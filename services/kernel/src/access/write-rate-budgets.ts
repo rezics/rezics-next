@@ -1,8 +1,8 @@
 export const principalClasses = ['anonymous', 'new-account', 'member', 'trusted', 'service'] as const;
-export type PrincipalClass = typeof principalClasses[number];
+export type PrincipalClass = (typeof principalClasses)[number];
 
 export const families = ['write', 'upload', 'report', 'correspondence', 'search', 'provider', 'address'] as const;
-export type RateLimitFamily = typeof families[number];
+export type RateLimitFamily = (typeof families)[number];
 
 export interface Budget {
   maximum: number;

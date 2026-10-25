@@ -1,10 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  RATE_LIMIT_V1,
-  families,
-  principalClasses,
-  rateLimitBudgets,
-} from '../../src/access/write-rate-budgets.ts';
+import { RATE_LIMIT_V1, families, principalClasses, rateLimitBudgets } from '../../src/access/write-rate-budgets.ts';
 
 test('versioned class family budgets preserve every applicable legacy numeric limit', () => {
   expect(principalClasses).toEqual(['anonymous', 'new-account', 'member', 'trusted', 'service']);
