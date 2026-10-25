@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, test } from 'bun:test';
-import pg from 'pg';
+import pg, { type PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandEvent } from '../src/command/command.ts';
 import { newId } from '../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
@@ -222,6 +222,67 @@ test('One contention retry stays within its bound as N grows', async () => {
         return { value: { ok: true }, events: events() };
       },
     );
+  });
+}, 90_000);
+
+test('Concurrent commands in one partition stay within their bound as concurrency grows', async () => {
+  await reset();
+  await checkGrowth(db, {
+    name: 'Concurrent commands in one partition stay within their bound as concurrency grows',
+    scales: [2, 8, 32],
+    bounds: { rows: 'linear', blocks: 'linear', statements: 'linear' },
+    grow,
+    operation: async (_growthDb, scale, repetition) => {
+      let serializableBegins = 0;
+      const restorations = new Map<
+        PoolClient,
+        { descriptor: PropertyDescriptor | undefined; wrapped: PoolClient['query'] }
+      >();
+      const observe = (client: PoolClient) => {
+        if (restorations.has(client)) return;
+        const descriptor = Object.getOwnPropertyDescriptor(client, 'query');
+        const query = client.query.bind(client);
+        const wrapped = ((...args: Parameters<PoolClient['query']>) => {
+          if (/^BEGIN ISOLATION LEVEL SERIALIZABLE/i.test(String(args[0]))) serializableBegins++;
+          return query(...args);
+        }) as PoolClient['query'];
+        client.query = wrapped;
+        restorations.set(client, { descriptor, wrapped });
+      };
+      pool.on('acquire', observe);
+      try {
+        const results = await Promise.all(
+          Array.from({ length: scale }, (_, n) =>
+            runCommand(
+              pool,
+              {
+                partition: anchorPartition,
+                deadline: Date.now() + 60_000,
+                basis,
+                receipt: {
+                  actorAccountId: actor,
+                  kind,
+                  key: `${prefix}concurrent-${scale}-${repetition}-${n}`,
+                  digest,
+                },
+              },
+              async () => ({ value: { ok: true }, events: events() }),
+            ),
+          ),
+        );
+        expect(results).toHaveLength(scale);
+        expect(results.every((result) => !result.replayed)).toBe(true);
+        expect(new Set(results.map((result) => result.position)).size).toBe(scale);
+        expect(serializableBegins).toBe(scale);
+      } finally {
+        pool.removeListener('acquire', observe);
+        for (const [client, { descriptor, wrapped }] of restorations) {
+          if (client.query !== wrapped) continue;
+          if (descriptor) Object.defineProperty(client, 'query', descriptor);
+          else Reflect.deleteProperty(client, 'query');
+        }
+      }
+    },
   });
 }, 90_000);
 

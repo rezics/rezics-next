@@ -6,8 +6,9 @@ import { createPool, NestedPoolCheckoutError } from '../src/database/pool.ts';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
+const secondPool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const partitions = [7, 8, 9, 10, 11, ...Array.from({ length: 11 }, (_, n) => 100 + n)];
+const partitions = [7, 8, 9, 10, 11, 12, ...Array.from({ length: 11 }, (_, n) => 100 + n)];
 afterEach(async () => {
   await admin.query(
     "UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = ANY($1)",
@@ -16,7 +17,7 @@ afterEach(async () => {
   await admin.query('DELETE FROM core.outbox WHERE partition_no = ANY($1)', [partitions]);
 });
 afterAll(async () => {
-  await pool.end();
+  await Promise.all([pool.end(), secondPool.end()]);
   await admin.end();
 });
 
@@ -87,38 +88,61 @@ test('a failed command leaves no position and no events', async () => {
   ]);
 });
 
-test('commands that collide at the fence retry and both commit', async () => {
+test('commands in one partition from one pool run one at a time and never collide', async () => {
+  let active = 0;
+  let peak = 0;
+  let bodyCalls = 0;
+  const commands = Array.from({ length: 16 }, (_, n) =>
+    runCommand(pool, { partition: 9, deadline: Date.now() + 60_000 }, async () => {
+      bodyCalls++;
+      peak = Math.max(peak, ++active);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      active--;
+      return { value: n, events: [event(n)] };
+    }),
+  );
+  const results = await Promise.all(commands);
+  expect(results.map((result) => result.position)).toEqual(Array.from({ length: 16 }, (_, n) => BigInt(n + 1)));
+  expect(results.map((result) => result.value).toSorted()).toEqual(Array.from({ length: 16 }, (_, n) => n));
+  expect(bodyCalls).toBe(16);
+  expect(peak).toBe(1);
+  expect(await position(9)).toBe(16);
+});
+
+test('commands that collide at the fence from two pools retry and both commit', async () => {
   let started = 0;
   let release!: () => void;
   const bothStarted = new Promise<void>((resolve) => (release = resolve));
-  const command = (n: number) =>
-    runCommand(pool, { partition: 9 }, async (tx) => {
+  const command = (commandPool: typeof pool, n: number) =>
+    runCommand(commandPool, { partition: 9 }, async (tx) => {
       await tx.query('SELECT position FROM core.partition WHERE partition_no = 9');
       if (++started === 2) release();
       await bothStarted;
       return { value: n, events: [event(n)] };
     });
-  const results = await Promise.all([command(1), command(2)]);
+  const results = await Promise.all([command(pool, 1), command(secondPool, 2)]);
   expect(started).toBe(3);
   expect(results.map((result) => result.position).sort()).toEqual([1n, 2n]);
   expect(await position(9)).toBe(2);
 });
 
-test('contention is retried at most three times and other failures are not retried', async () => {
+test('contention is retried with backoff until the deadline and other failures are not retried', async () => {
   let calls = 0;
-  const error = await runCommand(pool, { partition: 10 }, async () => {
+  const deadline = Date.now() + 300;
+  const error = await runCommand(pool, { partition: 10, deadline }, async () => {
     calls++;
     throw failure('40001');
   }).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(CommandUnavailableError);
   expect(error).toMatchObject({ reason: 'contention', partition: 10 });
-  expect(calls).toBe(3);
+  expect(calls).toBeGreaterThan(3);
   calls = 0;
   const recovered = await runCommand(pool, { partition: 10 }, async () => {
-    if (++calls < 3) throw failure(calls === 1 ? '40P01' : '55P03');
+    const codes = ['40001', '40P01', '55P03', '40001', '40P01'];
+    if (++calls <= codes.length) throw failure(codes[calls - 1]!);
     return { value: calls, events: [event(1)] };
   });
-  expect(recovered).toMatchObject({ value: 3, position: 1n });
+  expect(recovered).toMatchObject({ value: 6, position: 1n });
   calls = 0;
   const unique = failure('23505');
   await expect(
@@ -128,6 +152,36 @@ test('contention is retried at most three times and other failures are not retri
     }),
   ).rejects.toBe(unique);
   expect(calls).toBe(1);
+});
+
+test('a partition refuses the sixty-fifth waiter and commits every admitted waiter', async () => {
+  let entered!: () => void;
+  let release!: () => void;
+  const holding = new Promise<void>((resolve) => (entered = resolve));
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const first = runCommand(pool, { partition: 12, deadline: Date.now() + 60_000 }, async () => {
+    entered();
+    await held;
+    return { value: -1, events: [event(-1)] };
+  });
+  await holding;
+  const waiters = Array.from({ length: 64 }, (_, n) =>
+    runCommand(pool, { partition: 12, deadline: Date.now() + 60_000 }, async () => ({
+      value: n,
+      events: [event(n)],
+    })),
+  );
+  const refused = await runCommand(pool, { partition: 12, deadline: Date.now() + 60_000 }, async () => ({
+    value: 65,
+    events: [event(65)],
+  })).catch((caught: unknown) => caught);
+  expect(refused).toBeInstanceOf(CommandUnavailableError);
+  expect(refused).toMatchObject({ reason: 'overloaded', partition: 12 });
+  release();
+  const [firstResult, ...waiterResults] = await Promise.all([first, ...waiters]);
+  expect(firstResult.position).toBe(1n);
+  expect(waiterResults.map((result) => result.position)).toEqual(Array.from({ length: 64 }, (_, n) => BigInt(n + 2)));
+  expect(await position(12)).toBe(65);
 });
 
 test('a fenced partition is retried until it opens or the deadline passes', async () => {
