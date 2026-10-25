@@ -6,6 +6,7 @@ import {
   installStandingParentGrant,
 } from '../../src/access/index.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, accessCommandAuthorization, type Resource } from '../../src/request/access.ts';
 import { runCommand, authoritativeTimeValue, type CommandAuthorization } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -152,9 +153,15 @@ test('role grants retain independent principal, consent and denial operands and 
   const c = await creation();
   await runCommand(f.pool, c.options, (tx) => insert(tx, c.child));
   const request = newId(routeOf(f.principal)!);
-  await f.reader.query(
-    "INSERT INTO access.principal_assignment(route,principal_id,request_id,assigned_actor_id,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$3)",
-    [routeOf(f.principal), f.principal, request, f.recipient],
+  await createDelegationCommands({ pool: f.pool, access: f.access, action: 'account:delegate' }).create(
+    await f.context(f.principal),
+    {
+      principalId: f.principal,
+      requestId: request,
+      assignedActorId: f.recipient,
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    },
   );
   const delegated = await f.context(f.recipient, f.actions, `urn:rezics:request:${f.principal}:${request}`);
   const check = await accessCheck(f.access, delegated.actor, 'board:manage', c.child, delegated);
