@@ -134,8 +134,10 @@ REZICS visual language.
 | `LinkGrid`       | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
 | `TypeList`       | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
 
-`SLOT_NAMES` is `header`, `hero`, `entity`, `aside` and `footer`. `Slot` is the platform's
-rendering; reviewed first-party Zone code may wrap or replace it.
+`SLOT_NAMES` is `header`, `hero`, `entity`, `aside`, `footer` and `actions`. The host site
+fills the `actions` slot with its controls for the page subject, before any children the
+template puts there. `Slot` is the platform's rendering; reviewed first-party Zone code may
+wrap or replace it.
 
 `SearchBox` and `LinkGrid` read nothing. A `LinkGrid` `href` starting with `/` is a site path
 without the locale; the website renderer adds the locale.
@@ -300,7 +302,8 @@ release, nearest first, bounded by its class depth. A page read never scans the 
 page of its own. The package exports it as `@rezics/composition/profiles/platform.json`, so
 the website's fake kernel and stories serve the same templates.
 
-`generic` is a `header` slot holding `SubjectHeader`, then `MoreStatements`.
+`generic` is a `header` slot holding `SubjectHeader` and the `actions` slot, then
+`MoreStatements`.
 
 `bases` has one template, for `schema:CreativeWork`, the structural base of the bundled work
 types. That document is the same header slot, then a `Statements` node, then `MoreStatements`.

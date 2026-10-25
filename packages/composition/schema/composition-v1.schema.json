@@ -390,6 +390,10 @@
                 {
                   "type": "string",
                   "const": "footer"
+                },
+                {
+                  "type": "string",
+                  "const": "actions"
                 }
               ]
             },

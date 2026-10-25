@@ -8,7 +8,10 @@
         "props": {
           "id": "header",
           "name": "header",
-          "children": [{ "type": "SubjectHeader", "props": { "id": "subject-header" } }]
+          "children": [
+            { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+            { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+          ]
         }
       },
       { "type": "MoreStatements", "props": { "id": "more-statements" } }
@@ -25,7 +28,10 @@
             "props": {
               "id": "header",
               "name": "header",
-              "children": [{ "type": "SubjectHeader", "props": { "id": "subject-header" } }]
+              "children": [
+                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+              ]
             }
           },
           {
