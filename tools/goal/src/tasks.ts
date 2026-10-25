@@ -10,6 +10,7 @@ import { launch, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { terminateProcessGroup } from './process.ts';
 import { readMeasurement, makeRecord } from './records.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
 
@@ -63,6 +64,13 @@ export class WorkerTasks {
       return main;
     }
   }
+  private commitRetryLeftovers(task: Task, attempt: number): void {
+    const branch = git(task.worktree, ['branch', '--show-current']);
+    if (branch !== task.branch) throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return;
+    git(task.worktree, ['add', '-A']);
+    git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`]);
+  }
   private validateBrief(briefFile: string, excludingTask?: string): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
@@ -98,6 +106,7 @@ export class WorkerTasks {
   async retryHeld(taskId: string): Promise<RunningWorker> {
     let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
+    this.commitRetryLeftovers(task, task.currentAttempt);
     const integration = this.integrationHead();
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
     const branch = git(task.worktree, ['branch', '--show-current']);
@@ -192,7 +201,11 @@ export class WorkerTasks {
           current.brief = reshaped.brief; current.briefPath = briefPath; current.taskClass = nextTaskClass;
         });
       } else task = this.store.task(taskId);
+      let setupStep = 'checking worktree leftovers';
+      let retryPrepared = false;
       try {
+        this.commitRetryLeftovers(task, old?.attempt ?? 0);
+        setupStep = 'rebasing onto current dev';
         const integration = this.integrationHead();
         const tip = git(task.worktree, ['rev-parse', 'HEAD']);
         const rebaseLog = `${next.logPath}.rebase`;
@@ -211,9 +224,13 @@ export class WorkerTasks {
           } else git(task.worktree, ['reset', '--hard', integration]);
         }
         task = this.store.updateTask(next, current => { current.base = integration; });
-        if (!files.length && (changedBase || options.escalation === 'rebase-conflict')) installWorktreeDependencies(task.worktree);
+        if (!files.length && (changedBase || options.escalation === 'rebase-conflict')) {
+          setupStep = 'installing worktree dependencies';
+          installWorktreeDependencies(task.worktree);
+        }
         if (!files.length && options.escalation === 'rebase-conflict') files = options.conflictFiles ?? [];
         const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
+        retryPrepared = true;
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex);
       }
       catch (error) {
@@ -223,6 +240,12 @@ export class WorkerTasks {
         this.store.putRecord(makeRecord(this.store.task(taskId), failed, readMeasurement(failed, { configDirectory: pool.configDirectory }), 'stopped'));
         this.store.event(next, 'launch-failed', { error: String(error) });
         this.store.updateTask(next, t => { t.state = 'stopped'; });
+        if (!retryPrepared) {
+          const detail = String(error).replace(/[\r\n]+/g, ' ').slice(0, 800);
+          const event = { managerId: this.store.task(taskId).brief.manager, taskId, kind: 'environment' as const,
+            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000) };
+          new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory).deliver(event);
+        }
         throw error;
       }
     } finally { lease.release(); }
