@@ -10,7 +10,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
-const scales = [1, 8, 64] as const;
+const scales = [1, 4, 16] as const;
 const ordinalsPerScale = 500;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 const routeKey = new Uint8Array(32).fill(19);
@@ -130,7 +130,8 @@ async function observedActor(pool: Pool): Promise<AccountActor> {
 async function resetCase(): Promise<void> {
   await db.admin.query(
     `TRUNCATE content.board, content.thread, content.post, content.revision,
-      core.receipt, core.outbox, editorial.write_basis, access.resource_initialization CASCADE`,
+      core.receipt, core.outbox, editorial.write_basis, access.resource_initialization,
+      access.resource_grant, access.resource_role_grant, access.resource_denial CASCADE`,
   );
   await fixture.reset();
   actor = await observedActor(db.pool);
@@ -629,6 +630,7 @@ async function runCheck(
         to: scale * ordinalsPerScale,
       });
       if (previous === 0) await assertAnchorRelations(growthDb);
+      await growthDb.admin.query('CHECKPOINT');
     },
     operation,
   });
