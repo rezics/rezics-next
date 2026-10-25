@@ -1,0 +1,3 @@
+SELECT board_id, visibility, security_revision::text, created_at::text
+FROM content.board
+WHERE route = :route::integer AND board_id = :id::uuid;
