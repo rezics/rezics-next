@@ -47,6 +47,15 @@ const assignment = Type.Object(
 
 /** Exact public command return values; command keys, credentials and opening context stay private. */
 export const ACCESS_EVENTS = {
+  'com.rezics.access.account.suspended.v1': Type.Object(
+    {
+      accountId: identity,
+      state: Type.Literal('suspended'),
+      minimumAuthnEpoch: Type.String({ pattern: '^[1-9][0-9]{0,18}$', maxLength: 19 }),
+      receiptId: identity,
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.grant.create.v1': grant,
   'com.rezics.access.grant.change.v1': grant,
   'com.rezics.access.grant.revoke.v1': grant,

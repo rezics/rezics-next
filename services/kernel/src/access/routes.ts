@@ -10,6 +10,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
+import { createSuspensionCommands } from './suspension.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -113,7 +114,60 @@ export function accessRoutes(
       clock: dependencies.clock,
       managementAction: 'access:grant',
     }));
+  let suspension: ReturnType<typeof createSuspensionCommands> | undefined;
+  const suspensionCommands = () =>
+    (suspension ??= createSuspensionCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
+    .post(
+      customMethod('/v1/accounts/:accountId', 'suspend'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })) }, closed)),
+        response: {
+          200: withHeaders(
+            t.Object(
+              {
+                suspension: t.Object(
+                  {
+                    accountId: id,
+                    state: t.Literal('suspended'),
+                    minimumAuthnEpoch: t.String({ pattern: '^[1-9][0-9]{0,18}$' }),
+                    receiptId: id,
+                  },
+                  closed,
+                ),
+              },
+              closed,
+            ),
+            { [SESSION_HEADER]: t.String() },
+          ),
+          ...failures,
+        },
+        detail: { ...detail('account.suspend'), 'x-action': 'account:suspend' },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            suspensionCommands().suspend(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key, ...body },
+            ),
+          );
+          session.record(result);
+          const { accountId, state, minimumAuthnEpoch, receiptId } = result.value;
+          return { suspension: { accountId, state, minimumAuthnEpoch, receiptId } };
+        } catch (error) {
+          denied(error);
+        }
+      },
+    )
     .post(
       '/v1/grants',
       { headers, body: strict(grant), response: { 201: response(grant), ...failures }, detail: detail('grant.create') },

@@ -2,6 +2,7 @@
   "role": "platform.governance",
   "actions": [
     "access:grant",
+    "account:suspend",
     "subject:create",
     "subject:batch_write",
     "source_fence:read",
