@@ -24,6 +24,7 @@
  */
 import type { AccessAccount } from '@rezics/auth';
 import type { Account } from '../services/kernel/src/access/account-data.ts';
+import { PLATFORM_RESOURCE } from '../services/kernel/src/access/bootstrap-governance.ts';
 import type { GrantInput } from '../services/kernel/src/access/grant-commands.ts';
 import type { Envelope } from '../services/kernel/src/events/log.ts';
 import type { Resource } from '../services/kernel/src/request/access.ts';
@@ -34,7 +35,7 @@ import type {
 } from '../services/kernel/test/imports/identity-fixture.ts';
 export { MISSING_IMPORT_IDENTITY } from '../services/kernel/test/imports/identity-fixture.ts';
 
-export const GLOBAL: Readonly<Resource> = { route: 0, id: '00000000-0000-8000-0000-000000000000' };
+export const GLOBAL: Readonly<Resource> = PLATFORM_RESOURCE;
 export const SEMANTIC_ACTIONS = ['subject:create', 'source_fence:read', 'media:import_from_url'] as const;
 export const BULK_ACTION = 'subject:batch_write';
 export type Stage = 'auth-registration' | 'bootstrap' | 'grants';
