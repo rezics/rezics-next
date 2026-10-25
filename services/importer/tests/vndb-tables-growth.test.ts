@@ -1,0 +1,331 @@
+import { Database } from 'bun:sqlite';
+import { expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { sqliteEvidence, type Entry } from '../../../specs/imports-vndb-tables-driver.ts';
+import { VndbTablesStore } from '../src/vndb-tables.ts';
+import { createSqliteProbe } from './support/sqlite-growth.ts';
+
+const SOURCE = 'vndb';
+const TABLES = ['vn', 'vn_titles', 'entry_meta'] as const;
+const GROWING_TABLES = ['vndb_table_runs', 'vndb_table_rows', 'vndb_table_spool'];
+const SCALES = [1, 8, 64] as const;
+const encode = (text: string) => new TextEncoder().encode(text);
+const fixtureNames = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta'];
+const fixtureText = (name: string) =>
+  readFileSync(new URL(`../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url), 'utf8');
+
+type InternalOperations = {
+  validate(source: string, runId: string): void;
+  cleanup(source: string, runId: string): void;
+};
+
+function entry(path: string, text: string): Entry {
+  const bytes = encode(text);
+  return {
+    path,
+    kind: 'file',
+    declaredBytes: bytes.byteLength,
+    bytes: (async function* () {
+      for (let offset = 0; offset < bytes.byteLength; offset += 4096) yield bytes.subarray(offset, offset + 4096);
+    })(),
+  };
+}
+
+function spooledArchive(): Entry[] {
+  const entries = fixtureNames.map((name) => entry(`db/${name}`, fixtureText(name)));
+  return [...entries.filter((item) => !item.path.endsWith('.header')), ...entries.filter((item) => item.path.endsWith('.header'))];
+}
+
+async function* stream(entries: Entry[]) {
+  yield* entries;
+}
+
+function harness() {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync(resolve('.temp/vndb-tables-growth-'));
+  const database = new Database(resolve(directory, 'tables.sqlite'));
+  const asynchronousEvidence = sqliteEvidence();
+  asynchronousEvidence.attach(database);
+  const probe = createSqliteProbe(database, { growingTables: GROWING_TABLES });
+  const store = new VndbTablesStore(database, { childRowsPerVn: 8, pageSize: 16 });
+
+  return {
+    database,
+    store,
+    probe,
+    asynchronousEvidence,
+    close() {
+      probe.restore();
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+function runSql(database: Database, sql: string, ...parameters: (string | number | Uint8Array)[]) {
+  database.query(sql).run(...parameters);
+}
+
+const sequence = `WITH RECURSIVE seq(n) AS (
+  SELECT ?
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n < ?
+) `;
+const runId = "'history-' || printf('%05d', n)";
+
+/** Seed 500 archive rows per scale unit in every growing relation read by staging. */
+function seedBackground(database: Database, from: number, through: number) {
+  if (from > through) return;
+  runSql(
+    database,
+    `${sequence}INSERT INTO vndb_table_runs
+      (source,run_id,state,source_records,staged_rows,staged_bytes,child_cap)
+    SELECT 'history', ${runId}, 'ready', 1, 3, 128, 8 FROM seq`,
+    from,
+    through,
+  );
+  runSql(
+    database,
+    `${sequence}INSERT INTO vndb_table_rows (source,run_id,table_name,id,id_number,child,payload)
+    SELECT 'history', ${runId}, 'vn', 'v' || n, n, '', json_object('id','v' || n) FROM seq`,
+    from,
+    through,
+  );
+  runSql(
+    database,
+    `${sequence}INSERT INTO vndb_table_rows (source,run_id,table_name,id,id_number,child,payload)
+    SELECT 'history', ${runId}, 'vn_titles', 'v' || n, n, 'en',
+      json_object('id','v' || n,'lang','en','official',json('true'),'title','Title ' || n,'latin',NULL)
+    FROM seq`,
+    from,
+    through,
+  );
+  runSql(
+    database,
+    `${sequence}INSERT INTO vndb_table_rows (source,run_id,table_name,id,id_number,child,payload)
+    SELECT 'history', ${runId}, 'entry_meta', 'v' || n, n, '',
+      json_object('id','v' || n,'created','2020-01-01','lastmod','2020-01-01',
+        'revision',1,'num_edits',0,'num_users',0)
+    FROM seq`,
+    from,
+    through,
+  );
+
+  for (const table of TABLES) {
+    const raw =
+      table === 'vn'
+        ? encode(['v1', '\\N', '\\N', 'en', '0', '\\N', '\\N', '\\N', '0', '0', '0', '\\N', '\\N'].join('\t'))
+        : table === 'vn_titles'
+          ? encode(['v1', 'en', 't', 'title', '\\N'].join('\t'))
+          : encode(['v1', '2020-01-01', '2020-01-01', '1', '0', '0'].join('\t'));
+    runSql(
+      database,
+      `${sequence}INSERT INTO vndb_table_spool (source,run_id,table_name,sequence,raw)
+      SELECT 'history', ${runId}, ?, 1, ? FROM seq`,
+      from,
+      through,
+      table,
+      raw,
+    );
+  }
+}
+
+function seedRunRows(database: Database, source: string, run: string, count: number, state: string) {
+  runSql(
+    database,
+    `INSERT INTO vndb_table_runs
+      (source,run_id,state,source_records,staged_rows,staged_bytes,child_cap)
+    VALUES (?,?,?,?,?,?,?)`,
+    source,
+    run,
+    state,
+    count,
+    count * 3,
+    count * 128,
+    8,
+  );
+}
+
+function seedCompleteRows(database: Database, source: string, run: string, count: number) {
+  seedRunRows(database, source, run, count, 'ready');
+  for (let index = 1; index <= count; index++) {
+    const id = `v${index}`;
+    runSql(
+      database,
+      `INSERT INTO vndb_table_rows VALUES (?,?,?,?,?,?,?)`,
+      source,
+      run,
+      'vn',
+      id,
+      index,
+      '',
+      JSON.stringify({ id }),
+    );
+    runSql(
+      database,
+      `INSERT INTO vndb_table_rows VALUES (?,?,?,?,?,?,?)`,
+      source,
+      run,
+      'vn_titles',
+      id,
+      index,
+      'en',
+      JSON.stringify({ id, lang: 'en', official: true, title: `Title ${index}`, latin: null }),
+    );
+    runSql(
+      database,
+      `INSERT INTO vndb_table_rows VALUES (?,?,?,?,?,?,?)`,
+      source,
+      run,
+      'entry_meta',
+      id,
+      index,
+      '',
+      JSON.stringify({
+        id,
+        created: '2020-01-01',
+        lastmod: '2020-01-01',
+        revision: 1,
+        num_edits: 0,
+        num_users: 0,
+      }),
+    );
+  }
+}
+
+function seedSpoolRows(database: Database, source: string, run: string, count: number) {
+  const rows = {
+    vn: encode(['v1', '\\N', '\\N', 'en', '0', '\\N', '\\N', '\\N', '0', '0', '0', '\\N', '\\N'].join('\t')),
+    vn_titles: encode(['v1', 'en', 't', 'title', '\\N'].join('\t')),
+    entry_meta: encode(['v1', '2020-01-01', '2020-01-01', '1', '0', '0'].join('\t')),
+  };
+  for (const table of TABLES)
+    for (let sequenceNumber = 1; sequenceNumber <= count; sequenceNumber++)
+      runSql(
+        database,
+        `INSERT INTO vndb_table_spool VALUES (?,?,?,?,?)`,
+        source,
+        run,
+        table,
+        sequenceNumber,
+        rows[table],
+      );
+}
+
+async function measureStage(
+  evidence: ReturnType<typeof sqliteEvidence>,
+  operation: () => Promise<void>,
+): Promise<{ rows: number; blocks: 0; statements: number }> {
+  evidence.start();
+  try {
+    const value = await operation();
+    const cost = evidence.finish();
+    return { ...cost, blocks: 0 };
+  } catch (error) {
+    evidence.cancel();
+    throw error;
+  }
+}
+
+function expectConstantGrowth(samples: GrowthSample[]) {
+  assertGrowth(samples, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+}
+
+test('VNDB staging stays within its bound as R grows', async () => {
+  const h = harness();
+  const samples: GrowthSample[] = [];
+  try {
+    let seeded = 0;
+    for (const scale of SCALES) {
+      const target = scale * 500;
+      seedBackground(h.database, seeded + 1, target);
+      seeded = target;
+      h.database.exec('ANALYZE');
+
+      const run = `stage-${scale}`;
+      h.store.begin(SOURCE, run);
+      h.database.exec('ANALYZE');
+      const cost = await measureStage(h.asynchronousEvidence, () => h.store.stage(SOURCE, run, stream(spooledArchive())));
+      expect(h.store.inspect(SOURCE, run).state).toBe('ready');
+      samples.push({ scale, cost });
+    }
+    expectConstantGrowth(samples);
+  } finally {
+    h.close();
+  }
+}, 120_000);
+
+test('VNDB projection stays within its bound as R grows', () => {
+  const h = harness();
+  const samples: GrowthSample[] = [];
+  try {
+    seedCompleteRows(h.database, 'projection', 'projection-run', 17);
+    let seeded = 0;
+    for (const scale of SCALES) {
+      const target = scale * 500;
+      seedBackground(h.database, seeded + 1, target);
+      seeded = target;
+      h.database.exec('ANALYZE');
+
+      const measured = h.probe.measure(() => h.store.page('projection', 'projection-run', { after: null, limit: 16 }));
+      h.probe.verifyPlans();
+      expect(measured.value.records).toHaveLength(16);
+      expect(measured.value.next).toBe('v16');
+      samples.push({ scale, cost: measured.cost });
+    }
+    expectConstantGrowth(samples);
+  } finally {
+    h.close();
+  }
+}, 120_000);
+
+test('VNDB validation stays within its bound as R grows', () => {
+  const h = harness();
+  const samples: GrowthSample[] = [];
+  const validate = (h.store as unknown as InternalOperations).validate.bind(h.store);
+  try {
+    seedCompleteRows(h.database, 'validation', 'validation-run', 33);
+    let seeded = 0;
+    for (const scale of SCALES) {
+      const target = scale * 500;
+      seedBackground(h.database, seeded + 1, target);
+      seeded = target;
+      h.database.exec('ANALYZE');
+
+      const measured = h.probe.measure(() => validate('validation', 'validation-run'));
+      h.probe.verifyPlans();
+      samples.push({ scale, cost: measured.cost });
+    }
+    expectConstantGrowth(samples);
+  } finally {
+    h.close();
+  }
+}, 120_000);
+
+test('VNDB cleanup stays within its bound as R grows', () => {
+  const h = harness();
+  const samples: GrowthSample[] = [];
+  const cleanup = (h.store as unknown as InternalOperations).cleanup.bind(h.store);
+  try {
+    let seeded = 0;
+    for (const scale of SCALES) {
+      const target = scale * 500;
+      seedBackground(h.database, seeded + 1, target);
+      seeded = target;
+      const run = `cleanup-${scale}`;
+      seedCompleteRows(h.database, 'cleanup', run, 65);
+      seedSpoolRows(h.database, 'cleanup', run, 65);
+      h.database.exec('ANALYZE');
+
+      const measured = h.probe.measure(() => cleanup('cleanup', run));
+      h.probe.verifyPlans();
+      expect(measured.value).toBeUndefined();
+      samples.push({ scale, cost: measured.cost });
+    }
+    expectConstantGrowth(samples);
+  } finally {
+    h.close();
+  }
+}, 120_000);
