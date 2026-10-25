@@ -126,6 +126,120 @@ test('author creates first post subsequent post and nested replies on the immuta
   }
 });
 
+test('every thread post and reply preserves its own author declared licence subject references and board placement', async () => {
+  const [a, b, c] = fixture.subjectIds;
+  expect(new Set([a, b, c]).size).toBe(3);
+  expect([a, b, c].every(id => typeof id === 'string' && id.length > 0)).toBe(true);
+  const thread = await create({ subjectIds: [a!] });
+  const post = ok(await driver.createPost({
+    threadId: thread.id, body: fromPlainText('Post author references B and C'),
+    licence: 'CC-BY-4.0', subjectIds: [b!, c!], boardId: fixture.board.id,
+  }, options('own-refs', fixture.other)));
+  const child = ok(await driver.reply({
+    threadId: thread.id, parentId: post.id, body: fromPlainText('Reply author has no subject references'),
+    licence: 'MIT', subjectIds: [], boardId: fixture.board.id,
+  }, options('empty-refs')));
+  const inherited = await append(thread, 'default-refs');
+  const rows = await driver.inspect();
+  expect(rows.semanticRows).toEqual([]);
+  expect(thread).toMatchObject({ subjectIds: [a!], boardId: fixture.board.id, authorId: fixture.owner.id });
+  for (const [item, subjectIds, licence, authorId] of [
+    [thread.firstPost, [a!], 'LicenseRef-Author-Permission', fixture.owner.id],
+    [post, [b!, c!], 'CC-BY-4.0', fixture.other.id],
+    [child, [], 'MIT', fixture.owner.id],
+    [inherited, [a!], 'CC-BY-4.0', fixture.owner.id],
+  ] as const) {
+    const metadata = { subjectIds: [...subjectIds], licence, boardId: fixture.board.id };
+    expect(item).toMatchObject({ ...metadata, authorId, threadId: thread.id, route: thread.route });
+    expect(rows.items.find(row => row.id === item.id)).toMatchObject({ authorId, threadId: thread.id, route: thread.route });
+    expect(rows.revisions.find(row => row.id === item.revisionId)).toMatchObject({
+      ...metadata, itemId: item.id, threadId: thread.id, route: thread.route, body: bytes(item.body),
+    });
+    expect(ok(await driver.readItem(thread.id, item.id, null, item.revisionId), 200)).toEqual(item);
+    expect(ok(await driver.readItem(thread.id, item.id, null), 200)).toEqual(item);
+    expect(ok(await driver.readItems(thread.id, null), 200).find(row => row.id === item.id)).toEqual(item);
+  }
+  expect(child.parentId).toBe(post.id);
+  expect(ok(await driver.readThread(thread.id, null), 200)).toEqual(thread);
+});
+
+test('revising metadata preserves old exact revision metadata and body-only edits preserve the new metadata', async () => {
+  const [a, b, c] = fixture.subjectIds;
+  const thread = await create({ subjectIds: [a!] });
+  const oldBody = fromPlainText('Old post with author references');
+  const old = ok(await driver.createPost({
+    threadId: thread.id, body: oldBody, licence: 'CC-BY-4.0', subjectIds: [b!], boardId: fixture.board.id,
+  }, options('metadata-post', fixture.other)));
+  const before = await driver.inspect();
+  const body = fromPlainText('New post with changed author references and licence');
+  const updated = ok(await driver.revise({
+    threadId: thread.id, itemId: old.id, body, licence: 'MIT', subjectIds: [c!], boardId: fixture.board.id,
+  }, options('metadata-edit', fixture.other)), 200);
+  expect(updated.id).toBe(old.id);
+  expect(updated.revisionId).not.toBe(old.revisionId);
+  expect(updated).toMatchObject({
+    body, licence: 'MIT', subjectIds: [c!], boardId: fixture.board.id,
+    authorId: fixture.other.id, threadId: thread.id, route: thread.route, parentId: null,
+  });
+  const bodyOnly = ok(await driver.revise({
+    threadId: thread.id, itemId: old.id, body: fromPlainText('Body only after metadata edit'),
+  }, options('metadata-body-only', fixture.other)), 200);
+  expect(bodyOnly.revisionId).not.toBe(updated.revisionId);
+  expect(bodyOnly).toMatchObject({
+    id: old.id, licence: 'MIT', subjectIds: [c!], boardId: fixture.board.id, authorId: fixture.other.id,
+  });
+  const after = await driver.inspect();
+  expect(after.threads).toEqual(before.threads);
+  expect(after.items).toEqual(before.items);
+  expect(after.semanticRows).toEqual([]);
+  expect(after.revisions).toHaveLength(before.revisions.length + 2);
+  for (const row of before.revisions) expect(after.revisions.find(next => next.id === row.id)).toEqual(row);
+  for (const [item, subjectIds, licence, expectedBody] of [
+    [old, [b!], 'CC-BY-4.0', oldBody], [updated, [c!], 'MIT', body],
+    [bodyOnly, [c!], 'MIT', bodyOnly.body],
+  ] as const) {
+    expect(after.revisions.find(row => row.id === item.revisionId)).toMatchObject({
+      itemId: old.id, threadId: thread.id, route: thread.route, subjectIds: [...subjectIds],
+      licence, boardId: fixture.board.id, body: bytes(expectedBody),
+    });
+    expect(ok(await driver.readItem(thread.id, old.id, null, item.revisionId), 200)).toEqual(item);
+  }
+  expect(ok(await driver.readItem(thread.id, old.id, null), 200)).toEqual(bodyOnly);
+  expect(ok(await driver.readHistory(thread.id, old.id, fixture.other), 200)).toEqual(expect.arrayContaining([old, updated, bodyOnly]));
+});
+
+test('invalid subject IDs licences and conflicting item boards reject atomically without semantic dependencies', async () => {
+  const thread = await create();
+  const post = await append(thread);
+  const before = await driver.inspect();
+  const invalidMetadata = [
+    { subjectIds: ['not-a-subject-id'] }, { subjectIds: [''] },
+    { licence: 'not-an-SPDX-licence' }, { licence: 'MIT AND' },
+  ];
+  for (const [index, metadata] of invalidMetadata.entries()) {
+    await problem(await driver.create(input(metadata), options(`invalid-thread-${index}`)), 400);
+    await unchanged(before);
+  }
+  for (const [index, metadata] of [...invalidMetadata, { boardId: fixture.privateBoard.id }].entries()) {
+    const item = { threadId: thread.id, body: fromPlainText('Rejected metadata'), licence: 'MIT', ...metadata };
+    for (const result of [
+      () => driver.createPost(item, options(`invalid-post-${index}`)),
+      () => driver.reply({ ...item, parentId: post.id }, options(`invalid-reply-${index}`)),
+      () => driver.revise({ ...item, itemId: post.id }, options(`invalid-edit-${index}`)),
+    ]) {
+      const rejected = await result();
+      await problem(rejected, 400);
+      expect(rejected.value).toBeNull();
+      expect(rejected.response.headers.get('rezics-session-token')).toBeNull();
+      await unchanged(before);
+    }
+  }
+  await hidden(await driver.createPost({
+    threadId: fixture.unknownThread, body: fromPlainText('Missing thread'), licence: 'MIT', subjectIds: fixture.subjectIds,
+  }, options('missing-thread-refs')));
+  await unchanged(before);
+});
+
 test('identical idempotency payload replays IDs with one revision receipt and outbox effect', async () => {
   const before = await driver.inspect();
   const request = input();
@@ -202,6 +316,7 @@ test('revision appends immutable bytes and search text while exact old revision 
   expect(updated.id).toBe(old.id);
   expect(updated.revisionId).not.toBe(old.revisionId);
   expect(updated).toMatchObject({ threadId: thread.id, route: thread.route, authorId: old.authorId, licence: old.licence });
+  expect(updated).toMatchObject({ subjectIds: old.subjectIds, boardId: old.boardId });
   const after = await driver.inspect();
   expect(after.threads).toEqual(before.threads);
   expect(after.revisions.length).toBe(before.revisions.length + 1);

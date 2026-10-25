@@ -15,6 +15,9 @@ import type { DocumentSnapshot } from '@rezics/document';
  * seeded data. Error results have null value and keep the full problem response.
  * Fixture SQL and failure hooks stay test-only. Inspection reads authoritative
  * rows on an independent connection after requests finish, never an API cache.
+ * Forward optional metadata exactly, including explicit empty subjectIds; do not
+ * fill defaults in the adapter. Item views map the selected revision's stored
+ * licence, subjectIds and boardId, never reconstructed thread inheritance.
  */
 export interface Persona { id: string; bearer: string }
 export type Visibility = 'published' | 'draft' | 'protected' | 'taken_down';
@@ -39,6 +42,10 @@ export interface ItemInput {
   threadId: string;
   body: unknown;
   licence: string;
+  /** Omission may inherit thread defaults; [] is the author's empty references. */
+  subjectIds?: string[];
+  /** If supplied, must match the containing thread's board; never moves content. */
+  boardId?: string;
   authorId?: string;
 }
 export interface ItemView {
@@ -48,6 +55,8 @@ export interface ItemView {
   revisionId: string;
   authorId: string;
   licence: string;
+  subjectIds: string[];
+  boardId: string;
   parentId: string | null;
   body: DocumentSnapshot;
 }
@@ -70,6 +79,9 @@ export interface RevisionRow {
   body: Uint8Array;
   sha256: string;
   searchText: string;
+  licence: string;
+  subjectIds: string[];
+  boardId: string;
 }
 export interface Evidence {
   threads: { id: string; route: number; boardId: string; authorId: string }[];
@@ -92,6 +104,7 @@ export interface Fixture {
   moderator: Persona;
   board: { id: string; route: number };
   privateBoard: { id: string; route: number };
+  /** At least three distinct valid subject IDs, with no corresponding semantic rows. */
   subjectIds: string[];
   /** Well-formed unused IDs; foreignItem belongs to foreignThread on another route. */
   unknownThread: string;
@@ -112,7 +125,11 @@ export interface ContentThreadDriver {
   create(input: ThreadInput, options: WriteOptions): Promise<ApiResult<ThreadView>>;
   createPost(input: ItemInput, options: WriteOptions): Promise<ApiResult<ItemView>>;
   reply(input: ItemInput & { parentId: string }, options: WriteOptions): Promise<ApiResult<ItemView>>;
-  revise(input: { threadId: string; itemId: string; body: unknown; authorId?: string }, options: WriteOptions): Promise<ApiResult<ItemView>>;
+  /** Omitted metadata preserves the prior revision; boardId must still match the thread. */
+  revise(input: {
+    threadId: string; itemId: string; body: unknown; authorId?: string;
+    licence?: string; subjectIds?: string[]; boardId?: string;
+  }, options: WriteOptions): Promise<ApiResult<ItemView>>;
   readThread(id: string, actor: Persona | null): Promise<ApiResult<ThreadView>>;
   readItem(threadId: string, itemId: string, actor: Persona | null, revisionId?: string): Promise<ApiResult<ItemView>>;
   readHistory(threadId: string, itemId: string, actor: Persona | null): Promise<ApiResult<ItemView[]>>;
