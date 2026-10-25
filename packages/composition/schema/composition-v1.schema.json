@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["root", "content"],
+  "properties": {
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["props"],
+      "properties": {
+        "props": {
+          "type": "object",
+          "properties": {
+            "appearance": {
+              "type": "object",
+              "properties": {
+                "density": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "compact"
+                    },
+                    {
+                      "type": "string",
+                      "const": "comfortable"
+                    }
+                  ]
+                },
+                "radius": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "sm"
+                    },
+                    {
+                      "type": "string",
+                      "const": "md"
+                    },
+                    {
+                      "type": "string",
+                      "const": "lg"
+                    }
+                  ]
+                },
+                "surface": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "flat"
+                    },
+                    {
+                      "type": "string",
+                      "const": "cards"
+                    }
+                  ]
+                },
+                "cover": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "portrait"
+                    },
+                    {
+                      "type": "string",
+                      "const": "square"
+                    },
+                    {
+                      "type": "string",
+                      "const": "landscape"
+                    }
+                  ]
+                },
+                "headingScale": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "md"
+                    },
+                    {
+                      "type": "string",
+                      "const": "lg"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "content": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Stack"
+        },
+        {
+          "$ref": "#/$defs/Columns"
+        },
+        {
+          "$ref": "#/$defs/Heading"
+        },
+        {
+          "$ref": "#/$defs/Text"
+        },
+        {
+          "$ref": "#/$defs/Slot"
+        }
+      ]
+    },
+    "Stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Stack"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "gap", "children"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "gap": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "sm"
+                },
+                {
+                  "type": "string",
+                  "const": "md"
+                },
+                {
+                  "type": "string",
+                  "const": "lg"
+                }
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        }
+      }
+    },
+    "Columns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Columns"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "split", "start", "end"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "split": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "even"
+                },
+                {
+                  "type": "string",
+                  "const": "start"
+                },
+                {
+                  "type": "string",
+                  "const": "end"
+                }
+              ]
+            },
+            "start": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            },
+            "end": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        }
+      }
+    },
+    "Heading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Heading"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "text", "level"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+            },
+            "level": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 2
+                },
+                {
+                  "type": "number",
+                  "const": 3
+                },
+                {
+                  "type": "number",
+                  "const": 4
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "Text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Text"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "text"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 2000,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "Slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Slot"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name", "children"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "header"
+                },
+                {
+                  "type": "string",
+                  "const": "hero"
+                },
+                {
+                  "type": "string",
+                  "const": "entity"
+                },
+                {
+                  "type": "string",
+                  "const": "aside"
+                },
+                {
+                  "type": "string",
+                  "const": "footer"
+                }
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

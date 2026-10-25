@@ -85,6 +85,16 @@
         "@types/bun": "1.4.4",
       },
     },
+    "packages/composition": {
+      "name": "@rezics/composition",
+      "dependencies": {
+        "canonicalize": "5.1.0",
+        "typebox": "1.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+      },
+    },
     "packages/conversion": {
       "name": "@rezics/conversion",
       "dependencies": {
@@ -803,6 +813,8 @@
     "@rezics/auth-pages": ["@rezics/auth-pages@workspace:apps/auth"],
 
     "@rezics/client": ["@rezics/client@workspace:packages/client"],
+
+    "@rezics/composition": ["@rezics/composition@workspace:packages/composition"],
 
     "@rezics/conversion": ["@rezics/conversion@workspace:packages/conversion"],
 
