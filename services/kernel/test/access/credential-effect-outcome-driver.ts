@@ -112,8 +112,25 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   const kernel = () => required(pool, 'Kernel database is closed');
   const auth = () => required(authPool, 'Auth database is closed');
   const currentHost = () => required(host, 'Auth host is stopped');
+  const pending = new Set<Promise<Response>>();
+  const hostRequest = (input: Request) => {
+    const response = currentHost().handler(input);
+    pending.add(response);
+    void response.then(
+      () => pending.delete(response),
+      () => pending.delete(response),
+    );
+    return response;
+  };
+  const stopHost = async () => {
+    // Promise.all can reject before another concurrent Better Auth request settles.
+    // Its database must remain open until all issued HTTP requests have completed.
+    while (pending.size) await Promise.allSettled([...pending]);
+    await host?.stop();
+    host = undefined;
+  };
   const request = (path: string, body: unknown, caller?: string | Headers) =>
-    currentHost().handler(
+    hostRequest(
       new Request(`${issuer}${path}`, {
         method: 'POST',
         headers: {
@@ -212,7 +229,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   };
   const close = async () => {
     try {
-      await host?.stop();
+      await stopHost();
     } finally {
       host = undefined;
       await authPool?.end().catch(() => {});
@@ -262,7 +279,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       code_challenge_method: 'S256',
       resource: audience,
     }).toString();
-    const authorization = await currentHost().handler(
+    const authorization = await hostRequest(
       new Request(url, { headers: required(callers.get(caller), 'Missing website login').headers }),
     );
     if (authorization.status !== 302)
@@ -282,7 +299,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       .setExpirationTime('120s')
       .setJti(randomUUID())
       .sign(websitePair.privateKey);
-    const response = await currentHost().handler(
+    const response = await hostRequest(
       new Request(`${issuer}/token`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -303,10 +320,12 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   const person = async () => {
     const key = randomUUID();
     const email = `${key}@credential.test`;
-    const { accountId } = await successful<{ accountId: string }>(
-      await request('/signup', { key, handle: `human_${key.replaceAll('-', '')}`, email, password: originalPassword }),
-      'native registration and activation',
-    );
+    const { accountId } = await currentHost().workflows.register({
+      key,
+      handle: `human_${key.replaceAll('-', '')}`,
+      email,
+      password: originalPassword,
+    });
     const initial = await login(email, originalPassword, loginClient);
     for (const id of [clientId, 'credential-other-client'])
       await successful(await request('/consent', { client_id: id, scope: scopes }, initial), 'native consent');
@@ -647,7 +666,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       const gov = await governance();
       if (fact === 'actor-grant') {
         const resourceId = f.operatorId ?? f.subjectId;
-        await bindings.grants.revoke(await context(gov.caller), {
+        await bindings.grants.revoke(await context(f.caller), {
           resource: { route: routeOf(resourceId)!, id: resourceId },
           subjectId: f.operatorId === f.organizationId ? f.organizationId : f.humanId,
           subjectRole: f.operatorId === f.organizationId ? 'owner' : '',
@@ -721,12 +740,12 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         if (!reached) throw error;
       }
       if (!reached) throw new Error(`Native ${at} checkpoint was not reached`);
-      await currentHost().stop();
+      await stopHost();
       host = undefined;
       authPool = undefined;
     },
     async restart() {
-      await host?.stop();
+      await stopHost();
       host = undefined;
       authPool = undefined;
       await build();

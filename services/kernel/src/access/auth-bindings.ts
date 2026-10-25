@@ -53,6 +53,8 @@ export class AuthBindingUnavailableError extends Error {
   }
 }
 export class AuthBindingDeniedError extends Error {
+  readonly status = 403;
+
   constructor() {
     super('Auth binding denied');
     this.name = 'AuthBindingDeniedError';

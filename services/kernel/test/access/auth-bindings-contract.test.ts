@@ -57,6 +57,17 @@ beforeEach(async () => {
 });
 afterAll(() => pool.end());
 
+test('binding denial is a forbidden outcome while missing capabilities remain unavailable', async () => {
+  const denied = createAuthBindings({ pool, consumeAuthAuthorization: async () => null });
+  await expect(denied.consumeAuthorization!(input)).rejects.toMatchObject({
+    name: 'AuthBindingDeniedError',
+    status: 403,
+  });
+  const unavailable = new AuthBindingUnavailableError('consumeAuthAuthorization');
+  expect('status' in unavailable).toBe(false);
+  await expect(ports.consumeAuthorization!(input)).rejects.toBeInstanceOf(AuthBindingUnavailableError);
+});
+
 test('ordinary reads translate the real account anchor once and retain stored kind and operator relation', async () => {
   const queries: QueryConfig[] = [];
   const counted = Object.create(pool) as Pool;
