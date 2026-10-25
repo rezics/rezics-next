@@ -40,7 +40,14 @@ test('a command runs serializable with its timeouts, takes the next position and
   expect(first.value.statement).toBeGreaterThan(1500);
   expect(first.value.statement).toBeLessThanOrEqual(2000);
   const second = await runCommand(pool, { partition: 7 }, async () => ({ value: null, events: [event(3)] }));
-  expect(second).toEqual({ value: null, partition: 7, epoch: 1, position: 2n });
+  expect(second).toEqual({
+    value: null,
+    partition: 7,
+    epoch: 1,
+    position: 2n,
+    transactionId: expect.any(String),
+    replayed: false,
+  });
   expect(await position(7)).toBe(2);
   const { rows } = await admin.query(`SELECT position::int, event_seq, event_count, epoch, id::text, type, subject, data
     FROM core.outbox WHERE partition_no = 7 ORDER BY position, event_seq`);
