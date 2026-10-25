@@ -385,7 +385,7 @@ test.serial('metadata edits preserve the selected board scheme in the new head r
 });
 
 test.serial(
-  'setting and reading a fixed scheme stays bounded at 2048, 4096 and 16384 Realms and subjects',
+  'setting and reading a fixed scheme stays bounded at 2048, 8192 and 32768 Realms and subjects',
   async () => {
     const modulePath = '../../src/community/board-scheme.ts';
     const board = await import(modulePath);
@@ -519,7 +519,7 @@ test.serial(
         );
       },
     };
-    const scales: [number, number, number] = [2048, 4096, 16384];
+    const scales: [number, number, number] = [2048, 8192, 32768];
     {
       let head = probe.headRevisionId;
       const report = await checkGrowth(db, {
