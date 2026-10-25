@@ -240,16 +240,14 @@ async function disclose(
   const initial = observed.value;
   const board = initial?.thread.board_id ? await readBoard(dependencies, initial.thread.board_id, context) : null;
   const erased =
-    !!revisionId &&
-    !!initial &&
-    (initial.posts[0]?.availability === 'erased' || initial.revision?.availability === 'erased');
+    !!initial && (initial.posts[0]?.availability === 'erased' || initial.revision?.availability === 'erased');
   const rows = initial ? [initial.thread, ...initial.posts] : [];
   const checks: AccessCheck[] = [];
   if (board?.value) {
     for (const row of rows) {
-      const explicitErasureRead =
+      const erasureRead =
         erased && (row === initial?.posts[0] || row.visibility === 'taken_down' || row.availability === 'erased');
-      checks.push(await prepare(dependencies, row, context, { observed, board }, explicitErasureRead));
+      checks.push(await prepare(dependencies, row, context, { observed, board }, erasureRead));
     }
   }
   return snapshot(dependencies, threadId, context, async (client) => {
@@ -260,7 +258,8 @@ async function disclose(
       if (!admissible(rows[index]!, context, erased) || !(await checks[index]!(client))) return null;
     }
     if (!current.revision || !current.posts[0]) return null;
-    // Exact bytes are loaded only after every container and Access check passes.
+    // Logical erasure suppresses retained bytes for both head and exact reads.
+    // Available bytes are loaded only after every container and Access check passes.
     const revision = await point(client, 'revision', current.revision.id, threadId, !erased);
     if (!revision || revision.parent_id !== current.posts[0].id) return null;
     const item = itemView(current.posts[0], revision, erased);
@@ -271,7 +270,7 @@ async function disclose(
       id: thread.id,
       route: route(thread.id),
       authorId: thread.author_id!,
-      title: thread.title,
+      title: erased ? null : thread.title,
       licence: item.licence,
       subjectIds: item.subjectIds,
       boardId: thread.board_id!,
