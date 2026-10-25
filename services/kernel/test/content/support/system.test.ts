@@ -125,15 +125,27 @@ test('the isolated content system uses real ordinary and website identities thro
 
 test('failed full fixture construction removes only the partial isolated databases', async () => {
   const admin = new Pool({ connectionString: adminConnection(databaseUrl) });
-  const name = `content_empty_${crypto.randomUUID().replaceAll('-', '')}`;
+  const name = `content_partial_${crypto.randomUUID().replaceAll('-', '')}`;
   const source = new URL(databaseUrl);
   source.pathname = `/${name}`;
   let created = false;
   try {
-    await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
+    const templateName = decodeURIComponent(new URL(databaseUrl).pathname.slice(1));
+    const quotedTemplate = `"${templateName.replaceAll('"', '""')}"`;
+    await admin.query(`CREATE DATABASE "${name}" TEMPLATE ${quotedTemplate}`);
     created = true;
+    const malformedTemplate = new Pool({ connectionString: source.href });
+    try {
+      // Keep the migration probe intact, then fail at the real governance
+      // bootstrap after both isolated fixture databases and Auth have started.
+      await malformedTemplate.query('DROP TABLE access.governance_bootstrap');
+    } finally {
+      await malformedTemplate.end();
+    }
     const before = await admin.query('SELECT datname FROM pg_database ORDER BY datname');
-    await expect(createContentSystem({ databaseUrl: source.href })).rejects.toThrow();
+    await expect(createContentSystem({ databaseUrl: source.href })).rejects.toThrow(
+      'Operator governance bootstrap is unavailable',
+    );
     expect((await admin.query('SELECT datname FROM pg_database ORDER BY datname')).rows).toEqual(before.rows);
     expect((await admin.query('SELECT datname FROM pg_database WHERE datname=$1', [name])).rows).toEqual([
       { datname: name },
