@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { StdioAppServer, textInput } from '../src/app-server.ts';
+import { connectPool, textInput } from '../src/app-server.ts';
 
 const codexHome = process.env.CODEX_HOME;
 if (!codexHome) throw new Error('Set CODEX_HOME to the pool to smoke test');
 const cwd = resolve(import.meta.dir, '../../../.temp/codex-manager-smoke');
 mkdirSync(cwd, { recursive: true });
-const client = new StdioAppServer(['codex', 'app-server', '--stdio'], { ...process.env, CODEX_HOME: codexHome }, 60_000);
+const client = await connectPool({ id: 'smoke', codexHome });
 let threadId: string | undefined;
 let activeTurn: string | undefined;
 client.onNotification(({ method, params }) => {
@@ -20,6 +20,7 @@ try {
   const thread = await client.request('thread/start', { cwd, model: 'gpt-6.1-sol', approvalPolicy: 'never', sandbox: 'read-only',
     config: { model_reasoning_effort: 'low', model_auto_compact_token_limit: 300000 } });
   threadId = thread.thread.id;
+  console.log(JSON.stringify({ step: 'viewer', command: `codex resume ${threadId} --remote ${client.endpoint}` }));
   const set = await client.request('thread/goal/set', { threadId, objective: 'Acknowledge the smoke-test instruction and wait for a steer. Do not change any files.',
     status: 'active', tokenBudget: 20000, origin: 'user' });
   console.log(JSON.stringify({ step: 'goal-set', threadId, goal: set.goal }));

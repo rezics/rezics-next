@@ -1,8 +1,9 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 export type Notification = { method: string; params: any };
 export interface AppServer {
+  endpoint?: string;
   request<T = any>(method: string, params: unknown): Promise<T>;
   onNotification(listener: (notification: Notification) => void): () => void;
   close(): void;
@@ -70,14 +71,110 @@ export class StdioAppServer implements AppServer {
 
 export type CodexPool = { id: string; codexHome: string; executable?: string };
 
-/** A shared daemon per CODEX_HOME lets a tmux TUI join the manager's exact server. */
-export async function connectPool(pool: CodexPool): Promise<StdioAppServer> {
+/** JSON-RPC over the WebSocket app-server owned by this manager host. */
+export class WebSocketAppServer implements AppServer {
+  private nextId = 0;
+  private pending = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private listeners = new Set<(notification: Notification) => void>();
+  private ended: Error | undefined;
+  constructor(readonly endpoint: string, private readonly socket: WebSocket, private readonly child: ChildProcessWithoutNullStreams,
+    private readonly timeoutMs = 30_000) {
+    socket.addEventListener('message', event => {
+      try { this.receive(JSON.parse(typeof event.data === 'string' ? event.data : String(event.data))); }
+      catch (error) { this.fail(new Error(`Invalid app-server message: ${error}`)); }
+    });
+    socket.addEventListener('error', () => this.fail(new Error('App-server WebSocket failed')));
+    socket.addEventListener('close', () => this.fail(new Error('App-server WebSocket closed')));
+    child.on('error', error => this.fail(error));
+    child.on('exit', (code, signal) => this.fail(new Error(`App-server exited (${code ?? signal})`)));
+  }
+  private receive(message: any): void {
+    if (message.method && message.id !== undefined) {
+      this.write({ id: message.id, error: { code: -32601, message: `Unsupported server request: ${message.method}` } });
+    } else if (message.method) {
+      for (const listener of this.listeners) listener(message);
+    } else {
+      const pending = this.pending.get(message.id);
+      if (!pending) return;
+      this.pending.delete(message.id); clearTimeout(pending.timer);
+      if (message.error) pending.reject(new RpcError(message.error.code, message.error.message, message.error.data));
+      else pending.resolve(message.result);
+    }
+  }
+  private write(message: unknown): void {
+    if (this.socket.readyState !== WebSocket.OPEN) throw this.ended ?? new Error('App-server WebSocket is not open');
+    this.socket.send(JSON.stringify(message));
+  }
+  private fail(error: Error): void {
+    if (this.ended) return;
+    this.ended = error;
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
+    this.pending.clear();
+  }
+  async initialize(): Promise<void> {
+    await this.request('initialize', { clientInfo: { name: 'rezics_goal', title: 'REZICS Goal', version: '0.1.0' },
+      capabilities: { experimentalApi: true, requestAttestation: false } });
+    this.write({ method: 'initialized' });
+  }
+  request<T = any>(method: string, params: unknown): Promise<T> {
+    if (this.ended) return Promise.reject(this.ended);
+    const id = ++this.nextId;
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`App-server request timed out: ${method}`)); }, this.timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      try { this.write({ id, method, params }); } catch (error) {
+        clearTimeout(timer); this.pending.delete(id); reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+  onNotification(listener: (notification: Notification) => void): () => void {
+    this.listeners.add(listener); return () => this.listeners.delete(listener);
+  }
+  close(): void {
+    this.fail(new Error('App-server client closed'));
+    try { this.socket.close(); } catch {}
+    this.child.kill();
+  }
+}
+
+/** Starts one loopback app-server owned by this process and connects its JSON-RPC WebSocket. */
+export async function connectPool(pool: CodexPool): Promise<WebSocketAppServer> {
   const executable = pool.executable ?? 'codex';
   const env = { ...process.env, CODEX_HOME: pool.codexHome };
-  const started = spawnSync(executable, ['app-server', 'daemon', 'start'], { env, encoding: 'utf8', timeout: 30_000 });
-  if (started.status !== 0) throw new Error(started.stderr || started.error?.message || 'Cannot start Codex daemon');
-  const client = new StdioAppServer([executable, 'app-server', 'proxy'], env);
-  try { await client.initialize(); return client; } catch (error) { client.close(); throw error; }
+  const child = spawn(executable, ['app-server', '--listen', 'ws://127.0.0.1:0'], { env, stdio: 'pipe' });
+  child.stdout.resume();
+  let stderr = '';
+  let settled = false;
+  const ready = new Promise<string>((resolveReady, reject) => {
+    const finish = (error?: Error, value?: string) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (error) reject(error); else resolveReady(value!);
+    };
+    const timer = setTimeout(() => finish(new Error(`Timed out waiting for app-server readiness: ${stderr}`)), 30_000);
+    child.stderr.on('data', chunk => {
+      stderr += String(chunk);
+      const match = stderr.match(/readyz:\s*(https?:\/\/127\.0\.0\.1:\d+\/readyz)/);
+      if (match) finish(undefined, match[1]);
+    });
+    child.on('error', error => finish(error));
+    child.on('exit', (code, signal) => finish(new Error(`App-server exited before readiness (${code ?? signal}): ${stderr}`)));
+  });
+  try {
+    const readiness = await ready;
+    const endpoint = readiness.replace(/^https?:/, 'ws:').replace(/\/readyz$/, '');
+    const socket = new WebSocket(endpoint);
+    await new Promise<void>((resolveReady, reject) => {
+      const timer = setTimeout(() => { socket.close(); reject(new Error(`Timed out connecting to app-server at ${endpoint}`)); }, 30_000);
+      socket.addEventListener('open', () => { clearTimeout(timer); resolveReady(); }, { once: true });
+      socket.addEventListener('error', () => { clearTimeout(timer); reject(new Error(`Cannot connect to app-server at ${endpoint}`)); }, { once: true });
+    });
+    const client = new WebSocketAppServer(endpoint, socket, child);
+    try { await client.initialize(); return client; } catch (error) { client.close(); throw error; }
+  } catch (error) {
+    child.kill();
+    throw error;
+  }
 }
 
 export const textInput = (text: string) => [{ type: 'text', text, text_elements: [] }];

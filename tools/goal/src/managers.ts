@@ -137,8 +137,10 @@ export class ManagerSessions {
           const goal = await client.request('thread/goal/set', { threadId: state.threadId, objective: spec.objective,
             status: 'active', tokenBudget: spec.budget, origin: 'user' });
           state.goalState = goal.goal; state.status = 'running'; this.save(state);
+          const viewer = [spec.pool.executable ?? 'codex', 'resume', state.threadId!];
+          if (client.endpoint) viewer.push('--remote', client.endpoint);
           this.services.windows.register(spec.id, ['env', `CODEX_HOME=${spec.pool.codexHome}`, `GOAL_MANAGER=${spec.id}`,
-            spec.pool.executable ?? 'codex', 'resume', state.threadId!], spec.cwd);
+            ...viewer], spec.cwd);
           const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(this.opening(spec)) });
           this.turnStarted(state, turn.turn.id);
         } else {
