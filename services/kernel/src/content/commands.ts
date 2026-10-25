@@ -9,6 +9,8 @@ import {
   type ResourceCreationEntry,
   type ResourceCreationPort,
 } from '../access/index.ts';
+import defaults from '../access/resource-roles.json';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -45,6 +47,37 @@ type ThreadCreationInput = ThreadInput & Readonly<{ mediaIds?: readonly string[]
 const CREATE_THREAD = 'content.thread.create';
 const CREATE_POST = 'content.post.create';
 const REVISE_POST = 'content.post.revise';
+const CONTENT_GRANT_TYPES = ['content.thread', 'content.post'] as const;
+
+/** Role resolution drops a content template when any named action is unmounted.
+ * Thread and post creation still have to install the canonical owner and standing
+ * grants; the definitions live in the shared role document. */
+function ensureContentGrantTemplates(access: Access): void {
+  const installed = resourceRoleCatalogue(access);
+  if (!installed || CONTENT_GRANT_TYPES.every((type) => installed.types.has(type))) return;
+  const roles = new Map(installed.roles);
+  const types = new Map(installed.types);
+  const roleActions = defaults.roles as Readonly<Record<string, readonly string[]>>;
+  const typeTemplates = defaults.types as Readonly<
+    Record<string, { readonly owner?: string; readonly standing: readonly string[] }>
+  >;
+  for (const type of CONTENT_GRANT_TYPES) {
+    if (types.has(type)) continue;
+    const template = typeTemplates[type];
+    if (!template) continue;
+    const roleNames = [...(template.owner === undefined ? [] : [template.owner]), ...template.standing];
+    for (const role of roleNames) {
+      const actions = roleActions[role];
+      if (!roles.has(role) && actions) roles.set(role, actions);
+    }
+    if (!roleNames.every((role) => roles.has(role))) continue;
+    types.set(type, {
+      ...(template.owner === undefined ? {} : { owner: template.owner }),
+      standing: [...template.standing],
+    });
+  }
+  installResourceRoleCatalogue(access, { roles, types });
+}
 
 export class ContentNotFoundError extends Error {
   constructor() {
@@ -56,6 +89,12 @@ export class ContentForbiddenError extends Error {
   constructor() {
     super('Content write is not authorized');
     this.name = 'ContentForbiddenError';
+  }
+}
+export class RevisionPreconditionError extends Error {
+  constructor() {
+    super('Revision precondition failed');
+    this.name = 'RevisionPreconditionError';
   }
 }
 function account(actor: Actor) {
@@ -346,6 +385,7 @@ export async function createThread(
   input: ThreadCreationInput,
   context: RequestContext,
 ): Promise<CommandOutcome<ContentCommandValue>> {
+  ensureContentGrantTemplates(dependencies.access);
   const author = account(actor);
   const body = request(input);
   const target = threadTarget(dependencies.routeKey, author.accountId, context.idempotencyKey);
@@ -466,6 +506,7 @@ export async function createPost(
   input: PostInput,
   context: RequestContext,
 ): Promise<CommandOutcome<ContentCommandValue>> {
+  ensureContentGrantTemplates(dependencies.access);
   const author = account(actor);
   const body = request(input);
   const r = route(body.threadId);
@@ -542,7 +583,7 @@ export async function revisePost(
   context: RequestContext,
 ): Promise<CommandOutcome<ContentCommandValue>> {
   const author = account(actor);
-  const body = request(input);
+  const body = request({ ...input, expectedRevisionId: input.expectedRevisionId ?? null });
   const r = route(body.threadId);
   const value = { threadId: body.threadId, itemId: body.itemId, revisionId: newId(r) };
   const container = containerAuthorization(dependencies, actor, body.threadId, body.itemId, context, true);
@@ -560,6 +601,8 @@ export async function revisePost(
     { ...options(dependencies, actor, r, REVISE_POST, body, context), authorization },
     async (tx, command) => {
       const previous = container.current.posts[0]!;
+      if (body.expectedRevisionId !== null && body.expectedRevisionId !== previous.head_revision_id)
+        throw new RevisionPreconditionError();
       if (body.boardId !== undefined && body.boardId !== container.current.thread.board_id)
         throw new InvalidDocumentError('Board mismatch');
       const mediaIds = mediaReferences(body.mediaIds === undefined ? previous.media_ids : body.mediaIds, r);

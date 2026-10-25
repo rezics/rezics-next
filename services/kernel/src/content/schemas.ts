@@ -82,6 +82,7 @@ const item = {
   revisionId: ContentIdSchema,
   sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
   mediaIds: media,
+  revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
   ...viewerReaction,
 };
 

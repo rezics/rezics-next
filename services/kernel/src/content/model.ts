@@ -29,6 +29,7 @@ export type ItemMetadata = Readonly<{
   securityRevision: SecurityRevision;
   availability: Availability;
   createdAt: string;
+  revisedAt: string | null;
   sha256: string;
   mediaIds: readonly MediaId[];
 }>;
@@ -43,6 +44,7 @@ export type RevisionMetadata = Readonly<{
   subjectIds: readonly ContentId[];
   boardId: BoardId;
   createdAt: string;
+  revisedAt: string | null;
   sha256: string;
   mediaIds: readonly MediaId[];
 }>;
@@ -107,6 +109,8 @@ export type RevisionInput = Readonly<{
   subjectIds?: readonly ContentId[];
   boardId?: BoardId;
   mediaIds?: readonly MediaId[];
+  /** Head the caller last observed. Null omits the check; the digest still records it. */
+  expectedRevisionId?: string | null;
 }>;
 export type RequestContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
 export type AnchoredPosition = Readonly<{ partition: Partition; epoch: number; position: bigint }>;

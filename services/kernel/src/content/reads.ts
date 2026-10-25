@@ -53,6 +53,7 @@ type Row = {
   security_revision: string;
   availability: 'available' | 'erased';
   created_at: Date;
+  revised_at: Date | null;
   licence: string;
   subject_ids: string[];
   media_ids: string[];
@@ -310,6 +311,7 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
     visibility: post.visibility,
     securityRevision: post.security_revision,
     createdAt: post.created_at.toISOString(),
+    revisedAt: post.revised_at === null ? null : post.revised_at.toISOString(),
     sha256: revision.sha256.toString('hex'),
     mediaIds: revision.media_ids,
     revisionId: revision.id,

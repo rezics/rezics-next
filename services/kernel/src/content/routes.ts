@@ -1,6 +1,7 @@
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { erasePostLogical } from './erase-post.ts';
 import { withConnection } from '../database/pool.ts';
@@ -20,6 +21,7 @@ import {
   ContentNotFoundError as CommandNotFoundError,
   createPost,
   createThread,
+  RevisionPreconditionError,
   revisePost,
   type ContentCommandDependencies,
 } from './commands.ts';
@@ -89,6 +91,10 @@ const writeFailures = {
 };
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
+const reviseHeaders = t.Object(
+  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
+  { additionalProperties: true },
+);
 const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
@@ -175,6 +181,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('forbidden');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
+    if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
     if (
       error instanceof TypeError &&
       (error.message === 'Invalid content cursor' || error.message === 'Invalid reaction kind')
@@ -182,6 +189,18 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('invalid_request');
     throw error;
   }
+}
+
+function expectedRevision(header: string | null): string | null {
+  if (header === null) return null;
+  let value: unknown;
+  try {
+    [value] = parseItem(header);
+  } catch {
+    throw new ProblemError('invalid_request');
+  }
+  if (typeof value !== 'string' || routeOf(value) === null) throw new ProblemError('invalid_request');
+  return value;
 }
 
 function existingId(id: string): number {
@@ -468,15 +487,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id',
       {
         params,
-        response: { 200: withHeaders(postResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(postResponse, { ...sessionHeader, etag: t.String() }), ...readFailures },
         detail: { operationId: 'post.get', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
       },
-      async ({ params: { id }, actor, admission, job, session }) =>
+      async ({ params: { id }, actor, admission, job, session, set }) =>
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
             const post = await exactPost(await containingThread(id, context), id, context);
             session.record(sessionComponent(post.anchor));
+            set.headers.etag = JSON.stringify(post.value.revisionId);
             return { post: post.value };
           }),
         ),
@@ -517,9 +537,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         parse: [parseBody, 'json'],
         transform: rejectOversized,
-        headers: commandHeaders,
+        headers: reviseHeaders,
         body: revisionInput,
-        response: { 200: withHeaders(postResponse, sessionHeader), ...writeFailures },
+        response: {
+          200: withHeaders(postResponse, sessionHeader),
+          ...writeFailures,
+          412: problemSchema('precondition_failed'),
+        },
         detail: {
           operationId: 'post.revise',
           'x-exposure': 'public',
@@ -535,7 +559,17 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           admission.run('normal', job, async () => {
             const readContext = { actor, deadline: job.deadline };
             const threadId = await containingThread(id, readContext);
-            const result = await revisePost(dependencies, actor, { ...body, threadId, itemId: id }, context);
+            const result = await revisePost(
+              dependencies,
+              actor,
+              {
+                ...body,
+                threadId,
+                itemId: id,
+                expectedRevisionId: expectedRevision(request.headers.get('if-match')),
+              },
+              context,
+            );
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,

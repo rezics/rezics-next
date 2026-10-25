@@ -28626,6 +28626,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 securityRevision: import("../content/model.ts").SecurityRevision;
                                 availability: import("../content/model.ts").Availability;
                                 createdAt: string;
+                                revisedAt: string | null;
                                 sha256: string;
                                 mediaIds: readonly import("../content/model.ts").MediaId[];
                             }> & {
@@ -28648,6 +28649,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 securityRevision: import("../content/model.ts").SecurityRevision;
                                 availability: import("../content/model.ts").Availability;
                                 createdAt: string;
+                                revisedAt: string | null;
                                 sha256: string;
                                 mediaIds: readonly import("../content/model.ts").MediaId[];
                             }> & {
@@ -28956,6 +28958,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -28978,6 +28981,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29004,6 +29008,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29028,6 +29033,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29205,6 +29211,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29229,6 +29236,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29358,6 +29366,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 securityRevision: import("../content/model.ts").SecurityRevision;
                                 availability: import("../content/model.ts").Availability;
                                 createdAt: string;
+                                revisedAt: string | null;
                                 sha256: string;
                                 mediaIds: readonly import("../content/model.ts").MediaId[];
                             }> & {
@@ -29382,6 +29391,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 securityRevision: import("../content/model.ts").SecurityRevision;
                                 availability: import("../content/model.ts").Availability;
                                 createdAt: string;
+                                revisedAt: string | null;
                                 sha256: string;
                                 mediaIds: readonly import("../content/model.ts").MediaId[];
                             }> & {
@@ -29638,6 +29648,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         query: unknown;
                         headers: {
                             "idempotency-key": string;
+                            'if-match'?: string;
                         };
                         response: {
                             200: {
@@ -29654,6 +29665,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29678,6 +29690,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29735,6 +29748,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            412: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -29855,6 +29882,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -29879,6 +29907,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     securityRevision: import("../content/model.ts").SecurityRevision;
                                     availability: import("../content/model.ts").Availability;
                                     createdAt: string;
+                                    revisedAt: string | null;
                                     sha256: string;
                                     mediaIds: readonly import("../content/model.ts").MediaId[];
                                 }> & {
@@ -30011,6 +30040,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                         securityRevision: import("../content/model.ts").SecurityRevision;
                                         availability: import("../content/model.ts").Availability;
                                         createdAt: string;
+                                        revisedAt: string | null;
                                         sha256: string;
                                         mediaIds: readonly import("../content/model.ts").MediaId[];
                                     }> & {
@@ -30035,6 +30065,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                         securityRevision: import("../content/model.ts").SecurityRevision;
                                         availability: import("../content/model.ts").Availability;
                                         createdAt: string;
+                                        revisedAt: string | null;
                                         sha256: string;
                                         mediaIds: readonly import("../content/model.ts").MediaId[];
                                     }> & {

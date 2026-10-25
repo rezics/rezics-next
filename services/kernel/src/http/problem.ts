@@ -9,6 +9,7 @@ export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
 
 export const PROBLEMS = {
   invalid_request: { status: 400, title: 'Invalid Request', retryable: false },
+  precondition_failed: { status: 412, title: 'Precondition Failed', retryable: false },
   content_too_large: { status: 413, title: 'Content Too Large', retryable: false },
   invalid_signature: { status: 400, title: 'Invalid Signature', retryable: false },
   idempotency_conflict: { status: 422, title: 'Idempotency Key Reused', retryable: false },
