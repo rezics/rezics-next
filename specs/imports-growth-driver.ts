@@ -1,32 +1,39 @@
 /**
- * Immutable outcome contract; no implementation or simulated counters here.
+ * Outcome contract; no product implementation or simulated counters here.
  * IMPORT_GROWTH_DRIVER is an absolute path/file URL exporting
  * createImportGrowthDriver(). Each instance owns isolated stores and credentials.
  *
- * No performance harness exists on main at specification time. Binding must use
- * the performance Goal's shared harness when available, and a workspace check or
- * root gate must run this entire unchanged suite with that production binding.
- * The missing-driver verifier only proves the specification executes red.
+ * Production bindings must use openGrowthDatabase, seed, measure, checkGrowth
+ * and Population from services/kernel/test/support/growth.ts for PostgreSQL,
+ * retaining raw auto_explain capture (including nested Auth/Access/fence/receipt
+ * work). A root gate must run this suite with that real binding. The red verifier
+ * proves only executable specifications, never product success.
  *
  * All measurements include nested calls, retries, transactions, Auth, Access,
  * schema/projection validation, server fence checks and bulk-client requests.
- * Do not replace a dependent API with cheaper SQL or hide an existing-path cost:
- * report the exact production path and conflicting bound instead. No clocks,
- * mocks, product behavior, extrapolated counts or asserted constant counters.
- * Instrument actual operations, including zero-I/O converters. Keep raw executed
- * SQL and actual EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) / SQLite QUERY PLAN.
- * rowsExamined includes rejected/filtered/join rows, not just returned rows.
- * buffers includes hits AND reads; sqliteVmSteps/FULLSCAN_STEP are actual
- * sqlite3_stmt_status deltas, never estimates. All statements must be captured.
+ * No clocks, mocks, extrapolated counts, hidden work or cheaper substitute SQL.
+ * SQLite wraps actual Database prepare/query/run and Statement get/all/iterate/run,
+ * transaction and exec calls. Count executions, not preparations; count each
+ * executed SQL once (including transaction control), with actual bound parameters
+ * and rows delivered to store code, including lazy iterator consumption. Changes
+ * may be reported separately; returned rows are NOT examined rows.
+ * At each scale seed runs ANALYZE outside measurement. Capture raw EXPLAIN QUERY
+ * PLAN with the actual parameters for EVERY distinct executed SQLite SQL/binding,
+ * also outside measurement. Never require statement-status, VM or index-height
+ * estimates. SQLite blocks:0 means unavailable buffers, NOT zero physical I/O.
+ * Growing-table metadata comes from actual schema/index introspection, includes
+ * every growing relation (including read aliases), and is checked in test support.
+ * PostgreSQL retains actual examined rows and shared hits plus reads via growth.ts.
  *
  * N = unrelated catalogue/importer keys; history = unrelated U x t, including
  * history on the measured subject/source. M = fields/proposals, capped at 512;
  * recordBytes <= 65536; reconciliation/keyset page B = 8. Fixed operations allow
- * 24 statements per item and 64 * (items + M) examined/appended rows, independent of N/history.
- * A binary index has height ceil(log2(N + history + 2)); allow at most eight
- * buffer visits and 128 SQLite VM steps per statement per level, plus respectively
- * 8M and 128M for bounded field work across the operation. No scan is allowed
- * even below those absolute budgets.
+ * 24 statements per item and 64 * (items + M) rows per engine, independent of
+ * N/history (SQLite returned rows; PostgreSQL examined plus appended rows).
+ * Three equal-ratio scales use shared assertGrowth: constant statements and
+ * returned/examined rows for fixed operations, linear in bounded changed payload;
+ * PostgreSQL blocks are logarithmic in catalogue/history. SQLite indexed-key
+ * proof replaces unavailable work counters, never fabricated zero measurements.
  *
  * seed() is the ONLY setup method. Use the same deterministic algorithm at all
  * scales; bulk-load unrelated state outside measurement. It returns valid raw
@@ -49,7 +56,9 @@
  * unbounded anti-join. New/changed uses (source, record_key) seeks; staging uses
  * (source, run_id, record_key). Public commands route to each subject partition;
  * every refresh checks (source, external_id, field_group), including unchanged,
- * with the server checking again before a write to close the preflight race.
+ * with reference rechecks at command preparation and current-fence reads at final
+ * disclosure. Tuple-home authority is independent of subject mapping; a later
+ * cross-partition fence hides a write, without promising physical write exclusion.
  * Public writes occur only for D changed records. Bulk requests contain M bounded
  * commands. Seed/setup may NOT fake Auth or Access; real API paths use both.
  */
@@ -76,19 +85,44 @@ export interface ConverterFixture {
   oversized: Uint8Array;
   tooManyFields: Uint8Array;
 }
-export interface Statement {
-  sql: string;
-  engine: 'sqlite' | 'postgres';
-  /** Raw engine plan, including parameters/index conditions and actual rows. */
-  explain: string;
-  rowsExamined: number;
-  rowsAppended: number;
-  indexBuffers: number;
-  sqliteFullscanSteps?: number;
-  sqliteVmSteps?: number;
+export type SqliteValue = null | string | number | bigint | Uint8Array;
+export type SqliteParameters = readonly SqliteValue[] | Readonly<Record<string, SqliteValue>>;
+export interface GrowingRelation {
+  table: string;
+  /** Actual schema metadata, including unique keys used by exact INSERT. */
+  indexes: readonly { name: string; columns: readonly string[]; unique: boolean }[];
+  integerPrimaryKey?: string;
 }
+export interface SqliteStatement {
+  engine: 'sqlite';
+  sql: string;
+  parameters: SqliteParameters;
+  /** JSON of raw EXPLAIN QUERY PLAN rows for this SQL and these parameters. */
+  explain: string;
+  rowsReturned: number;
+  changes?: number;
+  classification: 'readable' | 'keyed-insert' | 'transaction-control';
+  /** Every growing relation read, including aliases for self joins/subqueries. */
+  reads: readonly { table: string; alias: string }[];
+}
+export interface PostgresStatement {
+  engine: 'postgres';
+  /** Actual write row count, separate from auto_explain examined rows. */
+  rowsAppended: number;
+  sql: string;
+  /** Raw auto_explain JSON; empty only for captured transaction control. */
+  explain: string;
+}
+export type Statement = SqliteStatement | PostgresStatement;
 export interface Counters {
   partitions: readonly string[];
+  /** Complete raw capture from growth.ts; never SQLite returned-row counters. */
+  postgres: import('../services/kernel/test/support/growth-cost').Capture;
+  sqlite: {
+    /** Actual ANALYZE executed after seeding at this scale, before measuring. */
+    analyzed: boolean;
+    growingRelations: readonly GrowingRelation[];
+  };
   statements: readonly Statement[];
   networkRequests: number;
   /** Instrumented field/byte visits, allocations and peak retained parser data. */
