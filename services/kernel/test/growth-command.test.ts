@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import pg, { type PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandEvent } from '../src/command/command.ts';
 import { newId } from '../src/route/route.ts';
@@ -46,7 +46,8 @@ const population: Population = {
           transaction_id: tx,
           epoch: 1,
           position: ordinal * 100 + 100,
-          actor_account_id: actor,
+          principal_id: actor,
+          principal_kind: 'account',
           client_id: clientId,
           requested_by: null,
         },
@@ -54,7 +55,8 @@ const population: Population = {
       'core.receipt': [
         {
           partition_no: partition,
-          actor_account_id: actor,
+          principal_id: actor,
+          principal_kind: 'account',
           command_kind: kind,
           idempotency_key: `${prefix}seed-${ordinal}`,
           request_digest: digest,

@@ -5,6 +5,7 @@ import readReceipt from './read-receipt.sql';
 import readTime from './time.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
+import { enterCommandGate } from './gate.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
@@ -231,10 +232,6 @@ function remaining(deadline: number): number {
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-function jitter(): Promise<void> {
-  return pause(5 + Math.floor(Math.random() * 16));
-}
-
 async function boundedRead<T>(client: PoolClient, deadline: number, read: () => Promise<T>): Promise<T> {
   await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
   try {
@@ -400,6 +397,8 @@ export async function runCommand<T>(
         attempt = Object.freeze({ partition, basis, time });
         evidence = await authorization.prepare(attempt);
       }
+      const gate = await enterCommandGate(pool, partition, deadline);
+      if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       const result = await withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
@@ -522,7 +521,7 @@ export async function runCommand<T>(
           commands.delete(tx);
           if (time) times.delete(time);
         }
-      });
+      }).finally(gate.release);
       if (result) return result;
       // Do not keep a failed attempt's T/capability alive during operational waits.
       if (time) times.delete(time);
@@ -531,18 +530,20 @@ export async function runCommand<T>(
       if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
       if (error instanceof CommandUnavailableError) throw error;
-      if (codeOf(error) === '57014' || Date.now() >= deadline) throw new CommandUnavailableError('deadline', partition);
+      if (codeOf(error) === '57014') throw new CommandUnavailableError('deadline', partition);
+      if (['40001', '40P01', '55P03'].includes(codeOf(error) ?? '')) {
+        if (Date.now() >= deadline) throw new CommandUnavailableError('contention', partition);
+        const maximum = Math.min(100, 5 * 2 ** contentionAttempts++);
+        await pause(Math.min(Math.random() * maximum, Math.max(0, deadline - Date.now())));
+        if (Date.now() >= deadline) throw new CommandUnavailableError('contention', partition);
+        continue;
+      }
+      if (Date.now() >= deadline) throw new CommandUnavailableError('deadline', partition);
       if (
         codeOf(error) === '53300' ||
         (error instanceof Error && /timeout exceeded when trying to connect/i.test(error.message))
       )
         throw new CommandUnavailableError('overloaded', partition);
-      if (['40001', '40P01', '55P03'].includes(codeOf(error) ?? '')) {
-        contentionAttempts++;
-        if (contentionAttempts >= 3) throw new CommandUnavailableError('contention', partition);
-        await jitter();
-        continue;
-      }
       throw error;
     } finally {
       if (time) times.delete(time);

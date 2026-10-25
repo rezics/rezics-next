@@ -103,7 +103,9 @@ test('commands in one partition from one pool run one at a time and never collid
   );
   const results = await Promise.all(commands);
   expect(results.map((result) => result.position)).toEqual(Array.from({ length: 16 }, (_, n) => BigInt(n + 1)));
-  expect(results.map((result) => result.value).toSorted()).toEqual(Array.from({ length: 16 }, (_, n) => n));
+  expect(results.map((result) => result.value).toSorted((left, right) => left - right)).toEqual(
+    Array.from({ length: 16 }, (_, n) => n),
+  );
   expect(bodyCalls).toBe(16);
   expect(peak).toBe(1);
   expect(await position(9)).toBe(16);
@@ -171,12 +173,14 @@ test('a partition refuses the sixty-fifth waiter and commits every admitted wait
       events: [event(n)],
     })),
   );
+  const refusedAt = Date.now();
   const refused = await runCommand(pool, { partition: 12, deadline: Date.now() + 60_000 }, async () => ({
     value: 65,
     events: [event(65)],
   })).catch((caught: unknown) => caught);
   expect(refused).toBeInstanceOf(CommandUnavailableError);
   expect(refused).toMatchObject({ reason: 'overloaded', partition: 12 });
+  expect(Date.now() - refusedAt).toBeLessThan(150);
   release();
   const [firstResult, ...waiterResults] = await Promise.all([first, ...waiters]);
   expect(firstResult.position).toBe(1n);
