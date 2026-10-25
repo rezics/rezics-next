@@ -116,3 +116,23 @@ in `board-scheme.ts` includes the scheme in its exact head read, including HTTP 
 The board scheme HTTP tests use genuine Auth-issued tokens and production Access.
 The kernel does not mount `account:suspend`, so the suspended-account persona is
 omitted rather than simulated by a database state mutation.
+
+Accounts owns the durable membership workflow and the actor-side inverse.
+`createRealmMembership` is the Realm partition adapter that workflow calls.
+`publish` runs in the Realm partition under the workflow step key. Role `member`
+opens `[T, infinity)` when no interval covers T. Role null closes the interval
+that covers T for that reservation and writes the terminal slot. The Realm must
+be active at T. Role `owner` is rejected: Realm owners are identity grants, not
+membership rows. The actor needs `realm:join` when joining themselves and
+`realm:manage` otherwise. `terminalize` writes the terminal slot only when that
+reservation has no member row, so an unpublished reservation can be closed and a
+published one cannot. Terminal rows are immutable. `readTerminal` and `readChange`
+are exact point reads of committed evidence. The role reader returns the owner
+and member proofs, using the current temporal key and the next lower-bound seek.
+A missing Realm, or one that is not yet active at T, has no proof.
+
+| Operation              | Touches                                                                                                                                                          | Bound                                  | Growth check                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Publish membership     | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A                                          | O(1) rows, O(log R) blocks, plus A     | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans    |
+| Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                                                            | O(1) rows, O(log R) blocks             | The same fixed probe and scales                                                                                                                                 |
+| Role proof             | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point                                                    | O(1) rows, O(log R) blocks             | The same fixed probe and scales                                                                                                                                 |

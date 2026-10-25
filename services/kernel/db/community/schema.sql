@@ -71,6 +71,19 @@ $$;
 
 
 --
+-- Name: guard_realm_member_terminal(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.guard_realm_member_terminal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Realm membership terminal slots are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_realm_revision(); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -201,6 +214,42 @@ CREATE TABLE community.realm (
 
 
 --
+-- Name: realm_member; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.realm_member (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    role text NOT NULL,
+    valid tstzrange NOT NULL,
+    reservation_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT realm_member_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT realm_member_role_check CHECK ((role = 'member'::text)),
+    CONSTRAINT realm_member_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_member_valid_check CHECK ((NOT isempty(valid)))
+);
+
+
+--
+-- Name: realm_member_terminal; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.realm_member_terminal (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    at timestamp with time zone NOT NULL,
+    CONSTRAINT realm_member_terminal_at_check CHECK (isfinite(at)),
+    CONSTRAINT realm_member_terminal_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT realm_member_terminal_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: realm_revision; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -294,6 +343,22 @@ ALTER TABLE ONLY community.publication
 
 
 --
+-- Name: realm_member realm_member_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.realm_member
+    ADD CONSTRAINT realm_member_pkey PRIMARY KEY (route, realm_id, account_id, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: realm_member_terminal realm_member_terminal_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.realm_member_terminal
+    ADD CONSTRAINT realm_member_terminal_pkey PRIMARY KEY (route, realm_id, account_id, reservation_id);
+
+
+--
 -- Name: realm realm_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -365,6 +430,27 @@ CREATE INDEX publication_head_adopted_page ON community.publication_head USING b
 
 
 --
+-- Name: realm_member_change; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE UNIQUE INDEX realm_member_change ON community.realm_member USING btree (route, realm_id, account_id, transaction_id);
+
+
+--
+-- Name: realm_member_next; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX realm_member_next ON community.realm_member USING btree (route, realm_id, account_id, lower(valid)) WHERE (NOT lower_inf(valid));
+
+
+--
+-- Name: realm_member_reservation; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX realm_member_reservation ON community.realm_member USING btree (route, realm_id, account_id, reservation_id);
+
+
+--
 -- Name: publication_head publication_head_identity; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -383,6 +469,13 @@ CREATE TRIGGER publication_immutable BEFORE DELETE OR UPDATE ON community.public
 --
 
 CREATE TRIGGER realm_identity BEFORE UPDATE ON community.realm FOR EACH ROW EXECUTE FUNCTION community.guard_realm();
+
+
+--
+-- Name: realm_member_terminal realm_member_terminal_immutable; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_member_terminal_immutable BEFORE DELETE OR UPDATE ON community.realm_member_terminal FOR EACH ROW EXECUTE FUNCTION community.guard_realm_member_terminal();
 
 
 --
