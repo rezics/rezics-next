@@ -18,26 +18,29 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } f
 import { parentCreationAuthorization } from '../../access/index.ts';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { authoritativeTimeValue } from '../../command/command.ts';
+import { activeRelease } from '../definitions.ts';
 import type { Access } from '../../request/access.ts';
 import { globalContextAnchor } from '../context.ts';
 
-const LabelsInput = t.Object({ labels: t.Optional(t.Record(t.String(), t.Any())) }, { additionalProperties: false });
+const LabelsInput = t.Object(
+  {
+    labels: t.Optional(t.Record(t.String(), t.Any())),
+    settings: t.Optional(t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' })),
+  },
+  { additionalProperties: false },
+);
 const ContextSchema = t.Object(
   {
     id: t.String({ format: 'uuid' }),
     kind: t.Union([t.Literal('community'), t.Literal('global')]),
     labels: t.Record(t.String(), t.String()),
+    settings: t.Union([t.Object({ id: t.String(), release: t.String() }, { additionalProperties: false }), t.Null()]),
+    defaults: t.Record(t.String(), t.Union([t.Literal('inherit'), t.Literal('suppress')])),
   },
   { additionalProperties: false },
 );
 const contextResponse = t.Object({ context: ContextSchema }, { additionalProperties: false });
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const unavailable = problemSchema(
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-);
 
 function contextRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -55,7 +58,13 @@ function contextRoutes(
           401: unauthorized,
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
         },
         detail: {
           operationId: 'context.create',
@@ -67,6 +76,14 @@ function contextRoutes(
       async ({ body, headers, actor, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
+        const active = await activeRelease(dependencies.pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        const settingsId = body.settings;
+        const settingsDefinition = settingsId === undefined ? undefined : active.release.contexts?.[settingsId];
+        if (settingsId !== undefined && !Object.hasOwn(active.release.contexts ?? {}, settingsId))
+          throw new ProblemError('invalid_request', { errors: [{ pointer: '/settings', code: 'unsupported' }] });
+        const settings = settingsId === undefined ? null : { id: settingsId, release: active.digest };
+        const defaults = settingsDefinition?.defaults ?? {};
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = contextTarget(dependencies.routeKey, account.accountId, key);
         try {
@@ -102,6 +119,8 @@ function contextRoutes(
               idempotencyKey: key,
               digest: requestDigest('context.create', account, body),
               input: body,
+              settings,
+              defaults,
               authorization,
               deadline: job.deadline,
             }),

@@ -165,12 +165,17 @@ export async function slotView(
   subject: string,
   property: string,
   context = GLOBAL_CONTEXT,
+  defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
   if (context === GLOBAL_CONTEXT) return { facts: await globalSlotView(tx, subject, property) };
 
   const state = await resolveSlot(tx, subject, property, context);
-  if (!state.expanded) return { facts: state.compact.map((candidate) => candidateFact(property, candidate)) };
-  if (state.adoption?.mode === 'suppress') return { facts: [], resolution: 'suppressed' };
+  if (!state.expanded) {
+    if (defaults[property] === 'suppress') return { facts: [], resolution: 'suppressed' };
+    return { facts: state.compact.map((candidate) => candidateFact(property, candidate)) };
+  }
+  if (state.adoption?.mode === 'suppress' || (!state.adoption && defaults[property] === 'suppress'))
+    return { facts: [], resolution: 'suppressed' };
   if (state.adoption?.mode === 'replace')
     return { facts: await selectionFacts(tx, subject, property, state.adoption.selection) };
 

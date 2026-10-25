@@ -45,7 +45,13 @@ export class ContextNotFoundError extends Error {
   }
 }
 
-export type ContextRecord = { id: string; kind: 'community' | 'global'; labels: Record<string, string> };
+export type ContextRecord = {
+  id: string;
+  kind: 'community' | 'global';
+  labels: Record<string, string>;
+  settings: { id: string; release: string } | null;
+  defaults: Record<string, 'inherit' | 'suppress'>;
+};
 
 export async function createContext(
   pool: Pool,
@@ -55,6 +61,8 @@ export async function createContext(
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
+    settings?: ContextRecord['settings'];
+    defaults?: ContextRecord['defaults'];
     authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
@@ -62,6 +70,8 @@ export async function createContext(
 ) {
   const { route, id } = options.target;
   if (routeOf(id) !== route) throw new RangeError('Context target id must carry its route');
+  const settings = options.settings ?? null;
+  const defaults = options.defaults ?? {};
   // itemFacts is the shared validator for subject labels, including language and length limits.
   const labels = contextLabels(id, options.input);
   const command = await runCommand(
@@ -91,7 +101,15 @@ export async function createContext(
       },
     },
     async (tx, { transactionId }) => {
-      await insertContext.run(tx, { route, context_id: id, labels, transaction_id: transactionId });
+      await insertContext.run(tx, {
+        route,
+        context_id: id,
+        labels,
+        settings_id: settings?.id ?? null,
+        settings_release: settings?.release ?? null,
+        defaults,
+        transaction_id: transactionId,
+      });
       if (options.authorization)
         await initializeResourceGrants(tx, {
           resource: options.target,
@@ -99,7 +117,7 @@ export async function createContext(
           creator: options.actor.accountId,
         });
       return {
-        value: { id, kind: 'community' as const, labels },
+        value: { id, kind: 'community' as const, labels, settings, defaults },
         events: [{ type: 'com.rezics.semantic.context.created.v1', data: { id } }],
       };
     },
@@ -111,7 +129,14 @@ export async function createContext(
   };
 }
 
-type ContextRow = { id: string; kind: ContextRecord['kind']; labels: Record<string, string> };
+type ContextRow = {
+  id: string;
+  kind: ContextRecord['kind'];
+  labels: Record<string, string>;
+  settings_id: string | null;
+  settings_release: string | null;
+  defaults: Record<string, 'inherit' | 'suppress'>;
+};
 
 export async function readContext(
   pool: Pool,
@@ -137,7 +162,13 @@ export async function readContext(
       }
       await client.query('COMMIT');
       return {
-        context: { id: row.id, kind: row.kind, labels: row.labels },
+        context: {
+          id: row.id,
+          kind: row.kind,
+          labels: row.labels,
+          settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
+          defaults: row.defaults,
+        },
         component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       };
     } catch (error) {
@@ -151,13 +182,17 @@ export async function readContext(
   });
 }
 
-export async function contextExists(pool: Pool, id: string): Promise<boolean> {
-  return (await readContext(pool, id, async () => true)) !== null;
+export async function contextSnapshot(pool: Pool, id: string): Promise<ContextRecord | null> {
+  return (await readContext(pool, id, async () => true))?.context ?? null;
 }
 
 export function contextLabels(id: string, input: unknown): Record<string, string> {
   const labels: Record<string, string> = {};
-  for (const fact of itemFacts(id, input)) {
+  const labelInput =
+    input !== null && typeof input === 'object' && !Array.isArray(input)
+      ? { labels: (input as Record<string, unknown>).labels }
+      : input;
+  for (const fact of itemFacts(id, labelInput)) {
     if (fact.kind === 'label' && fact.language !== null) labels[fact.language] = fact.body as string;
   }
   return labels;

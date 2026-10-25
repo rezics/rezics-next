@@ -15,6 +15,11 @@ export type ContextRecord = {
     id: string;
     kind: 'community' | 'global';
     labels: Record<string, string>;
+    settings: {
+        id: string;
+        release: string;
+    } | null;
+    defaults: Record<string, 'inherit' | 'suppress'>;
 };
 export declare function createContext(pool: Pool, options: {
     actor: AccountActor;
@@ -22,6 +27,8 @@ export declare function createContext(pool: Pool, options: {
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
+    settings?: ContextRecord['settings'];
+    defaults?: ContextRecord['defaults'];
     authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
@@ -30,6 +37,11 @@ export declare function createContext(pool: Pool, options: {
         id: string;
         kind: 'community';
         labels: Record<string, string>;
+        settings: {
+            id: string;
+            release: string;
+        } | null;
+        defaults: Record<string, "inherit" | "suppress">;
     };
     component: {
         partition: number;
@@ -46,6 +58,6 @@ export declare function readContext(pool: Pool, id: string, authorize: (client: 
         position: bigint;
     };
 } | null>;
-export declare function contextExists(pool: Pool, id: string): Promise<boolean>;
+export declare function contextSnapshot(pool: Pool, id: string): Promise<ContextRecord | null>;
 export declare function contextLabels(id: string, input: unknown): Record<string, string>;
 export declare function publicContextEligibility(resource: Resource): import("../access/eligibility.ts").ResourceEligibility;

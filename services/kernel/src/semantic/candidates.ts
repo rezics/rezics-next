@@ -26,7 +26,7 @@ import {
   type Candidate,
 } from './slots.ts';
 import readTypes from './read-item-types.sql';
-import { contextExists } from './context.ts';
+import { contextSnapshot } from './context.ts';
 
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}
@@ -553,8 +553,9 @@ export async function listCandidates(
   ring: KeyRing,
   options: PageOptions & { property: string; context: string },
 ) {
-  if (options.context !== GLOBAL_CONTEXT && !(await contextExists(pool, options.context)))
-    throw new SubjectNotFoundError();
+  const contextRecord = options.context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, options.context);
+  if (options.context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
+  const defaults = contextRecord?.defaults ?? {};
   return page(
     pool,
     ring,
@@ -626,7 +627,7 @@ export async function listCandidates(
         if (!release) throw new Error('Candidate release is missing');
         releases.set(row.release, release);
       }
-      const view = await slotView(client, options.subject, options.property, options.context);
+      const view = await slotView(client, options.subject, options.property, options.context, defaults);
       const ranks = new Map(
         view.facts.map((fact) => [
           fact.statement_id!,

@@ -8,6 +8,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { contextTarget } from '../../src/semantic/context.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -21,6 +22,7 @@ afterAll(async () => {
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
+const routeKey = new Uint8Array(32).fill(4);
 const actions = [
   'access:grant',
   'context:create',
@@ -47,7 +49,7 @@ const kernel = createKernel({
   pool,
   access: (config: AccessConfig) => createAccess({ ...config, auth }),
   tokens,
-  routeKey: new Uint8Array(32).fill(4),
+  routeKey,
   writeRate: {
     async spend() {
       return { allowed: true as const };
@@ -147,11 +149,11 @@ async function activateSettings(settingsId: string, mode: 'inherit' | 'suppress'
   return digest;
 }
 
-async function createContext(settings: string, idempotency = key()) {
+async function createContext(settings?: string, idempotency = key()) {
   const answer = await call('POST', '/v1/contexts', {
     authenticated: true,
     key: idempotency,
-    body: { labels: { en: 'Readers' }, settings },
+    body: { labels: { en: 'Readers' }, ...(settings === undefined ? {} : { settings }) },
   });
   return { ...answer, idempotency };
 }
@@ -219,12 +221,20 @@ test('a Context created from settings suppresses its default properties until it
     settings: null,
     defaults: {},
   });
+  const withoutSettings = await createContext();
+  expect(withoutSettings.response.status).toBe(201);
+  expect(withoutSettings.body.context.settings).toBeNull();
+  expect(withoutSettings.body.context.defaults).toEqual({});
   const global = await view(subject.id);
   expect(global.statements['schema:url']).toHaveLength(1);
   const suppressed = await view(subject.id, contextId);
   expect(suppressed.statements['schema:url']).toBeUndefined();
   expect(suppressed.resolution).toEqual({ 'schema:url': 'suppressed' });
-  expect((await view(subject.id, contextId, true)).resolution).toEqual({ 'schema:url': 'suppressed' });
+  const editorSuppressed = await view(subject.id, contextId, true);
+  expect({ statements: editorSuppressed.statements, resolution: editorSuppressed.resolution }).toEqual({
+    statements: suppressed.statements,
+    resolution: suppressed.resolution,
+  });
   expect((await listed(subject.id, 'schema:url')).candidates[0].rank).toBe('normal');
   expect((await listed(subject.id, 'schema:url', contextId)).candidates[0].rank).toBeNull();
 
@@ -241,9 +251,20 @@ test('a Context created from settings suppresses its default properties until it
   const proposed = await call('POST', `/v1/subjects/${subject.id}/candidates`, {
     authenticated: true,
     key: key(),
-    body: { statement: statement('schema:url', 'https://example.org/adopted') },
+    body: {
+      statement: {
+        ...statement('schema:url', 'https://example.org/adopted'),
+        references: [{ parts: [statement('schema:url', 'https://example.org/source')] }],
+      },
+    },
   });
   expect(proposed.response.status).toBe(201);
+  const accepted = await call('POST', `/v1/subjects/${subject.id}/candidates/${proposed.body.candidate}:accept`, {
+    authenticated: true,
+    key: key(),
+    body: { context: contextId, expected_head: null },
+  });
+  expect(accepted.response.status).toBe(200);
   const replaced = await call('POST', `/v1/subjects/${subject.id}:adopt`, {
     authenticated: true,
     key: key(),
@@ -260,7 +281,11 @@ test('a Context created from settings suppresses its default properties until it
   expect(adopted.statements['schema:url'].map((fact: any) => fact.value.content)).toEqual([
     'https://example.org/adopted',
   ]);
-  expect((await view(subject.id, contextId, true)).statements).toEqual(adopted.statements);
+  const editorAdopted = await view(subject.id, contextId, true);
+  expect({ statements: editorAdopted.statements, resolution: editorAdopted.resolution }).toEqual({
+    statements: adopted.statements,
+    resolution: adopted.resolution,
+  });
 });
 
 test('a Context keeps its settings snapshot when a later release changes them', async () => {
@@ -297,9 +322,12 @@ test('an unknown settings id is refused and nothing is written', async () => {
   expect(first.body).toMatchObject({
     code: 'invalid_request',
     effect_status: 'not_applied',
-    errors: [{ pointer: '/settings', code: expect.any(String) }],
+    errors: [{ pointer: '/settings', code: 'unsupported' }],
   });
   expect(await contexts()).toBe(before);
+  const contextId = contextTarget(routeKey, accountId, idempotency.slice(1, -1)).id;
+  const missing = await call('GET', `/v1/contexts/${contextId}`);
+  expect(missing.response.status).toBe(404);
   const replay = await createContext('missing', idempotency);
   expect(replay.response.status).toBe(first.response.status);
   expect(replay.body).toMatchObject({

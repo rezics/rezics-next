@@ -10,7 +10,7 @@ import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
-import { contextExists } from './context.ts';
+import { contextSnapshot } from './context.ts';
 import { slotView } from './slots.ts';
 import createRevision from './create-revision.sql';
 import insertFacts from './insert-facts.sql';
@@ -206,7 +206,9 @@ export async function readSubject(
 ): Promise<{ subject: Item; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
-  if (context !== GLOBAL_CONTEXT && !(await contextExists(pool, context))) return null;
+  const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
+  if (context !== GLOBAL_CONTEXT && !contextRecord) return null;
+  const defaults = contextRecord?.defaults ?? {};
   const snapshot = await withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
@@ -228,7 +230,7 @@ export async function readSubject(
       const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
       if (allowed) {
         for (const property of release.types[rows[0]!.type]!.properties) {
-          const view = await slotView(client, id, property, context);
+          const view = await slotView(client, id, property, context, defaults);
           statementFacts.push(...view.facts);
           if (view.resolution) resolution[property] = view.resolution;
         }

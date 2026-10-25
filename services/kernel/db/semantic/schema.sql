@@ -137,9 +137,17 @@ CREATE TABLE semantic.context (
     kind text NOT NULL,
     labels jsonb NOT NULL,
     recorded_transaction_id uuid,
+    settings_id text,
+    settings_release text,
+    defaults jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT context_check CHECK ((route = ((get_byte(uuid_send(context_id), 10) * 256) + get_byte(uuid_send(context_id), 11)))),
+    CONSTRAINT context_defaults_check CHECK (((jsonb_typeof(defaults) = 'object'::text) AND (NOT jsonb_path_exists(defaults, '$.*?(@ != "inherit" && @ != "suppress")'::jsonpath)))),
     CONSTRAINT context_kind_check CHECK ((kind = ANY (ARRAY['global'::text, 'community'::text]))),
-    CONSTRAINT context_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT context_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT context_settings_id_check CHECK (((settings_id IS NULL) OR (settings_id ~ '^[a-z][a-z0-9-]{0,63}$'::text))),
+    CONSTRAINT context_settings_pair_check CHECK (((settings_id IS NULL) = (settings_release IS NULL))),
+    CONSTRAINT context_settings_release_check CHECK (((settings_release IS NULL) OR (settings_release ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT context_without_settings_defaults_check CHECK (((settings_id IS NOT NULL) OR (defaults = '{}'::jsonb)))
 );
 
 
