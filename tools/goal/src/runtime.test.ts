@@ -80,7 +80,7 @@ for (const when of ['gate', 'merge'] as const) test(`cross-process supersession 
     const runtime = createRuntime({ tasks: h.tasks });
     const task = h.tasks.dispatch(h.briefFile), worker = await h.tasks.retry(task.id);
     await settle(h.tasks, worker, runtime.queue);
-    const env = { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_DATABASE_PATH: h.settings.databasePath };
+    const env = { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_STATE_DIRECTORY: h.settings.stateDirectory };
     const wait = "console.log('held'); const b=Buffer.alloc(1); readSync(0,b,0,1,null);";
     const source = `import {readSync} from 'node:fs';
 import {createRuntime} from ${JSON.stringify(join(import.meta.dir, 'config.ts'))};
@@ -90,7 +90,7 @@ train:{merge(cwd,candidate){${when === 'merge' ? wait : ''}git(cwd,'merge','--ff
 await runtime.pump(); runtime.close();`;
     const contender = `import {openDb} from ${JSON.stringify(join(import.meta.dir, 'db.ts'))};
 import {WorkerStore} from ${JSON.stringify(join(import.meta.dir, 'store.ts'))};
-const store=new WorkerStore(openDb(process.env.GOAL_DATABASE_PATH));
+const store=new WorkerStore(openDb(${JSON.stringify(join(h.settings.stateDirectory, 'goal.sqlite'))}));
 const ref=${JSON.stringify({ taskId: task.id, attempt: 1 })}; const old=store.attempt(ref);
 console.log('ready'); await new Promise(resolve=>process.stdin.once('data',resolve));
 store.db.exec('PRAGMA busy_timeout=0');
@@ -170,7 +170,7 @@ test('the production CLI dispatch, train and inbox commands compose the real run
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8')); local.gate = ['true'];
     writeFileSync(h.settings.localFile, JSON.stringify(local));
     const env: NodeJS.ProcessEnv = { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_LOCAL_CONFIG: h.settings.localFile };
-    for (const key of ['GOAL_MANAGER', 'GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_DATABASE_PATH', 'GOAL_STATE_DIRECTORY', 'GOAL_WORKTREE_ROOT']) delete env[key];
+    for (const key of ['GOAL_MANAGER', 'GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_STATE_DIRECTORY', 'GOAL_WORKTREE_ROOT']) delete env[key];
     const command = async (...args: string[]) => {
       const child = Bun.spawn([process.execPath, join(import.meta.dir, 'cli.ts'), ...args], { cwd: h.root, env, stdout: 'pipe', stderr: 'pipe' });
       const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);

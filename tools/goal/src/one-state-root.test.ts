@@ -16,7 +16,7 @@ test('the store always lives in the state directory', () => {
     const settings = loadSettings({ cwd: h.root, env: {
       GOAL_STATE_DIRECTORY: '.temp/test-state', GOAL_DATABASE_PATH: '.temp/live/goal.sqlite',
     } });
-    expect(settings.databasePath).toBe(join(h.root, '.temp/test-state/goal.sqlite'));
+    expect(join(settings.stateDirectory, 'goal.sqlite')).toBe(join(h.root, '.temp/test-state/goal.sqlite'));
   } finally { h.dispose(); }
 });
 

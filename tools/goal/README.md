@@ -70,7 +70,7 @@ Only local policy determines unknown-quota admission, reserves and pacing. A ret
 quota failure excludes all aliases of that allowance before selecting another permitted pool. There is no credit
 purchase or reset-card redemption path.
 
-`mainCheckout`, `stateDirectory`, `worktreeRoot`, `databasePath`, `mainBranch`, `branchPrefix`, `terminationGraceMs`,
+`mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `branchPrefix`, `terminationGraceMs`,
 `gate`, `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
@@ -80,7 +80,6 @@ usage files and executable paths containing a slash resolve against the local fi
 | `GOAL_LOCAL_CONFIG` | Local JSON file. |
 | `GOAL_MAIN_CHECKOUT` | Main checkout. |
 | `GOAL_STATE_DIRECTORY` | State directory; defaults to `<main checkout>/.temp/goal`. |
-| `GOAL_DATABASE_PATH` | Shared database; defaults to `<state directory>/goal.sqlite`. |
 | `GOAL_WORKTREE_ROOT` | Worktree parent; defaults to `<main checkout>/.temp/worktrees`. |
 | `GOAL_CODEX_SERVICE_TIER` | Codex service tier for the invocation. |
 
@@ -239,5 +238,5 @@ missing contracts and unmeasured diff/gate data are explicit. Capture source nam
 
 For a standalone JSONL file, supply `--brief` or `--task`, `--start`, `--end`, `--pool`, `--model` and `--effort`.
 Optional `--baseline` accepts `{"input":0,"cached":0,"output":0}` with the actual preceding totals; `--table-version`
-and `--outcome` preserve known historical facts. Use both `GOAL_STATE_DIRECTORY` and `GOAL_DATABASE_PATH` under a scratch
-`.temp/` directory when testing imports so an explicit local database setting cannot select the real store.
+and `--outcome` preserve known historical facts. Set `GOAL_STATE_DIRECTORY` to a scratch `.temp/` directory when
+testing imports; the database is always `goal.sqlite` inside that state directory.

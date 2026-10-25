@@ -50,7 +50,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const initialMain = resolve(cwd, env.GOAL_MAIN_CHECKOUT || mainCheckout(cwd));
   const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
-  keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'databasePath', 'mainBranch', 'branchPrefix',
+  keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'branchPrefix',
     'terminationGraceMs', 'gate', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
@@ -95,8 +95,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   });
   if (new Set(pools.map(p => p.name)).size !== pools.length) throw new Error('duplicate pool name');
   return {
-    version: 1, mainCheckout: main, stateDirectory, worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT),
-    databasePath: path(local.databasePath, join(stateDirectory, 'goal.sqlite'), env.GOAL_DATABASE_PATH), localFile,
+    version: 1, mainCheckout: main, stateDirectory, worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT), localFile,
     mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'), branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
     gate: gate as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
@@ -139,8 +138,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     ? codeVersion(settings.mainCheckout, 'tools/goal') : undefined;
   const codeIsCurrent = () => startedCodeVersion === undefined
     || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
-  mkdirSync(dirname(settings.databasePath), { recursive: true });
-  const db = options.db ?? options.tasks?.store.db ?? openDb(settings.databasePath);
+  const databasePath = join(settings.stateDirectory, 'goal.sqlite');
+  mkdirSync(settings.stateDirectory, { recursive: true });
+  const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath);
   if (options.tasks && options.tasks.store.db !== db) throw new Error('Runtime modules must share one database connection');
   const store = options.tasks?.store ?? new WorkerStore(db);
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
@@ -178,7 +178,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     async mergedTasks(goal) { return new Set(tasks.completionScope(goal).filter(taskId => store.task(taskId).state === 'merged')); },
   });
   const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
-    `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_DATABASE_PATH=${settings.databasePath}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,
+    `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,
     process.execPath, join(settings.mainCheckout, 'tools/goal/src/cli.ts')];
   const managerServices: ManagerServices = {
     command, checkCompletion,

@@ -52,9 +52,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import { WorkerStore } from ${JSON.stringify(storeModule)};
 import { openDb } from ${JSON.stringify(dbModule)};
 import { sameProcess } from ${JSON.stringify(processModule)};
-const store = new WorkerStore(openDb(process.env.GOAL_DATABASE_PATH));
+const store = new WorkerStore(openDb(__GOAL_TEST_DATABASE_PATH__));
 const ref = {taskId:process.env.GOAL_TASK_ID, attempt:Number(process.env.GOAL_ATTEMPT)};
-const state = dirname(process.env.GOAL_DATABASE_PATH);
+const state = dirname(__GOAL_TEST_DATABASE_PATH__);
 if(ref.attempt === 1) {
   // Keep a descendant in the same group as well as the identified leader.
   spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {stdio:'ignore'});

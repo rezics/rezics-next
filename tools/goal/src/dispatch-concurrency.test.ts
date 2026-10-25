@@ -7,12 +7,13 @@ test('concurrent dispatch processes wait for the lifecycle lease', async () => {
   const h = harness();
   const childFile = join(h.settings.stateDirectory, 'dispatch-child.ts');
   writeFileSync(childFile, `
+    import { join } from 'node:path';
     import { loadSettings } from ${JSON.stringify(join(import.meta.dir, 'config.ts'))};
     import { openDb } from ${JSON.stringify(join(import.meta.dir, 'db.ts'))};
     import { WorkerStore } from ${JSON.stringify(join(import.meta.dir, 'store.ts'))};
     import { WorkerTasks } from ${JSON.stringify(join(import.meta.dir, 'tasks.ts'))};
     const settings = loadSettings({ cwd: process.env.FIXTURE_ROOT!, env: {} });
-    const store = new WorkerStore(openDb(settings.databasePath));
+    const store = new WorkerStore(openDb(join(settings.stateDirectory, 'goal.sqlite')));
     try { console.log(new WorkerTasks(settings, store).dispatch(process.env.FIXTURE_BRIEF!).id); }
     finally { store.db.close(); }
   `);

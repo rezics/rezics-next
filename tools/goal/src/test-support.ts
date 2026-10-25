@@ -77,12 +77,13 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   writeFileSync(join(root, '.gitignore'), '.temp/\n'); writeFileSync(join(root, 'README.md'), 'Fixture\n');
   git(root, ['add', '.']); git(root, ['commit', '-m', 'Initial fixture']);
   const state = join(root, '.temp/goal'); mkdirSync(state, { recursive: true });
-  const command = join(state, 'codex'); writeFileSync(command, script); chmodSync(command, 0o755);
+  const command = join(state, 'codex');
+  writeFileSync(command, script.replaceAll('__GOAL_TEST_DATABASE_PATH__', JSON.stringify(join(state, 'goal.sqlite')))); chmodSync(command, 0o755);
   const pool = { ...fixturePool(join(state, 'account')), command };
   writeFileSync(join(state, 'local.json'), JSON.stringify({ version: 1, terminationGraceMs: 1000, pools: [pool] }));
   const settings = loadSettings({ cwd: root, env: {} });
   mkdirSync(settings.stateDirectory, { recursive: true });
-  const store = new WorkerStore(openDb(settings.databasePath)), tasks = new WorkerTasks(settings, store);
+  const store = new WorkerStore(openDb(join(settings.stateDirectory, 'goal.sqlite'))), tasks = new WorkerTasks(settings, store);
   const briefFile = join(state, 'source.md'); writeFileSync(briefFile, markdown);
   return { root, settings, store, tasks, briefFile, dispose() { store.db.close(); rmSync(root, { recursive: true, force: true }); } };
 }

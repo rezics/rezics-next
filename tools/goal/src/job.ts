@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
 import { sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -156,15 +156,20 @@ export class WorkerJob implements GateOutcomeSink {
   /** Settle attempts left behind by a dead driver while holding the same lease used for retries and stops. */
   async recoverOrphans(): Promise<void> {
     const store = this.tasks.store;
+    const stateDirectory = resolve(this.tasks.settings.stateDirectory);
+    const ownsRunLog = (logPath: string) => {
+      const path = relative(stateDirectory, resolve(logPath));
+      return path !== '' && path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(path);
+    };
     const candidates = store.attempts().filter(attempt => ['running', 'exited'].includes(attempt.state)
-      && (!attempt.driver || !sameProcess(attempt.driver)));
+      && (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath));
     for (const candidate of candidates) {
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
       const lease = await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
       try {
         if (store.task(ref.taskId).currentAttempt !== ref.attempt) continue;
         const attempt = store.attempt(ref);
-        if (!['running', 'exited'].includes(attempt.state) || (attempt.driver && sameProcess(attempt.driver))) continue;
+        if (!['running', 'exited'].includes(attempt.state) || (attempt.driver && sameProcess(attempt.driver)) || !ownsRunLog(attempt.logPath)) continue;
         const events = store.events(ref.taskId).filter(event => event.attempt === ref.attempt).map(event => event.kind);
         if (events.includes('landing-requested')) continue;
         if (events.includes('driver-environment-failure')) continue;

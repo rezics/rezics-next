@@ -1,5 +1,5 @@
 import { mkdirSync, statSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { join } from 'node:path';
 import { loadSettings, createRuntime, type Runtime } from './config.ts';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
@@ -17,9 +17,10 @@ export type WorkerCommandOptions = {
 /** Tests may inject individual services. Production commands always use the shared runtime. */
 export async function runWorkerCommand(command: string, argv: string[], options: WorkerCommandOptions = {}): Promise<number> {
   const settings = options.runtime?.settings ?? options.settings ?? options.tasks?.settings ?? loadSettings({ ...(options.env ? { env: options.env } : {}) });
-  mkdirSync(dirname(settings.databasePath), { recursive: true });
+  const databasePath = join(settings.stateDirectory, 'goal.sqlite');
+  mkdirSync(settings.stateDirectory, { recursive: true });
   const runtime = options.runtime ?? (!options.store && !options.tasks && !options.landing && !options.inbox ? createRuntime({ settings }) : undefined);
-  const store = runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(settings.databasePath));
+  const store = runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(databasePath));
   const tasks = runtime?.tasks ?? options.tasks ?? new WorkerTasks(settings, store);
   const print = options.print ?? console.log;
   const job = runtime?.job ?? new WorkerJob(tasks, options.landing ?? { enqueue() {} }, options.inbox ?? { deliver() {} });

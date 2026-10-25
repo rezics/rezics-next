@@ -15,7 +15,7 @@ export type Pool = {
   policy: { weight: number; reservePercent: number; allowUnknown: boolean; maxAgeMs: number; maxBurnPerHour?: number };
 };
 export type Settings = {
-  version: 1; mainCheckout: string; stateDirectory: string; worktreeRoot: string; databasePath: string;
+  version: 1; mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   mainBranch: string; branchPrefix: string; localFile: string; pools: Pool[];
   routingFile: string; riskAreasFile: string; gate: string[];
   terminationGraceMs: number;

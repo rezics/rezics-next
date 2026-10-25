@@ -34,6 +34,7 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
 }
 export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env = { ...parent };
+  for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
   for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
   return { ...env, ...extra, [key]: pool.configDirectory };
@@ -66,7 +67,7 @@ export async function launch(store: WorkerStore, task: Task, attempt: Attempt, p
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
       const started = spawn(program, args, { cwd: task.worktree, detached: true, stdio: ['ignore', out, err], env: workerEnvironment(pool, {
-        GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), GOAL_DATABASE_PATH: store.db.filename,
+        GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt),
       }) });
       const identity = started.pid ? processIdentity(started.pid) : null;
       store.updateAttempt(attempt, current => { current.driver = driver; current.process = identity; current.state = 'running'; });
