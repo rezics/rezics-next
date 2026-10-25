@@ -268,9 +268,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     if (binding.getStore()) await materialize(accountId, selected.clientId, client.scopes, client.first_party);
     return client;
   }
-  let websiteScopes = (await database.query<{ scopes: string[] }>('SELECT scopes FROM auth_client WHERE client_id=$1', [WEBSITE_CLIENT_ID])).rows[0]?.scopes ?? ['openid', 'offline_access'];
-  const website = websiteRoutes({ options, database, native: getAuth, withIssuance, sessionProof, getJwks: signer.getJwks,
-    reload(scopes) { websiteScopes=scopes; native=undefined; },
+  const website = websiteRoutes({
+    options,
+    database,
+    native: getAuth,
+    withIssuance,
+    sessionProof,
+    getJwks: signer.getJwks,
   });
   function nativeAuth() {
     return betterAuth({
@@ -286,9 +290,19 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         credentialOwnerSchema,
         nativeVerificationPlugin,
         nativeSessionLimits(database),
-        jwt({ disableSettingJwtHeader: true, jwks: { remoteUrl: `${options.issuer}/.well-known/jwks.json`, keyPairConfig: { alg: 'ES256' } }, jwt: { issuer: options.issuer, sign: async (payload, header) => signer.signProtocol(header?.typ==='at+jwt' ? await website.accessClaims(payload) : payload, header) } }),
+        jwt({
+          disableSettingJwtHeader: true,
+          jwks: { remoteUrl: `${options.issuer}/.well-known/jwks.json`, keyPairConfig: { alg: 'ES256' } },
+          jwt: {
+            issuer: options.issuer,
+            sign: async (payload, header) =>
+              signer.signProtocol(header?.typ === 'at+jwt' ? await website.accessClaims(payload) : payload, header),
+          },
+        }),
         website.plugin,
-        websiteProvider(options.issuer, options.audience, websiteScopes, website.claims),
+        // Authorization validates against the registered client's scopes on every
+        // request, so the provider list holds protocol scopes only.
+        websiteProvider(['openid', 'offline_access'], website.claims),
         {
           id: 'trusted-establishment',
           async onRequest() {

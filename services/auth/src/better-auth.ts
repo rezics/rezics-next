@@ -25,7 +25,7 @@ export function betterAuthOptions(database: Pool, issuer: string, secret: string
     baseURL: issuer,
     basePath: '/api/auth',
     secret,
-    plugins: [credentialOwnerSchema, nativeVerificationPlugin, nativeSessionLimits(database), jwt(), websiteProvider(issuer, 'https://api.rezics.com', ['openid', 'offline_access'])],
+    plugins: [credentialOwnerSchema, nativeVerificationPlugin, nativeSessionLimits(database)],
     // Native cleanup is an unbounded DELETE, even behind an indexed adapter.
     // Expiry validation remains native; retention uses the internal batch port.
     verification: { disableCleanup: true },
@@ -41,4 +41,14 @@ export function betterAuthOptions(database: Pool, issuer: string, secret: string
       },
     },
   } satisfies BetterAuthOptions;
+}
+
+/**
+ * Adds the schema-owning protocol plugins that each service instance composes
+ * with its own signer, scopes and hooks. Shared with migration generation and
+ * the committed-schema check; never used to serve requests.
+ */
+export function betterAuthSchemaOptions(database: Pool, issuer: string, secret: string) {
+  const options = betterAuthOptions(database, issuer, secret);
+  return { ...options, plugins: [...options.plugins, jwt(), websiteProvider(['openid', 'offline_access'])] };
 }

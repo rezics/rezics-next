@@ -253,7 +253,43 @@ CREATE TABLE public.auth_barrier_proof (
 CREATE TABLE public.auth_client (
     client_id text NOT NULL,
     first_party boolean NOT NULL,
-    scopes text[] NOT NULL
+    scopes text[] NOT NULL,
+    id text GENERATED ALWAYS AS (client_id) STORED,
+    "clientSecret" text,
+    "clientDiscoveryId" text,
+    disabled boolean DEFAULT false,
+    "enableEndSession" boolean,
+    "subjectType" text,
+    "sectorIdentifier" text,
+    "clientCredentialsScopes" jsonb,
+    "userId" text,
+    "createdAt" timestamp with time zone,
+    "updatedAt" timestamp with time zone,
+    name text,
+    uri text,
+    icon text,
+    contacts jsonb,
+    tos text,
+    policy text,
+    "softwareId" text,
+    "softwareVersion" text,
+    "softwareStatement" text,
+    "redirectUris" jsonb DEFAULT '[]'::jsonb NOT NULL,
+    "postLogoutRedirectUris" jsonb,
+    "backchannelLogoutUri" text,
+    "backchannelLogoutSessionRequired" boolean,
+    "frontchannelLogoutUri" text,
+    "frontchannelLogoutSessionRequired" boolean,
+    "tokenEndpointAuthMethod" text,
+    "applicationType" text,
+    jwks text,
+    "jwksUri" text,
+    "grantTypes" jsonb,
+    "responseTypes" jsonb,
+    "requirePKCE" boolean,
+    "dpopBoundAccessTokens" boolean DEFAULT false,
+    "referenceId" text,
+    metadata jsonb
 );
 
 
@@ -305,6 +341,12 @@ CREATE TABLE public.auth_consent (
     account_id text NOT NULL,
     client_id text NOT NULL,
     scopes text[] NOT NULL,
+    id text DEFAULT (gen_random_uuid())::text NOT NULL,
+    "referenceId" text,
+    resources jsonb,
+    "requestedUserInfoClaims" jsonb,
+    "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "updatedAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
     pending_scopes text[],
     pending_reference text,
@@ -365,6 +407,17 @@ CREATE TABLE public.auth_public_key (
     kid text NOT NULL,
     public_jwk jsonb NOT NULL,
     CONSTRAINT auth_public_key_public_jwk_check CHECK ((((public_jwk ->> 'alg'::text) = 'ES256'::text) AND (NOT (public_jwk ? 'd'::text)) AND (NOT (public_jwk ? 'k'::text))))
+);
+
+
+--
+-- Name: auth_recent_oidc_session; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_recent_oidc_session (
+    session_id text NOT NULL,
+    account_id text NOT NULL,
+    expires_at timestamp with time zone NOT NULL
 );
 
 
@@ -495,6 +548,131 @@ CREATE TABLE public.auth_workflow_request (
 
 
 --
+-- Name: jwks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jwks (
+    id text NOT NULL,
+    "publicKey" text NOT NULL,
+    "privateKey" text NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    "expiresAt" timestamp with time zone,
+    alg text,
+    crv text
+);
+
+
+--
+-- Name: oauthAccessToken; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."oauthAccessToken" (
+    id text NOT NULL,
+    token text NOT NULL,
+    "clientId" text NOT NULL,
+    "sessionId" text,
+    "userId" text,
+    "referenceId" text,
+    "authorizationCodeId" text,
+    resources jsonb,
+    "requestedUserInfoClaims" jsonb,
+    "refreshId" text,
+    "expiresAt" timestamp with time zone NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    revoked timestamp with time zone,
+    confirmation jsonb,
+    scopes jsonb NOT NULL
+);
+
+
+--
+-- Name: oauthClientAssertion; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."oauthClientAssertion" (
+    id text NOT NULL,
+    "expiresAt" timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: oauthClientResource; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."oauthClientResource" (
+    id text NOT NULL,
+    "clientId" text NOT NULL,
+    "resourceId" text NOT NULL,
+    metadata jsonb,
+    "createdAt" timestamp with time zone
+);
+
+
+--
+-- Name: oauthRefreshFamily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."oauthRefreshFamily" (
+    id text NOT NULL,
+    "clientId" text NOT NULL,
+    revoked boolean NOT NULL,
+    sequence integer NOT NULL,
+    "expiresAt" timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: oauthRefreshToken; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."oauthRefreshToken" (
+    id text NOT NULL,
+    token text NOT NULL,
+    "clientId" text NOT NULL,
+    "sessionId" text,
+    "userId" text NOT NULL,
+    "referenceId" text,
+    "authorizationCodeId" text,
+    resources jsonb,
+    "requestedUserInfoClaims" jsonb,
+    "expiresAt" timestamp with time zone NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    revoked timestamp with time zone,
+    "rotatedAt" timestamp with time zone,
+    "rotationReplayResponse" text,
+    "rotationReplayExpiresAt" timestamp with time zone,
+    "authTime" timestamp with time zone,
+    acr text,
+    amr jsonb,
+    confirmation jsonb,
+    scopes jsonb NOT NULL
+);
+
+
+--
+-- Name: oauthResource; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."oauthResource" (
+    id text NOT NULL,
+    identifier text NOT NULL,
+    name text NOT NULL,
+    "accessTokenTtl" integer,
+    "refreshTokenTtl" integer,
+    "signingAlgorithm" text,
+    "signingKeyId" text,
+    "allowedScopes" jsonb,
+    "customClaims" jsonb,
+    "dpopBoundAccessTokensRequired" boolean,
+    disabled boolean,
+    "createdAt" timestamp with time zone,
+    "updatedAt" timestamp with time zone,
+    "policyVersion" integer,
+    metadata jsonb
+);
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -597,6 +775,14 @@ ALTER TABLE ONLY public.auth_client_coverage
 
 
 --
+-- Name: auth_client auth_client_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client
+    ADD CONSTRAINT auth_client_id_key UNIQUE (id);
+
+
+--
 -- Name: auth_client auth_client_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -626,6 +812,14 @@ ALTER TABLE ONLY public.auth_client_reduction
 
 ALTER TABLE ONLY public.auth_client_reduction_progress
     ADD CONSTRAINT auth_client_reduction_progress_pkey PRIMARY KEY (operation_id);
+
+
+--
+-- Name: auth_consent auth_consent_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_consent
+    ADD CONSTRAINT auth_consent_id_key UNIQUE (id);
 
 
 --
@@ -674,6 +868,14 @@ ALTER TABLE ONLY public.auth_provisioning_receipt
 
 ALTER TABLE ONLY public.auth_public_key
     ADD CONSTRAINT auth_public_key_pkey PRIMARY KEY (account_id, kid);
+
+
+--
+-- Name: auth_recent_oidc_session auth_recent_oidc_session_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recent_oidc_session
+    ADD CONSTRAINT auth_recent_oidc_session_pkey PRIMARY KEY (session_id);
 
 
 --
@@ -797,6 +999,86 @@ ALTER TABLE ONLY public.account
 
 
 --
+-- Name: jwks jwks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jwks
+    ADD CONSTRAINT jwks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: oauthAccessToken oauthAccessToken_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_pkey" PRIMARY KEY (id);
+
+
+--
+-- Name: oauthAccessToken oauthAccessToken_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_token_key" UNIQUE (token);
+
+
+--
+-- Name: oauthClientAssertion oauthClientAssertion_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthClientAssertion"
+    ADD CONSTRAINT "oauthClientAssertion_pkey" PRIMARY KEY (id);
+
+
+--
+-- Name: oauthClientResource oauthClientResource_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthClientResource"
+    ADD CONSTRAINT "oauthClientResource_pkey" PRIMARY KEY (id);
+
+
+--
+-- Name: oauthRefreshFamily oauthRefreshFamily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthRefreshFamily"
+    ADD CONSTRAINT "oauthRefreshFamily_pkey" PRIMARY KEY (id);
+
+
+--
+-- Name: oauthRefreshToken oauthRefreshToken_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_pkey" PRIMARY KEY (id);
+
+
+--
+-- Name: oauthRefreshToken oauthRefreshToken_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_token_key" UNIQUE (token);
+
+
+--
+-- Name: oauthResource oauthResource_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthResource"
+    ADD CONSTRAINT "oauthResource_identifier_key" UNIQUE (identifier);
+
+
+--
+-- Name: oauthResource oauthResource_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthResource"
+    ADD CONSTRAINT "oauthResource_pkey" PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -866,6 +1148,13 @@ CREATE INDEX auth_barrier_proof_expiry ON public.auth_barrier_proof USING btree 
 
 
 --
+-- Name: auth_client_userId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "auth_client_userId_idx" ON public.auth_client USING btree ("userId");
+
+
+--
 -- Name: auth_consent_client_owner; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -887,6 +1176,13 @@ CREATE INDEX auth_provisioning_receipt_owner_idx ON public.auth_provisioning_rec
 
 
 --
+-- Name: auth_recent_oidc_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_recent_oidc_expiry ON public.auth_recent_oidc_session USING btree (expires_at, session_id);
+
+
+--
 -- Name: auth_recovery_account_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -905,6 +1201,118 @@ CREATE INDEX auth_registration_stage_due ON public.auth_registration_stage USING
 --
 
 CREATE INDEX auth_session_opening_subject_account_id_idx ON public.auth_session_opening USING btree (subject_account_id);
+
+
+--
+-- Name: oauthAccessToken_authorizationCodeId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthAccessToken_authorizationCodeId_idx" ON public."oauthAccessToken" USING btree ("authorizationCodeId");
+
+
+--
+-- Name: oauthAccessToken_clientId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthAccessToken_clientId_idx" ON public."oauthAccessToken" USING btree ("clientId");
+
+
+--
+-- Name: oauthAccessToken_refreshId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthAccessToken_refreshId_idx" ON public."oauthAccessToken" USING btree ("refreshId");
+
+
+--
+-- Name: oauthAccessToken_sessionId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthAccessToken_sessionId_idx" ON public."oauthAccessToken" USING btree ("sessionId");
+
+
+--
+-- Name: oauthAccessToken_userId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthAccessToken_userId_idx" ON public."oauthAccessToken" USING btree ("userId");
+
+
+--
+-- Name: oauthClientResource_clientId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthClientResource_clientId_idx" ON public."oauthClientResource" USING btree ("clientId");
+
+
+--
+-- Name: oauthClientResource_clientId_resourceId_uidx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "oauthClientResource_clientId_resourceId_uidx" ON public."oauthClientResource" USING btree ("clientId", "resourceId");
+
+
+--
+-- Name: oauthClientResource_resourceId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthClientResource_resourceId_idx" ON public."oauthClientResource" USING btree ("resourceId");
+
+
+--
+-- Name: oauthRefreshFamily_expiresAt_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthRefreshFamily_expiresAt_idx" ON public."oauthRefreshFamily" USING btree ("expiresAt");
+
+
+--
+-- Name: oauthRefreshToken_authorizationCodeId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON public."oauthRefreshToken" USING btree ("authorizationCodeId");
+
+
+--
+-- Name: oauthRefreshToken_clientId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthRefreshToken_clientId_idx" ON public."oauthRefreshToken" USING btree ("clientId");
+
+
+--
+-- Name: oauthRefreshToken_sessionId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthRefreshToken_sessionId_idx" ON public."oauthRefreshToken" USING btree ("sessionId");
+
+
+--
+-- Name: oauthRefreshToken_userId_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "oauthRefreshToken_userId_idx" ON public."oauthRefreshToken" USING btree ("userId");
+
+
+--
+-- Name: oauth_access_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oauth_access_expiry ON public."oauthAccessToken" USING btree ("expiresAt", id);
+
+
+--
+-- Name: oauth_assertion_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oauth_assertion_expiry ON public."oauthClientAssertion" USING btree ("expiresAt", id);
+
+
+--
+-- Name: oauth_refresh_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oauth_refresh_expiry ON public."oauthRefreshToken" USING btree ("expiresAt", id);
 
 
 --
@@ -1039,6 +1447,14 @@ ALTER TABLE ONLY public.auth_client_reduction_progress
 
 
 --
+-- Name: auth_client auth_client_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client
+    ADD CONSTRAINT "auth_client_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
 -- Name: auth_consent auth_consent_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1108,6 +1524,62 @@ ALTER TABLE ONLY public.auth_recovery_establishment
 
 ALTER TABLE ONLY public.auth_session_opening
     ADD CONSTRAINT auth_session_opening_subject_account_id_fkey FOREIGN KEY (subject_account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthAccessToken oauthAccessToken_clientId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES public.auth_client(client_id) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthAccessToken oauthAccessToken_refreshId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_refreshId_fkey" FOREIGN KEY ("refreshId") REFERENCES public."oauthRefreshToken"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthAccessToken oauthAccessToken_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthClientResource oauthClientResource_clientId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthClientResource"
+    ADD CONSTRAINT "oauthClientResource_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES public.auth_client(client_id) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthClientResource oauthClientResource_resourceId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthClientResource"
+    ADD CONSTRAINT "oauthClientResource_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES public."oauthResource"(identifier) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthRefreshToken oauthRefreshToken_clientId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES public.auth_client(client_id) ON DELETE CASCADE;
+
+
+--
+-- Name: oauthRefreshToken oauthRefreshToken_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
 
 
 --

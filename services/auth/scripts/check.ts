@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
-import { betterAuthOptions } from '../src/better-auth.ts';
+import { betterAuthSchemaOptions } from '../src/better-auth.ts';
 import { migrate, run, schemaDump, testDatabase } from './database.ts';
 
 const database = testDatabase();
@@ -13,7 +13,7 @@ try {
   const pool = new Pool({ connectionString: database.url });
   try {
     const plan = await getMigrations(
-      betterAuthOptions(pool, 'https://auth.invalid', 'schema-verification-only-secret-32-bytes'),
+      betterAuthSchemaOptions(pool, 'https://auth.invalid', 'schema-verification-only-secret-32-bytes'),
     );
     if (
       plan.toBeCreated.length ||

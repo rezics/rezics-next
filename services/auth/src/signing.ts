@@ -250,10 +250,19 @@ export async function createSigner(database: Pool, configuration: AuthServiceOpt
   return {
     control,
     async signProtocol(payload: import('jose').JWTPayload, header?: { typ?: string; cty?: string }): Promise<string> {
-      const now=Math.floor(Date.now()/1000);
-      if(!Number.isSafeInteger(payload.iat)||!Number.isSafeInteger(payload.exp)||payload.iat!>now||payload.exp!>payload.iat!+300||payload.exp!<=now) throw new Error('Invalid protocol signing lifetime');
-      const current=await refresh();
-      return new SignJWT(payload).setProtectedHeader({alg:'ES256',kid:current.jwks.keys[0]!.kid,typ:header?.typ??'JWT'}).sign(current.key);
+      const now = Math.floor(Date.now() / 1000);
+      if (
+        !Number.isSafeInteger(payload.iat) ||
+        !Number.isSafeInteger(payload.exp) ||
+        payload.iat! > now ||
+        payload.exp! > payload.iat! + 300 ||
+        payload.exp! <= now
+      )
+        throw new Error('Invalid protocol signing lifetime');
+      const current = await refresh();
+      return new SignJWT(payload)
+        .setProtectedHeader({ alg: 'ES256', kid: current.jwks.keys[0]!.kid, typ: header?.typ ?? 'JWT' })
+        .sign(current.key);
     },
     async getJwks(): Promise<PublicJwks> {
       return structuredClone((await refresh()).jwks);

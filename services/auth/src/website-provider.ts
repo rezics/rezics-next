@@ -12,13 +12,17 @@ export const websiteSchema = {
   },
 };
 
-export function websiteProvider(_issuer: string, audience: string, scopes: string[], claims?: () => Promise<Record<string, unknown>>) {
+/**
+ * The official provider, configured for the confidential website client only.
+ * The API resource row and its client link are written by website registration,
+ * so the provider seeds no resources at startup.
+ */
+export function websiteProvider(scopes: string[], claims?: () => Promise<Record<string, unknown>>) {
   return oauthProvider({
     schema: websiteSchema,
     loginPage: '/login',
     consentPage: '/consent',
     scopes,
-    resources: [{ identifier: audience, name: 'REZICS API', allowedScopes: scopes }],
     grantTypes: ['authorization_code', 'refresh_token'],
     assertionMaxLifetime: 120,
     accessTokenExpiresIn: 300,
