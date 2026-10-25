@@ -3,6 +3,8 @@ import { ConfigError } from './server.ts';
 import { createWorkClient } from './work/client.ts';
 import { KERNEL_WORK_MODULES } from './work/modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
+import { effectsRelay } from './events/effects.ts';
+import { startRelays } from './events/relays.ts';
 
 export type WorkerConfig = { databaseUrl: string; executorId?: string; poolSize: number };
 
@@ -50,6 +52,7 @@ export async function startWorker(
   pool.on('error', () => {});
   const client = await createWorkClient(config.databaseUrl, pool);
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  let relays: ReturnType<typeof startRelays> | undefined;
   let starting: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   const stop = (): Promise<void> => {
@@ -57,7 +60,11 @@ export async function startWorker(
       try {
         // A signal during registration or launch drains the runtime once startup settles.
         await starting?.catch(() => {});
-        if (work) await work.shutdown();
+        try {
+          await relays?.stop();
+        } finally {
+          if (work) await work.shutdown();
+        }
       } finally {
         process.removeListener('SIGINT', signal);
         process.removeListener('SIGTERM', signal);
@@ -81,6 +88,7 @@ export async function startWorker(
     starting = (async () => {
       work = await composeWork(modules, { ...config, pool, client, env });
       await work.launch();
+      relays = startRelays(pool, [effectsRelay(pool, work.effects)]);
     })();
     await starting;
     return { stop };

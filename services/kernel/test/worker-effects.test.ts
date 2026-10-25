@@ -39,6 +39,7 @@ const serverConfig = () =>
     STRIPE_WEBHOOK_SECRETS: secret,
     CHECKOUT_SUCCESS_URL: 'https://example.test/success',
     CHECKOUT_CANCEL_URL: 'https://example.test/cancel',
+    KERNEL_WRITE_RATE_SECRET: 'worker-effects-rate-test-secret-32',
   });
 
 afterAll(async () => {
@@ -65,6 +66,7 @@ async function until(condition: () => boolean | Promise<boolean>): Promise<void>
 async function append(
   partition: number,
   type = SUBJECT_CREATED,
+  data: unknown = { id: crypto.randomUUID() },
 ): Promise<{ epoch: number; position: bigint; subject: string }> {
   const subject = crypto.randomUUID();
   const client = await admin.connect();
@@ -78,7 +80,7 @@ async function append(
     await client.query(
       `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
        VALUES ($1, $2, 0, 1, $3, $4, $5, $6, $7)`,
-      [partition, position, epoch, Bun.randomUUIDv7(), type, subject, JSON.stringify({ id: subject })],
+      [partition, position, epoch, Bun.randomUUIDv7(), type, subject, JSON.stringify(data)],
     );
     await client.query('COMMIT');
     return { epoch, position: BigInt(position), subject };
@@ -87,6 +89,101 @@ async function append(
   }
 }
 
+test("the worker relays every module's effects through one effect workflow", async () => {
+  const seen: Array<{ module: string; id: string }> = [];
+  let composedContext: WorkContext | undefined;
+  const modules: WorkModule[] = [
+    {
+      name: 'subject_effect',
+      register(context) {
+        composedContext = context;
+        context.addEffects([
+          {
+            name: 'subject_record',
+            types: [SUBJECT_CREATED],
+            async run(event) {
+              seen.push({ module: 'subject', id: event.id });
+            },
+          },
+        ]);
+      },
+    },
+    {
+      name: 'context_effect',
+      register(context) {
+        context.addEffects([
+          {
+            name: 'context_record',
+            types: [CONTEXT_CREATED],
+            async run(event) {
+              seen.push({ module: 'context', id: event.id });
+            },
+          },
+        ]);
+      },
+    },
+  ];
+  const registerWorkflow = spyOn(DBOS, 'registerWorkflow');
+  const env = { DATABASE_URL: databaseUrl, KERNEL_EXECUTOR_ID: `worker-effects-${crypto.randomUUID()}` };
+  const worker = await startWorker(readWorkerConfig(env), modules, env);
+  const actor: AccountActor = {
+    kind: 'account',
+    accountId: '019a1b2c-3d4e-7f00-8a00-beef00000001',
+    clientId: 'worker-effects-test',
+    scopes: [],
+    requestedBy: null,
+    authnEpoch: 1,
+  };
+  const routeKey = randomBytes(32);
+  try {
+    expect(() => composedContext!.addEffects([])).toThrow(/after work composition/);
+    await bootstrapRelease(pool, bundledRelease);
+    const subjectKey = crypto.randomUUID();
+    const subject = await createSubject(pool, {
+      actor,
+      target: subjectTarget(routeKey, actor.accountId, subjectKey),
+      idempotencyKey: subjectKey,
+      digest: createHash('sha256').update(subjectKey).digest(),
+      item: { type: 'schema:Person', labels: { en: 'Worker effect subject' } },
+      release: { digest: bundledDigest, release: bundledRelease },
+      authorize: async () => true,
+    });
+    const contextKey = crypto.randomUUID();
+    const context = await createContext(pool, {
+      actor,
+      target: contextTarget(routeKey, actor.accountId, contextKey),
+      idempotencyKey: contextKey,
+      digest: createHash('sha256').update(contextKey).digest(),
+      input: { labels: { en: 'Worker effect context' } },
+      authorize: async () => true,
+    });
+
+    const subjectEnvelope: Envelope = { ...subject.component, events: [] };
+    const contextEnvelope: Envelope = { ...context.component, events: [] };
+    const subjectWorkflowId = effectWorkflowId(subjectEnvelope, 0, 'subject_record');
+    const contextWorkflowId = effectWorkflowId(contextEnvelope, 0, 'context_record');
+    await DBOS.retrieveWorkflow(subjectWorkflowId).getResult();
+    await DBOS.retrieveWorkflow(contextWorkflowId).getResult();
+    await until(() => seen.length === 2);
+    expect(seen).toHaveLength(2);
+    expect(seen.map(({ module }) => module).sort()).toEqual(['context', 'subject']);
+    expect(await DBOS.getWorkflowStatus(subjectWorkflowId)).toMatchObject({
+      workflowName: 'effect',
+      queueName: 'effects',
+      queuePartitionKey: String(subject.component.partition),
+    });
+    expect(await DBOS.getWorkflowStatus(contextWorkflowId)).toMatchObject({
+      workflowName: 'effect',
+      queueName: 'effects',
+      queuePartitionKey: String(context.component.partition),
+    });
+    expect(registerWorkflow.mock.calls.filter((call) => call[1]?.name === 'effect')).toHaveLength(1);
+  } finally {
+    registerWorkflow.mockRestore();
+    await worker.stop();
+  }
+}, 45_000);
+
 test('the HTTP server launches no work executor and runs no relay', async () => {
   const queueClient = await createWorkClient(databaseUrl);
   await queueClient.registerQueue('workflows', WORK_QUEUES.workflows);
@@ -94,7 +191,9 @@ test('the HTTP server launches no work executor and runs no relay', async () => 
   const partition = 3072 + Math.floor(Math.random() * 512);
   const eventId = `evt_${crypto.randomUUID().replaceAll('-', '')}`;
   try {
-    const { position } = await append(partition);
+    const { position } = await append(partition, 'com.rezics.commerce.offer.created.v1', {
+      offerId: crypto.randomUUID(),
+    });
     const timestamp = Math.floor(Date.now() / 1000);
     const payload = JSON.stringify({
       id: eventId,
@@ -124,6 +223,8 @@ test('the HTTP server launches no work executor and runs no relay', async () => 
       headers: { 'content-type': 'application/json', 'stripe-signature': signature },
       body: payload,
     });
+    const body = await response.text();
+    expect(body).toContain('received');
     expect(response.status).toBe(200);
     await until(async () => {
       const { rows } = await admin.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid = $1', [
@@ -140,100 +241,6 @@ test('the HTTP server launches no work executor and runs no relay', async () => 
     await queueClient.close();
   }
 }, 30_000);
-
-test("the worker relays every module's effects through one effect workflow", async () => {
-  const seen: Array<{ module: string; id: string }> = [];
-  const modules: WorkModule[] = [
-    {
-      name: 'subject_effect',
-      register(context) {
-        (context as WorkContext & { addEffects(effects: Effect[]): void }).addEffects([
-          {
-            name: 'subject_record',
-            types: [SUBJECT_CREATED],
-            async run(event) {
-              seen.push({ module: 'subject', id: event.id });
-            },
-          },
-        ]);
-      },
-    },
-    {
-      name: 'context_effect',
-      register(context) {
-        (context as WorkContext & { addEffects(effects: Effect[]): void }).addEffects([
-          {
-            name: 'context_record',
-            types: [CONTEXT_CREATED],
-            async run(event) {
-              seen.push({ module: 'context', id: event.id });
-            },
-          },
-        ]);
-      },
-    },
-  ];
-  const registerWorkflow = spyOn(DBOS, 'registerWorkflow');
-  const env = { DATABASE_URL: databaseUrl, KERNEL_EXECUTOR_ID: `worker-effects-${crypto.randomUUID()}` };
-  const worker = await startWorker(readWorkerConfig(env), modules, env);
-  const actor: AccountActor = {
-    kind: 'account',
-    accountId: '019a1b2c-3d4e-7f00-8a00-beef00000001',
-    clientId: 'worker-effects-test',
-    scopes: [],
-    requestedBy: null,
-    authnEpoch: 1,
-  };
-  const routeKey = randomBytes(32);
-  try {
-    await bootstrapRelease(pool, bundledRelease);
-    const subjectKey = crypto.randomUUID();
-    const subject = await createSubject(pool, {
-      actor,
-      target: subjectTarget(routeKey, actor.accountId, subjectKey),
-      idempotencyKey: subjectKey,
-      digest: createHash('sha256').update(subjectKey).digest(),
-      item: { type: 'schema:Person', labels: { en: 'Worker effect subject' } },
-      release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
-    });
-    const contextKey = crypto.randomUUID();
-    const context = await createContext(pool, {
-      actor,
-      target: contextTarget(routeKey, actor.accountId, contextKey),
-      idempotencyKey: contextKey,
-      digest: createHash('sha256').update(contextKey).digest(),
-      input: { labels: { en: 'Worker effect context' } },
-      authorize: async () => true,
-    });
-
-    const subjectEnvelope: Envelope = { ...subject.component, events: [] };
-    const contextEnvelope: Envelope = { ...context.component, events: [] };
-    const subjectWorkflowId = effectWorkflowId(subjectEnvelope, 0, 'subject_record');
-    const contextWorkflowId = effectWorkflowId(contextEnvelope, 0, 'context_record');
-    await DBOS.retrieveWorkflow(subjectWorkflowId).getResult();
-    await DBOS.retrieveWorkflow(contextWorkflowId).getResult();
-    await until(() => seen.length === 2);
-    expect(seen).toEqual([
-      { module: 'subject', id: expect.any(String) },
-      { module: 'context', id: expect.any(String) },
-    ]);
-    expect(await DBOS.getWorkflowStatus(subjectWorkflowId)).toMatchObject({
-      workflowName: 'effect',
-      queueName: 'effects',
-      queuePartitionKey: String(subject.component.partition),
-    });
-    expect(await DBOS.getWorkflowStatus(contextWorkflowId)).toMatchObject({
-      workflowName: 'effect',
-      queueName: 'effects',
-      queuePartitionKey: String(context.component.partition),
-    });
-    expect(registerWorkflow.mock.calls.filter((call) => call[1]?.name === 'effect')).toHaveLength(1);
-  } finally {
-    registerWorkflow.mockRestore();
-    await worker.stop();
-  }
-}, 45_000);
 
 test('commerce registers its effects through the work context', async () => {
   const effects: Effect[] = [];

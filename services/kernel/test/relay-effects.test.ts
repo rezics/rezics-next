@@ -82,7 +82,7 @@ test('the worker relays a committed event to its effect without a caller naming 
   const module = {
     name: 'relay_test',
     register(context: WorkContext) {
-      (context as WorkContext & { addEffects(effects: Effect[]): void }).addEffects([effect]);
+      context.addEffects([effect]);
     },
   };
   const env = { DATABASE_URL: databaseUrl, KERNEL_EXECUTOR_ID: `relay-test-${crypto.randomUUID()}` };

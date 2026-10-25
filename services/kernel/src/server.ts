@@ -3,8 +3,6 @@ import { createWriteRateStage, type WriteRateStageOptions } from './access/write
 import { createPool } from './database/pool.ts';
 import { createKernel } from './http/kernel.ts';
 import type { KeyRing } from './tokens/seal.ts';
-import { startRelays } from './events/relays.ts';
-import { effectsRelay, launchWork, registerEffects, shutdownWork, type Effect } from './events/effects.ts';
 import { ConfigError, readCommerceConfig, type CommerceConfig } from './commerce/config.ts';
 import { createStripePort } from './commerce/stripe.ts';
 import { createCommerceWork } from './commerce/enqueue.ts';
@@ -85,14 +83,9 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   };
 }
 
-export async function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
+export async function startServer(config: ServerConfig) {
   const pool = createPool(config.databaseUrl);
   await setupSemantic(pool, bundledRelease);
-  const registeredEffects = registerEffects(options.effects ?? []);
-  let relays: ReturnType<typeof startRelays> | undefined;
-  const work = launchWork({ databaseUrl: config.databaseUrl }).then(() => {
-    relays = startRelays(pool, [effectsRelay(pool, registeredEffects)]);
-  });
   const workClient = createWorkClient(config.databaseUrl);
   // Observe startup rejection immediately; the webhook and stop still receive it.
   void workClient.catch(() => {});
@@ -132,21 +125,9 @@ export async function startServer(config: ServerConfig, options: { effects?: Eff
         await server.stop(true);
       } finally {
         try {
-          await work;
+          await (await workClient).close();
         } finally {
-          try {
-            await relays?.stop();
-          } finally {
-            try {
-              await shutdownWork();
-            } finally {
-              try {
-                await (await workClient).close();
-              } finally {
-                await pool.end();
-              }
-            }
-          }
+          await pool.end();
         }
       }
     },

@@ -1,6 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAccess } from '../access/index.ts';
-import { registerEffects } from '../events/effects.ts';
 import { routeOf } from '../route/route.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createCommerceCommands, type CheckoutOutcome } from './commands.ts';
@@ -35,7 +34,7 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
   const checkout = { ...deps.checkout };
   return {
     name: 'commerce',
-    register({ pool, queues, client }) {
+    register({ pool, queues, client, addEffects }) {
       if (!Object.hasOwn(queues, WORKFLOWS_QUEUE)) throw new Error('Commerce requires the workflows queue');
       // Only the trusted checkout command ports are used here. No request identity is fabricated.
       const commands = createCommerceCommands({ pool, access: createAccess({ actions: new Map() }) });
@@ -145,7 +144,7 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         { name: ORDER_RECONCILE_WORKFLOW },
       );
       const payouts = createPayouts({ pool, clock: deps.royaltyClock });
-      registerEffects([
+      addEffects([
         {
           name: 'commerce_royalty',
           types: ['com.rezics.commerce.transactions.recorded.v1'],

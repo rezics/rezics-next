@@ -1,7 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool } from 'pg';
-import { composeWork } from '../work/registry.ts';
+import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
+import { WORK_QUEUES } from '../work/queues.ts';
 import type { Relay } from './relays.ts';
 import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from './log.ts';
 
@@ -88,24 +89,28 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
 
 let worker: { stop(): Promise<void> } | undefined;
 
-/** Compatibility for effect callers that registered their functions before launch. */
+/** Compatibility for tests that register effects before launching the shared executor. */
 export async function launchWork(options: WorkOptions): Promise<void> {
   const pool = options.systemDatabasePool ?? new pg.Pool({ connectionString: options.databaseUrl, max: 10 });
   const client = await createWorkClient(options.databaseUrl, pool);
-  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   try {
-    work = await composeWork([], {
-      databaseUrl: options.databaseUrl,
-      ...(options.executorId === undefined ? {} : { executorId: options.executorId }),
-      pool,
-      client,
+    DBOS.setConfig({
+      name: WORK_APPLICATION,
+      systemDatabaseUrl: options.databaseUrl,
+      systemDatabaseSchemaName: DBOS_SCHEMA,
+      systemDatabasePool: pool,
+      runMigrations: false,
+      logLevel: 'warn',
+      ...(options.executorId === undefined ? {} : { executorID: options.executorId }),
     });
-    await client.registerQueue(EFFECTS_QUEUE, { partitionConcurrency: 1, minPollingIntervalMs: 10 });
-    await work.launch();
+    for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
+      await client.registerQueue(name, parameters);
+    }
+    await DBOS.launch();
     worker = {
       async stop() {
         try {
-          await work!.shutdown();
+          await DBOS.shutdown({ workflowCompletionTimeoutMS: 2_147_483_647 });
         } finally {
           await client.close();
           if (options.systemDatabasePool === undefined) await pool.end();
@@ -114,7 +119,7 @@ export async function launchWork(options: WorkOptions): Promise<void> {
     };
   } catch (error) {
     try {
-      await work?.shutdown();
+      if (DBOS.isInitialized()) await DBOS.shutdown({ workflowCompletionTimeoutMS: 2_147_483_647 });
     } finally {
       await client.close();
       if (options.systemDatabasePool === undefined) await pool.end();

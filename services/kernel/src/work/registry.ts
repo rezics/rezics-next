@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
+import { registerEffects, type Effect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
 
 export type WorkContext = {
@@ -8,6 +9,7 @@ export type WorkContext = {
   readonly queues: typeof WORK_QUEUES;
   readonly client: WorkClient;
   readonly env: Readonly<Record<string, string | undefined>>;
+  addEffects(effects: Effect[]): void;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
 export type WorkOptions = {
@@ -44,17 +46,29 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
     await options.client.registerQueue(name, parameters);
   }
+  const collectedEffects: Effect[] = [];
+  let acceptingEffects = true;
   const context: WorkContext = Object.freeze({
     pool: options.pool,
     queues: WORK_QUEUES,
     client: options.client,
     env: options.env ?? process.env,
+    addEffects(effects) {
+      if (!acceptingEffects) throw new Error('Cannot add effects after work composition');
+      collectedEffects.push(...effects);
+    },
   });
-  for (const module of registrations) await module.register(context);
+  try {
+    for (const module of registrations) await module.register(context);
+  } finally {
+    acceptingEffects = false;
+  }
+  const effects = registerEffects(collectedEffects);
 
   let launching: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   return {
+    effects,
     launch(): Promise<void> {
       if (stopping) return Promise.reject(new Error('Work launch refused after shutdown'));
       return (launching ??= DBOS.launch());
