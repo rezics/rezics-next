@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -6,15 +6,21 @@ import { createLifecycleInternals, LIFECYCLE_ACTIONS, type ProvisioningEvidence 
 import { accessCheck, AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 const admin = createPool(url);
+let assignments: Awaited<ReturnType<typeof delegatedAssignmentFixture>>;
+beforeAll(async () => {
+  assignments = await delegatedAssignmentFixture(admin);
+}, 30000);
 afterAll(async () => {
+  await assignments?.close();
   await pool.end();
   await admin.end();
-});
+}, 30000);
 const keys = await generateKeyPair('ES256', { extractable: true });
 const jwk = { ...(await exportJWK(keys.publicKey)), kid: 'native-self-read', alg: 'ES256' };
 const issuer = 'https://auth.example.test';
@@ -144,11 +150,12 @@ test('own account read requires scope and intersects the principal and current d
   expect(await read(actor)).toBe(false);
   await grant(f.accountId, f.accountId);
   const assignmentId = newId(routeOf(principal.accountId)!);
-  await admin.query(
-    `INSERT INTO access.principal_assignment(route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
-    VALUES ($1,$2,$3,$4,'(,)',$5)`,
-    [routeOf(principal.accountId), principal.accountId, assignmentId, f.accountId, key()],
-  );
+  await assignments.create({
+    principalId: principal.accountId,
+    requestId: assignmentId,
+    assignedActorId: f.accountId,
+    valid: '(,)',
+  });
   const delegated = await authenticate(
     f.accountId,
     'account:read',
