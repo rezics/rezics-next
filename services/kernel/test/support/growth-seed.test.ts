@@ -26,9 +26,9 @@ afterAll(async () => {
   await pool.end();
 });
 
-function rows(schema: string): Population {
+function rows(schema: string, name = schema): Population {
   return {
-    name: schema,
+    name,
     hotPartition: 23,
     rows: ({ ordinal, route }) => ({
       [`${schema}.parent`]: [{ route, id: ordinal }],
@@ -41,7 +41,7 @@ test('places the declared share of ordinals in the hot partition and spreads the
   const population: Population = { name: 'placement', hotPartition: 9, hotShare: 0.5 };
   const values = Array.from({ length: 1_000 }, (_, ordinal) => placement(population, ordinal));
   expect(values.filter((value) => value.hot)).toHaveLength(500);
-  expect(values.every((value) => value.hot === ((value.route >>> 4) === 9))).toBe(true);
+  expect(values.every((value) => value.hot === (value.route >>> 4 === 9))).toBe(true);
   expect(values).toEqual(Array.from({ length: 1_000 }, (_, ordinal) => placement(population, ordinal)));
 });
 
@@ -59,12 +59,12 @@ test('inserts the rows of each ordinal range once, in table order, and refreshes
 });
 
 test('grows cumulatively: seeding 0..8n after 0..n equals seeding 0..8n at once', async () => {
-  await seed(target, rows('growth_seed_cumulative_a'), { from: 0, to: 10 });
-  await seed(target, rows('growth_seed_cumulative_a'), { from: 10, to: 80 });
-  await seed(target, rows('growth_seed_cumulative_b'), { from: 0, to: 80 });
+  await seed(target, rows('growth_seed_cumulative_a', 'cumulative'), { from: 0, to: 10 });
+  await seed(target, rows('growth_seed_cumulative_a', 'cumulative'), { from: 10, to: 80 });
+  await seed(target, rows('growth_seed_cumulative_b', 'cumulative'), { from: 0, to: 80 });
   const counts = async (schema: string) =>
     pool.query<{ partition: number; count: string }>(
-      `SELECT route >>> 4 AS partition, count(*)::text AS count FROM ${schema}.parent GROUP BY 1 ORDER BY 1`,
+      `SELECT route / 16 AS partition, count(*)::int AS count FROM ${schema}.parent GROUP BY 1 ORDER BY 1`,
     );
   expect((await counts('growth_seed_cumulative_a')).rows).toEqual((await counts('growth_seed_cumulative_b')).rows);
 });
@@ -81,7 +81,7 @@ test('seeds through a production write path when the population supplies write',
   };
   await seed(target, population, { from: 0, to: 12 });
   expect(calls).toBe(12);
-  expect((await pool.query('SELECT count(*) FROM growth_seed_write.parent')).rows[0]!.count).toBe(12);
+  expect((await pool.query('SELECT count(*)::int AS count FROM growth_seed_write.parent')).rows[0]!.count).toBe(12);
 });
 
 test('rejects rows whose columns differ within a table or name an invalid table', async () => {
@@ -93,5 +93,5 @@ test('rejects rows whose columns differ within a table or name an invalid table'
   await expect(seed(target, mismatched, { from: 0, to: 2 })).rejects.toThrow();
   const invalid: Population = { name: 'invalid', hotPartition: 1, rows: () => ({ 'bad-name.parent': [{ id: 1 }] }) };
   await expect(seed(target, invalid, { from: 0, to: 1 })).rejects.toThrow();
-  expect((await pool.query('SELECT count(*) FROM growth_seed_test.parent')).rows[0]!.count).toBe(20);
+  expect((await pool.query('SELECT count(*)::int AS count FROM growth_seed_test.parent')).rows[0]!.count).toBe(20);
 });
