@@ -57,7 +57,12 @@ const readSubject = createServerFn({ method: 'GET' })
     const result = await client.subjects({ id: data.id }).get();
     if (result.error) {
       if (result.status === 404) throw notFound();
-      throw new Error(String(result.error.value?.title ?? 'Kernel subject read failed'));
+      const body = result.error.value;
+      if (result.status === 308 && body && typeof body === 'object' && 'redirect' in body && body.redirect.to)
+        throw redirect({ href: `/${data.locale}/subjects/${body.redirect.to}`, statusCode: 308 });
+      throw new Error(
+        String(body && typeof body === 'object' && 'title' in body ? body.title : 'Kernel subject read failed'),
+      );
     }
     const read = result.data as Read;
     const subject = read.subject;

@@ -169,7 +169,7 @@ const typed = [
   'PATCH /v1/collections/:collectionId/members/:memberId',
   'DELETE /v1/collections/:collectionId/members/:memberId',
   'POST /v1/collections/:collectionId/members/:memberId/$move',
-  'GET /v1/subjects/:subjectId/collections',
+  'GET /v1/subjects/:id/collections',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;
