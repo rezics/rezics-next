@@ -1,0 +1,17 @@
+{
+  "name": "@rezics/conversion",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bangumi": "./src/bangumi.ts",
+    "./vndb": "./src/vndb.ts",
+    "./open-library": "./src/open-library.ts",
+    "./wikidata": "./src/wikidata.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4"
+  }
+}

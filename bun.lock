@@ -55,6 +55,12 @@
         "@types/bun": "1.4.4",
       },
     },
+    "packages/conversion": {
+      "name": "@rezics/conversion",
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+      },
+    },
     "packages/definitions": {
       "name": "@rezics/definitions",
       "dependencies": {
@@ -128,6 +134,16 @@
       "devDependencies": {
         "@types/pg": "8.23.1",
         "dbmate": "2.37.0",
+      },
+    },
+    "services/importer": {
+      "name": "@rezics/importer",
+      "version": "0.1.0",
+      "dependencies": {
+        "@rezics/conversion": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.4",
       },
     },
     "services/kernel": {
@@ -662,9 +678,13 @@
 
     "@rezics/client": ["@rezics/client@workspace:packages/client"],
 
+    "@rezics/conversion": ["@rezics/conversion@workspace:packages/conversion"],
+
     "@rezics/definitions": ["@rezics/definitions@workspace:packages/definitions"],
 
     "@rezics/document": ["@rezics/document@workspace:packages/document"],
+
+    "@rezics/importer": ["@rezics/importer@workspace:services/importer"],
 
     "@rezics/kernel": ["@rezics/kernel@workspace:services/kernel"],
 
