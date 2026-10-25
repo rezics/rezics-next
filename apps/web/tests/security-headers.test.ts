@@ -399,6 +399,32 @@ test(
   timeout,
 );
 
+test('only the curator page editor route relaxes styles, and nothing else', async () => {
+  const { securityHeaders } = await import('../src/security/headers.ts');
+  const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
+  const policyAt = (path: string) =>
+    securityHeaders(new Request(`https://rezics.test${path}`), 'test', `${fake.url.origin}/auth`).get(
+      'content-security-policy',
+    )!;
+  const strictPolicy = policyAt('/en');
+  const relaxedPolicy = strictPolicy.replace("style-src 'self' 'nonce-test'", "style-src 'self' 'unsafe-inline'");
+  expect(relaxedPolicy).not.toBe(strictPolicy);
+
+  for (const locale of locales) {
+    for (const suffix of ['', '/', '/nested/deeper'])
+      expect(policyAt(`/${locale}/curate/presentation${suffix}`)).toBe(relaxedPolicy);
+
+    for (const path of [
+      `/${locale}`,
+      `/${locale}/curate`,
+      `/${locale}/curate/presentationx`,
+      `/${locale}/curate/presentationx/nested`,
+      `/${locale}/x/curate/presentation`,
+    ])
+      expect(policyAt(path)).toBe(strictPolicy);
+  }
+});
+
 test(
   'the policy admits exactly the outside origins the site uses',
   async () => {
