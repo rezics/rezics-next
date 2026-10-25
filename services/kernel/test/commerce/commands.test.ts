@@ -10,7 +10,6 @@ import { accessCheck, type Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
-import { COMMERCE_CATALOGUE } from '../../src/commerce/catalogue.ts';
 import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
 import { createCommerceCommands, OfferUnavailableError } from '../../src/commerce/commands.ts';
 import type { CheckoutSnapshot, Order, StripeTransaction } from '../../src/commerce/model.ts';
@@ -25,7 +24,8 @@ const seller = newId(0x2200);
 const buyer = newId(0x3300);
 const other = newId(0x3300);
 const suspended = newId(0x4400);
-const root = { route: 0, id: COMMERCE_CATALOGUE };
+const root = { route: 0, id: GLOBAL_CONTEXT };
+const unrelatedRoot = '00000000-0000-8000-8000-000000000099';
 const actions = ['access:grant', 'offer:create', 'offer:read', 'offer:manage', 'order:create'];
 let access: ReturnType<typeof createAccess>;
 let commands: ReturnType<typeof createCommerceCommands>;
@@ -79,11 +79,11 @@ beforeEach(async () => {
     'TRUNCATE commerce.order_transaction, commerce.entitlement, commerce.purchase_order, commerce.offer, access.resource_role_grant, access.resource_initialization, access.resource_grant, access.resource_denial, core.receipt, core.outbox',
   );
   await pool.query("UPDATE access.account SET state='active'");
-  // Privileged fixture bootstrap gives the operator ordinary authority on this fixed root.
+  // Privileged fixture bootstrap gives the operator ordinary authority on the platform root.
   for (const action of ['access:grant', 'offer:create'])
     await pool.query(
       "INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES (0,$1,$2,$3,'(,)',$2)",
-      [COMMERCE_CATALOGUE, operator, action],
+      [GLOBAL_CONTEXT, operator, action],
     );
   await createGrantCommands({ pool, access, managementAction: 'access:grant' }).create(
     { pool, deadline: Date.now() + 5000, actor: await actor(operator) },
@@ -155,9 +155,29 @@ function snapshot(o: Order): CheckoutSnapshot {
   };
 }
 
+test('offers are created under the platform root and commerce defines no root of its own', async () => {
+  await pool.query(
+    'DELETE FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2 AND action=$3',
+    [GLOBAL_CONTEXT, seller, 'offer:create'],
+  );
+  await pool.query(
+    "INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES (0,$1,$2,'offer:create','(,)',$2)",
+    [unrelatedRoot, seller],
+  );
+  await expect(commands.createOffer(await actor(seller), input(), key())).rejects.toBeInstanceOf(GrantDeniedError);
+  await pool.query(
+    'DELETE FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2 AND action=$3',
+    [unrelatedRoot, seller, 'offer:create'],
+  );
+  await createGrantCommands({ pool, access, managementAction: 'access:grant' }).create(
+    { pool, deadline: Date.now() + 5000, actor: await actor(operator) },
+    { resource: root, subject: { kind: 'account', id: seller }, actions: ['offer:create'], valid: '(,)', key: key() },
+  );
+  const created = await commands.createOffer(await actor(seller), input(), key());
+  expect(created.value.creatorAccountId).toBe(seller);
+});
+
 test('offers are created by approved sellers and orders by any active account on an active offer at T', async () => {
-  expect(routeOf(COMMERCE_CATALOGUE)).toBe(0);
-  expect(COMMERCE_CATALOGUE).not.toBe(GLOBAL_CONTEXT);
   const body = { ...input(), royaltyBasisPoints: 1 };
   const created = await commands.createOffer(await actor(seller), body, key());
   const o = created.value;
