@@ -12,8 +12,8 @@ export async function run(argv: string[], factory: () => Runtime | IntegrationRu
   const [command, ...args] = argv;
   if (!command || !commands.includes(command)) { console.error(`usage: goal <${commands.join('|')}> [args]`); return 2; }
   let runtime: Runtime | IntegrationRuntime | undefined;
-  // Only commands that are meant to follow work drain the train in this process.
-  if (!['dispatch', 'retry', 'land', 'train', '_manager-host'].includes(command)) process.env.GOAL_TRAIN_MODE = 'detached';
+  // Only the train itself, land and the host drain the train in this process; everything else hands it off.
+  if (!['land', 'train', '_manager-host'].includes(command)) process.env.GOAL_TRAIN_MODE = 'detached';
   try {
     runtime = await factory();
     // A command settles only orphans whose worker has exited; the host adopts the ones still running.
