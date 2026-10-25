@@ -19,7 +19,25 @@ export type AccessClient = Pick<PoolClient, 'query'>;
 
 export interface Access {
   authenticate(token: string, context: AccessContext): Promise<AccountActor>;
-  authorize(client: AccessClient, actor: Actor, action: string, resource: Resource): Promise<boolean>;
+  prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
+  authorize(
+    client: AccessClient,
+    actor: Actor,
+    action: string,
+    resource: Resource,
+    evidence?: unknown,
+  ): Promise<boolean>;
+}
+
+export async function accessCheck(
+  access: Access,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  context: AccessContext,
+): Promise<(client: AccessClient) => Promise<boolean>> {
+  const evidence = access.prepare ? await access.prepare(actor, action, resource, context) : null;
+  return (client) => access.authorize(client, actor, action, resource, evidence);
 }
 
 export class AuthenticationError extends Error {
