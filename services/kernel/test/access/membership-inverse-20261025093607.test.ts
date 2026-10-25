@@ -231,6 +231,12 @@ test('release requires immutable exact authoritative terminal proof and cannot d
     role: null,
     key: key(),
   });
+  const closedMembership = await reader.query(
+    `SELECT role, valid::text, transaction_id FROM access.organization_member
+     WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 AND NOT upper_inf(valid)`,
+    [routeOf(organizationId), organizationId, accountId],
+  );
+  expect(closedMembership.rows).toHaveLength(1);
   await expect(
     reader.query(
       `UPDATE access.lifecycle_membership_slot SET terminal=false WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 AND reservation_id=$4`,
@@ -279,11 +285,21 @@ test('release requires immutable exact authoritative terminal proof and cannot d
   expect(
     (
       await reader.query(
-        'SELECT role FROM access.organization_member WHERE route=$1 AND organization_id=$2 AND member_account_id=$3',
+        `SELECT role FROM access.organization_member
+         WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 AND valid @> statement_timestamp()`,
         [routeOf(organizationId), organizationId, accountId],
       )
     ).rows,
   ).toEqual([{ role: 'member' }]);
+  expect(
+    (
+      await reader.query(
+        `SELECT role, valid::text, transaction_id FROM access.organization_member
+         WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 AND NOT upper_inf(valid)`,
+        [routeOf(organizationId), organizationId, accountId],
+      )
+    ).rows,
+  ).toEqual(closedMembership.rows);
 });
 
 test('failed joins compensate only after terminalization; operator holds survive member release; no nested checkout', async () => {

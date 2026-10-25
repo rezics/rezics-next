@@ -776,13 +776,6 @@ ALTER TABLE ONLY access.write_rate_counter
 
 
 --
--- Name: write_rate_counter_expiry; Type: INDEX; Schema: access; Owner: -
---
-
-CREATE INDEX write_rate_counter_expiry ON access.write_rate_counter USING btree (route, expires_at, identity_digest, family);
-
-
---
 -- Name: lifecycle_membership_live; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -801,6 +794,13 @@ CREATE INDEX organization_member_change ON access.organization_member USING btre
 --
 
 CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
+
+
+--
+-- Name: write_rate_counter_expiry; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX write_rate_counter_expiry ON access.write_rate_counter USING btree (route, expires_at, identity_digest, family);
 
 
 --
