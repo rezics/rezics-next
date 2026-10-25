@@ -20,7 +20,7 @@ classes:
       (https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml)
       and the VNDB tag filter (https://vndb.org/d11). A curated list is a collection, not a series.
     annotations:
-      facets: genre keywords
+      facets: genre keywords contributor partOfSeries
   BookSeries:
     is_a: CreativeWorkSeries
     class_uri: schema:BookSeries
@@ -41,7 +41,7 @@ classes:
       - numberOfParts
       - descriptiveLink
     annotations:
-      facets: genre keywords startDate
+      facets: genre keywords startDate publisher contributor partOfSeries
 slots:
   publishedIn:
     slot_uri: wdt:P1433

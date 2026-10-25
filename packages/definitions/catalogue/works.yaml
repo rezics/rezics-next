@@ -25,3 +25,5 @@ classes:
       - wd:Q482994
     slots:
       - bangumiSubjectId
+    annotations:
+      facets: contributor partOfSeries genre keywords

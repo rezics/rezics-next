@@ -52,7 +52,19 @@
         "wdt:P179",
         "wdt:P725"
       ],
-      "facets": ["schema:isPartOf", "schema:datePublished", "schema:duration"]
+      "facets": [
+        "schema:isPartOf",
+        "schema:datePublished",
+        "schema:duration",
+        "schema:director",
+        "schema:musicBy",
+        "wdt:P725",
+        "schema:contributor",
+        "schema:character",
+        "wdt:P179",
+        "schema:genre",
+        "schema:keywords"
+      ]
     },
     "schema:Movie": {
       "iri": "http://schema.org/Movie",
@@ -97,7 +109,24 @@
         "wdt:P7937",
         "wdt:P973"
       ],
-      "facets": ["wdt:P7937", "schema:genre", "schema:keywords", "schema:datePublished"]
+      "facets": [
+        "wdt:P7937",
+        "schema:genre",
+        "schema:keywords",
+        "schema:datePublished",
+        "schema:author",
+        "schema:illustrator",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P58",
+        "wdt:P178",
+        "wdt:P725",
+        "schema:contributor",
+        "schema:character",
+        "wdt:P179"
+      ]
     },
     "schema:TVSeason": {
       "iri": "http://schema.org/TVSeason",
@@ -142,7 +171,24 @@
         "wdt:P7937",
         "wdt:P973"
       ],
-      "facets": ["wdt:P7937", "schema:genre", "schema:keywords", "schema:datePublished", "schema:numberOfEpisodes"]
+      "facets": [
+        "wdt:P7937",
+        "schema:genre",
+        "schema:keywords",
+        "schema:datePublished",
+        "schema:numberOfEpisodes",
+        "schema:author",
+        "schema:illustrator",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P58",
+        "wdt:P178",
+        "wdt:P725",
+        "schema:character",
+        "wdt:P179"
+      ]
     },
     "schema:TVSeries": {
       "iri": "http://schema.org/TVSeries",
@@ -190,7 +236,24 @@
         "wdt:P7937",
         "wdt:P973"
       ],
-      "facets": ["wdt:P7937", "schema:genre", "schema:keywords", "schema:datePublished", "schema:numberOfEpisodes"]
+      "facets": [
+        "wdt:P7937",
+        "schema:genre",
+        "schema:keywords",
+        "schema:datePublished",
+        "schema:numberOfEpisodes",
+        "schema:author",
+        "schema:illustrator",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P58",
+        "wdt:P178",
+        "wdt:P725",
+        "schema:character",
+        "wdt:P179"
+      ]
     },
     "bf:Instance": {
       "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
@@ -434,7 +497,17 @@
         "schema:keywords",
         "schema:datePublished",
         "wdt:P408",
-        "schema:numberOfPlayers"
+        "schema:numberOfPlayers",
+        "schema:author",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P178",
+        "wdt:P725",
+        "schema:publisher",
+        "schema:character",
+        "wdt:P179"
       ]
     },
     "wd:Q209163": {
@@ -489,7 +562,16 @@
         "schema:datePublished",
         "wdt:P408",
         "schema:numberOfPlayers",
-        "wdt:P8646"
+        "wdt:P8646",
+        "schema:author",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P178",
+        "schema:publisher",
+        "schema:character",
+        "wdt:P179"
       ]
     },
     "wd:Q20631656": {
@@ -570,7 +652,18 @@
         "wdt:P5732",
         "wdt:P725"
       ],
-      "facets": ["schema:keywords", "schema:genre", "schema:datePublished"]
+      "facets": [
+        "schema:keywords",
+        "schema:genre",
+        "schema:datePublished",
+        "schema:author",
+        "schema:illustrator",
+        "wdt:P725",
+        "schema:publisher",
+        "schema:contributor",
+        "schema:character",
+        "wdt:P179"
+      ]
     },
     "schema:ComicSeries": {
       "iri": "http://schema.org/ComicSeries",
@@ -607,7 +700,18 @@
         "wdt:P5732",
         "wdt:P725"
       ],
-      "facets": ["schema:keywords", "schema:genre", "schema:datePublished"]
+      "facets": [
+        "schema:keywords",
+        "schema:genre",
+        "schema:datePublished",
+        "schema:author",
+        "schema:illustrator",
+        "wdt:P725",
+        "schema:publisher",
+        "schema:contributor",
+        "schema:character",
+        "wdt:P179"
+      ]
     },
     "schema:Recipe": {
       "iri": "http://schema.org/Recipe",
@@ -669,7 +773,14 @@
         "wdt:P2635",
         "wdt:P973"
       ],
-      "facets": ["schema:genre", "schema:keywords", "schema:startDate"]
+      "facets": [
+        "schema:genre",
+        "schema:keywords",
+        "schema:startDate",
+        "schema:publisher",
+        "schema:contributor",
+        "wdt:P179"
+      ]
     },
     "wd:Q7725310": {
       "iri": "http://www.wikidata.org/entity/Q7725310",
@@ -695,7 +806,7 @@
         "schema:url",
         "wdt:P179"
       ],
-      "facets": ["schema:genre", "schema:keywords"]
+      "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"]
     },
     "wd:Q689445": {
       "iri": "http://www.wikidata.org/entity/Q689445",
@@ -750,7 +861,8 @@
         "schema:illustrator",
         "schema:musicBy",
         "schema:translator",
-        "wdt:P725"
+        "wdt:P725",
+        "wdt:P179"
       ]
     },
     "schema:MusicAlbum": {
@@ -781,7 +893,7 @@
         "wdt:P179",
         "wdt:P5732"
       ],
-      "facets": []
+      "facets": ["schema:contributor", "wdt:P179", "schema:genre", "schema:keywords"]
     }
   },
   "properties": {

@@ -81,7 +81,7 @@ classes:
       - softwareEngine
       - numberOfPlayers
     annotations:
-      facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers
+      facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers author director musicBy producer productionCompany developer voiceActor publisher character partOfSeries
   GameAddOn:
     is_a: LaunchWork
     class_uri: wd:Q209163
@@ -114,7 +114,7 @@ classes:
       - numberOfPlayers
       - expansionOf
     annotations:
-      facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf
+      facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf author director musicBy producer productionCompany developer publisher character partOfSeries
 slots:
   gamePlatform:
     slot_uri: schema:gamePlatform

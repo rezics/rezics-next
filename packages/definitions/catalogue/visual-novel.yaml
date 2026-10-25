@@ -35,7 +35,7 @@ classes:
       - derivativeWork
       - spinOffWork
     annotations:
-      facets: genre keywords character contributor author director illustrator musicBy translator voiceActor
+      facets: genre keywords character contributor author director illustrator musicBy translator voiceActor partOfSeries
 slots:
   followedByWork:
     slot_uri: wdt:P156
