@@ -21,6 +21,7 @@ import type {
   NativeWorkflowStatus,
   Operation,
   OperationProgress,
+  OperationResponse,
   RequestContext,
 } from './operation-contract.ts';
 import createOperation from './create-erasure-operation.sql';
@@ -158,7 +159,7 @@ export async function beginAuthorErasure(
   );
 }
 
-function counts(value: OperationProgress): OperationProgress {
+function counts(value: OperationResponse): OperationResponse {
   if (
     !value ||
     !Number.isSafeInteger(value.processedPosts) ||
@@ -170,7 +171,13 @@ function counts(value: OperationProgress): OperationProgress {
   return { processedPosts: value.processedPosts, erasedRevisions: value.erasedRevisions };
 }
 function view(operationId: string, threadId: string, authorId: string, status: NativeWorkflowStatus | null): Operation {
-  const progress = status ? counts(status.progress) : { processedPosts: 0, erasedRevisions: 0 };
+  let progress: OperationProgress = { processedPosts: 0, erasedRevisions: 0, steps: 0 };
+  if (status) {
+    const counters = counts(status.progress);
+    if (!Number.isSafeInteger(status.progress.steps) || status.progress.steps < 0)
+      throw new Error('Invalid native operation counters');
+    progress = { ...counters, steps: status.progress.steps };
+  }
   const base = {
     name: `operations/${operationId}` as const,
     metadata: { type: 'content.author_erasure' as const, threadId, authorId, ...progress },
@@ -182,15 +189,19 @@ function view(operationId: string, threadId: string, authorId: string, status: N
   }
   if (status.done !== true || (status.response === undefined) === (status.error === undefined))
     throw new Error('Invalid native operation status');
-  if (status.response) return { ...base, done: true, response: counts(status.response) };
-  const code = status.error?.status;
-  if (!Number.isInteger(code) || code! < 400 || code! > 599) throw new Error('Invalid native operation problem');
+  if (status.response === null || status.error === null) throw new Error('Invalid native operation status');
+  if (status.response !== undefined) return { ...base, done: true, response: counts(status.response) };
+  const nativeCode = status.error!.code;
+  const code = Number.isInteger(nativeCode) && nativeCode >= 1 && nativeCode <= 16 ? nativeCode : 13;
   // Native errors may contain SQL, SDK internals or authored content. Expose only
-  // the bounded public problem classification, never its raw message or stack.
+  // the canonical RPC code and a fixed public message, never native details.
   return {
     ...base,
     done: true,
-    error: { type: 'about:blank', title: code === 403 ? 'Forbidden' : 'Author erasure failed', status: code! },
+    error: {
+      code,
+      message: code === 7 ? 'Permission denied' : code === 13 ? 'Internal error' : 'Author erasure failed',
+    },
   };
 }
 

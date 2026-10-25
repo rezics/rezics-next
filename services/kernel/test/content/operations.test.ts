@@ -3,7 +3,11 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
-import type { AuthorErasureDependencies, NativeWorkflowStatus } from '../../src/content/operation-contract.ts';
+import type {
+  AuthorErasureDependencies,
+  NativeWorkflowStatus,
+  OperationProgress,
+} from '../../src/content/operation-contract.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
@@ -175,7 +179,7 @@ test('initiation commits one identity and ID-only native source before any worke
   ).toEqual([{ response: outcome.value }]);
   expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({
     name: `operations/${outcome.value.operationId}`,
-    metadata: { type: 'content.author_erasure', ...input, processedPosts: 0, erasedRevisions: 0 },
+    metadata: { type: 'content.author_erasure', ...input, processedPosts: 0, erasedRevisions: 0, steps: 0 },
     done: false,
   });
   expect(statusIds).toEqual([]);
@@ -236,7 +240,7 @@ test('status conceals noninitiators and current account denials before exact nat
   expect(statusIds).toEqual([]);
   native = {
     done: true,
-    progress: { processedPosts: 3, erasedRevisions: 12 },
+    progress: { processedPosts: 3, erasedRevisions: 12, steps: 1 },
     response: { processedPosts: 3, erasedRevisions: 12 },
   };
   expect(await readOperation(deps, actor, outcome.value.operationId, context())).toMatchObject({
@@ -246,15 +250,136 @@ test('status conceals noninitiators and current account denials before exact nat
   });
   native = {
     done: true,
-    progress: { processedPosts: 1, erasedRevisions: 2 },
-    error: { type: 'about:blank', title: 'Denied', status: 403, detail: 'SQL secret stack' },
+    progress: { processedPosts: 1, erasedRevisions: 2, steps: 2 },
+    error: { code: 7, message: 'SQL secret stack', details: [{ private: 'provider data' }] },
   };
   const failed = await readOperation(deps, actor, outcome.value.operationId, context());
-  expect(failed).toMatchObject({ done: true, error: { status: 403 } });
+  expect(failed).toEqual({
+    name: `operations/${outcome.value.operationId}`,
+    metadata: { type: 'content.author_erasure', ...input, ...native.progress },
+    done: true,
+    error: { code: 7, message: 'Permission denied' },
+  });
   expect(JSON.stringify(failed)).not.toContain('SQL secret');
-  native = { done: false, progress: { processedPosts: Number.MAX_SAFE_INTEGER + 1, erasedRevisions: 0 } };
+  native = { done: false, progress: { processedPosts: Number.MAX_SAFE_INTEGER + 1, erasedRevisions: 0, steps: 0 } };
   await expect(readOperation(deps, actor, outcome.value.operationId, context())).rejects.toThrow();
   native = null;
+});
+
+test('native operation serializer retains steps and only the approved result fields', async () => {
+  const deps = await dependencies();
+  const outcome = await beginAuthorErasure(deps, actor, input, context());
+  await bindAuthorErasureWorkflow(db.pool, outcome.value.operationId, await source(outcome), 0);
+  const progress = { processedPosts: 2, erasedRevisions: 9, steps: 1 };
+  const base = {
+    name: `operations/${outcome.value.operationId}` as const,
+    metadata: { type: 'content.author_erasure' as const, ...input, ...progress },
+  };
+  try {
+    native = { done: false, progress };
+    expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({ ...base, done: false });
+    // Runtime adapters may supply extra fields; serialize only the public counters.
+    const response = { processedPosts: 2, erasedRevisions: 9, steps: 1, total: 99, body: 'private author bytes' };
+    native = { done: true, progress: { ...progress, ...response }, response };
+    expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({
+      ...base,
+      done: true,
+      response: { processedPosts: 2, erasedRevisions: 9 },
+    });
+    const maximum = {
+      processedPosts: Number.MAX_SAFE_INTEGER,
+      erasedRevisions: Number.MAX_SAFE_INTEGER,
+      steps: Number.MAX_SAFE_INTEGER,
+    };
+    native = { done: true, progress: maximum, response: maximum };
+    expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({
+      name: base.name,
+      metadata: { type: 'content.author_erasure', ...input, ...maximum },
+      done: true,
+      response: { processedPosts: maximum.processedPosts, erasedRevisions: maximum.erasedRevisions },
+    });
+  } finally {
+    native = null;
+  }
+});
+
+test('terminal Status preserves native failure codes and sanitizes messages and details', async () => {
+  const deps = await dependencies();
+  const outcome = await beginAuthorErasure(deps, actor, input, context());
+  await bindAuthorErasureWorkflow(db.pool, outcome.value.operationId, await source(outcome), 0);
+  const progress = { processedPosts: 1, erasedRevisions: 2, steps: 1 };
+  try {
+    const internal = { code: 13, message: 'Internal error' };
+    const cases = [
+      ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 14, 15, 16].map((code) => ({
+        code,
+        expected: { code, message: 'Author erasure failed' },
+      })),
+      { code: 7, expected: { code: 7, message: 'Permission denied' } },
+      { code: 13, expected: internal },
+      ...[0, -1, 17, 403, NaN, Infinity, 7.5].map((code) => ({ code, expected: internal })),
+    ];
+    for (const { code, expected } of cases) {
+      native = {
+        done: true,
+        progress,
+        error: {
+          code,
+          message: 'SELECT private author bytes; SQL stack',
+          details: [{ token: 'private provider data' }],
+        },
+      };
+      expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({
+        name: `operations/${outcome.value.operationId}`,
+        metadata: { type: 'content.author_erasure', ...input, ...progress },
+        done: true,
+        error: expected,
+      });
+    }
+  } finally {
+    native = null;
+  }
+});
+
+test('native counters and pending or terminal result arms fail closed when malformed', async () => {
+  const deps = await dependencies();
+  const outcome = await beginAuthorErasure(deps, actor, input, context());
+  await bindAuthorErasureWorkflow(db.pool, outcome.value.operationId, await source(outcome), 0);
+  const progress = { processedPosts: 0, erasedRevisions: 0, steps: 0 };
+  const response = { processedPosts: 0, erasedRevisions: 0 };
+  try {
+    for (const key of ['processedPosts', 'erasedRevisions', 'steps'] as const) {
+      for (const invalid of [-1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, '1', null, undefined]) {
+        native = { done: false, progress: { ...progress, [key]: invalid } } as NativeWorkflowStatus;
+        await expect(readOperation(deps, actor, outcome.value.operationId, context())).rejects.toThrow(
+          'Invalid native operation counters',
+        );
+        if (key !== 'steps') {
+          native = { done: true, progress, response: { ...response, [key]: invalid } } as NativeWorkflowStatus;
+          await expect(readOperation(deps, actor, outcome.value.operationId, context())).rejects.toThrow(
+            'Invalid native operation counters',
+          );
+        }
+      }
+    }
+    const error = { code: 7, message: 'Permission denied' };
+    for (const malformed of [
+      { done: false, progress, response },
+      { done: false, progress, error },
+      { done: true, progress },
+      { done: true, progress, response, error },
+      { done: true, progress, response: null },
+      { done: true, progress, error: null },
+      { done: 'false', progress },
+    ]) {
+      native = malformed as NativeWorkflowStatus;
+      await expect(readOperation(deps, actor, outcome.value.operationId, context())).rejects.toThrow(
+        'Invalid native operation status',
+      );
+    }
+  } finally {
+    native = null;
+  }
 });
 
 test('explicit legal grants, concurrent retries and current named status denials use native authority', async () => {
@@ -430,12 +555,8 @@ test('checkGrowth measures production initiation and status with fixed Access th
         expect(exactId).toBe(workflowId);
         const status = await client.getWorkflow(exactId);
         if (!status) return null;
-        const progress = await client.getEvent<{ processedPosts: number; erasedRevisions: number }>(
-          exactId,
-          'progress',
-          0,
-        );
-        return { done: false, progress: progress ?? { processedPosts: 0, erasedRevisions: 0 } };
+        const progress = await client.getEvent<OperationProgress>(exactId, 'progress', 0);
+        return { done: false, progress: progress ?? { processedPosts: 0, erasedRevisions: 0, steps: 0 } };
       },
     },
   };
