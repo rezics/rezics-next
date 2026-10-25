@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { isOrdinalKey, keyBetween, MAX_ORDINAL_KEY_LENGTH, respacedKeys } from '../../src/library/ordinal.ts';
+import {
+  GENERATED_ORDINAL_KEY_LENGTH,
+  isOrdinalKey,
+  keyBetween,
+  MAX_ORDINAL_KEY_LENGTH,
+  respacedKeys,
+} from '../../src/library/ordinal.ts';
 
 function byCodeUnit(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -8,13 +14,14 @@ function byCodeUnit(left: string, right: string): number {
 function requireKey(value: string | null): string {
   expect(value).not.toBeNull();
   if (value === null) throw new Error('expected an order key');
-  expect(value.length).toBeLessThanOrEqual(MAX_ORDINAL_KEY_LENGTH);
+  expect(value.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
   expect(isOrdinalKey(value)).toBe(true);
   return value;
 }
 
 test('keys between neighbours stay in code-unit order, and the first insertion with no room returns null', () => {
   expect(MAX_ORDINAL_KEY_LENGTH).toBe(48);
+  expect(GENERATED_ORDINAL_KEY_LENGTH).toBe(32);
   const anchor = requireKey(keyBetween(null, null));
   const upper = requireKey(keyBetween(anchor, null));
   const lower = requireKey(keyBetween(null, anchor));
@@ -31,7 +38,7 @@ test('keys between neighbours stay in code-unit order, and the first insertion w
       expect(keyBetween(anchor, ceiling)).toBeNull();
       break;
     }
-    expect(key.length).toBeLessThanOrEqual(MAX_ORDINAL_KEY_LENGTH);
+    expect(key.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
     expect(isOrdinalKey(key)).toBe(true);
     expect(anchor < key).toBe(true);
     if (ceiling !== null) expect(key < ceiling).toBe(true);
@@ -51,7 +58,7 @@ test('keys between neighbours stay in code-unit order, and the first insertion w
       expect(keyBetween(floor, anchor)).toBeNull();
       break;
     }
-    expect(key.length).toBeLessThanOrEqual(MAX_ORDINAL_KEY_LENGTH);
+    expect(key.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
     expect(isOrdinalKey(key)).toBe(true);
     expect(key < anchor).toBe(true);
     if (floor !== null) expect(floor < key).toBe(true);
@@ -72,7 +79,7 @@ test('respacing yields short evenly spaced sorted unique keys', () => {
     expect(keys).toHaveLength(count);
     let previous: string | null = null;
     for (const key of keys) {
-      expect(key.length).toBeLessThanOrEqual(MAX_ORDINAL_KEY_LENGTH);
+      expect(key.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
       expect(isOrdinalKey(key)).toBe(true);
       const spaced = keyBetween(previous, null);
       expect(spaced).toBe(key);
@@ -113,4 +120,52 @@ test('invalid and out-of-order neighbours throw', () => {
   expect(isOrdinalKey(undefined)).toBe(false);
   expect(isOrdinalKey(1)).toBe(false);
   expect(isOrdinalKey({ key: anchor })).toBe(false);
+});
+
+test('two hundred inserts after one member respace the Collection before the two hundredth insert and every generated key has at most 32 characters', () => {
+  const anchor = requireKey(keyBetween(null, null));
+  const tail = requireKey(keyBetween(anchor, null));
+  let next = tail;
+  let respacedAt: number | null = null;
+  let sawThirtyTwo = false;
+  for (let insert = 1; insert <= 200; insert += 1) {
+    const key = keyBetween(anchor, next);
+    if (key === null) {
+      respacedAt = insert;
+      break;
+    }
+    expect(key.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
+    if (key.length === GENERATED_ORDINAL_KEY_LENGTH) sawThirtyTwo = true;
+    expect(isOrdinalKey(key)).toBe(true);
+    expect(anchor < key && key < next).toBe(true);
+    next = key;
+  }
+  expect(respacedAt).not.toBeNull();
+  expect(respacedAt!).toBeGreaterThan(1);
+  expect(respacedAt!).toBeLessThan(200);
+  expect(sawThirtyTwo).toBe(true);
+});
+
+test('a stored key of up to 48 characters is still accepted as a neighbour', () => {
+  const stored = `a0${'V'.repeat(46)}`;
+  const shorter = `a0${'V'.repeat(31)}`;
+  expect(stored).toHaveLength(MAX_ORDINAL_KEY_LENGTH);
+  expect(shorter).toHaveLength(33);
+  expect(isOrdinalKey(stored)).toBe(true);
+  expect(isOrdinalKey(shorter)).toBe(true);
+
+  const beforeStored = requireKey(keyBetween(null, stored));
+  const afterStored = requireKey(keyBetween(stored, null));
+  expect(beforeStored < stored && stored < afterStored).toBe(true);
+
+  const beforeShorter = requireKey(keyBetween(null, shorter));
+  const afterShorter = requireKey(keyBetween(shorter, null));
+  expect(beforeShorter < shorter && shorter < afterShorter).toBe(true);
+
+  const higher = 'a2';
+  expect(isOrdinalKey(higher)).toBe(true);
+  const betweenRoom = requireKey(keyBetween(stored, higher));
+  expect(stored < betweenRoom && betweenRoom < higher).toBe(true);
+
+  expect(keyBetween(shorter, stored)).toBeNull();
 });

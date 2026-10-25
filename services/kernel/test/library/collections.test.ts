@@ -12,7 +12,7 @@ import { ProblemError } from '../../src/http/problem.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import type { Collection, CollectionMember } from '../../src/library/collection-model.ts';
 import { insertMember, listMembers, readCollection } from '../../src/library/collection-store.ts';
-import { MAX_ORDINAL_KEY_LENGTH, respacedKeys } from '../../src/library/ordinal.ts';
+import { GENERATED_ORDINAL_KEY_LENGTH, MAX_ORDINAL_KEY_LENGTH, respacedKeys } from '../../src/library/ordinal.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -311,14 +311,27 @@ test('members keep first, after and last placement for repeated subjects', async
 test('repeated inserts after one member stay within the ordinal limit and respace in the same command', async () => {
   const created = await commands.createCollection(owner, { title: 'Gap', visibility: 'private' }, key());
   const anchor = await commands.addMember(owner, created.value.id, { subjectId: subjectA }, key());
+  expect(anchor.value.ordinalKey.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
+  let respacedBeforeTwoHundredth = false;
   for (let index = 0; index < 300; index += 1) {
-    await commands.addMember(owner, created.value.id, { subjectId: subjectA, after: anchor.value.id }, key());
+    // Authentication evidence lasts five seconds, and this loop outlives one proof.
+    if (index % 40 === 0) owner = await authenticate(owner.accountId, curatorScopes);
+    if (index === 199) respacedBeforeTwoHundredth = (await read(created.value.id))!.orderEpoch > 0;
+    const added = await commands.addMember(
+      owner,
+      created.value.id,
+      { subjectId: subjectA, after: anchor.value.id },
+      key(),
+    );
+    expect(added.value.ordinalKey.length).toBeLessThanOrEqual(GENERATED_ORDINAL_KEY_LENGTH);
     if (index === 199) {
       const midway = await membersOf(created.value.id);
       expect(midway).toHaveLength(201);
       expect(midway.every((member) => member.ordinalKey.length <= MAX_ORDINAL_KEY_LENGTH)).toBe(true);
+      expect(midway.every((member) => member.ordinalKey.length <= GENERATED_ORDINAL_KEY_LENGTH)).toBe(true);
     }
   }
+  expect(respacedBeforeTwoHundredth).toBe(true);
   const stored = await read(created.value.id);
   const members = await membersOf(created.value.id);
   expect(stored).toMatchObject({ revision: 1, memberCount: 301 });
@@ -327,6 +340,7 @@ test('repeated inserts after one member stay within the ordinal limit and respac
   expect(
     members.every((member) => member.ordinalKey.length >= 1 && member.ordinalKey.length <= MAX_ORDINAL_KEY_LENGTH),
   ).toBe(true);
+  expect(members.every((member) => member.ordinalKey.length <= GENERATED_ORDINAL_KEY_LENGTH)).toBe(true);
   expect(members[0]!.id).toBe(anchor.value.id);
   expect(new Set(members.map((member) => member.ordinalKey)).size).toBe(members.length);
 });

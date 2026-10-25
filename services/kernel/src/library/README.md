@@ -20,7 +20,7 @@ Events about private state use the account or Collection id as `subject`, never 
 
 ## Ordering
 
-Ordering keys are fractional-indexing keys of at most 48 characters. They are stored with `COLLATE "C"` and are unique on `(route, collection_id, ordinal_key)`. That unique constraint is deferrable. A respacing in the same command increments `orderEpoch`, which makes earlier cursors stale. A new Collection starts at epoch 0. Member cursors seal `orderEpoch + 1` because the seal rejects epoch 0. A mismatch is `stale_cursor`.
+Ordering keys are fractional-indexing keys. Keys are generated within 32 characters and stored within 48. They are stored with `COLLATE "C"` and are unique on `(route, collection_id, ordinal_key)`. That unique constraint is deferrable. A respace happens when no generated key fits. A respacing in the same command increments `orderEpoch`, which makes earlier cursors stale. A new Collection starts at epoch 0. Member cursors seal `orderEpoch + 1` because the seal rejects epoch 0. A mismatch is `stale_cursor`.
 
 ## Cost
 
@@ -65,13 +65,13 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 ### Add member
 
-- Touches: Subject resolve starts before the command. Inside: one active Collection read, one neighbour read, and, when no ordinal key fits in 48 characters, one `listMembers` of at most 5000 rows and one respace statement. The neighbour statement seeks at most one before key and one after key on the ordinal unique key, plus the named after-member when the position is after. Respace increments `order_epoch` when `member_count` equals the requested set and rewrites those members in the same statement. The insert statement then bumps `member_count` while it is below 5000 and inserts one member. The 5001st member writes nothing. The event subject is the Collection id. Respace does not itself emit `listing.changed`.
+- Touches: Subject resolve starts before the command. Inside: one active Collection read, one neighbour read, and, when no generated key fits, one `listMembers` of at most 5000 rows and one respace statement. Keys are generated within 32 characters and stored within 48. The neighbour statement seeks at most one before key and one after key on the ordinal unique key, plus the named after-member when the position is after. Respace increments `order_epoch` when `member_count` equals the requested set and rewrites those members in the same statement. The insert statement then bumps `member_count` while it is below 5000 and inserts one member. The 5001st member writes nothing. The event subject is the Collection id. Respace does not itself emit `listing.changed`.
 - Bound: Fitting key: library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus one subject resolve, authorization and the envelope. Respace of this Collection examines and rewrites `M` member keys, `M` at most 5000, so that path is `R` `O(M)` and `B` `O(M L(N))` on top of the fitting-key reads.
 - Growth check: `test/library/collections.test.ts`: `add cost stays constant as unrelated collections grow`. That sample does not grow the target's members and does not respace. `test/library/collection-store.test.ts`: `respacing 500 members rewrites one Collection in one statement and preserves order` shows one statement and `orderEpoch` 1 at 500 members. It is one size, not three scales. `test/library/subject-anchor.test.ts`: `subject anchoring has constant resolve cost and input-bounded page cost as unrelated subjects grow`.
 
 ### Move member
 
-- Touches: One active Collection read and one neighbour read. A fitting key updates one member primary key and touches the Collection primary key. When no key fits, the command lists at most 5000 members, respaces them, then lists at most 5000 members again to return the moved row. The event subject is the Collection id.
+- Touches: One active Collection read and one neighbour read. A fitting key updates one member primary key and touches the Collection primary key. When no generated key fits, the command lists at most 5000 members, respaces them, then lists at most 5000 members again to return the moved row. Keys are generated within 32 characters and stored within 48. The event subject is the Collection id.
 - Bound: Fitting key: library body `R` `O(1)`, `B` `O(L(N))`, `S` 4, plus authorization and the envelope. The respace path adds two lists of `M` rows and one rewrite of `M` keys, `M` at most 5000, so `R` `O(M)` and `B` `O(M L(N))`.
 - Growth check: `test/library/collections.test.ts`: `move cost stays constant as unrelated collections grow`. The sample is a fitting-key move and does not respace. `test/library/collection-store.test.ts`: `respacing 500 members rewrites one Collection in one statement and preserves order`.
 

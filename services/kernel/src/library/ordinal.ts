@@ -1,6 +1,7 @@
 import { BASE_62_DIGITS, generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 
 export const MAX_ORDINAL_KEY_LENGTH = 48;
+export const GENERATED_ORDINAL_KEY_LENGTH = 32;
 
 const MAX_RESPACED_KEYS = 5_000;
 const digits = new Set(BASE_62_DIGITS);
@@ -29,7 +30,7 @@ export function keyBetween(before: string | null, after: string | null): string 
   if (before !== null && after !== null && before >= after) throw new Error(`${before} >= ${after}`);
 
   const key = generateKeyBetween(before, after);
-  return key.length <= MAX_ORDINAL_KEY_LENGTH ? key : null;
+  return key.length <= GENERATED_ORDINAL_KEY_LENGTH ? key : null;
 }
 
 export function respacedKeys(count: number): string[] {
