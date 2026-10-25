@@ -241,6 +241,66 @@ test('Auth issues the canonical assignment while retaining the real actor, conse
   expect(JSON.stringify(jwks)).not.toContain(key.d!);
 });
 
+test('real principal sessions create immutable assignment provenance and a native receipt', async () => {
+  const created = await assignment();
+  const bearer = await token(actorCookie, created.reference);
+  const rows = await reader.query(
+    `SELECT creator_principal_id, assigned_actor_id, issued_valid::text, valid::text, revoked_at, transaction_id
+    FROM access.principal_assignment WHERE route=$1 AND principal_id=$2 AND request_id=$3`,
+    [routeOf(principalId), principalId, created.input.requestId],
+  );
+  expect(rows.rows).toHaveLength(1);
+  const row = rows.rows[0]!;
+  expect(row).toMatchObject({
+    creator_principal_id: principalId,
+    assigned_actor_id: actorId,
+    issued_valid: '(,)',
+    valid: '(,)',
+    revoked_at: null,
+  });
+  const receipts = await reader.query(
+    `SELECT r.actor_account_id, r.command_kind, octet_length(r.request_digest) AS digest_length,
+    b.client_id, b.requested_by
+    FROM core.receipt r JOIN editorial.write_basis b
+      ON b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
+    WHERE r.partition_no=$1 AND r.transaction_id=$2`,
+    [partitionOf(routeOf(principalId)!), row.transaction_id],
+  );
+  expect(receipts.rows).toEqual([
+    {
+      actor_account_id: principalId,
+      command_kind: 'access.assignment.create',
+      digest_length: 32,
+      client_id: 'web',
+      requested_by: null,
+    },
+  ]);
+  for (const [column, value] of [
+    ['assigned_actor_id', otherId],
+    ['creator_principal_id', otherId],
+    ['request_id', newId(0x2345)],
+    ['valid', '[2000-01-01,2001-01-01)'],
+  ]) {
+    await expect(
+      reader.query(
+        `UPDATE access.principal_assignment SET ${column}=$4 WHERE route=$1 AND principal_id=$2 AND request_id=$3`,
+        [routeOf(principalId), principalId, created.input.requestId, value],
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
+  }
+  expect(await readAssignment(reader, created.reference, actorId)).toMatchObject({ kind: 'resolved' });
+  expect((await operation(bearer)).value).toBe('updated');
+  await assignments.revoke(await authenticated(principalCookie), {
+    principalId,
+    requestId: created.input.requestId,
+    key: Bun.randomUUIDv7(),
+  });
+  await invalid(operation(bearer));
+  expect((await request('/token', { requested_by: created.reference }, actorCookie)).status).toBeGreaterThanOrEqual(
+    400,
+  );
+});
+
 test('real execution requires actor grants, approved scopes and independently current principal grants', async () => {
   const bearer = await token(actorCookie, reference);
   expect((await operation(bearer)).value).toBe('updated');

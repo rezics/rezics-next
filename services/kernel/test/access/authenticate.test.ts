@@ -4,6 +4,7 @@ import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } f
 import { createAuthService, type AuthService, type AuthServiceOptions } from '@rezics/auth';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
+import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -30,6 +31,7 @@ const actions: ActionCatalogue = new Map([
   [action, { anonymous: false }],
   ['subject:update', { anonymous: false }],
   ['subject:public', { anonymous: true }],
+  ['account:delegate', { anonymous: false }],
 ]);
 const routeOf = (id: string) => Number.parseInt(id.slice(24, 28), 16);
 const context = (source = pool, deadline = Date.now() + 3000) => ({ pool: source, deadline });
@@ -145,9 +147,13 @@ beforeAll(async () => {
       },
     },
   };
-  const approvals = new Set([person, robot]);
+  const approvals = new Set([person, robot, principal]);
   service = await createAuthService(options);
-  await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [action, 'subject:update'] });
+  await service.internal.registerClient({
+    clientId: 'web',
+    firstParty: true,
+    scopes: [action, 'subject:update', 'account:delegate'],
+  });
   await service.internal.registerClient({ clientId: 'external', firstParty: false, scopes: [action] });
   for (const id of [person, robot]) {
     await pool.query(
@@ -375,17 +381,35 @@ test('delegated signed claims require an actual principal-created matching assig
   for (const value of [null, false, principal, `${requestedBy}:extra`, requestedBy]) {
     await invalid(access.authenticate(await signed({ requested_by: value }), context()));
   }
+  await pool.query("UPDATE access.account SET state='pending' WHERE route=$1 AND account_id=$2", [
+    routeOf(principal),
+    principal,
+  ]);
+  await service.internal.provisionPassword({ authorization: principal, email: `${principal}@example.test`, password });
+  await pool.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+    routeOf(principal),
+    principal,
+  ]);
   await pool.query(
-    `INSERT INTO access.principal_assignment
-    (route,principal_id,request_id,assigned_actor_id,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$4)`,
-    [routeOf(principal), principal, requestId, person],
+    `INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$2,'account:delegate','(,)',$2)`,
+    [routeOf(principal), principal],
+  );
+  const principalContext = context();
+  const principalActor = await access.authenticate(
+    await token(await login(principal, 'web', ['account:delegate'])),
+    principalContext,
+  );
+  await createDelegationCommands({ pool, access, action: 'account:delegate' }).create(
+    { ...principalContext, actor: principalActor },
+    { principalId: principal, requestId, assignedActorId: person, valid: '(,)', key: Bun.randomUUIDv7() },
   );
   await pool.query(
     `INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id)
     VALUES ($1,$2,$3,$4,'(,)',$3)`,
     [resource.route, resource.id, principal, action],
   );
-  const delegated = await signed({ requested_by: requestedBy });
+  let delegated = await signed({ requested_by: requestedBy });
   const ctx = context();
   const actor = await access.authenticate(delegated, ctx);
   expect(actor.requestedBy).toBe(requestedBy);
@@ -393,15 +417,9 @@ test('delegated signed claims require an actual principal-created matching assig
   expect(await check(pool)).toBe(true);
   await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND subject_id=$2', [resource.route, principal]);
   expect(await check(pool)).toBe(false);
-  await pool.query('UPDATE access.principal_assignment SET assigned_actor_id=$2 WHERE route=$1', [
-    routeOf(principal),
-    robot,
-  ]);
+  delegated = await signed({ requested_by: requestedBy, sub: robot, authn_epoch: 2 });
   await invalid(access.authenticate(delegated, context()));
-  await pool.query('UPDATE access.principal_assignment SET assigned_actor_id=$2 WHERE route=$1', [
-    routeOf(principal),
-    person,
-  ]);
+  delegated = await signed({ requested_by: requestedBy });
   await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
     routeOf(principal),
     principal,
