@@ -1,9 +1,11 @@
 import type { Pool } from 'pg';
+import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
-export declare function searchRoutes<App>(app: App, { pool, search }: {
+export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     pool: Pool;
     search?: SearchService;
+    access?: Access | AccessFactory;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{

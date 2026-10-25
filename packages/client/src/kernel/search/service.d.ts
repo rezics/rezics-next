@@ -1,3 +1,4 @@
+import { type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type OpenSearch } from './opensearch.ts';
@@ -15,12 +16,13 @@ type Result = {
     type: string;
     labels: Record<string, string>;
 };
-export declare function createSearchService({ pool, client, prefix, source, cursors, }: {
+export declare function createSearchService({ pool, client, prefix, source, cursors, release, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
     cursors: KeyRing;
+    release?: () => Promise<FilterRelease | null>;
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number): Promise<{
         subjects: Result[];

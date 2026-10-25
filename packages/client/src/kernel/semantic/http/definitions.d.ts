@@ -1,7 +1,9 @@
 import type { Pool } from 'pg';
 import type { subjectRoutes } from './subjects.ts';
-export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }: {
+import { type Access, type AccessFactory } from '../../request/access.ts';
+export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool, access }: {
     pool: Pool;
+    access?: Access | AccessFactory;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{

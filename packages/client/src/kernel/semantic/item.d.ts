@@ -1,4 +1,6 @@
 import type { DataType } from '@rezics/definitions';
+import { type Violation } from '@rezics/definitions/validate';
+export type { Violation } from '@rezics/definitions/validate';
 export type Value = {
     type: 'value';
     content: unknown;
@@ -64,10 +66,6 @@ export type FactRow = {
     body: unknown;
     fact_revision?: number | null;
     fact_release?: string | null;
-};
-export type Violation = {
-    pointer: string;
-    code: 'required' | 'unknown_field' | 'invalid_type' | 'invalid_format' | 'out_of_range' | 'unsupported';
 };
 export declare class SubjectInputError extends Error {
     readonly violations: Violation[];

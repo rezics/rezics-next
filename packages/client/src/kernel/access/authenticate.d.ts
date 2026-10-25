@@ -1,0 +1,39 @@
+import { type FetchImplementation } from 'jose';
+import { type AccessClient, type AccessContext, type AccountActor } from '../request/access.ts';
+import { type DurableIdentity } from './durable-identity.ts';
+import type { AuthoritativeTime } from '../command/command.ts';
+import { type ApprovedIdentity } from './approved-identity.ts';
+import { type Account } from './account-data.ts';
+export type AuthenticationConfig = {
+    issuer: string;
+    audience: string;
+    jwksUrl: string;
+    /** Public JWKS transport only. No credential, token or private key is passed. */
+    fetch?: FetchImplementation;
+};
+type Identity = {
+    account: Account;
+    pool: AccessContext['pool'];
+    deadline: number;
+    expires: number;
+    observedAt: number;
+    durableTime?: AuthoritativeTime;
+    durableAction?: string;
+};
+/** Also bounds pool queueing and transports that do not honor AbortSignal. */
+export declare function within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
+/** Preserve pg's decoding capabilities when wrapping reylo's query transport. */
+export declare function deadlineClient(client: AccessClient, deadline: number): AccessClient;
+/** Each factory owns its key cache and its opaque, immutable request identities. */
+export declare function createAuthenticator(configuration?: AuthenticationConfig): {
+    authenticate: (token: string, context: AccessContext) => Promise<AccountActor>;
+    approvalScope: Readonly<{}>;
+    durableScope: Readonly<{}>;
+    /** Private operation proof, not a row/Actor registration API. */
+    restoreDurable(proof: DurableIdentity, context: AccessContext, time: AuthoritativeTime): Promise<AccountActor>;
+    discardDurable(actor: AccountActor): void;
+    /** Internal native approval proof only. Reconstructed actors have no proof. */
+    restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
+    identity(actor: AccountActor): Identity | undefined;
+};
+export {};

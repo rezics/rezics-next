@@ -1,0 +1,35 @@
+import type { Pool, PoolClient } from 'pg';
+import accountRead from './account-read.sql';
+import organizationRoleRead from './account-organization-role.sql';
+type Queryable = Pick<Pool | PoolClient, 'query'>;
+type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
+/** Private authoritative row, including lifecycle's fenced flag; never a public profile. */
+export type Account = Omit<AccountRow, 'minimumAuthnEpoch'> & {
+    minimumAuthnEpoch: bigint;
+};
+export type AccountKind = Account['kind'];
+export type AccountState = Account['state'];
+export type OrganizationRole = NonNullable<Awaited<ReturnType<typeof organizationRoleRead.run>>>['role'];
+export type PublicAccount = {
+    accountId: string;
+    kind: string;
+    handle: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
+    biography: string | null;
+    state: string;
+    operatorAccountId: string | null;
+} | {
+    accountId: string;
+    kind: string;
+    state: 'deleted';
+};
+/** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
+ * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
+ */
+export declare function readAccount(client: Queryable, route: number, accountId: string): Promise<Account | null>;
+/** Public allowlist; pending rows are hidden and deleted rows disclose only an identity tombstone. */
+export declare function readPublicAccount(client: Queryable, route: number, accountId: string): Promise<PublicAccount | null>;
+/** Reads a single member's role at the caller's authoritative request time on the organization anchor. */
+export declare function readOrganizationRole(client: Queryable, route: number, organizationId: string, memberAccountId: string, at: Date): Promise<OrganizationRole | null>;
+export {};

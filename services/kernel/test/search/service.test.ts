@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
@@ -81,7 +82,11 @@ async function publish(prefix: string, fake: Fake, subjects: readonly IndexedSub
 
 async function deployment(
   subjects: readonly IndexedSubject[],
-  options: { source?: (fake: Fake) => SubjectSource; client?: OpenSearch } = {},
+  options: {
+    source?: (fake: Fake) => SubjectSource;
+    client?: OpenSearch;
+    release?: () => Promise<FilterRelease | null>;
+  } = {},
 ) {
   const prefix = freshPrefix();
   const fake = createFakeSource();
@@ -94,10 +99,12 @@ async function deployment(
     prefix,
     source,
     cursors,
-    release: async () => ({
-      types: { 'schema:Book': { facets: [] }, 'schema:Recipe': { facets: [] } },
-      properties: {},
-    }),
+    release:
+      options.release ??
+      (async () => ({
+        types: { 'schema:Book': { facets: [] }, 'schema:Recipe': { facets: [] } },
+        properties: {},
+      })),
   });
   return { prefix, fake, service };
 }
@@ -227,6 +234,40 @@ test('text, filter, sort and paging errors are typed problems with pointers', as
   expect((await service.search('anonymous', { text: '-kokoro', filter: book })).subjects).toEqual([]);
   expect(ids(await service.search('anonymous', { text: 'kokoro -connect', filter: book }))).toEqual([kokoro.id]);
   expect(ids(await service.search('anonymous', {}))).toEqual([kokoro.id]);
+});
+
+test('saved filters use expanded positivity and keep the parsed filter in the cursor binding', async () => {
+  const book = { type: { in: ['schema:Book'] } };
+  const release: FilterRelease = {
+    types: { 'schema:Book': { facets: [] }, 'schema:Recipe': { facets: [] } },
+    properties: {},
+    filters: {
+      'subjects/current': { filter: book },
+      'subjects/other': { filter: { not: book } },
+    },
+  };
+  let reads = 0;
+  const { service } = await deployment([kokoro, kanata, miso], {
+    release: async () => {
+      reads++;
+      return release;
+    },
+  });
+  await service.search('anonymous', { text: 'kokoro' });
+  await service.search('anonymous', {});
+  expect(reads).toBe(0);
+  await problem(service.search('anonymous', { filter: { saved: 'subjects/other' } }), 'unsupported_query', [
+    { pointer: '/filter', code: 'unsupported' },
+  ]);
+  expect(reads).toBe(1);
+  const request = { filter: { saved: 'subjects/current' }, limit: 1 };
+  const first = await service.search('anonymous', request);
+  expect(ids(first)).toEqual([kokoro.id]);
+  expect(first.next).not.toBeNull();
+  release.filters!['subjects/current'] = { filter: { type: { in: ['schema:Recipe'] } } };
+  const next = await service.search('anonymous', { ...request, cursor: first.next! });
+  expect(ids(next)).toEqual([miso.id]);
+  expect(reads).toBe(3);
 });
 
 test('typeahead suggests only subjects that pass the final check', async () => {
