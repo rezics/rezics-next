@@ -99,6 +99,44 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       repetitions: 1,
       warmup: native,
       async grow(database, scale, previous) {
+        // Fixed unrelated rows, present at every scale, so the smallest sample is
+        // already past the sequential-scan crossover. Scale growth stays 500 per unit.
+        if (previous === 0) {
+          const background = Array.from({ length: 4000 }, () => newId(0));
+          const backgroundTransaction = newId(0);
+          await database.admin.query(
+            `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+            SELECT 0,id,'actor','active',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO semantic.context(route,context_id,kind,labels)
+            SELECT 0,id,'community','{}' FROM unnest($1::uuid[]) id`,
+            [background],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+            SELECT 0,id,id,'unrelated.reader','(,)',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+            SELECT 0,id,id,'subject:read','(,)',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+            SELECT 0,'account',id,'unrelated.command',id::text,$2,1,1,$3,'{}'
+            FROM unnest($1::uuid[]) id`,
+            [background, Buffer.alloc(32), backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,data)
+            SELECT 0,2000000+n,0,1,1,id,'com.rezics.subject.created.v1',jsonb_build_object('id',id)
+            FROM unnest($1::uuid[]) WITH ORDINALITY a(id,n)`,
+            [background],
+          );
+        }
         const ids = Array.from({ length: (scale - previous) * 500 }, () => newId(0));
         await database.admin.query(
           `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -141,7 +179,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
           'core.outbox',
           'semantic.context',
         ])
-          await database.admin.query(`ANALYZE ${table}`);
+          await database.admin.query(`VACUUM (ANALYZE) ${table}`);
       },
       async operation(database, scale) {
         await native(database);

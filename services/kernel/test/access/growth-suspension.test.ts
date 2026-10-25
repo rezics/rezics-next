@@ -241,6 +241,41 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
     repetitions: 1,
     async grow(database, scale, previous) {
       positive = positives[[1, 8, 64].indexOf(scale)]!;
+      if (previous === 0) {
+        // Authorization and the rate counter read these relations. Unrelated keys
+        // keep them past the sequential-scan crossover before the first scale.
+        const background = Array.from({ length: 4000 }, () => newId(0));
+        const backgroundTransaction = newId(0);
+        await database.admin.query(
+          `INSERT INTO semantic.context(route,context_id,kind,labels)
+          SELECT 0,id,'community','{}' FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+          [background],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+          SELECT 0,id,id,'unrelated.reader','(,)',$2 FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+          [background, backgroundTransaction],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+          SELECT 0,id,id,'subject:read','(,)',$2 FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+          [background, backgroundTransaction],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+          SELECT 0,id,id,'subject:read','resource','(,)',$2 FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+          [background, backgroundTransaction],
+        );
+        await database.admin.query(
+          `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+          SELECT 7, md5(i::text) || md5((i + 100000)::text), 'background', 1, '2099-01-01'::timestamptz
+          FROM generate_series(1, 4000) i`,
+        );
+      }
       // A fresh active account for the unmeasured suspend. The positive mutation stays one-shot.
       spare = await person(`growth_warmup_${scale}`);
       // Unrelated account rows are produced by native pending registration;
@@ -286,9 +321,17 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
       root.bearer = await issue('grant_root@suspension-growth.test');
       for (const table of [
         'access.account',
+        'access.handle_claim',
+        'access.resource_grant',
+        'access.resource_role_grant',
+        'access.resource_denial',
         'access.lifecycle_coordination',
         'access.lifecycle_fence_receipt',
+        'access.write_rate_counter',
+        'semantic.context',
         'core.receipt',
+        'core.outbox',
+        'editorial.write_basis',
       ])
         await database.admin.query(`VACUUM (ANALYZE) ${table}`);
       // Native seeding can outlast the pool's idle lifetime. Warm the real

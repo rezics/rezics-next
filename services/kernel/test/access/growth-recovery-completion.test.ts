@@ -111,6 +111,22 @@ beforeAll(async () => {
     await recover();
     await unrelated(i);
   }
+  // Recovery start seeks "user" by email and completion seeks account by id.
+  // Unrelated owners keep both relations past the sequential-scan crossover
+  // before the first scale, without matching the measured human.
+  await authDatabase.query(
+    `INSERT INTO "user" (id, name, email, "emailVerified")
+     SELECT 'growth-background-' || i, '', 'growth-background-' || i || '@background.test', false
+     FROM generate_series(1, 4000) i`,
+  );
+  await authDatabase.query(
+    `INSERT INTO account (id, "accountId", "providerId", "userId", "updatedAt")
+     SELECT 'growth-background-credential-' || i, 'growth-background-' || i, 'credential',
+            'growth-background-' || i, statement_timestamp()
+     FROM generate_series(1, 4000) i`,
+  );
+  await authDatabase.query('VACUUM (ANALYZE) "user"');
+  await authDatabase.query('VACUUM (ANALYZE) account');
 }, 600000);
 afterAll(async () => {
   await host?.stop();
@@ -130,7 +146,15 @@ test('native completion growth independent of receipt history', async () => {
         await recover();
         await unrelated(256 + i);
       }
-      for (const table of ['access.account', 'access.lifecycle_fence_receipt', 'core.receipt'])
+      for (const table of [
+        'access.account',
+        'access.lifecycle_fence_receipt',
+        'access.resource_grant',
+        'access.handle_claim',
+        'core.receipt',
+        'core.outbox',
+        'editorial.write_basis',
+      ])
         await db.admin.query(`VACUUM (ANALYZE) ${table}`);
       for (const table of [
         'auth_recovery',
@@ -138,6 +162,9 @@ test('native completion growth independent of receipt history', async () => {
         'auth_recovery_establishment',
         'auth_effect_receipt',
         'account',
+        '"user"',
+        'session',
+        'verification',
       ])
         await authDatabase.query(`VACUUM (ANALYZE) ${table}`);
     },

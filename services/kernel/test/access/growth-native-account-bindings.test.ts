@@ -32,6 +32,34 @@ beforeAll(async () => {
       ),
     );
   }
+  // Sign-in reads auth_consent and auth_client by key, and session expiry reads
+  // session by expiresAt. A few dozen rows stay in the sequential-scan range, so
+  // unrelated clients, consents and unexpired sessions are present before the
+  // first scale. Sessions belong to spare users, one each, so the capacity
+  // trigger keeps every background row.
+  await f.authPool.query(
+    `INSERT INTO auth_client (client_id, first_party, scopes)
+     SELECT 'growth-background-client-' || i, false, ARRAY['read']
+     FROM generate_series(0, 4000) i`,
+  );
+  await f.authPool.query(
+    `INSERT INTO auth_consent (account_id, client_id, scopes)
+     SELECT 'growth-background-' || i, 'growth-background-client-0', ARRAY['read']
+     FROM generate_series(1, 4000) i`,
+  );
+  await f.authPool.query(
+    `INSERT INTO "user" (id, name, email, "emailVerified")
+     SELECT 'growth-background-user-' || i, '', 'growth-background-user-' || i || '@background.test', false
+     FROM generate_series(1, 4000) i`,
+  );
+  await f.authPool.query(
+    `INSERT INTO session (id, token, "expiresAt", "updatedAt", "userId", "clientId", "grantedScope", "authnEpoch", "authTime", "authMethods")
+     SELECT 'growth-background-session-' || i, 'growth-background-token-' || i, '2099-01-01'::timestamptz,
+            statement_timestamp(), 'growth-background-user-' || i, 'growth-background-client-0', 'read', 1, 1, 'pwd'
+     FROM generate_series(1, 4000) i`,
+  );
+  for (const table of ['auth_client', 'auth_consent', '"user"', 'session'])
+    await f.authPool.query(`VACUUM (ANALYZE) ${table}`);
 }, 600000);
 afterAll(async () => {
   await f?.close();
@@ -67,13 +95,29 @@ test('fixed native human and automated registrations and exact replay stay bound
           key: `old-${index}`,
         });
       }
-      await db.admin.query('VACUUM (ANALYZE) core.receipt');
-      await db.admin.query('VACUUM (ANALYZE) access.account');
-      await db.admin.query('VACUUM (ANALYZE) access.workflow_approval');
-      await db.admin.query('VACUUM (ANALYZE) access.lifecycle_coordination');
-      await db.admin.query('VACUUM (ANALYZE) access.operator_relation_slot');
-      await f.authPool.query('VACUUM (ANALYZE) auth_registration_stage');
-      await f.authPool.query('VACUUM (ANALYZE) auth_provisioning_receipt');
+      for (const table of [
+        'core.receipt',
+        'core.outbox',
+        'editorial.write_basis',
+        'access.account',
+        'access.workflow_approval',
+        'access.lifecycle_coordination',
+        'access.operator_relation_slot',
+        'access.resource_grant',
+        'access.handle_claim',
+      ])
+        await db.admin.query(`VACUUM (ANALYZE) ${table}`);
+      for (const table of [
+        'auth_registration_stage',
+        'auth_provisioning_receipt',
+        'auth_consent',
+        'auth_client',
+        '"user"',
+        'account',
+        'session',
+        'verification',
+      ])
+        await f.authPool.query(`VACUUM (ANALYZE) ${table}`);
     },
     operation: async (_database, _scale, repetition) => {
       const key = `measured-native-${repetition}`;

@@ -157,8 +157,18 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     async grow(db, scale, previous) {
+      // Ordinals here never overlap the measured scales. The same row shape puts a
+      // few thousand unrelated memberships on the actor route before the first sample.
+      if (previous === 0) await seed(db, population, { from: 1_000_000, to: 1_004_000 });
       await seed(db, population, { from: previous, to: scale });
       input = await item();
+      for (const table of [
+        'access.account',
+        'access.organization_member',
+        'access.lifecycle_membership_slot',
+        'access.lifecycle_coordination',
+      ])
+        await db.admin.query(`VACUUM (ANALYZE) ${table}`);
     },
     async warmup() {
       const spare = await item();

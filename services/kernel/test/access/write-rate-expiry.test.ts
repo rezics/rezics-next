@@ -166,6 +166,7 @@ test('one native statement uses the route-led expiry index and remains bounded t
           FROM generate_series($2::integer,$3::integer) i`,
           [spareRoute, 9_000_000 + previous * 1000, 9_000_000 + previous * 1000 + 999],
         );
+        await database.admin.query('VACUUM (ANALYZE) access.write_rate_counter');
       },
       async warmup(database) {
         expect(await expireWriteRateCounters(database.pool, spareRoute)).toBe(1000);
