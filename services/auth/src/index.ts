@@ -70,6 +70,11 @@ export type AssignmentProof =
 /** Internal application ports. Never construct these results from HTTP fields. */
 export interface TrustedAccessPorts {
   readAccount(accountId: string): Promise<AccessAccount | null>;
+  /** Private pending read bound to the exact verified native registration command. */
+  readProvisioningAccount?(
+    accountId: string,
+    commandReference: string,
+  ): Promise<(AccessAccount & { registrationId: string; expiresAt: string }) | null>;
   /** Bind Access readAssignment: checks provenance, actor, validity, revocation and principal state/fence. */
   readAssignment?(requestedBy: string, assignedActorId: string): Promise<AssignmentProof>;
   authorizeProvisioning(commandReference: string): Promise<{ accountId: string }>;

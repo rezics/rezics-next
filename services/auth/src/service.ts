@@ -192,6 +192,31 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new Denied();
     return account;
   }
+  async function provisioningAccount(accountId: string, commandReference: string): Promise<AccessAccount> {
+    const reader = trustedAccess.readProvisioningAccount;
+    // Only isolated trusted-port fixtures may omit the dedicated production reader.
+    const account: (AccessAccount & { registrationId?: string; expiresAt?: string }) | null = reader
+      ? await reader.call(trustedAccess, accountId, commandReference)
+      : await trustedAccess.readAccount(accountId);
+    if (
+      !account ||
+      account.accountId !== accountId ||
+      account.kind !== 'actor' ||
+      account.state !== 'pending' ||
+      account.fenced ||
+      typeof account.automated !== 'boolean' ||
+      !Number.isSafeInteger(account.authnEpoch) ||
+      account.authnEpoch <= 0 ||
+      ((reader || account.registrationId !== undefined) &&
+        (typeof account.registrationId !== 'string' || account.registrationId.length === 0)) ||
+      ((reader || account.expiresAt !== undefined) &&
+        (typeof account.expiresAt !== 'string' ||
+          !Number.isFinite(Date.parse(account.expiresAt)) ||
+          Date.parse(account.expiresAt) <= Date.now()))
+    )
+      throw new Denied();
+    return account;
+  }
   async function clientFor(clientId: string): Promise<Client> {
     const result = await database.query<Client>(
       'SELECT client_id, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
@@ -515,14 +540,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       async provisionPassword(input) {
         // Authorization resolves an approved Access command; HTTP cannot supply this result.
         const approval = await trustedAccess.authorizeProvisioning(input.authorization);
-        const account = await trustedAccess.readAccount(approval.accountId);
-        if (
-          !account ||
-          account.accountId !== approval.accountId ||
-          account.kind !== 'actor' ||
-          account.state !== 'pending'
-        )
-          throw new Denied();
+        const account = await provisioningAccount(approval.accountId, input.authorization);
         if (
           typeof input.email !== 'string' ||
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ||
@@ -630,9 +648,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       async provisionCredentialless(input) {
         const approval = await trustedAccess.authorizeProvisioning(input.authorization);
-        const account = await trustedAccess.readAccount(approval.accountId);
-        if (!account || account.kind !== 'actor' || account.state !== 'pending' || !account.automated || account.fenced)
-          throw new Denied();
+        const account = await provisioningAccount(approval.accountId, input.authorization);
+        if (!account.automated) throw new Denied();
         await owner(account.accountId);
         return { accountId: account.accountId };
       },

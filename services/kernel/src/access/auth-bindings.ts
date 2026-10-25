@@ -101,6 +101,39 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       return null;
     }
   }
+  async function provisioning(id: string | null, reference: string) {
+    if (!verifyProvisioningReceipt || typeof reference !== 'string' || reference.length === 0) return null;
+    const receipt = await verifyProvisioningReceipt(reference);
+    allowed(receipt && (id === null || receipt.accountId === id) && live(receipt.expiresAt));
+    const current = await account(receipt.accountId);
+    allowed(current && current.kind === 'actor' && current.state === 'pending' && !current.fenced);
+    const authnEpoch = floor(current.minimumAuthnEpoch);
+    // Registration identity/expiry are private fields absent from the ordinary reader.
+    const registration = await registrationRead.run(pool, {
+      route: routeOf(current.accountId)!,
+      account_id: current.accountId,
+      expires_at: receipt.expiresAt,
+    });
+    allowed(
+      registration &&
+        registration.registrationId === receipt.registrationId &&
+        typeof receipt.registrationId === 'string' &&
+        receipt.registrationId.length > 0 &&
+        registration.expiresAt &&
+        live(registration.expiresAt) &&
+        Date.parse(registration.expiresAt) === Date.parse(receipt.expiresAt),
+    );
+    return {
+      accountId: current.accountId,
+      kind: current.kind,
+      state: current.state,
+      authnEpoch,
+      automated: current.operatorAccountId !== null,
+      fenced: current.fenced,
+      registrationId: registration.registrationId!,
+      expiresAt: new Date(registration.expiresAt!).toISOString(),
+    };
+  }
   async function barrier(
     receipt: LifecycleFenceReceipt | null,
     before: Account,
@@ -127,34 +160,19 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
   }
   return {
     readAccount: (id) => read(id),
+    async readProvisioningAccount(id, reference) {
+      try {
+        return await provisioning(id, reference);
+      } catch {
+        return null;
+      }
+    },
     readRecoveryAccount: (id) => read(id, true),
     async authorizeProvisioning(reference) {
       if (!verifyProvisioningReceipt) throw new AuthBindingUnavailableError('verifyProvisioningReceipt');
       allowed(typeof reference === 'string' && reference.length > 0);
-      const receipt = await verifyProvisioningReceipt(reference);
-      allowed(receipt && live(receipt.expiresAt));
-      const current = await account(receipt.accountId);
-      allowed(
-        current &&
-          current.kind === 'actor' &&
-          current.state === 'pending' &&
-          !current.fenced &&
-          current.operatorAccountId === null,
-      );
-      floor(current.minimumAuthnEpoch);
-      // Registration identity/expiry are private fields absent from the ordinary reader.
-      const registration = await registrationRead.run(pool, {
-        route: routeOf(current.accountId)!,
-        account_id: current.accountId,
-      });
-      allowed(
-        registration &&
-          registration.registrationId === receipt.registrationId &&
-          receipt.registrationId &&
-          registration.expiresAt &&
-          live(registration.expiresAt) &&
-          Date.parse(registration.expiresAt) === Date.parse(receipt.expiresAt),
-      );
+      const current = await provisioning(null, reference);
+      allowed(current && !current.automated);
       return { accountId: current.accountId };
     },
     async consumeAuthorization(input) {
