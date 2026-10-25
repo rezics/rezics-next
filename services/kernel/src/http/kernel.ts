@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { createAccess } from '../access/index.ts';
 import { accessRoutes } from '../access/routes.ts';
-import { systemClock, type KernelClock } from '../clock.ts';
+import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
@@ -19,7 +19,7 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
   /** Trusted domain time only; authentication and request budgets retain real time. */
-  clock?: KernelClock;
+  clock?: () => Date;
   commerce?: CommerceDependencies;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   search?: SearchService;
