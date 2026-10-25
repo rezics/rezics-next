@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { newErrorLines } from './merge-train.ts';
 import { integrationHarness } from './test-support.ts';
 
 type IntegrationCheck = { paths: string[]; command: string[] };
@@ -59,6 +60,47 @@ test('a branch integrates when dev already fails the integration check', async (
   } finally {
     h.dispose();
   }
+});
+
+test('a branch is refused for an error that dev, already failing the check, does not have', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.advanceDev('broken');
+    integrationChecks(h, [
+      {
+        paths: ['**'],
+        command: [
+          'sh',
+          '-c',
+          "test ! -e broken || echo 'src/a.ts(3,1): error TS2322: dev error'; test ! -e worse || echo 'src/b.ts(9,4): error TS2339: new error'; test ! -e broken",
+        ],
+      },
+    ]);
+    const task = h.dispatch('worse');
+    await h.start(task);
+    const dev = h.head();
+
+    await h.train(undefined, false);
+
+    expect(h.head()).toBe(dev);
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.outcomes[0]?.stage).toBe('gate');
+    expect(h.outcomes[0]?.firstFailure?.assertion).toContain('error TS2339: new error');
+    expect(h.outcomes[0]?.firstFailure?.assertion).not.toContain('dev error');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('newErrorLines ignores moved positions and timings and counts repeats', () => {
+  const dev = 'src/a.ts(3,1): error TS2322: same\nerror: script "typecheck" exited with code 1 after 2.31s';
+  expect(
+    newErrorLines('src/a.ts(40,7): error TS2322: same\nerror: script "typecheck" exited with code 1 after 9.80s', dev),
+  ).toEqual([]);
+  expect(newErrorLines('src/a.ts(3,1): error TS2322: same\nsrc/a.ts(8,1): error TS2322: same', dev)).toEqual([
+    'src/a.ts: error TS2322: same',
+  ]);
 });
 
 test('a branch that passes the integration check integrates into dev as before', async () => {

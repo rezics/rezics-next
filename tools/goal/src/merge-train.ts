@@ -41,6 +41,31 @@ async function runIntegrationChecks(
   return { passed: true, output, timedOut: false };
 }
 
+// While dev already fails a check, a branch is still refused for error lines that dev does not have. Source
+// positions and durations are dropped so that a moved line or a slower run compares equal; repeats count.
+export function newErrorLines(output: string, baseline: string): string[] {
+  const errors = (text: string) =>
+    text
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .split(/\r?\n/)
+      .filter((line) => /\berror\b/i.test(line))
+      .map((line) =>
+        line
+          .replace(/\(\d+,\s*\d+\)|:\d+:\d+\b/g, '')
+          .replace(/\b\d+(?:\.\d+)?\s*m?s\b/g, '')
+          .trim(),
+      );
+  const remaining = new Map<string, number>();
+  for (const line of errors(baseline)) remaining.set(line, (remaining.get(line) ?? 0) + 1);
+  const added: string[] = [];
+  for (const line of errors(output)) {
+    const count = remaining.get(line) ?? 0;
+    if (count) remaining.set(line, count - 1);
+    else added.push(line);
+  }
+  return added;
+}
+
 function derivedForPath(path: string, files: readonly DerivedFile[]): DerivedFile[] {
   return files.filter((file) => matchesPath(path, [file.path]));
 }
@@ -418,7 +443,15 @@ export class MergeTrain {
               result.stage = stage;
               return result;
             }
-            appendFileSync(logPath, 'dev already fails the integration check\n');
+            const added = newErrorLines(checked.output, baseline.output);
+            if (added.length) {
+              const report = `Errors that dev ${base} does not have:\n${added.join('\n')}`;
+              appendFileSync(logPath, `${report}\n`);
+              result.firstFailure = firstFailure(report);
+              result.stage = stage;
+              return result;
+            }
+            appendFileSync(logPath, 'dev already fails the integration check, with the same errors\n');
           }
         }
         if (!integratesIntoDev) {

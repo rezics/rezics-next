@@ -5,12 +5,12 @@
   "terminationGraceMs": 1500,
   "integrationChecks": [
     {
-      "paths": ["services/kernel/**", "packages/**", "package.json", "bun.lock"],
+      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "package.json", "bun.lock", "tsconfig*.json"],
       "command": ["bun", "install"]
     },
     {
-      "paths": ["services/kernel/**", "packages/**", "package.json", "bun.lock"],
-      "command": ["bun", "run", "--cwd", "services/kernel", "construct"]
+      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "command": ["bun", "scripts/typecheck.ts"]
     }
   ],
   "derivedFiles": [
