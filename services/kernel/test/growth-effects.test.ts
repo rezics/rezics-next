@@ -4,7 +4,7 @@ import pg from 'pg';
 import { createPool } from '../src/database/pool.ts';
 import { effectWorkflowId, launchWork, registerEffects, shutdownWork } from '../src/events/effects.ts';
 import type { CloudEvent, Envelope } from '../src/events/log.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from './support/growth.ts';
+import { assertGrowth, capture, costOf, openGrowthDatabase, type GrowthDatabase } from './support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -68,10 +68,94 @@ async function enqueueAndWait(item: Envelope, name = 'ordered'): Promise<void> {
   await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, name)).getResult();
 }
 
-async function seedPartitions(db: GrowthDatabase, from: number, to: number): Promise<void> {
-  for (let partition = from; partition < to; partition++) {
-    await db.admin.query('UPDATE core.partition SET position = position + 1 WHERE partition_no = $1', [partition]);
+const GROWTH_SCALES = [1, 8, 64] as const;
+const HISTORY_ROWS_PER_SCALE = 500;
+// DBOS migrations 115_workflow_status_in_flight_index_v2 and 117_workflow_status_partition_dequeue_index_v3 index only in-flight rows.
+
+async function seedHistory(db: GrowthDatabase, namespace: string, partitionBase: number, from: number, to: number) {
+  const count = (to - from) * HISTORY_ROWS_PER_SCALE;
+  if (count === 0) return;
+  const offset = from * HISTORY_ROWS_PER_SCALE;
+  await db.admin.query(
+    `WITH history AS (
+       SELECT n, $1 || ':' || n::text AS workflow_uuid,
+              CASE WHEN n % 10 = 0 THEN $2::text ELSE ($2::int + n % 400)::text END AS partition_key
+       FROM generate_series($3::int, $4::int - 1) AS n
+     ), inserted AS (
+       INSERT INTO dbos.workflow_status (
+         workflow_uuid, status, name, queue_name, authenticated_user, assumed_role, authenticated_roles,
+         executor_id, application_id, created_at, updated_at, recovery_attempts, inputs,
+         queue_partition_key, serialization
+       )
+       SELECT workflow_uuid, 'SUCCESS', 'effect', 'effects', '', '', '', '', 'rezics-kernel', n, n, 0,
+              '[]', partition_key, 'JSON'
+       FROM history
+       RETURNING workflow_uuid
+     )
+     INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output, error)
+     SELECT workflow_uuid, 1, 'effect.run', 'null', '' FROM inserted`,
+    [namespace, partitionBase, offset + 1, offset + count + 1],
+  );
+}
+
+const QUEUE_POLL_PATTERNS = [
+  /FROM\s+"dbos"\.workflow_status[\s\S]*queue_name[\s\S]*queue_partition_key/i,
+  /WITH\s+RECURSIVE[\s\S]*FROM\s+"dbos"\.workflow_status[\s\S]*queue_partition_key/i,
+];
+
+function isQueuePoll(statement: string): boolean {
+  return QUEUE_POLL_PATTERNS.some((pattern) => pattern.test(statement));
+}
+
+async function runGrowthCheck(
+  db: GrowthDatabase,
+  name: string,
+  history: (scale: number, previous: number) => Promise<void>,
+  operation: (repetition: number) => Promise<{ rows: number; blocks: number; statements: number }>,
+): Promise<void> {
+  let previous = 0;
+  let repetition = 0;
+  const samples = [];
+  for (const scale of GROWTH_SCALES) {
+    await history(scale, previous);
+    const cost = await operation(repetition++);
+    samples.push({ scale, cost });
+    previous = scale;
   }
+  try {
+    assertGrowth(samples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'GrowthBoundError') error.message = `${name}: ${error.message}`;
+    throw error;
+  }
+}
+
+async function measuredPersistence(
+  db: GrowthDatabase,
+  item: Envelope,
+): Promise<{ rows: number; blocks: number; statements: number }> {
+  const result = await capture(db, () => enqueueAndWait(item));
+  const statements = result.capture.statements.filter((statement) => !isQueuePoll(statement)).length;
+  const plans = result.capture.plans.map((plan) => costOf({ statements: [], plans: [plan] }));
+  return {
+    statements,
+    rows: Math.max(0, ...plans.map((cost) => cost.rows)),
+    blocks: Math.max(0, ...plans.map((cost) => cost.blocks)),
+  };
+}
+
+async function measuredEnqueue(item: Envelope): Promise<{ rows: number; blocks: number; statements: number }> {
+  const result = await capture(growth, () => effects.enqueue([item]));
+  const nonPollPlans = result.capture.plans.filter((_plan, index) => {
+    const statement = result.capture.statements[index];
+    return statement === undefined || !isQueuePoll(statement);
+  });
+  const cost = costOf({
+    statements: result.capture.statements.filter((statement) => !isQueuePoll(statement)),
+    plans: nonPollPlans,
+  });
+  await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult();
+  return { rows: cost.rows, blocks: cost.blocks, statements: cost.statements };
 }
 
 test('a blocked effect in one partition does not delay effects of another partition', async () => {
@@ -100,46 +184,29 @@ test('effects of one partition start in position order', async () => {
 }, 30_000);
 
 test('Effect enqueue stays within its bound as N grows', async () => {
-  const base = freshPartition();
-  await checkGrowth(growth, {
-    name: 'Effect enqueue',
-    scales: [1, 4, 16],
-    repetitions: 1,
-    warmups: 0,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow: async (db, scale, previous) => {
-      await seedPartitions(db, base + previous, base + scale);
-      for (let i = previous; i < scale; i++) {
-        const item = envelope(base + i, 1n, `growth-${base + i}`);
-        await enqueueAndWait(item);
-      }
-    },
-    // Awaiting the handle keeps DBOS's background polling outside each measured capture.
-    operation: async (_db, _scale, repetition) => {
+  const namespace = `effect-enqueue-history:${crypto.randomUUID()}`;
+  const partitionBase = freshPartition();
+  await runGrowthCheck(
+    growth,
+    'Effect enqueue',
+    async (scale, previous) => seedHistory(growth, namespace, partitionBase, previous, scale),
+    async (repetition) => {
       const partition = freshPartition();
-      const item = envelope(partition, BigInt(repetition + 1), `measured-${partition}`);
-      await enqueueAndWait(item);
+      return measuredEnqueue(envelope(partition, BigInt(repetition + 1), `measured-enqueue-${partition}`));
     },
-  });
+  );
 }, 120_000);
 
 test('Effect persistence stays within its bound as N grows', async () => {
-  await checkGrowth(growth, {
-    name: 'Effect persistence',
-    scales: [1, 4, 16],
-    repetitions: 1,
-    warmups: 0,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow: async (_db, scale, previous) => {
-      for (let i = previous; i < scale; i++) {
-        await enqueueAndWait(envelope(freshPartition(), BigInt(i + 1), `persist-grow-${i}`));
-      }
-    },
-    // The enqueue and awaited handle isolate one workflow's persisted execution and completion.
-    operation: async (_db, _scale, repetition) => {
+  const namespace = `effect-persistence-history:${crypto.randomUUID()}`;
+  const partitionBase = freshPartition();
+  await runGrowthCheck(
+    growth,
+    'Effect persistence',
+    async (scale, previous) => seedHistory(growth, namespace, partitionBase, previous, scale),
+    async (repetition) => {
       const partition = freshPartition();
-      const item = envelope(partition, BigInt(repetition + 1), `persist-${partition}`);
-      await enqueueAndWait(item);
+      return measuredPersistence(growth, envelope(partition, BigInt(repetition + 1), `persist-${partition}`));
     },
-  });
+  );
 }, 120_000);
