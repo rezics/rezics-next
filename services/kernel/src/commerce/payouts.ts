@@ -5,7 +5,6 @@ import {
   principalCommandIdentity,
   runCommand,
   type CommandAuthorization,
-  type CommandAttempt,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -277,43 +276,6 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       throw error;
     }
   }
-  // Authority lives at route 0. Check it at each attempt's T before acquiring the creator's command connection.
-  // The opaque proof binds that exact attempt; a receipt replay must pass the same root authorization again.
-  function rootAuthorization(authorization: CommandAuthorization): CommandAuthorization {
-    if (
-      authorization.action !== 'payout_statement:mark_paid' ||
-      authorization.resource.route !== 0 ||
-      authorization.resource.id !== GLOBAL_CONTEXT
-    )
-      throw notFound();
-    const proofs = new WeakMap<object, { attempt: CommandAttempt; expiresAt: number }>();
-    return {
-      action: authorization.action,
-      resource: authorization.resource,
-      denied: notFound,
-      async prepare(attempt) {
-        const evidence = await authorization.prepare?.(attempt);
-        const mode = await withConnection(pool, (client) => authorization.authorize(client, attempt, evidence));
-        if (mode !== 'execute') throw notFound();
-        const proof = Object.freeze({});
-        proofs.set(proof, { attempt, expiresAt: Date.now() + 1000 });
-        return proof;
-      },
-      async authorize(_tx, attempt, evidence) {
-        const prepared = typeof evidence === 'object' && evidence !== null ? proofs.get(evidence) : undefined;
-        if (
-          !prepared ||
-          prepared.attempt.time !== attempt.time ||
-          prepared.attempt.basis !== attempt.basis ||
-          prepared.attempt.partition !== attempt.partition ||
-          Date.now() >= prepared.expiresAt
-        )
-          throw notFound();
-        proofs.delete(evidence as object);
-        return 'execute';
-      },
-    };
-  }
   async function markPaid(
     actor: Actor,
     id: string,
@@ -323,6 +285,12 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
   ) {
     const route = routeOf(id);
     if (route === null || actor.kind !== 'account') throw notFound();
+    if (
+      authorization.action !== 'payout_statement:mark_paid' ||
+      authorization.resource.route !== 0 ||
+      authorization.resource.id !== GLOBAL_CONTEXT
+    )
+      throw notFound();
     if (!paidReference.trim() || paidReference.length > 256) throw new ProblemError('invalid_request');
     const identity = principalCommandIdentity(actor);
     return runCommand(
@@ -330,7 +298,7 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       {
         ...identity,
         partition: partitionOf(route),
-        authorization: rootAuthorization(authorization),
+        authorization,
         clock,
         receipt: {
           kind: 'commerce.payout.mark_paid',

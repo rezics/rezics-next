@@ -1,14 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { resourceAuthorization } from '../access/resource-authorization.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import type { Access, Actor } from '../request/access.ts';
+import { readPartition } from '../partition/partition.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import readContext from '../semantic/read-context.sql';
 import { createPayouts, listPayoutLines, listPayoutStatements, readPayoutStatement } from './payouts.ts';
 
 const amount = t.Integer({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER });
@@ -100,8 +104,9 @@ export function payoutRoutes(
   app: ReturnType<typeof definitionRoutes>,
   {
     pool,
+    access,
     tokens = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) },
-  }: { pool: Pool; tokens?: KeyRing },
+  }: { pool: Pool; access: () => Access; tokens?: KeyRing },
 ) {
   const payouts = createPayouts({ pool });
   return app
@@ -181,21 +186,37 @@ export function payoutRoutes(
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ actor, authorizeCommand, params, body, headers, admission, job, session }) => {
-        if (actor.kind !== 'account') throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new ProblemError('not_found'),
-        );
-        const result = await admission.run('normal', job, () =>
-          payouts.markPaid(
-            actor,
-            params.statementId,
-            body.paidReference,
-            idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-            authorization,
-          ),
-        );
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        const route = routeOf(params.statementId);
+        if (actor.kind !== 'account' || route === null) throw new ProblemError('not_found');
+        const authorization = resourceAuthorization({
+          access: access(),
+          actor,
+          action: 'payout_statement:mark_paid',
+          anchor: {
+            resource: { route: 0, id: GLOBAL_CONTEXT },
+            async validate(client) {
+              if (!(await readPartition(client, 0))) return false;
+              const root = await readContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
+              return root?.kind === 'global';
+            },
+          },
+          context: { pool, deadline: job.deadline, partition: partitionOf(route) },
+        });
+        const result = await admission
+          .run('normal', job, () =>
+            payouts.markPaid(
+              actor,
+              params.statementId,
+              body.paidReference,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              authorization,
+            ),
+          )
+          .catch((error: unknown) => {
+            if (error instanceof GrantDeniedError) throw new ProblemError('not_found');
+            throw error;
+          });
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         return {
           statement: {

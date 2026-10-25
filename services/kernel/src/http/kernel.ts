@@ -39,7 +39,10 @@ export function createKernel(dependencies: KernelDependencies) {
     subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), dependencies),
     dependencies,
   );
-  const payouts = payoutRoutes(app, dependencies);
+  const payouts = payoutRoutes(app, {
+    ...dependencies,
+    access: () => resolveAccess({ actions: actionCatalogue(app) }),
+  });
   const commercial = commerceRoutes(app, {
     pool: dependencies.pool,
     tokens,
