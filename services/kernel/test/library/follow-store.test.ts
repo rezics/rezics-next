@@ -1,7 +1,13 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg, { type Pool, type PoolClient } from 'pg';
 import * as store from '../../src/library/follow-store.ts';
-import { assertGrowth, measure, openGrowthDatabase, type GrowthDatabase, type GrowthSample } from '../support/growth.ts';
+import {
+  assertGrowth,
+  measure,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthSample,
+} from '../support/growth.ts';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -70,7 +76,10 @@ test('a follow is unique for a follower and target and is stored in the follower
       reason: 'explicit',
     });
     expect(await store.readFollow(client, route + 1, firstAccount, targetId)).toBeNull();
-    await expect(apply(client, route === 0 ? firstAccount : id(4, route + 1), id(5), 'follow')).rejects.toThrow();
+    await client.query('SAVEPOINT wrong_route');
+    await expect(apply(client, id(4, route + 1), id(5), 'follow')).rejects.toThrow();
+    await client.query('ROLLBACK TO SAVEPOINT wrong_route');
+    await client.query('SAVEPOINT target_type_mismatch');
     await expect(
       store.applyFollow(client, route, {
         accountId: firstAccount,
@@ -82,8 +91,10 @@ test('a follow is unique for a follower and target and is stored in the follower
         time,
       }),
     ).rejects.toThrow();
-    expect(await client.query('SELECT count(*)::int AS count FROM library.follow WHERE target_id = $1', [targetId]))
-      .toMatchObject({ rows: [{ count: 2 }] });
+    await client.query('ROLLBACK TO SAVEPOINT target_type_mismatch');
+    expect(
+      await client.query('SELECT count(*)::int AS count FROM library.follow WHERE target_id = $1', [targetId]),
+    ).toMatchObject({ rows: [{ count: 2 }] });
   });
 });
 
@@ -91,15 +102,78 @@ test('all follow intents preserve explicit unfollows and only explicit intent ch
   await inTransaction(pool, async (client) => {
     const accountId = id(10);
     const cases = [
-      { initial: 'none', intent: 'implied', reason: 'library', changed: true, state: 'following', storedReason: 'library' },
-      { initial: 'following', intent: 'implied', reason: 'membership', changed: false, state: 'following', storedReason: 'library' },
-      { initial: 'unfollowed', intent: 'implied', reason: 'library', changed: false, state: 'unfollowed', storedReason: 'explicit' },
-      { initial: 'none', intent: 'follow', reason: 'explicit', changed: true, state: 'following', storedReason: 'explicit' },
-      { initial: 'following', intent: 'follow', reason: 'explicit', changed: true, state: 'following', storedReason: 'explicit' },
-      { initial: 'unfollowed', intent: 'follow', reason: 'explicit', changed: true, state: 'following', storedReason: 'explicit' },
-      { initial: 'none', intent: 'unfollow', reason: 'explicit', changed: true, state: 'unfollowed', storedReason: 'explicit' },
-      { initial: 'following', intent: 'unfollow', reason: 'explicit', changed: true, state: 'unfollowed', storedReason: 'explicit' },
-      { initial: 'unfollowed', intent: 'unfollow', reason: 'explicit', changed: false, state: 'unfollowed', storedReason: 'explicit' },
+      {
+        initial: 'none',
+        intent: 'implied',
+        reason: 'library',
+        changed: true,
+        state: 'following',
+        storedReason: 'library',
+      },
+      {
+        initial: 'following',
+        intent: 'implied',
+        reason: 'membership',
+        changed: false,
+        state: 'following',
+        storedReason: 'library',
+      },
+      {
+        initial: 'unfollowed',
+        intent: 'implied',
+        reason: 'library',
+        changed: false,
+        state: 'unfollowed',
+        storedReason: 'explicit',
+      },
+      {
+        initial: 'none',
+        intent: 'follow',
+        reason: 'explicit',
+        changed: true,
+        state: 'following',
+        storedReason: 'explicit',
+      },
+      {
+        initial: 'following',
+        intent: 'follow',
+        reason: 'explicit',
+        changed: true,
+        state: 'following',
+        storedReason: 'explicit',
+      },
+      {
+        initial: 'unfollowed',
+        intent: 'follow',
+        reason: 'explicit',
+        changed: true,
+        state: 'following',
+        storedReason: 'explicit',
+      },
+      {
+        initial: 'none',
+        intent: 'unfollow',
+        reason: 'explicit',
+        changed: true,
+        state: 'unfollowed',
+        storedReason: 'explicit',
+      },
+      {
+        initial: 'following',
+        intent: 'unfollow',
+        reason: 'explicit',
+        changed: true,
+        state: 'unfollowed',
+        storedReason: 'explicit',
+      },
+      {
+        initial: 'unfollowed',
+        intent: 'unfollow',
+        reason: 'explicit',
+        changed: false,
+        state: 'unfollowed',
+        storedReason: 'explicit',
+      },
     ] as const;
 
     for (const [index, item] of cases.entries()) {
@@ -108,16 +182,9 @@ test('all follow intents preserve explicit unfollows and only explicit intent ch
       if (item.initial === 'unfollowed') await apply(client, accountId, targetId, 'unfollow');
       const before = await store.readFollow(client, route, accountId, targetId);
 
-      expect(
-        await apply(
-          client,
-          accountId,
-          targetId,
-          item.intent,
-          item.reason,
-          '2026-10-26T12:01:00.000Z',
-        ),
-      ).toBe(item.changed);
+      expect(await apply(client, accountId, targetId, item.intent, item.reason, '2026-10-26T12:01:00.000Z')).toBe(
+        item.changed,
+      );
 
       const after = await store.readFollow(client, route, accountId, targetId);
       expect(after).toMatchObject({ state: item.state, reason: item.storedReason });
@@ -127,8 +194,9 @@ test('all follow intents preserve explicit unfollows and only explicit intent ch
     const explicitlyUnfollowed = id(200);
     expect(await apply(client, accountId, explicitlyUnfollowed, 'unfollow')).toBe(true);
     const beforeImplied = await store.readFollow(client, route, accountId, explicitlyUnfollowed);
-    expect(await apply(client, accountId, explicitlyUnfollowed, 'implied', 'membership', '2026-10-27T12:00:00.000Z'))
-      .toBe(false);
+    expect(
+      await apply(client, accountId, explicitlyUnfollowed, 'implied', 'membership', '2026-10-27T12:00:00.000Z'),
+    ).toBe(false);
     expect(await store.readFollow(client, route, accountId, explicitlyUnfollowed)).toEqual(beforeImplied);
   });
 });
@@ -161,12 +229,13 @@ test('follow pages use a stable updated-at keyset and keep follower rows private
     });
 
     expect([first, second, third].map((page) => page.map((follow) => follow.targetId))).toEqual([
-      [targets[3], targets[1]],
-      [targets[2], targets[0]],
-      [targets[4]],
+      [targets[3]!, targets[1]!],
+      [targets[2]!, targets[0]!],
+      [targets[4]!],
     ]);
-    expect([...first, ...second, ...third].every((follow) => follow.accountId === accountId && follow.state === 'following'))
-      .toBe(true);
+    expect(
+      [...first, ...second, ...third].every((follow) => follow.accountId === accountId && follow.state === 'following'),
+    ).toBe(true);
     expect(await store.pageFollows(client, route, otherAccountId, { after: null, limit: 10 })).toMatchObject([
       { accountId: otherAccountId, targetId: id(307) },
     ]);
@@ -238,12 +307,21 @@ test('apply and page statement counts and examined rows stay constant as unrelat
       previous = scale;
     }
 
-    expect(applySamples.map((sample) => sample.cost.rows)).toEqual([1, 1, 1]);
-    expect(pageSamples.map((sample) => sample.cost.rows)).toEqual([1, 1, 1]);
+    const touchedRows = (samples: GrowthSample[]) =>
+      samples.map((sample) => sample.cost.relations?.['library.follow']?.rows ?? 0);
+    expect(touchedRows(applySamples)).toEqual([1, 1, 1]);
+    expect(touchedRows(pageSamples)).toEqual([1, 1, 1]);
     expect(applySamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
     expect(pageSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    assertGrowth(applySamples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
-    assertGrowth(pageSamples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
+    expect(applySamples.every((sample) => sample.cost.relations?.['library.follow']?.sequentialScans === 0)).toBe(true);
+    expect(pageSamples.every((sample) => sample.cost.relations?.['library.follow']?.sequentialScans === 0)).toBe(true);
+    const growthRows = (samples: GrowthSample[]): GrowthSample[] =>
+      samples.map((sample) => ({
+        scale: sample.scale,
+        cost: { ...sample.cost, rows: sample.cost.relations?.['library.follow']?.rows ?? 0 },
+      }));
+    assertGrowth(growthRows(applySamples), { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
+    assertGrowth(growthRows(pageSamples), { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
   } finally {
     await database.admin.query('DELETE FROM library.follow WHERE route = $1', [route]);
     await database.close();
