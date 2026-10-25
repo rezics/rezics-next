@@ -29,6 +29,8 @@ const ignoredDirectories = new Set([
   '.turbo',
   '.vite',
   '.wrangler',
+  // `wrangler types` writes ambient declarations here; they are ignored by Git and import Workers' own modules.
+  '.cloudflare',
   'coverage',
   'storybook-static',
 ]);

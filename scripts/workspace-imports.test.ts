@@ -234,11 +234,12 @@ test('the repository passes except for the imports listed in this brief', () => 
     '@rezics/client packages/client/src/kernel/semantic/item.d.ts @rezics/definitions',
     '@rezics/client packages/client/src/kernel/semantic/item.d.ts @rezics/definitions',
     '@rezics/client packages/client/src/kernel/semantic/links.d.ts pg',
-    '@rezics/composition packages/composition/scripts/schema.ts oxfmt',
   ].map((entry) => {
     const [workspace, file, packageName] = entry.split(' ');
     return `error: ${workspace} ${file} imports ${packageName}, which its package.json does not declare`;
   });
 
-  expect(checkWorkspaceImports(repositoryRoot)).toEqual(expected);
+  // Owners are removing these; a fix shrinks the list, and only an import outside it fails.
+  const known = new Set(expected);
+  expect(checkWorkspaceImports(repositoryRoot).filter((line) => !known.has(line))).toEqual([]);
 });
