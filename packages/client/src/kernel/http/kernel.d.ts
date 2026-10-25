@@ -1,4 +1,5 @@
 import { type CommerceDependencies } from '../commerce/routes.ts';
+import type { ContentBoardDependencies } from '../content/boards.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { type SearchService } from '../search/http/routes.ts';
 import { createApp } from './app.ts';
@@ -7,7 +8,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Trusted domain time only; authentication and request budgets retain real time. */
     clock?: () => Date;
     commerce?: CommerceDependencies;
-    content?: ContentRuntime;
+    content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
     search?: SearchService;
 };
 /** The route key must stay the same across restarts, or retries lose their receipts. */
@@ -2464,6 +2465,129 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             };
                             error: never;
                         };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                threads: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                            sort?: "newest" | "oldest";
+                            query?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                threads: Readonly<{
+                                    id: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    title: string | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    firstPost: import("../content/model.ts").ItemView;
+                                }>[];
+                                next: string | null;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
                     };
                 };
             };
