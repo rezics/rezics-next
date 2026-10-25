@@ -52,14 +52,24 @@ export async function coordinateMembership<Reservation>(input: {
   return reservation;
 }
 
+/** Transport validation only; authority belongs exclusively to the native resolver.
+ * One optional dot admits sealed locators while excluding three-part JWTs. */
+export function isMembershipAuthorizationReference(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 4096 &&
+    /^[A-Za-z0-9][A-Za-z0-9:_/-]*(?:\.[A-Za-z0-9_-]+)?$/.test(value)
+  );
+}
+
 export const MEMBERSHIP_WORKFLOW_NAME = 'accounts.membership';
 /** Pure registration: uses the caller's configured SDK, never launches it,
  * creates a pool, accesses credentials, or installs queues/schedules. */
 export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPorts<Context>) {
   const key = (phase: string) => `wf:${DBOS.workflowID!}:${phase}`;
   async function authorized(input: MembershipWorkInput) {
-    if (typeof input.authorization !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9:_/-]{0,255}$/.test(input.authorization))
-      throw new Error('Membership authorization denied');
+    if (!isMembershipAuthorizationReference(input.authorization)) throw new Error('Membership authorization denied');
     return ports.authorize(input.authorization, input);
   }
   const step = <A extends unknown[], R>(name: string, action: (...args: A) => Promise<R>) =>
@@ -93,6 +103,8 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
   const publish = step('publish', async (input: MembershipWorkInput, reservation: MembershipWorkReservation) => {
     await ports.publish(await authorized(input), input, reservation, key('publish'));
   });
+  // Cleanup carries only the exact native reservation. Its terminal proof,
+  // rather than membership rights that publication may remove, permits release.
   const terminalize = step('terminalize', async (reservation: MembershipWorkReservation) => {
     await ports.terminalize(reservation, key('terminalize'));
   });

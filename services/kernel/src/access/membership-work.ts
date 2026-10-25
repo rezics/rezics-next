@@ -1,5 +1,6 @@
 import {
   MEMBERSHIP_WORKFLOW_NAME,
+  isMembershipAuthorizationReference,
   registerMembershipWorkflows,
   type MembershipWorkInput,
   type MembershipWorkResult,
@@ -7,7 +8,6 @@ import {
 } from '@rezics/auth/membership-workflows';
 import canonicalize from 'canonicalize';
 import { routeOf } from '../route/route.ts';
-import { ConfigError } from '../commerce/config.ts';
 import { accountsWorkModule as writeRateExpiryWorkModule } from './write-rate-expiry.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
@@ -16,7 +16,13 @@ import {
   type RealmMembershipAuthority,
   type MembershipReservation,
 } from './membership-inverse.ts';
-import { createAccess } from './permission.ts';
+import { createAccess as trustedPermissionAccess } from './permission.ts';
+import { createAccess, createWorkflowApprovals } from './index.ts';
+import {
+  readMembershipRouteKey,
+  readMembershipWorkConfig,
+  type MembershipWorkConfig,
+} from './membership-work-config.ts';
 import type { Access } from '../request/access.ts';
 import {
   createLifecycleCommands,
@@ -55,27 +61,57 @@ export type RealmMembershipCommands = {
   ): Promise<unknown>;
   terminalize(reservation: MembershipReservation, key: string): Promise<unknown>;
 };
+type MembershipWorkContext = Pick<WorkContext, 'pool' | 'env'>;
 type Options = { authorize?: MembershipAuthorization; access?: Access; realm?: RealmMembershipCommands };
 
-/** Native Access-only ports. No Auth host, database, key or maintenance runtime
- * is constructed here. The capability owner must inject a durable resolver. */
+/** Native Access-only ports. Direct component construction defers approval
+ * configuration until use; WorkModule registration validates it eagerly. */
 export function createMembershipWorkPorts(
-  context: WorkContext,
+  context: MembershipWorkContext,
   options: Options = {},
 ): MembershipWorkflowPorts<LifecycleRequest> {
-  const encoded = context.env.KERNEL_ROUTE_KEY ?? '';
-  const routeKey = Buffer.from(encoded, 'base64url');
-  if (routeKey.length !== 32 || routeKey.toString('base64url') !== encoded) throw new ConfigError('KERNEL_ROUTE_KEY');
+  return membershipWorkPorts(context, options);
+}
+function membershipWorkPorts(
+  context: MembershipWorkContext,
+  options: Options,
+  config?: MembershipWorkConfig,
+): MembershipWorkflowPorts<LifecycleRequest> {
+  const routeKey = config?.routeKey ?? readMembershipRouteKey(context.env);
   const internal = createLifecycleInternals({
     pool: context.pool,
     routeKey,
     provisioningEvidence: async () => null,
     recoveryEvidence: async () => null,
   });
-  const access =
-    options.access ??
-    createAccess({ actions: new Map(LIFECYCLE_ACTIONS), accountEvidence: (_actor, request) => request.account });
-  const commands = createLifecycleCommands({ pool: context.pool, access });
+  // Explicit trusted test injection retains the low-level fixture adapter.
+  // Production always restores identity through installed Access's approval bridge.
+  const trusted = options.authorize
+    ? (options.access ??
+      trustedPermissionAccess({
+        actions: new Map(LIFECYCLE_ACTIONS),
+        accountEvidence: (_actor, request) => request.account,
+      }))
+    : undefined;
+  let installed: { access: Access; approvals: ReturnType<typeof createWorkflowApprovals> } | undefined;
+  function native() {
+    if (!installed) {
+      const settings = config ?? readMembershipWorkConfig(context.env);
+      const actions = new Map(LIFECYCLE_ACTIONS);
+      const access = options.access ?? createAccess({ actions, auth: settings.auth });
+      installed = {
+        access,
+        approvals: createWorkflowApprovals({
+          pool: context.pool,
+          access,
+          actions,
+          referenceKeys: settings.referenceKeys,
+        }),
+      };
+    }
+    return installed;
+  }
+  const commands = () => createLifecycleCommands({ pool: context.pool, access: trusted ?? native().access });
   const inverse = createMembershipInverseCommands({
     pool: context.pool,
     ...(options.realm ? { realmAuthority: options.realm.authority } : {}),
@@ -87,8 +123,21 @@ export function createMembershipWorkPorts(
   return {
     authorize:
       options.authorize ??
-      (async () => {
-        throw new MembershipAuthorizationUnavailableError();
+      (async (reference, input) => {
+        if (input.kind !== 'membership' || input.principal.kind !== 'organization')
+          throw new MembershipAuthorizationUnavailableError();
+        return native().approvals.resolve(
+          reference,
+          {
+            kind: 'membership',
+            organizationId: input.principal.id,
+            memberAccountId: input.memberAccountId,
+            role: input.role,
+            ...(input.reservationId === undefined ? {} : { reservationId: input.reservationId }),
+            authorization: reference,
+          },
+          { pool: context.pool, deadline: Date.now() + 30_000 },
+        );
       }),
     actorAccountId: (request) => request.actor.accountId,
     reserve(input) {
@@ -105,8 +154,15 @@ export function createMembershipWorkPorts(
           key,
         });
       }
+      if (
+        held.accountId !== input.memberAccountId ||
+        held.principal.kind !== input.principal.kind ||
+        held.principal.id !== input.principal.id ||
+        (input.reservationId !== undefined && held.reservationId !== input.reservationId)
+      )
+        throw new MembershipAuthorizationUnavailableError();
       if (input.principal.kind === 'realm') return realm().publish(request, input, held, key);
-      return commands.setMembership(request, {
+      return commands().setMembership(request, {
         organizationId: input.principal.id,
         memberAccountId: held.accountId,
         reservationId: held.reservationId,
@@ -128,7 +184,11 @@ export function createMembershipWorkPorts(
 }
 export function registerAccounts(
   context: WorkContext,
-  ports: MembershipWorkflowPorts<LifecycleRequest> = createMembershipWorkPorts(context),
+  ports: MembershipWorkflowPorts<LifecycleRequest> = membershipWorkPorts(
+    context,
+    {},
+    readMembershipWorkConfig(context.env),
+  ),
 ): void {
   registerMembershipWorkflows(ports);
 }
@@ -136,7 +196,8 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
   return {
     name: 'accounts',
     async register(context) {
-      registerAccounts(context, createMembershipWorkPorts(context, options));
+      const config = options.authorize ? undefined : readMembershipWorkConfig(context.env);
+      registerAccounts(context, membershipWorkPorts(context, options, config));
       await writeRateExpiryWorkModule.register(context);
     },
   };
@@ -155,8 +216,7 @@ export async function enqueueMembership(client: WorkClient, workflowId: string, 
     typeof workflowId !== 'string' ||
     !/^[A-Za-z0-9][A-Za-z0-9:_/-]{0,199}$/.test(workflowId) ||
     Object.keys(input).some((field) => !fields.includes(field)) ||
-    typeof input.authorization !== 'string' ||
-    !/^[A-Za-z0-9][A-Za-z0-9:_/-]{0,255}$/.test(input.authorization)
+    !isMembershipAuthorizationReference(input.authorization)
   )
     throw new Error('Invalid membership work input');
   if (
@@ -171,7 +231,11 @@ export async function enqueueMembership(client: WorkClient, workflowId: string, 
   const ids =
     input.kind === 'organization'
       ? [input.organizationId]
-      : [input.memberAccountId, input.principal.id, ...(input.reservationId ? [input.reservationId] : [])];
+      : [
+          input.memberAccountId,
+          input.principal.id,
+          ...(input.reservationId === undefined ? [] : [input.reservationId]),
+        ];
   if (ids.some((id) => typeof id !== 'string' || routeOf(id) === null))
     throw new Error('Invalid membership work input');
   const snapshot = structuredClone(input);

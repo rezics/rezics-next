@@ -108,6 +108,54 @@ API processes use `createWorkClient(databaseUrl)` from `src/work/client.ts` to e
 pass that client to modules, and call `close()` on shutdown. Enqueueing needs no running worker; the next worker
 runs the persisted work. Reuse a workflow ID for idempotency.
 
+### Membership workflows
+
+The default `accounts` WorkModule resolves persisted native workflow approvals through installed Access. Registration
+reads `WorkContext.env`, validates the configuration before registering steps, and reports `ConfigError` with the
+invalid variable's name. It requires `KERNEL_ROUTE_KEY` (canonical base64url, exactly 32 bytes), `AUTH_ISSUER`,
+`AUTH_AUDIENCE`, `AUTH_JWKS_URL` with the public-verifier URL rules above, and a reference key ring.
+The three Auth values are passed explicitly to installed Access; supplied contexts never fall back to `process.env`.
+Only Auth's public JWKS is used. The module does not construct an Auth host, pool, provider or maintenance runtime.
+
+When `KERNEL_SESSION_KEYS` is supplied, the module reuses that existing deployment ring: comma-separated
+`kid:canonical-base64url` entries, with the first key current, at most four distinct canonical decimal IDs in 0–255,
+and each key at least 32 bytes. The value is bounded to 8192 UTF-8 bytes. This takes precedence over the workflow-only
+setting; the caller must use the same deployed ring. Seal purposes separate approvals from session tokens.
+
+Otherwise `KERNEL_WORKFLOW_REFERENCE_KEYS` is required, as JSON of at most 8192 UTF-8 bytes:
+`{"current":7,"keys":{"7":"<canonical base64url key containing at least 32 bytes>"}}`.
+Use exactly the same key ring in the caller's `createWorkflowApprovals`. There must be one to four keys, with canonical
+decimal key IDs from 0 through 255, an integer `current` naming an existing key, and no duplicate properties, unknown
+properties, padding or noncanonical base64url. Configuration parses once per module registration. Keep old keys while
+outstanding approvals need them. The existing accounts expiry registration also reads the optional
+`KERNEL_WRITE_RATE_EXPIRY_PARTITION` (0–4095) and `KERNEL_WRITE_RATE_EXPIRY_NODE` admission; without a partition it
+installs no schedule. These are all accounts-module environment reads.
+
+Organization membership input maps to native `AccountOperation` membership with exactly `organizationId` from
+`principal.id`, `memberAccountId`, `role`, optional `reservationId` and `authorization`. Native immutable operation-key
+and digest binding, original scopes, delegator and epoch floor remain authoritative. Every protected registered
+reserve and publication step resolves the exact sealed approval afresh; publication also performs the native final command-time authorization.
+References are opaque nonempty locators bounded to 4096 characters, including native dotted seals. Enqueue rejects
+JWTs, bearer strings, raw contexts and unknown fields. It never decodes a locator for authority, and persists no bearer
+or resolved actor. Native expiry denies even if approval cleanup has not run.
+
+Reserve precedes publication; leave commits authoritative removal before inverse release. Failed joins terminalize the
+exact authoritative reservation before inverse cleanup. Cleanup uses that native terminal proof and remains possible
+after approval revocation or self-removal, without restoring membership authority. The existing 1000-membership cap,
+historical intervals and native receipt semantics remain in force. Command keys derive from the stable workflow
+identity and fixed phase; no module contention retry or additional DBOS launch is installed. Explicit trusted component-test injection remains available.
+Organization creation and Realm operations still have no native approval descriptor and remain unavailable by default;
+they need their owning adapters. Component fixtures establish domain rows and test JWTs, not ordinary registration,
+final lifecycle/API assembly or a website provider.
+
+With `R = N + U*t + M`, resolution seeks one sealed exact approval row on the actor anchor in `O(log R)`. Installed
+actor-side authorization costs `O((1+K) log G + matches)`, with `K <= 1000`. Fixed reserve, publication and release
+commands each use one anchored partition and `O(log R)` point mutations. No ACL, history or table scan or held
+cross-anchor connection is introduced. `growth-native-membership-work.test.ts` measures actual native resolution and
+workflow commands at three scales of prior approvals, membership intervals and unrelated accounts, with constant
+statements and rows at fixed K and logarithmic buffer bounds, without timing assertions or planner forcing. Existing
+process-death ordering, compensation and cap tests continue independently.
+
 ## Check
 
 Run `bun run check` from this workspace. It starts a disposable PostgreSQL database, applies migrations and checks the
