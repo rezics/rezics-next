@@ -266,7 +266,7 @@ test('the runner creates the first generation, feeds every generation and follow
     await createSubjectIndex(search, prefix, 2);
     await runner.refresh();
     await eventually(() => exists(subjectIndexName(prefix, 2), a.id));
-    expect(await checkpoint(subjectConsumer(prefix, 2), 110)).toBe('1');
+    await eventually(async () => (await checkpoint(subjectConsumer(prefix, 2), 110)) === '1');
     await runner.pause();
     const b = book(110, 2);
     fake.put(b);
