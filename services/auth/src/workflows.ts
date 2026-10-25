@@ -130,6 +130,13 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
 export interface AccountWorkflowOptions<Context = WorkflowContext> {
   database: Pool;
   systemDatabaseUrl: string;
+  /** Same-database deployments require Auth's separate native SDK schema. */
+  systemDatabaseSchemaName?: string;
+  systemDatabasePool?: Pool;
+  /** Compose service registrations before this host's single launch. */
+  registerWorkflows?: () => void;
+  /** A containing service host owns signals and pool shutdown when false. */
+  handleSignals?: boolean;
   /** Persistent Auth-only 32-byte key, independent of Better Auth/signing keys. */
   stagingKey: Uint8Array;
   auth: AuthService;
@@ -183,12 +190,22 @@ const workflowId = (key: string) => `accounts:${hash(key).toString('hex')}`;
 export function createAccountWorkflows<Context = WorkflowContext>(options: AccountWorkflowOptions<Context>) {
   const { database, auth, access } = options;
   if (options.stagingKey.byteLength !== 32) throw new Error('Configure a persistent 32-byte Auth staging key');
-  if (
-    !options.systemDatabaseUrl ||
-    (new URL(options.systemDatabaseUrl).pathname === new URL(database.options.connectionString!).pathname &&
-      new URL(options.systemDatabaseUrl).host === new URL(database.options.connectionString!).host)
-  )
-    throw new Error('DBOS requires a separate system database');
+  let systemUrl: URL;
+  let authUrl: URL;
+  try {
+    systemUrl = new URL(options.systemDatabaseUrl);
+    authUrl = new URL(database.options.connectionString!);
+    if (!['postgres:', 'postgresql:'].includes(systemUrl.protocol)) throw new Error();
+  } catch {
+    throw new Error('Invalid Auth workflow database configuration');
+  }
+  const sameDatabase =
+    systemUrl.hostname === authUrl.hostname &&
+    (systemUrl.port || '5432') === (authUrl.port || '5432') &&
+    systemUrl.pathname === authUrl.pathname;
+  const systemSchema = options.systemDatabaseSchemaName ?? (sameDatabase ? 'auth_dbos' : 'dbos');
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(systemSchema) || (sameDatabase && systemSchema !== 'auth_dbos'))
+    throw new Error('Auth workflows require an isolated native system schema');
   const key = Buffer.from(hkdfSync('sha256', options.stagingKey, '', 'rezics.auth.registration-staging.v1', 32));
   const digestKey = Buffer.from(hkdfSync('sha256', options.stagingKey, '', 'rezics.auth.registration-binding.v1', 32));
   const token = {};
@@ -200,6 +217,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   };
   const bindingDigest = (data: unknown) => createHmac('sha256', digestKey).update(JSON.stringify(data)).digest();
   let started = false;
+  let starting: Promise<void> | undefined;
   let registered = false;
   const active = () => {
     if (!started || owner !== token) throw new Error('Start the Auth workflow host first');
@@ -878,6 +896,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return (await DBOS.resumeWorkflow(id)).getResult();
   }
   const close = async () => {
+    await starting;
     if (!started || owner !== token) return;
     started = false;
     process.off('SIGINT', interrupt);
@@ -892,31 +911,43 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   const interrupt = () => {
     void close();
   };
-  return {
-    async start() {
-      if (started) return;
-      if (owner) throw new Error('Another Auth workflow host owns DBOS in this process');
-      owner = token;
-      try {
-        if (!registered) register();
-        DBOS.setConfig({
-          name: 'rezics-auth-accounts',
-          systemDatabaseUrl: options.systemDatabaseUrl,
-          executorID: options.executorId ?? 'auth-accounts',
-          applicationVersion: 'accounts-v1',
-          systemDatabasePoolSize: 8,
-          logLevel: 'warn',
-        });
-        await DBOS.launch();
-        started = true;
+  const start = async () => {
+    if (owner) throw new Error('Another Auth workflow host owns DBOS in this process');
+    owner = token;
+    try {
+      if (!registered) {
+        register();
+        options.registerWorkflows?.();
+      }
+      DBOS.setConfig({
+        name: 'rezics-auth-accounts',
+        systemDatabaseUrl: options.systemDatabaseUrl,
+        systemDatabaseSchemaName: systemSchema,
+        ...(options.systemDatabasePool ? { systemDatabasePool: options.systemDatabasePool } : {}),
+        executorID: options.executorId ?? 'auth-accounts',
+        applicationVersion: 'accounts-v1',
+        systemDatabasePoolSize: 8,
+        logLevel: 'warn',
+      });
+      await DBOS.launch();
+      started = true;
+      if (options.handleSignals !== false) {
         process.once('SIGINT', interrupt);
         process.once('SIGTERM', interrupt);
-      } catch (error) {
-        await DBOS.shutdown({ deregister: true });
-        owner = undefined;
-        registered = false;
-        throw error;
       }
+    } catch (error) {
+      await DBOS.shutdown({ deregister: true });
+      owner = undefined;
+      registered = false;
+      throw error;
+    }
+  };
+  return {
+    start() {
+      if (started) return Promise.resolve();
+      return (starting ??= start().finally(() => {
+        starting = undefined;
+      }));
     },
     close,
     beginRegistration: (input: { key: string; handle: string }) => begin(input),

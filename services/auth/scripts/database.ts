@@ -29,7 +29,7 @@ export function migrate(url: string, migrationsDirectory = 'db/migrations'): voi
 
 export function schemaDump(url: string, fixture?: TestDatabase): string {
   if (fixture && fixture.url !== url) throw new Error('Schema dump URL does not belong to this Auth fixture');
-  const dumpArgs = ['pg_dump', '--schema-only', '--no-owner', '--no-privileges'];
+  const dumpArgs = ['pg_dump', '--schema-only', '--no-owner', '--no-privileges', '--exclude-schema=auth_dbos'];
   let args: string[];
   if (fixture) {
     const database = new URL(url);

@@ -2,6 +2,8 @@ import type { Pool } from 'pg';
 import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
+export { createAuthHost, AuthHostConfigurationError } from './host.ts';
+export type { AuthHostOptions } from './host.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export type {
@@ -160,7 +162,7 @@ export interface AuthService {
   handler(request: Request): Promise<Response>;
   verifier: VerifierConfiguration;
   internal: {
-    /** One native expiry batch, at most 1000 rows; schedule through the shared worker. */
+    /** One native expiry batch, at most 1000 rows; scheduled by the Auth host. */
     pruneExpiredVerifications(): Promise<number>;
     /** Bounded maintenance; the host registers and schedules these ports. */
     pruneExpiredSessions(batch?: number): Promise<number>;
