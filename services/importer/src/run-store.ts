@@ -633,6 +633,34 @@ export class RunStore<Projection = BatchStatement[]> {
   classify(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
     return this.plan(run, key, input, false);
   }
+  /**
+   * Trusted coordinator disposition after classification: only a pure converter ignored
+   * outcome or an exact current candidate lookup can establish no owned effects.
+   * This is neither a receipt nor fence evidence; every refresh must still check all tuple fences.
+   */
+  acknowledgeNoEffects(run: Run, key: string, input: { reason: 'converter-ignored' | 'no-owned-candidates' }): void {
+    validateRun(run);
+    keyId(key);
+    exact(input, ['reason']);
+    if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates') fail();
+    this.transaction(() => {
+      const live = this.get<{ id: string }>(
+        `SELECT g.id FROM run_sources AS s
+        JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
+        WHERE s.source=? AND s.lease_run=? AND g.id=? AND g.lease=? AND g.status='ready'`,
+        run.source,
+        run.id,
+        run.id,
+        run.lease,
+      );
+      if (!live) throw new Error('Run is stale, unsealed, failed, or no longer current');
+      const entry = this.entry(run, key);
+      // Original keys/bytes are immutable even after commands are acknowledged or fenced.
+      if (!entry?.kind || entry.bytes !== null || entry.keys_json !== '[]' || entry.remaining || entry.pending)
+        throw new Error('No-effect acknowledgement requires a classified empty command plan');
+      this.resolve(run, entry);
+    });
+  }
   /** Private record plan; every dispatch still uses the portable one-envelope contract. */
   prepare(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
     return this.plan(run, key, input, true);
