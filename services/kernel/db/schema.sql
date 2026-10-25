@@ -24,6 +24,13 @@ CREATE SCHEMA core;
 
 
 --
+-- Name: editorial; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA editorial;
+
+
+--
 -- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -82,6 +89,46 @@ CREATE TABLE core.partition (
 
 
 --
+-- Name: receipt; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.receipt (
+    partition_no integer NOT NULL,
+    actor_account_id uuid NOT NULL,
+    command_kind text NOT NULL,
+    idempotency_key text NOT NULL,
+    request_digest bytea NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    response jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT receipt_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT receipt_idempotency_key_check CHECK (((char_length(idempotency_key) >= 1) AND (char_length(idempotency_key) <= 255))),
+    CONSTRAINT receipt_position_check CHECK (("position" > 0)),
+    CONSTRAINT receipt_request_digest_check CHECK ((octet_length(request_digest) = 32))
+);
+
+
+--
+-- Name: write_basis; Type: TABLE; Schema: editorial; Owner: -
+--
+
+CREATE TABLE editorial.write_basis (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    actor_account_id uuid NOT NULL,
+    client_id text NOT NULL,
+    requested_by text,
+    recorded_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT write_basis_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT write_basis_position_check CHECK (("position" > 0))
+);
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -107,6 +154,30 @@ ALTER TABLE ONLY core.partition
 
 
 --
+-- Name: receipt receipt_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.receipt
+    ADD CONSTRAINT receipt_pkey PRIMARY KEY (partition_no, actor_account_id, command_kind, idempotency_key);
+
+
+--
+-- Name: write_basis write_basis_partition_no_position_key; Type: CONSTRAINT; Schema: editorial; Owner: -
+--
+
+ALTER TABLE ONLY editorial.write_basis
+    ADD CONSTRAINT write_basis_partition_no_position_key UNIQUE (partition_no, "position");
+
+
+--
+-- Name: write_basis write_basis_pkey; Type: CONSTRAINT; Schema: editorial; Owner: -
+--
+
+ALTER TABLE ONLY editorial.write_basis
+    ADD CONSTRAINT write_basis_pkey PRIMARY KEY (partition_no, transaction_id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -120,6 +191,22 @@ ALTER TABLE ONLY public.schema_migrations
 
 ALTER TABLE ONLY core.outbox
     ADD CONSTRAINT outbox_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: receipt receipt_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.receipt
+    ADD CONSTRAINT receipt_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: write_basis write_basis_partition_no_fkey; Type: FK CONSTRAINT; Schema: editorial; Owner: -
+--
+
+ALTER TABLE ONLY editorial.write_basis
+    ADD CONSTRAINT write_basis_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
 
 
 --
