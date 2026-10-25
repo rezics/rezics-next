@@ -1,2 +1,17 @@
 types:
+  schema:Episode: 集
+  schema:Movie: 電影
+  schema:TVSeason: 編播季
   schema:TVSeries: 電視系列節目
+properties:
+  schema:alternateName: 別名
+  schema:copyrightNotice: 版權聲明
+  schema:duration: 片長
+  schema:endDate: 結束日期
+  schema:episodeNumber: 集數
+  schema:isPartOf: 所屬實體
+  schema:numberOfEpisodes: 集數
+  schema:startDate: 開始日期
+  wdt:P449: 首播平台
+  wdt:P7937: 作品形式
+  wdt:P973: 詳細描述網址

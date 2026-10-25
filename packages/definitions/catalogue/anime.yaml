@@ -1,20 +1,239 @@
 id: https://rezics.com/catalogue/anime
 name: anime
 version: 1.0.0
-description: Television series profile terms.
+description: Anime work, season, episode and film profile terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
   - core
+  - classification
 classes:
   TVSeries:
-    is_a: LaunchWork
+    is_a: CreativeWorkSeries
     class_uri: schema:TVSeries
+    description: >-
+      An animated television series. Its browse facets follow Bangumi's anime browser:
+      https://bgm.tv/anime/browser.
     exact_mappings:
       - wd:Q5398426
     slots:
       - bangumiSubjectId
+      - abstract
+      - alternateName
+      - datePublished
+      - inLanguage
+      - startDate
+      - endDate
+      - numberOfEpisodes
+      - originalBroadcaster
+      - descriptiveLink
+      - copyrightNotice
+      - author
+      - illustrator
+      - director
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - developer
+      - voiceActor
+      - contributor
+      - character
+      - genre
+      - keywords
+      - partOfSeries
+      - workFormat
+    annotations:
+      facets: workFormat genre keywords datePublished numberOfEpisodes
+  Movie:
+    is_a: LaunchWork
+    class_uri: schema:Movie
+    description: >-
+      An animated feature or short film (https://schema.org/Movie;
+      https://www.wikidata.org/wiki/Q11424). Its browse facets follow Bangumi's anime browser:
+      https://bgm.tv/anime/browser.
+    exact_mappings:
+      - wd:Q11424
+    slots:
+      - bangumiSubjectId
+      - alternateName
+      - datePublished
+      - duration
+      - descriptiveLink
+      - copyrightNotice
+      - author
+      - illustrator
+      - director
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - developer
+      - voiceActor
+      - contributor
+      - character
+      - genre
+      - keywords
+      - partOfSeries
+      - workFormat
+    annotations:
+      facets: workFormat genre keywords datePublished
+  TVSeason:
+    is_a: LaunchWork
+    class_uri: schema:TVSeason
+    description: >-
+      A separately identified television season (https://schema.org/TVSeason;
+      https://www.wikidata.org/wiki/Q3464665). Its browse facets follow Bangumi's anime browser:
+      https://bgm.tv/anime/browser.
+    exact_mappings:
+      - wd:Q3464665
+    slots:
+      - bangumiSubjectId
+      - datePublished
+      - startDate
+      - endDate
+      - numberOfEpisodes
+      - descriptiveLink
+      - author
+      - illustrator
+      - director
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - developer
+      - voiceActor
+      - contributor
+      - character
+      - genre
+      - keywords
+      - partOfSeries
+      - workFormat
+    annotations:
+      facets: workFormat genre keywords datePublished numberOfEpisodes
+  Episode:
+    is_a: LaunchWork
+    class_uri: schema:Episode
+    description: >-
+      A separately identified episode or other installment of an anime work. Its browse facets follow Bangumi's anime
+      browser: https://bgm.tv/anime/browser.
+    exact_mappings:
+      - wd:Q1983062
+    slots:
+      - datePublished
+      - duration
+      - episodeNumber
+      - isPartOf
+      - director
+      - musicBy
+      - contributor
+      - character
+      - genre
+      - keywords
+    annotations:
+      facets: isPartOf datePublished duration
+slots:
+  alternateName:
+    slot_uri: schema:alternateName
+    description: An alternate name or alias, preserving its source language and spelling.
+    multivalued: true
+    close_mappings:
+      - wd:P2561
+    annotations:
+      datatype: monolingualtext
+  numberOfEpisodes:
+    slot_uri: schema:numberOfEpisodes
+    description: The number of episodes or installments in the work or season.
+    range: integer
+    minimum_value: 0
+    close_mappings:
+      - wd:P1113
+    annotations:
+      datatype: quantity
+      units: '1'
+  startDate:
+    slot_uri: schema:startDate
+    description: The start of the original broadcast or release period.
+    range: date
+    exact_mappings:
+      - wd:P580
+    annotations:
+      datatype: time
+  endDate:
+    slot_uri: schema:endDate
+    description: The end of the original broadcast or release period.
+    range: date
+    exact_mappings:
+      - wd:P582
+    annotations:
+      datatype: time
+  originalBroadcaster:
+    slot_uri: wdt:P449
+    description: The original broadcaster, when the source identifies the first broadcast.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P449
+    annotations:
+      datatype: wikibase-item
+  descriptiveLink:
+    slot_uri: wdt:P973
+    description: A link to a descriptive page about the anime work.
+    range: uri
+    multivalued: true
+    exact_mappings:
+      - wd:P973
+    annotations:
+      datatype: url
+  copyrightNotice:
+    slot_uri: schema:copyrightNotice
+    description: A source copyright notice, which does not establish a reuse licence.
+    multivalued: true
+    close_mappings:
+      - wd:P6216
+    annotations:
+      datatype: string
+  duration:
+    slot_uri: schema:duration
+    description: The stated running time in seconds where its units are explicit.
+    range: integer
+    minimum_value: 0
+    exact_mappings:
+      - wd:P2047
+    annotations:
+      datatype: quantity
+      units: wd:Q11574
+  episodeNumber:
+    slot_uri: schema:episodeNumber
+    description: >-
+      The source episode ordinal, stored apart from the episode identifier so that zero, specials, fractional ordinals
+      and gaps remain expressible.
+    exact_mappings:
+      - wd:P1545
+    annotations:
+      datatype: string
+  isPartOf:
+    slot_uri: schema:isPartOf
+    description: The television series or season containing this episode.
+    any_of:
+      - range: TVSeries
+      - range: TVSeason
+    exact_mappings:
+      - wd:P361
+    annotations:
+      datatype: wikibase-item
+  workFormat:
+    slot_uri: wdt:P7937
+    description: The source format of this anime work, represented by a source concept.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P7937
+    annotations:
+      datatype: wikibase-item

@@ -1,2 +1,17 @@
 types:
+  schema:Episode: エピソード
+  schema:Movie: 映画
+  schema:TVSeason: シーズン
   schema:TVSeries: テレビ番組シリーズ
+properties:
+  schema:alternateName: 別名
+  schema:copyrightNotice: 著作権表示
+  schema:duration: 再生時間
+  schema:endDate: 終了日
+  schema:episodeNumber: 話数
+  schema:isPartOf: 以下の一部分
+  schema:numberOfEpisodes: 話数
+  schema:startDate: 開始日
+  wdt:P449: 放送当初のネットワーク
+  wdt:P7937: 創作物の形式
+  wdt:P973: 詳細情報URL

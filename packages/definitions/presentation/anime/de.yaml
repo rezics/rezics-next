@@ -1,2 +1,17 @@
 types:
+  schema:Episode: Episode
+  schema:Movie: Film
+  schema:TVSeason: Staffel
   schema:TVSeries: Fernsehserie
+properties:
+  schema:alternateName: Alternativname
+  schema:copyrightNotice: Urheberrechtshinweis
+  schema:duration: Dauer
+  schema:endDate: Endzeitpunkt
+  schema:episodeNumber: Episodennummer
+  schema:isPartOf: ist Teil von
+  schema:numberOfEpisodes: Episodenanzahl
+  schema:startDate: Startdatum
+  wdt:P449: Sender der Erstausstrahlung
+  wdt:P7937: künstlerische Form
+  wdt:P973: beschrieben in URL

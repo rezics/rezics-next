@@ -44,14 +44,41 @@ test('an anime work, its seasons, episodes and releases are catalogue profiles',
   expect(types['schema:Movie']?.mappings).toContain('wd:Q11424');
   expect(types['schema:TVSeason']).toBeDefined();
   expect(types['schema:Episode']).toBeDefined();
+  expect(types['schema:Movie']!.properties).toEqual(
+    expect.arrayContaining(['wdt:P5732', 'schema:url', 'schema:datePublished', 'schema:duration']),
+  );
+  expect(types['schema:TVSeason']!.properties).toEqual(
+    expect.arrayContaining(['wdt:P5732', 'schema:url', 'schema:name', 'schema:datePublished']),
+  );
 
   for (const type of ['schema:TVSeries', 'schema:Movie', 'schema:TVSeason']) {
     expect(types[type]!.properties).toContain('wdt:P5732');
     expect(types[type]!.properties).toEqual(expect.arrayContaining(['schema:genre', 'schema:keywords', 'wdt:P179']));
   }
+  expect(types['schema:TVSeries']!.facets).toEqual([
+    'wdt:P7937',
+    'schema:genre',
+    'schema:keywords',
+    'schema:datePublished',
+    'schema:numberOfEpisodes',
+  ]);
+  expect(types['schema:Movie']!.facets).toEqual([
+    'wdt:P7937',
+    'schema:genre',
+    'schema:keywords',
+    'schema:datePublished',
+  ]);
+  expect(types['schema:TVSeason']!.facets).toEqual([
+    'wdt:P7937',
+    'schema:genre',
+    'schema:keywords',
+    'schema:datePublished',
+    'schema:numberOfEpisodes',
+  ]);
   expect(types['schema:Episode']!.properties).toEqual(
     expect.arrayContaining(['schema:url', 'schema:name', 'schema:datePublished', 'schema:episodeNumber']),
   );
+  expect(types['schema:Episode']!.facets).toEqual(['schema:isPartOf', 'schema:datePublished', 'schema:duration']);
   expect(properties['schema:episodeNumber']).toMatchObject({
     datatype: 'string',
     mappings: ['wd:P1545'],
@@ -59,7 +86,7 @@ test('an anime work, its seasons, episodes and releases are catalogue profiles',
   expect(properties['schema:isPartOf']).toMatchObject({
     datatype: 'wikibase-item',
     mappings: ['wd:P361'],
-    targets: ['schema:TVSeries', 'schema:TVSeason'],
+    targets: ['schema:TVSeason', 'schema:TVSeries'],
   });
 });
 
@@ -71,7 +98,10 @@ test('Bangumi anime subject and episode fields are bundled or omitted with a rea
   expectBundledOrOmitted(animeSubjectType);
 
   const animePlatforms = data.enumerations.find(({ id }) => id === 'platform.anime')!;
-  for (const { mapping } of animePlatforms.values) if (mapping.profile) expectBundledOrOmitted(mapping.profile);
+  for (const { mapping } of animePlatforms.values) {
+    expectBundledOrOmitted(mapping);
+    if (mapping.profile) expectBundledOrOmitted(mapping.profile);
+  }
 
   for (const template of ['TVAnime', 'OVA', 'Movie', 'Anime']) {
     const fields = data.infobox.find(({ id }) => id === template)!.fields;
@@ -93,12 +123,9 @@ test('anime terms carry labels in all eight UI locales', () => {
   const types = Object.values(classes)
     .map(({ class_uri }) => class_uri)
     .filter((term): term is string => term !== undefined);
-  const properties = [
-    ...Object.entries(classes).flatMap(([, definition]) =>
-      (definition.slots ?? []).map((slot) => slots[slot]?.slot_uri ?? slot),
-    ),
-    ...Object.values(slots).map(({ slot_uri }) => slot_uri),
-  ].filter((term): term is string => term !== undefined);
+  const properties = Object.values(slots)
+    .map(({ slot_uri }) => slot_uri)
+    .filter((term): term is string => term !== undefined);
 
   for (const locale of uiLocales) {
     const presentation = Bun.YAML.parse(

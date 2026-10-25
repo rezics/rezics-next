@@ -560,7 +560,7 @@ files:
           mappingRelation: close
   - id: episode
     type:
-      status: proposed
+      status: existing
       term: schema:Episode
       'on': schema:Episode
       wikidata: wd:Q1983062
@@ -571,7 +571,7 @@ files:
     fields:
       - id: airdate
         mapping:
-          status: proposed
+          status: existing
           term: schema:datePublished
           'on': schema:Episode
           wikidata: wd:P577
@@ -581,7 +581,7 @@ files:
             - https://www.wikidata.org/wiki/Property:P577
       - id: description
         mapping:
-          status: proposed
+          status: existing
           term: schema:abstract
           'on': schema:Episode
           wikidata: wd:Q333291
@@ -591,15 +591,11 @@ files:
           mappingRelation: close
       - id: disc
         mapping:
-          status: proposed
-          term: schema:position
-          'on': schema:Episode
-          wikidata: wd:P1545
-          meaning: The source disc number as a qualifier on the installment membership; zero means unspecified.
-          sources: *id019
+          status: omitted
+          reason: The disc number describes a physical release grouping, not the episode ordinal or its series membership.
       - id: duration
         mapping:
-          status: proposed
+          status: existing
           term: schema:duration
           'on': schema:Episode
           wikidata: wd:P2047
@@ -609,7 +605,7 @@ files:
             - https://www.wikidata.org/wiki/Property:P2047
       - id: id
         mapping:
-          status: proposed
+          status: existing
           term: schema:url
           'on': schema:Episode
           wikidata: wd:P2888
@@ -620,7 +616,7 @@ files:
           mappingRelation: close
       - id: name
         mapping: &id021
-          status: proposed
+          status: existing
           term: schema:name
           'on': schema:Episode
           wikidata: wd:P2561
@@ -630,7 +626,7 @@ files:
         mapping: *id021
       - id: sort
         mapping:
-          status: proposed
+          status: existing
           term: schema:episodeNumber
           'on': schema:Episode
           wikidata: wd:P1545
@@ -640,7 +636,7 @@ files:
             - https://www.wikidata.org/wiki/Property:P1545
       - id: subject_id
         mapping:
-          status: proposed
+          status: existing
           term: schema:isPartOf
           'on': schema:Episode
           wikidata: wd:P361
@@ -650,12 +646,8 @@ files:
             - https://www.wikidata.org/wiki/Property:P361
       - id: type
         mapping:
-          status: proposed
-          term: wdt:P7937
-          'on': schema:Episode
-          wikidata: wd:P7937
-          meaning: The source installment form from the episode-type enumeration.
-          sources: *id022
+          status: omitted
+          reason: The source episode-kind enumeration has no shared episode property with the same meaning.
   - id: subject-relations
     type:
       status: proposed
@@ -821,7 +813,7 @@ infobox:
           meaning: The original source name or a language-tagged Chinese name.
       - id: 别名
         mapping:
-          status: proposed
+          status: existing
           term: schema:alternateName
           'on': schema:TVSeries
           wikidata: wd:P2561
@@ -832,7 +824,7 @@ infobox:
           mappingRelation: close
       - id: 话数
         mapping:
-          status: proposed
+          status: existing
           term: schema:numberOfEpisodes
           'on': schema:TVSeries
           wikidata: wd:P1113
@@ -868,7 +860,7 @@ infobox:
             broadcaster.
       - id: 播放电视台
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P449
           'on': schema:TVSeries
           wikidata: wd:P449
@@ -883,7 +875,7 @@ infobox:
             broadcaster.
       - id: 播放结束
         mapping:
-          status: proposed
+          status: existing
           term: schema:endDate
           'on': schema:TVSeries
           wikidata: wd:P582
@@ -893,7 +885,7 @@ infobox:
             - https://www.wikidata.org/wiki/Property:P582
       - id: 导演
         mapping:
-          status: proposed
+          status: existing
           term: schema:director
           'on': schema:TVSeries
           wikidata: wd:P57
@@ -902,7 +894,7 @@ infobox:
           qualifiers: *id002
       - id: 音乐
         mapping:
-          status: proposed
+          status: existing
           term: schema:musicBy
           'on': schema:TVSeries
           wikidata: wd:P86
@@ -911,7 +903,7 @@ infobox:
           qualifiers: *id002
       - id: 链接
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P973
           'on': schema:TVSeries
           wikidata: wd:P973
@@ -926,7 +918,7 @@ infobox:
           reason: Unstructured miscellaneous free text has no defined template semantics; do not infer catalogue statements.
       - id: Copyright
         mapping:
-          status: proposed
+          status: existing
           term: schema:copyrightNotice
           'on': schema:TVSeries
           wikidata: wd:P6216
@@ -939,83 +931,30 @@ infobox:
     source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml
     fields:
       - id: 中文名
-        mapping:
-          status: proposed
-          term: schema:name
-          'on': schema:CreativeWork
-          wikidata: wd:P2561
-          meaning: The original source name or a language-tagged Chinese name.
-          sources: *id020
+        mapping: &animeOmitted
+          status: omitted
+          reason: The OVA format has no concrete catalogue profile that preserves it without inferring a movie or series type.
       - id: 别名
-        mapping:
-          status: proposed
-          term: schema:alternateName
-          'on': schema:CreativeWork
-          wikidata: wd:P2561
-          meaning: An alternate name or alias, preserving language and source spelling.
-          sources: *id033
-          mappingRelation: close
+        mapping: *animeOmitted
       - id: 话数
-        mapping:
-          status: proposed
-          term: schema:numberOfEpisodes
-          'on': schema:CreativeWork
-          wikidata: wd:P1113
-          meaning: The number of installments; book chapters retain their source unit.
-          sources: *id034
-          mappingRelation: close
+        mapping: *animeOmitted
       - id: 发售日
-        mapping:
-          status: proposed
-          term: schema:datePublished
-          'on': schema:CreativeWork
-          wikidata: wd:P577
-          meaning: The publication or first release date with the source precision.
-          sources: *id035
+        mapping: *animeOmitted
       - id: 官方网站
-        mapping:
-          status: proposed
-          term: schema:url
-          'on': schema:CreativeWork
-          wikidata: wd:P856
-          meaning: The official website of this work.
-          sources: &id040
-            - https://schema.org/url
-            - https://www.wikidata.org/wiki/Property:P856
+        mapping: *animeOmitted
       - id: 开始
-        mapping:
-          status: proposed
-          term: schema:startDate
-          'on': schema:CreativeWork
-          wikidata: wd:P580
-          meaning: The start of serialization or release of this series.
-          sources: &id060
-            - https://schema.org/startDate
-            - https://www.wikidata.org/wiki/Property:P580
+        mapping: *animeOmitted
       - id: 结束
-        mapping:
-          status: proposed
-          term: schema:endDate
-          'on': schema:CreativeWork
-          wikidata: wd:P582
-          meaning: The end of serialization or release of this series.
-          sources: *id036
+        mapping: *animeOmitted
       - id: 链接
-        mapping:
-          status: proposed
-          term: wdt:P973
-          'on': schema:CreativeWork
-          wikidata: wd:P973
-          meaning: A link to a descriptive page; other arbitrary links require an explicit omission, never an identity
-            claim.
-          sources: *id037
+        mapping: *animeOmitted
       - *id038
   - id: Movie
     source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml
     fields: &id042
       - id: 中文名
         mapping:
-          status: proposed
+          status: existing
           term: schema:name
           'on': schema:Movie
           wikidata: wd:P2561
@@ -1023,7 +962,7 @@ infobox:
           sources: *id020
       - id: 别名
         mapping:
-          status: proposed
+          status: existing
           term: schema:alternateName
           'on': schema:Movie
           wikidata: wd:P2561
@@ -1032,7 +971,7 @@ infobox:
           mappingRelation: close
       - id: 上映年度
         mapping:
-          status: proposed
+          status: existing
           term: schema:datePublished
           'on': schema:Movie
           wikidata: wd:P577
@@ -1040,7 +979,7 @@ infobox:
           sources: *id035
       - id: 片长
         mapping:
-          status: proposed
+          status: existing
           term: schema:duration
           'on': schema:Movie
           wikidata: wd:P2047
@@ -1048,15 +987,17 @@ infobox:
           sources: *id039
       - id: 官方网站
         mapping:
-          status: proposed
+          status: existing
           term: schema:url
           'on': schema:Movie
           wikidata: wd:P856
           meaning: The official website of this work.
-          sources: *id040
+          sources: &id040
+            - https://schema.org/url
+            - https://www.wikidata.org/wiki/Property:P856
       - id: 链接
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P973
           'on': schema:Movie
           wikidata: wd:P973
@@ -1066,7 +1007,7 @@ infobox:
       - *id038
       - id: Copyright
         mapping:
-          status: proposed
+          status: existing
           term: schema:copyrightNotice
           'on': schema:Movie
           wikidata: wd:P6216
@@ -1310,7 +1251,9 @@ infobox:
           'on': schema:BookSeries
           wikidata: wd:P580
           meaning: The start of serialization or release of this series.
-          sources: *id060
+          sources: &id060
+            - https://schema.org/startDate
+            - https://www.wikidata.org/wiki/Property:P580
       - id: 结束
         mapping:
           status: proposed
@@ -1640,7 +1583,9 @@ enumerations:
           wikidata: wd:Q47461344
           meaning: A book work, including manga; select editions and series from their source flags.
       - id: 2
-        mapping: *id012
+        mapping:
+          status: omitted
+          reason: The anime family is dispatched by its format concept, and has no separate generic profile.
       - &id084
         id: 3
         mapping: &id073
@@ -1906,6 +1851,7 @@ enumerations:
       - id: 1
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/2-1
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -1920,28 +1866,26 @@ enumerations:
       - id: 2
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/2-2
             scheme: https://rezics.com/schemes/bangumi/formats
             label: ova
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
-          profile: &id083
-            status: proposed
-            term: schema:CreativeWork
-            'on': schema:CreativeWork
-            wikidata: wd:Q17537576
-            meaning: Animation of this source format; do not infer movie or series from the format alone.
-            sources: *id023
+          profile: &animeFormatUnprofiled
+            status: omitted
+            reason: This format remains a source concept; no concrete catalogue profile represents it without changing its distinction.
       - id: 3
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/2-3
             scheme: https://rezics.com/schemes/bangumi/formats
             label: movie
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
           profile: &id082
-            status: proposed
+            status: existing
             term: schema:Movie
             'on': schema:Movie
             wikidata: wd:Q11424
@@ -1952,6 +1896,7 @@ enumerations:
       - id: 4
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/2-4
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -1961,21 +1906,23 @@ enumerations:
       - id: 5
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/2-5
             scheme: https://rezics.com/schemes/bangumi/formats
             label: web
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
-          profile: *id083
+          profile: *animeFormatUnprofiled
       - id: 2006
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/2-2006
             scheme: https://rezics.com/schemes/bangumi/formats
             label: anime_comic
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
-          profile: *id083
+          profile: *animeFormatUnprofiled
   - id: platform.real
     values:
       - &id085

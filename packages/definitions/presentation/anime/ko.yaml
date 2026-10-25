@@ -1,2 +1,17 @@
 types:
+  schema:Episode: 에피소드
+  schema:Movie: 영화
+  schema:TVSeason: 시즌
   schema:TVSeries: 텔레비전 시리즈
+properties:
+  schema:alternateName: 다른 이름
+  schema:copyrightNotice: 저작권 고지
+  schema:duration: 다음 시간 동안 진행됨
+  schema:endDate: 종료일
+  schema:episodeNumber: 회차
+  schema:isPartOf: 다음의 일부
+  schema:numberOfEpisodes: 에피소드 수
+  schema:startDate: 시작일
+  wdt:P449: 다음에서 본방송을 함
+  wdt:P7937: 저작물의 형식
+  wdt:P973: 기술되어 있는 URL

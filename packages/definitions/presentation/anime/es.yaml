@@ -1,2 +1,17 @@
 types:
+  schema:Episode: episodio
+  schema:Movie: película
+  schema:TVSeason: temporada televisiva
   schema:TVSeries: serie de televisión
+properties:
+  schema:alternateName: nombre alternativo
+  schema:copyrightNotice: aviso de derechos de autor
+  schema:duration: duración
+  schema:endDate: fecha de finalización
+  schema:episodeNumber: número de episodio
+  schema:isPartOf: forma parte de
+  schema:numberOfEpisodes: número de episodios
+  schema:startDate: fecha de inicio
+  wdt:P449: emisora original
+  wdt:P7937: forma artística
+  wdt:P973: descrito en la URL

@@ -1,2 +1,17 @@
 types:
+  schema:Episode: 集
+  schema:Movie: 电影
+  schema:TVSeason: 编播季
   schema:TVSeries: 电视系列节目
+properties:
+  schema:alternateName: 别名
+  schema:copyrightNotice: 版权声明
+  schema:duration: 时长
+  schema:endDate: 结束日期
+  schema:episodeNumber: 集数
+  schema:isPartOf: 所属实体
+  schema:numberOfEpisodes: 集数
+  schema:startDate: 开始日期
+  wdt:P449: 首播平台
+  wdt:P7937: 作品形式
+  wdt:P973: 详情描述网址
