@@ -1,2 +1,10 @@
 types:
   schema:VideoGame: videojuego
+  wd:Q20631656: release
+properties:
+  schema:alternateName: nombre alternativo
+  schema:gamePlatform: plataforma de juego
+  schema:gtin: GTIN
+  wdt:P2899: edad mínima
+  wdt:P31: instancia de
+  wdt:P437: distribución

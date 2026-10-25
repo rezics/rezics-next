@@ -377,6 +377,7 @@
       "bases": ["schema:CreativeWork"],
       "properties": [
         "schema:abstract",
+        "schema:alternateName",
         "schema:contributor",
         "schema:datePublished",
         "schema:genre",
@@ -390,6 +391,50 @@
         "wdt:P5732"
       ],
       "facets": []
+    },
+    "wd:Q20631656": {
+      "iri": "http://www.wikidata.org/entity/Q20631656",
+      "labels": {
+        "de": "Softwareveröffentlichung",
+        "en": "software release",
+        "es": "release",
+        "fr": "publication de logiciels",
+        "ja": "ソフトウェア・リリース",
+        "ko": "출시 버전",
+        "zh-Hans": "软件发布",
+        "zh-Hant": "軟體發布"
+      },
+      "mappings": [],
+      "bases": [],
+      "properties": [
+        "schema:alternateName",
+        "schema:datePublished",
+        "schema:exampleOfWork",
+        "schema:gamePlatform",
+        "schema:gtin",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:name",
+        "schema:publisher",
+        "schema:sameAs",
+        "schema:url",
+        "wdt:P155",
+        "wdt:P178",
+        "wdt:P2899",
+        "wdt:P31",
+        "wdt:P3180",
+        "wdt:P437"
+      ],
+      "facets": [
+        "schema:gamePlatform",
+        "schema:datePublished",
+        "wdt:P2899",
+        "wdt:P437",
+        "wdt:P31",
+        "schema:exampleOfWork",
+        "wdt:P178",
+        "schema:publisher"
+      ]
     },
     "schema:Recipe": {
       "iri": "http://schema.org/Recipe",
@@ -461,19 +506,45 @@
       "bases": ["schema:VideoGame", "schema:CreativeWork"],
       "properties": [
         "schema:abstract",
+        "schema:alternateName",
+        "schema:author",
+        "schema:character",
         "schema:contributor",
         "schema:datePublished",
+        "schema:director",
         "schema:genre",
+        "schema:illustrator",
         "schema:image",
         "schema:inLanguage",
         "schema:keywords",
+        "schema:musicBy",
         "schema:name",
         "schema:sameAs",
+        "schema:translator",
         "schema:url",
+        "wdt:P144",
+        "wdt:P155",
+        "wdt:P156",
         "wdt:P179",
-        "wdt:P3180"
+        "wdt:P1889",
+        "wdt:P2512",
+        "wdt:P3180",
+        "wdt:P361",
+        "wdt:P4969",
+        "wdt:P725"
       ],
-      "facets": []
+      "facets": [
+        "schema:genre",
+        "schema:keywords",
+        "schema:character",
+        "schema:contributor",
+        "schema:author",
+        "schema:director",
+        "schema:illustrator",
+        "schema:musicBy",
+        "schema:translator",
+        "wdt:P725"
+      ]
     },
     "schema:MusicAlbum": {
       "iri": "http://schema.org/MusicAlbum",
@@ -995,6 +1066,7 @@
         "schema:VideoGame",
         "skos:Concept",
         "skos:ConceptScheme",
+        "wd:Q20631656",
         "wd:Q689445",
         "wd:Q7725310",
         "wd:Q95074"
@@ -1863,6 +1935,192 @@
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
+    "wdt:P2899": {
+      "iri": "http://www.wikidata.org/prop/direct/P2899",
+      "labels": {
+        "de": "Mindestalter",
+        "en": "minimum age",
+        "es": "edad mínima",
+        "fr": "âge minimal",
+        "ja": "下限年齢",
+        "ko": "이용할 수 있는 최소 연령",
+        "zh-Hans": "最低年龄",
+        "zh-Hant": "最低年齡"
+      },
+      "mappings": ["wd:P2899"],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": ["http://www.wikidata.org/entity/Q577"]
+          }
+        }
+      },
+      "units": ["http://www.wikidata.org/entity/Q577"],
+      "minimum": 0,
+      "maximum": 18
+    },
+    "schema:alternateName": {
+      "iri": "http://schema.org/alternateName",
+      "labels": {
+        "de": "Alternativname",
+        "en": "alternative name",
+        "es": "nombre alternativo",
+        "fr": "nom alternatif",
+        "ja": "別名",
+        "ko": "대체 이름",
+        "zh-Hans": "别名",
+        "zh-Hant": "別名"
+      },
+      "mappings": ["wd:P2561"],
+      "datatype": "monolingualtext",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["text", "language"],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1500
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+          }
+        }
+      }
+    },
+    "wdt:P437": {
+      "iri": "http://www.wikidata.org/prop/direct/P437",
+      "labels": {
+        "de": "Auslieferungsmedium",
+        "en": "distribution format",
+        "es": "distribución",
+        "fr": "format de distribution",
+        "ja": "メディア形態",
+        "ko": "유통 방법",
+        "zh-Hans": "发行方式",
+        "zh-Hant": "發行格式"
+      },
+      "mappings": ["wd:P437"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["skos:Concept"]
+    },
+    "wdt:P155": {
+      "iri": "http://www.wikidata.org/prop/direct/P155",
+      "labels": {
+        "de": "Vorgänger",
+        "en": "follows",
+        "es": "precedido por",
+        "fr": "précédé par",
+        "ja": "前",
+        "ko": "이전",
+        "zh-Hans": "上一项",
+        "zh-Hant": "上一項"
+      },
+      "mappings": ["wd:P155"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": [
+        "bf:Instance",
+        "schema:Book",
+        "schema:MusicAlbum",
+        "schema:TVSeries",
+        "schema:VideoGame",
+        "wd:Q689445",
+        "wd:Q7725310"
+      ]
+    },
+    "schema:gamePlatform": {
+      "iri": "http://schema.org/gamePlatform",
+      "labels": {
+        "de": "Spielplattform",
+        "en": "game platform",
+        "es": "plataforma de juego",
+        "fr": "plateforme de jeu",
+        "ja": "ゲームプラットフォーム",
+        "ko": "게임 플랫폼",
+        "zh-Hans": "游戏平台",
+        "zh-Hant": "遊戲平台"
+      },
+      "mappings": ["wd:P400"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["skos:Concept"]
+    },
+    "schema:gtin": {
+      "iri": "http://schema.org/gtin",
+      "labels": {
+        "de": "GTIN",
+        "en": "GTIN",
+        "es": "GTIN",
+        "fr": "GTIN",
+        "ja": "GTIN",
+        "ko": "GTIN",
+        "zh-Hans": "GTIN",
+        "zh-Hant": "GTIN"
+      },
+      "mappings": ["wd:P3962"],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^(?:[0-9]{8}|[0-9]{12,14})$"
+      }
+    },
+    "wdt:P31": {
+      "iri": "http://www.wikidata.org/prop/direct/P31",
+      "labels": {
+        "de": "ist ein(e)",
+        "en": "instance of",
+        "es": "instancia de",
+        "fr": "nature de l’élément",
+        "ja": "分類",
+        "ko": "다음 종류에 속함",
+        "zh-Hans": "隶属于",
+        "zh-Hant": "隸屬於"
+      },
+      "mappings": ["wd:P31"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["skos:Concept"]
+    },
     "schema:cookTime": {
       "iri": "http://schema.org/cookTime",
       "labels": {
@@ -1961,6 +2219,146 @@
       },
       "units": ["1"],
       "minimum": 1
+    },
+    "wdt:P1889": {
+      "iri": "http://www.wikidata.org/prop/direct/P1889",
+      "labels": {
+        "de": "verschieden von",
+        "en": "different from",
+        "es": "diferente de",
+        "fr": "à ne pas confondre avec",
+        "ja": "以下と異なる",
+        "ko": "다음과 다름",
+        "zh-Hans": "区别于",
+        "zh-Hant": "相異物"
+      },
+      "mappings": ["wd:P1889"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["wd:Q689445"]
+    },
+    "wdt:P144": {
+      "iri": "http://www.wikidata.org/prop/direct/P144",
+      "labels": {
+        "de": "basiert auf",
+        "en": "based on",
+        "es": "basado en",
+        "fr": "basé sur",
+        "ja": "派生元",
+        "ko": "다음에 기반을 두었음",
+        "zh-Hans": "改编自",
+        "zh-Hant": "改編自"
+      },
+      "mappings": ["wd:P144"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": [
+        "bf:Instance",
+        "schema:Book",
+        "schema:MusicAlbum",
+        "schema:TVSeries",
+        "schema:VideoGame",
+        "wd:Q689445",
+        "wd:Q7725310"
+      ]
+    },
+    "wdt:P4969": {
+      "iri": "http://www.wikidata.org/prop/direct/P4969",
+      "labels": {
+        "de": "abgeleitetes Werk",
+        "en": "derivative work",
+        "es": "obra derivada",
+        "fr": "œuvre dérivée",
+        "ja": "派生作品",
+        "ko": "다음 작품은 이 작품을 바탕으로 함",
+        "zh-Hans": "衍生作品",
+        "zh-Hant": "衍生作品"
+      },
+      "mappings": ["wd:P4969"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["wd:Q689445"]
+    },
+    "wdt:P156": {
+      "iri": "http://www.wikidata.org/prop/direct/P156",
+      "labels": {
+        "de": "Nachfolger",
+        "en": "followed by",
+        "es": "sucedido por",
+        "fr": "suivi par",
+        "ja": "次",
+        "ko": "다음",
+        "zh-Hans": "下一项",
+        "zh-Hant": "下一項"
+      },
+      "mappings": ["wd:P156"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["wd:Q689445"]
+    },
+    "wdt:P361": {
+      "iri": "http://www.wikidata.org/prop/direct/P361",
+      "labels": {
+        "de": "ist Teil von",
+        "en": "part of",
+        "es": "forma parte de",
+        "fr": "partie de",
+        "ja": "以下の一部分",
+        "ko": "다음의 일부",
+        "zh-Hans": "所属实体",
+        "zh-Hant": "所屬實體"
+      },
+      "mappings": ["wd:P361"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["wd:Q689445"]
+    },
+    "wdt:P2512": {
+      "iri": "http://www.wikidata.org/prop/direct/P2512",
+      "labels": {
+        "de": "hat Ableger",
+        "en": "has spin-off",
+        "es": "serie derivada",
+        "fr": "série dérivée",
+        "ja": "スピンオフ",
+        "ko": "스핀오프",
+        "zh-Hans": "派生作品",
+        "zh-Hant": "派生作品"
+      },
+      "mappings": ["wd:P2512"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["wd:Q689445"]
     }
   }
 }

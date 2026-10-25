@@ -1,21 +1,50 @@
 id: https://rezics.com/catalogue/game
 name: game
 version: 1.0.0
-description: Video game profile terms.
+description: Video game work and release profile terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
+  bf: http://id.loc.gov/ontologies/bibframe/
 default_range: string
 imports:
   - linkml:types
   - core
+  - book
+  - classification
 classes:
   VideoGame:
     abstract: true
     is_a: LaunchWork
     class_uri: schema:VideoGame
-    description: Shared video game fields; source identifiers are declared on concrete profiles.
+    description: Shared video game work fields; source identifiers are declared on concrete profiles.
+    slots:
+      - alternateName
+  VideoGameRelease:
+    is_a: Thing
+    class_uri: wd:Q20631656
+    description: >-
+      A distinct software release that may represent one or more works. Class source:
+      https://www.wikidata.org/wiki/Q20631656. Release browse filters:
+      https://api.vndb.org/kana#filters.
+    slots:
+      - alternateName
+      - datePublished
+      - developer
+      - exampleOfWork
+      - gamePlatform
+      - gtin
+      - inLanguage
+      - publisher
+      - follows
+      - ageRating
+      - releaseType
+      - distributionFormat
+      - vndbId
+    annotations:
+      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher
   BangumiVideoGame:
     is_a: VideoGame
     class_uri: schema:VideoGame
@@ -23,3 +52,67 @@ classes:
       - wd:Q7889
     slots:
       - bangumiSubjectId
+slots:
+  alternateName:
+    slot_uri: schema:alternateName
+    description: An alternative name or romanized title for this thing.
+    multivalued: true
+    exact_mappings:
+      - wd:P2561
+    annotations:
+      datatype: monolingualtext
+  gamePlatform:
+    slot_uri: schema:gamePlatform
+    description: A platform on which the release can run.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P400
+    annotations:
+      datatype: wikibase-item
+  gtin:
+    slot_uri: schema:gtin
+    description: Global Trade Item Number for the release.
+    pattern: '^(?:[0-9]{8}|[0-9]{12,14})$'
+    exact_mappings:
+      - wd:P3962
+    annotations:
+      datatype: external-id
+  ageRating:
+    slot_uri: wdt:P2899
+    description: The minimum age associated with the release rating, in years.
+    range: integer
+    minimum_value: 0
+    maximum_value: 18
+    exact_mappings:
+      - wd:P2899
+    annotations:
+      datatype: quantity
+      units: wd:Q577
+  releaseType:
+    slot_uri: wdt:P31
+    description: A release type concept, such as complete, partial or trial release.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P31
+    annotations:
+      datatype: wikibase-item
+  distributionFormat:
+    slot_uri: wdt:P437
+    description: A distribution format or physical medium for the release.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P437
+    annotations:
+      datatype: wikibase-item
+  follows:
+    slot_uri: wdt:P155
+    description: A prior work or release that this work or release follows.
+    range: CreativeWork
+    multivalued: true
+    exact_mappings:
+      - wd:P155
+    annotations:
+      datatype: wikibase-item

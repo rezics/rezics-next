@@ -930,10 +930,10 @@ enumerations:
       }
     - {
         value: ser,
-        term: 'wdt:P361',
-        mapping: 'wdt:P361',
+        term: 'wdt:P179',
+        mapping: 'wdt:P179',
         meaning: The works belong to the same series grouping.,
-        citations: *id008,
+        citations: ['https://www.wikidata.org/wiki/Property:P179'],
       }
     - {
         value: fan,
@@ -1119,6 +1119,11 @@ table_types:
     mapping: wd:Q5
     meaning: Person profile.
     citations: *id013
+  schema:Organization:
+    status: existing
+    mapping: wd:Q43229
+    meaning: Organization producer profile.
+    citations: *id003
   schema:Quotation:
     status: proposed
     mapping: wd:Q815341
@@ -1130,17 +1135,15 @@ table_types:
     meaning: Software application or game-engine record.
     citations: ['https://schema.org/SoftwareApplication', 'https://www.wikidata.org/wiki/Q166142']
   schema:Thing:
-    status: proposed
-    mapping: wd:Q35120
-    meaning: Common entity type for producer rows, whose Person or Organization subtype is selected by producers.type.
-    citations: ['https://schema.org/Thing', 'https://www.wikidata.org/wiki/Q35120']
+    status: omitted
+    meaning: Producer rows are represented by the existing Organization or Person profile types selected from the source discriminator.
   schema:VideoGame:
     status: existing
     mapping: wd:Q7889
     meaning: Video game profile context.
     citations: ['https://schema.org/VideoGame', 'https://www.wikidata.org/wiki/Q7889']
   schema:character:
-    status: proposed
+    status: existing
     mapping: wdt:P674
     meaning: Character appearing in a creative work.
     citations:
@@ -1150,7 +1153,7 @@ table_types:
         'https://www.wikidata.org/wiki/Property:P674',
       ]
   schema:contributor:
-    status: proposed
+    status: existing
     mapping: wdt:P767
     meaning: Staff contribution statement.
     citations:
@@ -1170,7 +1173,7 @@ table_types:
         'https://www.wikidata.org/wiki/Property:P629',
       ]
   schema:gamePlatform:
-    status: proposed
+    status: existing
     mapping: wdt:P400
     meaning: Platform for which a work was developed or released.
     citations:
@@ -1180,7 +1183,7 @@ table_types:
         'https://www.wikidata.org/wiki/Property:P400',
       ]
   schema:genre:
-    status: proposed
+    status: existing
     mapping: wdt:P136
     meaning: Genre or tag association for a work.
     citations:
@@ -1199,6 +1202,16 @@ table_types:
         'https://www.wikidata.org/wiki/Property:18',
         'https://www.wikidata.org/wiki/Property:P18',
       ]
+  schema:alternateName:
+    status: existing
+    mapping: wdt:P2561
+    meaning: Alternative or romanized name of a work or release.
+    citations: ['https://schema.org/alternateName', 'https://www.wikidata.org/wiki/Property:P2561']
+  schema:gtin:
+    status: existing
+    mapping: wdt:P3962
+    meaning: Global Trade Item Number for a release.
+    citations: ['https://schema.org/gtin', 'https://www.wikidata.org/wiki/Property:P3962']
   schema:name:
     status: existing
     mapping: wdt:P1476
@@ -1245,18 +1258,28 @@ table_types:
     mapping: wd:Q689445
     meaning: Visual novel profile type, bundled by the catalogue.
     citations: ['https://www.wikidata.org/wiki/Q689445']
+  wd:Q20631656:
+    status: existing
+    mapping: wd:Q20631656
+    meaning: A software release profile, bundled by the catalogue.
+    citations: ['https://www.wikidata.org/wiki/Q20631656']
   wdt:P1352:
     status: proposed
     mapping: wdt:P1352
     meaning: A ranking or rating record that is intentionally excluded.
     citations: ['https://www.wikidata.org/wiki/Property:1352', 'https://www.wikidata.org/wiki/Property:P1352']
   wdt:P144:
-    status: proposed
+    status: existing
     mapping: wdt:P144
     meaning: Work used as the basis for an adaptation or fan work.
     citations: ['https://www.wikidata.org/wiki/Property:144', 'https://www.wikidata.org/wiki/Property:P144']
+  wdt:P179:
+    status: existing
+    mapping: wdt:P179
+    meaning: Membership in a creative work series.
+    citations: ['https://www.wikidata.org/wiki/Property:P179']
   wdt:P155:
-    status: proposed
+    status: existing
     mapping: wdt:P155
     meaning: Predecessor or superseded-release relation.
     citations: &id030 ['https://www.wikidata.org/wiki/Property:155', 'https://www.wikidata.org/wiki/Property:P155']
@@ -1277,17 +1300,17 @@ table_types:
     citations: &id037 ['https://www.wikidata.org/wiki/Property:279', 'https://www.wikidata.org/wiki/Property:P279']
     semantic_term: skos:broader
   wdt:P361:
-    status: proposed
+    status: existing
     mapping: wdt:P361
     meaning: Membership in a related work or concept scheme.
     citations: &id035 ['https://www.wikidata.org/wiki/Property:361', 'https://www.wikidata.org/wiki/Property:P361']
   wdt:P437:
-    status: proposed
+    status: existing
     mapping: wdt:P437
     meaning: Distribution format or physical release medium.
     citations: ['https://www.wikidata.org/wiki/Property:437', 'https://www.wikidata.org/wiki/Property:P437']
   wdt:P725:
-    status: proposed
+    status: existing
     mapping: wdt:P725
     meaning: Voice actor assigned to a character.
     citations: &id042 ['https://www.wikidata.org/wiki/Property:725', 'https://www.wikidata.org/wiki/Property:P725']
@@ -1296,6 +1319,36 @@ table_types:
     mapping: wdt:P749
     meaning: Parent-organization relationship.
     citations: ['https://www.wikidata.org/wiki/Property:749', 'https://www.wikidata.org/wiki/Property:P749']
+  wdt:P156:
+    status: existing
+    mapping: wdt:P156
+    meaning: The work that follows this visual novel.
+    citations: ['https://www.wikidata.org/wiki/Property:P156']
+  wdt:P1889:
+    status: existing
+    mapping: wdt:P1889
+    meaning: An alternative work relation.
+    citations: ['https://www.wikidata.org/wiki/Property:P1889']
+  wdt:P2512:
+    status: existing
+    mapping: wdt:P2512
+    meaning: A spin-off work relation.
+    citations: ['https://www.wikidata.org/wiki/Property:P2512']
+  wdt:P2899:
+    status: existing
+    mapping: wdt:P2899
+    meaning: Minimum age associated with a content rating.
+    citations: ['https://www.wikidata.org/wiki/Property:P2899']
+  wdt:P31:
+    status: existing
+    mapping: wdt:P31
+    meaning: Release type classification property.
+    citations: ['https://www.wikidata.org/wiki/Property:P31']
+  wdt:P4969:
+    status: existing
+    mapping: wdt:P4969
+    meaning: A derivative work relation.
+    citations: ['https://www.wikidata.org/wiki/Property:P4969']
 tables:
   - name: anime
     type: wd:Q1107
@@ -1716,23 +1769,12 @@ tables:
         meaning: VNDB producer identity.
         citations: *id021
       - name: type
-        status: proposed
-        term: wdt:P31
-        mapping: wdt:P31
-        meaning: Producer profile class selected by the source entity type.
-        citations: &id031 ['https://www.wikidata.org/wiki/Property:31', 'https://www.wikidata.org/wiki/Property:P31']
+        status: omitted
+        reason: Source discriminator selects the Organization or Person profile type; it is not a separate producer statement.
         values: *id022
       - name: lang
-        status: proposed
-        term: schema:knowsLanguage
-        mapping: wdt:P1412
-        meaning: Primary working language associated with the producer.
-        citations:
-          &id034 [
-            'https://schema.org/knowsLanguage',
-            'https://www.wikidata.org/wiki/Property:1412',
-            'https://www.wikidata.org/wiki/Property:P1412',
-          ]
+        status: omitted
+        reason: The source language preference is outside the selected producer profile.
         values: *id017
       - name: name
         status: existing
@@ -1742,17 +1784,11 @@ tables:
         meaning: Producer name.
         citations: *id018
       - name: latin
-        status: proposed
-        term: schema:alternateName
-        mapping: wdt:P2561
-        meaning: Romanized alternative producer name.
-        citations: *id016
+        status: omitted
+        reason: Romanized producer names are source display variants without an alternate-name term on the shared producer types.
       - name: alias
-        status: proposed
-        term: schema:alternateName
-        mapping: wdt:P2561
-        meaning: Alternative producer name.
-        citations: *id016
+        status: omitted
+        reason: Producer aliases are source display variants without an alternate-name term on the shared producer types.
       - name: description
         status: omitted
         reason: Producer prose is outside the selected profile projection.
@@ -1797,14 +1833,19 @@ tables:
         status: omitted
         reason: Creative dialogue text is outside the permitted metadata profile.
   - name: releases
-    type: bf:Instance
+    type: wd:Q20631656
     columns:
       - name: id
-        status: omitted
-        reason: Release key joins release details to linked VN rows.
+        status: existing
+        term: wdt:P3180
+        'on': wd:Q20631656
+        mapping: wdt:P3180
+        meaning: VNDB release identity.
+        citations: *id021
       - name: gtin
-        status: proposed
+        status: existing
         term: schema:gtin
+        'on': wd:Q20631656
         mapping: wdt:P3962
         meaning: Global Trade Item Number for this release.
         citations:
@@ -1816,7 +1857,7 @@ tables:
       - name: olang
         status: existing
         term: schema:inLanguage
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P407
         meaning: Original language of this release.
         citations: *id024
@@ -1824,7 +1865,7 @@ tables:
       - name: released
         status: existing
         term: schema:datePublished
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P577
         meaning: Release publication date.
         citations:
@@ -1843,8 +1884,12 @@ tables:
         status: omitted
         reason: Source screen-resolution detail is release-technical metadata.
       - name: minage
-        status: omitted
-        reason: Source age-rating threshold has no selected standard profile term.
+        status: existing
+        term: wdt:P2899
+        'on': wd:Q20631656
+        mapping: wdt:P2899
+        meaning: Minimum age associated with the release's age rating, in years.
+        citations: ['https://www.wikidata.org/wiki/Property:P2899', 'https://api.vndb.org/kana#filters']
       - name: ani_story
         status: omitted
         reason: Source animation quantity code is release-technical metadata.
@@ -1926,7 +1971,7 @@ tables:
       - name: img
         status: existing
         term: schema:image
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P18
         meaning: Resolve the image ID through the release cover group.
         citations: *id014
@@ -1937,7 +1982,7 @@ tables:
       - name: itype
         status: existing
         term: schema:image
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P18
         meaning: Image category selecting its role in the release cover group.
         citations: *id014
@@ -1945,7 +1990,7 @@ tables:
       - name: lang
         status: existing
         term: schema:inLanguage
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P407
         meaning: Language associated with the release image.
         citations: *id024
@@ -1957,8 +2002,104 @@ tables:
         status: omitted
         reason: Release key anchoring the physical-media detail.
       - name: medium
-        status: omitted
-        reason: Carrier-medium code is source-specific packaging detail.
+        status: existing
+        term: wdt:P437
+        'on': wd:Q20631656
+        mapping: wdt:P437
+        meaning: Distribution format or physical medium of this release.
+        citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters']
+        values:
+          - {
+              value: blr,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Blu-ray disc format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: mrt,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Cartridge format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: cas,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Cassette tape format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: cd,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Compact disc format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: dc,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Download card format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: dvd,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: DVD format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: flp,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Floppy disk format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: gdr,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: GD-ROM format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: in,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Internet download format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: mem,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Memory card format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: nod,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Nintendo Optical Disc format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: umd,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Universal Media Disc format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
+          - {
+              value: otc,
+              term: 'wdt:P437',
+              mapping: 'wdt:P437',
+              meaning: Other physical or digital distribution format.,
+              citations: ['https://www.wikidata.org/wiki/Property:P437', 'https://api.vndb.org/kana#filters'],
+            }
       - name: qty
         status: omitted
         reason: Carrier quantity is packaging detail, including source-defined zero for unknown or nonphysical media.
@@ -1969,8 +2110,9 @@ tables:
         status: omitted
         reason: Source key joins related dump rows; the key is not emitted as a standalone profile statement.
       - name: platform
-        status: proposed
+        status: existing
         term: schema:gamePlatform
+        'on': wd:Q20631656
         mapping: wdt:P400
         meaning: A platform on which the visual novel release can run.
         citations: *id026
@@ -1982,8 +2124,9 @@ tables:
         status: omitted
         reason: Release key anchoring a producer credit.
       - name: pid
-        status: proposed
+        status: existing
         term: wdt:P178
+        'on': wd:Q20631656
         mapping: wdt:P178
         meaning: Producer identity used as the value of the developer or publisher credit selected by the role flags.
         citations: &id028 ['https://www.wikidata.org/wiki/Property:178', 'https://www.wikidata.org/wiki/Property:P178']
@@ -2020,8 +2163,9 @@ tables:
         status: omitted
         reason: Release key anchoring the supersession statement.
       - name: rid
-        status: proposed
+        status: existing
         term: wdt:P155
+        'on': wd:Q20631656
         mapping: wdt:P155
         meaning: Release that this release follows or supersedes.
         citations: *id030
@@ -2034,7 +2178,7 @@ tables:
       - name: lang
         status: existing
         term: schema:inLanguage
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P407
         meaning: Language of the release title.
         citations: *id024
@@ -2045,13 +2189,14 @@ tables:
       - name: title
         status: existing
         term: schema:name
-        'on': bf:Instance
+        'on': wd:Q20631656
         mapping: wdt:P1476
         meaning: Release title in its stated language.
         citations: *id018
       - name: latin
-        status: proposed
+        status: existing
         term: schema:alternateName
+        'on': wd:Q20631656
         mapping: wdt:P2561
         meaning: Romanized alternative form of the release title.
         citations: *id016
@@ -2062,14 +2207,19 @@ tables:
         status: omitted
         reason: Release key anchoring its visual-novel work relation.
       - name: vid
-        status: omitted
-        reason: Visual-novel key is the target of the release-of-work statement.
+        status: existing
+        term: schema:exampleOfWork
+        'on': wd:Q20631656
+        mapping: wdt:P629
+        meaning: Visual-novel work represented by this release.
+        citations: [https://schema.org/exampleOfWork, https://www.wikidata.org/wiki/Property:P629]
       - name: rtype
-        status: proposed
+        status: existing
         term: wdt:P31
+        'on': wd:Q20631656
         mapping: wdt:P31
         meaning: Completeness class of this release-to-work link.
-        citations: *id031
+        citations: ['https://www.wikidata.org/wiki/Property:31', 'https://www.wikidata.org/wiki/Property:P31']
         values: *id032
   - name: rlists
     type: schema:ItemList
@@ -2107,7 +2257,12 @@ tables:
         term: schema:knowsLanguage
         mapping: wdt:P1412
         meaning: Language known by this person.
-        citations: *id034
+        citations:
+          [
+            'https://schema.org/knowsLanguage',
+            'https://www.wikidata.org/wiki/Property:1412',
+            'https://www.wikidata.org/wiki/Property:P1412',
+          ]
         values: *id017
       - name: main
         status: omitted
@@ -2440,8 +2595,9 @@ tables:
         status: omitted
         reason: Source development-status code has no selected profile property.
       - name: alias
-        status: proposed
+        status: existing
         term: schema:alternateName
+        'on': wd:Q689445
         mapping: wdt:P2561
         meaning: A source-provided alternative name for the visual novel.
         citations: *id016
@@ -2465,11 +2621,8 @@ tables:
         status: omitted
         reason: Visual-novel key anchoring a source staff-edition grouping.
       - name: lang
-        status: proposed
-        term: schema:inLanguage
-        mapping: wdt:P407
-        meaning: Language associated with the staff-credit list.
-        citations: *id024
+        status: omitted
+        reason: This language groups a staff list and does not describe the visual novel work.
         values: *id017
       - name: eid
         status: omitted
@@ -2478,11 +2631,8 @@ tables:
         status: omitted
         reason: Source staff-edition flag is grouping metadata, not a profile fact.
       - name: name
-        status: proposed
-        term: schema:name
-        mapping: wdt:P1476
-        meaning: Name of the staff-credit list.
-        citations: *id018
+        status: omitted
+        reason: This label identifies a source-specific staff grouping, not a separately referable entity.
   - name: vn_extlinks
     type: schema:sameAs
     columns:
@@ -2538,17 +2688,15 @@ tables:
         status: omitted
         reason: Visual-novel key anchoring the relation statement.
       - name: vid
-        status: proposed
+        status: existing
         term: wdt:P361
+        'on': wd:Q689445
         mapping: wdt:P361
         meaning: Related visual novel; relation-specific mappings below select the Wikidata property.
         citations: *id035
       - name: relation
-        status: proposed
-        term: wdt:P361
-        mapping: wdt:P361
-        meaning: A relation type selecting the property used between visual novels.
-        citations: *id035
+        status: omitted
+        reason: The relation code selects the bundled work-to-work property listed by its values; the code is not an independent statement.
         values: *id041
       - name: official
         status: omitted
@@ -2573,14 +2721,16 @@ tables:
         status: omitted
         reason: Visual-novel key supplies context for the character voice credit.
       - name: cid
-        status: proposed
+        status: existing
         term: schema:character
+        'on': wd:Q689445
         mapping: wdt:P674
         meaning: Character whose voice is credited.
         citations: *id019
       - name: aid
-        status: proposed
+        status: existing
         term: wdt:P725
+        'on': wd:Q689445
         mapping: wdt:P725
         meaning: Voice actor credited for the associated character.
         citations: *id042
@@ -2599,8 +2749,9 @@ tables:
               - https://schema.org/character
               - https://www.wikidata.org/wiki/Property:P674
       - name: note
-        status: proposed
+        status: existing
         term: wdt:P1932
+        'on': wd:Q689445
         mapping: wdt:P1932
         meaning: Credited-as name qualifier for the voice-actor statement.
         citations:
@@ -2618,14 +2769,16 @@ tables:
         status: omitted
         reason: Visual-novel key supplies context for the credit statement.
       - name: aid
-        status: proposed
+        status: existing
         term: schema:contributor
+        'on': wd:Q689445
         mapping: wdt:P767
         meaning: Staff member credited on the visual novel using the role property selected below.
         citations: *id043
       - name: role
-        status: proposed
+        status: existing
         term: schema:contributor
+        'on': wd:Q689445
         mapping: wdt:P767
         meaning: Select the credit property that is the main statement value; detailed role remains a qualifier.
         citations: *id043
@@ -2654,8 +2807,9 @@ tables:
         status: omitted
         reason: Edition-group key is local staff-list organization, not credit order.
       - name: note
-        status: proposed
+        status: existing
         term: wdt:P1932
+        'on': wd:Q689445
         mapping: wdt:P1932
         meaning: Credited-as name qualifier for the credit statement.
         citations: *id045
@@ -2691,8 +2845,9 @@ tables:
         meaning: A VN title in its stated language.
         citations: *id018
       - name: latin
-        status: proposed
+        status: existing
         term: schema:alternateName
+        'on': wd:Q689445
         mapping: wdt:P2561
         meaning: Romanized alternative form of a VN title.
         citations: *id016

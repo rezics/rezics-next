@@ -1,2 +1,10 @@
 types:
   wd:Q689445: ビジュアルノベル
+properties:
+  wdt:P144: 派生元
+  wdt:P155: 前
+  wdt:P156: 次
+  wdt:P1889: 以下と異なる
+  wdt:P2512: スピンオフ
+  wdt:P361: 以下の一部分
+  wdt:P4969: 派生作品

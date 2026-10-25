@@ -1,11 +1,12 @@
 id: https://rezics.com/catalogue/visual-novel
 name: visual-novel
 version: 1.0.0
-description: Visual novel profile terms.
+description: Visual novel work profile terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
 default_range: string
 imports:
   - linkml:types
@@ -14,5 +15,79 @@ classes:
   VisualNovel:
     is_a: VideoGame
     class_uri: wd:Q689445
+    description: >-
+      A visual novel work and the characters, staff and relationships represented by it. Work browse filters:
+      https://api.vndb.org/kana#filters.
     slots:
       - vndbId
+      - character
+      - author
+      - director
+      - illustrator
+      - musicBy
+      - translator
+      - voiceActor
+      - follows
+      - followedByWork
+      - partOfWork
+      - alternativeWork
+      - basedOnWork
+      - derivativeWork
+      - spinOffWork
+    annotations:
+      facets: genre keywords character contributor author director illustrator musicBy translator voiceActor
+slots:
+  followedByWork:
+    slot_uri: wdt:P156
+    description: A work that follows this visual novel.
+    range: VisualNovel
+    multivalued: true
+    exact_mappings:
+      - wd:P156
+    annotations:
+      datatype: wikibase-item
+  partOfWork:
+    slot_uri: wdt:P361
+    description: A related work in whose set, series or shared setting this visual novel belongs.
+    range: VisualNovel
+    multivalued: true
+    exact_mappings:
+      - wd:P361
+    annotations:
+      datatype: wikibase-item
+  alternativeWork:
+    slot_uri: wdt:P1889
+    description: An alternative work in the same setting or continuity.
+    range: VisualNovel
+    multivalued: true
+    exact_mappings:
+      - wd:P1889
+    annotations:
+      datatype: wikibase-item
+  basedOnWork:
+    slot_uri: wdt:P144
+    description: A work this visual novel is based on.
+    range: CreativeWork
+    multivalued: true
+    exact_mappings:
+      - wd:P144
+    annotations:
+      datatype: wikibase-item
+  derivativeWork:
+    slot_uri: wdt:P4969
+    description: A work derived from this visual novel.
+    range: VisualNovel
+    multivalued: true
+    exact_mappings:
+      - wd:P4969
+    annotations:
+      datatype: wikibase-item
+  spinOffWork:
+    slot_uri: wdt:P2512
+    description: A spin-off work related to this visual novel.
+    range: VisualNovel
+    multivalued: true
+    exact_mappings:
+      - wd:P2512
+    annotations:
+      datatype: wikibase-item

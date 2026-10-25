@@ -1,2 +1,10 @@
 types:
   schema:VideoGame: コンピュータゲーム
+  wd:Q20631656: ソフトウェア・リリース
+properties:
+  schema:alternateName: 別名
+  schema:gamePlatform: ゲームプラットフォーム
+  schema:gtin: GTIN
+  wdt:P2899: 下限年齢
+  wdt:P31: 分類
+  wdt:P437: メディア形態

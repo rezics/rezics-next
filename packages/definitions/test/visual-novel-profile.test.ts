@@ -8,7 +8,7 @@ const visualNovelTablePrefix = /^(?:vn|releases|producers)(?:_|$)/u;
 test('a visual novel and its releases by platform and language are catalogue profiles', () => {
   const { types, properties } = bundledRelease;
   const visualNovel = types['wd:Q689445'];
-  const release = types['bf:Instance'];
+  const release = types['wd:Q20631656'];
 
   expect(visualNovel?.properties).toEqual(
     expect.arrayContaining([
@@ -24,26 +24,35 @@ test('a visual novel and its releases by platform and language are catalogue pro
   expect(release?.properties).toEqual(
     expect.arrayContaining([
       'schema:datePublished',
-      'schema:developer',
       'schema:exampleOfWork',
       'schema:gamePlatform',
       'schema:inLanguage',
       'schema:publisher',
+      'wdt:P178',
       'wdt:P2899',
+      'wdt:P31',
       'wdt:P437',
     ]),
   );
   expect(properties['schema:exampleOfWork']).toMatchObject({
     datatype: 'wikibase-item',
     targets: expect.arrayContaining(['wd:Q689445']),
-    qualifiers: expect.arrayContaining(['wdt:P3831']),
   });
+  for (const credit of ['wdt:P178', 'schema:publisher'])
+    expect(properties[credit]?.qualifiers).toEqual(
+      expect.arrayContaining(['wdt:P1932', 'schema:position', 'wdt:P3831']),
+    );
   expect(properties['schema:gamePlatform']).toMatchObject({
     datatype: 'wikibase-item',
     multivalued: true,
     mappings: ['wd:P400'],
   });
-  expect(properties['wdt:P2899']).toMatchObject({ datatype: 'quantity', units: ['http://www.wikidata.org/entity/Q577'] });
+  expect(properties['schema:inLanguage']).toMatchObject({ datatype: 'string', multivalued: true });
+  expect(properties['wdt:P2899']).toMatchObject({
+    datatype: 'quantity',
+    units: ['http://www.wikidata.org/entity/Q577'],
+  });
+  expect(properties['wdt:P31']).toMatchObject({ datatype: 'wikibase-item', multivalued: true });
   expect(properties['wdt:P437']).toMatchObject({ datatype: 'wikibase-item', multivalued: true });
 });
 
@@ -63,7 +72,12 @@ test('VNDB visual novel, release and producer fields are bundled or omitted with
       expect(column.status).not.toBe('proposed');
       if (column.status === 'existing') {
         expect(bundledRelease.properties[column.term!]).toBeDefined();
-        expect(bundledRelease.types[column.on!]?.properties).toContain(column.term);
+        const properties = bundledRelease.types[column.on!]?.properties ?? [];
+        const isProperty = properties.includes(column.term!);
+        const isQualifier = properties.some((property) =>
+          bundledRelease.properties[property]?.qualifiers.includes(column.term!),
+        );
+        expect(isProperty || isQualifier).toBe(true);
       } else {
         expect(column.status).toBe('omitted');
         expect(column.reason).toBeTruthy();
@@ -78,6 +92,7 @@ test('visual novel terms carry labels in all eight UI locales', () => {
     'schema:gamePlatform',
     'schema:publisher',
     'wdt:P2899',
+    'wdt:P31',
     'wdt:P437',
   ];
   for (const key of profileTerms) {
@@ -85,5 +100,5 @@ test('visual novel terms carry labels in all eight UI locales', () => {
     expect(Object.keys(bundledRelease.properties[key]!.labels).sort()).toEqual(uiLocales);
   }
   expect(Object.keys(bundledRelease.types['wd:Q689445']!.labels).sort()).toEqual(uiLocales);
-  expect(Object.keys(bundledRelease.types['bf:Instance']!.labels).sort()).toEqual(uiLocales);
+  expect(Object.keys(bundledRelease.types['wd:Q20631656']!.labels).sort()).toEqual(uiLocales);
 });

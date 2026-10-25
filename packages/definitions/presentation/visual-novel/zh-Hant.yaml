@@ -1,2 +1,10 @@
 types:
   wd:Q689445: 視覺小說
+properties:
+  wdt:P144: 改編自
+  wdt:P155: 上一項
+  wdt:P156: 下一項
+  wdt:P1889: 相異物
+  wdt:P2512: 派生作品
+  wdt:P361: 所屬實體
+  wdt:P4969: 衍生作品
