@@ -82,10 +82,10 @@ test('the store applies a checkout decision to order transactions and entitlemen
       checkoutExpiresAt: time,
     });
     expect(await store.readOrderBySession(c, route + 1, 'cs_test_paid')).toBeNull();
-    const before = (await store.readSettlementState(c, route, id(4)))!;
+    const before = (await store.readSettlementState(c, route, id(4), [transaction.id]))!;
     const unchanged = await store.applyCheckoutDecision(c, route, before, { changed: false }, options);
     expect(unchanged).toEqual({ changed: false });
-    expect(await store.readSettlementState(c, route, id(4))).toEqual(before);
+    expect(await store.readSettlementState(c, route, id(4), [transaction.id])).toEqual(before);
     const result = await store.applyCheckoutDecision(c, route, before, grant, options);
     expect(result).toMatchObject({
       changed: true,
@@ -93,7 +93,7 @@ test('the store applies a checkout decision to order transactions and entitlemen
       entitlement: { id: id(5), targetSubjectId: offer.targetSubjectId, revision: 1 },
       newTransactions: [transaction],
     });
-    const paid = (await store.readSettlementState(c, route, id(4)))!;
+    const paid = (await store.readSettlementState(c, route, id(4), [transaction.id]))!;
     expect(paid.transactionIds).toEqual(['txn_paid']);
     expect(await store.readOrderTransactions(c, route, id(4))).toEqual([transaction]);
     expect(
@@ -107,20 +107,20 @@ test('the store applies a checkout decision to order transactions and entitlemen
     await expect(
       store.applyCheckoutDecision(c, route, before, grant, { ...options, newEntitlementId: id(6) }),
     ).rejects.toThrow();
-    expect(await store.readSettlementState(c, route, id(4))).toEqual(paid);
+    expect(await store.readSettlementState(c, route, id(4), [transaction.id])).toEqual(paid);
     // Even a writer incorrectly requesting a second grant cannot defeat the fulfilment index.
     await c.query('SAVEPOINT duplicate');
     await expect(
       store.applyCheckoutDecision(c, route, paid, grant, { ...options, newEntitlementId: id(6) }),
     ).rejects.toThrow();
     await c.query('ROLLBACK TO SAVEPOINT duplicate');
-    expect(await store.readSettlementState(c, route, id(4))).toEqual(paid);
+    expect(await store.readSettlementState(c, route, id(4), [transaction.id])).toEqual(paid);
     for (const action of [
       { kind: 'revoke', reason: 'refund' },
       { kind: 'reason', reason: 'dispute' },
       { kind: 'restore' },
     ] as const) {
-      const state = (await store.readSettlementState(c, route, id(4)))!;
+      const state = (await store.readSettlementState(c, route, id(4), []))!;
       await store.applyCheckoutDecision(
         c,
         route,
@@ -134,12 +134,12 @@ test('the store applies a checkout decision to order transactions and entitlemen
         revokeReason: action.kind === 'restore' ? null : action.reason,
       });
     }
-    const state = (await store.readSettlementState(c, route, id(4)))!;
+    const state = (await store.readSettlementState(c, route, id(4), []))!;
     await c.query('UPDATE commerce.entitlement SET revision = revision + 1 WHERE route = $1 AND entitlement_id = $2', [
       route,
       id(5),
     ]);
-    const stale = (await store.readSettlementState(c, route, id(4)))!;
+    const stale = (await store.readSettlementState(c, route, id(4), []))!;
     await expect(
       store.applyCheckoutDecision(
         c,
@@ -149,7 +149,7 @@ test('the store applies a checkout decision to order transactions and entitlemen
         options,
       ),
     ).rejects.toThrow();
-    expect(await store.readSettlementState(c, route, id(4))).toEqual(stale);
+    expect(await store.readSettlementState(c, route, id(4), [])).toEqual(stale);
     expect(await store.readEntitlement(c, route + 1, id(5))).toBeNull();
     expect(await store.listEntitlements(c, route, id(2), { after: null, limit: 1000 })).toHaveLength(1);
     expect(await store.listEntitlements(c, route, id(2), { after: id(5), limit: 1 })).toEqual([]);
@@ -193,7 +193,13 @@ test('store statement counts do not grow with unrelated rows', async () => {
     await fixture(async (c) => {
       await seed(c, scale);
       // Keep a real page and transaction in the measured reads.
-      await store.applyCheckoutDecision(c, route, (await store.readSettlementState(c, route, id(4)))!, grant, options);
+      await store.applyCheckoutDecision(
+        c,
+        route,
+        (await store.readSettlementState(c, route, id(4), [transaction.id]))!,
+        grant,
+        options,
+      );
       const captured: { sql: string; values: unknown[] }[] = [];
       const tracked = new Proxy(c, {
         get(target, key) {
@@ -206,7 +212,7 @@ test('store statement counts do not grow with unrelated rows', async () => {
         },
       });
       const measured: number[] = [];
-      const state = (await store.readSettlementState(tracked, route, id(4)))!;
+      const state = (await store.readSettlementState(tracked, route, id(4), ['txn_refund']))!;
       measured.push(captured.length);
       await c.query('SAVEPOINT measure');
       const start = captured.length;

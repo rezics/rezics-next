@@ -217,7 +217,13 @@ async function effect(orderId: string) {
   ).rows[0]!;
   const workflowID = `payout-test:${key()}`;
   await client.enqueue(
-    { workflowName: 'effect', queueName: 'effects', workflowID, workflowIDReusePolicy: 'return-existing' },
+    {
+      workflowName: 'effect',
+      queueName: 'effects',
+      queuePartitionKey: String(row.partition_no),
+      workflowID,
+      workflowIDReusePolicy: 'return-existing',
+    },
     'commerce_royalty',
     {
       specversion: '1.0',
