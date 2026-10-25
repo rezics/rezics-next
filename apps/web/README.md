@@ -252,8 +252,8 @@ HTTP requests; omitted categories are zero. Arrows mean sequential work. Bounds 
 Let s count the subject payload's entries (including labels, aliases, statements, qualifiers, references and related
 subjects, even entries filtered out before display), the board page's threads, or the thread page's posts, as applicable;
 M is one media object's bytes, and t is tokens or stored entries in one session object. Home reads one route template
-and renders its bounded search results; subject reads have no pagination or app-side cap on s. Board and thread reads
-use the kernel's default page size, at most 100 entries.
+and renders its bounded search results. The kernel caps s at 512 facts per subject and returns current revisions only, so
+the page needs no cap of its own. Board and thread reads use the kernel's default page size, at most 100 entries.
 Each SQLite object has one `record` and an expiry alarm: a login record holds state, nonce, PKCE verifier, return path
 and expiry (10 minutes); a session record holds subject, access/refresh/ID tokens, a 128-bit CSRF token and expiries
 (30 days from sign-in).
@@ -427,8 +427,11 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   template, the subject and the template's planned reads; local rendering follows; a merged id redirects without
   another K
 - **Bound:** ≤1 K (`pages:read`) and ≤1 D (preferences) per page view; the kernel behind that read is one subject read
-  plus the template's planned reads (at most 16); 0 R/A
-- **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`
+  plus the template's planned reads (at most 16); 0 R/A; O(s) bytes parsed, buffered and rendered, with s at most 512
+  facts
+- **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`;
+  `services/kernel/test/semantic/growth-reads.test.ts`: `the fact writer refuses more than 512 facts for one subject`;
+  `Anchored subject read stays within its bound as the subject's history grows`
 
 ### Credential resolution (media prelude)
 
@@ -562,5 +565,3 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   `MAX_PROFILE_BYTES` (1 MiB); no public-page work
 - **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
   refusal handling
-
-The subject JSON body and rendered data grow with uncapped s, even though related labels arrive in the same response and there are no per-item server calls.
