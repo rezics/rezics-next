@@ -151,7 +151,8 @@ async function kernelAccepts(token: string) {
 }
 
 beforeAll(async () => {
-  pool = new Pool({ connectionString: process.env.AUTH_TEST_DATABASE_URL ?? (fixture = testDatabase()).url });
+  fixture = testDatabase();
+  pool = new Pool({ connectionString: fixture.url });
   await pool.query(
     'CREATE TABLE test_effect_receipt (id text PRIMARY KEY, value jsonb NOT NULL, invalidates boolean NOT NULL)',
   );
