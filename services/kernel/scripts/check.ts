@@ -75,22 +75,6 @@ async function main(): Promise<void> {
   if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
   const url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
 
-  const started = Date.now();
-  while (true) {
-    try {
-      run('docker', ['exec', container, 'pg_isready', '-U', 'rezics', '-d', 'rezics']);
-      // pg_isready in the container may succeed before the host publish is ready; TCP check from host follows.
-      run('node', [
-        '-e',
-        `const n=require('net');const s=n.connect(${match[1]},'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))`,
-      ]);
-      break;
-    } catch {
-      if (Date.now() - started > 60_000) fail('Test PostgreSQL did not accept host TCP connections within 60 seconds');
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
-    }
-  }
-
   migrate(url);
   const expected = await Bun.file(resolve(directory, 'db/schema.sql')).text();
   if (schemaDump(url) !== expected) fail('Schema dump differs from db/schema.sql; run `bun run db dump`');

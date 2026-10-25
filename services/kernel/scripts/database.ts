@@ -1,6 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { createConnection } from 'node:net';
-import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,26 +25,7 @@ function databaseUrl(databasePort: number): string {
   return `postgres://rezics:rezics@127.0.0.1:${databasePort}/rezics?sslmode=disable`;
 }
 
-function validateMigrationsStrictly(): void {
-  const files = readdirSync(resolve(directory, 'db/migrations')).sort();
-  const numbers = new Set<string>();
-  for (const file of files) {
-    if (!/^\d{4}_[a-z0-9_]+\.sql$/.test(file)) throw new Error(`Invalid migration filename: ${file}`);
-    const number = file.slice(0, 4);
-    if (numbers.has(number)) throw new Error(`Duplicate migration number: ${number}`);
-    numbers.add(number);
-    const source = readFileSync(resolve(directory, 'db/migrations', file), 'utf8');
-    if (
-      (source.match(/^-- migrate:up$/gm) ?? []).length !== 1 ||
-      (source.match(/^-- migrate:down$/gm) ?? []).length !== 1
-    ) {
-      throw new Error(`Migration must contain exactly one up and down section: ${file}`);
-    }
-  }
-}
-
 export function migrate(url: string): void {
-  validateMigrationsStrictly();
   command(resolve(directory, 'node_modules/.bin/dbmate'), [
     '--url',
     url,
@@ -56,6 +35,7 @@ export function migrate(url: string): void {
     '--migration-lock',
     '--wait',
     'up',
+    '--strict',
   ]);
 }
 
@@ -84,36 +64,11 @@ function docker(args: string[]): string {
   return command('docker', args);
 }
 
-function waitForPort(databasePort: number): Promise<void> {
-  return new Promise((resolvePromise, reject) => {
-    const started = Date.now();
-    const attempt = () => {
-      const socket = createConnection({ host: '127.0.0.1', port: databasePort });
-      socket.once('connect', () => {
-        socket.destroy();
-        resolvePromise();
-      });
-      socket.once('error', () => {
-        socket.destroy();
-        if (Date.now() - started > 60_000)
-          reject(new Error('PostgreSQL did not accept TCP connections within 60 seconds'));
-        else setTimeout(attempt, 250);
-      });
-    };
-    attempt();
-  });
-}
-
 async function up(): Promise<void> {
   const existing = docker(['ps', '-aq', '--filter', `name=^${container}$`]).trim();
   if (existing) {
     const running = docker(['inspect', '-f', '{{.State.Running}}', container]).trim();
-    if (running === 'true') {
-      await waitForPort(port);
-    } else {
-      docker(['start', container]);
-      await waitForPort(port);
-    }
+    if (running !== 'true') docker(['start', container]);
   } else {
     docker(['volume', 'create', volume]);
     docker([
@@ -133,7 +88,6 @@ async function up(): Promise<void> {
       'POSTGRES_DB=rezics',
       POSTGRES_IMAGE,
     ]);
-    await waitForPort(port);
   }
   const url = databaseUrl(port);
   migrate(url);
