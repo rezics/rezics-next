@@ -1,0 +1,3 @@
+/type/work	/works/OL1W	7	2024-01-02T03:04:05.000000	{"key":"/works/OL1W","type":{"key":"/type/work"},"revision":7,"title":"Lantern 🌙","description":{"type":"/type/text","value":"Public synopsis\nTab\there and \\path"},"last_modified":{"type":"/type/datetime","value":"2024-01-02T03:04:05.000000"}}
+/type/user	/people/private	1	2024-01-02T03:04:05.000000	{"key":"/people/private","type":{"key":"/type/user"},"revision":1,"email":"PRIVATE_ACCOUNT_SENTINEL","text":"PRIVATE_USER_POST_SENTINEL"}
+/type/edition	/books/OL2M	3	2024-01-02T03:04:05.000000	{"key":"/books/OL2M","type":{"key":"/type/edition"},"revision":3,"title":"Harbor","works":[{"key":"/works/OL1W"}]}
