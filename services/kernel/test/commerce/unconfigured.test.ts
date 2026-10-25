@@ -25,6 +25,7 @@ function baseEnvironment() {
     KERNEL_ROUTE_KEY: Buffer.alloc(32, 1).toString('base64url'),
     KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
     KERNEL_PORT: '0',
+    KERNEL_WRITE_RATE_SECRET: 'unconfigured-commerce-rate-secret-32-bytes',
   };
 }
 
@@ -107,7 +108,7 @@ test('without commerce variables the API starts, serves reads, and refuses order
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        'idempotency-key': 'unconfigured-order-key',
+        'idempotency-key': JSON.stringify('unconfigured-order-key'),
       },
       body: JSON.stringify({ offerId }),
     });

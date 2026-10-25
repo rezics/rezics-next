@@ -23,7 +23,7 @@ export type ServerConfig = {
   port: number;
   routeKey: Uint8Array;
   tokens: KeyRing;
-  commerce?: CommerceConfig;
+  commerce: CommerceConfig | null;
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
@@ -78,16 +78,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   };
   createWriteRateStage(writeRate, rateAttribution); // Validate trusted transport configuration at startup.
   const search = readSearchConfig(env);
-  // Commerce is configured only when an operator sets it. A partial set still names the missing variable.
-  const commerceConfigured = [
-    'STRIPE_SECRET_KEY',
-    'STRIPE_WEBHOOK_SECRETS',
-    'STRIPE_MANAGED_PAYMENTS',
-    'STRIPE_API_HOST',
-    'CHECKOUT_SUCCESS_URL',
-    'CHECKOUT_CANCEL_URL',
-  ].some((variable) => env[variable] !== undefined);
-  const commerce = commerceConfigured ? readCommerceConfig(env) : undefined;
+  const commerce = readCommerceConfig(env);
   return {
     databaseUrl,
     hostname,
@@ -96,7 +87,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     tokens: { current, keys },
     writeRate,
     rateAttribution,
-    ...(commerce === undefined ? {} : { commerce }),
+    commerce,
     ...(search === undefined ? {} : { search }),
   };
 }
@@ -140,7 +131,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               cursors: config.tokens,
             }),
           }),
-      ...(commerce === undefined
+      ...(commerce === null
         ? {}
         : {
             commerce: {

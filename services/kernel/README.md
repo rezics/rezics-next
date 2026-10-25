@@ -30,6 +30,12 @@ Run `bun run db up`, then `bun run dev` from this workspace to serve the API loc
 `KERNEL_HOSTNAME` defaults to `127.0.0.1` and `KERNEL_PORT` defaults to `4100`. `db up` generates the development
 secrets once and keeps them in `.env` across restarts.
 
+Commerce settings are optional and all or nothing: `STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`,
+`CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` are required when enabled; the API also requires
+`STRIPE_WEBHOOK_SECRETS`, and `STRIPE_API_HOST` is an optional endpoint override. With none set, the API serves
+commerce reads but refuses order creation with `dependency_unavailable`, and the worker registers no commerce
+workflows. If any setting is present, startup validates the required values and names the first missing or invalid one.
+
 Bearer tokens are verified against the Auth service. The first request that carries one reads `AUTH_ISSUER`
 (the Auth service's canonical origin), `AUTH_AUDIENCE` (the API's HTTPS URL) and `AUTH_JWKS_URL` (the Auth
 service's public JWKS URL, on the exact issuer origin). Without them the kernel still starts and serves anonymous

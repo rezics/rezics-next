@@ -18,9 +18,9 @@ test('commerce configuration preserves checkout URLs and rotating secrets and co
     cancelUrl: env.CHECKOUT_CANCEL_URL,
   });
   expect(
-    readCommerceConfig({ ...env, STRIPE_MANAGED_PAYMENTS: 'true', STRIPE_API_HOST: 'http://127.0.0.1:4321' }).stripe,
+    readCommerceConfig({ ...env, STRIPE_MANAGED_PAYMENTS: 'true', STRIPE_API_HOST: 'http://127.0.0.1:4321' })!.stripe,
   ).toEqual({ apiKey: env.STRIPE_SECRET_KEY, managedPayments: true, host: '127.0.0.1', port: 4321, protocol: 'http' });
-  expect(readCommerceConfig({ ...env, STRIPE_API_HOST: 'https://stripe.example.test' }).stripe).toMatchObject({
+  expect(readCommerceConfig({ ...env, STRIPE_API_HOST: 'https://stripe.example.test' })!.stripe).toMatchObject({
     host: 'stripe.example.test',
     port: 443,
     protocol: 'https',
@@ -32,7 +32,7 @@ test('checkout URL configuration preserves the supported order and Stripe placeh
     ...env,
     CHECKOUT_SUCCESS_URL: 'https://web.example.test/orders/{ORDER_ID}?session={CHECKOUT_SESSION_ID}',
     CHECKOUT_CANCEL_URL: 'https://web.example.test/orders/{ORDER_ID}/cancel',
-  });
+  })!;
   expect(checkout.successUrl).toBe('https://web.example.test/orders/{ORDER_ID}?session={CHECKOUT_SESSION_ID}');
   expect(checkout.cancelUrl).toBe('https://web.example.test/orders/{ORDER_ID}/cancel');
 });
@@ -84,12 +84,12 @@ test('missing and invalid configuration names the variable without printing its 
   }
 });
 
-test('server configuration requires and carries commerce configuration', () => {
+test('server configuration carries configured commerce and leaves it absent when unconfigured', () => {
   const base = {
     DATABASE_URL: 'postgres://localhost/rezics',
     KERNEL_ROUTE_KEY: Buffer.alloc(32, 1).toString('base64url'),
     KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
   };
   expect(readConfig({ ...base, ...env }).commerce).toEqual(readCommerceConfig(env));
-  expect(() => readConfig(base)).toThrow('STRIPE_SECRET_KEY');
+  expect(readConfig(base).commerce).toBeNull();
 });

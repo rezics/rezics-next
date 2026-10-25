@@ -19,6 +19,18 @@ export type CommerceWorkerConfig = Omit<CommerceConfig, 'webhookSecrets'>;
 export type CheckoutUrls = Pick<CommerceWorkerConfig, 'successUrl' | 'cancelUrl'>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
+const commerceVariables = [
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRETS',
+  'STRIPE_MANAGED_PAYMENTS',
+  'STRIPE_API_HOST',
+  'CHECKOUT_SUCCESS_URL',
+  'CHECKOUT_CANCEL_URL',
+] as const;
+
+function isCommerceConfigured(env: Environment): boolean {
+  return commerceVariables.some((variable) => env[variable] !== undefined);
+}
 
 function required(env: Environment, variable: string): string {
   const value = env[variable];
@@ -95,12 +107,14 @@ function readCheckoutConfig(env: Environment): Pick<CommerceWorkerConfig, 'succe
 }
 
 /** Configuration shared by the worker's durable commerce workflows and the HTTP server. */
-export function readCommerceWorkerConfig(env: Environment): CommerceWorkerConfig {
+export function readCommerceWorkerConfig(env: Environment): CommerceWorkerConfig | null {
+  if (!isCommerceConfigured(env)) return null;
   return { stripe: readStripeConfig(env), ...readCheckoutConfig(env) };
 }
 
 /** HTTP-only configuration adds webhook verification secrets to the worker's shared settings. */
-export function readCommerceConfig(env: Environment): CommerceConfig {
+export function readCommerceConfig(env: Environment): CommerceConfig | null {
+  if (!isCommerceConfigured(env)) return null;
   const apiKey = readStripeApiKey(env);
   const webhookSecrets = readWebhookSecrets(env);
   return {

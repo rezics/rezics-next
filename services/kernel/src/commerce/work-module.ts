@@ -6,6 +6,7 @@ export const commerceWorkModule: WorkModule = {
   name: 'commerce',
   async register(context) {
     const config = readCommerceWorkerConfig(context.env);
+    if (config === null) return;
     const { createCommerceWork } = await import('./work.ts');
     await createCommerceWork({
       stripe: createStripePort({ ...config.stripe, clock: () => new Date() }),
