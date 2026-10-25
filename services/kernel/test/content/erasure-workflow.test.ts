@@ -256,35 +256,25 @@ test('the content initiator reader accepts only the committed operation source a
 
 test('native workflow resolves persisted initiating identity and physically completes more than two post pages', async () => {
   const selected = await scope(201, 3);
-  const operationId = newId(route);
-  const event = {
-    type: 'com.rezics.content.author-erasure.requested.v1',
-    data: { operationId, threadId: selected.threadId, authorId: selected.actor.accountId },
-  };
-  // Setup persists only verified identity columns, just as the native initiation command does.
-  const source = await runCommand(fixture.pool, { partition }, async (tx, { transactionId }) => {
-    await tx.query(
-      `INSERT INTO content.operation
-       (route,operation_id,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
-        actor_client_id,actor_scopes,actor_requested_by,actor_authn_epoch,empty_scope,upper_created_at,
-        upper_post_id,requested_at,recorded_transaction_id)
-       VALUES ($1,$2,$3,$3,$4,'account',$3,$5,$6,$7,$8,false,$9,$10,statement_timestamp(),$11)`,
-      [
-        route,
-        operationId,
-        selected.actor.accountId,
-        selected.threadId,
-        selected.actor.clientId,
-        selected.actor.scopes,
-        selected.actor.requestedBy,
-        selected.actor.authnEpoch,
-        selected.at,
-        selected.ids.at(-1),
-        transactionId,
-      ],
-    );
-    return { value: operationId, events: [event] };
-  });
+  const source = await beginAuthorErasure(
+    {
+      pool: fixture.pool,
+      access: fixture.access,
+      clock: () => new Date(),
+      workflows: {
+        async enqueue() {
+          throw new Error('Only the durable relay may enqueue');
+        },
+        async status() {
+          throw new Error('No status read during initiation');
+        },
+      },
+    },
+    selected.actor,
+    { threadId: selected.threadId, authorId: selected.actor.accountId },
+    context(),
+  );
+  const operationId = source.value.operationId;
   let envelope: Envelope | undefined;
   const read = await readBatch(fixture.pool, {
     partition,
