@@ -56,11 +56,17 @@ async function setup(name: string, axes: readonly Axis[]) {
     ])
       await db.admin.query(`DELETE FROM ${table} WHERE ${column}=ANY($1::text[])`, [owners]);
     await db.admin.query('DELETE FROM auth_client_reduction WHERE client_id=ANY($1::text[])', [clients]);
-    // Reclaim cleared children before parent cascades probe Auth's unindexed foreign keys.
+    await db.admin.query('DELETE FROM auth_client_coverage WHERE client_id=ANY($1::text[])', [clients]);
+    // Reclaim cleared child tuples before deleting their parents.
     await db.admin.query('VACUUM (ANALYZE)');
     await db.admin.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [owners]);
     await db.admin.query('DELETE FROM auth_client WHERE client_id=ANY($1::text[])', [clients]);
+    await db.admin.query(
+      'UPDATE auth_signing_generation SET current_kid=NULL,generation=generation+1 WHERE current_kid=$1',
+      [signingKid],
+    );
     await db.admin.query('DELETE FROM auth_signing_key WHERE kid=ANY($1::text[])', [signingKids]);
+    await db.admin.query('DELETE FROM auth_signing_key_archive WHERE kid=ANY($1::text[])', [signingKids]);
     await db.close();
   };
   try {
@@ -211,7 +217,7 @@ async function setup(name: string, axes: readonly Axis[]) {
     const robotUser = await row('"user"', 'id', robot);
     const robotAccount = await row('account', '"userId"', robot);
     const verification = await row('verification', 'value', human);
-    const signing = await row('auth_signing_key', 'kid', signingKid);
+    const signing = await row('auth_signing_key_archive', 'kid', signingKid);
     const now = new Date();
     const expires = new Date(now.getTime() + 300_000);
     const has = (axis: Axis) => axes.includes(axis);
@@ -271,7 +277,7 @@ async function setup(name: string, axes: readonly Axis[]) {
         if (has('K')) {
           const kid = entry('signing');
           signingKids.push(kid);
-          records['public.auth_signing_key'] = [
+          records['public.auth_signing_key_archive'] = [
             { ...signing, kid, private_jwk: { ...(signing.private_jwk as object), kid } },
           ];
         }
@@ -338,8 +344,9 @@ async function setup(name: string, axes: readonly Axis[]) {
     // Reinstall the same production-created neighbourhood through the unmeasured seed connection between destructive runs.
     const restoreSession = async (template = session) => {
       await db.admin.query(
-        'INSERT INTO session SELECT * FROM jsonb_populate_record(NULL::session,$1::jsonb) ON CONFLICT (id) DO NOTHING',
-        [JSON.stringify(template)],
+        `INSERT INTO session SELECT * FROM jsonb_populate_record(NULL::session,$1::jsonb)
+         WHERE NOT EXISTS (SELECT 1 FROM session WHERE id=$2)`,
+        [JSON.stringify(template), template.id],
       );
     };
     return {
@@ -401,7 +408,7 @@ test(
 test(
   'Access token issuance stays within its bound as S grows',
   () =>
-    fixture('Access token issuance stays within its bound as S grows', ['S', 'K'], async (f) => {
+    fixture('Access token issuance stays within its bound as S grows', ['A', 'S', 'K'], async (f) => {
       await f.check(async () => {
         expect(await (await f.request('/token', {}, f.cookie)).json()).toMatchObject({
           token_type: 'Bearer',
@@ -411,9 +418,6 @@ test(
     }),
   timeout,
 );
-
-// Loading/selection and JWKS output traverse all retained K even with fixed injection and activeKid.
-test.skip('Signing keys and JWKS stays within its bound as K grows', () => {}, timeout);
 
 test(
   'Password sign-in stays within its bound as A grows',
@@ -517,9 +521,6 @@ test(
   timeout,
 );
 
-// The recovery/opening FK cascades scan global H/O even when every target fanout is fixed.
-test.skip('Account erasure stays within its bound as H grows', () => {}, timeout);
-
 test(
   'Recovery start stays within its bound as V grows',
   () =>
@@ -541,7 +542,7 @@ test(
       const credential = (await f.db.admin.query('SELECT * FROM account WHERE "userId"=$1', [f.human])).rows[0];
       const epoch = f.person.authnEpoch;
       await f.check(async () => {
-        // Restore the production-created proof, credential and fixed session neighbourhood outside capture.
+        // Restore the production-created proof, credential and fixed sessions through the unmeasured connection.
         f.person.authnEpoch = epoch;
         await f.db.admin.query('DELETE FROM auth_barrier_proof WHERE account_id=$1', [f.human]);
         await f.db.admin.query('DELETE FROM auth_effect_receipt WHERE account_id=$1', [f.human]);
