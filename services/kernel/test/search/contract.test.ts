@@ -47,6 +47,7 @@ test('documents are built only from the anchor partition snapshot and versioned 
       id: book.id,
       version: 42n,
       document: {
+        id: book.id,
         partition: 10,
         type: 'schema:Book',
         security_revision: 3,
@@ -61,6 +62,7 @@ test('documents are built only from the anchor partition snapshot and versioned 
       id: unnamed.id,
       version: 42n,
       document: {
+        id: unnamed.id,
         partition: 10,
         type: 'schema:Book',
         security_revision: 3,
