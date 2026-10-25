@@ -1,0 +1,1023 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { createAuthService } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { exportJWK, generateKeyPair } from 'jose';
+import { Pool, type PoolClient } from 'pg';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import type {
+  Anchor,
+  CollectionView,
+  CopyView,
+  EntryView,
+  FollowView,
+  LibraryDriver,
+  LibraryInspection,
+  Persona,
+  PublishedLogView,
+  SessionView,
+} from '../../../../../specs/library-driver.ts';
+import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
+import { createAccess } from '../../../src/access/index.ts';
+import { readAccount } from '../../../src/access/account-data.ts';
+import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { createCollectionCommands } from '../../../src/library/collections.ts';
+import { createKernel } from '../../../src/http/kernel.ts';
+import { actionCatalogue } from '../../../src/http/request.ts';
+import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
+import { createWorkClient } from '../../../src/work/client.ts';
+import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
+import { startWorker } from '../../../src/worker.ts';
+import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+
+const autoExplainSetup = [
+  "LOAD 'auto_explain'",
+  'SET auto_explain.log_min_duration = 0',
+  'SET auto_explain.log_analyze = on',
+  'SET auto_explain.log_buffers = on',
+  'SET auto_explain.log_timing = off',
+  'SET auto_explain.log_triggers = off',
+  'SET auto_explain.log_verbose = on',
+  'SET auto_explain.log_nested_statements = on',
+  "SET auto_explain.log_format = 'json'",
+  "SET auto_explain.log_level = 'notice'",
+  'SET auto_explain.sample_rate = 1',
+  'SET client_min_messages = notice',
+];
+
+type AccountAnchor = Anchor & { email: string };
+type CapturedStatements = { statements: string[]; plans: unknown[] };
+type SavedMeasurement = { scale: number; index: number; statements: string[]; buffers: number };
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+type ConnectCallback = (error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => void;
+type ConnectPrototype = { connect: (...args: unknown[]) => unknown };
+
+function queryText(query: unknown): string | undefined {
+  if (typeof query === 'string') return query;
+  if (typeof query !== 'object' || query === null || !('text' in query)) return undefined;
+  return typeof query.text === 'string' ? query.text : undefined;
+}
+
+function planFromNotice(message: string, target: CapturedStatements | undefined): void {
+  const marker = 'plan:\n';
+  if (!target || !message.startsWith('duration:') || !message.includes(marker)) return;
+  target.plans.push(JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown);
+}
+
+/** Execute Access's database-time observation, then align its returned instant with the scenario clock. */
+function bindDatabaseClock(pool: Pool, now: () => string): () => void {
+  const clients = new WeakSet<PoolClient>();
+  const matches = (query: unknown) =>
+    (queryText(query) ?? '').replace(/\s+/g, ' ').trim().startsWith('SELECT clock_timestamp()::text AS at');
+  const replace = (value: unknown) => {
+    if (typeof value !== 'object' || value === null || !('rows' in value) || !Array.isArray(value.rows)) return value;
+    return {
+      ...value,
+      rows: value.rows.map((row) => (typeof row === 'object' && row !== null ? { ...row, at: now() } : row)),
+    };
+  };
+  const onAcquire = (client: PoolClient) => {
+    if (clients.has(client)) return;
+    clients.add(client);
+    const query = client.query.bind(client) as PoolClient['query'];
+    client.query = ((...args: Parameters<PoolClient['query']>) => {
+      if (!matches(args[0])) return query(...args);
+      const callbackIndex = args.findIndex((argument) => typeof argument === 'function');
+      if (callbackIndex >= 0) {
+        const callback = args[callbackIndex] as (...callbackArgs: unknown[]) => unknown;
+        const next = [...args] as unknown[];
+        next[callbackIndex] = (...callbackArgs: unknown[]) => {
+          const [error, result, ...remaining] = callbackArgs;
+          return callback(error, error ? result : replace(result), ...remaining);
+        };
+        return query(...(next as Parameters<PoolClient['query']>));
+      }
+      const result = query(...args);
+      if (typeof result !== 'object' || result === null || !('then' in result)) return result;
+      return Promise.resolve(result).then(replace);
+    }) as PoolClient['query'];
+  };
+  const poolQuery = pool.query;
+  pool.query = ((...args: Parameters<Pool['query']>) => {
+    if (!matches(args[0])) return poolQuery.apply(pool, args as never);
+    const callbackIndex = args.findIndex((argument) => typeof argument === 'function');
+    if (callbackIndex >= 0) {
+      const callback = args[callbackIndex] as (...callbackArgs: unknown[]) => unknown;
+      const next = [...args] as unknown[];
+      next[callbackIndex] = (...callbackArgs: unknown[]) => {
+        const [error, result, ...remaining] = callbackArgs;
+        return callback(error, error ? result : replace(result), ...remaining);
+      };
+      return poolQuery.apply(pool, next as never);
+    }
+    const result = poolQuery.apply(pool, args as never);
+    if (typeof result !== 'object' || result === null || !('then' in result)) return result;
+    return Promise.resolve(result).then(replace);
+  }) as Pool['query'];
+  pool.on('acquire', onAcquire);
+  return () => {
+    pool.off('acquire', onAcquire);
+    pool.query = poolQuery;
+  };
+}
+
+/** Instrument library-owned pg.Pool instances as well as the shared growth pool. */
+function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () => CapturedStatements | undefined) {
+  const prototype = Pool.prototype as unknown as ConnectPrototype;
+  const original = prototype.connect;
+  const clients = new WeakSet<PoolClient>();
+  const pending = new WeakMap<PoolClient, Promise<void>>();
+
+  async function prepare(client: PoolClient): Promise<void> {
+    if (clients.has(client)) return pending.get(client);
+    clients.add(client);
+    const query = client.query.bind(client) as PoolClient['query'];
+    client.on('notice', (notice) => {
+      if (typeof notice.message === 'string') planFromNotice(notice.message, active());
+    });
+    client.query = ((...args: Parameters<PoolClient['query']>) => {
+      const text = queryText(args[0]);
+      if (text !== undefined) active()?.statements.push(text);
+      return query(...args);
+    }) as PoolClient['query'];
+    const setup = Promise.all(autoExplainSetup.map((statement) => query(statement))).then(() => undefined);
+    pending.set(client, setup);
+    await setup;
+  }
+
+  prototype.connect = function (this: Pool, ...args: unknown[]): unknown {
+    if (this === mainPool || this.options.connectionString !== databaseUrl) return original.apply(this, args);
+    const callback = args[0];
+    if (typeof callback === 'function') {
+      const done = callback as ConnectCallback;
+      return original.call(this, ((error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => {
+        if (error) {
+          done(error, client, release);
+          return;
+        }
+        void prepare(client).then(
+          () => done(undefined, client, release),
+          (cause: unknown) => {
+            const failure = cause instanceof Error ? cause : new Error(String(cause));
+            release(failure);
+            done(failure, client, release);
+          },
+        );
+      }) as never);
+    }
+    return (original.call(this) as Promise<PoolClient>).then(async (client) => {
+      await prepare(client);
+      return client;
+    });
+  };
+
+  return () => {
+    prototype.connect = original;
+  };
+}
+
+function responseError(label: string, response: Response, body: string): Error {
+  return new Error(`${label} returned ${response.status}: ${body}`);
+}
+
+async function expectJson<T>(label: string, response: Response, status: number): Promise<T> {
+  const text = await response.text();
+  if (response.status !== status) throw responseError(label, response, text);
+  try {
+    return JSON.parse(text) as T;
+  } catch (cause) {
+    throw new Error(`${label} returned invalid JSON: ${text}`, { cause });
+  }
+}
+
+function iso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function difference(left: readonly string[], right: readonly string[]): { added: string[]; removed: string[] } {
+  const remaining = [...right];
+  const added: string[] = [];
+  for (const statement of left) {
+    const index = remaining.indexOf(statement);
+    if (index < 0) added.push(statement);
+    else remaining.splice(index, 1);
+  }
+  return { added, removed: remaining };
+}
+
+function sourceFile(statement: string): string {
+  return statement.match(/\/\*\s*file=['"]([^'"]+)['"][^*]*\*\//i)?.[1] ?? 'source not embedded in statement';
+}
+
+export async function createLibraryDriver(): Promise<LibraryDriver> {
+  const base = process.env.DATABASE_URL;
+  if (!base) throw new Error('DATABASE_URL must name the migrated test database');
+
+  const suffix = Bun.randomUUIDv7().replaceAll('-', '');
+  const kernelName = `library_${suffix}`;
+  const authName = `library_auth_${suffix}`;
+  const url = new URL(base);
+  const template = decodeURIComponent(url.pathname.slice(1));
+  url.pathname = '/postgres';
+
+  let owner: Pool | undefined;
+  let db: GrowthDatabase | undefined;
+  let authPool: Pool | undefined;
+  let authServer: ReturnType<typeof Bun.serve> | undefined;
+  let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+  let child: ReturnType<typeof Bun.spawn> | undefined;
+  let restorePoolInstrumentation: (() => void) | undefined;
+  let restoreDatabaseClock: (() => void) | undefined;
+  let dropped = false;
+
+  const cleanup = async () => {
+    if (child) {
+      child.kill('SIGCONT');
+      child.kill('SIGTERM');
+      await child.exited.catch(() => undefined);
+      child = undefined;
+    }
+    restorePoolInstrumentation?.();
+    restorePoolInstrumentation = undefined;
+    restoreDatabaseClock?.();
+    restoreDatabaseClock = undefined;
+    await authServer?.stop(true).catch(() => undefined);
+    authServer = undefined;
+    await workClient?.close().catch(() => undefined);
+    workClient = undefined;
+    await authPool?.end().catch(() => undefined);
+    authPool = undefined;
+    await db?.close().catch(() => undefined);
+    db = undefined;
+    if (owner && !dropped) {
+      for (const database of [authName, kernelName]) {
+        try {
+          await owner.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
+        } catch {
+          // Preserve the original setup/test error while still attempting both drops.
+        }
+      }
+      dropped = true;
+    }
+    await owner?.end().catch(() => undefined);
+    owner = undefined;
+  };
+
+  try {
+    owner = new Pool({ connectionString: url.toString(), max: 1 });
+    await owner.query(`CREATE DATABASE ${kernelName} TEMPLATE "${template.replaceAll('"', '""')}"`);
+    url.pathname = `/${kernelName}`;
+    const databaseUrl = url.toString();
+    let fixedInstant: string | undefined;
+    const scenarioNow = () => fixedInstant ?? new Date().toISOString();
+    db = await openGrowthDatabase(databaseUrl);
+    restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
+
+    await owner.query(`CREATE DATABASE ${authName}`);
+    url.pathname = `/${authName}`;
+    migrateAuth(url.toString());
+    authPool = new Pool({ connectionString: url.toString(), max: 2 });
+    authPool.on('error', () => {});
+    authPool.on('connect', (client) => client.on('error', () => {}));
+
+    const approvals = new Set<string>();
+    const tokens = new Map<string, string>();
+    const ownerAccount = { id: newId(0x3300), route: 0x3300, partition: partitionOf(0x3300) };
+    const otherAccount = { id: newId(0x3301), route: 0x3301, partition: partitionOf(0x3301) };
+    const suspendedAccount = { id: newId(0x5520), route: 0x5520, partition: partitionOf(0x5520) };
+    const governor = { id: newId(0x1101), route: 0x1101, partition: partitionOf(0x1101) };
+    const seedSamePartition = { id: newId(0x3302), route: 0x3302, partition: partitionOf(0x3302) };
+    const seedOtherPartition = { id: newId(0x6610), route: 0x6610, partition: partitionOf(0x6610) };
+    const knownPeople = [ownerAccount, otherAccount, suspendedAccount, governor, seedSamePartition, seedOtherPartition];
+    for (const person of knownPeople) approvals.add(person.id);
+
+    const signingKey = {
+      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+      kid: 'library-outcomes',
+      alg: 'ES256',
+    };
+    let auth!: Awaited<ReturnType<typeof createAuthService>>;
+    authServer = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: (request) => auth.handler(request),
+    });
+    const issuer = `http://127.0.0.1:${authServer.port}`;
+    const audience = 'https://api.rezics.test';
+    const password = 'library fixture password with enough entropy';
+    auth = await createAuthService({
+      database: authPool!,
+      issuer,
+      audience,
+      secret: 'library-fixture-secret-with-at-least-32-bytes',
+      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
+      trustedAccess: {
+        async readAccount(id) {
+          if (!db) throw new Error('The isolated kernel database is closed');
+          const row = await readAccount(db.admin, routeOf(id)!, id);
+          return (
+            row && {
+              accountId: row.accountId,
+              kind: row.kind,
+              state: row.state,
+              authnEpoch: Number(row.minimumAuthnEpoch),
+              automated: row.operatorAccountId !== null,
+            }
+          );
+        },
+        async authorizeProvisioning(reference) {
+          if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
+          return { accountId: reference };
+        },
+      },
+    });
+
+    let fixtureAccess: ReturnType<typeof createAccess> | undefined;
+    const app = createKernel({
+      pool: db!.pool,
+      clock: () => new Date(scenarioNow()),
+      writeRate: createWriteRateLimiter({
+        secret: 'library-fixture-write-rate-secret-with-at-least-32-bytes',
+        overrides: JSON.stringify({
+          anonymous: { write: { maximum: 1_000_000, seconds: 60 } },
+          'new-account': { write: { maximum: 1_000_000, seconds: 60 } },
+          member: { write: { maximum: 1_000_000, seconds: 60 } },
+          trusted: { write: { maximum: 1_000_000, seconds: 60 } },
+          service: { write: { maximum: 1_000_000, seconds: 60 } },
+        }),
+      }),
+      routeKey: new Uint8Array(32).fill(17),
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
+      access: (config) => {
+        fixtureAccess = createAccess({
+          ...config,
+          auth: {
+            issuer,
+            audience,
+            jwksUrl: `${issuer}/.well-known/jwks.json`,
+            fetch: async (location, init) => auth.handler(new Request(location, init)),
+          },
+        });
+        return fixtureAccess;
+      },
+    });
+    const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
+    scopes.push('access:grant');
+    await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes });
+
+    async function provisionAccount(person: Anchor): Promise<AccountAnchor> {
+      const email = `${person.id}@example.test`;
+      await db!.admin.query(
+        "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
+        [person.route, person.id],
+      );
+      await auth.internal.provisionPassword({ authorization: person.id, email, password });
+      await db!.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+        person.route,
+        person.id,
+      ]);
+      const signedIn = await auth.handler(
+        new Request(`${issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({ email, password, client_id: 'web', scope: scopes }),
+        }),
+      );
+      if (signedIn.status !== 200) throw new Error(`Fixture sign-in failed: ${signedIn.status}`);
+      const cookie = signedIn.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const issued = await auth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: '{}',
+        }),
+      );
+      if (issued.status !== 200) throw new Error(`Fixture token issuance failed: ${issued.status}`);
+      tokens.set(person.id, ((await issued.json()) as { access_token: string }).access_token);
+      return { ...person, email };
+    }
+
+    async function createPerson(route: number): Promise<AccountAnchor> {
+      const person = { id: newId(route), route, partition: partitionOf(route) };
+      approvals.add(person.id);
+      return provisionAccount(person);
+    }
+
+    for (const person of knownPeople) await provisionAccount(person);
+
+    const byRoute = async (
+      token: string | null,
+      method: HttpMethod,
+      path: string,
+      body?: unknown,
+      headers?: Record<string, string>,
+    ) => {
+      const requestHeaders = new Headers(headers);
+      if (token) requestHeaders.set('authorization', `Bearer ${token}`);
+      else requestHeaders.delete('authorization');
+      const init: RequestInit = { method, headers: requestHeaders };
+      if (body !== undefined) {
+        requestHeaders.set('content-type', 'application/json');
+        init.body = JSON.stringify(body);
+      }
+      const response = await app.handle(new Request(`http://kernel.test${path}`, init));
+      return response;
+    };
+    const key = () => `"${Bun.randomUUIDv7()}"`;
+    const tokenFor = (person: Anchor) => {
+      const token = tokens.get(person.id);
+      if (!token) throw new Error(`No authenticated fixture token for ${person.id}`);
+      return token;
+    };
+    // Account rows and Auth credentials are established through the fixture provisioning handshake.
+    await bootstrapRelease(db.pool, bundledRelease);
+    const bootstrap = Bun.spawn([process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.id], {
+      cwd: resolve(import.meta.dir, '../../..'),
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [bootstrapCode, bootstrapOut, bootstrapErr] = await Promise.all([
+      bootstrap.exited,
+      new Response(bootstrap.stdout).text(),
+      new Response(bootstrap.stderr).text(),
+    ]);
+    if (bootstrapCode !== 0)
+      throw new Error(`Governance bootstrap exited ${bootstrapCode}: ${bootstrapOut}${bootstrapErr}`);
+
+    for (const group of ['collections', 'personal_library', 'reading_progress']) {
+      const response = await byRoute(tokenFor(governor), 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
+        'Idempotency-Key': key(),
+      });
+      await expectJson(`Opening ${group}`, response, 200);
+    }
+    const suspend = await byRoute(
+      tokenFor(governor),
+      'POST',
+      `/v1/accounts/${suspendedAccount.id}:suspend`,
+      {},
+      {
+        'Idempotency-Key': key(),
+      },
+    );
+    await expectJson('Suspending fixture persona', suspend, 200);
+
+    await authServer.stop(true);
+    authServer = undefined;
+
+    workClient = await createWorkClient(databaseUrl);
+    let activeInternalCapture: CapturedStatements | undefined;
+    restorePoolInstrumentation = instrumentLibraryPools(databaseUrl, db.pool, () => activeInternalCapture);
+
+    const accounts = {
+      owner: { id: ownerAccount.id, route: ownerAccount.route, partition: ownerAccount.partition },
+      other: { id: otherAccount.id, route: otherAccount.route, partition: otherAccount.partition },
+      suspended: { id: suspendedAccount.id, route: suspendedAccount.route, partition: suspendedAccount.partition },
+    };
+    const unknown = {
+      collectionId: newId(ownerAccount.route),
+      memberId: newId(ownerAccount.route),
+      subjectId: newId(0x6b21),
+      sessionId: newId(ownerAccount.route),
+      copyId: newId(ownerAccount.route),
+      logId: newId(ownerAccount.route),
+    };
+    const initialSubjectIds = new Set<string>();
+    let seedActors = [seedSamePartition, seedOtherPartition];
+    let seedSubjects = 0;
+    let measurementScale = -1;
+    let measurementIndex = 0;
+    const savedMeasurements: SavedMeasurement[] = [];
+    let childHeld = true;
+    let workerFailure: string | undefined;
+    let workerDiagnosticsTask: Promise<void> | undefined;
+
+    async function startExecutor(): Promise<void> {
+      if (child) {
+        if (childHeld) child.kill('SIGCONT');
+        childHeld = false;
+        return;
+      }
+      let ready!: () => void;
+      const readiness = new Promise<void>((resolveReady) => {
+        ready = resolveReady;
+      });
+      child = Bun.spawn([process.execPath, import.meta.filename], {
+        env: {
+          ...process.env,
+          DATABASE_URL: databaseUrl,
+          KERNEL_ROUTE_KEY: Buffer.alloc(32, 17).toString('base64url'),
+          KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 19).toString('base64url')}`,
+          AUTH_ISSUER: issuer,
+          AUTH_AUDIENCE: audience,
+          AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+          STRIPE_SECRET_KEY: 'sk_test_library_outcomes',
+          STRIPE_MANAGED_PAYMENTS: 'false',
+          CHECKOUT_SUCCESS_URL: 'https://web.example.test/checkout?session={CHECKOUT_SESSION_ID}',
+          CHECKOUT_CANCEL_URL: 'https://web.example.test/checkout/cancel',
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+        ipc(message) {
+          if (message === 'ready') ready();
+        },
+      });
+      const running = child;
+      let diagnostics = '';
+      workerDiagnosticsTask = (async () => {
+        const read = async (stream: ReadableStream<Uint8Array>) => {
+          const decoder = new TextDecoder();
+          for await (const chunk of stream) {
+            diagnostics += decoder.decode(chunk, { stream: true });
+            workerFailure ??= diagnostics.match(/Relay (?:effects|semantic_links) stopped[^\n]*/)?.[0];
+          }
+          diagnostics += decoder.decode();
+        };
+        await Promise.all([
+          read(running.stdout as ReadableStream<Uint8Array>),
+          read(running.stderr as ReadableStream<Uint8Array>),
+        ]);
+        workerFailure ??= diagnostics.match(/Relay (?:effects|semantic_links) stopped[^\n]*/)?.[0];
+        workerFailure ??=
+          running.exitCode !== 0 && running.exitCode !== null
+            ? `executor exited ${running.exitCode}: ${diagnostics}`
+            : undefined;
+      })();
+      const exited = running.exited.then(async (code) => {
+        await workerDiagnosticsTask;
+        workerFailure ??= `executor exited ${code}: ${diagnostics || '(no output)'}`;
+        return code;
+      });
+      const outcome = await Promise.race([
+        readiness.then(() => ({ ready: true as const })),
+        exited.then((code) => ({ ready: false as const, code })),
+      ]);
+      if (!outcome.ready) throw new Error(`Production library executor exited ${outcome.code}: ${workerFailure ?? ''}`);
+      for (const queue of await workClient!.listQueues()) await queue.setMinPollingIntervalMs(5);
+      childHeld = false;
+    }
+
+    async function holdExecutor(): Promise<void> {
+      if (child && !childHeld) {
+        child.kill('SIGSTOP');
+        childHeld = true;
+      }
+    }
+
+    async function settle(): Promise<void> {
+      await startExecutor();
+      for (;;) {
+        if (workerFailure) {
+          const stopped = workerFailure.match(/partition (\d+) position (\d+)/);
+          const events = stopped
+            ? await db!.admin.query(
+                'SELECT event_seq, type, data FROM core.outbox WHERE partition_no=$1 AND position=$2 ORDER BY event_seq',
+                [Number(stopped[1]!), (BigInt(stopped[2]!) + 1n).toString()],
+              )
+            : undefined;
+          throw new Error(
+            `Production library executor: ${workerFailure}${events ? `; events=${JSON.stringify(events.rows)}` : ''}`,
+          );
+        }
+        const workflows = (await workClient!.listWorkflows({ limit: 10000 })).filter((row) => row.status !== 'SUCCESS');
+        if (workflows.length) {
+          for (const workflow of workflows.filter((row) => row.status !== 'DELAYED')) {
+            await workClient!.retrieveWorkflow(workflow.workflowID).getResult();
+          }
+          if (workflows.some((row) => row.status !== 'DELAYED')) continue;
+        }
+        const pending = await db!.admin.query(`
+          SELECT 1
+            FROM core.partition AS partition
+            CROSS JOIN (VALUES ('effects'::text), ('semantic_links'::text)) AS consumers(name)
+            LEFT JOIN core.consumer_checkpoint AS checkpoint
+              ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = consumers.name
+           WHERE partition.position > COALESCE(checkpoint.position, 0)
+           LIMIT 1`);
+        if (
+          !pending.rowCount &&
+          (await workClient!.listWorkflows({ limit: 10000 })).every((row) => row.status === 'SUCCESS')
+        )
+          return;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      }
+    }
+
+    async function inspect(): Promise<LibraryInspection> {
+      const collections = (
+        await db!.admin.query(`
+        SELECT collection_id AS id, curator_account_id AS "curatorAccountId", title, description, visibility,
+               revision, member_count AS "memberCount", created_at AS "createdAt", updated_at AS "updatedAt", route
+          FROM library.collection ORDER BY route, collection_id`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: partitionOf(Number(row.route)),
+        createdAt: iso(row.createdAt),
+        updatedAt: iso(row.updatedAt),
+      })) as LibraryInspection['collections'];
+      const members = (
+        await db!.admin.query(`
+        SELECT member_id AS id, subject_id AS "subjectId", note, added_at AS "addedAt",
+               collection_id AS "collectionId", ordinal_key AS "orderKey", route
+          FROM library.collection_member ORDER BY route, collection_id, member_id`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: partitionOf(Number(row.route)),
+        addedAt: iso(row.addedAt),
+      })) as LibraryInspection['members'];
+      const entries = (
+        await db!.admin.query(`
+        SELECT subject_id AS "subjectId", state, revision, created_at AS "createdAt", updated_at AS "updatedAt",
+               account_id AS "accountId", route
+          FROM library.entry ORDER BY route, account_id, subject_id`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: partitionOf(Number(row.route)),
+        createdAt: iso(row.createdAt),
+        updatedAt: iso(row.updatedAt),
+      })) as LibraryInspection['entries'];
+      const sessions = (
+        await db!.admin.query(`
+        SELECT session_id AS id, subject_id AS "subjectId", version_subject_id AS "versionSubjectId", mode, unit,
+               total::text AS total, amount::text AS amount, locator, position::text AS position,
+               completed_unit_count AS "completedUnitCount", state, revision, started_at AS "startedAt",
+               completed_at AS "completedAt", account_id AS "accountId", route
+          FROM library.progress_session ORDER BY route, session_id`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: partitionOf(Number(row.route)),
+        startedAt: iso(row.startedAt),
+        completedAt: row.completedAt === null ? null : iso(row.completedAt),
+      })) as LibraryInspection['sessions'];
+      const completedUnits = (
+        await db!.admin.query(`
+        SELECT session_id AS "sessionId", unit_id AS "unitId"
+          FROM library.progress_unit ORDER BY route, session_id, unit_id`)
+      ).rows as LibraryInspection['completedUnits'];
+      const changes = (
+        await db!.admin.query(`
+        SELECT session_id AS "sessionId", change_no AS revision, intent, recorded_at AS "createdAt"
+          FROM library.progress_change ORDER BY route, session_id, change_no`)
+      ).rows.map((row) => ({
+        id: `${row.sessionId}:${row.revision}`,
+        sessionId: row.sessionId,
+        revision: Number(row.revision),
+        intent: row.intent,
+        createdAt: iso(row.createdAt),
+      })) as LibraryInspection['changes'];
+      const copies = (
+        await db!.admin.query(`
+        SELECT copy_id AS id, subject_id AS "subjectId", status, revision, location, source,
+               acquired_on AS "acquiredOn", disposed_on AS "disposedOn", note,
+               account_id AS "accountId", route
+          FROM library.copy ORDER BY route, copy_id`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: partitionOf(Number(row.route)),
+        acquiredOn: row.acquiredOn instanceof Date ? row.acquiredOn.toISOString().slice(0, 10) : row.acquiredOn,
+        disposedOn: row.disposedOn instanceof Date ? row.disposedOn.toISOString().slice(0, 10) : row.disposedOn,
+      })) as LibraryInspection['copies'];
+      const follows = (
+        await db!.admin.query(`
+        SELECT target_id AS "targetId", target_type AS "targetType", state, reason,
+               updated_at AS "updatedAt", account_id AS "accountId", route
+          FROM library.follow ORDER BY route, account_id, target_id`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: partitionOf(Number(row.route)),
+        updatedAt: iso(row.updatedAt),
+      })) as LibraryInspection['follows'];
+      const publishedLogs = (
+        await db!.admin.query(`
+        SELECT log_id AS id, account_id AS "accountId", subject_id AS "subjectId", session_state AS "sessionState",
+               started_at AS "startedAt", completed_at AS "completedAt", note, published_at AS "publishedAt"
+          FROM library.published_log ORDER BY route, log_id`)
+      ).rows.map((row) => ({
+        ...row,
+        startedAt: iso(row.startedAt),
+        completedAt: row.completedAt === null ? null : iso(row.completedAt),
+        publishedAt: iso(row.publishedAt),
+      })) as LibraryInspection['publishedLogs'];
+
+      // The target subject must share the physical partition with a private source row
+      // before that row belongs in this exhaustive partition view. Collection metadata
+      // is joined from the authoritative source Collection; no visibility filter applies.
+      const subjectPartitionRows = (
+        await db!.admin.query(`
+        SELECT listing.subject_id AS "subjectId", listing.route,
+               listing.route >> 4 AS partition, 'library.subject_collection'::text AS "table",
+               listing.collection_id::text AS key, 'collection'::text AS source,
+               listing.collection_id AS "collectionId", collection.visibility,
+               listing.multiplicity
+          FROM library.subject_collection AS listing
+          LEFT JOIN library.collection AS collection
+            ON collection.route = listing.collection_route AND collection.collection_id = listing.collection_id
+        UNION ALL
+        SELECT entry.subject_id, entry.route, entry.route >> 4, 'library.entry',
+               entry.account_id::text || ':' || entry.subject_id::text, 'entry', NULL, NULL, NULL
+          FROM library.entry AS entry
+          JOIN semantic.subject AS subject
+            ON subject.subject_id = entry.subject_id AND subject.route >> 4 = entry.route >> 4
+        UNION ALL
+        SELECT session.subject_id, session.route, session.route >> 4, 'library.progress_session',
+               session.session_id::text, 'session', NULL, NULL, NULL
+          FROM library.progress_session AS session
+          JOIN semantic.subject AS subject
+            ON subject.subject_id = session.subject_id AND subject.route >> 4 = session.route >> 4
+        UNION ALL
+        SELECT copy.subject_id, copy.route, copy.route >> 4, 'library.copy',
+               copy.copy_id::text, 'copy', NULL, NULL, NULL
+          FROM library.copy AS copy
+          JOIN semantic.subject AS subject
+            ON subject.subject_id = copy.subject_id AND subject.route >> 4 = copy.route >> 4
+        UNION ALL
+        SELECT follow.target_id, follow.route, follow.route >> 4, 'library.follow',
+               follow.account_id::text || ':' || follow.target_id::text, 'follow', NULL, NULL, NULL
+          FROM library.follow AS follow
+          JOIN semantic.subject AS subject
+            ON subject.subject_id = follow.target_id AND subject.route >> 4 = follow.route >> 4
+         WHERE follow.target_type = 'subject'
+        UNION ALL
+        SELECT log.subject_id, log.route, log.route >> 4, 'library.published_log',
+               log.log_id::text, 'publishedLog', NULL, NULL, NULL
+          FROM library.published_log AS log
+          JOIN semantic.subject AS subject
+            ON subject.subject_id = log.subject_id AND subject.route >> 4 = log.route >> 4
+        ORDER BY partition, route, "table", key`)
+      ).rows.map((row) => ({
+        ...row,
+        route: Number(row.route),
+        partition: Number(row.partition),
+        multiplicity: row.multiplicity === null ? null : Number(row.multiplicity),
+      })) as LibraryInspection['subjectPartitionRows'];
+      const events = (
+        await db!.admin.query('SELECT id, type, data FROM core.outbox ORDER BY partition_no, position, event_seq')
+      ).rows as LibraryInspection['events'];
+      const workflows = (await workClient!.listWorkflows({ limit: 10000 }))
+        .map((row) => ({ id: row.workflowID, name: row.workflowName, status: row.status }))
+        .sort((left, right) => left.id.localeCompare(right.id));
+      return {
+        collections,
+        members,
+        entries,
+        sessions,
+        completedUnits,
+        changes,
+        copies,
+        follows,
+        publishedLogs,
+        subjectPartitionRows,
+        events,
+        workflows,
+      };
+    }
+
+    async function provisionSubject(input: { versionOf?: string } = {}): Promise<Anchor> {
+      const body =
+        input.versionOf === undefined
+          ? { type: 'schema:Book', labels: { en: 'Library outcome subject' } }
+          : {
+              type: 'bf:Instance',
+              labels: { en: 'Library outcome edition' },
+              statements: {
+                'schema:exampleOfWork': [
+                  {
+                    property: { id: 'schema:exampleOfWork' },
+                    value: { type: 'value', content: input.versionOf },
+                  },
+                ],
+              },
+            };
+      const response = await byRoute(tokenFor(governor), 'POST', '/v1/subjects', body, { 'Idempotency-Key': key() });
+      const result = await expectJson<{ subject: { id: string } }>('Creating semantic subject', response, 201);
+      const subjectRoute = routeOf(result.subject.id);
+      if (subjectRoute === null) throw new Error('Production semantic create returned an unroutable subject');
+      initialSubjectIds.add(result.subject.id);
+      return { id: result.subject.id, route: subjectRoute, partition: partitionOf(subjectRoute) };
+    }
+
+    const driver: LibraryDriver = {
+      accounts,
+      unknown: {
+        collectionId: unknown.collectionId,
+        memberId: unknown.memberId,
+        subjectId: unknown.subjectId,
+        sessionId: unknown.sessionId,
+        copyId: unknown.copyId,
+        logId: unknown.logId,
+      },
+      async setTime(value) {
+        fixedInstant = new Date(value).toISOString();
+      },
+      now: scenarioNow,
+      provisionSubject,
+      async request(as: Persona, input) {
+        const account = as === 'anonymous' ? null : accounts[as];
+        return byRoute(
+          account === null ? null : tokenFor(account),
+          input.method,
+          input.path,
+          input.body,
+          input.headers,
+        );
+      },
+      inspect,
+      settle,
+      async seedMembers(input) {
+        if (!fixtureAccess) throw new Error('Access was not composed for the production member command');
+        const actor = await fixtureAccess.authenticate(tokenFor(ownerAccount), {
+          pool: db!.pool,
+          deadline: Date.now() + 300_000,
+        });
+        const commands = createCollectionCommands({
+          pool: db!.pool,
+          access: fixtureAccess,
+          clock: () => new Date(scenarioNow()),
+        });
+        for (let index = 0; index < input.count; index += 8) {
+          await Promise.all(
+            Array.from({ length: Math.min(8, input.count - index) }, () =>
+              commands.addMember(actor, input.collectionId, { subjectId: input.subjectId }, key()),
+            ),
+          );
+        }
+      },
+      async seed(scale) {
+        if (!Number.isSafeInteger(scale) || scale < seedSubjects) throw new RangeError('Seed scales must increase');
+        measurementScale = scale;
+        measurementIndex = 0;
+        if (scale > 0 && seedActors.length === 2 && initialSubjectIds.size > 0) {
+          const firstSubject = [...initialSubjectIds][0]!;
+          const subjectRoute = routeOf(firstSubject)!;
+          if (
+            partitionOf(subjectRoute) !== seedSamePartition.partition &&
+            partitionOf(subjectRoute) !== seedOtherPartition.partition
+          ) {
+            const person = await createPerson(subjectRoute);
+            seedActors = [...seedActors, person];
+          }
+        }
+        while (seedSubjects < scale) {
+          const index = seedSubjects;
+          const subject = await provisionSubject();
+          const account = seedActors[index % seedActors.length]!;
+          const token = tokenFor(account);
+          const collectionResponse = await byRoute(
+            token,
+            'POST',
+            '/v1/collections',
+            {
+              title: `Growth shelf ${index}`,
+              visibility: 'private',
+            },
+            { 'Idempotency-Key': key() },
+          );
+          const collection = (
+            await expectJson<{ collection: CollectionView }>(`Seeding collection ${index}`, collectionResponse, 201)
+          ).collection;
+          const entryResponse = await byRoute(
+            token,
+            'PUT',
+            `/v1/libraryEntries/${subject.id}`,
+            { state: 'planned' },
+            {
+              'Idempotency-Key': key(),
+            },
+          );
+          await expectJson<{ libraryEntry: EntryView }>(`Seeding entry ${index}`, entryResponse, 201);
+          const sessionResponse = await byRoute(
+            token,
+            'POST',
+            '/v1/progressSessions',
+            {
+              subjectId: subject.id,
+              mode: 'completed_units',
+              unit: 'chapter',
+            },
+            { 'Idempotency-Key': key() },
+          );
+          const session = (
+            await expectJson<{ progressSession: SessionView }>(`Seeding session ${index}`, sessionResponse, 201)
+          ).progressSession;
+          const copyResponse = await byRoute(
+            token,
+            'POST',
+            '/v1/copies',
+            {
+              subjectId: subject.id,
+              status: 'ordered',
+            },
+            { 'Idempotency-Key': key() },
+          );
+          await expectJson<{ copy: CopyView }>(`Seeding copy ${index}`, copyResponse, 201);
+          const followResponse = await byRoute(token, 'PUT', `/v1/follows/${subject.id}`, undefined, {
+            'Idempotency-Key': key(),
+          });
+          await expectJson<{ follow: FollowView }>(`Seeding follow ${index}`, followResponse, 200);
+          const memberResponse = await byRoute(
+            token,
+            'POST',
+            `/v1/collections/${collection.id}/members`,
+            {
+              subjectId: subject.id,
+            },
+            { 'Idempotency-Key': key() },
+          );
+          await expectJson(`Seeding collection member ${index}`, memberResponse, 201);
+          const recordResponse = await byRoute(
+            token,
+            'POST',
+            `/v1/progressSessions/${session.id}:record`,
+            {
+              revision: session.revision,
+              add: [`growth-unit:${index}`],
+            },
+            { 'Idempotency-Key': key() },
+          );
+          await expectJson(`Seeding completed unit ${index}`, recordResponse, 200);
+          const publishedResponse = await byRoute(
+            token,
+            'POST',
+            '/v1/publishedLogs',
+            {
+              sessionId: session.id,
+            },
+            { 'Idempotency-Key': key() },
+          );
+          await expectJson<{ publishedLog: PublishedLogView }>(
+            `Seeding published log ${index}`,
+            publishedResponse,
+            201,
+          );
+          seedSubjects++;
+        }
+      },
+      async measure<T>(operation: () => Promise<T>) {
+        await holdExecutor();
+        const internal: CapturedStatements = { statements: [], plans: [] };
+        activeInternalCapture = internal;
+        const result = await capture(db!, operation).finally(() => {
+          activeInternalCapture = undefined;
+        });
+        const raw = {
+          statements: [...result.capture.statements, ...internal.statements],
+          plans: [...result.capture.plans, ...internal.plans],
+        };
+        const cost = costOf(raw);
+        const saved = {
+          scale: measurementScale,
+          index: measurementIndex++,
+          statements: raw.statements,
+          buffers: cost.blocks,
+        };
+        savedMeasurements.push(saved);
+        await mkdir(resolve(import.meta.dir, '../../../../../.temp'), { recursive: true });
+        await Bun.write(
+          resolve(import.meta.dir, `../../../../../.temp/library-outcome-${suffix}.json`),
+          JSON.stringify(savedMeasurements, null, 2),
+        );
+        const baseline = savedMeasurements.find((item) => item.scale === 0 && item.index === saved.index);
+        if (baseline && saved.scale > 0 && baseline.statements.length !== saved.statements.length) {
+          const diff = difference(saved.statements, baseline.statements);
+          const statements = (values: string[]) => values.map((text) => ({ file: sourceFile(text), text }));
+          throw new Error(
+            `Statement count changed at scale ${saved.scale}, measurement ${saved.index}; ` +
+              `extra statements: ${JSON.stringify(statements(diff.added))}; ` +
+              `missing statements: ${JSON.stringify(statements(diff.removed))}. ` +
+              'Captured statement texts are in .temp/library-outcome-*.json.',
+          );
+        }
+        return { value: result.value, statements: raw.statements.length, buffers: cost.blocks };
+      },
+      async close() {
+        tokens.clear();
+        approvals.clear();
+        await cleanup();
+        dropped = true;
+      },
+    };
+    return driver;
+  } catch (error) {
+    await cleanup();
+    dropped = true;
+    throw error;
+  }
+}
+
+if (import.meta.main) {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error('DATABASE_URL is required for the library executor');
+  await startWorker({ databaseUrl, poolSize: 10, executorId: 'library-outcomes' }, KERNEL_WORK_MODULES, process.env);
+  for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
+  process.send?.('ready');
+}
