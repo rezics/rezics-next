@@ -28,6 +28,27 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: outbox; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.outbox (
+    partition_no integer NOT NULL,
+    "position" bigint NOT NULL,
+    event_seq integer NOT NULL,
+    event_count integer NOT NULL,
+    epoch integer NOT NULL,
+    id uuid NOT NULL,
+    type text NOT NULL,
+    subject text,
+    data jsonb NOT NULL,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT outbox_check CHECK (((event_seq >= 0) AND (event_seq < event_count))),
+    CONSTRAINT outbox_event_count_check CHECK ((event_count > 0)),
+    CONSTRAINT outbox_position_check CHECK (("position" > 0))
+);
+
+
+--
 -- Name: partition; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -56,6 +77,14 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: outbox outbox_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.outbox
+    ADD CONSTRAINT outbox_pkey PRIMARY KEY (partition_no, "position", event_seq);
+
+
+--
 -- Name: partition partition_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -69,6 +98,14 @@ ALTER TABLE ONLY core.partition
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: outbox outbox_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.outbox
+    ADD CONSTRAINT outbox_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
 
 
 --
