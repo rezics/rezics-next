@@ -1,6 +1,38 @@
+import canonicalize from 'canonicalize';
+import { createHash } from 'node:crypto';
+import { parseItem } from 'structured-headers';
+import { ProblemError } from './problem.ts';
+import type { AccountActor } from '../request/access.ts';
 import type { ActionCatalogue } from '../request/access.ts';
 
 export const SESSION_HEADER = 'rezics-session-token';
+export const IDEMPOTENCY_HEADER = 'idempotency-key';
+
+export function idempotencyKeyOf(header: string | null | undefined): string {
+  if (typeof header !== 'string')
+    throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a structured field string.' });
+
+  let value: unknown;
+  try {
+    [value] = parseItem(header);
+  } catch {
+    throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a structured field string.' });
+  }
+  if (typeof value !== 'string' || value.length < 1 || value.length > 255)
+    throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a string of 1 to 255 characters.' });
+  return value;
+}
+
+export function requestDigest(operation: string, actor: AccountActor, body: unknown): Uint8Array {
+  const canonical = canonicalize({
+    operation,
+    client_id: actor.clientId,
+    requested_by: actor.requestedBy,
+    body,
+  });
+  if (canonical === undefined) throw new TypeError('Request body must be canonical JSON');
+  return createHash('sha256').update(canonical, 'utf8').digest();
+}
 
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;

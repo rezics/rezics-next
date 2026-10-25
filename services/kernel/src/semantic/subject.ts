@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { AccountActor } from '../request/access.ts';
+import type { AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { itemFacts, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
 import insertFacts from './insert-facts.sql';
@@ -11,6 +11,12 @@ import readLabelsStatement from './read-labels.sql';
 import readSubjectStatement from './read-subject.sql';
 
 export const CREATE_SUBJECT = 'subject.create';
+
+/** Retries reach the partition holding their receipt while each attempt gets a new subject id. */
+export function subjectTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
+  const route = anchorRoute(routeKey, `${accountId}\n${CREATE_SUBJECT}\n${idempotencyKey}`);
+  return { route, id: newId(route) };
+}
 
 export class SubjectAccessDeniedError extends Error {
   constructor() {
@@ -29,7 +35,7 @@ export async function createSubject(
   pool: Pool,
   options: {
     actor: AccountActor;
-    routeKey: Uint8Array;
+    target: Resource;
     idempotencyKey: string;
     digest: Uint8Array;
     item: unknown;
@@ -37,11 +43,8 @@ export async function createSubject(
     deadline?: number;
   },
 ): Promise<CreateSubjectResult> {
-  const route = anchorRoute(
-    options.routeKey,
-    `${options.actor.accountId}\n${CREATE_SUBJECT}\n${options.idempotencyKey}`,
-  );
-  const subjectId = newId(route);
+  const { route, id: subjectId } = options.target;
+  if (routeOf(subjectId) !== route) throw new RangeError('Subject target id must carry its route');
   const facts = itemFacts(subjectId, options.item);
   const partition = partitionOf(route);
   const command = await runCommand(
@@ -126,6 +129,7 @@ async function rollback(client: PoolClient, error: unknown): Promise<never> {
 export async function readSubject(
   pool: Pool,
   id: string,
+  authorize: (client: PoolClient) => Promise<boolean>,
 ): Promise<{ subject: ResolvedItem; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
@@ -139,8 +143,13 @@ export async function readSubject(
         return null;
       }
       const rows = (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[];
+      if (!rows.length) {
+        await client.query('COMMIT');
+        return null;
+      }
+      const allowed = await authorize(client);
       await client.query('COMMIT');
-      if (!rows.length) return null;
+      if (!allowed) return null;
       return {
         subject: resolveItem(id, asFacts(rows)) as ResolvedItem,
         component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },

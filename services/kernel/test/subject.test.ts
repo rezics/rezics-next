@@ -6,7 +6,13 @@ import { createPool } from '../src/database/pool.ts';
 import type { AccountActor } from '../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../src/route/route.ts';
 import { itemFacts, resolveItem, SubjectInputError } from '../src/semantic/item.ts';
-import { createSubject, readLabels, readSubject, SubjectAccessDeniedError } from '../src/semantic/subject.ts';
+import {
+  createSubject,
+  readLabels,
+  readSubject,
+  SubjectAccessDeniedError,
+  subjectTarget,
+} from '../src/semantic/subject.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -80,7 +86,7 @@ function create(
 ) {
   return createSubject(pool, {
     actor,
-    routeKey,
+    target: subjectTarget(routeKey, actor.accountId, key),
     idempotencyKey: key,
     digest: options.digest ?? digest(JSON.stringify(item)),
     item,
@@ -105,7 +111,7 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
   const statements = Object.values(subject.statements).flat();
   expect(statements).toHaveLength(6);
   for (const entry of statements) expect(routeOf(entry.id)).toBe(route);
-  expect(await readSubject(pool, subject.id)).toEqual({ subject, component: created.component });
+  expect(await readSubject(pool, subject.id, allow)).toEqual({ subject, component: created.component });
 });
 
 test('each value is one compact fact row in its slot log, written under the command write basis', async () => {
@@ -219,7 +225,7 @@ test('labels of referenced subjects are read in their own partitions', async () 
 });
 
 test('an unknown or malformed id reads as nothing', async () => {
-  expect(await readSubject(pool, newId(0x0042))).toBeNull();
-  expect(await readSubject(pool, 'not-an-id')).toBeNull();
-  expect(await readSubject(pool, randomUUID())).toBeNull();
+  expect(await readSubject(pool, newId(0x0042), allow)).toBeNull();
+  expect(await readSubject(pool, 'not-an-id', allow)).toBeNull();
+  expect(await readSubject(pool, randomUUID(), allow)).toBeNull();
 });

@@ -5,7 +5,7 @@ import { createPool } from '../src/database/pool.ts';
 import type { AccountActor } from '../src/request/access.ts';
 import { anchorRoute, partitionOf } from '../src/route/route.ts';
 import { LIST_SUBJECTS, PAGE_SIZE, PageCursorError, pageSubjects } from '../src/semantic/page.ts';
-import { CREATE_SUBJECT, createSubject } from '../src/semantic/subject.ts';
+import { CREATE_SUBJECT, createSubject, subjectTarget } from '../src/semantic/subject.ts';
 import { encodeCursor } from '../src/tokens/cursor.ts';
 import type { KeyRing } from '../src/tokens/seal.ts';
 
@@ -49,7 +49,7 @@ async function createBooks(keys: string[]): Promise<{ id: string; title: string 
     const title = `Book ${n}`;
     const { subject } = await createSubject(pool, {
       actor,
-      routeKey,
+      target: subjectTarget(routeKey, actor.accountId, key),
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
       item: { labels: { en: title, ja: `本 ${n}` }, descriptions: { en: 'a paged book' } },
