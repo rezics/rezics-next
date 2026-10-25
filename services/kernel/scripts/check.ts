@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { realpathSync, statSync } from 'node:fs';
+import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps } from './database.ts';
 import { buildSearchImage, waitForSearch } from './search.ts';
@@ -9,11 +10,135 @@ const pid = String(process.pid);
 let container = '';
 let searchContainer = '';
 
+type CheckPlan = { files: string[] | null; tests: string[] };
+
+function moduleTests(moduleDirectory: string): string[] {
+  return Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: moduleDirectory })).sort();
+}
+
+function pathIsWithin(parent: string, candidate: string): boolean {
+  const path = relative(parent, candidate);
+  return path !== '' && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
+
+export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
+  const root = resolve(moduleDirectory);
+  const allTests = moduleTests(root);
+  if (args.length === 0) return { files: null, tests: allTests };
+
+  let rootRealPath: string | null;
+  try {
+    rootRealPath = realpathSync(root);
+  } catch {
+    rootRealPath = null;
+  }
+  const files = new Set<string>();
+  for (const argument of args) {
+    const normalized = resolve(root, argument.startsWith('./') ? argument.slice(2) : argument);
+    if (!rootRealPath || !pathIsWithin(root, normalized)) {
+      throw new Error(`Check path must name an existing file inside ${moduleDirectory}: ${argument}`);
+    }
+
+    try {
+      if (!statSync(normalized).isFile() || !pathIsWithin(rootRealPath, realpathSync(normalized))) {
+        throw new Error();
+      }
+    } catch {
+      throw new Error(`Check path must name an existing file inside ${moduleDirectory}: ${argument}`);
+    }
+
+    files.add(relative(root, normalized).split(sep).join('/'));
+  }
+
+  const sortedFiles = Array.from(files).sort();
+  const testFiles = new Set(allTests);
+  return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
+}
+
+function diagnosticPath(line: string): string | null | undefined {
+  if (/^error TS\d+\b/.test(line)) return null;
+  return line.match(/^(.+?)\(\d+,\d+\): error TS\d+\b/)?.[1];
+}
+
+export function ownDiagnostics(output: string, files: string[]): string[] {
+  const ownedFiles = new Set(files);
+  const diagnostics: string[] = [];
+  let current: string[] = [];
+  let keepCurrent = false;
+
+  const flush = (): void => {
+    if (keepCurrent) diagnostics.push(current.join('\n'));
+    current = [];
+    keepCurrent = false;
+  };
+
+  for (const line of output.split(/\r\n?|\n/)) {
+    const path = diagnosticPath(line);
+    if (path !== undefined) {
+      flush();
+      current = [line];
+      keepCurrent = path === null || ownedFiles.has(path);
+    } else if (current.length > 0 && /^[\t ]+/.test(line)) {
+      current.push(line);
+    } else {
+      flush();
+    }
+  }
+  flush();
+  return diagnostics;
+}
+
+function hasDiagnosticLine(output: string): boolean {
+  return output.split(/\r\n?|\n/).some((line) => diagnosticPath(line) !== undefined);
+}
+
+const formatExtensions = new Set([
+  '.astro',
+  '.cjs',
+  '.cts',
+  '.css',
+  '.gql',
+  '.graphql',
+  '.html',
+  '.js',
+  '.jsx',
+  '.json',
+  '.json5',
+  '.jsonc',
+  '.less',
+  '.md',
+  '.mdx',
+  '.mjs',
+  '.mts',
+  '.scss',
+  '.svelte',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.vue',
+  '.yaml',
+  '.yml',
+]);
+
+function formattedFiles(files: string[]): string[] {
+  return files.filter((file) => formatExtensions.has(extname(file).toLowerCase()));
+}
+
 function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
   const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
+}
+
+function capture(
+  program: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): { status: number | null; output: string } {
+  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
+  if (result.error) throw result.error;
+  return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
 function docker(args: string[]): string {
@@ -59,6 +184,7 @@ function fail(message: string): never {
 }
 
 async function main(): Promise<void> {
+  const plan = checkPlan(process.argv.slice(2), directory);
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
@@ -127,11 +253,29 @@ async function main(): Promise<void> {
     }
   }
 
-  run(resolve(directory, '../../node_modules/.bin/tsc'), ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
-  run(resolve(directory, '../../node_modules/.bin/oxlint'), ['--config', '../../.oxlintrc.json', '.'], env);
-  run(resolve(directory, '../../node_modules/.bin/oxfmt'), ['--check', '.'], env);
+  const tsc = resolve(directory, '../../node_modules/.bin/tsc');
+  const oxlint = resolve(directory, '../../node_modules/.bin/oxlint');
+  const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
+  if (plan.files === null) {
+    run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+    run(oxlint, ['--config', '../../.oxlintrc.json', '.'], env);
+    run(oxfmt, ['--check', '.'], env);
+  } else {
+    const typecheck = capture(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'], env);
+    const diagnostics = ownDiagnostics(typecheck.output, plan.files);
+    if (diagnostics.length) fail(diagnostics.join('\n'));
+    if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
+      fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
+    }
 
-  const testFiles = Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: directory })).sort();
+    const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
+    if (lintFiles.length) run(oxlint, ['--config', '../../.oxlintrc.json', ...lintFiles], env);
+
+    const formatFiles = formattedFiles(plan.files);
+    if (formatFiles.length) run(oxfmt, ['--check', ...formatFiles], env);
+  }
+
+  const testFiles = plan.tests;
   await waitForSearch(searchUrl, searchContainer);
   for (const [index, file] of testFiles.entries()) {
     const database = `kernel_test_${index + 1}`;
@@ -174,20 +318,22 @@ async function main(): Promise<void> {
   }
 }
 
-process.on('SIGINT', () => {
-  cleanup();
-  process.exit(130);
-});
-process.on('SIGTERM', () => {
-  cleanup();
-  process.exit(143);
-});
+if (import.meta.main) {
+  process.on('SIGINT', () => {
+    cleanup();
+    process.exit(130);
+  });
+  process.on('SIGTERM', () => {
+    cleanup();
+    process.exit(143);
+  });
 
-try {
-  await main();
-} catch (error) {
-  console.error(error);
-  process.exitCode = 1;
-} finally {
-  cleanup();
+  try {
+    await main();
+  } catch (error) {
+    console.error(error);
+    process.exitCode = 1;
+  } finally {
+    cleanup();
+  }
 }

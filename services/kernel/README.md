@@ -67,6 +67,9 @@ schema dump, runs TypeScript, lint and formatting checks, then runs each test fi
 database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
 database is removed at the end.
 
+Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
+The full `bun run check` is what the gate runs.
+
 ## Growth checks
 
 A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
