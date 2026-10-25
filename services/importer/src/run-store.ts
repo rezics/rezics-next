@@ -73,7 +73,16 @@ type Command = {
   command_key: string;
   record_key: string;
   field_group: FieldGroup;
+  op: BatchCommand['op'];
+  envelope_index: number;
   done: number;
+};
+type Envelope = {
+  record_key: string;
+  envelope_index: number;
+  multi: number;
+  bytes: string;
+  keys_json: string;
 };
 
 export const RUN_TABLES = [
@@ -84,6 +93,7 @@ export const RUN_TABLES = [
   'run_acknowledged',
   'run_commands',
   'run_payloads',
+  'run_envelopes',
 ] as const;
 
 function fail(): never {
@@ -130,7 +140,7 @@ function validateRun(run: Run) {
 function pageLimit(value: number) {
   if (!Number.isInteger(value) || value < 1 || value > 100) fail();
 }
-function boundedJson(value: unknown, cap = 65536): string {
+function boundedJson(value: unknown, cap = 65536, commandBodies?: string[]): string {
   // Serialize data descriptors directly so neither accessors nor toJSON can run.
   let budget = cap;
   const parts: string[] = [];
@@ -145,6 +155,7 @@ function boundedJson(value: unknown, cap = 65536): string {
     append(JSON.stringify(value));
   }
   function visit(v: unknown, depth: number) {
+    const start = parts.length;
     if (depth > 64) fail();
     if (typeof v === 'string') {
       string(v);
@@ -182,6 +193,9 @@ function boundedJson(value: unknown, cap = 65536): string {
     }
     append(array ? ']' : '}');
     parents.delete(v);
+    // A request's commands are at depth two. Capture their already serialized
+    // bytes once; splitting and the payload journal reuse these exact bodies.
+    if (commandBodies && depth === 2) commandBodies.push(parts.slice(start).join(''));
   }
   try {
     visit(value, 0);
@@ -313,11 +327,19 @@ export class RunStore<Projection = BatchStatement[]> {
         projection_json TEXT NOT NULL, PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_commands (
         source TEXT NOT NULL, run_id TEXT NOT NULL, command_key TEXT NOT NULL,
-        record_key TEXT NOT NULL, field_group TEXT NOT NULL, done INTEGER NOT NULL,
+        record_key TEXT NOT NULL, field_group TEXT NOT NULL, op TEXT NOT NULL,
+        envelope_index INTEGER NOT NULL, done INTEGER NOT NULL,
         PRIMARY KEY(source,run_id,command_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_payloads (
         source TEXT NOT NULL, command_key TEXT NOT NULL, body TEXT NOT NULL,
         PRIMARY KEY(source,command_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_envelopes (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
+        envelope_index INTEGER NOT NULL, multi INTEGER NOT NULL,
+        bytes TEXT NOT NULL, keys_json TEXT NOT NULL, remaining INTEGER NOT NULL,
+        pending INTEGER NOT NULL, PRIMARY KEY(source,run_id,record_key,envelope_index)) WITHOUT ROWID`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_envelope_pending
+        ON run_envelopes(source,run_id,pending,record_key,envelope_index)`);
     } catch (error) {
       db.close();
       throw error;
@@ -609,14 +631,60 @@ export class RunStore<Projection = BatchStatement[]> {
     this.write('UPDATE run_generations SET resolved=resolved+1 WHERE source=? AND id=?', run.source, run.id);
   }
   classify(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
+    return this.plan(run, key, input, false);
+  }
+  /** Private record plan; every dispatch still uses the portable one-envelope contract. */
+  prepare(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
+    return this.plan(run, key, input, true);
+  }
+  private plan(
+    run: Run,
+    key: string,
+    input: { commands: BatchCommand[]; omissions?: Omission[] },
+    multi: boolean,
+  ): Kind {
     keyId(key);
     exact(input, ['commands'], ['omissions']);
-    if (!Array.isArray(input.commands) || input.commands.length > 100) fail();
+    if (!Array.isArray(input.commands) || input.commands.length > (multi ? 300 : 100)) fail();
     const request: ImportBatchRequest = { commands: input.commands };
-    const bytes = boundedJson(request);
-    if (input.commands.length && checkBatchWrite(request).length) fail();
+    const bodies: string[] = [];
+    const bytes = boundedJson(request, multi ? 2 * 1024 * 1024 : 65536, bodies);
+    // Work only with the descriptor-checked JSON snapshot from here onward.
+    const commands = (JSON.parse(bytes) as ImportBatchRequest).commands;
+    const envelopes: { bytes: string; keys: string[] }[] = [];
+    const commandEnvelopes: number[] = [];
+    const unique = new Set<string>();
+    let parts: string[] = [];
+    let keys: string[] = [];
+    let size = Buffer.byteLength('{"commands":[]}');
+    const flush = () => {
+      if (!parts.length) return;
+      const body = `{"commands":[${parts.join(',')}]}`;
+      if (checkBatchWrite(JSON.parse(body)).length) fail();
+      envelopes.push({ bytes: body, keys });
+      parts = [];
+      keys = [];
+      size = Buffer.byteLength('{"commands":[]}');
+    };
+    for (let i = 0; i < commands.length; i++) {
+      const c = commands[i]!;
+      const body = bodies[i];
+      if (!body || !c || typeof c !== 'object') fail();
+      const length = Buffer.byteLength(body);
+      if (length + Buffer.byteLength('{"commands":[]}') > 65536)
+        throw new TypeError('Command byte size exceeds envelope limit');
+      if (unique.has(c.key)) fail();
+      unique.add(c.key);
+      if (parts.length === 100 || size + length + (parts.length ? 1 : 0) > 65536) flush();
+      commandEnvelopes.push(envelopes.length);
+      size += length + (parts.length ? 1 : 0);
+      parts.push(body);
+      keys.push(c.key);
+    }
+    flush();
     const omissions = input.omissions ?? [];
     if (!Array.isArray(omissions) || omissions.length > 3) fail();
+    boundedJson(omissions);
     const groups = new Set<FieldGroup>();
     for (const o of omissions) {
       exact(o, ['field_group', 'disposition', 'securityRevision']);
@@ -643,7 +711,7 @@ export class RunStore<Projection = BatchStatement[]> {
         e = this.entry(run, key)!;
       }
       const row = JSON.parse(e.row_json) as RecordRow;
-      for (const c of input.commands) {
+      for (const c of commands) {
         if (
           c.source.source !== run.source ||
           c.source.external_id !== key ||
@@ -653,8 +721,7 @@ export class RunStore<Projection = BatchStatement[]> {
         )
           fail();
       }
-      if (e.kind && input.commands.length && e.bytes !== bytes)
-        throw new Error('Prepared command envelope is immutable');
+      if (e.kind && commands.length && e.bytes !== bytes) throw new Error('Prepared command envelope is immutable');
       if (!e.kind) {
         const current = this.get<{ row_json: string; projection_json: string }>(
           'SELECT row_json,projection_json FROM run_acknowledged WHERE source=? AND record_key=?',
@@ -669,20 +736,24 @@ export class RunStore<Projection = BatchStatement[]> {
               : current.row_json === e.row_json && current.projection_json === e.projection_json
                 ? 'unchanged'
                 : 'changed';
+        if (multi && !commands.length && !omissions.length && e.kind !== 'unchanged')
+          throw new Error('Empty record plan requires unchanged or fenced proof');
         // A successful omission can acknowledge a record in an abandoned generation.
         // Snapshot equality must still compare against the complete pointer, not that ack.
         const baseline = this.get<{ row_json: string; projection_json: string }>(
-          `SELECT b.row_json,b.projection_json FROM run_sources AS s JOIN run_entries AS b
-            ON b.source=s.source AND b.run_id=s.generation AND b.record_key=? WHERE s.source=?`,
-          key,
+          `SELECT row_json,projection_json FROM run_entries
+          WHERE source=? AND run_id=(SELECT generation FROM run_sources WHERE source=?) AND record_key=?`,
           run.source,
+          run.source,
+          key,
         );
         const snapshotChanged =
           !baseline || baseline.row_json !== e.row_json || baseline.projection_json !== e.projection_json;
         const keys: string[] = [];
         // Each original request envelope is stored before this transaction returns to a caller/transport.
-        for (const c of input.commands) {
-          const body = boundedJson(c);
+        for (let i = 0; i < commands.length; i++) {
+          const c = commands[i]!;
+          const body = bodies[i]!;
           const old = this.get<{ body: string }>(
             'SELECT body FROM run_payloads WHERE source=? AND command_key=?',
             run.source,
@@ -692,15 +763,34 @@ export class RunStore<Projection = BatchStatement[]> {
           if (!old)
             this.write('INSERT INTO run_payloads(source,command_key,body) VALUES(?,?,?)', run.source, c.key, body);
           this.write(
-            'INSERT INTO run_commands(source,run_id,command_key,record_key,field_group,done) VALUES(?,?,?,?,?,?)',
+            `INSERT INTO run_commands(source,run_id,command_key,record_key,field_group,op,envelope_index,done)
+            VALUES(?,?,?,?,?,?,?,?)`,
             run.source,
             run.id,
             c.key,
             key,
             c.source.field_group,
+            c.op,
+            commandEnvelopes[i]!,
             0,
           );
           keys.push(c.key);
+        }
+        for (let i = 0; i < envelopes.length; i++) {
+          const envelope = envelopes[i]!;
+          this.write(
+            `INSERT INTO run_envelopes(source,run_id,record_key,envelope_index,multi,bytes,keys_json,remaining,pending)
+            VALUES(?,?,?,?,?,?,?,?,?)`,
+            run.source,
+            run.id,
+            key,
+            i,
+            envelopes.length > 1 ? 1 : 0,
+            envelope.bytes,
+            JSON.stringify(envelope.keys),
+            envelope.keys.length,
+            1,
+          );
         }
         e.bytes = keys.length ? bytes : null;
         e.keys_json = JSON.stringify(keys);
@@ -751,12 +841,7 @@ export class RunStore<Projection = BatchStatement[]> {
             commandKey,
           )!;
           if (!c.done && saved.some((o) => o.field_group === c.field_group)) {
-            this.write(
-              'UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key=?',
-              run.source,
-              run.id,
-              commandKey,
-            );
+            this.completeCommand(run, c);
             e.remaining--;
           }
         }
@@ -775,17 +860,53 @@ export class RunStore<Projection = BatchStatement[]> {
   pagePending(run: Run, page: { after?: string; limit: number }): Pending[] {
     exact(page, ['limit'], ['after']);
     pageLimit(page.limit);
-    if (page.after !== undefined) keyId(page.after);
+    let recordKey = '';
+    let envelopeIndex = -1;
+    if (page.after !== undefined) {
+      if (typeof page.after !== 'string') fail();
+      if (page.after.startsWith('!')) {
+        identifier(page.after, 2048, /^![A-Za-z0-9_-]+$/u);
+        let cursor: { source: string; run: string; record: string; envelope: number };
+        try {
+          cursor = JSON.parse(Buffer.from(page.after.slice(1), 'base64url').toString('utf8'));
+        } catch {
+          return fail();
+        }
+        exact(cursor, ['source', 'run', 'record', 'envelope']);
+        if (cursor.source !== run.source || cursor.run !== run.id) fail();
+        keyId(cursor.record);
+        if (!Number.isInteger(cursor.envelope) || cursor.envelope < 0 || cursor.envelope >= 300) fail();
+        recordKey = cursor.record;
+        envelopeIndex = cursor.envelope;
+      } else {
+        keyId(page.after);
+        recordKey = page.after;
+        // Legacy single-envelope cursors continue after the whole record key.
+        envelopeIndex = 300;
+      }
+    }
     const g = this.generation(run, true);
     if (!['ready', 'finalizing'].includes(g.status)) return [];
-    return this.all<Entry>(
-      `SELECT * FROM run_entries INDEXED BY run_pending
-      WHERE source=? AND run_id=? AND pending=1 AND record_key>? ORDER BY record_key LIMIT ?`,
+    return this.all<Envelope>(
+      `SELECT record_key,envelope_index,multi,bytes,keys_json FROM run_envelopes INDEXED BY run_envelope_pending
+      WHERE source=? AND run_id=? AND pending=1 AND (record_key,envelope_index)>(?,?)
+      ORDER BY record_key,envelope_index LIMIT ?`,
       run.source,
       run.id,
-      page.after ?? '',
+      recordKey,
+      envelopeIndex,
       page.limit,
-    ).map((e) => ({ after: e.record_key, recordKey: e.record_key, bytes: e.bytes!, keys: JSON.parse(e.keys_json) }));
+    ).map((e) => ({
+      after: e.multi
+        ? '!' +
+          Buffer.from(
+            JSON.stringify({ source: run.source, run: run.id, record: e.record_key, envelope: e.envelope_index }),
+          ).toString('base64url')
+        : e.record_key,
+      recordKey: e.record_key,
+      bytes: e.bytes,
+      keys: JSON.parse(e.keys_json),
+    }));
   }
   pageVanished(run: Run, page: { after?: string; limit: number }): RecordRow[] {
     validateRun(run);
@@ -821,16 +942,39 @@ export class RunStore<Projection = BatchStatement[]> {
       page.limit,
     ).map((m) => JSON.parse(m.row_json) as RecordRow);
   }
-  acknowledge(run: Run, result: ImportBatchResult): void {
+  private completeCommand(run: Run, command: Command) {
+    this.write(
+      'UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key=?',
+      run.source,
+      run.id,
+      command.command_key,
+    );
+    this.write(
+      `UPDATE run_envelopes SET remaining=remaining-1,pending=CASE WHEN remaining=1 THEN 0 ELSE 1 END
+      WHERE source=? AND run_id=? AND record_key=? AND envelope_index=?`,
+      run.source,
+      run.id,
+      command.record_key,
+      command.envelope_index,
+    );
+  }
+  acknowledge(run: Run, result: ImportBatchResult, scope?: { recordKey: string }): void {
     boundedJson(result);
     if (
       checkBatchWriteResult(result).length ||
       new Set(result.results.map((r) => r.key)).size !== result.results.length
     )
       fail();
+    if (scope !== undefined) {
+      exact(scope, ['recordKey']);
+      keyId(scope.recordKey);
+    }
     this.transaction(() => {
       const g = this.generation(run, true);
       if (!['ready', 'complete'].includes(g.status)) throw new Error('Run is not ready');
+      const completed: Command[] = [];
+      // Validate the response once and seek only keyed command metadata. No
+      // acknowledgement parses a record plan or searches its command array.
       for (const r of result.results) {
         const c = this.get<Command>(
           'SELECT * FROM run_commands WHERE source=? AND run_id=? AND command_key=?',
@@ -838,24 +982,34 @@ export class RunStore<Projection = BatchStatement[]> {
           run.id,
           r.key,
         );
-        if (!c) throw new Error('Unknown command result');
+        if (!c || (scope && c.record_key !== scope.recordKey)) throw new Error('Unknown or unowned command result');
+        if (scope && 'value' in r) {
+          const value = r.value;
+          if (
+            (c.op === 'create' && !Object.hasOwn(value, 'id')) ||
+            (c.op === 'propose' && !Object.hasOwn(value, 'candidate')) ||
+            (c.op === 'retract' && Object.keys(value).length !== 1)
+          )
+            throw new Error('Result value does not match command operation');
+        }
         if (c.done || (r.status !== 200 && r.status !== 201)) continue;
-        const e = this.entry(run, c.record_key)!;
-        this.write(
-          'UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key=?',
+        completed.push(c);
+      }
+      const decrements = new Map<string, number>();
+      for (const c of completed) {
+        this.completeCommand(run, c);
+        decrements.set(c.record_key, (decrements.get(c.record_key) ?? 0) + 1);
+      }
+      for (const [key, count] of decrements) {
+        const entry = this.get<{ remaining: number }>(
+          `UPDATE run_entries SET remaining=remaining-? WHERE source=? AND run_id=? AND record_key=?
+          RETURNING remaining`,
+          count,
           run.source,
           run.id,
-          r.key,
-        );
-        e.remaining--;
-        this.write(
-          'UPDATE run_entries SET remaining=? WHERE source=? AND run_id=? AND record_key=?',
-          e.remaining,
-          run.source,
-          run.id,
-          c.record_key,
-        );
-        this.resolve(run, e);
+          key,
+        )!;
+        if (!entry.remaining) this.resolve(run, this.entry(run, key)!);
       }
     });
   }
