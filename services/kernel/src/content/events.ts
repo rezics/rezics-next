@@ -1,6 +1,7 @@
 import { Type, type Static } from 'typebox';
 import { MEDIA_EVENTS } from './media-events.ts';
 import { MODERATION_EVENTS } from './moderation-events.ts';
+import { OPERATION_EVENTS } from './operation-events.ts';
 import { REPORT_EVENTS } from './report-events.ts';
 
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -22,6 +23,7 @@ export const CONTENT_EVENTS = {
   ...MEDIA_EVENTS,
   ...MODERATION_EVENTS,
   ...REPORT_EVENTS,
+  ...OPERATION_EVENTS,
 } as const;
 
 export type ContentEventType = keyof typeof CONTENT_EVENTS;
