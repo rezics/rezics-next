@@ -37,7 +37,7 @@ const book = (partition: number, n: number, patch: Partial<IndexedSubject> = {})
   ...patch,
 });
 
-async function append(partition: number, subject: string, type: string): Promise<void> {
+async function append(partition: number, subject: string, type: string, data: object): Promise<void> {
   const client = await admin.connect();
   try {
     await client.query('BEGIN');
@@ -47,8 +47,8 @@ async function append(partition: number, subject: string, type: string): Promise
     );
     await client.query(
       `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
-       VALUES ($1, $2, 0, 1, $3, $4, $5, $6, jsonb_build_object('subjectId', $6::text))`,
-      [partition, rows[0]!.position, rows[0]!.epoch, crypto.randomUUID(), type, subject],
+       VALUES ($1, $2, 0, 1, $3, $4, $5, $6, $7::jsonb)`,
+      [partition, rows[0]!.position, rows[0]!.epoch, crypto.randomUUID(), type, subject, JSON.stringify(data)],
     );
     await client.query('COMMIT');
   } catch (error) {
@@ -86,7 +86,8 @@ test("a listed event refreshes the public collection count from the subject's pa
     },
   };
   const relay = createSubjectIndexer({ pool, search, source, listing, index, consumer: 'search_listing' });
-  for (const subject of [a, b, hidden]) await append(121, subject.id, 'com.rezics.subject.created.v1');
+  for (const subject of [a, b, hidden])
+    await append(121, subject.id, 'com.rezics.subject.created.v1', { id: subject.id });
   await relay.run(121);
   expect(calls).toEqual(['subjects 3', `listing ${[a.id, b.id].sort().join(',')}`]);
   expect(await countOf(index, a.id)).toBe(3);
@@ -95,7 +96,7 @@ test("a listed event refreshes the public collection count from the subject's pa
   counts.set(b.id, 2);
   fake.advance(121);
   calls.length = 0;
-  await append(121, b.id, 'com.rezics.library.subject.listed.v1');
+  await append(121, b.id, 'com.rezics.library.subject.listed.v1', { subjectId: b.id });
   expect(await relay.run(121)).toMatchObject({ status: 'read', envelopes: 1 });
   expect(calls).toEqual(['subjects 1', `listing ${b.id}`]);
   expect(await countOf(index, b.id)).toBe(2);
@@ -103,7 +104,11 @@ test("a listed event refreshes the public collection count from the subject's pa
 
   fake.put({ ...b, visibility: 'hidden', securityRevision: 2 });
   calls.length = 0;
-  await append(121, b.id, 'com.rezics.subject.updated.v1');
+  await append(121, b.id, 'com.rezics.subject.visibility_changed.v1', {
+    id: b.id,
+    visibility: 'hidden',
+    security_revision: 2,
+  });
   await relay.run(121);
   expect(calls).toEqual(['subjects 1']);
 });
