@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import { useLayoutEffect } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthShell } from '../frame';
 import '../styles.css';
@@ -8,6 +9,9 @@ export const Route = createRootRoute({
 });
 
 function Root() {
+  useLayoutEffect(() => {
+    document.documentElement.dataset.hydrated = '';
+  }, []);
   return (
     <html lang={getLocale()}>
       <head>

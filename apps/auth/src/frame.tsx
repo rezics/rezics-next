@@ -18,11 +18,12 @@ export function AuthShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function AuthPage({ heading }: { heading: string }) {
+export function AuthPage({ heading, children }: { heading: string; children?: ReactNode }) {
   return (
     <main className="auth-main">
       <section className="auth-card" aria-labelledby="auth-heading">
         <h1 id="auth-heading">{heading}</h1>
+        {children}
       </section>
     </main>
   );

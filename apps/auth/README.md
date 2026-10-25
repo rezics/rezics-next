@@ -4,6 +4,18 @@ Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at 
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
 
+The login page has labelled email and password fields with password-manager autocomplete. It sends JSON to the
+same-origin `/signin` endpoint from the browser with same-origin credentials. `src/sign-in.ts` holds the provisional
+client id (`login`), scope (`[]`) and parameters dropped when resuming authorization (`sig` and `exp`).
+
+After a successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and
+empty parameters and removing every `sig` and `exp`. Without a remaining query it navigates to `/security`. The
+response body never supplies a navigation target. Recovery links to `/recovery`; sign-up preserves the login query.
+
+Empty fields and pending requests prevent submission. A refusal keeps the email, clears the password and focuses
+an alert: 401 reports incorrect email or password without identifying an account, 429 includes valid `Retry-After`
+seconds, and other responses or network failures report that sign-in is unavailable.
+
 ## Development
 
 From this directory, run:
@@ -30,6 +42,7 @@ Production does not set AUTH_ORIGIN.
 
 The static page frames make zero K, D, R and A calls. Development forwarding makes one Auth request per forwarded
 request, streams both bodies, and buffers nothing. Both costs are constant per request.
+The login page makes no server reads. A sign-in adds one browser `POST /signin` and one navigation on success.
 
 ## Visual check
 
