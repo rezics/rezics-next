@@ -599,6 +599,13 @@ ALTER TABLE ONLY access.standing_parent_installation
 
 
 --
+-- Name: organization_member_owner_probe; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
+
+
+--
 -- Name: account account_identity; Type: TRIGGER; Schema: access; Owner: -
 --
 
