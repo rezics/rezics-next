@@ -427,3 +427,33 @@ exact consent/client/coverage/reduction SQL statement, fixed rows and O(log R)
 blocks. The Auth native growth probe retains its SQL and plans in
 `.temp/current-consent-growth.json`; later durable Access growth checks must
 include this Auth probe as well.
+
+## Content work configuration
+
+The content registration in `src/content/register.ts` uses the shared kernel worker and its
+queues, database pool, enqueue client and shutdown. It does not start a separate process or relay.
+Set all of the following in the worker environment; missing or partial configuration fails closed.
+Configuration errors name only the variable, never its secret value.
+
+| Variable                       | Value                                                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONTENT_R2_ENDPOINT`          | HTTPS account S3 origin, `https://<32-hex-account-id>.r2.cloudflarestorage.com` (optional `eu` or `fedramp` jurisdiction). No path, credentials, query or fragment. |
+| `CONTENT_R2_BUCKET`            | Media bucket name, 3–63 lowercase letters, digits and hyphens.                                                                                                      |
+| `CONTENT_R2_ACCESS_KEY_ID`     | Private host-side R2 access key with media read/write/delete permission.                                                                                            |
+| `CONTENT_R2_SECRET_ACCESS_KEY` | Corresponding private secret.                                                                                                                                       |
+| `CONTENT_SOURCE_HOSTS`         | Comma-separated exact lowercase DNS source hosts, at most 100, for trusted HTTPS source imports. No schemes, ports, wildcard suffixes, IP literals or whitespace.   |
+
+Author erasure also requires `CONTENT_AUTH_CONSENT_URL`, the exact private HTTPS
+`/internal/v1/consents:read` endpoint, and `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`
+for its Cloudflare Access service token. The shared `KERNEL_ROUTE_KEY` binds imported source tuples.
+
+Image processing uses the partitioned effects queue; object purges and author erasure use the
+independently bounded governance queue. URL imports use the import queue. Content contributes its
+shared effects through the kernel registration. The enqueue-only operation client reads committed
+operation identities and native DBOS status and latest progress events without starting a runtime.
+
+Storage operations have a 30-second request deadline and a 20-MiB byte limit. Collection uses the
+persistent `content.collection.hourly` DBOS schedule in UTC. Each sweep visits the fixed 4096
+partition numbers with at most eight partition workflows in flight and batches of at most 100.
+Collection jobs obtain authoritative command time; the schedule timestamp cannot change the
+24-hour retention cutoff. The shared worker owns draining work and closing resources on shutdown.

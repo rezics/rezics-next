@@ -1,3 +1,4 @@
+import { registerContent } from '../content/register.ts';
 import { accountsWorkModule } from '../access/membership-work.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
@@ -10,4 +11,5 @@ export const KERNEL_WORK_MODULES: readonly WorkModule[] = [
   commerceWorkModule,
   libraryWorkModule,
   searchWorkModule,
+  registerContent,
 ];
