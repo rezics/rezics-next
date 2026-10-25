@@ -3,6 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import { checkout } from '../../src/commerce/checkout.ts';
+import * as commerceStore from '../../src/commerce/store.ts';
 import { StripeUnavailableError, type Offer } from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -123,6 +124,7 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
             buyerAccountId: growthActorId,
             offerId,
             offerRevision: 1,
+            targetSubjectId,
             creatorAccountId: growthActorId,
             title: 'Growth offer',
             currency: 'usd',
@@ -304,6 +306,7 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
             buyer_account_id: growthActorId,
             offer_id: offerId,
             offer_revision: 1,
+            target_subject_id: targetSubjectId,
             creator_account_id: growthActorId,
             title: 'Growth offer',
             currency: 'usd',
@@ -347,7 +350,7 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
             return {
               route: actorRoute,
               order_id: orderId,
-              balance_transaction_id: `txn_growth${ordinal}_${index}`,
+              balance_transaction_id: `txn_growth${ordinal}x${index}`,
               kind: index === 0 ? 'charge' : 'refund',
               source_id: index === 0 ? `ch_growth${ordinal}` : `re_growth${ordinal}_${index}`,
               currency: 'usd',
@@ -572,4 +575,217 @@ test('Checkout and receipt recording stays within its bound as o grows', async (
       return completed;
     },
   );
+}, 90_000);
+
+test('Order session and transaction reads stays within its bound as o grows', async () => {
+  const database = db!;
+  await resetGrowthData(database);
+  const offer = await createOfferAnchor();
+  const actor = await freshActor();
+  const anchor = await checkout(
+    { pool: database.pool, commands, stripe, successUrl, cancelUrl },
+    actor,
+    offer.id,
+    requestKey('order-read-anchor', 0),
+  );
+  const population = commercePopulation(`order-reads-${Bun.randomUUIDv7()}`, {
+    orders: true,
+    transactionsPerOrder: 8,
+    receiptKind: 'checkout',
+    offerInitialization: false,
+  });
+  await check(
+    database,
+    'Order session and transaction reads stays within its bound as o grows',
+    population,
+    async () => {
+      const sessionOrder = await commerceStore.readOrderBySession(database.pool, actorRoute, anchor.checkoutSessionId!);
+      const transactions = await commerceStore.readOrderTransactions(database.pool, actorRoute, anchor.id);
+      expect(sessionOrder?.id).toBe(anchor.id);
+      expect(transactions).toHaveLength(0);
+      return { sessionOrder, transactions };
+    },
+  );
+}, 90_000);
+
+test('Order decision and settlement stays within its bound as N grows', async () => {
+  const database = db!;
+  await resetGrowthData(database);
+  const offer = await createOfferAnchor();
+  const anchor = await checkout(
+    { pool: database.pool, commands, stripe, successUrl, cancelUrl },
+    await freshActor(),
+    offer.id,
+    requestKey('settlement-anchor', 0),
+  );
+  const population = commercePopulation(`order-settlement-${Bun.randomUUIDv7()}`, {
+    orders: true,
+    entitlements: true,
+    transactionsPerOrder: 8,
+    receiptKind: 'checkout',
+    offerInitialization: false,
+  });
+  await check(
+    database,
+    'Order decision and settlement stays within its bound as N grows',
+    population,
+    async (_, __, repetition) => {
+      const order = await commerceStore.readOrder(database.pool, actorRoute, anchor.id);
+      if (!order) throw new Error('Settlement anchor order is missing');
+      return commands.applyCheckoutSnapshot(
+        {
+          sessionId: anchor.checkoutSessionId!,
+          clientReferenceId: order.id,
+          metadataOrderId: order.id,
+          status: 'complete',
+          paymentStatus: 'paid',
+          paymentIntentStatus: 'succeeded',
+          paymentIntentId: 'pi_growthsettlementanchor',
+          livemode: false,
+          currency: order.currency,
+          amountSubtotalMinor: order.unitAmountMinor,
+          amountTotalMinor: order.unitAmountMinor,
+          amountTaxMinor: 0,
+          chargeAmountMinor: order.unitAmountMinor,
+          chargeId: 'ch_growthsettlementanchor',
+          refunds: [],
+          disputes: [],
+          transactions: [],
+          observedAt: new Date().toISOString(),
+        },
+        requestKey('settlement-workflow', repetition),
+      );
+    },
+  );
+}, 90_000);
+
+test('Entitlement grant change lock and read stays within its bound as e grows', async () => {
+  const database = db!;
+  await resetGrowthData(database);
+  const offer = await createOfferAnchor();
+  const created = await commands.createOrder(await freshActor(), offer.id, requestKey('entitlement-anchor', 0));
+  const population = commercePopulation(`entitlement-lock-${Bun.randomUUIDv7()}`, {
+    orders: true,
+    entitlements: true,
+    receiptKind: 'checkout',
+    offerInitialization: false,
+  });
+  await check(
+    database,
+    'Entitlement grant change lock and read stays within its bound as e grows',
+    population,
+    async () => {
+      const state = await commerceStore.readSettlementState(database.pool, actorRoute, created.value.id, []);
+      expect(state?.entitlement).toBeNull();
+      return state;
+    },
+  );
+}, 90_000);
+
+test('Entitlement list stays within its bound as d grows', async () => {
+  const database = db!;
+  await resetGrowthData(database);
+  const offer = await createOfferAnchor();
+  const anchor = await commands.createOrder(await freshActor(), offer.id, requestKey('entitlement-list-anchor', 0));
+  const population = commercePopulation(`entitlement-list-${Bun.randomUUIDv7()}`, {
+    orders: true,
+    entitlements: true,
+    receiptKind: 'checkout',
+    offerInitialization: false,
+  });
+  await check(database, 'Entitlement list stays within its bound as d grows', population, async () =>
+    commerceStore.listEntitlements(database.pool, actorRoute, growthActorId, { after: null, limit: 20 }),
+  );
+  expect(anchor.value.id).toBeTruthy();
+}, 90_000);
+
+test('Webhook and commerce jobs stays within its bound as N grows', async () => {
+  const database = db!;
+  await resetGrowthData(database);
+  const offer = await createOfferAnchor();
+  const anchor = await checkout(
+    { pool: database.pool, commands, stripe, successUrl, cancelUrl },
+    await freshActor(),
+    offer.id,
+    requestKey('commerce-job-anchor', 0),
+  );
+  const population = commercePopulation(`commerce-jobs-${Bun.randomUUIDv7()}`, {
+    orders: true,
+    entitlements: true,
+    transactionsPerOrder: 8,
+    receiptKind: 'checkout',
+    offerInitialization: false,
+  });
+  await check(
+    database,
+    'Webhook and commerce jobs stays within its bound as N grows',
+    population,
+    async (_, __, repetition) =>
+      commands.readOrderForAccount(growthActorId, anchor.id).then((order) => {
+        if (!order) throw new Error('Commerce job anchor order is missing');
+        return order;
+      }),
+  );
+}, 90_000);
+
+test('Erasure stays within its bound as N grows', async () => {
+  const database = db!;
+  await resetGrowthData(database);
+  const offer = await createOfferAnchor();
+  const erasureOrder = await checkout(
+    { pool: database.pool, commands, stripe, successUrl, cancelUrl },
+    await freshActor(),
+    offer.id,
+    requestKey('erasure-transaction-anchor', 0),
+  );
+  await commands.applyCheckoutSnapshot(
+    {
+      sessionId: erasureOrder.checkoutSessionId!,
+      clientReferenceId: erasureOrder.id,
+      metadataOrderId: erasureOrder.id,
+      status: 'complete',
+      paymentStatus: 'paid',
+      paymentIntentStatus: 'succeeded',
+      paymentIntentId: 'pi_growtherasureanchor',
+      livemode: false,
+      currency: 'usd',
+      amountSubtotalMinor: 1200,
+      amountTotalMinor: 1200,
+      amountTaxMinor: 0,
+      chargeAmountMinor: 1200,
+      chargeId: 'ch_growthErasureAnchor',
+      refunds: [],
+      disputes: [],
+      transactions: [
+        {
+          id: 'txn_growthErasureAnchor',
+          kind: 'charge',
+          sourceId: 'ch_growthErasureAnchor',
+          currency: 'usd',
+          amountMinor: 1200,
+          feeMinor: 0,
+          netMinor: 1200,
+          feeDetails: [],
+          exchangeRate: null,
+          created: new Date().toISOString(),
+        },
+      ],
+      observedAt: new Date().toISOString(),
+    },
+    requestKey('erasure-settlement', 0),
+  );
+  const population = commercePopulation(`erasure-${Bun.randomUUIDv7()}`, {
+    orders: true,
+    transactionsPerOrder: 8,
+    receiptKind: 'checkout',
+    offerInitialization: false,
+  });
+  await check(database, 'Erasure stays within its bound as N grows', population, async () => {
+    await expect(
+      database.pool.query(
+        'DELETE FROM commerce.order_transaction WHERE route = $1 AND order_id = $2 AND balance_transaction_id = $3',
+        [actorRoute, erasureOrder.id, 'txn_growthErasureAnchor'],
+      ),
+    ).rejects.toThrow();
+  });
 }, 90_000);
