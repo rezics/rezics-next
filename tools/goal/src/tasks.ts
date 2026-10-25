@@ -83,8 +83,16 @@ export class WorkerTasks {
     return worker;
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
-    let task = this.store.task(taskId);
+    const task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
+    const moved = this.moveToMain(task);
+    const worker = await this.retryTask(taskId, moved ? {} : { escalation: 'rebase-conflict' });
+    if (!worker) throw new Error('released task was unexpectedly held again');
+    return worker;
+  }
+  /** Move a task that waited for others onto current main; null when its own commits conflict. */
+  private moveToMain(task: Task): Task | null {
+    const taskId = task.id;
     const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
     const branch = git(task.worktree, ['branch', '--show-current']);
@@ -100,20 +108,12 @@ export class WorkerTasks {
         const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort']);
-        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict' });
-        if (!worker) throw new Error('released task was unexpectedly held again');
-        return worker;
+        return null;
       }
     } else git(task.worktree, ['reset', '--hard', main]);
     installWorktreeDependencies(task.worktree);
-    if (task.currentAttempt) {
-      task = this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => { current.base = main; });
-    } else {
-      task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
-    }
-    const worker = await this.retryTask(taskId, {});
-    if (!worker) throw new Error('released task was unexpectedly held again');
-    return worker;
+    if (task.currentAttempt) return this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => { current.base = main; });
+    return this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
   }
   private async retryTask(taskId: string, options: RetryOptions): Promise<RunningWorker | null> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
@@ -136,6 +136,14 @@ export class WorkerTasks {
           current.brief = nextBrief; current.briefPath = briefPath; current.taskClass = nextTaskClass; current.state = 'held';
         });
         return null;
+      }
+      // Every launch of a task that waited for others starts from a base that contains their merged work.
+      if (options.escalation !== 'rebase-conflict' && ['ready', 'stopped', 'held'].includes(task.state) && nextBrief.after.some(id => {
+        const merged = byId.get(id)?.mergedCommit;
+        return merged && spawnSync('git', ['merge-base', '--is-ancestor', merged, 'HEAD'], { cwd: task.worktree }).status !== 0;
+      })) {
+        const moved = this.moveToMain(task);
+        if (moved) task = moved; else options = { ...options, escalation: 'rebase-conflict' };
       }
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;

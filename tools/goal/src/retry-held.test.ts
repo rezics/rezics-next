@@ -58,3 +58,28 @@ test('a task stopped after its worker exited can be held behind an unmerged task
     expect(h.store.task(task.id).currentAttempt).toBe(1);
   } finally { h.dispose(); }
 });
+
+test('a stopped task retried after its dependencies merged starts from a base that contains them', async () => {
+  const h = harness();
+  try {
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const waiting = join(h.root, '.temp/goal/waiting.md');
+    writeFileSync(waiting, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
+    const task = h.tasks.dispatch(waiting);
+    expect(h.store.task(task.id).state).toBe('held');
+    h.store.updateTask({ taskId: task.id, attempt: 0 }, t => { t.state = 'stopped'; });
+    await job.start(dependency.id); await job.drain();
+    writeFileSync(join(h.root, 'dependency.txt'), 'merged\n');
+    git(h.root, 'add', 'dependency.txt'); git(h.root, 'commit', '-qm', 'Merge the dependency');
+    const main = git(h.root, 'rev-parse', 'main');
+    job.onGateOutcome(merged(dependency.id, main)); await job.drain();
+    expect(h.store.task(task.id).state).toBe('stopped');
+
+    await job.start(task.id, { brief: waiting }); await job.drain();
+    const started = h.store.task(task.id);
+    expect(started.currentAttempt).toBe(1);
+    expect(started.base).toBe(main);
+    expect(spawnSync('git', ['merge-base', '--is-ancestor', main, 'HEAD'], { cwd: started.worktree }).status).toBe(0);
+  } finally { h.dispose(); }
+});
