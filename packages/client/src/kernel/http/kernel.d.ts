@@ -184,6 +184,349 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             };
         };
     };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                get: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            subject: {
+                                id: string;
+                                type: "schema:Book";
+                                labels: Record<string, string>;
+                                descriptions: Record<string, string>;
+                                aliases: Record<string, string[]>;
+                                statements: Record<string, {
+                                    id: string;
+                                    rank: "deprecated" | "normal" | "preferred";
+                                    property: {
+                                        id: string;
+                                        data_type: import("../semantic/profile.ts").DataType;
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: any;
+                                    } | {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                    qualifiers: {
+                                        property: {
+                                            id: string;
+                                            data_type: import("../semantic/profile.ts").DataType;
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                    }[];
+                                    references: {
+                                        parts: {
+                                            property: {
+                                                id: string;
+                                                data_type: import("../semantic/profile.ts").DataType;
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        hash: string;
+                                    }[];
+                                }[]>;
+                            };
+                            related: Record<string, {
+                                labels: Record<string, string>;
+                            }>;
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            releases: {
+                post: {
+                    body: {
+                        release: Record<string, any>;
+                    };
+                    params: {};
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            digest: string;
+                        };
+                        201: {
+                            digest: string;
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            releases: {
+                ":digest": {
+                    get: {
+                        body: unknown;
+                        params: {
+                            digest: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                digest: string;
+                                release: Record<string, any>;
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            active: {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            digest: string;
+                            head: number;
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("./admission.ts").Admission;
@@ -203,74 +546,39 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/subjects/:id", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "post", "/v1/definitions/releases/:digest/$activate", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        id: import("typebox").TString;
+        digest: import("typebox").TString;
+    }>;
+    headers: import("typebox").TObject<{
+        "idempotency-key": import("typebox").TString;
+    }>;
+    body: import("typebox").TObject<{
+        expected_head: import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TNull]>;
     }>;
     response: {
         200: import("typebox").TObject<{
-            subject: import("typebox").TObject<{
-                id: import("typebox").TString;
-                type: import("typebox").TLiteral<"schema:Book">;
-                labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
-                statements: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
-                    property: import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                    }>;
-                    value: import("typebox").TUnion<[import("typebox").TObject<{
-                        type: import("typebox").TLiteral<"value">;
-                        content: import("typebox").TAny;
-                    }>, import("typebox").TObject<{
-                        type: import("typebox").TLiteral<"somevalue">;
-                    }>, import("typebox").TObject<{
-                        type: import("typebox").TLiteral<"novalue">;
-                    }>]>;
-                    qualifiers: import("typebox").TArray<import("typebox").TObject<{
-                        property: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                        }>;
-                        value: import("typebox").TUnion<[import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"value">;
-                            content: import("typebox").TAny;
-                        }>, import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"somevalue">;
-                        }>, import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"novalue">;
-                        }>]>;
-                    }>>;
-                    references: import("typebox").TArray<import("typebox").TObject<{
-                        parts: import("typebox").TArray<import("typebox").TObject<{
-                            property: import("typebox").TObject<{
-                                id: import("typebox").TString;
-                                data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                            }>;
-                            value: import("typebox").TUnion<[import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"value">;
-                                content: import("typebox").TAny;
-                            }>, import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"somevalue">;
-                            }>, import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"novalue">;
-                            }>]>;
-                        }>>;
-                        hash: import("typebox").TString;
-                    }>>;
-                }>>>;
-            }>;
-            related: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
-                labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            }>>;
+            digest: import("typebox").TString;
+            head: import("typebox").TInteger;
         }> & {
             headers: {
-                readonly "rezics-session-token": import("typebox").TString;
+                "rezics-session-token": import("typebox").TString;
             };
         };
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -285,7 +593,49 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -317,13 +667,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     detail: {
         operationId: string;
         'x-action': string;
-        security: ({
+        security: {
             bearerAuth: never[];
-        } | {
-            bearerAuth?: never;
-        })[];
+        }[];
     };
-}, {}, "/v1/subjects/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, session }: {
+}, {}, "/v1/definitions/releases/:digest/$activate">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, body, headers, actor, authorizeCommand, admission, job, session }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -334,63 +682,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
     status: import("elysia").SelectiveStatus<{
         200: {
-            subject: {
-                id: string;
-                type: "schema:Book";
-                labels: Record<string, string>;
-                descriptions: Record<string, string>;
-                aliases: Record<string, string[]>;
-                statements: Record<string, {
-                    id: string;
-                    rank: "deprecated" | "normal" | "preferred";
-                    property: {
-                        id: string;
-                        data_type: import("../semantic/profile.ts").DataType;
-                    };
-                    value: {
-                        type: "value";
-                        content: any;
-                    } | {
-                        type: "somevalue";
-                    } | {
-                        type: "novalue";
-                    };
-                    qualifiers: {
-                        property: {
-                            id: string;
-                            data_type: import("../semantic/profile.ts").DataType;
-                        };
-                        value: {
-                            type: "value";
-                            content: any;
-                        } | {
-                            type: "somevalue";
-                        } | {
-                            type: "novalue";
-                        };
-                    }[];
-                    references: {
-                        parts: {
-                            property: {
-                                id: string;
-                                data_type: import("../semantic/profile.ts").DataType;
-                            };
-                            value: {
-                                type: "value";
-                                content: any;
-                            } | {
-                                type: "somevalue";
-                            } | {
-                                type: "novalue";
-                            };
-                        }[];
-                        hash: string;
-                    }[];
-                }[]>;
-            };
-            related: Record<string, {
-                labels: Record<string, string>;
-            }>;
+            digest: string;
+            head: number;
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
         };
         401: {
             type: unknown;
@@ -406,7 +713,49 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
         404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -437,63 +786,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     problem: import("elysia").SelectiveProblem<{
         200: {
-            subject: {
-                id: string;
-                type: "schema:Book";
-                labels: Record<string, string>;
-                descriptions: Record<string, string>;
-                aliases: Record<string, string[]>;
-                statements: Record<string, {
-                    id: string;
-                    rank: "deprecated" | "normal" | "preferred";
-                    property: {
-                        id: string;
-                        data_type: import("../semantic/profile.ts").DataType;
-                    };
-                    value: {
-                        type: "value";
-                        content: any;
-                    } | {
-                        type: "somevalue";
-                    } | {
-                        type: "novalue";
-                    };
-                    qualifiers: {
-                        property: {
-                            id: string;
-                            data_type: import("../semantic/profile.ts").DataType;
-                        };
-                        value: {
-                            type: "value";
-                            content: any;
-                        } | {
-                            type: "somevalue";
-                        } | {
-                            type: "novalue";
-                        };
-                    }[];
-                    references: {
-                        parts: {
-                            property: {
-                                id: string;
-                                data_type: import("../semantic/profile.ts").DataType;
-                            };
-                            value: {
-                                type: "value";
-                                content: any;
-                            } | {
-                                type: "somevalue";
-                            } | {
-                                type: "novalue";
-                            };
-                        }[];
-                        hash: string;
-                    }[];
-                }[]>;
-            };
-            related: Record<string, {
-                labels: Record<string, string>;
-            }>;
+            digest: string;
+            head: number;
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
         };
         401: {
             type: unknown;
@@ -509,7 +817,49 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
         404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -540,72 +890,37 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            id: import("typebox").TString;
+            digest: import("typebox").TString;
+        }>;
+        headers: import("typebox").TObject<{
+            "idempotency-key": import("typebox").TString;
+        }>;
+        body: import("typebox").TObject<{
+            expected_head: import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TNull]>;
         }>;
         response: {
             200: import("typebox").TObject<{
-                subject: import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TLiteral<"schema:Book">;
-                    labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                    descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                    aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
-                    statements: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
-                        property: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                        }>;
-                        value: import("typebox").TUnion<[import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"value">;
-                            content: import("typebox").TAny;
-                        }>, import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"somevalue">;
-                        }>, import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"novalue">;
-                        }>]>;
-                        qualifiers: import("typebox").TArray<import("typebox").TObject<{
-                            property: import("typebox").TObject<{
-                                id: import("typebox").TString;
-                                data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                            }>;
-                            value: import("typebox").TUnion<[import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"value">;
-                                content: import("typebox").TAny;
-                            }>, import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"somevalue">;
-                            }>, import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"novalue">;
-                            }>]>;
-                        }>>;
-                        references: import("typebox").TArray<import("typebox").TObject<{
-                            parts: import("typebox").TArray<import("typebox").TObject<{
-                                property: import("typebox").TObject<{
-                                    id: import("typebox").TString;
-                                    data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                                }>;
-                                value: import("typebox").TUnion<[import("typebox").TObject<{
-                                    type: import("typebox").TLiteral<"value">;
-                                    content: import("typebox").TAny;
-                                }>, import("typebox").TObject<{
-                                    type: import("typebox").TLiteral<"somevalue">;
-                                }>, import("typebox").TObject<{
-                                    type: import("typebox").TLiteral<"novalue">;
-                                }>]>;
-                            }>>;
-                            hash: import("typebox").TString;
-                        }>>;
-                    }>>>;
-                }>;
-                related: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
-                    labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                }>>;
+                digest: import("typebox").TString;
+                head: import("typebox").TInteger;
             }> & {
                 headers: {
-                    readonly "rezics-session-token": import("typebox").TString;
+                    "rezics-session-token": import("typebox").TString;
                 };
             };
+            400: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
             401: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -620,7 +935,49 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
             404: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            409: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            422: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -652,13 +1009,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         detail: {
             operationId: string;
             'x-action': string;
-            security: ({
+            security: {
                 bearerAuth: never[];
-            } | {
-                bearerAuth?: never;
-            })[];
+            }[];
         };
-    }, {}, "/v1/subjects/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/definitions/releases/:digest/$activate">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -679,12 +1034,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     rid?: string;
     request: Request;
     store: {};
-    body: unknown;
+    body: {
+        expected_head: number | null;
+    };
     query: Record<string, string | undefined>;
     params: {
-        id: string;
+        digest: string;
     };
-    headers: Record<string, string | undefined>;
+    headers: {
+        "idempotency-key": string;
+    };
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("./admission.ts").Admission;
     readonly job: {
@@ -699,78 +1058,41 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    subject: import("../semantic/item.ts").Item;
-    related: Record<string, {
-        labels: Record<string, string>;
-    }>;
+    digest: string;
+    head: number;
 }>, {
     params: import("typebox").TObject<{
-        id: import("typebox").TString;
+        digest: import("typebox").TString;
+    }>;
+    headers: import("typebox").TObject<{
+        "idempotency-key": import("typebox").TString;
+    }>;
+    body: import("typebox").TObject<{
+        expected_head: import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TNull]>;
     }>;
     response: {
         200: import("typebox").TObject<{
-            subject: import("typebox").TObject<{
-                id: import("typebox").TString;
-                type: import("typebox").TLiteral<"schema:Book">;
-                labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
-                statements: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
-                    property: import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                    }>;
-                    value: import("typebox").TUnion<[import("typebox").TObject<{
-                        type: import("typebox").TLiteral<"value">;
-                        content: import("typebox").TAny;
-                    }>, import("typebox").TObject<{
-                        type: import("typebox").TLiteral<"somevalue">;
-                    }>, import("typebox").TObject<{
-                        type: import("typebox").TLiteral<"novalue">;
-                    }>]>;
-                    qualifiers: import("typebox").TArray<import("typebox").TObject<{
-                        property: import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                        }>;
-                        value: import("typebox").TUnion<[import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"value">;
-                            content: import("typebox").TAny;
-                        }>, import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"somevalue">;
-                        }>, import("typebox").TObject<{
-                            type: import("typebox").TLiteral<"novalue">;
-                        }>]>;
-                    }>>;
-                    references: import("typebox").TArray<import("typebox").TObject<{
-                        parts: import("typebox").TArray<import("typebox").TObject<{
-                            property: import("typebox").TObject<{
-                                id: import("typebox").TString;
-                                data_type: import("typebox").TUnsafe<import("../semantic/profile.ts").DataType>;
-                            }>;
-                            value: import("typebox").TUnion<[import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"value">;
-                                content: import("typebox").TAny;
-                            }>, import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"somevalue">;
-                            }>, import("typebox").TObject<{
-                                type: import("typebox").TLiteral<"novalue">;
-                            }>]>;
-                        }>>;
-                        hash: import("typebox").TString;
-                    }>>;
-                }>>>;
-            }>;
-            related: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
-                labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-            }>>;
+            digest: import("typebox").TString;
+            head: import("typebox").TInteger;
         }> & {
             headers: {
-                readonly "rezics-session-token": import("typebox").TString;
+                "rezics-session-token": import("typebox").TString;
             };
         };
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -785,7 +1107,49 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -817,11 +1181,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     detail: {
         operationId: string;
         'x-action': string;
-        security: ({
+        security: {
             bearerAuth: never[];
-        } | {
-            bearerAuth?: never;
-        })[];
+        }[];
     };
 }>;
 /** The app's type is the Eden contract. */

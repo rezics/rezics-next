@@ -26,7 +26,15 @@ type Routes = TypedRoutes<Kernel['~Routes']>;
 
 // Type-checking proves that each entry is a typed route, that no typed route is missing, and that every success
 // response keeps its schema's type. An error names the offending routes.
-const typed = ['GET /health', 'POST /v1/subjects', 'GET /v1/subjects/:id'] as const satisfies readonly Routes[];
+const typed = [
+  'GET /health',
+  'POST /v1/subjects',
+  'GET /v1/subjects/:id',
+  'POST /v1/definitions/releases',
+  'GET /v1/definitions/releases/:digest',
+  'GET /v1/definitions/active',
+  'POST /v1/definitions/releases/:digest/$activate',
+] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;
 type Loose = LooseRoutes<Kernel['~Routes']>;

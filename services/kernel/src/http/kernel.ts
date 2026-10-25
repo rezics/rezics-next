@@ -1,3 +1,4 @@
+import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { createApp } from './app.ts';
 import { subjectRoutes } from './subjects.ts';
 
@@ -5,7 +6,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & { routeKey: U
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies) {
-  return subjectRoutes(createApp(dependencies), dependencies);
+  return definitionRoutes(subjectRoutes(createApp(dependencies), dependencies), dependencies);
 }
 
 /** The app's type is the Eden contract. */

@@ -31,13 +31,6 @@ CREATE SCHEMA editorial;
 
 
 --
--- Name: semantic; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA semantic;
-
-
---
 -- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -162,44 +155,6 @@ CREATE TABLE public.schema_migrations (
 
 
 --
--- Name: fact; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.fact (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    slot_id uuid NOT NULL,
-    log_seq integer NOT NULL,
-    operation text NOT NULL,
-    kind text NOT NULL,
-    language text,
-    property text,
-    statement_id uuid,
-    body jsonb NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    CONSTRAINT fact_check CHECK ((((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))),
-    CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
-    CONSTRAINT fact_log_seq_check CHECK (((log_seq >= 1) AND (log_seq <= 32))),
-    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text])))
-);
-
-
---
--- Name: subject; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    type text NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
-    CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_type_check CHECK ((type = 'schema:Book'::text))
-);
-
-
---
 -- Name: consumer_checkpoint consumer_checkpoint_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -256,22 +211,6 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
--- Name: fact fact_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.fact
-    ADD CONSTRAINT fact_pkey PRIMARY KEY (route, subject_id, slot_id, log_seq);
-
-
---
--- Name: subject subject_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject
-    ADD CONSTRAINT subject_pkey PRIMARY KEY (route, subject_id);
-
-
---
 -- Name: consumer_checkpoint consumer_checkpoint_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -301,14 +240,6 @@ ALTER TABLE ONLY core.receipt
 
 ALTER TABLE ONLY editorial.write_basis
     ADD CONSTRAINT write_basis_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
-
-
---
--- Name: fact fact_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.fact
-    ADD CONSTRAINT fact_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --
