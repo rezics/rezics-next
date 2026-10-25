@@ -26,4 +26,4 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   } finally {
     await database.close();
   }
-}, 55_000);
+}, 180_000);

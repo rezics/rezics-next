@@ -54,6 +54,15 @@ import { observeSql, type SqlObserver } from './support/sql-observer.ts';
 const AUDIENCE = 'https://content.test';
 const HOT_ROUTE = 131;
 const MEASURED_KEYS = 24;
+const suiteDrivers = new Set<ContentThreadDriver>();
+
+/** The frozen suite's beforeEach owns the process-wide Auth workflow host.
+ * Measured growth starts its own host on the observed pool, so that suite host
+ * must be stopped first. Closing it twice is safe. */
+async function releaseSuiteDrivers(): Promise<void> {
+  const drivers = [...suiteDrivers];
+  await Promise.all(drivers.map((driver) => driver.close()));
+}
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type Credential = { bearer: string; actor: AccountActor };
@@ -198,9 +207,14 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
   operation(db: { pool: PgPool }, scale: number, repetition: number): Promise<number>;
   close(): Promise<void>;
 }> {
+  await releaseSuiteDrivers();
   const authName = databaseName('contentauth');
   const maintainer = new Pool({ connectionString: maintenanceUrl(database.url) });
   const authPool = new Pool({ connectionString: namedUrl(database.url, authName) });
+  // Auth ends this pool on start failure and again on stop. Share one close.
+  const endAuthPool = authPool.end.bind(authPool);
+  let authEnding: Promise<void> | undefined;
+  authPool.end = () => (authEnding ??= endAuthPool());
   let authCreated = false;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let closing: Promise<void> | undefined;
@@ -513,12 +527,21 @@ export async function createContentThreadDriver(): Promise<ContentThreadDriver> 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
   const system = await createNativeContentSystem({ databaseUrl });
+  let driver: ContentThreadDriver;
   try {
-    return bindDriver(system);
+    driver = bindDriver(system);
   } catch (error) {
     await system.close();
     throw error;
   }
+  let closing: Promise<void> | undefined;
+  const stop = driver.close.bind(driver);
+  driver.close = () => {
+    suiteDrivers.delete(driver);
+    return (closing ??= stop());
+  };
+  suiteDrivers.add(driver);
+  return driver;
 }
 
 function bindDriver(system: NativeContentSystem): ContentThreadDriver {
@@ -1005,6 +1028,20 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
     async commandTrace() {
       const records = observer.records.slice(mark);
       const receiptAt = records.findIndex((record) => record.statement === readReceipt.sql);
+      const bodyStatements = new Set([insertThread.sql, insertPost.sql, insertRevision.sql]);
+      const bodyAt = records.findIndex((record) => bodyStatements.has(record.statement));
+      // Board projection and read hydration run after the content command commits.
+      // Their fences are separate transactions and are not this command's writes.
+      let commandFenceUntil = bodyAt < 0 ? 0 : records.length;
+      if (bodyAt >= 0) {
+        for (let index = bodyAt + 1; index < records.length; index++) {
+          const statement = records[index]!.statement;
+          if (statement === 'COMMIT' || statement === 'ROLLBACK') {
+            commandFenceUntil = index;
+            break;
+          }
+        }
+      }
       const stages: Stage[] = [];
       const checks: { action: string; resourceId: string; partition: number; statement: number; at: string }[] = [];
       const writePartitions: number[] = [];
@@ -1022,15 +1059,11 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
             statement: index + 1,
             at: instant(parameter(record, permissionRead.params, 'at')),
           });
-        } else if (record.statement === readReceipt.sql) {
+        } else if (record.statement === readReceipt.sql && (bodyAt < 0 || index < commandFenceUntil)) {
           add('receipt');
-        } else if (
-          record.statement === insertThread.sql ||
-          record.statement === insertPost.sql ||
-          record.statement === insertRevision.sql
-        ) {
+        } else if (bodyStatements.has(record.statement)) {
           add('body');
-        } else if (record.statement === fenceStatement.sql) {
+        } else if (record.statement === fenceStatement.sql && index < commandFenceUntil) {
           add('write');
           writePartitions.push(Number(parameter(record, fenceStatement.params, 'partition_no')));
         }
