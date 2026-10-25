@@ -74,7 +74,6 @@ const readResponse = t.Object(
   { subject: ItemSchema, related: t.Record(t.String(), LabelsSchema) },
   { additionalProperties: false },
 );
-const sessionResponse = (schema: ReturnType<typeof t.Object>) => withHeaders(schema, { [SESSION_HEADER]: t.String() });
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema(
   'overloaded',
@@ -117,107 +116,105 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
 }
 
 function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: SubjectRouteDependencies) {
-  app.post(
-    '/v1/subjects',
-    {
-      headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
-      body: ItemInputSchema,
-      response: {
-        201: withHeaders(itemResponse, { [SESSION_HEADER]: t.String(), location: t.String() }),
-        400: problemSchema('invalid_request'),
-        401: unauthorized,
-        403: problemSchema('forbidden'),
-        422: problemSchema('idempotency_conflict'),
-        503: unavailable,
+  return app
+    .post(
+      '/v1/subjects',
+      {
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: ItemInputSchema,
+        response: {
+          201: withHeaders(itemResponse, { [SESSION_HEADER]: t.String(), location: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          422: problemSchema('idempotency_conflict'),
+          503: unavailable,
+        },
+        detail: {
+          operationId: 'subject.create',
+          'x-action': 'subject:create',
+          security: [{ bearerAuth: [] }],
+        },
       },
-      detail: {
-        operationId: 'subject.create',
-        'x-action': 'subject:create',
-        security: [{ bearerAuth: [] }],
+      async ({ body, headers, actor, authorize, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const account: AccountActor = actor;
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const target = subjectTarget(routeKey, account.accountId, key);
+        const check = await authorize(target);
+        try {
+          const result = await admission.run('normal', job, () =>
+            createSubject(pool, {
+              actor: account,
+              target,
+              idempotencyKey: key,
+              digest: requestDigest('subject.create', account, body),
+              item: body,
+              authorize: check,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(result.component);
+          set.status = 201;
+          set.headers.location = `/v1/subjects/${result.subject.id}`;
+          return { subject: result.subject };
+        } catch (error) {
+          if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
+          if (error instanceof SubjectAccessDeniedError) throw new ProblemError('forbidden');
+          throw error;
+        }
       },
-    },
-    async ({ body, headers, actor, authorize, admission, job, session, set }) => {
-      if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-      const account: AccountActor = actor;
-      const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-      const target = subjectTarget(routeKey, account.accountId, key);
-      const check = await authorize(target);
-      try {
-        const result = await admission.run('normal', job, () =>
-          createSubject(pool, {
-            actor: account,
-            target,
-            idempotencyKey: key,
-            digest: requestDigest('subject.create', account, body),
-            item: body,
-            authorize: check,
-            deadline: job.deadline,
+    )
+    .get(
+      '/v1/subjects/:id',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          200: withHeaders(readResponse, { [SESSION_HEADER]: t.String() }),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          503: problemSchema('overloaded', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject.get',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job, session }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const resource = { route, id: params.id };
+        const check = await authorize(resource);
+        const result = await admission.run('normal', job, () => readSubject(pool, params.id, check));
+        if (!result) throw new ProblemError('not_found');
+
+        const { propertyIds, subjectIds } = relatedIds(result.subject);
+        const related: Record<string, { labels: Record<string, string> }> = {};
+        for (const property of BOOK_PROPERTIES) {
+          if (propertyIds.has(property.id)) related[property.id] = { labels: property.labels };
+        }
+        const labels = await Promise.all(
+          [...subjectIds].map(async (id) => {
+            const relatedRoute = routeOf(id);
+            if (relatedRoute === null) return null;
+            const relatedResource = { route: relatedRoute, id };
+            const relatedCheck = await authorize(relatedResource);
+            return admission
+              .run('normal', job, async () => {
+                const allowed = await withConnection(pool, (client) => relatedCheck(client));
+                if (!allowed) return null;
+                return (await readLabels(pool, [id])).get(id) ?? null;
+              })
+              .then((value) => ({ id, labels: value }));
           }),
         );
+        for (const entry of labels) if (entry?.labels) related[entry.id] = { labels: entry.labels };
+
         session.record(result.component);
-        set.status = 201;
-        set.headers.location = `/v1/subjects/${result.subject.id}`;
-        return { subject: result.subject };
-      } catch (error) {
-        if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
-        if (error instanceof SubjectAccessDeniedError) throw new ProblemError('forbidden');
-        throw error;
-      }
-    },
-  );
-
-  app.get(
-    '/v1/subjects/:id',
-    {
-      params: t.Object({ id: t.String() }),
-      response: {
-        200: sessionResponse(readResponse),
-        401: unauthorized,
-        404: problemSchema('not_found'),
-        503: problemSchema('overloaded', 'deadline_exceeded'),
+        return { subject: result.subject, related };
       },
-      detail: {
-        operationId: 'subject.get',
-        'x-action': 'subject:read',
-        security: [{ bearerAuth: [] }, {}],
-      },
-    },
-    async ({ params, authorize, admission, job, session }) => {
-      const route = routeOf(params.id);
-      if (route === null) throw new ProblemError('not_found');
-      const resource = { route, id: params.id };
-      const check = await authorize(resource);
-      const result = await admission.run('normal', job, () => readSubject(pool, params.id, check));
-      if (!result) throw new ProblemError('not_found');
-
-      const { propertyIds, subjectIds } = relatedIds(result.subject);
-      const related: Record<string, { labels: Record<string, string> }> = {};
-      for (const property of BOOK_PROPERTIES) {
-        if (propertyIds.has(property.id)) related[property.id] = { labels: property.labels };
-      }
-      const labels = await Promise.all(
-        [...subjectIds].map(async (id) => {
-          const relatedRoute = routeOf(id);
-          if (relatedRoute === null) return null;
-          const relatedResource = { route: relatedRoute, id };
-          const relatedCheck = await authorize(relatedResource);
-          return admission
-            .run('normal', job, async () => {
-              const allowed = await withConnection(pool, (client) => relatedCheck(client));
-              if (!allowed) return null;
-              return (await readLabels(pool, [id])).get(id) ?? null;
-            })
-            .then((value) => ({ id, labels: value }));
-        }),
-      );
-      for (const entry of labels) if (entry?.labels) related[entry.id] = { labels: entry.labels };
-
-      session.record(result.component);
-      return { subject: result.subject, related };
-    },
-  );
-
-  return app;
+    );
 }
 
 export { subjectRoutes };
