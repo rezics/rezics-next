@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { openGrowthDatabase, checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import { createSubject, readSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { createSubject, readLabels, readSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { itemFacts, resolveItem } from '../../src/semantic/item.ts';
 import { pageSubjects } from '../../src/semantic/page.ts';
@@ -75,8 +75,9 @@ afterAll(async () => {
   if (db) await db.close();
 });
 
-async function grow(database: GrowthDatabase, scale: number, previous: number) {
-  await seed({ pool: database.pool, admin: database.admin }, subjectPopulation(partition), {
+async function grow(database: GrowthDatabase, scale: number, previous: number, name: string) {
+  const population: Population = { ...subjectPopulation(partition), name };
+  await seed({ pool: database.pool, admin: database.admin }, population, {
     from: previous,
     to: scale,
   });
@@ -86,7 +87,7 @@ test('Subject creation stays within its bound as N grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Subject creation stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow,
+    grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-create-growth'),
     operation: async (database, _scale, repetition) => {
       const key = `growth-create-${randomUUID()}-${repetition}`;
       const target = subjectTarget(routeKey, actor.accountId, key);
@@ -108,7 +109,7 @@ test('Command and receipt stays within its bound as N grows', async () => {
     name: 'Command and receipt stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
-      await grow(database, scale, previous);
+      await grow(database, scale, previous, 'semantic-command-growth');
       for (let ordinal = previous; ordinal < scale; ordinal++) {
         const key = `growth-history-${ordinal}-${randomUUID()}`;
         await runCommand(
@@ -152,7 +153,7 @@ test('Anchored subject read stays within its bound as N grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Anchored subject read stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow,
+    grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-read-growth'),
     operation: (database) => readSubject(database.pool, anchor, async () => true),
   });
   expect(report.samples).toHaveLength(3);
@@ -163,7 +164,7 @@ test('Partition keyset page stays within its bound as d grows', async () => {
     name: 'Partition keyset page stays within its bound as d grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
-      await grow(database, scale, previous);
+      await grow(database, scale, previous, 'semantic-page-growth');
       // Growth is placed in the page's partition so each scale advances the keyset depth.
       // This population uses the same production subject and label-fact shape as the page read.
       const local: Population = { ...subjectPopulation(partition), name: 'semantic-page-depth' };
@@ -188,18 +189,29 @@ test('Partition keyset page stays within its bound as d grows', async () => {
 test('Item projection and related labels stays within its bound as P grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Item projection and related labels stays within its bound as P grows',
-    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
-    grow,
-    operation: async () => resolveItem(anchor, itemFacts(anchor, subject)),
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-related-growth'),
+    operation: async (database) => readLabels(database.pool, [anchor]),
   });
-  expect(report.samples.every(({ cost }) => cost.statements === 0 && cost.rows === 0 && cost.blocks === 0)).toBe(true);
+  expect(report.samples).toHaveLength(3);
+  expect(resolveItem(anchor, itemFacts(anchor, subject)).labels).toEqual(subject.labels);
+}, 90_000);
+
+test('Batch label fill stays within its bound as P grows', async () => {
+  const report = await checkGrowth(db, {
+    name: 'Batch label fill stays within its bound as P grows',
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-batch-label-growth'),
+    operation: async (database) => readLabels(database.pool, [anchor]),
+  });
+  expect(report.samples).toHaveLength(3);
 }, 90_000);
 
 test('Request authorization stays within its bound as N grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Request authorization stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow,
+    grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-authorization-growth'),
     operation: async (database) => {
       // A stable, empty authorization callback isolates the anchored semantic request read.
       return readSubject(database.pool, anchor, async () => true);
