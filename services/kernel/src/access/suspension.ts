@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { runCommand } from '../command/command.ts';
+import { runCommand, type CommandOutcome } from '../command/command.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -22,10 +22,17 @@ export type SuspensionValue = {
 /** Unheld accounts only. A durable coordinator must resolve existing lifecycle
  * responsibilities before this terminal transition; elapsed time grants no bypass.
  * Authorization uses the Global Context, then releases it before target checkout.
+ * Every attempt, including receipt replay, admits the current actor and checks
+ * the same action before reading the subject partition's receipt.
+ *
+ * Cost: one actor admission seek and the native Global Context formula cost
+ * O((1 + K) log G), K <= 1000. The subject transaction uses one account PK,
+ * one indexed holds EXISTS, and bounded fence/receipt/outbox writes, O(log R),
+ * R = N + U*t + M. It never reads organization or responsibility history.
  */
 export function createSuspensionCommands(config: { pool: Pool; access: Access; clock: () => Date }) {
   return {
-    async suspend(context: SuspensionContext, body: SuspensionInput) {
+    async suspend(context: SuspensionContext, body: SuspensionInput): Promise<CommandOutcome<SuspensionValue>> {
       const input = structuredClone(body);
       const route = routeOf(input.accountId);
       const { actor } = context;
