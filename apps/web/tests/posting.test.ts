@@ -498,7 +498,7 @@ async function checkWrite(
 }
 
 // Add the board's new-thread link, labelled composer, CSRF write and locale-preserving redirect to turn this into test(...).
-test.failing(
+test(
   'a signed-in member starts a thread from its board and lands on it',
   async () => {
     reset();
@@ -511,6 +511,7 @@ test.failing(
       await start.click();
       await page.waitForURL(`${await site()}${boardPath('ja')}/new`);
       await hydrated(page);
+      console.log('POSTING DEBUG NEW PAGE', await page.locator('main').innerText());
       await labelledEditor(page);
       expect(await title(page).count()).toBe(1);
       await title(page).fill('Reading together');
@@ -551,7 +552,7 @@ test.failing(
 );
 
 // Add the reply composer, authenticated post write and rendered reply with a fresh draft to turn this into test(...).
-test.failing(
+test(
   'a signed-in member replies to a thread and sees the reply',
   async () => {
     reset();
@@ -577,6 +578,15 @@ test.failing(
         'A different interpretation',
       );
       expect(await page.locator('main li').filter({ hasText: 'A different interpretation' }).count()).toBe(1);
+      console.log(
+        'POSTING DEBUG EMPTY EDITOR',
+        await editor(page).evaluate((element) => ({
+          html: element.innerHTML,
+          pDisplay: getComputedStyle(element.firstElementChild!).display,
+          parent: element.parentElement?.className,
+          text: element.innerText,
+        })),
+      );
       expect(await editor(page).innerText()).toBe('');
       expect(await send(page).isDisabled()).toBe(true);
       const nextHtml = await page.content();
@@ -595,7 +605,7 @@ test.failing(
 );
 
 // Offer contextual sign-in on boards and threads with return_to and no composer to turn this into test(...).
-test.failing(
+test(
   'a signed-out visitor is offered sign-in instead of a composer',
   async () => {
     reset();
@@ -621,7 +631,7 @@ test.failing(
 );
 
 // Disable send for blank titles and content-free blocks snapshots in both composers to turn this into test(...).
-test.failing(
+test(
   'an empty draft cannot be sent',
   async () => {
     reset();
@@ -658,7 +668,7 @@ test.failing(
 );
 
 // Preserve drafts and keys on localized kernel refusals and rotate the key after success to turn this into test(...).
-test.failing(
+test(
   'a refused write keeps the draft, says why and retries with the same idempotency key',
   async () => {
     for (const locale of ['en', 'ja'])

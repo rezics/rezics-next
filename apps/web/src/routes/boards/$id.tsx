@@ -1,6 +1,8 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
 import { readBoardPage } from '../../threads/reads';
+import { SignInPrompt } from '../../threads/composer';
 
 export const Route = createFileRoute('/boards/$id')({
   validateSearch: (search: Record<string, unknown>) =>
@@ -13,11 +15,23 @@ export const Route = createFileRoute('/boards/$id')({
 
 function BoardPage() {
   const { board, threads } = Route.useLoaderData();
+  const { session } = useLoaderData({ from: '__root__' });
+  const location = useLocation();
   const id = Route.useParams().id;
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <h1 className="font-serif text-4xl font-semibold tracking-tight">{board.title ?? m.threads_untitled()}</h1>
+        {session === 'signed-in' ? (
+          <a
+            href={`/${getLocale()}/boards/${id}/new`}
+            className="inline-flex min-h-10 items-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90"
+          >
+            {m.board_start_thread()}
+          </a>
+        ) : session === 'signed-out' ? (
+          <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
+        ) : null}
       </header>
       <section className="space-y-4" aria-labelledby="board-threads-heading">
         <h2 id="board-threads-heading" className="text-xl font-semibold">

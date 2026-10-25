@@ -53,9 +53,19 @@ export const readBoardPage = createServerFn({ method: 'GET' })
     return { board: board.board, threads };
   });
 
+export const readNewThreadPage = createServerFn({ method: 'GET' })
+  .validator(validatePageInput)
+  .handler(async ({ data }): Promise<{ board: Board['board']; idempotencyKey: string }> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const result = await kernelClient().boards({ id: data.id }).get();
+    const board = checkRead<Board>(result, 'board');
+    if (board.board.id !== data.id) throw notFound();
+    return { board: board.board, idempotencyKey: crypto.randomUUID() };
+  });
+
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }): Promise<{ thread: Thread['thread']; posts: PostPage }> => {
+  .handler(async ({ data }): Promise<{ thread: Thread['thread']; posts: PostPage; idempotencyKey: string }> => {
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient();
     const query = data.cursor ? { query: { cursor: data.cursor } } : {};
@@ -66,5 +76,5 @@ export const readThreadPage = createServerFn({ method: 'GET' })
     const thread = checkRead<Thread>(threadResult, 'thread');
     const posts = checkRead<PostPage>(postsResult, 'thread posts');
     if (thread.thread.id !== data.id) throw notFound();
-    return { thread: thread.thread, posts };
+    return { thread: thread.thread, posts, idempotencyKey: crypto.randomUUID() };
   });

@@ -38,5 +38,16 @@
   "thread_posts_heading": "Publicaciones",
   "thread_posts_empty": "Todavía no hay publicaciones en este debate.",
   "thread_post_erased": "Esta publicación fue eliminada.",
-  "threads_untitled": "Sin título"
+  "threads_untitled": "Sin título",
+  "board_start_thread": "Crear un hilo",
+  "thread_new_heading": "Crear un hilo",
+  "thread_title_label": "Título",
+  "thread_new_body_label": "Texto del hilo",
+  "thread_reply_body_label": "Texto de la respuesta",
+  "thread_write_send": "Enviar",
+  "thread_write_retry": "Volver a intentar",
+  "thread_write_forbidden": "No tienes permiso para publicar esta contribución.",
+  "thread_write_invalid": "Este borrador no es válido. Revísalo e inténtalo de nuevo.",
+  "thread_write_rate_limited": "Estás enviando contribuciones demasiado rápido. Espera {seconds} segundos antes de volver a intentarlo.",
+  "thread_write_unavailable": "Esta contribución no está disponible temporalmente. Inténtalo de nuevo."
 }

@@ -38,5 +38,16 @@
   "thread_posts_heading": "Posts",
   "thread_posts_empty": "There are no posts in this thread yet.",
   "thread_post_erased": "This post was erased.",
-  "threads_untitled": "Untitled"
+  "threads_untitled": "Untitled",
+  "board_start_thread": "Start a new thread",
+  "thread_new_heading": "Start a new thread",
+  "thread_title_label": "Title",
+  "thread_new_body_label": "Thread body",
+  "thread_reply_body_label": "Reply body",
+  "thread_write_send": "Send",
+  "thread_write_retry": "Try again",
+  "thread_write_forbidden": "You do not have permission to publish this contribution.",
+  "thread_write_invalid": "This draft is invalid. Review it and try again.",
+  "thread_write_rate_limited": "You're sending contributions too fast. Wait {seconds} seconds before trying again.",
+  "thread_write_unavailable": "This contribution is temporarily unavailable. Please try again."
 }

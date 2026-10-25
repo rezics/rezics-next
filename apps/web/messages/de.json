@@ -38,5 +38,16 @@
   "thread_posts_heading": "Beiträge",
   "thread_posts_empty": "In diesem Thread gibt es noch keine Beiträge.",
   "thread_post_erased": "Dieser Beitrag wurde gelöscht.",
-  "threads_untitled": "Ohne Titel"
+  "threads_untitled": "Ohne Titel",
+  "board_start_thread": "Neuen Thread starten",
+  "thread_new_heading": "Neuen Thread starten",
+  "thread_title_label": "Titel",
+  "thread_new_body_label": "Threadtext",
+  "thread_reply_body_label": "Antworttext",
+  "thread_write_send": "Senden",
+  "thread_write_retry": "Erneut versuchen",
+  "thread_write_forbidden": "Sie dürfen diesen Beitrag nicht veröffentlichen.",
+  "thread_write_invalid": "Dieser Entwurf ist ungültig. Bitte prüfen Sie ihn und versuchen Sie es erneut.",
+  "thread_write_rate_limited": "Sie senden Beiträge zu schnell. Bitte warten Sie {seconds} Sekunden und versuchen Sie es erneut.",
+  "thread_write_unavailable": "Der Beitrag ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut."
 }

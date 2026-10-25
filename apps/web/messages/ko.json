@@ -38,5 +38,16 @@
   "thread_posts_heading": "게시물",
   "thread_posts_empty": "이 스레드에는 아직 게시물이 없습니다.",
   "thread_post_erased": "이 게시물은 삭제되었습니다.",
-  "threads_untitled": "제목 없음"
+  "threads_untitled": "제목 없음",
+  "board_start_thread": "새 스레드 시작",
+  "thread_new_heading": "새 스레드 시작",
+  "thread_title_label": "제목",
+  "thread_new_body_label": "스레드 본문",
+  "thread_reply_body_label": "답글 본문",
+  "thread_write_send": "보내기",
+  "thread_write_retry": "다시 시도",
+  "thread_write_forbidden": "이 기여를 게시할 권한이 없습니다.",
+  "thread_write_invalid": "초안이 올바르지 않습니다. 내용을 확인한 뒤 다시 시도하세요.",
+  "thread_write_rate_limited": "너무 빠르게 게시하고 있습니다. {seconds}초 기다린 후 다시 시도하세요.",
+  "thread_write_unavailable": "지금은 게시할 수 없습니다. 다시 시도해 주세요."
 }

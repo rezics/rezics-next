@@ -1,7 +1,10 @@
 import { DocumentBody } from '@rezics/ui/document-body';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { readThreadPage } from '../../threads/reads';
+import { replyToThread, type CreatedPost } from '../../threads/actions';
+import { csrfHeaders, draftFetch, PostComposer, SignInPrompt } from '../../threads/composer';
 
 export const Route = createFileRoute('/threads/$id')({
   validateSearch: (search: Record<string, unknown>) =>
@@ -13,8 +16,14 @@ export const Route = createFileRoute('/threads/$id')({
 });
 
 function ThreadPage() {
-  const { thread, posts } = Route.useLoaderData();
+  const { thread, posts: loadedPosts, idempotencyKey } = Route.useLoaderData();
+  const [posts, setPosts] = useState(loadedPosts);
+  const { session } = useLoaderData({ from: '__root__' });
+  const location = useLocation();
   const id = Route.useParams().id;
+
+  useEffect(() => setPosts(loadedPosts), [loadedPosts]);
+
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
@@ -54,6 +63,22 @@ function ThreadPage() {
           </nav>
         )}
       </section>
+      {session === 'signed-in' ? (
+        <PostComposer<CreatedPost>
+          initialKey={idempotencyKey}
+          onSubmit={async ({ body, idempotencyKey: key }) => {
+            const result = await replyToThread({
+              data: { threadId: id, body, idempotencyKey: key },
+              headers: csrfHeaders(),
+              fetch: draftFetch(body),
+            });
+            return result.ok ? { ok: true as const, value: result.post } : result;
+          }}
+          onSuccess={(post) => setPosts((current) => ({ ...current, posts: [...current.posts, post] }))}
+        />
+      ) : session === 'signed-out' ? (
+        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
+      ) : null}
     </article>
   );
 }
