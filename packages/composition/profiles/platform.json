@@ -407,5 +407,166 @@
       }
     }
   ],
-  "routes": []
+  "routes": [
+    {
+      "route": "/",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "SearchBox",
+            "props": {
+              "id": "search",
+              "placeholder": {
+                "en": "Search books, anime, visual novels and recipes",
+                "zh-Hant": "搜尋書籍、動畫、視覺小說和食譜",
+                "zh-Hans": "搜索图书、动画、视觉小说和食谱",
+                "ja": "書籍、アニメ、ビジュアルノベル、レシピを検索",
+                "ko": "도서, 애니메이션, 비주얼 노벨, 레시피 검색",
+                "de": "Nach Büchern, Anime, Visual Novels und Rezepten suchen",
+                "fr": "Rechercher des livres, des anime, des visual novels et des recettes",
+                "es": "Buscar libros, anime, novelas visuales y recetas"
+              }
+            }
+          },
+          {
+            "type": "LinkGrid",
+            "props": {
+              "id": "verticals",
+              "links": [
+                {
+                  "label": {
+                    "en": "Books",
+                    "zh-Hant": "書籍",
+                    "zh-Hans": "图书",
+                    "ja": "書籍",
+                    "ko": "도서",
+                    "de": "Bücher",
+                    "fr": "Livres",
+                    "es": "Libros"
+                  },
+                  "href": "/search?type=schema%3ABook"
+                },
+                {
+                  "label": {
+                    "en": "Anime",
+                    "zh-Hant": "動畫",
+                    "zh-Hans": "动画",
+                    "ja": "アニメ",
+                    "ko": "애니메이션",
+                    "de": "Anime",
+                    "fr": "Anime",
+                    "es": "Anime"
+                  },
+                  "href": "/search?type=schema%3ATVSeries"
+                },
+                {
+                  "label": {
+                    "en": "Visual novels",
+                    "zh-Hant": "視覺小說",
+                    "zh-Hans": "视觉小说",
+                    "ja": "ビジュアルノベル",
+                    "ko": "비주얼 노벨",
+                    "de": "Visual Novels",
+                    "fr": "Visual novels",
+                    "es": "Novelas visuales"
+                  },
+                  "href": "/search?type=wd%3AQ689445"
+                },
+                {
+                  "label": {
+                    "en": "Recipes",
+                    "zh-Hant": "食譜",
+                    "zh-Hans": "食谱",
+                    "ja": "レシピ",
+                    "ko": "레시피",
+                    "de": "Rezepte",
+                    "fr": "Recettes",
+                    "es": "Recetas"
+                  },
+                  "href": "/search?type=schema%3ARecipe"
+                }
+              ]
+            }
+          },
+          {
+            "type": "TypeList",
+            "props": {
+              "id": "books",
+              "title": {
+                "en": "Books",
+                "zh-Hant": "書籍",
+                "zh-Hans": "图书",
+                "ja": "書籍",
+                "ko": "도서",
+                "de": "Bücher",
+                "fr": "Livres",
+                "es": "Libros"
+              },
+              "types": ["schema:Book"],
+              "sort": "collections",
+              "limit": 12
+            }
+          },
+          {
+            "type": "TypeList",
+            "props": {
+              "id": "anime",
+              "title": {
+                "en": "Anime",
+                "zh-Hant": "動畫",
+                "zh-Hans": "动画",
+                "ja": "アニメ",
+                "ko": "애니메이션",
+                "de": "Anime",
+                "fr": "Anime",
+                "es": "Anime"
+              },
+              "types": ["schema:TVSeries", "schema:Movie"],
+              "sort": "collections",
+              "limit": 12
+            }
+          },
+          {
+            "type": "TypeList",
+            "props": {
+              "id": "visual-novels",
+              "title": {
+                "en": "Visual novels",
+                "zh-Hant": "視覺小說",
+                "zh-Hans": "视觉小说",
+                "ja": "ビジュアルノベル",
+                "ko": "비주얼 노벨",
+                "de": "Visual Novels",
+                "fr": "Visual novels",
+                "es": "Novelas visuales"
+              },
+              "types": ["wd:Q689445"],
+              "sort": "collections",
+              "limit": 12
+            }
+          },
+          {
+            "type": "TypeList",
+            "props": {
+              "id": "recipes",
+              "title": {
+                "en": "Recipes",
+                "zh-Hant": "食譜",
+                "zh-Hans": "食谱",
+                "ja": "レシピ",
+                "ko": "레시피",
+                "de": "Rezepte",
+                "fr": "Recettes",
+                "es": "Recetas"
+              },
+              "types": ["schema:Recipe"],
+              "sort": "collections",
+              "limit": 12
+            }
+          }
+        ]
+      }
+    }
+  ]
 }
