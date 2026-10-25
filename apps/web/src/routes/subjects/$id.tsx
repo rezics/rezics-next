@@ -9,7 +9,9 @@ import type { Related } from '../../subject/types';
 
 type Read = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>['data']>;
 type LangText = { text: string; lang?: string };
-type Value = { kind: 'text'; text: LangText } | { kind: 'link'; text: LangText; href: string; subjectId?: string };
+type Value =
+  | { kind: 'text'; text: LangText; muted?: boolean }
+  | { kind: 'link'; text: LangText; href: string; subjectId?: string; muted?: boolean };
 type SubjectPage = {
   id: string;
   label: LangText;
@@ -67,8 +69,8 @@ const readSubject = createServerFn({ method: 'GET' })
       value: { type: string; content?: unknown };
     }): Value | null => {
       const value = snak.value;
-      if (value.type === 'somevalue') return { kind: 'text', text: { text: m.subject_value_unknown() } };
-      if (value.type === 'novalue') return { kind: 'text', text: { text: m.subject_value_none() } };
+      if (value.type === 'somevalue') return { kind: 'text', text: { text: m.subject_value_unknown() }, muted: true };
+      if (value.type === 'novalue') return { kind: 'text', text: { text: m.subject_value_none() }, muted: true };
       if (snak.property.data_type === 'wikibase-item' && typeof value.content === 'string') {
         const entry = related[value.content];
         const hrefId = entry?.redirect ?? value.content;
@@ -77,6 +79,7 @@ const readSubject = createServerFn({ method: 'GET' })
           href: `/${locale}/subjects/${hrefId}`,
           subjectId: hrefId,
           text: entry ? label(entry.labels, locale) : { text: m.subject_value_unlabelled() },
+          ...(!entry ? { muted: true } : {}),
         };
       }
       if (snak.property.data_type === 'quantity' && value.content && typeof value.content === 'object') {
@@ -150,24 +153,27 @@ export const Route = createFileRoute('/subjects/$id')({
 
 function InlineValue({ value }: { value: Value | null }) {
   if (!value) return null;
+  const mutedClass = value.muted ? 'text-muted-foreground' : undefined;
   return value.kind === 'link' ? (
     value.subjectId ? (
-      <Link to="/subjects/$id" params={{ id: value.subjectId }} lang={value.text.lang}>
+      <Link to="/subjects/$id" params={{ id: value.subjectId }} lang={value.text.lang} className={mutedClass}>
         {value.text.text}
       </Link>
     ) : (
-      <a href={value.href} lang={value.text.lang}>
+      <a href={value.href} lang={value.text.lang} className={mutedClass}>
         {value.text.text}
       </a>
     )
   ) : (
-    <span lang={value.text.lang}>{value.text.text}</span>
+    <span lang={value.text.lang} className={mutedClass}>
+      {value.text.text}
+    </span>
   );
 }
 function SubjectPageView() {
   const page = Route.useLoaderData();
   return (
-    <article className="mx-auto max-w-4xl space-y-8 text-foreground">
+    <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <h1 lang={page.label.lang} className="font-serif text-4xl font-semibold tracking-tight">
           {page.label.text}
@@ -186,21 +192,21 @@ function SubjectPageView() {
           </div>
         )}
       </header>
-      <dl className="grid gap-5 sm:grid-cols-[minmax(10rem,1fr)_3fr]">
-        {page.groups.flatMap((group) =>
-          group.statements.map((statement, index) => (
-            <div className="contents" key={`${group.property.text}-${index}`}>
-              {index === 0 && (
-                <dt className="font-semibold">
-                  {group.property.lang ? (
-                    <span lang={group.property.lang}>{group.property.text}</span>
-                  ) : (
-                    group.property.text
-                  )}
-                </dt>
+      <dl className="space-y-5">
+        {page.groups.map((group, index) => (
+          <div
+            className="grid gap-y-2 border-b border-border/60 pb-4 sm:grid-cols-[minmax(10rem,1fr)_3fr] sm:gap-x-4"
+            key={`${group.property.text}-${index}`}
+          >
+            <dt className="font-semibold">
+              {group.property.lang ? (
+                <span lang={group.property.lang}>{group.property.text}</span>
+              ) : (
+                group.property.text
               )}
-              {index > 0 && <dt aria-hidden="true" />}
-              <dd className="space-y-2 border-b border-border/60 pb-4">
+            </dt>
+            {group.statements.map((statement, statementIndex) => (
+              <dd key={statementIndex} className="space-y-2 sm:col-start-2">
                 <InlineValue value={statement.value} />
                 {statement.qualifiers.length > 0 && (
                   <dl className="ms-4 grid grid-cols-[auto_1fr] gap-x-3 text-sm text-muted-foreground">
@@ -215,9 +221,9 @@ function SubjectPageView() {
                   </dl>
                 )}
               </dd>
-            </div>
-          )),
-        )}
+            ))}
+          </div>
+        ))}
       </dl>
       {page.sources.length > 0 && (
         <section>

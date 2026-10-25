@@ -66,7 +66,7 @@ function Mark() {
     </svg>
   );
 }
-function Logo({ locale: _locale }: { locale: string }) {
+function Logo({ locale: _locale, showWordmarkOnMobile = false }: { locale: string; showWordmarkOnMobile?: boolean }) {
   const { isMobile, setOpenMobile } = useSidebar();
   return (
     <Link
@@ -76,17 +76,21 @@ function Logo({ locale: _locale }: { locale: string }) {
       className="flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5"
     >
       <Mark />
-      <span className="hidden font-extrabold text-[15px] text-foreground tracking-[0.28em] sm:inline">REZICS</span>
+      <span
+        className={`${showWordmarkOnMobile ? 'inline' : 'hidden sm:inline'} font-extrabold text-[15px] text-foreground tracking-[0.28em]`}
+      >
+        REZICS
+      </span>
     </Link>
   );
 }
 function Navigation({ current }: { current: string }) {
   const { setOpenMobile, isMobile } = useSidebar();
   return (
-    <nav aria-label={m.shell_navigation()}>
+    <>
       {isMobile && (
         <SidebarHeader className="flex-row items-center justify-between">
-          <Logo locale={getLocale()} />
+          <Logo locale={getLocale()} showWordmarkOnMobile />
           <Button
             variant="ghost"
             size="icon-md"
@@ -97,26 +101,28 @@ function Navigation({ current }: { current: string }) {
           </Button>
         </SidebarHeader>
       )}
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            {destinations.map((item) => {
-              const Icon = item.icon;
-              return (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton asChild isActive={current === item.to} tooltip={item.message()}>
-                    <Link to={item.to} onClick={() => setOpenMobile(false)} data-autofocus className="text-primary">
-                      <Icon aria-hidden="true" className="size-5" />
-                      <span>{item.message()}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
-    </nav>
+      <nav aria-label={m.shell_navigation()}>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              {destinations.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton asChild isActive={current === item.to} tooltip={item.message()}>
+                      <Link to={item.to} onClick={() => setOpenMobile(false)} data-autofocus className="text-primary">
+                        <Icon aria-hidden="true" className="size-5" />
+                        <span>{item.message()}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </nav>
+    </>
   );
 }
 function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
@@ -301,7 +307,9 @@ export function AppShell({
             <Navigation current={location.pathname} />
           </Sidebar>
           <SkipNavContent asChild id="main-content" className="min-w-0 flex-1">
-            <main className="min-h-[calc(100dvh-4rem)] min-w-0 p-6 pb-24 outline-none md:pb-6">{children}</main>
+            <main className="min-h-[calc(100dvh-4rem)] min-w-0 p-6 pb-24 outline-none md:pb-6">
+              <div className="mx-auto w-full max-w-5xl">{children}</div>
+            </main>
           </SkipNavContent>
         </div>
         <BottomNavigation aria-label={m.shell_navigation()} className="md:hidden">
