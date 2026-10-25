@@ -1,5 +1,11 @@
 import type { Actor } from '../request/access.ts';
-import type { AuthorErasureDependencies, AuthorErasureInput, Operation, RequestContext } from './operation-contract.ts';
+import type {
+  AuthorErasureDependencies,
+  AuthorErasureInput,
+  CommandRequestContext,
+  Operation,
+  RequestContext,
+} from './operation-contract.ts';
 import type { CommandOutcome } from '../command/command.ts';
 
 /** Initiates native author-erasure work. The port remains closed until its
@@ -9,7 +15,7 @@ export async function beginAuthorErasure(
   _deps: AuthorErasureDependencies,
   _actor: Actor,
   _input: AuthorErasureInput,
-  _context: RequestContext,
+  _context: CommandRequestContext,
 ): Promise<CommandOutcome<{ operationId: string }>> {
   throw new Error('Author erasure initiation is not implemented');
 }
