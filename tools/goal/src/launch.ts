@@ -40,11 +40,13 @@ export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, par
   return { ...env, ...extra, [key]: pool.configDirectory };
 }
 export function workerPrompt(task: Task, evidence: string | undefined, consultation: string | undefined, resolutionFiles: readonly string[], mainCheckout: string): string {
+  const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map(file => file.path);
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
     'Do not rebase, merge, change acceptance tests, or expand the declared scope.',
+    frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
     'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
     readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
     task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',

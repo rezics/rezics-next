@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
@@ -14,6 +15,24 @@ const derivedFiles = defaults.derivedFiles as DerivedFile[];
 
 function unmergedFiles(cwd: string): string[] {
   return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
+}
+
+type FrozenTaskRecord = { frozenFiles?: { path: string; hash: string }[] };
+function frozenFilesForTask(stateDirectory: string, taskId: string): { path: string; hash: string }[] {
+  const path = join(stateDirectory, 'goal.sqlite');
+  if (!existsSync(path)) return [];
+  const db = new Database(path, { readonly: true, strict: true });
+  try {
+    const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
+    return row ? (JSON.parse(row.body) as FrozenTaskRecord).frozenFiles ?? [] : [];
+  } finally { db.close(); }
+}
+
+function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
+  return frozen.filter(file => {
+    try { return createHash('sha256').update(readFileSync(join(cwd, file.path))).digest('hex') !== file.hash; }
+    catch { return true; }
+  }).map(file => file.path);
 }
 
 function rebaseWithDerivedFiles(cwd: string, base: string, originalBase: string, logPath: string,
@@ -195,6 +214,18 @@ export class MergeTrain {
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
         rebaseOnto(trainTree, base, originalBase, logPath);
+        const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
+        const changedFrozen = changedFrozenFiles(trainTree, frozen);
+        if (changedFrozen.length) {
+          stage = 'rebase';
+          result.stage = 'rebase';
+          result.conflictedFiles = changedFrozen;
+          result.firstFailure = firstFailure(`Frozen acceptance file changed: ${changedFrozen.join(', ')}`);
+          appendFileSync(logPath, `Frozen acceptance files changed: ${changedFrozen.join(', ')}\n`);
+          const mutable = o.fence as AttemptFence & { updateAttempt?: (ref: AttemptRef, update: (attempt: { escalation: string | null }) => void) => unknown };
+          mutable.updateAttempt?.(request, attempt => { attempt.escalation = 'rebase-conflict'; });
+          return result;
+        }
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base);
         result.diffLines = diffLineCount(trainTree, base);

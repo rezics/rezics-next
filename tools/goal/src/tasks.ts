@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
@@ -13,6 +13,42 @@ import { readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
+import { parseFrozenFiles, type FrozenFile } from './frozen.ts';
+
+type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
+
+function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
+  return (task as FrozenTask).frozenFiles ?? [];
+}
+function commitFrozenFiles(worktree: string, files: readonly FrozenFile[], previous: readonly Pick<FrozenFile, 'path' | 'hash'>[] = []): void {
+  const current = new Map(files.map(file => [file.path, file]));
+  const touched = new Set([...previous.map(file => file.path), ...current.keys()]);
+  for (const path of touched) {
+    const target = resolve(worktree, path);
+    const fromRoot = relative(resolve(worktree), target);
+    if (!fromRoot || fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(fromRoot))
+      throw new Error(`invalid frozen file path: ${path}`);
+    let component = resolve(worktree);
+    for (const part of path.split('/')) {
+      component = join(component, part);
+      try { if (lstatSync(component).isSymbolicLink()) throw new Error(`frozen file path crosses a symbolic link: ${path}`); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; break; }
+    }
+    const file = current.get(path);
+    if (file) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.content, 'utf8');
+    } else if (existsSync(target)) rmSync(target, { force: true });
+  }
+  if (!touched.size) return;
+  const existing = [...current.keys()];
+  if (existing.length) git(worktree, ['add', '-A', '--', ...existing]);
+  const removed = previous.map(file => file.path).filter(path => !current.has(path));
+  if (removed.length) git(worktree, ['add', '-u', '--', ...removed]);
+  const status = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: worktree });
+  if (status.status === 0) return;
+  git(worktree, ['commit', '-m', 'test: frozen acceptance files']);
+}
 
 export function git(cwd: string, args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -90,12 +126,18 @@ export class WorkerTasks {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'));
     try {
       const base = this.integrationHead();
+      const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
       git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
       installWorktreeDependencies(worktree);
-      return this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
+      commitFrozenFiles(worktree, files);
+      this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
+      this.store.updateTask({ taskId: id, attempt: 0 }, current => {
+        (current as FrozenTask).frozenFiles = files.map(({ path, hash }) => ({ path, hash }));
+      });
+      return this.store.task(id);
     } finally { lease.release(); }
   }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
@@ -205,6 +247,13 @@ export class WorkerTasks {
       let retryPrepared = false;
       try {
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
+        setupStep = 'committing frozen acceptance files';
+        const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
+        const priorFiles = frozenFiles(task);
+        commitFrozenFiles(task.worktree, frozenBlocks, priorFiles);
+        task = this.store.updateTask(next, current => {
+          (current as FrozenTask).frozenFiles = frozenBlocks.map(({ path, hash }) => ({ path, hash }));
+        });
         setupStep = 'rebasing onto current dev';
         const integration = this.integrationHead();
         const tip = git(task.worktree, ['rev-parse', 'HEAD']);

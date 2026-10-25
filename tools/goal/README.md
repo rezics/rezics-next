@@ -18,6 +18,10 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
+Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
+```` ```ts path=tools/example.test.ts ````. Each path must be inside the brief's declared paths. The controller writes
+and commits these files before launch, records their SHA-256 hashes, and refuses integration if a worker changes one.
+
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
 the lease to drain a request that arrived during shutdown; pumps return quietly when another process holds the lease.
