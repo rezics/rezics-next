@@ -1,0 +1,43 @@
+import { expect, test } from 'bun:test';
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { connectPool } from './app-server.ts';
+
+// Stands in for `codex app-server --listen ws://127.0.0.1:<port>` (port 0 picks one), printing its readiness URL to
+// stderr as codex-cli 0.163.0 does, and answering JSON-RPC over the WebSocket.
+const fake = `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+if (args[0] !== 'app-server' || !args.includes('--listen')) process.exit(2);
+const listen = new URL(args[args.indexOf('--listen') + 1]);
+if (listen.protocol !== 'ws:' || listen.hostname !== '127.0.0.1') process.exit(3);
+const server = Bun.serve({ hostname: '127.0.0.1', port: Number(listen.port || 0), fetch(request, server) {
+  if (new URL(request.url).pathname === '/readyz') return new Response('ok');
+  return server.upgrade(request) ? undefined : new Response('upgrade required', { status: 426 });
+}, websocket: { message(ws, data) {
+  const message = JSON.parse(String(data));
+  if (message.id === undefined) return;
+  const result = message.method === 'initialize' ? { userAgent: 'fake', codexHome: process.env.CODEX_HOME } : { echo: message.method, params: message.params };
+  ws.send(JSON.stringify({ id: message.id, result }));
+  if (message.method === 'thread/start') ws.send(JSON.stringify({ method: 'thread/started', params: { thread: { id: 'thread-1' } } }));
+} } });
+console.error('  readyz: http://127.0.0.1:' + server.port + '/readyz');
+`;
+
+test('a pool app-server listens on a loopback WebSocket owned by the caller and serves JSON-RPC', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-'));
+  const executable = join(directory, 'codex');
+  writeFileSync(executable, fake); chmodSync(executable, 0o755);
+  const server = await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
+  const endpoint = server.endpoint;
+  try {
+    expect(endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
+    const notifications: string[] = [];
+    server.onNotification(notification => notifications.push(notification.method));
+    expect(await server.request('thread/start', { cwd: directory })).toEqual({ echo: 'thread/start', params: { cwd: directory } });
+    await Bun.sleep(50);
+    expect(notifications).toContain('thread/started');
+  } finally { server.close(); }
+  await Bun.sleep(300);
+  expect(await fetch(`${endpoint.replace('ws://', 'http://')}/readyz`).then(() => 'up', () => 'down')).toBe('down');
+});
