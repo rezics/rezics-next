@@ -13,6 +13,9 @@ import {
   type Resource,
 } from '../request/access.ts';
 import { resolveResourceRoles, installResourceRoleCatalogue, type ResourceRoleCatalogue } from './resource-roles.ts';
+import { withConnection } from '../database/pool.ts';
+import { MEMBERSHIP_LIMIT, type MembershipPrincipal } from './membership-inverse.ts';
+import inverseRead from './permission-inverse.sql';
 import candidatesRead from './permission-candidates.sql';
 import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
@@ -30,9 +33,29 @@ export type PermissionConfig = {
   /** Retrieve the already-read account from the request; do not query again here. */
   accountEvidence: (actor: AccountActor, context: PermissionContext) => Account | null | undefined;
   authenticate?: Access['authenticate'];
+  /** Server-owned Realm integration. Read only this Realm/member anchor on the
+   * supplied released connection. Return positive and negative proofs for the existing ACL subject roles
+   * using native current/next temporal seeks, never an interval-history scan.
+   * Proof validity ends at the next authoritative temporal transition.
+   * Following is not membership. Missing verifier or required proof denies.
+   */
+  realmRoleReader?: RealmRoleReader;
+};
+export type MembershipRoleProof = { role: 'owner' | 'member'; member: boolean; valid: string };
+export type RealmRoleReader = (
+  client: AccessClient,
+  input: { realmId: string; accountId: string; at: string },
+) => Promise<readonly MembershipRoleProof[] | null>;
+
+type RoleEvidence = {
+  account_id: string;
+  organization_id: string;
+  group_kind: MembershipPrincipal['kind'];
+  role: 'owner' | 'member';
+  member: boolean;
+  valid: string;
 };
 
-type RoleEvidence = { account_id: string; organization_id: string; role: string; valid: string };
 type Prepared = {
   binding: string;
   deadline: number;
@@ -148,13 +171,7 @@ export function createAccess(config: PermissionConfig): Access {
         if (actor.kind === 'anonymous') {
           if (!metadata.anonymous) return evidence;
         } else {
-          if (
-            !uuidPattern.test(actor.accountId) ||
-            !actor.clientId ||
-            !actor.scopes.includes(action) ||
-            actor.scopes.some((scope) => !actions.has(scope))
-          )
-            return evidence;
+          if (!uuidPattern.test(actor.accountId) || !actor.clientId || !actor.scopes.includes(action)) return evidence;
           account = config.accountEvidence(actor, context);
           if (!account || !eligible(account, actor)) return evidence;
         }
@@ -188,47 +205,115 @@ export function createAccess(config: PermissionConfig): Access {
               return evidence;
             principalId = principal;
             valid = assignment.valid;
-            members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
+            if (principal === actor.accountId) members[0]!.automated ||= assignment.operatorAccountId !== null;
+            else members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
           }
         }
         const grantRoles = [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
         const roles: RoleEvidence[] = [];
         if (actor.kind === 'account') {
+          // The inverse is admission evidence only. Never derive identities from
+          // resource ACLs or treat a stale inverse row as a membership role.
+          for (const member of members) {
+            if (member.automated) continue;
+            const rows = await withConnection(context.pool, (client) =>
+              inverseRead.run(client, {
+                route: routeOf(member.accountId),
+                account_id: member.accountId,
+              }),
+            );
+            if (!rows.length || rows.some((r) => r.complete !== true)) return evidence;
+            const inverse: MembershipPrincipal[] = [];
+            for (const row of rows) {
+              if (row.kind === null && row.id === null) continue;
+              if (
+                (row.kind !== 'organization' && row.kind !== 'realm') ||
+                !row.id ||
+                row.id === member.accountId ||
+                !uuidPattern.test(row.id)
+              )
+                return evidence;
+              inverse.push({ kind: row.kind, id: row.id });
+            }
+            if (inverse.length > MEMBERSHIP_LIMIT || new Set(inverse.map((g) => g.id)).size !== inverse.length)
+              return evidence;
+            for (const group of inverse)
+              for (const role of ['owner', 'member'] as const)
+                roles.push({
+                  account_id: member.accountId,
+                  organization_id: group.id,
+                  group_kind: group.kind,
+                  role,
+                  member: false,
+                  valid: 'empty',
+                });
+          }
           const candidates = await candidatesRead.run(context.pool, {
             route: resource.route,
             resource_id: resource.id,
             action,
             grant_roles: grantRoles,
+            actor_id: actor.accountId,
+            principal_id: principalId ?? '',
+            roles,
+            at,
           });
-          for (const candidate of candidates) {
-            for (const member of members) {
-              if (member.automated) continue;
-              const memberships = await membershipRead.run(context.pool, {
-                route: routeOf(candidate.organizationId),
-                organization_id: candidate.organizationId,
-                member_id: member.accountId,
-                at,
-              });
-              if (
-                !memberships.length ||
-                memberships.some((row) => row.kind !== 'organization' || row.state !== 'active' || row.fenced !== false)
-              )
-                return evidence;
-              roles.push({
-                account_id: member.accountId,
-                organization_id: candidate.organizationId,
-                role: '',
-                valid: '(,)',
-              });
-              for (const membership of memberships)
-                if (membership.role && membership.valid)
-                  roles.push({
-                    account_id: member.accountId,
-                    organization_id: candidate.organizationId,
-                    role: membership.role,
-                    valid: membership.valid,
+          // Only hits from the single bounded probe cause an anchored role read.
+          const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
+          const groups = new Map<string, RoleEvidence[]>();
+          for (const row of roles) {
+            const key = `${row.account_id}/${row.organization_id}`;
+            const entries = groups.get(key) ?? [];
+            entries.push(row);
+            groups.set(key, entries);
+          }
+          const matched = [...groups].filter(([key]) => hits.has(key)).map(([, entries]) => entries);
+          // Independent anchor reads borrow/release their own client. Bounded
+          // batches never acquire a second client inside an anchored callback;
+          // all settle before any resource checkout, including failure paths.
+          for (let start = 0; start < matched.length; start += 4) {
+            const results = await Promise.allSettled(
+              matched.slice(start, start + 4).map(async (entries) => {
+                const group = entries[0]!;
+                const proofs = await withConnection(context.pool, async (client) => {
+                  if (group.group_kind === 'realm')
+                    return (
+                      config.realmRoleReader?.(client, {
+                        realmId: group.organization_id,
+                        accountId: group.account_id,
+                        at,
+                      }) ?? null
+                    );
+                  const rows = await membershipRead.run(client, {
+                    route: routeOf(group.organization_id),
+                    organization_id: group.organization_id,
+                    member_id: group.account_id,
+                    at,
                   });
-            }
+                  if (
+                    rows.length !== 2 ||
+                    rows.some((r) => r.kind !== 'organization' || r.state !== 'active' || r.fenced !== false)
+                  )
+                    return null;
+                  return rows;
+                });
+                if (
+                  !proofs ||
+                  proofs.length !== 2 ||
+                  new Set(proofs.map((r) => r.role)).size !== 2 ||
+                  proofs.some((r) => !['owner', 'member'].includes(r.role) || typeof r.member !== 'boolean' || !r.valid)
+                )
+                  return false;
+                for (const proof of proofs) {
+                  if (!proof.valid) return false;
+                  const row = entries.find((r) => r.role === proof.role)!;
+                  row.member = proof.member;
+                  row.valid = proof.valid;
+                }
+                return true;
+              }),
+            );
+            if (results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
           }
         }
         // Short-lived account/assignment/membership observations never survive the

@@ -63,6 +63,12 @@ async function removeGrant(subject: string) {
 }
 async function membership(role = 'owner', member = actorId, organization = orgId, valid = allTime) {
   await pool.query(
+    `INSERT INTO access.membership_inverse
+    (route,account_id,kind,group_id,reservation_id,transaction_id)
+    VALUES ($1,$2,'organization',$3,$4,$4) ON CONFLICT DO NOTHING`,
+    [routeOf(member), member, organization, transactionId],
+  );
+  await pool.query(
     `INSERT INTO access.organization_member
     (route,organization_id,member_account_id,role,valid,transaction_id) VALUES ($1,$2,$3,$4,$5::tstzrange,$6)`,
     [routeOf(organization), organization, member, role, valid, transactionId],
@@ -103,6 +109,7 @@ async function unavailable(table: string, body: () => Promise<void>) {
 }
 
 beforeEach(async () => {
+  await pool.query('TRUNCATE access.membership_inverse');
   for (const table of ['resource_grant', 'resource_denial', 'principal_assignment', 'organization_member', 'account']) {
     await pool.query(`DELETE FROM access.${table}`);
   }

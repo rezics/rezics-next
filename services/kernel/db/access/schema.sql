@@ -416,6 +416,17 @@ CREATE TABLE access.membership_inverse (
 
 
 --
+-- Name: membership_inverse_coverage; Type: VIEW; Schema: access; Owner: -
+--
+
+CREATE VIEW access.membership_inverse_coverage AS
+ SELECT route,
+    account_id,
+    membership_inverse_complete AS complete
+   FROM access.account;
+
+
+--
 -- Name: membership_inverse_terminal; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -818,10 +829,24 @@ CREATE INDEX organization_member_change ON access.organization_member USING btre
 
 
 --
+-- Name: organization_member_next_role; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX organization_member_next_role ON access.organization_member USING btree (route, organization_id, member_account_id, role, lower(valid)) WHERE (NOT lower_inf(valid));
+
+
+--
 -- Name: organization_member_owner_probe; Type: INDEX; Schema: access; Owner: -
 --
 
 CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
+
+
+--
+-- Name: resource_denial_permission; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX resource_denial_permission ON access.resource_denial USING gist (route, resource_id, action, subject_id, subject_role, valid);
 
 
 --
