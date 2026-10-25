@@ -1,5 +1,5 @@
 /**
- * TEST ONLY. IMPORT_VNDB_TABLES_DRIVER exports createVndbTablesDriver(limits).
+ * TEST ONLY. IMPORT_VNDB_TABLES_DRIVER exports createVndbTablesDriver(limits, attachSqlite).
  * Bind actual importer begin/stage/page/commit operations and durable indexed
  * importer-owned storage. The adapter forwards raw archive-entry streams unchanged;
  * it must not parse COPY, group rows, implement conversion or model run state.
@@ -33,33 +33,21 @@
  * Skip unrelated tables without parsing or retaining personal data, including
  * spools/logs. Never execute any SQL shipped in the archive.
  *
- * Cost contract (no performance Goal harness exists in this checkout): N is
- * accumulated importer/catalogue keys; U*t is unrelated historical activity;
- * S is supplied supported table rows/bytes; M is supported child rows per VN.
- * Each supplied supported row is staged exactly once by keyed insert/update,
- * O(S log N). No existing partition/table/history enumeration. Materialization
- * uses exact (source, run, table, entry_id) indexed seeks, O((1+M) log N) and
- * O(M) memory. Pages use keyset ranges and a fixed cap, never OFFSET. Maintained
- * run/source counters replace COUNT. No cross-kernel-partition SQL.
- *
- * measure observes actual executor statement counts, examined rows, index/VM
- * steps, fullscan steps and buffered rows, including nested production calls.
- * It must not use EXPLAIN estimates, adapter constants, wall-clock time or reset
- * counters between nested operations. Backends must expose equivalent measured
- * index work if they lack VM counters. inspect uses maintained counters. Seed
- * writes real unrelated importer/catalogue keys and history outside measurement;
- * it does not materialize measured records. These exact bounds are asserted:
- * 32/128/512 unrelated keys, four history rows/key, fixed M=2: <=16 statements,
- * <=4*(1+M) examined rows, <=32*(1+M)*ceil(log2(N+2)) index steps,
- * <=128*(1+M)*ceil(log2(N+2)) VM steps, zero full/partition scans or OFFSET.
- * At 16x N, index/VM work <=3x the initial work plus the fixed allowances in
- * the suite. M=2/4/8 is accepted; M=9 aborts with the configured hard cap 8.
- * Stage row writes equal S; encoded durable bytes <=8*input bytes+4096 and
- * do not grow with preexisting N or history. Peak buffered rows <=16*(8+2).
- * Stage statements/examined rows <=8*S+16, index steps <=32*(S+1)*ceil(log2(N+2)),
- * VM steps <=128*(S+1)*ceil(log2(N+2)); every scan/offset counter stays zero.
+ * SQLite evidence is installed on every real handle before any statement is
+ * prepared, including reopened handles, by the factory's second argument.
+ * measure includes nested calls; ANALYZE and bound EXPLAIN QUERY PLAN run outside
+ * measurement. All importer relations are growing: reads must SEARCH declared
+ * indexes or INTEGER PRIMARY KEY with an equality/range prefix. No scan, automatic
+ * index, temporary sort, OFFSET, whole-state enumeration or historical COUNT.
+ * Returned rows count actual get/all/iterate consumption, not examined VM rows.
+ * blocks:0 means SQLite buffer counters are unavailable, not zero physical IO.
+ * Streaming the explicit archive once is O(input bytes), independently asserted.
+ * Staging writes equal S, durable bytes <=8*input bytes+4096, buffered rows <=160.
  */
-export type Path = readonly (string | number)[];
+import { Database } from 'bun:sqlite';
+import type { VndbDriver } from './imports-vndb-driver.ts';
+export type { Path } from './imports-vndb-driver.ts';
+export type Converter = VndbDriver;
 export interface Entry {
   path: string;
   kind: 'file' | 'directory' | 'symlink' | 'hardlink';
@@ -72,33 +60,15 @@ export interface GroupedRecord {
   vn_titles: Array<{ id: string; lang: string; official: boolean; title: string; latin: string | null }>;
   entry_meta: { id: string; created: string; lastmod: string; revision: number; num_edits: number; num_users: number };
 }
-export interface Converter {
-  readonly converter_revision: string;
-  convert(record: unknown): unknown;
-  locate(output: unknown): { proposals: Path[]; converterRevision: Path };
-  parseProposal(proposal: unknown): unknown;
-  observe(proposal: unknown): Array<{
-    kind: string;
-    value: unknown;
-    valuePath: Path;
-    language?: string;
-    fieldGroupPath: Path;
-    reference: { source: Path; externalId: Path; revision: Path; url: Path };
-    rights: { databaseLicense: Path; contentsLicense: Path; attribution: Path };
-  }>;
-}
 export interface Cost {
   statements: number;
-  examinedRows: number;
-  indexSteps: number;
-  vmSteps: number;
-  fullscanSteps: number;
-  wholePartitionReads: number;
-  offsetStatements: number;
-  crossPartitionStatements: number;
-  /** Actual staging row inserts/updates, including accidental copies; excludes run-counter metadata. */
+  /** Actual rows returned to store code, including consumed iterator rows. */
+  rows: number;
+  /** Actual staging writes, excluding maintained run counters. */
   rowWrites: number;
   peakBufferedRows: number;
+  /** Actual cross-kernel-partition executor calls, including nested calls. */
+  crossPartitionStatements: number;
 }
 export interface Baseline {
   run: string;
@@ -148,5 +118,216 @@ export async function loadVndbTablesDriver(): Promise<VndbTablesDriver> {
   const module = process.env.IMPORT_VNDB_TABLES_DRIVER;
   if (!module) throw new Error('IMPORT_VNDB_TABLES_DRIVER is required: bind real VNDB table ingestion');
   const binding = await import(module);
-  return binding.createVndbTablesDriver(limits);
+  const evidence = sqliteEvidence();
+  const driver: VndbTablesDriver = await binding.createVndbTablesDriver(limits, evidence.attach);
+  const measure = driver.measure.bind(driver);
+  driver.measure = async (operation) => {
+    evidence.start();
+    try {
+      const result = await measure(operation);
+      const measured = evidence.finish();
+      return { value: result.value, cost: { ...result.cost, ...measured } };
+    } catch (error) {
+      evidence.cancel();
+      throw error;
+    }
+  };
+  return driver;
+}
+
+/** Test support only. The binding must attach EVERY actual SQLite handle before
+ * preparing statements. Never attach a substitute database or a shadow store.
+ * Transaction boundaries execute through the observed real exec method so native
+ * hidden statements cannot escape counting (including nested rollback/release).
+ */
+export function sqliteEvidence() {
+  type Call = { db: Database; sql: string; parameters: unknown[] };
+  const handles = new Set<Database>();
+  const calls: Call[] = [];
+  let active = false;
+  let rows = 0;
+  let savepoint = 0;
+  const requireThat = (condition: unknown, message: string) => {
+    if (!condition) throw new Error(`SQLite indexed-key proof: ${message}`);
+  };
+  function record(db: Database, sql: string, parameters: unknown[]) {
+    if (active) calls.push({ db, sql, parameters: structuredClone(parameters) });
+  }
+  // Preserve quoted semicolons and strip comments; never split SQL on raw ';'.
+  function statements(sql: string): string[] {
+    const tokens =
+      sql.match(
+        /'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/|;|[^'"`\[;/-]+|./g,
+      ) ?? [];
+    const result: string[] = [];
+    let current = '';
+    for (const token of tokens) {
+      if (token.startsWith('--') || token.startsWith('/*')) current += ' ';
+      else if (token === ';') {
+        if (current.trim()) result.push(current.trim());
+        current = '';
+      } else current += token;
+    }
+    if (current.trim()) result.push(current.trim());
+    return result;
+  }
+  function attach(db: Database) {
+    requireThat(db instanceof Database, 'attach the actual bun:sqlite Database');
+    requireThat(!active, 'open and attach handles before measurement/ANALYZE');
+    if (handles.has(db)) return;
+    handles.add(db);
+    const seen = new WeakSet<object>();
+    for (const method of ['prepare', 'query'] as const) {
+      const original = db[method].bind(db);
+      Object.defineProperty(db, method, {
+        configurable: true,
+        value: (...args: Parameters<typeof original>) => {
+          const statement = Reflect.apply(original, db, args);
+          if (seen.has(statement)) return statement;
+          seen.add(statement);
+          const initial = (args as unknown[])[1];
+          let bound: unknown[] = initial === undefined ? [] : Array.isArray(initial) ? initial : [initial];
+          for (const execute of ['get', 'all', 'iterate', 'run', 'values'] as const) {
+            const run = statement[execute].bind(statement);
+            Object.defineProperty(statement, execute, {
+              configurable: true,
+              value: (...parameters: unknown[]) => {
+                if (parameters.length > 0) bound = parameters;
+                const actualParameters = structuredClone(bound);
+                if (execute !== 'iterate') record(db, args[0], actualParameters);
+                const result = Reflect.apply(run, statement, parameters);
+                if (execute === 'iterate') {
+                  return (function* () {
+                    record(db, args[0], actualParameters);
+                    for (const row of result as Iterable<unknown>) {
+                      if (active) rows++;
+                      yield row;
+                    }
+                  })();
+                }
+                if (active && execute === 'get' && result !== null && result !== undefined) rows++;
+                if (active && (execute === 'all' || execute === 'values')) rows += (result as unknown[]).length;
+                return result;
+              },
+            });
+          }
+          return statement;
+        },
+      });
+    }
+    for (const method of ['run', 'exec'] as const) {
+      const original = db[method].bind(db);
+      Object.defineProperty(db, method, {
+        configurable: true,
+        value: (sql: string, ...parameters: unknown[]) => {
+          if (!active) return Reflect.apply(original, db, [sql, ...parameters]);
+          let result: unknown;
+          for (const statement of statements(sql)) {
+            record(db, statement, parameters);
+            result = Reflect.apply(original, db, [statement, ...parameters]);
+          }
+          return result;
+        },
+      });
+    }
+    Object.defineProperty(db, 'transaction', {
+      configurable: true,
+      value: (fn: (...args: unknown[]) => unknown) => {
+        requireThat(typeof fn === 'function', 'transaction callback must be a function');
+        const wrap = (mode: string) =>
+          function (this: unknown, ...args: unknown[]) {
+            const nested = db.inTransaction;
+            const name = `vndb_measure_${++savepoint}`;
+            try {
+              db.exec(nested ? `SAVEPOINT ${name}` : `BEGIN ${mode}`);
+              const result = fn.apply(this, args);
+              db.exec(nested ? `RELEASE ${name}` : 'COMMIT');
+              return result;
+            } catch (error) {
+              if (db.inTransaction) {
+                db.exec(nested ? `ROLLBACK TO ${name}` : 'ROLLBACK');
+                if (nested) db.exec(`RELEASE ${name}`);
+              }
+              throw error;
+            }
+          };
+        const wrapped = wrap('DEFERRED');
+        return Object.defineProperties(wrapped, {
+          default: { value: wrapped },
+          deferred: { value: wrap('DEFERRED') },
+          immediate: { value: wrap('IMMEDIATE') },
+          exclusive: { value: wrap('EXCLUSIVE') },
+          database: { value: db },
+        });
+      },
+    });
+  }
+
+  function prove({ db, sql, parameters }: Call) {
+    requireThat(!/\bOFFSET\b|\bCOUNT\s*\(/i.test(sql), 'OFFSET/history COUNT is forbidden');
+    const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(parameters as never[])) as Array<{ detail: string }>;
+    const indexes = new Set(
+      (db.query("SELECT name FROM sqlite_schema WHERE type = 'index'").all() as Array<{ name: string }>).map(
+        (row) => row.name,
+      ),
+    );
+    for (const { detail } of plan) {
+      requireThat(!/\bAUTOMATIC\b|USE TEMP B-TREE/i.test(detail), detail);
+      requireThat(!/\bSCAN\b/i.test(detail) || detail === 'SCAN CONSTANT ROW', detail);
+      if (/\bSEARCH\b/i.test(detail)) {
+        const index = /USING (?:COVERING )?INDEX (\S+)\s+\(/i.exec(detail)?.[1];
+        requireThat(/USING INTEGER PRIMARY KEY\s*\(/i.test(detail) || (index && indexes.has(index)), detail);
+        requireThat(/\([^)]*(?:=|>|<|BETWEEN)[^)]*\)/i.test(detail), `missing equality/range prefix: ${detail}`);
+      }
+    }
+    // Empty plans are classified explicitly. SELECT/UPDATE/DELETE always went
+    // through bound EXPLAIN above; spelling alone never exempts a readable plan.
+    if (plan.length === 0) {
+      if (/^(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/i.test(sql)) return;
+      const insert = /^INSERT(?: OR \w+)? INTO\s+("?[\w]+"?)\s*\(([^)]+)\)\s*VALUES\s*\(/i.exec(sql);
+      requireThat(insert && !/\bSELECT\b/i.test(sql), `unclassified empty plan: ${sql}`);
+      const table = insert![1]!.replaceAll('"', '');
+      const columns = insert![2]!.split(',').map((column) => column.trim().replaceAll('"', ''));
+      const primary = (db.query(`PRAGMA table_info("${table}")`).all() as Array<{ name: string; pk: number }>)
+        .filter((column) => column.pk > 0)
+        .map((column) => column.name);
+      requireThat(
+        primary.length > 0 && primary.every((column) => columns.includes(column)),
+        `INSERT lacks exact primary key: ${sql}`,
+      );
+    }
+  }
+  return {
+    attach,
+    start() {
+      requireThat(!active && handles.size > 0, 'a real observed production handle is mandatory');
+      calls.length = 0;
+      rows = 0;
+      // Closed handles are discarded only when a real reopen has replaced them.
+      for (const db of handles) {
+        try {
+          db.exec('ANALYZE');
+        } catch (error) {
+          if ((error as Error).message.includes('closed')) handles.delete(db);
+          else throw error;
+        }
+      }
+      requireThat(handles.size > 0, 'no open production handles');
+      active = true;
+    },
+    finish() {
+      active = false;
+      requireThat(calls.length > 0, 'operation executed no observed SQL');
+      const distinct = new Set<string>();
+      for (const call of calls) {
+        const key = `${[...handles].indexOf(call.db)}:${call.sql}:${JSON.stringify(call.parameters, (_key, value) => (typeof value === 'bigint' ? { bigint: String(value) } : value))}`;
+        if (!distinct.has(key)) prove(call);
+        distinct.add(key);
+      }
+      return { rows, statements: calls.length };
+    },
+    cancel() {
+      active = false;
+    },
+  };
 }

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { checkBatchWrite } from '@rezics/definitions/bulk';
+import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
 import {
   loadVndbTablesDriver,
   limits,
@@ -28,7 +30,26 @@ const fixture = () => names.map((name) => entry(`db/${name}`, text(name)));
 const replace = (entries: Entry[], path: string, value: string | Uint8Array) =>
   entries.map((item) => (item.path === path ? entry(path, value) : item));
 async function* stream(entries: Entry[]) {
-  yield* entries;
+  for (const item of entries) {
+    let consumed = 0;
+    let passes = 0;
+    const bytes: AsyncIterable<Uint8Array> = {
+      async *[Symbol.asyncIterator]() {
+        expect(++passes).toBe(1);
+        for await (const chunk of item.bytes) {
+          consumed += chunk.byteLength;
+          yield chunk;
+        }
+      },
+    };
+    yield { ...item, bytes };
+    // Ignored private tables need not be decoded or consumed. Supported files
+    // are streamed exactly once, separately from indexed storage comparisons.
+    if (names.some((name) => item.path === `db/${name}`)) {
+      expect(passes).toBe(1);
+      expect(consumed).toBe(item.declaredBytes);
+    }
+  }
 }
 async function stage(d: VndbTablesDriver, entries = fixture()) {
   const run = await d.begin();
@@ -52,17 +73,24 @@ function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver
   expect(d.converter.converter_revision.trim()).not.toBe('');
   expect(at(row.output, located.converterRevision)).toBe(d.converter.converter_revision);
   expect(located.proposals.length).toBeGreaterThan(0);
+  expect(checkBatchWrite({ commands: located.proposals.map((path) => at(row.output, path)) })).toEqual([]);
+  expect(at(row.output, located.sourceRights.databaseLicense)).toBe('ODbL-1.0');
+  expect(at(row.output, located.sourceRights.contentsLicense)).toBe('LicenseRef-DbCL-1.0');
+  expect(at(row.output, located.sourceRights.attribution)).toBe('VNDB');
   const titles: unknown[] = [];
   const kinds: string[] = [];
   for (const path of located.proposals) {
     const proposal = at(row.output, path);
-    expect(d.converter.parseProposal(proposal)).toEqual(proposal);
+    const accepted = d.converter.parseProposal(proposal);
+    expect<unknown>(accepted).toEqual(proposal);
+    expect(accepted).not.toHaveProperty('rights');
+    expect(accepted.source.record_revision).toBe(String(row.revision));
     const facts = d.converter.observe(proposal);
     expect(facts.length).toBeGreaterThan(0);
     for (const fact of facts) {
       kinds.push(fact.kind);
       expect(['description', 'cover', 'user-content']).not.toContain(fact.kind);
-      expect(at(proposal, fact.fieldGroupPath)).toBe('metadata');
+      expect(at(proposal, fact.fieldGroupPath)).toBe('facts');
       if (fact.kind !== 'type') expect(at(proposal, fact.valuePath)).toEqual(fact.value);
       if (fact.kind === 'title') titles.push([fact.language, fact.value]);
       if (fact.kind === 'external-id') expect(fact.value).toBe(row.key);
@@ -71,9 +99,6 @@ function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver
       expect(at(proposal, fact.reference.externalId)).toBe(row.key);
       expect(at(proposal, fact.reference.revision)).toBe(row.revision);
       expect(at(proposal, fact.reference.url)).toBe(`https://vndb.org/${row.key}.${row.revision}`);
-      expect(at(proposal, fact.rights.databaseLicense)).toBe('ODbL-1.0');
-      expect(at(proposal, fact.rights.contentsLicense)).toBe('LicenseRef-DbCL-1.0');
-      expect(at(proposal, fact.rights.attribution)).toBe('VNDB');
     }
   }
   expect(kinds).toContain('external-id');
@@ -83,42 +108,31 @@ function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver
     expect(JSON.stringify(row.output)).not.toContain(marker);
   }
 }
-function bounded(cost: Cost, n: number, m: number) {
+function validCost(cost: Cost) {
   for (const value of Object.values(cost)) {
     expect(Number.isSafeInteger(value)).toBe(true);
     expect(value).toBeGreaterThanOrEqual(0);
   }
   expect(cost.statements).toBeGreaterThan(0);
-  expect(cost.statements).toBeLessThanOrEqual(16);
-  expect(cost.examinedRows).toBeGreaterThanOrEqual(2 + m);
-  expect(cost.examinedRows).toBeLessThanOrEqual(4 * (1 + m));
-  expect(cost.indexSteps).toBeGreaterThan(0);
-  expect(cost.indexSteps).toBeLessThanOrEqual(32 * (1 + m) * Math.ceil(Math.log2(n + 2)));
-  expect(cost.vmSteps).toBeLessThanOrEqual(128 * (1 + m) * Math.ceil(Math.log2(n + 2)));
-  expect(cost.fullscanSteps).toBe(0);
-  expect(cost.wholePartitionReads).toBe(0);
-  expect(cost.offsetStatements).toBe(0);
   expect(cost.crossPartitionStatements).toBe(0);
-  expect(cost.rowWrites).toBe(0);
   expect(cost.peakBufferedRows).toBeLessThanOrEqual(limits.pageSize * (limits.childRowsPerVn + 2));
 }
-function boundedStage(cost: Cost, n: number, rows: number) {
+function bounded(cost: Cost, m: number) {
+  validCost(cost);
+  expect(cost.statements).toBeLessThanOrEqual(16);
+  expect(cost.rows).toBeGreaterThanOrEqual(2 + m);
+  expect(cost.rows).toBeLessThanOrEqual(4 * (1 + m));
+  expect(cost.rowWrites).toBe(0);
+}
+function boundedStage(cost: Cost, rows: number) {
+  validCost(cost);
   expect(cost.rowWrites).toBe(rows);
-  expect(cost.statements).toBeGreaterThan(0);
   expect(cost.statements).toBeLessThanOrEqual(8 * rows + 16);
-  expect(cost.examinedRows).toBeLessThanOrEqual(8 * rows + 16);
-  expect(cost.indexSteps).toBeGreaterThan(0);
-  expect(cost.indexSteps).toBeLessThanOrEqual(32 * (rows + 1) * Math.ceil(Math.log2(n + 2)));
-  expect(cost.vmSteps).toBeLessThanOrEqual(128 * (rows + 1) * Math.ceil(Math.log2(n + 2)));
-  for (const field of [
-    'fullscanSteps',
-    'wholePartitionReads',
-    'offsetStatements',
-    'crossPartitionStatements',
-  ] as const) {
-    expect(cost[field]).toBe(0);
-  }
-  expect(cost.peakBufferedRows).toBeLessThanOrEqual(limits.pageSize * (limits.childRowsPerVn + 2));
+  expect(cost.rows).toBeLessThanOrEqual(8 * rows + 16);
+}
+function sample(scale: number, cost: Cost): GrowthSample {
+  // SQLite buffers are unavailable; blocks:0 does not claim zero physical IO.
+  return { scale, cost: { rows: cost.rows, blocks: 0, statements: cost.statements } };
 }
 async function rejected(d: VndbTablesDriver, entries: Entry[]) {
   const before = await Promise.all(['v123', 'v124'].map((key) => d.baseline(key)));
@@ -467,7 +481,7 @@ test('keyset enumeration enforces the fixed page cap and emits each VN exactly o
     entries = replace(entries, 'db/entry_meta', meta);
     const run = await d.begin();
     const staged = await d.measure(() => d.stage(run, stream(entries)));
-    boundedStage(staged.cost, keys.length, keys.length * 3);
+    boundedStage(staged.cost, keys.length * 3);
     await expect(d.page(run, null, limits.pageSize + 1)).rejects.toThrow();
     const seen: string[] = [];
     let after: string | null = null;
@@ -475,11 +489,8 @@ test('keyset enumeration enforces the fixed page cap and emits each VN exactly o
       const measured = await d.measure(() => d.page(run, after, limits.pageSize));
       const page = measured.value;
       expect(page.records).toHaveLength(i === 12 ? 1 : 16);
-      expect(measured.cost.examinedRows).toBeLessThanOrEqual(4 * limits.pageSize * 2);
+      expect(measured.cost.rows).toBeLessThanOrEqual(4 * limits.pageSize * 2);
       expect(measured.cost.peakBufferedRows).toBeLessThanOrEqual(160);
-      expect(measured.cost.offsetStatements).toBe(0);
-      expect(measured.cost.fullscanSteps).toBe(0);
-      expect(measured.cost.wholePartitionReads).toBe(0);
       seen.push(...page.records.map((row) => row.key));
       after = page.next;
       expect(after).toBe(i === 12 ? null : page.records.at(-1)!.key);
@@ -490,8 +501,9 @@ test('keyset enumeration enforces the fixed page cap and emits each VN exactly o
   }
 });
 
-test('one grouped record has bounded rows and logarithmic index work at 32 128 and 512 unrelated keys', async () => {
-  const costs: Cost[] = [];
+test('one grouped record uses indexed seeks and constant returned rows and statements at 32 128 and 512 unrelated keys', async () => {
+  const costs: GrowthSample[] = [];
+  const staging: GrowthSample[] = [];
   const storage: Array<{ rows: number; bytes: number }> = [];
   for (const scale of [32, 128, 512]) {
     const d = await loadVndbTablesDriver();
@@ -501,7 +513,8 @@ test('one grouped record has bounded rows and logarithmic index work at 32 128 a
       const inputBytes = entries.reduce((sum, item) => sum + item.declaredBytes, 0);
       const run = await d.begin();
       const staged = await d.measure(() => d.stage(run, stream(entries)));
-      boundedStage(staged.cost, scale + 2, 7);
+      boundedStage(staged.cost, 7);
+      staging.push(sample(scale, staged.cost));
       const state = await d.inspect(run);
       expect(state.stagedRows).toBe(7);
       expect(state.stagedBytes).toBeGreaterThan(0);
@@ -513,16 +526,16 @@ test('one grouped record has bounded rows and logarithmic index work at 32 128 a
       expect(measured.value.records[0]!.key).toBe('v123');
       expect(measured.value.records[0]!.revision).toBe(7);
       expect(measured.value.records[0]!.record.vn_titles).toHaveLength(2);
-      bounded(measured.cost, scale + 2, 2);
-      costs.push(measured.cost);
+      bounded(measured.cost, 2);
+      costs.push(sample(scale, measured.cost));
     } finally {
       await d.close();
     }
   }
   expect(storage[1]).toEqual(storage[0]);
   expect(storage[2]).toEqual(storage[0]);
-  expect(costs[2]!.indexSteps).toBeLessThanOrEqual(3 * costs[0]!.indexSteps + 64 * 3);
-  expect(costs[2]!.vmSteps).toBeLessThanOrEqual(3 * costs[0]!.vmSteps + 256 * 3);
+  assertGrowth(costs, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+  assertGrowth(staging, { rows: 'constant', blocks: 'constant', statements: 'constant' });
 });
 
 test('supported child cardinality grows only with supplied rows through the hard cap and rejects above it', async () => {
@@ -543,14 +556,14 @@ test('supported child cardinality grows only with supplied rows through the hard
       }
       const run = await d.begin();
       const staged = await d.measure(() => d.stage(run, stream(entries)));
-      boundedStage(staged.cost, 514, m + 5);
+      boundedStage(staged.cost, m + 5);
       expect((await d.inspect(run)).stagedRows).toBe(m + 5);
       expect((await d.inspect(run)).stagedBytes).toBeLessThanOrEqual(
         8 * entries.reduce((sum, item) => sum + item.declaredBytes, 0) + 4096,
       );
       const measured = await d.measure(() => d.page(run, null, 1));
       expect(measured.value.records[0]!.record.vn_titles).toHaveLength(m);
-      bounded(measured.cost, 514, m);
+      bounded(measured.cost, m);
       await d.commit(run);
     }
   } finally {
