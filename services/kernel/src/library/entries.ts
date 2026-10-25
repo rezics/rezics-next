@@ -162,7 +162,12 @@ export function createEntryCommands(config: Dependencies) {
     const parsed = putInput(input);
     requireRoute(owner.accountId);
     requireRoute(subjectId);
-    const resolved = await resolveSubject({ pool, access }, owner, subjectId);
+    const existing = await snapshot(actor, 'library_entry:update', (client, accountOwner, route) =>
+      store.readEntry(client, route, accountOwner.accountId, subjectId),
+    );
+    const resolved = existing
+      ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
+      : await resolveSubject({ pool, access }, owner, subjectId);
     if (!resolved) throw new LibraryNotFoundError();
 
     const requestInput = {
@@ -230,6 +235,11 @@ export function createEntryCommands(config: Dependencies) {
     const expected = revision(expectedRevision);
     requireRoute(owner.accountId);
     requireRoute(subjectId);
+    const existing = await snapshot(actor, 'library_entry:delete', (client, accountOwner, route) =>
+      store.readEntry(client, route, accountOwner.accountId, subjectId),
+    );
+    const resolved = existing ? { subjectId } : await resolveSubject({ pool, access }, owner, subjectId);
+    if (!resolved) throw new LibraryNotFoundError();
     return runner.ownAccount(
       actor,
       {
@@ -240,7 +250,7 @@ export function createEntryCommands(config: Dependencies) {
       },
       async (tx, command) => {
         const route = requireRoute(owner.accountId);
-        const removed = await store.deleteEntry(tx, route, owner.accountId, subjectId, expected);
+        const removed = await store.deleteEntry(tx, route, owner.accountId, resolved.subjectId, expected);
         if (!removed) throw new LibraryConflictError();
         return { value: removed, events: [entryEvent(DELETED_EVENT, owner.accountId, removed.subjectId)] };
       },
@@ -248,13 +258,20 @@ export function createEntryCommands(config: Dependencies) {
   }
 
   async function readEntry(actor: Actor, subjectId: string): Promise<Entry> {
-    account(actor, 'library_entry:read');
+    const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
-    return snapshot(actor, 'library_entry:read', async (client, owner, route) => {
-      const entry = await store.readEntry(client, route, owner.accountId, subjectId);
-      if (!entry || entry.accountId !== owner.accountId) throw new LibraryNotFoundError();
-      return entry;
-    });
+    const existing = await snapshot(actor, 'library_entry:read', (client, owner, route) =>
+      store.readEntry(client, route, owner.accountId, subjectId),
+    );
+    if (existing) return existing;
+
+    const resolved = await resolveSubject({ pool, access }, actor, subjectId);
+    if (!resolved) throw new LibraryNotFoundError();
+    const entry = await snapshot(actor, 'library_entry:read', (client, owner, route) =>
+      store.readEntry(client, route, owner.accountId, resolved.subjectId),
+    );
+    if (!entry || entry.accountId !== owner.accountId) throw new LibraryNotFoundError();
+    return entry;
   }
 
   async function listEntries(actor: Actor, options: ListEntryOptions = {}) {

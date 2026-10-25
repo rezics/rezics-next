@@ -484,7 +484,8 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
         const memberId = newId(route);
         const placed = await placeInCollection(tx, route, collectionId, position, memberId, false);
         const subject = await subjectPromise;
-        if (!subject || subject.subjectId !== draft.subjectId) throw notFound();
+        if (!subject || (subject.subjectId !== draft.subjectId && subject.requestedSubjectId !== draft.subjectId))
+          throw notFound();
         if (placed.respace.length > 0) {
           const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
           if (epoch === null) throw new ProblemError('conflict');

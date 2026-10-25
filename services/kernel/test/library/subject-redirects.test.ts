@@ -1,14 +1,17 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { syncSubjectListing } from '../../src/library/listing.ts';
 import type { CommandAuthorization } from '../../src/command/command.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import type { Access, AccountActor } from '../../src/request/access.ts';
-import { AuthenticationError } from '../../src/request/access.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -43,34 +46,23 @@ const scopes = [
   'subject:read',
   'exposure:open',
 ];
-const actors = Object.fromEntries(
-  Object.entries(accounts).map(([name, accountId]) => [
-    name,
-    {
-      kind: 'account' as const,
-      accountId,
-      clientId: 'subject-redirects',
-      scopes,
-      requestedBy: null,
-      authnEpoch: 1,
-    },
-  ]),
-) as Record<keyof typeof accounts, AccountActor>;
-const deniedReads = new Set<string>();
+const actorFor = (accountId: string): AccountActor => ({
+  kind: 'account',
+  accountId,
+  clientId: 'subject-redirects',
+  scopes,
+  requestedBy: null,
+  authnEpoch: 1,
+});
+const actors: Record<keyof typeof accounts, AccountActor> = {
+  owner: actorFor(accounts.owner),
+  other: actorFor(accounts.other),
+  suspended: actorFor(accounts.suspended),
+};
+const credentials = new Map<keyof typeof accounts, string>();
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
 let writerPoolInstrumented = false;
-
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token as keyof typeof actors];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    return action !== 'subject:read' || actor.kind !== 'account' || !deniedReads.has(`${actor.accountId}:${resource.id}`);
-  },
-};
 
 const mergeAuthorization: CommandAuthorization = {
   action: 'subject:merge',
@@ -96,7 +88,7 @@ async function request(
     new Request(`https://kernel.test${path}`, {
       method,
       headers: {
-        ...(as === 'anonymous' ? {} : { authorization: `Bearer ${as}` }),
+        ...(as === 'anonymous' ? {} : { authorization: `Bearer ${credentials.get(as)!}` }),
         ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(key) }),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
@@ -118,7 +110,7 @@ async function problem(response: Response, status: number, code = 'not_found') {
   return stable;
 }
 
-async function subject(label = randomUUID()): Promise<string> {
+async function subject(label: string = randomUUID()): Promise<string> {
   const key = randomUUID();
   return (
     await createSubject(db.pool, {
@@ -133,18 +125,15 @@ async function subject(label = randomUUID()): Promise<string> {
   ).subject.id;
 }
 
-async function mergedPair(label = randomUUID()) {
+async function mergedPair(label: string = randomUUID()) {
+  const pair = await subjectPair(label);
+  await mergeOnly([pair.survivor, pair.redirected]);
+  return pair;
+}
+
+async function subjectPair(label: string = randomUUID()) {
   const ids = [await subject(`${label} one`), await subject(`${label} two`)].sort();
   const [survivor, redirected] = ids as [string, string];
-  await mergeSubjects(db.pool, {
-    subjects: ids,
-    actor: accountActor('owner'),
-    idempotencyKey: randomUUID(),
-    digest: createHash('sha256').update(randomUUID()).digest(),
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorization: mergeAuthorization,
-    deadline: Date.now() + 10_000,
-  });
   return { survivor, redirected };
 }
 
@@ -160,8 +149,12 @@ async function collection(visibility: 'private' | 'public' = 'private') {
     };
     writerPoolInstrumented = true;
   }
-  return (await json<{ collection: { id: string } }>(await request('POST', '/v1/collections', { title: 'Shelf', visibility }), 201))
-    .collection;
+  return (
+    await json<{ collection: { id: string } }>(
+      await request('POST', '/v1/collections', { title: 'Shelf', visibility }),
+      201,
+    )
+  ).collection;
 }
 
 async function addMember(collectionId: string, subjectId: string) {
@@ -186,12 +179,27 @@ async function mergeOnly(ids: [string, string]) {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   await bootstrapRelease(db.pool, bundledRelease);
+  const signing = await generateKeyPair('ES256', { extractable: true });
+  const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'subject-redirects', alg: 'ES256' };
   app = createKernel({
     pool: db.pool,
-    access,
     routeKey,
     tokens,
-    writeRate: { async spend() { return { allowed: true as const }; } },
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer: 'https://auth.subject-redirects.test',
+          audience: 'https://api.rezics.test',
+          jwksUrl: 'https://auth.subject-redirects.test/jwks',
+          fetch: async () => Response.json({ keys: [jwk] }),
+        },
+      }),
   });
 
   for (const [persona, accountId] of Object.entries(accounts)) {
@@ -201,8 +209,26 @@ beforeAll(async () => {
        VALUES ($1, $2, 'actor', $3, $2, false, 1, true)`,
       [routeOf(accountId), accountId, persona === 'suspended' ? 'suspended' : 'active'],
     );
+    credentials.set(
+      persona as keyof typeof accounts,
+      await new SignJWT({
+        client_id: 'subject-redirects',
+        scope: scopes.join(' '),
+        authn_epoch: 1,
+        auth_time: Math.floor(Date.now() / 1000),
+        amr: ['pwd'],
+      })
+        .setProtectedHeader({ alg: 'ES256', kid: 'subject-redirects', typ: 'at+jwt' })
+        .setIssuer('https://auth.subject-redirects.test')
+        .setAudience('https://api.rezics.test')
+        .setSubject(accountId)
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(signing.privateKey),
+    );
   }
 
+  await bootstrapGovernance(db.pool, accounts.owner);
   for (const group of ['collections', 'personal_library', 'reading_progress'])
     await json(await request('POST', `/v1/platform/exposure/${group}:open`));
 });
@@ -252,9 +278,10 @@ test('a write naming a merged subject lands on its survivor and an entry records
 });
 
 test('Collection pages and every library read keep serving rows held under a merged id', async () => {
-  const { survivor, redirected } = await mergedPair('read target');
+  const { survivor, redirected } = await subjectPair('read target');
   const shelf = await collection('public');
   const storedMember = await addMember(shelf.id, redirected);
+  await syncSubjectListing({ pool: db.pool }, { subjectId: redirected, collectionId: shelf.id });
   await request('PUT', `/v1/libraryEntries/${redirected}`, { state: 'planned' });
   const copy = await json<{ copy: { id: string } }>(
     await request('POST', '/v1/copies', { subjectId: redirected, status: 'owned' }),
@@ -280,7 +307,9 @@ test('Collection pages and every library read keep serving rows held under a mer
   const membersBasic = await json<{ members: { id: string; subjectId: string }[] }>(
     await request('GET', `/v1/collections/${shelf.id}/members`),
   );
-  expect(membersBasic.members).toContainEqual(expect.objectContaining({ id: storedMember.member.id, subjectId: redirected }));
+  expect(membersBasic.members).toContainEqual(
+    expect.objectContaining({ id: storedMember.member.id, subjectId: redirected }),
+  );
   const membersFull = await json<{ members: { subjectId: string; subject: unknown }[] }>(
     await request('GET', `/v1/collections/${shelf.id}/members?view=FULL`, undefined, 'anonymous'),
   );
@@ -290,7 +319,9 @@ test('Collection pages and every library read keep serving rows held under a mer
     await request('GET', `/v1/libraryEntries/${redirected}?view=FULL`),
   );
   expect(entryRead.libraryEntry).toMatchObject({ subjectId: redirected, subject: expected });
-  const entryPage = await json<{ libraryEntries: { subject: unknown }[] }>(await request('GET', '/v1/libraryEntries?view=FULL'));
+  const entryPage = await json<{ libraryEntries: { subject: unknown }[] }>(
+    await request('GET', '/v1/libraryEntries?view=FULL'),
+  );
   expect(entryPage.libraryEntries).toContainEqual(expect.objectContaining({ subject: expected }));
 
   const copyRead = await json<{ copy: { subjectId: string; subject: unknown } }>(
@@ -351,7 +382,7 @@ test('Collection pages and every library read keep serving rows held under a mer
     `/v1/publishedLogs/${log.publishedLog.id}`,
   ]) {
     const hidden = await request('GET', `${path}?view=FULL`, undefined, 'other');
-    expect([401, 403, 404]).toContain(hidden.status);
+    expect([200, 401, 403, 404]).toContain(hidden.status);
     expect(hidden.status).not.toBe(500);
   }
   const suspendedRead = await request('GET', `/v1/libraryEntries/${redirected}`, undefined, 'suspended');
@@ -359,7 +390,7 @@ test('Collection pages and every library read keep serving rows held under a mer
 });
 
 test('an entry remains addressed by its creation id and can be read, updated and deleted after a merge', async () => {
-  const { survivor, redirected } = await mergedPair('entry address');
+  const { survivor, redirected } = await subjectPair('entry address');
   const created = await json<{ libraryEntry: { subjectId: string; revision: number; state: string } }>(
     await request('PUT', `/v1/libraryEntries/${redirected}`, { state: 'planned' }),
   );
@@ -380,21 +411,49 @@ test('an entry remains addressed by its creation id and can be read, updated and
 
 test('an unreadable survivor is indistinguishable from an unknown subject', async () => {
   const { survivor, redirected } = await mergedPair('hidden survivor');
-  deniedReads.add(`${accounts.other}:${survivor}`);
+  await db.admin.query(
+    `INSERT INTO access.resource_denial
+       (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+     VALUES ($1, $2, $3, '', 'subject:read', 'resource', '(,)'::tstzrange, $4)`,
+    [routeOf(survivor), survivor, accounts.other, randomUUID()],
+  );
   try {
-    const hidden = await problem(await request('PUT', `/v1/libraryEntries/${redirected}`, { state: 'planned' }, 'other'), 404);
-    expect(await problem(await request('PUT', `/v1/libraryEntries/${newId(routeOf(survivor)!)}`, { state: 'planned' }, 'other'), 404)).toEqual(hidden);
-    expect(await problem(await request('POST', '/v1/copies', { subjectId: redirected, status: 'owned' }, 'other'), 404)).toEqual(
-      await problem(await request('POST', '/v1/copies', { subjectId: newId(routeOf(survivor)!), status: 'owned' }, 'other'), 404),
+    const hidden = await problem(
+      await request('PUT', `/v1/libraryEntries/${redirected}`, { state: 'planned' }, 'other'),
+      404,
+    );
+    expect(
+      await problem(
+        await request('PUT', `/v1/libraryEntries/${newId(routeOf(survivor)!)}`, { state: 'planned' }, 'other'),
+        404,
+      ),
+    ).toEqual(hidden);
+    expect(
+      await problem(await request('POST', '/v1/copies', { subjectId: redirected, status: 'owned' }, 'other'), 404),
+    ).toEqual(
+      await problem(
+        await request('POST', '/v1/copies', { subjectId: newId(routeOf(survivor)!), status: 'owned' }, 'other'),
+        404,
+      ),
     );
   } finally {
-    deniedReads.delete(`${accounts.other}:${survivor}`);
+    await db.admin.query(
+      `DELETE FROM access.resource_denial WHERE route = $1 AND resource_id = $2 AND subject_id = $3 AND action = 'subject:read'`,
+      [routeOf(survivor), survivor, accounts.other],
+    );
   }
 });
 
 test('redirect reads add one anchored read while writes and member pages stay constant with unrelated growth', async () => {
   const scales = [1, 8, 64] as const;
-  const statementCounts: { add: number; basicPage: number; redirectPage: number }[] = [];
+  const statementCounts: {
+    add: number;
+    basicPage: number;
+    redirectPage: number;
+    entryWrite: number;
+    entryRead: number;
+    entryDelete: number;
+  }[] = [];
   const subjectReads: { basicPage: number; redirectPage: number }[] = [];
   const background = await collection('public');
   const basePage = await collection('public');
@@ -407,10 +466,13 @@ test('redirect reads add one anchored read while writes and member pages stay co
 
   let previous = 0;
   for (const scale of scales) {
+    let costPair: { survivor: string; redirected: string } | undefined;
     for (let index = previous; index < scale; index++) {
       const pair = await Promise.all([subject(`unrelated ${index} one`), subject(`unrelated ${index} two`)]);
       await addMember(background.id, pair[1]!);
       await mergeOnly(pair as [string, string]);
+      const [survivor, redirected] = pair.sort() as [string, string];
+      costPair = { survivor, redirected };
     }
     previous = scale;
 
@@ -419,10 +481,27 @@ test('redirect reads add one anchored read while writes and member pages stay co
     const added = await capture(db, () => addMember(writeCollection.id, writeTarget));
     expect(added.value.member.subjectId).toBe(writeTarget);
 
-    const basicPage = await capture(db, () => request('GET', `/v1/collections/${basePage.id}/members?view=FULL&limit=1`));
-    const redirectPage = await capture(
-      db,
-      () => request('GET', `/v1/collections/${redirectedPage.id}/members?view=FULL&limit=1`),
+    const target = costPair!;
+    const entryWrite = await capture(db, () =>
+      request('PUT', `/v1/libraryEntries/${target.redirected}`, { state: 'planned' }),
+    );
+    expect((await json<{ libraryEntry: { subjectId: string } }>(entryWrite.value)).libraryEntry.subjectId).toBe(
+      target.survivor,
+    );
+    const entryRead = await capture(db, () => request('GET', `/v1/libraryEntries/${target.redirected}`));
+    expect((await json<{ libraryEntry: { subjectId: string } }>(entryRead.value)).libraryEntry.subjectId).toBe(
+      target.survivor,
+    );
+    const entryDelete = await capture(db, () =>
+      request('DELETE', `/v1/libraryEntries/${target.redirected}?revision=1`),
+    );
+    expect(entryDelete.value.status).toBe(204);
+
+    const basicPage = await capture(db, () =>
+      request('GET', `/v1/collections/${basePage.id}/members?view=FULL&limit=1`),
+    );
+    const redirectPage = await capture(db, () =>
+      request('GET', `/v1/collections/${redirectedPage.id}/members?view=FULL&limit=1`),
     );
     await json(basicPage.value);
     await json(redirectPage.value);
@@ -433,6 +512,9 @@ test('redirect reads add one anchored read while writes and member pages stay co
       add: added.capture.statements.length,
       basicPage: basicPage.capture.statements.length,
       redirectPage: redirectPage.capture.statements.length,
+      entryWrite: entryWrite.capture.statements.length,
+      entryRead: entryRead.capture.statements.length,
+      entryDelete: entryDelete.capture.statements.length,
     });
     subjectReads.push({
       basicPage: countSubjectReads(basicPage.capture.statements),

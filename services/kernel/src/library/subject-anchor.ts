@@ -3,6 +3,7 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubject } from '../semantic/subject.ts';
 
 const ACCESS_BUDGET_MS = 5_000;
@@ -15,7 +16,7 @@ export type SubjectAnchorDependencies = {
   clock?: KernelClock;
 };
 
-export type ResolvedSubject = { subjectId: string; requestedSubjectId: null };
+export type ResolvedSubject = { subjectId: string; requestedSubjectId: string | null };
 
 function accessDeadline(clock: KernelClock): number {
   const now = clock().getTime();
@@ -29,19 +30,34 @@ export async function resolveSubject(
   actor: Actor,
   subjectId: string,
 ): Promise<ResolvedSubject | null> {
-  const route = routeOf(subjectId);
-  if (route === null) return null;
+  async function readAnchor(id: string) {
+    const route = routeOf(id);
+    if (route === null) return null;
+    const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
+    const check = await accessCheck(deps.access, actor, 'subject:read', resource, {
+      pool: deps.pool,
+      deadline: accessDeadline(deps.clock ?? systemClock),
+    });
+    return readSubject(deps.pool, id, (client) => check(client));
+  }
 
-  const resource = { route, id: subjectId, eligibility: subjectReadEligibility({ route, id: subjectId }) };
-  const check = await accessCheck(deps.access, actor, 'subject:read', resource, {
-    pool: deps.pool,
-    deadline: accessDeadline(deps.clock ?? systemClock),
-  });
-  const result = await readSubject(deps.pool, subjectId, (client) => check(client));
-  return result ? { subjectId, requestedSubjectId: null } : null;
+  try {
+    const result = await readAnchor(subjectId);
+    return result ? { subjectId, requestedSubjectId: null } : null;
+  } catch (error) {
+    if (!(error instanceof SubjectRedirectError)) throw error;
+    if (error.from !== subjectId) return null;
+    try {
+      const survivor = await readAnchor(error.to);
+      return survivor ? { subjectId: error.to, requestedSubjectId: subjectId } : null;
+    } catch (survivorError) {
+      if (survivorError instanceof SubjectRedirectError) return null;
+      throw survivorError;
+    }
+  }
 }
 
-/** Filter a bounded page's IDs through one semantic anchored read per distinct subject. */
+/** Keep stored IDs that resolve in one hop, preserving page identity and bounds. */
 export async function readableSubjects(
   deps: SubjectAnchorDependencies,
   actor: Actor,
@@ -63,5 +79,5 @@ export async function readableSubjects(
   );
   const failure = outcomes.find((outcome) => outcome.status === 'rejected');
   if (failure?.status === 'rejected') throw failure.reason;
-  return resolved.flatMap((subject) => (subject ? [subject.subjectId] : []));
+  return distinctIds.flatMap((id, index) => (resolved[index] ? [id] : []));
 }

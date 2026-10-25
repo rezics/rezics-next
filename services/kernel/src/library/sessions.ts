@@ -102,10 +102,18 @@ export function createSessionCommands(config: Dependencies) {
     const owner = account(actor, 'progress_session:create');
     const parsed = valid(parseSessionCreate(input));
     await withConnection(pool, (client) => admit(client, owner));
+    const resolvedIds = new Map<string, string>();
     for (const subjectId of new Set([parsed.subjectId, parsed.versionSubjectId])) {
-      if (subjectId !== null && !(await resolveSubject({ pool, access }, owner, subjectId)))
-        throw new LibraryNotFoundError();
+      if (subjectId === null) continue;
+      const resolved = await resolveSubject({ pool, access }, owner, subjectId);
+      if (!resolved) throw new LibraryNotFoundError();
+      resolvedIds.set(subjectId, resolved.subjectId);
     }
+    const stored = {
+      ...parsed,
+      subjectId: resolvedIds.get(parsed.subjectId)!,
+      versionSubjectId: parsed.versionSubjectId === null ? null : resolvedIds.get(parsed.versionSubjectId)!,
+    };
     return runner.ownAccount(
       actor,
       { action: 'progress_session:create', kind: 'progress_session.start', requestKey, input: parsed },
@@ -114,7 +122,7 @@ export function createSessionCommands(config: Dependencies) {
         const session = await store.insertSession(
           tx,
           route,
-          { ...parsed, id: newId(route), accountId: owner.accountId },
+          { ...stored, id: newId(route), accountId: owner.accountId },
           {
             transactionId: command.transactionId,
             time: authoritativeTimeValue(command.time),

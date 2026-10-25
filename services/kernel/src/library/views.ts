@@ -10,6 +10,7 @@ import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubject } from '../semantic/subject.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -75,20 +76,37 @@ class ViewReader {
 
   async subject(id: string): Promise<Summary | null> {
     const { pool, access, clock = systemClock } = this.deps;
-    const route = routeOf(id);
-    if (route === null) return null;
-    const check = await accessCheck(
-      access,
-      this.actor,
-      'subject:read',
-      {
-        route,
-        id,
-        eligibility: subjectReadEligibility({ route, id }),
-      },
-      { pool, deadline: clock().getTime() + 5000 },
-    );
-    const result = await readSubject(pool, id, (client) => check(client));
+    const actor = this.actor;
+    async function readAnchor(anchorId: string) {
+      const route = routeOf(anchorId);
+      if (route === null) return null;
+      const check = await accessCheck(
+        access,
+        actor,
+        'subject:read',
+        {
+          route,
+          id: anchorId,
+          eligibility: subjectReadEligibility({ route, id: anchorId }),
+        },
+        { pool, deadline: clock().getTime() + 5000 },
+      );
+      return readSubject(pool, anchorId, (client) => check(client));
+    }
+
+    let result: Awaited<ReturnType<typeof readSubject>>;
+    try {
+      result = await readAnchor(id);
+    } catch (error) {
+      if (!(error instanceof SubjectRedirectError)) throw error;
+      if (error.from !== id) return null;
+      try {
+        result = await readAnchor(error.to);
+      } catch (survivorError) {
+        if (survivorError instanceof SubjectRedirectError) return null;
+        throw survivorError;
+      }
+    }
     if (!result) return null;
     const { subject } = result;
     // Until semantic provides a summary read, this also resolves every statement slot.

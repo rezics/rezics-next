@@ -85,9 +85,9 @@ export function createFollowCommands(config: FollowDeps) {
     return account;
   }
 
-  async function readable(actor: AccountActor, target: FollowTarget): Promise<boolean> {
+  async function readable(actor: AccountActor, target: FollowTarget): Promise<FollowTarget | null> {
     const route = routeOf(target.targetId);
-    if (route === null) return false;
+    if (route === null) return null;
     if (target.targetType === 'space') {
       const identity = { route, id: target.targetId };
       const check = await accessCheck(
@@ -100,21 +100,23 @@ export function createFollowCommands(config: FollowDeps) {
         },
         { pool, deadline: Date.now() + 5000 },
       );
-      return withConnection(pool, async (client) => {
+      const allowed = await withConnection(pool, async (client) => {
         if (!(await check(client))) return false;
         return (await readSpace(client, target.targetId, new Date().toISOString())) !== null;
       });
+      return allowed ? target : null;
     }
     if (target.targetType === 'subject') {
-      return (await resolveSubject({ pool, access }, actor, target.targetId)) !== null;
+      const resolved = await resolveSubject({ pool, access }, actor, target.targetId);
+      return resolved ? { ...target, targetId: resolved.subjectId } : null;
     }
     const collection = await withConnection(pool, (client) => readCollection(client, route, target.targetId));
-    return (
-      collection?.state === 'active' &&
+    return collection?.state === 'active' &&
       (collection.visibility === 'public' ||
         collection.visibility === 'unlisted' ||
         collection.curatorAccountId === actor.accountId)
-    );
+      ? target
+      : null;
   }
 
   async function resolveTarget(actor: AccountActor, input: FollowTarget | string): Promise<FollowTarget> {
@@ -122,7 +124,10 @@ export function createFollowCommands(config: FollowDeps) {
       typeof input === 'string'
         ? (['collection', 'subject', 'space'] as const).map((targetType) => ({ targetId: input, targetType }))
         : [asTarget(input)];
-    for (const target of candidates) if (await readable(actor, target)) return target;
+    for (const target of candidates) {
+      const resolved = await readable(actor, target);
+      if (resolved) return resolved;
+    }
     throw new LibraryNotFoundError();
   }
 
@@ -198,7 +203,12 @@ export function createFollowCommands(config: FollowDeps) {
           }
         : input,
     );
-    return write(account, target, requestKey, 'unfollow');
+    return write(
+      account,
+      existing ? { targetId: existing.targetId, targetType: existing.targetType } : target,
+      requestKey,
+      'unfollow',
+    );
   }
 
   async function followForMembership(input: {
