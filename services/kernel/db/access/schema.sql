@@ -118,6 +118,65 @@ CREATE TABLE access.organization_member (
 
 
 --
+-- Name: principal_assignment; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.principal_assignment (
+    route integer NOT NULL,
+    principal_id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    assigned_actor_id uuid NOT NULL,
+    valid tstzrange NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT principal_assignment_check CHECK ((route = ((get_byte(uuid_send(principal_id), 10) * 256) + get_byte(uuid_send(principal_id), 11)))),
+    CONSTRAINT principal_assignment_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT principal_assignment_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: resource_denial; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.resource_denial (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    subject_role text DEFAULT ''::text NOT NULL,
+    action text NOT NULL,
+    reason text NOT NULL,
+    valid tstzrange NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT resource_denial_action_check CHECK ((action ~ '^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$'::text)),
+    CONSTRAINT resource_denial_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT resource_denial_reason_check CHECK ((reason = ANY (ARRAY['resource'::text, 'suspension'::text, 'realm_ban'::text]))),
+    CONSTRAINT resource_denial_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT resource_denial_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
+    CONSTRAINT resource_denial_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: resource_grant; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.resource_grant (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    subject_role text DEFAULT ''::text NOT NULL,
+    action text NOT NULL,
+    valid tstzrange NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT resource_grant_action_check CHECK ((action ~ '^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$'::text)),
+    CONSTRAINT resource_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT resource_grant_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT resource_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
+    CONSTRAINT resource_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
 -- Name: account account_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -139,6 +198,30 @@ ALTER TABLE ONLY access.handle_claim
 
 ALTER TABLE ONLY access.organization_member
     ADD CONSTRAINT organization_member_pkey PRIMARY KEY (route, organization_id, member_account_id, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: principal_assignment principal_assignment_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.principal_assignment
+    ADD CONSTRAINT principal_assignment_pkey PRIMARY KEY (route, principal_id, request_id);
+
+
+--
+-- Name: resource_denial resource_denial_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_denial
+    ADD CONSTRAINT resource_denial_pkey PRIMARY KEY (route, resource_id, subject_id, subject_role, action, reason, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: resource_grant resource_grant_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_grant
+    ADD CONSTRAINT resource_grant_pkey PRIMARY KEY (route, resource_id, subject_id, subject_role, action, valid WITHOUT OVERLAPS);
 
 
 --
