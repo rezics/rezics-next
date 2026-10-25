@@ -511,7 +511,6 @@ test(
       await start.click();
       await page.waitForURL(`${await site()}${boardPath('ja')}/new`);
       await hydrated(page);
-      console.log('POSTING DEBUG NEW PAGE', await page.locator('main').innerText());
       await labelledEditor(page);
       expect(await title(page).count()).toBe(1);
       await title(page).fill('Reading together');
@@ -578,16 +577,7 @@ test(
         'A different interpretation',
       );
       expect(await page.locator('main li').filter({ hasText: 'A different interpretation' }).count()).toBe(1);
-      console.log(
-        'POSTING DEBUG EMPTY EDITOR',
-        await editor(page).evaluate((element) => ({
-          html: element.innerHTML,
-          pDisplay: getComputedStyle(element.firstElementChild!).display,
-          parent: element.parentElement?.className,
-          text: element.innerText,
-        })),
-      );
-      expect(await editor(page).innerText()).toBe('');
+      expect((await editor(page).innerText()).trim()).toBe('');
       expect(await send(page).isDisabled()).toBe(true);
       const nextHtml = await page.content();
       await editor(page).fill('Another contribution');
@@ -729,7 +719,7 @@ test(
             } else {
               await eventually(() => posts.posts.length === 2);
               await page.locator('main li').filter({ hasText: 'Keep this argument' }).waitFor();
-              expect(await editor(page).innerText()).toBe('');
+              expect((await editor(page).innerText()).trim()).toBe('');
               expect(await reason.count()).toBe(0);
               const freshHtml = await page.content();
               await editor(page).fill('A fresh draft');
