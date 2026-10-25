@@ -1,6 +1,6 @@
 import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
-import { CommandUnavailableError, IdempotencyConflictError } from '../command/command.ts';
+import { CommandUnavailableError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
 
 export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
@@ -9,6 +9,7 @@ export const PROBLEMS = {
   invalid_request: { status: 400, title: 'Invalid Request', retryable: false },
   invalid_signature: { status: 400, title: 'Invalid Signature', retryable: false },
   idempotency_conflict: { status: 422, title: 'Idempotency Key Reused', retryable: false },
+  too_many_events: { status: 422, title: 'Too Many Events', retryable: false },
   authentication_required: { status: 401, title: 'Authentication Required', retryable: false },
   invalid_credentials: { status: 401, title: 'Invalid Credentials', retryable: false },
   forbidden: { status: 403, title: 'Forbidden', retryable: false },
@@ -233,6 +234,9 @@ export function problemResponse(error: unknown, context: { method: string; id: s
     headers.set('www-authenticate', error.challenge);
   } else if (error instanceof IdempotencyConflictError) {
     code = 'idempotency_conflict';
+  } else if (error instanceof TooManyEventsError) {
+    code = 'too_many_events';
+    detail = error.message;
   } else if (error instanceof CommandUnavailableError) {
     switch (error.reason) {
       case 'overloaded':

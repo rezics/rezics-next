@@ -9,6 +9,7 @@ import { readPartition } from '../partition/partition.ts';
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
 type CommandResult<T> = { value: T; events: CommandEvent[] };
+export const MAX_COMMAND_EVENTS = 1000;
 
 /** Principal kind marker only; never an account ID. */
 export const ANONYMOUS_PRINCIPAL_ID = '00000000-0000-0000-0000-000000000000';
@@ -137,6 +138,18 @@ export class IdempotencyConflictError extends Error {
     super(`Idempotency key was reused with a different request for partition ${partition}`);
     this.name = 'IdempotencyConflictError';
     this.partition = partition;
+  }
+}
+
+export class TooManyEventsError extends Error {
+  readonly partition: number;
+  readonly count: number;
+
+  constructor(partition: number, count: number) {
+    super(`Command for partition ${partition} emitted ${count} events; the limit is ${MAX_COMMAND_EVENTS}`);
+    this.name = 'TooManyEventsError';
+    this.partition = partition;
+    this.count = count;
   }
 }
 
@@ -317,6 +330,8 @@ export async function runCommand<T>(
           const transactionId = Bun.randomUUIDv7();
           const response = await body(tx, { transactionId, time });
           if (response.events.length === 0) throw new TypeError('A command must emit at least one event');
+          if (response.events.length > MAX_COMMAND_EVENTS)
+            throw new TooManyEventsError(partition, response.events.length);
           let receipt: Record<string, unknown> | null = null;
           let value = response.value;
           if (options.receipt && receiptDigest) {

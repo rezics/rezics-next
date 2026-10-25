@@ -17,7 +17,10 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await admin.query("UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = $1", [partition]);
+  await admin.query(
+    "UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = $1",
+    [partition],
+  );
   await admin.query('DELETE FROM core.receipt WHERE partition_no = $1', [partition]);
   await admin.query('DELETE FROM editorial.write_basis WHERE partition_no = $1', [partition]);
   await admin.query('DELETE FROM core.outbox WHERE partition_no = $1', [partition]);
@@ -45,24 +48,37 @@ test('a command with 1,001 events fails before commit and leaves no position, ev
 
   expect(error).toBeInstanceOf(TooManyEventsError);
   expect(error).toMatchObject({ partition, count: MAX_COMMAND_EVENTS + 1 });
-  expect(await admin.query('SELECT position::int FROM core.partition WHERE partition_no = $1', [partition])).toMatchObject({
+  expect(
+    await admin.query('SELECT position::int FROM core.partition WHERE partition_no = $1', [partition]),
+  ).toMatchObject({
     rows: [{ position: 0 }],
   });
-  expect(await admin.query('SELECT count(*)::int AS n FROM core.outbox WHERE partition_no = $1', [partition])).toMatchObject({
+  expect(
+    await admin.query('SELECT count(*)::int AS n FROM core.outbox WHERE partition_no = $1', [partition]),
+  ).toMatchObject({
     rows: [{ n: 0 }],
   });
-  expect(await admin.query('SELECT count(*)::int AS n FROM editorial.write_basis WHERE partition_no = $1', [partition])).toMatchObject({
+  expect(
+    await admin.query('SELECT count(*)::int AS n FROM editorial.write_basis WHERE partition_no = $1', [partition]),
+  ).toMatchObject({
     rows: [{ n: 0 }],
   });
-  expect(await admin.query('SELECT count(*)::int AS n FROM core.receipt WHERE partition_no = $1', [partition])).toMatchObject({
+  expect(
+    await admin.query('SELECT count(*)::int AS n FROM core.receipt WHERE partition_no = $1', [partition]),
+  ).toMatchObject({
     rows: [{ n: 0 }],
   });
 });
 
 test('a command with 1,000 events commits', async () => {
-  const result = await runCommand(pool, { partition }, async () => ({ value: 'committed', events: events(MAX_COMMAND_EVENTS) }));
+  const result = await runCommand(pool, { partition }, async () => ({
+    value: 'committed',
+    events: events(MAX_COMMAND_EVENTS),
+  }));
   expect(result).toMatchObject({ value: 'committed', partition, position: 1n, replayed: false });
-  expect(await admin.query('SELECT count(*)::int AS n FROM core.outbox WHERE partition_no = $1', [partition])).toMatchObject({
+  expect(
+    await admin.query('SELECT count(*)::int AS n FROM core.outbox WHERE partition_no = $1', [partition]),
+  ).toMatchObject({
     rows: [{ n: MAX_COMMAND_EVENTS }],
   });
 });
@@ -83,7 +99,10 @@ test('too many events maps to the too_many_events problem', async () => {
 
 test('New command stays within its bound as k grows', async () => {
   const database = growth!;
-  await database.admin.query("UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = $1", [partition]);
+  await database.admin.query(
+    "UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = $1",
+    [partition],
+  );
   await database.admin.query('DELETE FROM core.receipt WHERE partition_no = $1', [partition]);
   await database.admin.query('DELETE FROM editorial.write_basis WHERE partition_no = $1', [partition]);
   await database.admin.query('DELETE FROM core.outbox WHERE partition_no = $1', [partition]);
