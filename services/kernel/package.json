@@ -28,6 +28,7 @@
     "reylo": "0.5.0",
     "sharp": "0.35.5",
     "spdx-license-ids": "3.0.24",
+    "stripe": "23.0.1",
     "structured-headers": "2.1.1",
     "typebox": "1.4.3"
   },
