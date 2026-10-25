@@ -242,6 +242,32 @@ CREATE TABLE library.progress_unit (
 
 
 --
+-- Name: published_log; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.published_log (
+    route integer NOT NULL,
+    log_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    session_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    session_state text NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    completed_at timestamp with time zone,
+    note text,
+    published_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT published_log_check CHECK ((route = ((get_byte(uuid_send(log_id), 10) * 256) + get_byte(uuid_send(log_id), 11)))),
+    CONSTRAINT published_log_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT published_log_check2 CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
+    CONSTRAINT published_log_check3 CHECK (((session_state = 'completed'::text) = (completed_at IS NOT NULL))),
+    CONSTRAINT published_log_note_check CHECK (((note IS NULL) OR ((char_length(note) >= 0) AND (char_length(note) <= 1000)))),
+    CONSTRAINT published_log_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT published_log_session_state_check CHECK ((session_state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text])))
+);
+
+
+--
 -- Name: subject_collection; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -352,6 +378,14 @@ ALTER TABLE ONLY library.progress_unit
 
 
 --
+-- Name: published_log published_log_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.published_log
+    ADD CONSTRAINT published_log_pkey PRIMARY KEY (route, log_id);
+
+
+--
 -- Name: subject_collection subject_collection_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -414,6 +448,13 @@ CREATE INDEX follow_account_page ON library.follow USING btree (route, account_i
 --
 
 CREATE INDEX progress_session_account_subject ON library.progress_session USING btree (route, account_id, subject_id, started_at DESC, session_id);
+
+
+--
+-- Name: published_log_account_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX published_log_account_page ON library.published_log USING btree (route, account_id, published_at DESC, log_id);
 
 
 --

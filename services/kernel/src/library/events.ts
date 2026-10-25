@@ -11,4 +11,6 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.progress_session.updated.v1': Type.Object({ sessionId: id }, { additionalProperties: false }),
   'com.rezics.library.copy.updated.v1': Type.Object({ copyId: id }, { additionalProperties: false }),
   'com.rezics.library.copy.deleted.v1': Type.Object({ copyId: id }, { additionalProperties: false }),
+  'com.rezics.library.published_log.updated.v1': Type.Object({ logId: id }, { additionalProperties: false }),
+  'com.rezics.library.published_log.deleted.v1': Type.Object({ logId: id }, { additionalProperties: false }),
 } as const;
