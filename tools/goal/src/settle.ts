@@ -2,7 +2,7 @@ import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
 import { makeRecord, readMeasurement, reportedApproaches } from './records.ts';
 import { evidenceBundle } from './evidence.ts';
-import { terminateProcessGroup } from './process.ts';
+import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
 import type { RunningWorker } from './launch.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
@@ -16,6 +16,7 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
   const store = tasks.store;
   store.assertCurrent(ref);
   await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
+  await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
   let queued = false;
   store.write(ref, () => {
     if (store.events(ref.taskId).some(event => event.attempt === ref.attempt && event.kind === 'landing-requested')) { queued = true; return; }

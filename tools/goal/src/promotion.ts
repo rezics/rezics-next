@@ -6,6 +6,7 @@ import defaults from '../defaults.json';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { matchesPath } from './briefs.ts';
 import { firstFailure, gateRunner, git, type GateRunner } from './merge.ts';
+import { stopProcessesUnder } from './process.ts';
 import type { DerivedFile } from './merge-train.ts';
 import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
@@ -149,7 +150,10 @@ async function gateAt(options: PromotionOptions, run: PromotionRun, commit: stri
       // The first failure decides the run; later commands on a broken commit only cost time.
       if (!result.passed) break;
     }
-  } finally { git(main, 'worktree', 'remove', '--force', tree); }
+  } finally {
+    await stopProcessesUnder(tree, options.settings.terminationGraceMs);
+    git(main, 'worktree', 'remove', '--force', tree);
+  }
   return results;
 }
 
