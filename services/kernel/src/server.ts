@@ -9,6 +9,8 @@ import { createCommerceWork } from './commerce/enqueue.ts';
 import { createWorkClient } from './work/client.ts';
 
 export { ConfigError } from './commerce/config.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { setupSemantic } from './semantic/setup.ts';
 
 export type ServerConfig = {
   databaseUrl: string;
@@ -61,8 +63,9 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   return { databaseUrl, hostname, port, routeKey, tokens: { current, keys }, commerce: readCommerceConfig(env) };
 }
 
-export function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
+export async function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
   const pool = createPool(config.databaseUrl);
+  await setupSemantic(pool, bundledRelease);
   const registeredEffects = registerEffects(options.effects ?? []);
   let relays: ReturnType<typeof startRelays> | undefined;
   const work = launchWork({ databaseUrl: config.databaseUrl }).then(() => {
@@ -122,7 +125,7 @@ export function startServer(config: ServerConfig, options: { effects?: Effect[] 
 
 if (import.meta.main) {
   try {
-    const server = startServer(readConfig(process.env));
+    const server = await startServer(readConfig(process.env));
     console.info(server.url.href);
     const stop = () => {
       void server.stop().finally(() => process.exit(0));

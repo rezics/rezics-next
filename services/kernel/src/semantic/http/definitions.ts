@@ -5,7 +5,7 @@ import { withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import type { subjectRoutes } from '../../http/subjects.ts';
+import type { subjectRoutes } from './subjects.ts';
 import { AuthenticationError } from '../../request/access.ts';
 import {
   activateRelease,

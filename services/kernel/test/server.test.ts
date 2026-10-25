@@ -65,7 +65,7 @@ test('the server reads its configuration from the environment and names, never e
 });
 
 test('a started server answers health and the subject routes over HTTP, then stops', async () => {
-  const server = startServer(readConfig({ ...env, KERNEL_PORT: '0' }));
+  const server = await startServer(readConfig({ ...env, KERNEL_PORT: '0' }));
   const origin = server.url.href.replace(/\/$/, '');
   try {
     expect(server.url.hostname).toBe('127.0.0.1');
@@ -77,7 +77,7 @@ test('a started server answers health and the subject routes over HTTP, then sto
     const anonymous = await fetch(`${origin}/v1/subjects`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'idempotency-key': '"k-1"' },
-      body: JSON.stringify({ labels: { en: 'Kokoro' } }),
+      body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Kokoro' } }),
     });
     expect(anonymous.status).toBe(401);
   } finally {

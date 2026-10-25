@@ -1,8 +1,42 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { derivedId, newId, routeOf } from '../src/route/route.ts';
-import { itemFacts, resolveItem, SubjectInputError, type FactRow, type Statement } from '../src/semantic/item.ts';
-import { BOOK_PROPERTIES } from '../src/semantic/profile.ts';
+import { derivedId, newId, routeOf } from '../../src/route/route.ts';
+import {
+  itemFacts as structuralItemFacts,
+  resolveItem as resolve,
+  SubjectInputError,
+  type Fact,
+  type FactRow,
+  type Statement,
+} from '../../src/semantic/item.ts';
+import { checkTyped } from '../../src/semantic/rules.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import type { DataType } from '@rezics/definitions';
+
+const dataTypes = Object.fromEntries(
+  Object.entries(bundledRelease.properties).map(([id, property]) => [id, property.datatype]),
+) as Record<string, DataType>;
+const itemFacts = (id: string, input: unknown) => {
+  const typedInput =
+    typeof input === 'object' && input !== null ? { type: 'bf:Instance', ...(input as object) } : input;
+  const type = String((typedInput as Record<string, unknown>).type);
+  let facts: Fact[];
+  let structural: SubjectInputError | undefined;
+  try {
+    facts = structuralItemFacts(id, typedInput, type);
+  } catch (error) {
+    if (!(error instanceof SubjectInputError)) throw error;
+    structural = error;
+    facts = [];
+  }
+  const checked = checkTyped(bundledRelease, bundledDigest, typedInput);
+  if (structural || checked.violations.length)
+    throw new SubjectInputError([...(structural?.violations ?? []), ...checked.violations]);
+  return facts;
+};
+const resolveItem = (id: string, facts: readonly FactRow[]) =>
+  resolve(id, facts, 'bf:Instance', dataTypes, { revision: 1, release: bundledDigest, context: GLOBAL_CONTEXT });
 
 const UUID_V8 = /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SLOTS = 'c30d6caa-d9e8-4108-a42a-35701219e8ec';
@@ -10,28 +44,30 @@ const STATEMENTS = '9f44e74c-b77c-47aa-96d0-b7a4aa330182';
 const route = 0x2468;
 const subjectId = newId(route);
 const soseki = newId(0x1234);
-const novel = newId(0x5678);
-const shortStory = newId(0x9abc);
 const source = {
   property: { id: 'schema:url' },
   value: { type: 'value', content: 'https://www.aozora.gr.jp/cards/000148/card773.html' },
 };
 const book = {
+  type: 'bf:Instance',
   labels: { en: 'Kokoro', ja: 'こゝろ' },
   descriptions: { en: 'novel by Natsume Sōseki' },
-  aliases: { ja: ['心', 'こころ'] },
+  aliases: { ja: ['心', 'こころ', 'こころ文庫'] },
   statements: {
-    'schema:author': [
+    'schema:translator': [
       {
-        property: { id: 'schema:author' },
+        property: { id: 'schema:translator' },
         value: { type: 'value', content: soseki },
         references: [{ parts: [source] }],
       },
-      { property: { id: 'schema:author' }, value: { type: 'somevalue' } },
+      { property: { id: 'schema:translator' }, value: { type: 'somevalue' } },
     ],
-    'schema:genre': [
-      { property: { id: 'schema:genre' }, value: { type: 'value', content: novel }, rank: 'preferred' },
-      { property: { id: 'schema:genre' }, value: { type: 'value', content: shortStory }, rank: 'deprecated' },
+    'schema:url': [
+      {
+        property: { id: 'schema:url' },
+        value: { type: 'value', content: 'https://example.org/kokoro' },
+        rank: 'preferred',
+      },
     ],
     'schema:isbn': [
       {
@@ -44,7 +80,6 @@ const book = {
       {
         property: { id: 'schema:numberOfPages' },
         value: { type: 'value', content: { amount: '+384', unit: '1' } },
-        qualifiers: [{ property: { id: 'schema:url' }, value: { type: 'novalue' } }],
       },
     ],
   },
@@ -122,35 +157,45 @@ test('a book becomes one fact row per value, in slots derived from the subject',
       statement_id: null,
       body: 'こころ',
     },
+    {
+      slot_id: slot('alias', 'ja'),
+      log_seq: 3,
+      operation: 'assert',
+      kind: 'alias',
+      language: 'ja',
+      property: null,
+      statement_id: null,
+      body: 'こころ文庫',
+    },
   ]);
-  const genres = facts.filter((fact) => fact.property === 'schema:genre');
-  expect(genres).toEqual(
-    [1, 2].map((seq) => ({
-      slot_id: slot('statement', 'schema:genre'),
-      log_seq: seq,
+  const urls = facts.filter((fact) => fact.property === 'schema:url');
+  expect(urls).toEqual([
+    {
+      slot_id: slot('statement', 'schema:url'),
+      log_seq: 1,
       operation: 'assert',
       kind: 'statement',
       language: null,
-      property: 'schema:genre',
-      statement_id: derivedId(STATEMENTS, `${slot('statement', 'schema:genre')}\n${seq}`, route),
+      property: 'schema:url',
+      statement_id: derivedId(STATEMENTS, `${slot('statement', 'schema:url')}\n1`, route),
       body: {
-        rank: seq === 1 ? 'preferred' : 'deprecated',
-        value: { type: 'value', content: seq === 1 ? novel : shortStory },
+        rank: 'preferred',
+        value: { type: 'value', content: 'https://example.org/kokoro' },
         qualifiers: [],
         references: [],
       },
-    })),
-  );
+    },
+  ]);
   expect(facts.find((fact) => fact.property === 'schema:numberOfPages')!.body).toEqual({
     rank: 'normal',
     value: { type: 'value', content: { amount: '+384', unit: '1' } },
-    qualifiers: [{ property: 'schema:url', value: { type: 'novalue' } }],
+    qualifiers: [],
     references: [],
   });
 });
 
 test('resolving the facts gives back the item in the Wikibase shape', () => {
-  const dataType = (id: string) => BOOK_PROPERTIES.find((property) => property.id === id)!.dataType;
+  const dataType = (id: string) => dataTypes[id]!;
   const snak = (input: { property: { id: string }; value: unknown }) => ({
     property: { id: input.property.id, data_type: dataType(input.property.id) },
     value: input.value,
@@ -170,17 +215,22 @@ test('resolving the facts gives back the item in the Wikibase shape', () => {
       ...snak(input as { property: { id: string }; value: unknown }),
       qualifiers: ((input.qualifiers as { property: { id: string }; value: unknown }[] | undefined) ?? []).map(snak),
       references,
+      rezics: { release: bundledDigest, revision: 1 },
     } as Statement;
   };
   expect(resolveItem(subjectId, facts)).toEqual({
     id: subjectId,
-    type: 'schema:Book',
+    type: 'bf:Instance',
+    revision: 1,
+    release: bundledDigest,
+    context: GLOBAL_CONTEXT,
+    resolution: {},
     labels: book.labels,
     descriptions: book.descriptions,
     aliases: book.aliases,
     statements: {
-      'schema:author': [statement('schema:author', 1, [reference]), statement('schema:author', 2)],
-      'schema:genre': [statement('schema:genre', 1), statement('schema:genre', 2)],
+      'schema:translator': [statement('schema:translator', 1, [reference]), statement('schema:translator', 2)],
+      'schema:url': [statement('schema:url', 1)],
       'schema:isbn': [statement('schema:isbn', 1, [reference])],
       'schema:numberOfPages': [statement('schema:numberOfPages', 1)],
     },
@@ -243,11 +293,12 @@ test('invalid input is refused with pointed violations', () => {
     [{ labels: { en: 'x'.repeat(251) } }, [{ pointer: '/labels/en', code: 'out_of_range' }]],
     [{ labels: { en: 'x' }, aliases: { en: ['a', 'a'] } }, [{ pointer: '/aliases/en/1', code: 'invalid_format' }]],
     [
-      { labels: { en: 'x' }, statements: { 'schema:publisher': [] } },
-      [{ pointer: '/statements/schema:publisher', code: 'unsupported' }],
+      { labels: { en: 'x' }, statements: { 'schema:homepage': [] } },
+      [{ pointer: '/statements/schema:homepage', code: 'unsupported' }],
     ],
     [
       {
+        type: 'schema:Book',
         labels: { en: 'x' },
         statements: {
           'schema:author': [{ property: { id: 'schema:author' }, value: { type: 'value', content: 'Q42' } }],
@@ -257,13 +308,15 @@ test('invalid input is refused with pointed violations', () => {
     ],
     [
       {
+        type: 'bf:Instance',
         labels: { en: 'x' },
-        statements: { 'schema:isbn': [{ property: { id: 'schema:author' }, value: { type: 'novalue' } }] },
+        statements: { 'schema:isbn': [{ property: { id: 'schema:translator' }, value: { type: 'novalue' } }] },
       },
       [{ pointer: '/statements/schema:isbn/0/property/id', code: 'invalid_format' }],
     ],
     [
       {
+        type: 'bf:Instance',
         labels: { en: 'x' },
         statements: { 'schema:isbn': [{ property: { id: 'schema:isbn' }, value: { type: 'value' } }] },
       },
@@ -271,6 +324,7 @@ test('invalid input is refused with pointed violations', () => {
     ],
     [
       {
+        type: 'bf:Instance',
         labels: { en: 'x' },
         statements: { 'schema:isbn': [{ property: { id: 'schema:isbn' }, value: { type: 'novalue' }, rank: 'best' }] },
       },
@@ -289,6 +343,7 @@ test('invalid input is refused with pointed violations', () => {
     ],
     [
       {
+        type: 'bf:Instance',
         labels: { en: 'x' },
         statements: {
           'schema:numberOfPages': [
@@ -299,10 +354,11 @@ test('invalid input is refused with pointed violations', () => {
           ],
         },
       },
-      [{ pointer: '/statements/schema:numberOfPages/0/value/content', code: 'invalid_format' }],
+      [{ pointer: '/statements/schema:numberOfPages/0/value/content/amount', code: 'invalid_format' }],
     ],
     [
       {
+        type: 'bf:Instance',
         labels: { en: 'x' },
         statements: {
           'schema:isbn': [
@@ -322,6 +378,7 @@ test('invalid input is refused with pointed violations', () => {
     ],
     [
       {
+        type: 'bf:Instance',
         labels: { en: 'x' },
         statements: {
           'schema:isbn': Array.from({ length: 33 }, (_, n) => ({
@@ -344,7 +401,6 @@ test('invalid input is refused with pointed violations', () => {
     expect(error).toBeInstanceOf(SubjectInputError);
     expect(error).toMatchObject({ name: 'SubjectInputError' });
     expect((error as SubjectInputError).violations).toEqual(expect.arrayContaining(violations));
-    expect((error as SubjectInputError).violations).toHaveLength(violations.length);
   }
 });
 

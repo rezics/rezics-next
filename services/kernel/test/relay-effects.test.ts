@@ -85,7 +85,7 @@ test('the server relays a committed event to its effect without a caller naming 
   });
   const partition = freshPartition();
   const emptyPartition = freshPartition();
-  const server = startServer(config, { effects: [effect] });
+  const server = await startServer(config, { effects: [effect] });
   try {
     const { epoch, position, subject } = await append(partition);
     await until(async () => (await checkpoint(partition)) === String(position));

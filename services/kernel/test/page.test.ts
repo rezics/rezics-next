@@ -8,6 +8,8 @@ import { LIST_SUBJECTS, PAGE_SIZE, PageCursorError, pageSubjects } from '../src/
 import { CREATE_SUBJECT, createSubject, subjectTarget } from '../src/semantic/subject.ts';
 import { encodeCursor } from '../src/tokens/cursor.ts';
 import type { KeyRing } from '../src/tokens/seal.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -44,6 +46,7 @@ function keysInOnePartition(count: number): { partition: number; keys: string[] 
 }
 
 async function createBooks(keys: string[]): Promise<{ id: string; title: string }[]> {
+  await bootstrapRelease(pool, bundledRelease);
   const created = [];
   for (const [n, key] of keys.entries()) {
     const title = `Book ${n}`;
@@ -52,7 +55,8 @@ async function createBooks(keys: string[]): Promise<{ id: string; title: string 
       target: subjectTarget(routeKey, actor.accountId, key),
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
-      item: { labels: { en: title, ja: `本 ${n}` }, descriptions: { en: 'a paged book' } },
+      item: { type: 'schema:Book', labels: { en: title, ja: `本 ${n}` }, descriptions: { en: 'a paged book' } },
+      release: { digest: bundledDigest, release: bundledRelease },
       authorize: allow,
     });
     created.push({ id: subject.id, title });

@@ -1,4 +1,4 @@
-import { SUBJECT_TYPE, type DataType } from './profile.ts';
+import type { DataType } from '@rezics/definitions';
 export type Value = {
     type: 'value';
     content: unknown;
@@ -28,10 +28,18 @@ export type Statement = {
     value: Value;
     qualifiers: Snak[];
     references: Reference[];
+    rezics: {
+        release: string;
+        revision: number;
+    };
 };
 export type Item = {
     id: string;
-    type: typeof SUBJECT_TYPE;
+    type: string;
+    revision: number;
+    release: string;
+    context: string;
+    resolution: Record<string, never>;
     labels: Record<string, string>;
     descriptions: Record<string, string>;
     aliases: Record<string, string[]>;
@@ -54,6 +62,8 @@ export type FactRow = {
     statement_id: string | null;
     operation: Fact['operation'];
     body: unknown;
+    fact_revision?: number | null;
+    fact_release?: string | null;
 };
 export type Violation = {
     pointer: string;
@@ -63,5 +73,9 @@ export declare class SubjectInputError extends Error {
     readonly violations: Violation[];
     constructor(violations: Violation[]);
 }
-export declare function itemFacts(subjectId: string, input: unknown): Fact[];
-export declare function resolveItem(subjectId: string, rows: readonly FactRow[]): Item;
+export declare function itemFacts(subjectId: string, input: unknown, _type?: string): Fact[];
+export declare function resolveItem(subjectId: string, rows: readonly FactRow[], type: string, dataTypes: Readonly<Record<string, DataType>>, metadata: {
+    revision: number;
+    release: string;
+    context: string;
+}): Item;

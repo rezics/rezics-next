@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { createHash, randomUUID } from 'node:crypto';
 import { IdempotencyConflictError } from '../src/command/command.ts';
@@ -8,11 +8,14 @@ import { idempotencyKeyOf, IDEMPOTENCY_HEADER, requestDigest } from '../src/http
 import type { AccountActor } from '../src/request/access.ts';
 import { anchorRoute, routeOf } from '../src/route/route.ts';
 import { createSubject, readSubject, subjectTarget } from '../src/semantic/subject.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 afterAll(() => pool.end());
+beforeAll(() => bootstrapRelease(pool, bundledRelease));
 
 const routeKey = new Uint8Array(32).fill(11);
 const actor: AccountActor = {
@@ -23,7 +26,7 @@ const actor: AccountActor = {
   requestedBy: null,
   authnEpoch: 1,
 };
-const book = { labels: { en: 'Botchan' } };
+const book = { type: 'schema:Book', labels: { en: 'Botchan' } };
 const allow = async () => true;
 
 test('a create lands where its account and idempotency key anchor it, under a new id each attempt', async () => {
@@ -36,7 +39,14 @@ test('a create lands where its account and idempotency key anchor it, under a ne
   expect(second.id).not.toBe(first.id);
   expect(subjectTarget(routeKey, randomUUID(), key).route).not.toBe(first.route);
 
-  const options = { actor, idempotencyKey: key, digest: new Uint8Array(32).fill(1), item: book, authorize: allow };
+  const options = {
+    actor,
+    idempotencyKey: key,
+    digest: new Uint8Array(32).fill(1),
+    item: book,
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: allow,
+  };
   const created = await createSubject(pool, { ...options, target: first });
   expect(created.subject.id).toBe(first.id);
   const replayed = await createSubject(pool, { ...options, target: second });
@@ -52,7 +62,15 @@ test('a read checks access inside its transaction, and a refused read is no subj
   const key = randomUUID();
   const target = subjectTarget(routeKey, actor.accountId, key);
   const digest = new Uint8Array(32).fill(2);
-  await createSubject(pool, { actor, target, idempotencyKey: key, digest, item: book, authorize: allow });
+  await createSubject(pool, {
+    actor,
+    target,
+    idempotencyKey: key,
+    digest,
+    item: book,
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: allow,
+  });
 
   const seen: string[] = [];
   const found = await readSubject(pool, target.id, async (client) => {

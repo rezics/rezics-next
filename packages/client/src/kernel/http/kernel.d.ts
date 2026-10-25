@@ -41,6 +41,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         subjects: {
             post: {
                 body: {
+                    type: string;
                     labels: Record<string, any>;
                     descriptions?: Record<string, any>;
                     aliases?: Record<string, any>;
@@ -58,7 +59,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     201: {
                         subject: {
                             id: string;
-                            type: "schema:Book";
+                            type: string;
+                            revision: number;
+                            release: string;
+                            context: string;
+                            resolution: Record<string, any>;
                             labels: Record<string, string>;
                             descriptions: Record<string, string>;
                             aliases: Record<string, string[]>;
@@ -67,7 +72,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 rank: "deprecated" | "normal" | "preferred";
                                 property: {
                                     id: string;
-                                    data_type: import("../semantic/profile.ts").DataType;
+                                    data_type: "external-id" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                 };
                                 value: {
                                     type: "value";
@@ -80,7 +85,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 qualifiers: {
                                     property: {
                                         id: string;
-                                        data_type: import("../semantic/profile.ts").DataType;
+                                        data_type: "external-id" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -95,7 +100,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     parts: {
                                         property: {
                                             id: string;
-                                            data_type: import("../semantic/profile.ts").DataType;
+                                            data_type: "external-id" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -108,6 +113,10 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     }[];
                                     hash: string;
                                 }[];
+                                rezics: {
+                                    release: string;
+                                    revision: number;
+                                };
                             }[]>;
                         };
                     };
@@ -201,7 +210,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         200: {
                             subject: {
                                 id: string;
-                                type: "schema:Book";
+                                type: string;
+                                revision: number;
+                                release: string;
+                                context: string;
+                                resolution: Record<string, any>;
                                 labels: Record<string, string>;
                                 descriptions: Record<string, string>;
                                 aliases: Record<string, string[]>;
@@ -210,7 +223,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     rank: "deprecated" | "normal" | "preferred";
                                     property: {
                                         id: string;
-                                        data_type: import("../semantic/profile.ts").DataType;
+                                        data_type: "external-id" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -223,7 +236,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     qualifiers: {
                                         property: {
                                             id: string;
-                                            data_type: import("../semantic/profile.ts").DataType;
+                                            data_type: "external-id" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -238,7 +251,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                         parts: {
                                             property: {
                                                 id: string;
-                                                data_type: import("../semantic/profile.ts").DataType;
+                                                data_type: "external-id" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                             };
                                             value: {
                                                 type: "value";
@@ -251,6 +264,10 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                         }[];
                                         hash: string;
                                     }[];
+                                    rezics: {
+                                        release: string;
+                                        revision: number;
+                                    };
                                 }[]>;
                             };
                             related: Record<string, {
@@ -1261,6 +1278,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly parentAuthorization: (action: string, parent: unknown, resource: import("../request/access.ts").Resource, creation: unknown, denied: () => Error) => import("../command/command.ts").CommandAuthorization | Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -1531,6 +1549,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly parentAuthorization: (action: string, parent: unknown, resource: import("../request/access.ts").Resource, creation: unknown, denied: () => Error) => import("../command/command.ts").CommandAuthorization | Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -1557,6 +1576,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly parentAuthorization: (action: string, parent: unknown, resource: import("../request/access.ts").Resource, creation: unknown, denied: () => Error) => import("../command/command.ts").CommandAuthorization | Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     entitlement: {
         id: string;

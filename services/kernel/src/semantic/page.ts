@@ -4,7 +4,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { resolveItem, type FactRow, type Item } from './item.ts';
+import type { FactRow, Item } from './item.ts';
 import pageSubjectsStatement from './page-subjects.sql';
 
 export const LIST_SUBJECTS = 'subject.list';
@@ -152,7 +152,11 @@ export async function pageSubjects(
       const shown = groups.slice(0, size);
       const subjects = shown.map((group) => ({
         id: group[0]!.id,
-        labels: resolveItem(group[0]!.id, facts(group)).labels,
+        labels: Object.fromEntries(
+          facts(group)
+            .filter((fact) => fact.kind === 'label' && fact.operation === 'assert')
+            .map((fact) => [fact.language!, fact.body as string]),
+        ),
       }));
       const last = shown.at(-1)?.[0];
       const next =

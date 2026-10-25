@@ -3,9 +3,9 @@ import { createAccess } from '../access/index.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
+import { subjectRoutes } from '../semantic/http/subjects.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
-import { subjectRoutes } from './subjects.ts';
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;

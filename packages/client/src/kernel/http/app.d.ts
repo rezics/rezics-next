@@ -39,6 +39,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
         };
         readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly parentAuthorization: (action: string, parent: unknown, resource: Resource, creation: unknown, denied: () => Error) => import("../command/command.ts").CommandAuthorization | Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -77,6 +78,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
             };
             readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
             readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly parentAuthorization: (action: string, parent: unknown, resource: Resource, creation: unknown, denied: () => Error) => import("../command/command.ts").CommandAuthorization | Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -101,6 +103,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
     };
     readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly parentAuthorization: (action: string, parent: unknown, resource: Resource, creation: unknown, denied: () => Error) => import("../command/command.ts").CommandAuthorization | Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     status: 'ok';
 }>, import("elysia").InputSchema<never> & {

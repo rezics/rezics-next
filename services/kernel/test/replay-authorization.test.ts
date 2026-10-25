@@ -7,6 +7,8 @@ import { createSubject, SubjectAccessDeniedError } from '../src/semantic/subject
 import { IdempotencyConflictError } from '../src/command/command.ts';
 import { requestDigest } from '../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../src/route/route.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -32,7 +34,7 @@ const access = createAccess({
 const actorId = newId(0xc100);
 const principalId = newId(0xc110);
 const assignmentId = newId(0xc110);
-const item = { labels: { en: 'receipt secret' }, descriptions: {}, aliases: {}, statements: {} };
+const item = { type: 'schema:Book', labels: { en: 'receipt secret' }, descriptions: {}, aliases: {}, statements: {} };
 let trace: string[] = [];
 pool.on('connect', (client) => {
   const query = client.query.bind(client);
@@ -45,6 +47,7 @@ pool.on('connect', (client) => {
   }) as typeof client.query;
 });
 beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
   for (const id of [actorId, principalId])
     await admin.query(
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$3)`,
@@ -96,6 +99,7 @@ async function fixture(route: number, delegated = false) {
       idempotencyKey: key,
       digest: requestDigest('subject.create', actor, item),
       item,
+      release: { digest: bundledDigest, release: bundledRelease },
       authorize,
     });
   };

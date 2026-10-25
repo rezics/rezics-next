@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
+import type { DataType } from '@rezics/definitions';
 import { derivedId, routeOf } from '../route/route.ts';
-import { propertyOf, SUBJECT_TYPE, type DataType } from './profile.ts';
 
 export type Value = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
 export type Snak = { property: { id: string; data_type: DataType }; value: Value };
@@ -12,10 +12,15 @@ export type Statement = {
   value: Value;
   qualifiers: Snak[];
   references: Reference[];
+  rezics: { release: string; revision: number };
 };
 export type Item = {
   id: string;
-  type: typeof SUBJECT_TYPE;
+  type: string;
+  revision: number;
+  release: string;
+  context: string;
+  resolution: Record<string, never>;
   labels: Record<string, string>;
   descriptions: Record<string, string>;
   aliases: Record<string, string[]>;
@@ -38,6 +43,8 @@ export type FactRow = {
   statement_id: string | null;
   operation: Fact['operation'];
   body: unknown;
+  fact_revision?: number | null;
+  fact_release?: string | null;
 };
 export type Violation = {
   pointer: string;
@@ -56,7 +63,6 @@ export class SubjectInputError extends Error {
 const SLOT_NS = 'c30d6caa-d9e8-4108-a42a-35701219e8ec';
 const STATEMENT_NS = '9f44e74c-b77c-47aa-96d0-b7a4aa330182';
 const languagePattern = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
-const amountPattern = /^[+-](?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -73,7 +79,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-export function itemFacts(subjectId: string, input: unknown): Fact[] {
+export function itemFacts(subjectId: string, input: unknown, _type?: string): Fact[] {
   const route = routeOf(subjectId);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
   const errors: Violation[] = [];
@@ -86,7 +92,7 @@ export function itemFacts(subjectId: string, input: unknown): Fact[] {
   if (!isObject(input)) {
     throw new SubjectInputError([{ pointer: '', code: 'invalid_type' }]);
   }
-  fields(input, ['labels', 'descriptions', 'aliases', 'statements'], '');
+  fields(input, ['type', 'labels', 'descriptions', 'aliases', 'statements'], '');
   const terms: { kind: 'label' | 'description'; language: string; body: string }[] = [];
   const aliasTerms: { language: string; body: string }[] = [];
   const termMap = (key: 'labels' | 'descriptions' | 'aliases') => {
@@ -160,7 +166,6 @@ export function itemFacts(subjectId: string, input: unknown): Fact[] {
       add(`${at}/property/id`, 'invalid_type');
       return null;
     }
-    if (!propertyOf(id)) add(`${at}/property/id`, 'unsupported');
     if (expected && id !== expected) add(`${at}/property/id`, 'invalid_format');
     const val = raw.value;
     if (!isObject(val) || !['value', 'somevalue', 'novalue'].includes(String(val.type))) {
@@ -170,7 +175,7 @@ export function itemFacts(subjectId: string, input: unknown): Fact[] {
     fields(val, val.type === 'value' ? ['type', 'content'] : ['type'], `${at}/value`);
     if (val.type === 'value') {
       if (!own(val, 'content')) add(`${at}/value/content`, 'required');
-      else validateContent(id, val.content, `${at}/value/content`, add);
+      else if (val.content === undefined) add(`${at}/value/content`, 'invalid_type');
     } else if (own(val, 'content')) add(`${at}/value/content`, 'unknown_field');
     return { property: id, value: val };
   };
@@ -179,10 +184,6 @@ export function itemFacts(subjectId: string, input: unknown): Fact[] {
     else
       for (const [prop, list] of Object.entries(input.statements)) {
         const at = `/statements/${prop.replaceAll('~', '~0').replaceAll('/', '~1')}`;
-        if (!propertyOf(prop)) {
-          add(at, 'unsupported');
-          continue;
-        }
         if (!Array.isArray(list)) {
           add(at, 'invalid_type');
           continue;
@@ -288,47 +289,13 @@ export function itemFacts(subjectId: string, input: unknown): Fact[] {
   return facts;
 }
 
-function validateContent(
-  id: string,
-  content: unknown,
-  at: string,
-  add: (pointer: string, code: Violation['code']) => void,
-): void {
-  const type = propertyOf(id)?.dataType;
-  if (!type) return;
-  if (type === 'document' || type === 'media') {
-    add(at, 'unsupported');
-  } else if (type === 'wikibase-item') {
-    if (typeof content !== 'string') add(at, 'invalid_type');
-    else if (routeOf(content) === null) add(at, 'invalid_format');
-  } else if (type === 'external-id') {
-    if (typeof content !== 'string') add(at, 'invalid_type');
-    else if (content.length < 1 || content.length > 1500)
-      add(at, content.length > 1500 ? 'out_of_range' : 'invalid_format');
-  } else if (type === 'quantity') {
-    if (!isObject(content)) {
-      add(at, 'invalid_type');
-      return;
-    }
-    if (Object.keys(content).some((key) => !['amount', 'unit'].includes(key))) add(at, 'unknown_field');
-    if (typeof content.amount !== 'string' || content.unit !== '1' || !amountPattern.test(content.amount))
-      add(at, 'invalid_format');
-  } else {
-    if (typeof content !== 'string') {
-      add(at, 'invalid_type');
-      return;
-    }
-    try {
-      const url = new URL(content);
-      if (content.length > 1500) add(at, 'out_of_range');
-      else if (!['http:', 'https:'].includes(url.protocol)) add(at, 'invalid_format');
-    } catch {
-      add(at, content.length > 1500 ? 'out_of_range' : 'invalid_format');
-    }
-  }
-}
-
-export function resolveItem(subjectId: string, rows: readonly FactRow[]): Item {
+export function resolveItem(
+  subjectId: string,
+  rows: readonly FactRow[],
+  type: string,
+  dataTypes: Readonly<Record<string, DataType>>,
+  metadata: { revision: number; release: string; context: string },
+): Item {
   const labels: Record<string, string> = {};
   const descriptions: Record<string, string> = {};
   const aliases = new Map<string, string[]>();
@@ -359,7 +326,7 @@ export function resolveItem(subjectId: string, rows: readonly FactRow[]): Item {
           references: { parts: { property: string; value: Value }[] }[];
         };
         const snak = (entry: { property: string; value: Value }): Snak => ({
-          property: { id: entry.property, data_type: propertyOf(entry.property)!.dataType },
+          property: { id: entry.property, data_type: dataTypes[entry.property]! },
           value: entry.value,
         });
         const refs = body.references.map((ref) => ({
@@ -369,10 +336,14 @@ export function resolveItem(subjectId: string, rows: readonly FactRow[]): Item {
         const resolved: Statement = {
           id: row.statement_id!,
           rank: body.rank,
-          property: { id: property, data_type: propertyOf(property)!.dataType },
+          property: { id: property, data_type: dataTypes[property]! },
           value: body.value,
           qualifiers: body.qualifiers.map(snak),
           references: refs,
+          rezics: {
+            revision: row.fact_revision ?? metadata.revision,
+            release: row.fact_release ?? metadata.release,
+          },
         };
         if (index >= 0) list.splice(index, 1);
         list.push(resolved);
@@ -382,7 +353,9 @@ export function resolveItem(subjectId: string, rows: readonly FactRow[]): Item {
   }
   return {
     id: subjectId,
-    type: SUBJECT_TYPE,
+    type,
+    ...metadata,
+    resolution: {},
     labels,
     descriptions,
     aliases: Object.fromEntries([...aliases].filter(([, values]) => values.length)),

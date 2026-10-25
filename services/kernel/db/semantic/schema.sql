@@ -23,6 +23,15 @@ SET row_security = off;
 CREATE SCHEMA semantic;
 
 
+--
+-- Name: prevent_revision_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.prevent_revision_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'Semantic revisions are immutable' USING ERRCODE = '23514'; END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -95,6 +104,24 @@ CREATE TABLE semantic.fact (
 
 
 --
+-- Name: revision; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.revision (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    revision integer NOT NULL,
+    kind text NOT NULL,
+    release text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text]))),
+    CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: subject; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -105,7 +132,7 @@ CREATE TABLE semantic.subject (
     recorded_transaction_id uuid NOT NULL,
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_type_check CHECK ((type = 'schema:Book'::text))
+    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text))
 );
 
 
@@ -142,11 +169,40 @@ ALTER TABLE ONLY semantic.fact
 
 
 --
+-- Name: revision revision_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.revision
+    ADD CONSTRAINT revision_pkey PRIMARY KEY (route, subject_id, revision);
+
+
+--
 -- Name: subject subject_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.subject
     ADD CONSTRAINT subject_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: revision_transaction; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX revision_transaction ON semantic.revision USING btree (route, subject_id, recorded_transaction_id);
+
+
+--
+-- Name: revision revision_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON semantic.revision FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: revision revision_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER revision_immutable_truncate BEFORE TRUNCATE ON semantic.revision FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -163,6 +219,14 @@ ALTER TABLE ONLY semantic.definition_activation
 
 ALTER TABLE ONLY semantic.fact
     ADD CONSTRAINT fact_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: revision revision_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.revision
+    ADD CONSTRAINT revision_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --

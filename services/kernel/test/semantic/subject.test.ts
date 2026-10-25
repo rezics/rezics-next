@@ -1,23 +1,27 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { IdempotencyConflictError } from '../src/command/command.ts';
-import { createPool } from '../src/database/pool.ts';
-import type { AccountActor } from '../src/request/access.ts';
-import { anchorRoute, newId, partitionOf, routeOf } from '../src/route/route.ts';
-import { itemFacts, resolveItem, SubjectInputError } from '../src/semantic/item.ts';
+import { IdempotencyConflictError } from '../../src/command/command.ts';
+import { createPool } from '../../src/database/pool.ts';
+import type { AccountActor } from '../../src/request/access.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { itemFacts, resolveItem as resolve, SubjectInputError } from '../../src/semantic/item.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import type { DataType } from '@rezics/definitions';
 import {
   createSubject,
   readLabels,
   readSubject,
   SubjectAccessDeniedError,
   subjectTarget,
-} from '../src/semantic/subject.ts';
+} from '../../src/semantic/subject.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+beforeAll(() => bootstrapRelease(pool, bundledRelease));
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -36,43 +40,39 @@ const allow = async () => true;
 const digest = (text: string) => createHash('sha256').update(text).digest();
 const UUID_V8 = /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const soseki = newId(0x1234);
-const novel = newId(0x5678);
-const shortStory = newId(0x9abc);
 const source = {
   property: { id: 'schema:url' },
   value: { type: 'value', content: 'https://www.aozora.gr.jp/cards/000148/card773.html' },
 };
 const book = {
+  type: 'bf:Instance',
   labels: { en: 'Kokoro', ja: 'こゝろ' },
   descriptions: { en: 'novel by Natsume Sōseki' },
-  aliases: { ja: ['心', 'こころ'] },
+  aliases: { ja: ['心', 'こころ', 'こころ文庫'] },
   statements: {
-    'schema:author': [
+    'schema:translator': [
       {
-        property: { id: 'schema:author' },
+        property: { id: 'schema:translator' },
         value: { type: 'value', content: soseki },
         references: [{ parts: [source] }],
       },
-      { property: { id: 'schema:author' }, value: { type: 'somevalue' } },
+      { property: { id: 'schema:translator' }, value: { type: 'somevalue' } },
     ],
-    'schema:genre': [
-      { property: { id: 'schema:genre' }, value: { type: 'value', content: novel }, rank: 'preferred' },
-      { property: { id: 'schema:genre' }, value: { type: 'value', content: shortStory }, rank: 'deprecated' },
-    ],
-    'schema:isbn': [
+    'schema:datePublished': [
       {
-        property: { id: 'schema:isbn' },
-        value: { type: 'value', content: '978-4-10-101013-7' },
-        references: [{ parts: [source] }],
+        property: { id: 'schema:datePublished' },
+        value: {
+          type: 'value',
+          content: {
+            time: '+1914-09-20T00:00:00Z',
+            precision: 11,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          },
+        },
       },
     ],
-    'schema:numberOfPages': [
-      {
-        property: { id: 'schema:numberOfPages' },
-        value: { type: 'value', content: { amount: '+384', unit: '1' } },
-        qualifiers: [{ property: { id: 'schema:url' }, value: { type: 'novalue' } }],
-      },
-    ],
+    'schema:inLanguage': [{ property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'ja' } }],
+    'schema:url': [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/kokoro' } }],
   },
 };
 async function partitionPosition(partition: number): Promise<bigint> {
@@ -90,12 +90,27 @@ function create(
     idempotencyKey: key,
     digest: options.digest ?? digest(JSON.stringify(item)),
     item,
+    release: { digest: bundledDigest, release: bundledRelease },
     authorize: options.authorize ?? allow,
+  });
+}
+
+async function seedAuthor(): Promise<void> {
+  const id = soseki;
+  await createSubject(pool, {
+    actor,
+    target: { route: routeOf(id)!, id },
+    idempotencyKey: `seed-${id}`,
+    digest: digest(id),
+    item: { type: 'schema:Person', labels: { en: 'Natsume Sōseki' } },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: allow,
   });
 }
 
 test('a created book is anchored by its idempotency key and reads back as a Wikibase item', async () => {
   const key = randomUUID();
+  await seedAuthor();
   const created = await create(book, key);
   const route = anchorRoute(routeKey, `${actor.accountId}\nsubject.create\n${key}`);
   const { subject } = created;
@@ -106,15 +121,25 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
     position: await partitionPosition(partitionOf(route)),
   });
   expect(created.replayed).toBe(false);
-  expect(subject).toEqual(resolveItem(subject.id, itemFacts(subject.id, book)));
+  const dataTypes = Object.fromEntries(
+    Object.entries(bundledRelease.properties).map(([id, property]) => [id, property.datatype]),
+  ) as Record<string, DataType>;
+  expect(subject).toEqual(
+    resolve(subject.id, itemFacts(subject.id, book, 'bf:Instance'), 'bf:Instance', dataTypes, {
+      revision: 1,
+      release: bundledDigest,
+      context: GLOBAL_CONTEXT,
+    }),
+  );
   expect(subject.labels).toEqual(book.labels);
   const statements = Object.values(subject.statements).flat();
-  expect(statements).toHaveLength(6);
+  expect(statements).toHaveLength(5);
   for (const entry of statements) expect(routeOf(entry.id)).toBe(route);
   expect(await readSubject(pool, subject.id, allow)).toEqual({ subject, component: created.component });
 });
 
 test('each value is one compact fact row in its slot log, written under the command write basis', async () => {
+  await seedAuthor();
   const { subject, component } = await create(book);
   const route = routeOf(subject.id)!;
   const { rows: key } = await admin.query(
@@ -150,7 +175,7 @@ test('each value is one compact fact row in its slot log, written under the comm
     'SELECT type, recorded_transaction_id FROM semantic.subject WHERE route = $1 AND subject_id = $2',
     [route, subject.id],
   );
-  expect(subjects).toEqual([{ type: 'schema:Book', recorded_transaction_id: [...transactions][0] }]);
+  expect(subjects).toEqual([{ type: 'bf:Instance', recorded_transaction_id: [...transactions][0] }]);
   const { rows: events } = await admin.query(
     'SELECT event_count, type, subject, data FROM core.outbox WHERE partition_no = $1 AND position = $2',
     [component.partition, String(component.position)],
@@ -162,6 +187,7 @@ test('each value is one compact fact row in its slot log, written under the comm
 
 test('a retried create returns the same subject and a changed request under the same key is refused', async () => {
   const key = randomUUID();
+  await seedAuthor();
   const first = await create(book, key);
   const before = await partitionPosition(first.component.partition);
   const again = await create(book, key);
@@ -176,7 +202,7 @@ test('invalid input is refused before anything is written', async () => {
   const partition = partitionOf(anchorRoute(routeKey, `${actor.accountId}\nsubject.create\n${key}`));
   const before = await partitionPosition(partition);
   let checks = 0;
-  const error = await create({ labels: { en: 'x' }, statements: { 'schema:publisher': [] } }, key, {
+  const error = await create({ type: 'bf:Instance', labels: { en: 'x' }, statements: { 'schema:author': [] } }, key, {
     authorize: async () => {
       checks++;
       return true;
@@ -184,7 +210,7 @@ test('invalid input is refused before anything is written', async () => {
   }).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(SubjectInputError);
   expect((error as SubjectInputError).violations).toEqual([
-    { pointer: '/statements/schema:publisher', code: 'unsupported' },
+    { pointer: '/statements/schema:author', code: 'unsupported' },
   ]);
   expect(checks).toBe(0);
   expect(await partitionPosition(partition)).toBe(before);
@@ -211,7 +237,9 @@ test('a denied create writes nothing, so the same key may be used once it is all
 
 test('labels of referenced subjects are read in their own partitions', async () => {
   const created = await Promise.all(
-    [{ en: 'Natsume Sōseki', ja: '夏目漱石' }, { en: 'novel' }, { ja: '短編小説' }].map((labels) => create({ labels })),
+    [{ en: 'Natsume Sōseki', ja: '夏目漱石' }, { en: 'novel' }, { ja: '短編小説' }].map((labels) =>
+      create({ type: 'schema:Person', labels }),
+    ),
   );
   const ids = created.map((entry) => entry.subject.id);
   const labels = await readLabels(pool, [...ids, ids[0]!, newId(0x0042), 'not-an-id']);

@@ -1,18 +1,21 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { createPool } from '../src/database/pool.ts';
-import { createKernel } from '../src/http/kernel.ts';
-import { openApiDocument } from '../src/http/openapi.ts';
-import { SESSION_HEADER } from '../src/http/request.ts';
-import { AuthenticationError, type Access, type AccountActor, type Resource } from '../src/request/access.ts';
-import { newId } from '../src/route/route.ts';
-import type { KeyRing } from '../src/tokens/seal.ts';
-import { decodeSession } from '../src/tokens/session.ts';
+import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { openApiDocument } from '../../src/http/openapi.ts';
+import { SESSION_HEADER } from '../../src/http/request.ts';
+import { AuthenticationError, type Access, type AccountActor, type Resource } from '../../src/request/access.ts';
+import { newId } from '../../src/route/route.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
+import { decodeSession } from '../../src/tokens/session.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 afterAll(() => pool.end());
+beforeAll(() => bootstrapRelease(pool, bundledRelease));
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
 const routeKey = new Uint8Array(32).fill(13);
@@ -61,20 +64,30 @@ async function call(
   return { response, body: (await response.json()) as Record<string, any> };
 }
 
-const create = (body: unknown, key = `"${randomUUID()}"`, token = 'writer') =>
-  call('POST', '/v1/subjects', { token, key, body });
+const create = (body: Record<string, unknown>, key = `"${randomUUID()}"`, token = 'writer') =>
+  call('POST', '/v1/subjects', { token, key, body: { type: 'schema:Book', ...body } });
 const author = (id: string) => ({ property: { id: 'schema:author' }, value: { type: 'value', content: id } });
 
 test('a create is 201 with its location and session token, and its key replays it', async () => {
   const key = `"${randomUUID()}"`;
-  const book = { labels: { en: 'Botchan', ja: '坊っちゃん' } };
+  const book = { type: 'schema:Book', labels: { en: 'Botchan', ja: '坊っちゃん' } };
   const first = await create(book, key);
   expect(first.response.status).toBe(201);
   const id = first.body.subject.id as string;
   expect(first.body).toEqual({
-    subject: { id, type: 'schema:Book', labels: book.labels, descriptions: {}, aliases: {}, statements: {} },
+    subject: expect.objectContaining({
+      id,
+      type: 'schema:Book',
+      revision: 1,
+      context: GLOBAL_CONTEXT,
+      labels: book.labels,
+      descriptions: {},
+      aliases: {},
+      statements: {},
+    }),
   });
   expect(first.response.headers.get('location')).toBe(`/v1/subjects/${id}`);
+  expect(first.response.headers.get('etag')).toBe('"1"');
   const session = first.response.headers.get(SESSION_HEADER)!;
   expect(decodeSession(tokens, `account:${accountFor('writer').accountId}`, session)).toHaveLength(1);
 
@@ -89,7 +102,7 @@ test('a create is 201 with its location and session token, and its key replays i
 });
 
 test('a create needs an account, a structured idempotency key, a valid item and the create grant', async () => {
-  const book = { labels: { en: 'Kokoro' } };
+  const book = { type: 'schema:Book', labels: { en: 'Kokoro' } };
   const anonymous = await call('POST', '/v1/subjects', { key: `"${randomUUID()}"`, body: book });
   expect(anonymous.response.status).toBe(401);
   expect(anonymous.body.code).toBe('authentication_required');
@@ -112,15 +125,16 @@ test('a create needs an account, a structured idempotency key, a valid item and 
   const forbidden = await create(book, key, 'reader');
   expect(forbidden.response.status).toBe(403);
   expect(forbidden.body).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
-  expect(checks.at(-1)).toEqual(['reader', 'subject:create', expect.objectContaining({ id: expect.any(String) })]);
+  expect(checks.at(-1)).toEqual(['reader', 'subject:create', { route: 0, id: GLOBAL_CONTEXT }]);
 });
 
 test('a read returns the subject, its session token and the labels of its properties and readable subjects', async () => {
-  const soseki = (await create({ labels: { en: 'Natsume Sōseki' } })).body.subject.id as string;
-  const secret = (await create({ labels: { en: 'Unreadable' } })).body.subject.id as string;
+  const soseki = (await create({ type: 'schema:Person', labels: { en: 'Natsume Sōseki' } })).body.subject.id as string;
+  const secret = (await create({ type: 'schema:Person', labels: { en: 'Unreadable' } })).body.subject.id as string;
   hidden.add(secret);
   const source = { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/kokoro' } };
   const created = await create({
+    type: 'schema:Book',
     labels: { en: 'Kokoro' },
     statements: { 'schema:author': [{ ...author(soseki), references: [{ parts: [source] }] }, author(secret)] },
   });
@@ -128,10 +142,11 @@ test('a read returns the subject, its session token and the labels of its proper
 
   const read = await call('GET', `/v1/subjects/${id}`, { session: created.response.headers.get(SESSION_HEADER)! });
   expect(read.response.status).toBe(200);
+  expect(read.response.headers.get('etag')).toBe('"1"');
   expect(read.body.subject).toEqual(created.body.subject);
   expect(read.body.related).toEqual({
-    'schema:author': { labels: { en: 'author', ja: '著者' } },
-    'schema:url': { labels: { en: 'URL', ja: 'URL' } },
+    'schema:author': { labels: { en: 'author', ja: '著者', 'zh-Hant': '作者' } },
+    'schema:url': { labels: { en: 'URL', ja: 'URL', 'zh-Hant': 'URL' } },
     [soseki]: { labels: { en: 'Natsume Sōseki' } },
   });
   expect(decodeSession(tokens, 'anonymous', read.response.headers.get(SESSION_HEADER)!)).toHaveLength(1);
@@ -141,7 +156,7 @@ test('a read returns the subject, its session token and the labels of its proper
 });
 
 test('a malformed, missing or unreadable subject is the same 404', async () => {
-  const id = (await create({ labels: { en: 'Sanshirō' } })).body.subject.id as string;
+  const id = (await create({ type: 'schema:Person', labels: { en: 'Sanshirō' } })).body.subject.id as string;
   hidden.add(id);
   const answers = await Promise.all(
     ['not-an-id', newId(0x0042), id].map((subject) => call('GET', `/v1/subjects/${subject}`, { token: 'reader' })),
