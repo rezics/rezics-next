@@ -6,6 +6,7 @@ import {
   currentCommand,
   authoritativeTimeValue,
   type CommandAuthorization,
+  type CommandAttempt,
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
@@ -21,7 +22,8 @@ import {
   type ActionCatalogue,
 } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
-import { readAccount, type Account } from './account-data.ts';
+import type { Account } from './account-data.ts';
+import { actingCommandAccount, commandAccessContext } from './command-admission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import accountRead from './operator-account.sql';
 import reservationRead from './operator-reservation.sql';
@@ -202,6 +204,7 @@ export function createOperatorCommands(config: OperatorConfig) {
   async function openingEvidence(
     context: LifecycleRequest,
     input: { operatorAccountId: string; subjectAccountId: string; purpose: OperatorPurpose },
+    attempt: CommandAttempt,
   ) {
     requireAllowed(input.purpose === 'session' || input.purpose === 'credential-management');
     const deadline = Math.min(context.deadline, Date.now() + EVIDENCE_TTL_MS);
@@ -209,9 +212,8 @@ export function createOperatorCommands(config: OperatorConfig) {
       // Independent reads finish before the management-resource checkout. The
       // supplied request evidence is required; consumption additionally refreshes
       // the human so a durable receipt never preserves a stale login observation.
-      const actualHuman = await withConnection(pool, (client) =>
-        readAccount(client, route(context.actor.accountId), context.actor.accountId),
-      );
+      const preparation = commandAccessContext({ ...context, pool }, attempt);
+      const actualHuman = await actingCommandAccount(access, context.actor, preparation);
       requireAllowed(human(actualHuman, context.actor));
       const operator = await read(input.operatorAccountId);
       requireAllowed(eligible(operator));
@@ -238,7 +240,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       } else {
         requireAllowed(operator.kind === 'actor' && operator.accountId === context.actor.accountId);
       }
-      const permissionContext = { ...context, pool, account: actualHuman };
+      const permissionContext = Object.assign(preparation, { account: actualHuman });
       const allowed = await accessCheck(
         access,
         context.actor,
@@ -568,7 +570,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     ) {
       input = { ...input };
       context = request(context);
-      const facts = await openingEvidence(context, input);
+      const prepared = openingAuthorization(context, input);
       return execute(
         {
           anchor: input.operatorAccountId,
@@ -577,9 +579,10 @@ export function createOperatorCommands(config: OperatorConfig) {
           input: { ...input, managementAction },
           actor: context.actor,
           deadline: context.deadline,
-          authorization: openingAuthorization(context, input, facts),
+          authorization: prepared.authorization,
         },
         async (tx, transactionId) => {
+          const facts = prepared.facts();
           await finalOpening(tx, context, input, facts);
           const receiptId = derivedId(NAMESPACE, `${transactionId}:opening`, route(input.operatorAccountId));
           const inserted = await openingInsert.run(tx, {
@@ -606,7 +609,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       input = { ...input };
       route(input.receiptId);
       context = request(context);
-      const facts = await openingEvidence(context, input);
+      const prepared = openingAuthorization(context, input);
       const outcome = await execute(
         {
           anchor: input.operatorAccountId,
@@ -615,9 +618,10 @@ export function createOperatorCommands(config: OperatorConfig) {
           input: { ...input, managementAction },
           actor: context.actor,
           deadline: context.deadline,
-          authorization: openingAuthorization(context, input, facts),
+          authorization: prepared.authorization,
         },
         async (tx, transactionId) => {
+          const facts = prepared.facts();
           await finalOpening(tx, context, input, facts);
           const consumed = await openingConsume.run(tx, {
             ...receiptParameters(tx, context, input, facts),
@@ -638,16 +642,35 @@ export function createOperatorCommands(config: OperatorConfig) {
   };
   function openingAuthorization(
     context: LifecycleRequest,
-    input: { operatorAccountId: string; subjectAccountId: string },
-    facts: OpeningEvidence,
-  ): CommandAuthorization {
-    return {
+    input: { operatorAccountId: string; subjectAccountId: string; purpose: OperatorPurpose },
+  ) {
+    let current: OpeningEvidence | undefined;
+    const proofs = new WeakMap<object, { attempt: CommandAttempt; facts: OpeningEvidence }>();
+    const authorization: CommandAuthorization = {
       action: managementAction,
       resource: { route: route(input.operatorAccountId), id: input.operatorAccountId },
       denied: () => new OperatorDeniedError(),
-      async authorize(tx) {
-        await finalOpening(tx, context, input, facts);
+      async prepare(attempt) {
+        current = undefined;
+        const facts = await openingEvidence(context, input, attempt);
+        const proof = Object.freeze({});
+        proofs.set(proof, { attempt, facts });
+        return proof;
+      },
+      async authorize(tx, attempt, proof) {
+        const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+        if (typeof proof === 'object' && proof !== null) proofs.delete(proof);
+        requireAllowed(prepared && prepared.attempt === attempt);
+        await finalOpening(tx, context, input, prepared.facts);
+        current = prepared.facts;
         return 'execute';
+      },
+    };
+    return {
+      authorization,
+      facts() {
+        requireAllowed(current);
+        return current;
       },
     };
   }

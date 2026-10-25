@@ -1,3 +1,9 @@
+import {
+  accessCommandAttempt,
+  commandAccessContext,
+  createCommandAdmission,
+  installCommandAdmission,
+} from './command-admission.ts';
 import type { Access, AccessConfig as KernelAccessConfig, Actor, Resource } from '../request/access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
@@ -28,6 +34,7 @@ type Prepared = { actor: Actor; action: string; route: number; id: string; deadl
 export function createAccess(config: AccessConfig): Access {
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   const authentication = createAuthenticator(config.auth);
+  const admission = createCommandAdmission(authentication.identity);
   const prepared = new WeakMap<object, Prepared>();
   const permissions = permissionAccess({
     actions,
@@ -42,12 +49,25 @@ export function createAccess(config: AccessConfig): Access {
       try {
         const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
         if (actor.kind === 'account' && (!identity || identity.pool !== context.pool)) return null;
-        const deadline = Math.min(context.deadline, identity?.deadline ?? Infinity, identity?.expires ?? Infinity);
+        const attempt = accessCommandAttempt(context);
+        if (attempt && actor.kind === 'account' && !(await admission(actor, context))) return null;
+        const deadline = Math.min(
+          context.deadline,
+          identity?.deadline ?? Infinity,
+          identity?.expires ?? Infinity,
+          !attempt && identity ? identity.observedAt + 180_000 : Infinity,
+        );
+        const permissionContext = {
+          pool: deadlineClient(context.pool, deadline) as typeof context.pool,
+          deadline,
+        };
         const evidence = await within(deadline, () =>
-          permissions.prepare!(actor, action, resource, {
-            pool: deadlineClient(context.pool, deadline) as typeof context.pool,
-            deadline,
-          }),
+          permissions.prepare!(
+            actor,
+            action,
+            resource,
+            attempt ? commandAccessContext(permissionContext, attempt) : permissionContext,
+          ),
         );
         if (typeof evidence !== 'object' || evidence === null) return null;
         prepared.set(evidence, { actor, action, route: resource.route, id: resource.id, deadline });
@@ -76,6 +96,7 @@ export function createAccess(config: AccessConfig): Access {
       }
     },
   };
+  installCommandAdmission(access, admission);
   installApprovalIdentityBridge(access, {
     scope: authentication.approvalScope,
     expiry(actor, context) {

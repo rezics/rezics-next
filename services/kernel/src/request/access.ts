@@ -1,6 +1,13 @@
 import type { Pool, PoolClient } from 'pg';
+import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
-import { commandTime, type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
+import {
+  commandTime,
+  authoritativeTimeValue,
+  type CommandAttempt,
+  type AuthoritativeTime,
+  type CommandAuthorization,
+} from '../command/command.ts';
 import type { ResourceEligibility } from '../access/eligibility.ts';
 
 export type AccountActor = {
@@ -63,9 +70,9 @@ export async function accessCheck(
   return (client, time = commandTime(client)) => access.authorize(client, actor, action, resource, evidence, time);
 }
 
-/** Prepare request evidence once. The command boundary invokes the final formula
- * on every real attempt, at its trusted T, before looking up any receipt.
- * The explicit self-read exception can retrieve a receipt but never run a body.
+/** Prepare evidence on every live attempt before resource checkout. The stable
+ * check wrapper always uses the current attempt's evidence, including body checks
+ * captured before execution. Self-read permits receipt lookup only, never a body.
  */
 export async function accessCommandAuthorization(
   access: Access,
@@ -76,31 +83,48 @@ export async function accessCommandAuthorization(
   denied: () => Error,
 ): Promise<AccessCommandAuthorization> {
   const target = Object.freeze({ ...resource });
-  let check: AccessCheck = async () => false;
-  let selfRead: AccessCheck | undefined;
-  try {
-    check = await accessCheck(access, actor, action, target, context);
-    if (actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read') {
-      selfRead = await accessCheck(
-        access,
-        actor,
-        'account:read',
-        {
-          route: Number.parseInt(actor.accountId.slice(24, 28), 16),
-          id: actor.accountId,
-        },
-        context,
-      );
-    }
-  } catch {
-    // Failure to obtain independently anchored evidence denies at the boundary.
-  }
+  type Prepared = { attempt: CommandAttempt; check: AccessCheck; selfRead?: AccessCheck };
+  const proofs = new WeakMap<object, Prepared>();
+  let current: Prepared | undefined;
+  const check: AccessCheck = async (client, time = commandTime(client)) => {
+    if (!current || time !== current.attempt.time || commandTime(client) !== time) return false;
+    authoritativeTimeValue(time);
+    return current.check(client, time);
+  };
   return {
     action,
     resource: target,
     denied,
     check,
-    async authorize(tx, attempt) {
+    async prepare(attempt) {
+      current = undefined;
+      try {
+        const preparation = commandAccessContext(context, attempt);
+        await requireCommandAdmission(access, actor, preparation);
+        const prepared: Prepared = { attempt, check: await accessCheck(access, actor, action, target, preparation) };
+        if (actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read') {
+          prepared.selfRead = await accessCheck(
+            access,
+            actor,
+            'account:read',
+            {
+              route: Number.parseInt(actor.accountId.slice(24, 28), 16),
+              id: actor.accountId,
+            },
+            preparation,
+          );
+        }
+        const proof = Object.freeze({});
+        proofs.set(proof, prepared);
+        return proof;
+      } catch {
+        throw denied();
+      }
+    },
+    async authorize(tx, attempt, proof) {
+      const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (typeof proof === 'object' && proof !== null) proofs.delete(proof);
+      if (!prepared || prepared.attempt !== attempt || commandTime(tx) !== attempt.time) throw denied();
       if (
         actor.kind === 'anonymous' &&
         (target.eligibility === undefined ||
@@ -119,8 +143,9 @@ export async function accessCommandAuthorization(
           attempt.basis.requestedBy !== actor.requestedBy)
       )
         throw denied();
+      current = prepared;
       if (await check(tx, attempt.time)) return 'execute';
-      if (selfRead && (await selfRead(tx, attempt.time))) return 'receipt-only';
+      if (prepared.selfRead && (await prepared.selfRead(tx, attempt.time))) return 'receipt-only';
       throw denied();
     },
   };

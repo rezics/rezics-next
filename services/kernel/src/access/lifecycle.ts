@@ -1115,7 +1115,7 @@ export function createLifecycleInternals(
 }
 
 /** Public command inputs carry NO actor/client/scope overrides. The first
- * parameter is verified kernel request context. accessCheck prepares once before
+ * parameter is verified kernel request context. Access prepares on every attempt before
  * checkout and the resource check executes on each real runCommand attempt.
  */
 export function createLifecycleCommands(config: Boundary & { access: Access }) {

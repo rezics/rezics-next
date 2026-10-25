@@ -198,6 +198,8 @@ export function parentCreationAuthorization(input: {
           authenticate: access.authenticate.bind(access),
           authorize: access.authorize.bind(access),
           async prepare(...args) {
+            // Forward the exact context: its opaque live-attempt admission marker
+            // must reach the installed Access without copying or refreshing twice.
             const evidence = await access.prepare?.(...args);
             proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
             return evidence;

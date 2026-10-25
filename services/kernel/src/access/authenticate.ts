@@ -21,7 +21,13 @@ export type AuthenticationConfig = {
   fetch?: FetchImplementation;
 };
 
-type Identity = { account: Account; pool: AccessContext['pool']; deadline: number; expires: number };
+type Identity = {
+  account: Account;
+  pool: AccessContext['pool'];
+  deadline: number;
+  expires: number;
+  observedAt: number;
+};
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const uuidPattern = new RegExp(`^${uuid}$`);
 const requestedByPattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
@@ -190,7 +196,8 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
       claims(payload, config);
       const accountId = payload.sub!;
       const client = deadlineClient(context.pool, context.deadline);
-      // The only actor point read: current state, epoch floor and fence share its anchor.
+      // Authentication keeps its single actor point read on the account anchor.
+      const observedAt = Date.now();
       const account = await readAccount(client, routeOf(accountId), accountId);
       if (
         !account ||
@@ -225,6 +232,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         pool: context.pool,
         deadline: context.deadline,
         expires,
+        observedAt,
       });
       bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
       return actor;
@@ -243,6 +251,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         const { actor, expires } = facts;
         remaining(Math.min(context.deadline, expires));
         const client = deadlineClient(context.pool, Math.min(context.deadline, expires));
+        const observedAt = Date.now();
         const account = await readAccount(client, routeOf(actor.accountId), actor.accountId);
         if (
           !account ||
@@ -265,6 +274,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
           pool: context.pool,
           deadline: context.deadline,
           expires,
+          observedAt,
         });
         bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
         return actor;

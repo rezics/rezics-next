@@ -1,4 +1,5 @@
 import type { Account } from './account-data.ts';
+import { accessCommandAttempt } from './command-admission.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import {
   accessCheck,
@@ -223,7 +224,10 @@ export function createAccess(config: PermissionConfig): Access {
         // of these reads holds a connection while another partition is consulted.
         const time = await timeRead.run(context.pool);
         if (!time) return evidence;
-        const at = time.at;
+        // Commands prepare after their executor mints T. Negative membership
+        // proofs must start at that same T, not at a later preparation clock.
+        const attempt = accessCommandAttempt(context);
+        const at = attempt ? authoritativeTimeValue(attempt.time) : time.at;
         let principalId: string | null = null;
         let valid = '(,)';
         const members: { accountId: string; automated: boolean }[] = [];
@@ -362,7 +366,7 @@ export function createAccess(config: PermissionConfig): Access {
         }
         // Short-lived account/assignment/membership observations never survive the
         // request deadline. The final SQL also checks their actual validity ranges.
-        const databaseDeadline = new Date(Date.parse(at) + Math.max(0, deadline - Date.now())).toISOString();
+        const databaseDeadline = new Date(Date.parse(time.at) + Math.max(0, deadline - Date.now())).toISOString();
         if (binding !== bind(actor, action, resource) || Date.now() >= deadline) return evidence;
         prepared.set(evidence, {
           binding,

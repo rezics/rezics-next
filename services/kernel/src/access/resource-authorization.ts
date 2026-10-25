@@ -1,3 +1,4 @@
+import { commandAccessContext } from './command-admission.ts';
 import {
   ANONYMOUS_PRINCIPAL_ID,
   authoritativeTimeValue,
@@ -128,7 +129,9 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
     async prepare(attempt) {
       if (!bound(attempt) || !prepare) throw denied();
       try {
-        const evidence = await within(deadline, () => prepare(actor, action, resource, { pool, deadline }));
+        const evidence = await within(deadline, () =>
+          prepare(actor, action, resource, commandAccessContext({ pool, deadline }, attempt)),
+        );
         const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
         if (Date.now() >= proofDeadline) throw denied();
         await within(proofDeadline, () =>

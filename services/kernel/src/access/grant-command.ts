@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import {
+  runCommand,
+  type CommandAttempt,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
 import {
   accessCheck,
   type Access,
@@ -11,6 +16,7 @@ import {
   type Resource,
 } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { commandAccessContext, requireCommandAdmission } from './command-admission.ts';
 
 /** Only kernel-authenticated actor objects belong in this context; request JSON
  * supplies the command input, never this context or an authorization decision.
@@ -53,26 +59,37 @@ export async function grantCommand<T>(
     options.key.length > 256
   )
     throw options.denied();
-  const checks: AccessCheck[] = [];
-  try {
-    for (const action of new Set(options.actions))
-      checks.push(await accessCheck(config.access, actor, action, options.resource, context));
-  } catch {
-    throw options.denied();
-  }
   const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
+  const proofs = new WeakMap<object, { attempt: CommandAttempt; checks: AccessCheck[] }>();
   const authorization: CommandAuthorization = {
     action: options.actions[0]!,
     resource: Object.freeze({ ...options.resource }),
     denied: options.denied,
-    async authorize(tx, attempt) {
+    async prepare(attempt) {
+      try {
+        const preparation = commandAccessContext(context, attempt);
+        await requireCommandAdmission(config.access, actor, preparation);
+        const checks: AccessCheck[] = [];
+        for (const action of new Set(options.actions))
+          checks.push(await accessCheck(config.access, actor, action, options.resource, preparation));
+        const proof = Object.freeze({});
+        proofs.set(proof, { attempt, checks });
+        return proof;
+      } catch {
+        throw options.denied();
+      }
+    },
+    async authorize(tx, attempt, proof) {
+      const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (typeof proof === 'object' && proof !== null) proofs.delete(proof);
+      if (!prepared || prepared.attempt !== attempt) throw options.denied();
       if (
         attempt.basis?.actorAccountId !== basis.actorAccountId ||
         attempt.basis.clientId !== basis.clientId ||
         attempt.basis.requestedBy !== basis.requestedBy
       )
         throw options.denied();
-      for (const check of checks) if (!(await check(tx, attempt.time))) throw options.denied();
+      for (const check of prepared.checks) if (!(await check(tx, attempt.time))) throw options.denied();
       if (Date.now() >= context.deadline) throw options.denied();
       return 'execute';
     },
