@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { watch, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { processIdentity, sameProcess, waitForProcess } from './process.ts';
+import { processIdentity, sameProcess } from './process.ts';
 import type { ProcessIdentity } from './process.ts';
 
 type Owner = ProcessIdentity & { token: string };
@@ -90,29 +90,4 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
     }
     throw new LeaseHeldError(`Lease held: ${directory}`);
   } finally { rmSync(prepared, { recursive: true, force: true }); }
-}
-
-/** Subscribe before checking ownership; a release or owner exit cannot be missed between those operations. */
-export async function waitForDirectoryLease(directory: string, timeoutMs = 30_000): Promise<DirectoryLease> {
-  mkdirSync(dirname(directory), { recursive: true });
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const abort = new AbortController();
-    let wake!: () => void;
-    const changed = new Promise<void>(resolve => { wake = resolve; });
-    const watcher = watch(dirname(directory), (_, name) => { if (name === directory.split('/').at(-1)) wake(); });
-    let ownerExit: Promise<void> | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      try { return acquireDirectoryLease(directory); }
-      catch (error) { if (!(error instanceof LeaseHeldError)) throw error; }
-      const owner = readOwner(directory);
-      ownerExit = owner.kind === 'owner' ? waitForProcess(owner.owner, abort.signal) : Promise.resolve();
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`);
-      await Promise.race([changed, ownerExit, new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`)), remaining);
-      })]);
-    } finally { if (timer) clearTimeout(timer); watcher.close(); abort.abort(); await ownerExit; }
-  }
 }

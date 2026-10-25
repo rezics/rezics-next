@@ -153,7 +153,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     return execute(argv, cwd, log);
   });
   let train!: MergeTrain;
-  const pump = () => train.run(true);
+  const pump = () => train.pump();
   const job = new WorkerJob(tasks, queue, inbox, undefined, pump);
   const handOff = () => new Promise<void>((resolve, reject) => {
     const env = { ...process.env };

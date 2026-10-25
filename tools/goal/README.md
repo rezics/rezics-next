@@ -18,8 +18,8 @@ rebase, merge or change acceptance tests. The controller rebases detached candid
 merged result, then fast-forwards main. A passing attempt record is finalized through the real gate outcome sink.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
-enqueues its landing request, and starts the train. Enqueuers wait for the train lease rather than dropping a busy
-wakeup. A request arriving while another train finishes acquires the released lease and drains the remaining queue.
+enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
+the lease to drain a request that arrived during shutdown; pumps return quietly when another process holds the lease.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
 Each process records the Git object id for `main:tools/goal` when it starts. A stale train hands its queue to a detached
 current-code process, while a stale manager host restarts after finishing its active request and recovers persisted sessions.

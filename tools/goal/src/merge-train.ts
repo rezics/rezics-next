@@ -6,7 +6,7 @@ import defaults from '../defaults.json';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
-import { acquireDirectoryLease, waitForDirectoryLease } from './lease.ts';
+import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { changedFiles, firstFailure, gateRunner, git, outsideScope, type GateRunner } from './merge.ts';
 
 type DerivedFile = { path: string; command: string[] };
@@ -65,7 +65,12 @@ export type TrainOptions = {
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
 
-  async run(waitForLease = false): Promise<void> {
+  async run(): Promise<void> { await this.drain(true); }
+
+  /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
+  async pump(): Promise<void> { await this.drain(false); }
+
+  private async drain(failWhenInitiallyHeld: boolean): Promise<void> {
     const o = this.options;
     if (o.codeIsCurrent && !o.codeIsCurrent()) {
       await o.handOff?.();
@@ -73,32 +78,51 @@ export class MergeTrain {
     }
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, 'train.lease');
-    const lease = waitForLease ? await waitForDirectoryLease(leasePath) : acquireDirectoryLease(leasePath);
-    try {
-      if (o.codeIsCurrent && !o.codeIsCurrent()) {
-        await o.handOff?.();
-        return;
+    let acquired = false;
+    for (;;) {
+      let lease: ReturnType<typeof acquireDirectoryLease>;
+      try { lease = acquireDirectoryLease(leasePath); }
+      catch (error) {
+        if (error instanceof LeaseHeldError) {
+          if (failWhenInitiallyHeld && !acquired) throw error;
+          return;
+        }
+        throw error;
       }
-      for (;;) {
+      acquired = true;
+      try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
           await o.handOff?.();
           return;
         }
-        const entry = o.queue.next();
-        if (!entry) break;
-        try {
-          const outcome = entry.outcome ?? await this.integrate(entry);
-          if (!entry.outcome) o.queue.finish(entry.id, outcome);
-          // Sink delivery is at least once; obsolete entries must never block the current attempt.
-          o.sink.onGateOutcome(outcome);
-          o.queue.acknowledge(entry.id);
-        } catch (error) {
-          if (!(error instanceof StaleAttemptError)) throw error;
-          o.queue.acknowledge(entry.id);
+        for (;;) {
+          if (o.codeIsCurrent && !o.codeIsCurrent()) {
+            await o.handOff?.();
+            return;
+          }
+          const entry = o.queue.next();
+          if (!entry) break;
+          try {
+            const outcome = entry.outcome ?? await this.integrate(entry);
+            if (!entry.outcome) o.queue.finish(entry.id, outcome);
+            // Sink delivery is at least once; obsolete entries must never block the current attempt.
+            o.sink.onGateOutcome(outcome);
+            o.queue.acknowledge(entry.id);
+          } catch (error) {
+            if (!(error instanceof StaleAttemptError)) throw error;
+            o.queue.acknowledge(entry.id);
+          }
         }
+        await o.beforeRelease?.();
+      } finally { lease.release(); }
+
+      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+        await o.handOff?.();
+        return;
       }
-      await o.beforeRelease?.();
-    } finally { lease.release(); }
+      // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
+      if (!o.queue.next()) return;
+    }
   }
 
   private async integrate(entry: LandingEntry): Promise<GateOutcome> {
