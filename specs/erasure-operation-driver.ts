@@ -13,15 +13,29 @@
  * may write fixture data. Inspection uses independent read-only DB connections.
  * Reply.response is the complete original HTTP Response. value is only a lossless
  * field-name mapping of JSON read through clone(), including AIP metadata/result
- * fields; errors have no value. Do not repair an invalid wire operation in mapping.
+ * fields; denied HTTP replies have no value and retain RFC9457/effect_status.
+ * Terminal operation.error is the actual google.rpc.Status in value, not an HTTP
+ * problem. Do not repair an invalid wire operation in mapping.
  */
 export type Persona = 'anonymous' | 'author' | 'legal' | 'unrelated' | 'suspended' | 'revoked';
-export interface Reply<T> { response: Response; value?: T }
+export interface Reply<T> {
+  response: Response;
+  value?: T;
+}
 export interface Operation {
   name: string;
   done: boolean;
-  metadata: { total: number; processed: number; steps: number };
-  response?: { erasedPosts: number };
+  /** Native bounded counters; no upfront author-history total or derived progress.
+   * Every counter is a finite, nonnegative safe integer. */
+  metadata: {
+    type: 'content.author_erasure';
+    threadId: string;
+    authorId: string;
+    processedPosts: number;
+    erasedRevisions: number;
+    steps: number;
+  };
+  response?: { processedPosts: number; erasedRevisions: number };
   /** Actual AIP/google.rpc.Status; PERMISSION_DENIED is code 7. */
   error?: { code: number; message: string; details?: unknown[] };
 }
@@ -94,9 +108,11 @@ export interface ErasureOperationDriver {
   seed(input: { posts: number; revisions: number }): Promise<Fixture>;
   /** POST threads/{id}:erase; authorId is untrusted JSON selection, key is the
    * actual Idempotency-Key. Replay sends the same serialized request and credentials.
-   * Preserve the stored original 202 on replay even after native completion. */
+   * Preserve the stored original 202 on replay even after native completion.
+   * Initiation uses at most two indexed endpoint seeks plus the identity insert;
+   * never COUNT author history or precompute a selection total. */
   erase(actor: Persona, threadId: string, authorId: string, key: string): Promise<Reply<Operation>>;
-  /** GET operations/{id}; own-account formula AND exact authenticated initiator.
+  /** GET operations/{id}; exact native lookup, own-account formula AND exact authenticated initiator.
    * Evaluate current suspension/revocation before disclosing status or a receipt. */
   status(actor: Persona, name: string): Promise<Reply<Operation>>;
   /** Valid correctly routed operation name with no corresponding durable operation. */
@@ -128,7 +144,11 @@ export interface ErasureOperationDriver {
    * the revoked grant. suspension revoke suspends; allow reactivates. Account axes
    * independently remove actor grant, consented scope or applicable principal grant.
    * Await authoritative commit before returning; do not issue replacement JWTs. */
-  authority(actor: Persona, axis: 'account:read' | 'account:read-scope' | 'account:read-principal' | 'post:erase' | 'suspension', mode: 'allow' | 'revoke'): Promise<void>;
+  authority(
+    actor: Persona,
+    axis: 'account:read' | 'account:read-scope' | 'account:read-principal' | 'post:erase' | 'suspension',
+    mode: 'allow' | 'revoke',
+  ): Promise<void>;
   /** Last authority mutation's committed authoritative timestamp, comparable to T. */
   authorityTime(): Promise<string>;
   /** Stable row ordering; never infer erasure/purge/effects from command arguments. */
@@ -150,5 +170,9 @@ export interface ErasureOperationDriver {
    * counts, disabled planner, observer simulation or wall-clock thresholds. This
    * port freezes future binding obligations; it is not itself a growth harness.
    */
-  checkGrowth(input: { seed: number; scales: [32, 256, 2048]; measurements: ['initiation', 'status', 'native-step'] }): Promise<GrowthResult[]>;
+  checkGrowth(input: {
+    seed: number;
+    scales: [32, 256, 2048];
+    measurements: ['initiation', 'status', 'native-step'];
+  }): Promise<GrowthResult[]>;
 }
