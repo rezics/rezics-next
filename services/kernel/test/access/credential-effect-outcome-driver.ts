@@ -933,7 +933,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   };
 
   /** Pause actual SQL transport boundaries. Never replace a native authorization
-   * port or run a private formula; callbacks execute outside committed transactions.
+   * port or run a private formula; native command locks are released before callbacks.
    */
   async function atBoundary<T>(
     at: 'before-consume' | 'consumed' | 'committed',
@@ -964,7 +964,8 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         const invoke = query as (...values: unknown[]) => unknown;
         const last = args.at(-1);
         // Let the native command release its client and partition gate. Pause
-        // the next Auth read instead of holding the command's COMMIT response.
+        // Auth's credential owner-lock read before it acquires any lock. A
+        // background DBOS query must never take the request's checkpoint.
         if (at === 'consumed' && database === kernel() && sql === 'COMMIT' && consumed) {
           if (typeof last === 'function') {
             const callback = last as (error: unknown, value?: unknown) => void;
@@ -982,7 +983,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
           at === 'before-consume'
             ? /SELECT (?:id,password,)?xmin::text AS version FROM (?:account|auth_public_key)/.test(sql)
             : at === 'consumed'
-              ? database === auth() && nativeCommitted
+              ? database === auth() && nativeCommitted && sql === 'SELECT auth_assert_session_capacity($1,true)'
               : sql === 'COMMIT' && committed;
         if (fired || !match) return invoke(...args);
         fired = true;
