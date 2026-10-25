@@ -313,7 +313,7 @@ test('search page stays within its bound as s grows', async () => {
     kernelCalls.length = 0;
     const response = await fetch(`${origin}/en/search?q=results`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual(['POST /v1/subjects:search']);
+    expect(kernelCalls).toEqual(['GET /v1/definitions/active', 'POST /v1/subjects:search']);
     expect((await response.text()).length).toBeLessThan(100_000);
   }
 }, 300_000);

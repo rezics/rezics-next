@@ -1,0 +1,319 @@
+import { afterAll, expect, test } from 'bun:test';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
+import { join } from 'node:path';
+import { chromium, type Browser, type Page } from 'playwright';
+
+const app = join(import.meta.dir, '..');
+const timeout = 300_000;
+const digest = 'release-test-digest';
+const asOf = '2026-10-01T00:00:00.000Z';
+const book = 'schema:Book';
+const author = 'schema:author';
+const genre = 'schema:genre';
+const authorOne = '00000000-0000-4000-8000-000000000123';
+const authorTwo = '00000000-0000-4000-8000-000000000456';
+const genreOne = 'wd:Q789';
+
+const release = {
+  types: {
+    [book]: {
+      labels: { en: 'book', es: 'libro', fr: 'livre' },
+      bases: ['schema:CreativeWork'],
+      facets: [author, genre],
+    },
+    'schema:CreativeWork': {
+      labels: { en: 'creative work', es: 'obra creativa' },
+      bases: [],
+      facets: ['schema:datePublished'],
+    },
+    'schema:Recipe': { labels: { en: 'recipe', es: 'receta' }, bases: [], facets: [author] },
+    'schema:Person': { labels: { en: 'person', es: 'persona' }, bases: [], facets: [] },
+  },
+  properties: {
+    [author]: { labels: { en: 'author', es: 'autor', fr: 'auteur' }, datatype: 'wikibase-item' },
+    [genre]: {
+      labels: { en: 'genre', es: 'género', fr: 'genre' },
+      datatype: 'string',
+      value: { pattern: '^wd:Q[0-9]+$' },
+    },
+    'schema:datePublished': { labels: { en: 'publication date' }, datatype: 'time' },
+  },
+};
+
+const calls: { method: string; path: string; query: string | null; body: any }[] = [];
+let failFacets = false;
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  Response.json(body, { status, headers: { 'cache-control': 'no-store', ...headers } });
+
+const fake = Bun.serve({
+  port: 0,
+  hostname: '127.0.0.1',
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/v1/definitions/active' && request.method === 'GET') {
+      calls.push({ method: request.method, path: url.pathname, query: null, body: null });
+      return json({ digest });
+    }
+    if (url.pathname === `/v1/definitions/releases/${digest}` && request.method === 'GET') {
+      calls.push({ method: request.method, path: url.pathname, query: null, body: null });
+      return json({ digest, release }, 200, {
+        etag: `"${digest}"`,
+        'cache-control': 'public, max-age=31536000, immutable',
+      });
+    }
+    if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
+      const body = await request.json();
+      calls.push({ method: request.method, path: url.pathname, query: null, body });
+      return json({
+        subjects: [{ id: '00000000-0000-4000-8000-000000000111', type: book, labels: { en: 'Kokoro', es: 'Kokoro' } }],
+        total: { value: 1, relation: 'exact' },
+        next: null,
+        as_of: asOf,
+      });
+    }
+    if (url.pathname === '/v1/subjects:facets' && request.method === 'POST') {
+      const body = await request.json();
+      calls.push({ method: request.method, path: url.pathname, query: null, body });
+      if (failFacets) return json({ type: 'about:blank', status: 503 }, 503);
+      return json({
+        facets: (body.facets ?? []).map(({ property }: { property: string }) => ({
+          property,
+          relation: 'exact',
+          values:
+            property === author
+              ? [
+                  { value: authorOne, count: 7, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                  { value: authorTwo, count: 4, labels: { en: 'Unknown author' } },
+                ]
+              : property === genre
+                ? [{ value: genreOne, count: 3, labels: { en: 'Historical novel', es: 'novela histórica' } }]
+                : [],
+        })),
+        total: { value: 1, relation: 'exact' },
+        as_of: asOf,
+      });
+    }
+    if (url.pathname.startsWith('/auth/')) return new Response(null, { status: 404 });
+    return new Response(null, { status: 404 });
+  },
+});
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+let child: ChildProcess | undefined;
+let started: Promise<string> | undefined;
+
+function site(): Promise<string> {
+  started ??= (async () => {
+    const port = await freePort();
+    let output = '';
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-8000);
+    };
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        KERNEL_ORIGIN: fake.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: 'rezics-website',
+        WEBSITE_CLIENT_KEY: '{}',
+        API_RESOURCE: 'https://api.rezics.test',
+        WEBSITE_SCOPES: 'media:create media:read_reservation media:read media:complete media:erase',
+      },
+    });
+    child.stdout!.on('data', keep);
+    child.stderr!.on('data', keep);
+    const origin = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + 150_000;
+    for (;;) {
+      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+      try {
+        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+        if (response.status < 500) return origin;
+      } catch {}
+      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+      await Bun.sleep(500);
+    }
+  })();
+  return started;
+}
+
+let browser: Browser | undefined;
+
+async function open(path: string, javaScriptEnabled = true): Promise<Page> {
+  const origin = await site();
+  browser ??= await chromium.launch();
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 860 },
+    reducedMotion: 'reduce',
+    javaScriptEnabled,
+  });
+  const page = await context.newPage();
+  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  if (javaScriptEnabled) await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  return page;
+}
+
+afterAll(async () => {
+  await browser?.close();
+  fake.stop(true);
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
+});
+
+const callsAt = (since: number, path: string) => calls.slice(since).filter((call) => call.path === path);
+
+test(
+  'an unrestricted search offers type choices, and a chosen type shows its facets with counts',
+  async () => {
+    const page = await open('/es/search?q=Kokoro');
+    try {
+      const main = page.getByRole('main');
+      expect(await main.getByRole('link', { name: 'libro', exact: true }).count()).toBe(1);
+      expect(await main.getByRole('link', { name: 'receta', exact: true }).count()).toBe(1);
+      expect(await main.getByRole('link', { name: 'persona', exact: true }).count()).toBe(0);
+      await main.getByRole('link', { name: 'libro', exact: true }).click();
+      await page.waitForURL((url) => url.searchParams.get('type') === book);
+      expect(new URL(page.url()).searchParams.get('q')).toBe('Kokoro');
+      expect(await main.getByRole('group', { name: 'autor' }).count()).toBe(1);
+      expect(await main.getByRole('group', { name: 'género' }).count()).toBe(1);
+      expect(await main.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(1);
+      expect(await main.getByText('Unknown author (4)', { exact: true }).count()).toBe(1);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'choosing facet values narrows results with one filter sent to search and facets, without JavaScript',
+  async () => {
+    const page = await open(`/en/search?q=Kokoro&type=${encodeURIComponent(book)}`, false);
+    try {
+      const authorOneInput = page.locator(`input[name="f.${author}"][value="${authorOne}"]`);
+      const authorTwoInput = page.locator(`input[name="f.${author}"][value="${authorTwo}"]`);
+      const genreInput = page.locator(`input[name="f.${genre}"][value="${genreOne}"]`);
+      expect(await authorOneInput.count()).toBe(1);
+      const since = calls.length;
+      await authorOneInput.check();
+      await authorTwoInput.check();
+      await genreInput.check();
+      await page.getByRole('button', { name: 'Apply' }).click();
+      await page.waitForURL((url) => url.searchParams.getAll(`f.${author}`).length === 2);
+      expect(new URL(page.url()).searchParams.getAll(`f.${author}`)).toEqual([authorOne, authorTwo]);
+      expect(new URL(page.url()).searchParams.getAll(`f.${genre}`)).toEqual([genreOne]);
+      const expected = {
+        and: [
+          { type: { in: [book] } },
+          { statement: { property: author, in: [authorOne, authorTwo] } },
+          { statement: { property: genre, in: [genreOne] } },
+        ],
+      };
+      const searchCalls = callsAt(since, '/v1/subjects:search');
+      const facetCalls = callsAt(since, '/v1/subjects:facets');
+      expect(searchCalls).toHaveLength(1);
+      expect(facetCalls).toHaveLength(1);
+      expect(searchCalls[0]!.body).toMatchObject({ text: 'Kokoro', filter: expected });
+      expect(facetCalls[0]!.body).toEqual({
+        text: 'Kokoro',
+        filter: expected,
+        facets: [
+          { property: author, size: 10 },
+          { property: genre, size: 10 },
+          { property: 'schema:datePublished', size: 10 },
+        ],
+      });
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'types, properties and values are labelled in the page locale',
+  async () => {
+    const page = await open(`/es/search?q=Kokoro&type=${encodeURIComponent(book)}`);
+    try {
+      const main = page.getByRole('main');
+      expect(await main.getByText('libro', { exact: true }).count()).toBeGreaterThan(0);
+      const property = main.getByRole('group', { name: 'autor' });
+      expect(await property.count()).toBe(1);
+      expect(await property.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(1);
+      expect(await property.locator('legend').getAttribute('lang')).toBe('es');
+      expect(await property.locator('label').first().getAttribute('lang')).toBe('es');
+      const fallback = main.getByRole('group', { name: 'publication date' });
+      expect(await fallback.locator('legend').getAttribute('lang')).toBe('en');
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a failed facet read still shows the results',
+  async () => {
+    failFacets = true;
+    const since = calls.length;
+    const page = await open(`/en/search?q=Kokoro&type=${encodeURIComponent(book)}`);
+    try {
+      const main = page.getByRole('main');
+      expect(await main.getByRole('link', { name: 'Kokoro', exact: true }).count()).toBe(1);
+      expect(callsAt(since, '/v1/subjects:facets')).toHaveLength(1);
+      expect(await main.getByRole('group').count()).toBe(0);
+      expect(await main.getByText('Filters', { exact: true }).count()).toBe(0);
+    } finally {
+      failFacets = false;
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'searches read the definitions release once per digest and make two kernel reads each',
+  async () => {
+    const origin = await site();
+    const before = calls.length;
+    const queries = Array.from({ length: 10 }, (_, index) => `cost-${index}`);
+    for (const query of queries) {
+      const response = await fetch(
+        `${origin}/en/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(book)}`,
+      );
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+    }
+    const recent = calls.slice(before);
+    const searchCalls = recent.filter((call) => call.path === '/v1/subjects:search');
+    const facetCalls = recent.filter((call) => call.path === '/v1/subjects:facets');
+    expect(searchCalls).toHaveLength(10);
+    expect(facetCalls).toHaveLength(10);
+    for (const query of queries) {
+      const search = searchCalls.filter((call) => call.body?.text === query);
+      const facets = facetCalls.filter((call) => call.body?.text === query);
+      expect(search).toHaveLength(1);
+      expect(facets).toHaveLength(1);
+      expect(search[0]!.body.filter).toEqual(facets[0]!.body.filter);
+    }
+    expect(calls.filter((call) => call.path === '/v1/definitions/releases/' + digest)).toHaveLength(1);
+    expect(calls.filter((call) => call.path === '/v1/definitions/active').length).toBeLessThanOrEqual(1);
+  },
+  timeout,
+);
