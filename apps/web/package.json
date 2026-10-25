@@ -25,6 +25,7 @@
     "@puckeditor/core": "0.23.0",
     "@rezics/ui": "workspace:*",
     "@rezics/client": "workspace:*",
+    "@rezics/composition": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",

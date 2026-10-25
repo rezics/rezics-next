@@ -51,6 +51,7 @@
         "@inlang/plugin-json": "5.1.63",
         "@puckeditor/core": "0.23.0",
         "@rezics/client": "workspace:*",
+        "@rezics/composition": "workspace:*",
         "@rezics/ui": "workspace:*",
         "@tailwindcss/vite": "4.3.3",
         "@tanstack/react-router": "1.170.46",
