@@ -90,6 +90,38 @@ $$;
 
 
 --
+-- Name: guard_media_erasure(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_media_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.erased THEN
+    IF TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION 'Erased media identity must survive cleanup' USING ERRCODE = '23514';
+    END IF;
+    IF NOT NEW.erased OR
+       ROW(NEW.route, NEW.media_id, NEW.container_id, NEW.uploader_id, NEW.key,
+           NEW.sha256, NEW.actual_byte_count, NEW.state, NEW.decision)
+       IS DISTINCT FROM
+       ROW(OLD.route, OLD.media_id, OLD.container_id, OLD.uploader_id, OLD.key,
+           OLD.sha256, OLD.actual_byte_count, OLD.state, OLD.decision) THEN
+      RAISE EXCEPTION 'Media erasure and exact identity are irreversible' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  IF NEW.erased IS DISTINCT FROM OLD.erased AND NEW.security_revision <= OLD.security_revision THEN
+    RAISE EXCEPTION 'Media erasure requires an increasing security revision' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_media_security(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -131,6 +163,34 @@ BEGIN
         NEW.source_partition, NEW.source_position, NEW.source_event_index) IS DISTINCT FROM
       ROW(OLD.native_workflow_id, OLD.source_epoch, OLD.source_partition, OLD.source_position, OLD.source_event_index)) THEN
     RAISE EXCEPTION 'Operation identity and source binding are immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_post_erasure(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_post_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.availability = 'erased' THEN
+    IF TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION 'Erased post identity must survive cleanup' USING ERRCODE = '23514';
+    END IF;
+    IF NEW.availability <> 'erased' OR NEW.head_revision_id IS DISTINCT FROM OLD.head_revision_id THEN
+      RAISE EXCEPTION 'Logical post erasure is irreversible' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  IF NEW.availability IS DISTINCT FROM OLD.availability
+     AND NEW.security_revision <= OLD.security_revision THEN
+    RAISE EXCEPTION 'Post erasure requires an increasing security revision' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END;
@@ -729,6 +789,13 @@ CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.impor
 
 
 --
+-- Name: media media_erasure_guard; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER media_erasure_guard BEFORE DELETE OR UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_erasure();
+
+
+--
 -- Name: media media_security_guard; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -740,6 +807,13 @@ CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW 
 --
 
 CREATE TRIGGER operation_identity BEFORE INSERT OR DELETE OR UPDATE ON content.operation FOR EACH ROW EXECUTE FUNCTION content.guard_operation_identity();
+
+
+--
+-- Name: post post_erasure_guard; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER post_erasure_guard BEFORE DELETE OR UPDATE ON content.post FOR EACH ROW EXECUTE FUNCTION content.guard_post_erasure();
 
 
 --
