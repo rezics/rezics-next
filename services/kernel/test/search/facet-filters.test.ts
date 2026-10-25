@@ -131,7 +131,7 @@ async function problem(promise: Promise<unknown>, code: string, errors: { pointe
     (caught: unknown) => caught,
   );
   expect(error).toBeInstanceOf(ProblemError);
-  expect([(error as ProblemError).code, (error as ProblemError).errors]).toEqual([code, errors]);
+  expect([(error as ProblemError).code, (error as ProblemError).errors] as unknown[]).toEqual([code, errors]);
   return error as ProblemError;
 }
 
