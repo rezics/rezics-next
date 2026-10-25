@@ -1,9 +1,14 @@
 types:
   schema:VideoGame: Computerspiel
   wd:Q20631656: Softwareveröffentlichung
+  wd:Q209163: Computerspiel-Erweiterung
 properties:
   schema:gamePlatform: Spielplattform
   schema:gtin: GTIN
   wdt:P2899: Mindestalter
   wdt:P31: ist ein(e)
   wdt:P437: Auslieferungsmedium
+  wdt:P408: Engine
+  schema:numberOfPlayers: Spieleranzahl
+  schema:minValue: Mindestwert
+  wdt:P8646: Erweiterung von

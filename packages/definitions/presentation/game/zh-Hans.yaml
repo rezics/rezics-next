@@ -1,9 +1,14 @@
 types:
   schema:VideoGame: 电子游戏
   wd:Q20631656: 软件发布
+  wd:Q209163: 资料片
 properties:
   schema:gamePlatform: 游戏平台
   schema:gtin: GTIN
   wdt:P2899: 最低年龄
   wdt:P31: 隶属于
   wdt:P437: 发行方式
+  wdt:P408: 软件引擎
+  schema:numberOfPlayers: 游玩人数
+  schema:minValue: 最小值
+  wdt:P8646: 资料片原作

@@ -1,7 +1,7 @@
 id: https://rezics.com/catalogue/game
 name: game
 version: 1.0.0
-description: Video game work and release profile terms.
+description: Video game works, platform and language releases, and independently referable add-ons.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
@@ -14,12 +14,15 @@ imports:
   - core
   - book
   - classification
+  - anime
 classes:
   VideoGame:
     abstract: true
     is_a: LaunchWork
     class_uri: schema:VideoGame
-    description: Shared video game work fields; source identifiers are declared on concrete profiles.
+    description: >-
+      Shared video game work fields; source identifiers are declared on concrete profiles.
+      Sources: https://schema.org/VideoGame and https://www.wikidata.org/wiki/Q7889.
     slots:
       - alternateName
   VideoGameRelease:
@@ -27,7 +30,9 @@ classes:
     description: >-
       A distinct software release that may represent one or more works. Class source:
       https://www.wikidata.org/wiki/Q20631656. Release browse filters:
-      https://api.vndb.org/kana#filters.
+      https://api.vndb.org/kana#filters and https://bgm.tv/game/browser.
+      Platform and language distinguish releases when the source identifies them; a work's lists of
+      platforms and languages do not imply a Cartesian product of releases.
     slots:
       - alternateName
       - datePublished
@@ -50,10 +55,66 @@ classes:
   BangumiVideoGame:
     is_a: VideoGame
     class_uri: schema:VideoGame
+    description: >-
+      The game work, retaining Bangumi's first release date and aggregate platform information.
+      Shared credits carry credited-as, order and detailed role only when supplied by the source.
+      Facets follow the platform, genre, tag and date filters in https://bgm.tv/game/browser;
+      engine and player count are additional structured infobox filters.
+      Sources: https://schema.org/VideoGame and https://www.wikidata.org/wiki/Q7889.
     exact_mappings:
       - wd:Q7889
     slots:
       - bangumiSubjectId
+      - gamePlatform
+      - author
+      - director
+      - illustrator
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - developer
+      - publisher
+      - voiceActor
+      - character
+      - descriptiveLink
+      - softwareEngine
+      - numberOfPlayers
+    annotations:
+      facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers
+  GameAddOn:
+    is_a: LaunchWork
+    class_uri: wd:Q209163
+    description: >-
+      An independently referable expansion or add-on work, including downloadable content.
+      A download, patch or bundled asset without its own work identity does not create a subject.
+      Link the add-on to its base game with expansionOf; releases use VideoGameRelease and exampleOfWork.
+      Class source: https://www.wikidata.org/wiki/Q209163. Downloadable content is a form of add-on:
+      https://www.wikidata.org/wiki/Q1066707. Facets follow https://bgm.tv/game/browser,
+      supplemented by structured infobox fields and the base-game relation.
+    exact_mappings:
+      - wd:Q209163
+    slots:
+      - bangumiSubjectId
+      - alternateName
+      - gamePlatform
+      - author
+      - director
+      - illustrator
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - developer
+      - publisher
+      - voiceActor
+      - character
+      - descriptiveLink
+      - softwareEngine
+      - numberOfPlayers
+      - expansionOf
+    annotations:
+      facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf
 slots:
   gamePlatform:
     slot_uri: schema:gamePlatform
@@ -108,5 +169,55 @@ slots:
     multivalued: true
     exact_mappings:
       - wd:P155
+    annotations:
+      datatype: wikibase-item
+  softwareEngine:
+    slot_uri: wdt:P408
+    description: >-
+      The software engine used by the game, represented by a named engine concept.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P408.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P408
+    annotations:
+      datatype: wikibase-item
+  numberOfPlayers:
+    slot_uri: schema:numberOfPlayers
+    description: >-
+      A supported player count. For a source range, the amount is its upper endpoint and the
+      minimumPlayerCount qualifier preserves the lower endpoint; a lone count has no inferred minimum.
+      Unstructured play modes are not converted to counts. Sources: https://schema.org/numberOfPlayers
+      and https://www.wikidata.org/wiki/Property:P1873, whose maximum-only meaning is a close mapping.
+    range: integer
+    minimum_value: 1
+    close_mappings:
+      - wd:P1873
+    annotations:
+      datatype: quantity
+      units: '1'
+      qualifiers: minimumPlayerCount
+  minimumPlayerCount:
+    slot_uri: schema:minValue
+    description: >-
+      The lower endpoint of the source player-count range, qualifying numberOfPlayers.
+      Sources: https://schema.org/minValue and https://www.wikidata.org/wiki/Property:P1872.
+      The Wikidata mapping is close because it specifically describes the minimum number of players.
+    range: integer
+    minimum_value: 1
+    close_mappings:
+      - wd:P1872
+    annotations:
+      datatype: quantity
+      units: '1'
+  expansionOf:
+    slot_uri: wdt:P8646
+    description: >-
+      The base game this independently referable add-on expands. This is not a release-of relation.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P8646.
+    range: VideoGame
+    multivalued: true
+    exact_mappings:
+      - wd:P8646
     annotations:
       datatype: wikibase-item

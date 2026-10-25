@@ -47,6 +47,14 @@ notes:
   - Schema to Wikidata mappings marked close preserve source distinctions and do not assert RDF equivalence.
   - Unknown observed association codes are explicitly omitted. The API CharacterType definition takes precedence over
     the abbreviated Archive README example for ships and organizations.
+  - Game work platform lists and first-publication dates remain work-level source assertions. Create a software release
+    only when a source identifies that release and its platform or language; never infer platform-language combinations.
+  - Game player counts use schema:numberOfPlayers. A numeric range stores its upper endpoint as the amount and its lower
+    endpoint as the schema:minValue qualifier; an exact count has no invented lower endpoint. Unstructured play modes
+    are not numeric player counts. Sources are https://schema.org/numberOfPlayers, https://schema.org/minValue,
+    https://www.wikidata.org/wiki/Property:P1873 and https://www.wikidata.org/wiki/Property:P1872.
+  - Bangumi game browser facets follow https://bgm.tv/game/browser. Source format and staff codes remain concepts;
+    downloadable content is an add-on work only when independently referable, not a new type for every format value.
 vocabulary:
   - &id010
     status: proposed
@@ -1302,7 +1310,7 @@ infobox:
       - &id066
         id: 别名
         mapping:
-          status: proposed
+          status: existing
           term: schema:alternateName
           'on': schema:VideoGame
           wikidata: wd:P2561
@@ -1312,7 +1320,7 @@ infobox:
       - &id067
         id: 平台
         mapping:
-          status: proposed
+          status: existing
           term: schema:gamePlatform
           'on': schema:VideoGame
           wikidata: wd:P400
@@ -1323,7 +1331,7 @@ infobox:
       - &id068
         id: 游戏类型
         mapping:
-          status: proposed
+          status: existing
           term: schema:genre
           'on': schema:VideoGame
           wikidata: wd:P136
@@ -1335,7 +1343,7 @@ infobox:
       - &id069
         id: 游戏引擎
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P408
           'on': schema:VideoGame
           wikidata: wd:P408
@@ -1345,7 +1353,7 @@ infobox:
       - &id070
         id: 游玩人数
         mapping:
-          status: proposed
+          status: existing
           term: schema:numberOfPlayers
           'on': schema:VideoGame
           wikidata: wd:P1873
@@ -1368,40 +1376,52 @@ infobox:
             scope.
       - id: 开发
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P178
           'on': schema:VideoGame
           wikidata: wd:P178
           meaning: The credited developer of this game.
           sources: *id062
-          qualifiers: *id002
+          qualifiers: &gameCreditQualifiers
+            creditedAs:
+              <<: *id031
+              status: existing
+              'on': schema:VideoGame
+            order:
+              <<: *id024
+              status: existing
+              'on': schema:VideoGame
+            role:
+              <<: *id001
+              status: existing
+              'on': schema:VideoGame
       - id: 发行
         mapping:
-          status: proposed
+          status: existing
           term: schema:publisher
           'on': schema:VideoGame
           wikidata: wd:P123
           meaning: The credited publisher of this game.
           sources: *id063
-          qualifiers: *id002
+          qualifiers: *gameCreditQualifiers
       - id: 剧本
         mapping:
-          status: proposed
+          status: existing
           term: schema:author
           'on': schema:VideoGame
           wikidata: wd:P50
           meaning: The credited writer of the game scenario.
           sources: *id064
-          qualifiers: *id002
+          qualifiers: *gameCreditQualifiers
       - id: 程序
         mapping:
-          status: proposed
+          status: existing
           term: schema:contributor
           'on': schema:VideoGame
           wikidata: wd:P767
           meaning: The credited programmer of the game.
           sources: *id026
-          qualifiers: *id002
+          qualifiers: *gameCreditQualifiers
       - id: website
         mapping:
           status: existing
@@ -1411,7 +1431,7 @@ infobox:
           meaning: The official website of this game.
       - id: 链接
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P973
           'on': schema:VideoGame
           wikidata: wd:P973
@@ -1528,13 +1548,13 @@ infobox:
       - *id066
       - id: 开发者
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P178
           'on': schema:VideoGame
           wikidata: wd:P178
           meaning: The credited developer of this independently published game.
           sources: *id062
-          qualifiers: *id002
+          qualifiers: *gameCreditQualifiers
       - *id061
       - *id067
       - *id068
@@ -1593,12 +1613,10 @@ enumerations:
           reason: Music and live-action subject types are outside the launch scope.
       - id: 4
         mapping:
-          status: proposed
-          term: schema:CreativeWork
-          'on': schema:CreativeWork
-          wikidata: wd:Q17537576
-          meaning: A game-family source record; platform distinguishes video games, non-game software and tabletop games.
-          sources: *id023
+          status: omitted
+          reason: >-
+            The game family dispatches by platform to a video game or independently referable add-on;
+            software and tabletop records are outside this video-game profile. No generic family subject is created.
       - id: 6
         mapping: *id073
   - id: subject.series
@@ -1962,6 +1980,7 @@ enumerations:
       - id: 4001
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/4-4001
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -1976,37 +1995,37 @@ enumerations:
       - id: 4002
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/4-4002
             scheme: https://rezics.com/schemes/bangumi/formats
             label: software
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
           profile:
-            status: proposed
-            term: wd:Q7397
-            'on': wd:Q7397
-            wikidata: wd:Q7397
-            meaning: Software outside the video-game category; application type is not assumed.
-            sources:
-              - https://www.wikidata.org/wiki/Q7397
+            status: omitted
+            reason: Non-game software is outside the video-game profile; the format concept remains available.
       - id: 4003
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/4-4003
             scheme: https://rezics.com/schemes/bangumi/formats
             label: dlc
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
           profile:
-            status: proposed
-            term: schema:CreativeWork
-            'on': schema:CreativeWork
-            wikidata: wd:Q17537576
-            meaning: Downloadable supplemental content; its media type is not inferred.
-            sources: *id023
+            status: existing
+            term: wd:Q209163
+            'on': wd:Q209163
+            wikidata: wd:Q209163
+            meaning: An independently referable game add-on work, including downloadable content and expansions.
+            sources:
+              - https://www.wikidata.org/wiki/Q209163
+              - https://www.wikidata.org/wiki/Q1066707
       - id: 4004
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/4-4004
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -2016,20 +2035,15 @@ enumerations:
       - id: 4005
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/4-4005
             scheme: https://rezics.com/schemes/bangumi/formats
             label: table
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
           profile:
-            status: proposed
-            term: schema:Game
-            'on': schema:Game
-            wikidata: wd:Q11410
-            meaning: A tabletop game, outside the narrower video-game class.
-            sources:
-              - https://schema.org/Game
-              - https://www.wikidata.org/wiki/Q11410
+            status: omitted
+            reason: Tabletop games are outside the video-game profile; the format concept remains available.
   - id: staff.2
     values:
       - id: 1

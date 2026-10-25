@@ -1,9 +1,14 @@
 types:
   schema:VideoGame: videojuego
   wd:Q20631656: release
+  wd:Q209163: expansión
 properties:
   schema:gamePlatform: plataforma de juego
   schema:gtin: GTIN
   wdt:P2899: edad mínima
   wdt:P31: instancia de
   wdt:P437: distribución
+  wdt:P408: motor
+  schema:numberOfPlayers: número de jugadores
+  schema:minValue: valor mínimo
+  wdt:P8646: expansión de

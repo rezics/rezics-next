@@ -1,9 +1,14 @@
 types:
   schema:VideoGame: video game
   wd:Q20631656: software release
+  wd:Q209163: expansion add-on
 properties:
   schema:gamePlatform: game platform
   schema:gtin: GTIN
   wdt:P2899: minimum age
   wdt:P31: instance of
   wdt:P437: distribution format
+  wdt:P408: software engine
+  schema:numberOfPlayers: number of players
+  schema:minValue: minimum value
+  wdt:P8646: expansion of

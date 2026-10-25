@@ -1,9 +1,14 @@
 types:
   schema:VideoGame: コンピュータゲーム
   wd:Q20631656: ソフトウェア・リリース
+  wd:Q209163: 拡張パック
 properties:
   schema:gamePlatform: ゲームプラットフォーム
   schema:gtin: GTIN
   wdt:P2899: 下限年齢
   wdt:P31: 分類
   wdt:P437: メディア形態
+  wdt:P408: ソフトウェアエンジン
+  schema:numberOfPlayers: プレイ人数
+  schema:minValue: 最小値
+  wdt:P8646: 以下の拡張パック
