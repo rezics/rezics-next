@@ -1,0 +1,165 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { createAccess } from '../access/index.ts';
+import { registerEffects } from '../events/effects.ts';
+import { routeOf } from '../route/route.ts';
+import type { WorkModule } from '../work/registry.ts';
+import { createCommerceCommands, type CheckoutOutcome } from './commands.ts';
+import {
+  StripeRejectedError,
+  StripeUnavailableError,
+  type CheckoutSnapshot,
+  type Order,
+  type StripeEventRef,
+  type StripePort,
+} from './model.ts';
+import { readOrder } from './store.ts';
+import {
+  ORDER_RECONCILE_WORKFLOW,
+  orderReconcileWorkflowId,
+  STRIPE_EVENT_WORKFLOW,
+  WORKFLOWS_QUEUE,
+} from './work-contract.ts';
+import clockQuery from './work-clock.sql';
+
+export type CommerceWorkDependencies = {
+  stripe: StripePort;
+  checkout: { successUrl: string; cancelUrl: string };
+};
+
+/** Registration owns closures over explicit ports; the worker supplies its pool and queue registry. */
+export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
+  const { stripe } = deps;
+  const checkout = { ...deps.checkout };
+  return {
+    name: 'commerce',
+    register({ pool, queues, client }) {
+      if (!Object.hasOwn(queues, WORKFLOWS_QUEUE)) throw new Error('Commerce requires the workflows queue');
+      // Only the trusted checkout command ports are used here. No request identity is fabricated.
+      const commands = createCommerceCommands({ pool, access: createAccess({ actions: new Map() }) });
+      const stripeRetries = {
+        retriesAllowed: true,
+        intervalSeconds: 1,
+        backoffRate: 2,
+        maxAttempts: 5,
+        shouldRetry: (error: unknown) => error instanceof StripeUnavailableError,
+      };
+      const resolveCheckout = DBOS.registerStep(
+        async (ref: StripeEventRef) =>
+          ref.sessionId ?? (ref.paymentIntentId ? stripe.findCheckoutSession(ref.paymentIntentId) : null),
+        { name: 'commerce.resolveCheckout', ...stripeRetries },
+      );
+      const clock = DBOS.registerStep(
+        async () => {
+          const row = await clockQuery.run({ query: pool.query.bind(pool) });
+          if (!row) throw new Error('PostgreSQL clock is unavailable');
+          return row.observedAt;
+        },
+        { name: 'commerce.clock' },
+      );
+      const readCheckout = DBOS.registerStep(
+        async (sessionId: string, observedAt: string): Promise<CheckoutSnapshot> => ({
+          ...(await stripe.readCheckout(sessionId)),
+          observedAt,
+        }),
+        { name: 'commerce.readCheckout', ...stripeRetries },
+      );
+      const applyCheckout = DBOS.registerStep(
+        async (snapshot: CheckoutSnapshot, workflowId: string) => {
+          // The command appends ':apply'; supplying this prefix preserves ADR-0033's wf:{id}:{step} key.
+          await commands.applyCheckoutSnapshot(snapshot, `wf:${workflowId}`);
+        },
+        { name: 'commerce.applyCheckout' },
+      );
+      async function sync(sessionId: string, workflowId: string) {
+        // Persist the database observation before contacting Stripe. A delayed old response cannot outrank
+        // a workflow that observed a later provider state, and recovery reuses both durable results.
+        const observedAt = await clock();
+        const snapshot = await readCheckout(sessionId, observedAt);
+        await applyCheckout(snapshot, workflowId);
+      }
+      DBOS.registerWorkflow(
+        async (ref: StripeEventRef) => {
+          const sessionId = await resolveCheckout(ref);
+          if (sessionId) await sync(sessionId, DBOS.workflowID!);
+        },
+        { name: STRIPE_EVENT_WORKFLOW },
+      );
+      const getOrder = DBOS.registerStep(
+        async (orderId: string) => {
+          const route = routeOf(orderId);
+          return route === null ? null : readOrder(pool, route, orderId);
+        },
+        { name: 'commerce.readOrder' },
+      );
+      const createCheckout = DBOS.registerStep(
+        async (order: Order): Promise<CheckoutOutcome> => {
+          try {
+            return {
+              session: await stripe.createCheckoutSession(
+                {
+                  orderId: order.id,
+                  buyerAccountId: order.buyerAccountId,
+                  title: order.title,
+                  currency: order.currency,
+                  unitAmountMinor: order.unitAmountMinor,
+                  taxCode: order.taxCode,
+                  ...checkout,
+                  // Stable across the HTTP attempt, delayed reconciliation and step recovery.
+                  expiresAt: Math.floor(Date.parse(order.createdAt) / 1000) + 3600,
+                },
+                `order:${order.id}`,
+              ),
+            };
+          } catch (error) {
+            if (error instanceof StripeRejectedError) return { kind: 'failed' };
+            throw error;
+          }
+        },
+        { name: 'commerce.createCheckout', ...stripeRetries },
+      );
+      const recordCheckout = DBOS.registerStep(
+        async (orderId: string, outcome: CheckoutOutcome) => {
+          await commands.recordCheckout(orderId, outcome);
+        },
+        { name: 'commerce.recordCheckout' },
+      );
+      DBOS.registerWorkflow(
+        async (orderId: string) => {
+          let order = await getOrder(orderId);
+          if (!order || order.settlement === 'paid' || order.settlement === 'failed') return;
+          if (!order.checkoutSessionId) {
+            const outcome = await createCheckout(order);
+            await recordCheckout(orderId, outcome);
+            order = await getOrder(orderId);
+            if (!order || order.settlement === 'paid' || order.settlement === 'failed') return;
+          }
+          if (!order.checkoutSessionId || !order.checkoutExpiresAt) return;
+          const workflowId = DBOS.workflowID!;
+          await sync(order.checkoutSessionId, `${workflowId}:initial`);
+          await DBOS.sleep(Math.max(0, Date.parse(order.checkoutExpiresAt) + 600_000 - Date.now()));
+          await sync(order.checkoutSessionId, `${workflowId}:expiry`);
+        },
+        { name: ORDER_RECONCILE_WORKFLOW },
+      );
+      registerEffects([
+        {
+          name: 'commerce_reconcile_order',
+          types: ['com.rezics.commerce.order.created.v1'],
+          async run(event) {
+            const { orderId } = event.data as { orderId: string };
+            await client.enqueue(
+              {
+                workflowName: ORDER_RECONCILE_WORKFLOW,
+                workflowID: orderReconcileWorkflowId(orderId),
+                workflowIDReusePolicy: 'return-existing',
+                queueName: WORKFLOWS_QUEUE,
+                delaySeconds: 900,
+              },
+              orderId,
+            );
+          },
+        },
+      ]);
+    },
+  };
+}

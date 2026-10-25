@@ -51,10 +51,10 @@ test('a verified paid event delivered twice runs one unpartitioned workflow and 
     'commerce.applyCheckout',
   ]);
   const receipts = (
-    await fixture.pool.query('SELECT receipt_key, partition_no FROM core.receipt WHERE kind=$1 AND receipt_key=$2', [
-      'commerce.checkout.apply',
-      `wf:${event.id}:apply`,
-    ])
+    await fixture.pool.query(
+      'SELECT idempotency_key AS receipt_key, partition_no FROM core.receipt WHERE command_kind=$1 AND idempotency_key=$2',
+      ['commerce.checkout.apply', `wf:${event.id}:apply`],
+    )
   ).rows;
   expect(receipts).toEqual([{ receipt_key: `wf:${event.id}:apply`, partition_no: partitionOf(routeOf(order.id)!) }]);
   expect(Date.parse((await fixture.state(order.id)).observed_at)).toBeGreaterThan(Date.parse('2026-01-01'));
@@ -119,9 +119,12 @@ test('a refund arriving before completed never grants, even when completed is de
   expect(await fixture.entitlements(order.id)).toHaveLength(0);
   const { verifyStripeEvent, classifyStripeEvent } = await import('../../src/commerce/webhook.ts');
   const ref = classifyStripeEvent(
-    await verifyStripeEvent(new TextEncoder().encode(completed.bytes), completed.signature, [
-      fixture.transport.fake.webhookSecret,
-    ]),
+    await verifyStripeEvent(
+      new TextEncoder().encode(completed.bytes),
+      completed.signature,
+      [fixture.transport.fake.webhookSecret],
+      Date.now(),
+    ),
   )!;
   await createEnqueue(fixture.client).enqueueStripeEvent(ref);
   await fixture.finish(`stripe:${ref.eventId}`);
@@ -212,7 +215,7 @@ for (const lost of [false, true])
     });
     expect(delayed!.delayUntilEpochMS! - Date.now()).toBeGreaterThan(890_000);
     expect(delayed!.delayUntilEpochMS! - Date.now()).toBeLessThanOrEqual(900_000);
-    await fixture.client.setWorkflowDelay(id, { delaySeconds: 0 });
+    await fixture.client.setWorkflowDelay(id, { delayUntilEpochMS: Date.now() });
     await until(
       () => fixture.client.listWorkflowSteps(id),
       (steps) => !!steps?.some((step) => step.name === 'DBOS.sleep'),
@@ -248,7 +251,7 @@ for (const lost of [false, true])
 test('reconciliation sleeps durably through expiry and repairs a missed expired webhook', async () => {
   const { order, session } = await fixture.checkout();
   const id = await fixture.schedule(order.id);
-  await fixture.client.setWorkflowDelay(id, 0);
+  await fixture.client.setWorkflowDelay(id, { delayUntilEpochMS: Date.now() });
   await until(
     () => fixture.client.listWorkflowSteps(id),
     (steps) => !!steps?.some((step) => step.name === 'DBOS.sleep'),
@@ -271,7 +274,7 @@ test('a rejected reconciliation create marks the order failed; terminal orders f
   const order = await fixture.order();
   fixture.transport.fake.nextCreateFault = 'rejected';
   const id = await fixture.schedule(order.id);
-  await fixture.client.setWorkflowDelay(id, 0);
+  await fixture.client.setWorkflowDelay(id, { delayUntilEpochMS: Date.now() });
   await fixture.finish(id);
   expect(await fixture.state(order.id)).toMatchObject({ settlement: 'failed' });
   const paid = await fixture.checkout();

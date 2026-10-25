@@ -38,7 +38,7 @@ export async function workFixture() {
   });
   const signing = await generateKeyPair('ES256');
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'work', alg: 'ES256' };
-  const actions = ['offer:create', 'order:create'];
+  const actions = ['access:grant', 'offer:create', 'offer:read', 'offer:manage', 'order:create'];
   const access = createAccess({
     actions: new Map(actions.map((action) => [action, { anonymous: false }])),
     auth: {
@@ -61,8 +61,14 @@ export async function workFixture() {
     [GLOBAL_CONTEXT, seller],
   );
   async function actor(accountId: string) {
-    const token = await new SignJWT({ client_id: 'web', scope: actions.join(' '), authn_epoch: 1 })
-      .setProtectedHeader({ alg: 'ES256', kid: 'work' })
+    const token = await new SignJWT({
+      client_id: 'web',
+      scope: actions.join(' '),
+      authn_epoch: 1,
+      auth_time: Math.floor(Date.now() / 1000),
+      amr: ['pwd'],
+    })
+      .setProtectedHeader({ alg: 'ES256', kid: 'work', typ: 'at+jwt' })
       .setIssuer('https://auth.test')
       .setAudience('https://kernel.test')
       .setSubject(accountId)
@@ -147,9 +153,12 @@ export async function workFixture() {
     },
     async deliver(type: string, objectId: string) {
       const event = await transport.fake.event(type, objectId);
-      const verified = await verifyStripeEvent(new TextEncoder().encode(event.bytes), event.signature, [
-        transport.fake.webhookSecret,
-      ]);
+      const verified = await verifyStripeEvent(
+        new TextEncoder().encode(event.bytes),
+        event.signature,
+        [transport.fake.webhookSecret],
+        Date.now(),
+      );
       const ref = classifyStripeEvent(verified)!;
       await createEnqueue(client).enqueueStripeEvent(ref);
       return { id: `stripe:${ref.eventId}`, ref };
@@ -159,7 +168,7 @@ export async function workFixture() {
         () => client.getWorkflow(id),
         (row) => row?.status === 'SUCCESS' || row?.status === 'ERROR',
       );
-      return client.retrieveWorkflow(id).getResult({ timeoutSeconds: 1 });
+      return client.retrieveWorkflow(id).getResult();
     },
     async state(orderId: string) {
       return (
@@ -197,7 +206,8 @@ export async function workFixture() {
           source: `urn:rezics:log:${event.partition_no}.${event.epoch}`,
           type: event.type,
           subject: orderId,
-          time: event.time,
+          time: event.recorded_at.toISOString(),
+          sequence: String(event.position).padStart(19, '0'),
           datacontenttype: 'application/json',
           data: event.data,
         },
