@@ -82,12 +82,21 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   const blocker = /^BLOCKER:\s*(.+)$/im.exec(result.result)?.[1]?.trim();
   result.blocker = blocker && !/^(none|no(?: blockers?)?|n\/a|not blocked)\.?$/i.test(blocker) ? blocker : null;
   try {
-    const exit = JSON.parse(result.result);
+    // A CLI without an enforced output schema may wrap the status object in prose; take the last object that parses.
+    const exit = (() => { try { return JSON.parse(result.result); } catch { return lastStatusObject(result.result); } })();
     if (exit.status === 'blocked' && exit.blocker && ['spec-conflict', 'scope-growth', 'tool'].includes(exit.blocker.kind) && typeof exit.blocker.detail === 'string') {
       result.failureKind = exit.blocker.kind; result.blocker = exit.blocker.detail;
     }
   } catch { /* Historical human-readable handoffs remain importable. */ }
   return result;
+}
+function lastStatusObject(text: string): unknown {
+  for (let end = text.lastIndexOf('}'); end >= 0; end = text.lastIndexOf('}', end - 1)) {
+    for (let start = text.lastIndexOf('{', end); start >= 0; start = text.lastIndexOf('{', start - 1)) {
+      try { const value = JSON.parse(text.slice(start, end + 1)); if (value && typeof value === 'object' && 'status' in value) return value; } catch { /* keep widening */ }
+    }
+  }
+  return null;
 }
 export function makeRecord(task: Task, attempt: Attempt, measurement: LogMeasurement, outcome: AttemptRecord['outcome'] = 'pending-gate'): AttemptRecord {
   return { taskId: task.id, attempt: attempt.attempt, taskClass: task.taskClass, profile: attempt.profile, pool: attempt.pool,
