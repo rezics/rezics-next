@@ -58,10 +58,14 @@ export async function runWorkerCommand(command: string, argv: string[], options:
           `Wall clock to pass p50/p90: critical path ${duration(result.wallClockToPassMs.criticalPath.p50)}/${duration(result.wallClockToPassMs.criticalPath.p90)}; other ${duration(result.wallClockToPassMs.other.p50)}/${duration(result.wallClockToPassMs.other.p90)}.`,
         ].join('\n'));
       }
-    } else if (command === 'retry' || command === 'stop' || command === 'consult') {
+    } else if (command === 'retry') {
+      if (!arg || (argv.length !== 1 && !(argv.length === 3 && argv[1] === '--brief' && argv[2])))
+        throw new Error('usage: retry <task> [--brief <file>]');
+      await job.start(arg, argv.length === 3 ? { brief: argv[2]! } : {});
+    } else if (command === 'stop' || command === 'cancel' || command === 'consult') {
       if (!arg || argv.length !== 1) throw new Error(`usage: ${command} <task>`);
-      if (command === 'retry') await job.start(arg);
-      else if (command === 'stop') await tasks.stop(arg);
+      if (command === 'stop') await tasks.stop(arg);
+      else if (command === 'cancel') await tasks.cancel(arg);
       else await job.consultTask(arg);
     } else if (command === 'event') {
       const [taskId, n, kind, body = '{}'] = argv;

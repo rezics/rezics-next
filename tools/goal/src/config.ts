@@ -158,8 +158,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     return { ...ref, branch: task.branch, worktree: task.worktree, declaredPaths: task.brief.paths, gate: task.brief.acceptance.command };
   };
   const checkCompletion = completionChecker({ ...settings, runGate,
-    condition(goal) { return { taskIds: store.tasks().filter(task => task.brief.goal === goal).map(task => task.id), gate: settings.gate }; },
-    async mergedTasks(goal) { return new Set(store.tasks().filter(task => task.brief.goal === goal && task.state === 'merged').map(task => task.id)); },
+    condition(goal) { return { taskIds: tasks.completionScope(goal), gate: settings.gate }; },
+    async mergedTasks(goal) { return new Set(tasks.completionScope(goal).filter(taskId => store.task(taskId).state === 'merged')); },
   });
   const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
     `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_DATABASE_PATH=${settings.databasePath}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,

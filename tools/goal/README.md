@@ -166,8 +166,9 @@ notifications without a polling model or sleep loop. One lease module protects b
 
 ```sh
 bun tools/goal/src/cli.ts status [task]
-bun tools/goal/src/cli.ts retry <task>
+bun tools/goal/src/cli.ts retry <task> [--brief <file>]
 bun tools/goal/src/cli.ts stop <task>
+bun tools/goal/src/cli.ts cancel <task>
 bun tools/goal/src/cli.ts consult <task>
 bun tools/goal/src/cli.ts attempts --json
 bun tools/goal/src/cli.ts report [--json]
@@ -181,6 +182,9 @@ bun tools/goal/src/cli.ts inbox read <manager>
 bun tools/goal/src/cli.ts inbox ack <manager>
 bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]
 ```
+
+`retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same.
+`cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 

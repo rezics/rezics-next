@@ -145,6 +145,15 @@ export class WorkerStore implements AttemptFence {
       this.saveTask(task); this.saveAttempt(attempt);
     });
   }
+  /** A previously stopped attempt is already fenced, but its task can still be cancelled. */
+  cancelStopped(ref: AttemptRef): void {
+    this.db.transaction(() => {
+      const task = this.task(ref.taskId), attempt = this.attempt(ref);
+      if (task.currentAttempt !== ref.attempt || task.state !== 'stopped' || attempt.state !== 'stopped')
+        throw new Error('only a stopped current task can be cancelled');
+      task.state = 'cancelled'; this.saveTask(task);
+    }).immediate();
+  }
   /** A stopped task may be explicitly retried; it remains fenced until the replacement is published. */
   retryStopped(taskId: string, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.db.transaction(() => {

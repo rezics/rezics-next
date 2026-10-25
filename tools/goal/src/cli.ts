@@ -3,7 +3,7 @@ import { createRuntime, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
-const workerCommands = ['dispatch', 'status', 'retry', 'stop', 'consult', 'attempts', 'report', 'import-attempt', 'event'];
+const workerCommands = ['dispatch', 'status', 'retry', 'stop', 'cancel', 'consult', 'attempts', 'report', 'import-attempt', 'event'];
 const integrationCommands = ['land', 'train', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 
