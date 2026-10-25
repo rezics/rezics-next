@@ -22,7 +22,7 @@ const password = randomBytes(24).toString('base64url');
 let failRelease = false;
 let failErase = false;
 let failRevoke: string | undefined;
-let pages: { items: { reservationId: string; subjectAccountId: string }[]; next: string | null }[] = [];
+let pages: { operators: { reservationId: string; subjectAccountId: string }[]; next: string | null }[] = [];
 async function result<T>(kind: string, key: string, value: T) {
   calls.push(kind);
   const row = (
@@ -334,8 +334,8 @@ test('bounded operator fanout stays incomplete and fenced until failed Auth work
   }));
   for (const item of items) await owner(item.subjectAccountId);
   pages = [
-    { items: items.slice(0, 64), next: 'reservation-63' },
-    { items: items.slice(64), next: null },
+    { operators: items.slice(0, 64), next: 'reservation-63' },
+    { operators: items.slice(64), next: null },
   ];
   failRevoke = items[1]!.subjectAccountId;
   await expect(
