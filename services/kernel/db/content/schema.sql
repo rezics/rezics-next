@@ -259,6 +259,17 @@ $$;
 
 
 --
+-- Name: operation_routable_uuid(uuid); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.operation_routable_uuid(id uuid) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $_$
+  SELECT id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+$_$;
+
+
+--
 -- Name: operation_scopes_valid(text[]); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -465,6 +476,16 @@ CREATE TABLE content.operation (
     source_partition integer,
     source_position bigint,
     source_event_index integer,
+    source_digest text,
+    original_minimum_authn_epoch text,
+    original_operator_account_id uuid,
+    original_delegation_transaction_id uuid,
+    original_delegation_issued_valid text,
+    creation_command_kind text,
+    creation_idempotency_key text,
+    creation_request_digest text,
+    creation_target_route integer,
+    creation_target_id uuid,
     CONSTRAINT operation_actor_authn_epoch_check CHECK (((actor_authn_epoch >= 1) AND (actor_authn_epoch <= '9007199254740991'::bigint))),
     CONSTRAINT operation_actor_client_id_check CHECK (((char_length(actor_client_id) >= 1) AND (char_length(actor_client_id) <= 1024))),
     CONSTRAINT operation_actor_kind_check CHECK ((actor_kind = 'account'::text)),
@@ -475,8 +496,20 @@ CREATE TABLE content.operation (
     CONSTRAINT operation_check2 CHECK (((route >> 4) = (((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)) >> 4))),
     CONSTRAINT operation_check3 CHECK (((empty_scope AND (upper_created_at IS NULL) AND (upper_post_id IS NULL)) OR ((NOT empty_scope) AND (upper_created_at IS NOT NULL) AND (upper_post_id IS NOT NULL) AND isfinite(upper_created_at) AND (upper_created_at <= requested_at) AND (SUBSTRING(uuid_send(upper_post_id) FROM 11 FOR 2) = SUBSTRING(uuid_send(thread_id) FROM 11 FOR 2))))),
     CONSTRAINT operation_check4 CHECK (((num_nonnulls(native_workflow_id, source_epoch, source_partition, source_position, source_event_index) = 0) OR ((num_nonnulls(native_workflow_id, source_epoch, source_partition, source_position, source_event_index) = 5) AND (source_epoch > 0) AND (source_partition = (route >> 4)) AND (source_position > 0) AND (source_event_index >= 0) AND (native_workflow_id = ((((((((('fx:'::text || source_epoch) || ':'::text) || source_partition) || ':'::text) || source_position) || ':'::text) || source_event_index) || ':content_author_erase_'::text) || operation_id))))),
+    CONSTRAINT operation_creation_command_kind_check CHECK ((creation_command_kind = 'content.author-erasure'::text)),
+    CONSTRAINT operation_creation_idempotency_key_check CHECK ((creation_idempotency_key ~ '^[!-~]{1,255}$'::text)),
+    CONSTRAINT operation_creation_request_digest_check CHECK ((creation_request_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT operation_creation_target_id_check CHECK (content.operation_routable_uuid(creation_target_id)),
+    CONSTRAINT operation_creation_target_route CHECK ((creation_target_route = ((get_byte(uuid_send(creation_target_id), 10) * 256) + get_byte(uuid_send(creation_target_id), 11)))),
+    CONSTRAINT operation_creation_target_route_check CHECK (((creation_target_route >= 0) AND (creation_target_route <= 65535))),
+    CONSTRAINT operation_initiator_wire CHECK (((source_digest IS NULL) OR (content.operation_routable_uuid(operation_id) AND content.operation_routable_uuid(initiator_account_id) AND content.operation_routable_uuid(recorded_transaction_id) AND content.operation_routable_uuid(thread_id) AND content.operation_routable_uuid(author_account_id) AND content.operation_routable_uuid(upper_post_id) AND (actor_client_id ~ '^[!-~]+$'::text) AND (cardinality(actor_scopes) <= 100) AND ((actor_requested_by IS NULL) OR ((char_length(actor_requested_by) <= 128) AND (actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)))))),
+    CONSTRAINT operation_original_delegation_issued_valid_check CHECK (((char_length(original_delegation_issued_valid) >= 1) AND (char_length(original_delegation_issued_valid) <= 256))),
+    CONSTRAINT operation_original_delegation_transaction_id_check CHECK (content.operation_routable_uuid(original_delegation_transaction_id)),
+    CONSTRAINT operation_original_minimum_authn_epoch_check CHECK ((original_minimum_authn_epoch ~ '^[1-9][0-9]{0,18}$'::text)),
+    CONSTRAINT operation_original_operator_account_id_check CHECK (content.operation_routable_uuid(original_operator_account_id)),
     CONSTRAINT operation_requested_at_check CHECK (isfinite(requested_at)),
-    CONSTRAINT operation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT operation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT operation_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text))
 );
 
 

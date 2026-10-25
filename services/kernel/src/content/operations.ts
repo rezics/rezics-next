@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
+import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
@@ -17,6 +19,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   AuthorErasureDependencies,
   AuthorErasureInput,
+  AuthorErasureReceipt,
   CommandRequestContext,
   NativeWorkflowStatus,
   Operation,
@@ -39,12 +42,15 @@ export async function beginAuthorErasure(
   context: CommandRequestContext,
 ): Promise<CommandOutcome<{ operationId: string }>> {
   if (actor.kind !== 'account') throw new GrantDeniedError();
+  const idempotencyKey = context.idempotencyKey;
+  if (!/^[\x21-\x7e]{1,255}$/.test(idempotencyKey)) throw new TypeError('Invalid erasure command key');
   const route = routeOf(input.threadId);
   const accountRoute = routeOf(actor.accountId);
   if (route === null || accountRoute === null || routeOf(input.authorId) === null) throw new GrantDeniedError();
   const identity = principalCommandIdentity(actor);
   // Copy only verified identity fields; never serialize a bearer or caller extras.
   const snapshot = {
+    kind: 'account' as const,
     accountId: actor.accountId,
     clientId: actor.clientId,
     scopes: [...actor.scopes],
@@ -53,9 +59,14 @@ export async function beginAuthorErasure(
   };
   const selection = { threadId: input.threadId, authorId: input.authorId };
   const operationId = newId(route);
+  const operation = { route, id: operationId, kind: 'content.author-erasure', sourceId: operationId };
+  const requestDigest = createHash('sha256')
+    .update(canonicalize([identity, selection])!)
+    .digest();
   let firstPostId = selection.threadId;
   type Endpoints = NonNullable<Awaited<ReturnType<typeof readEndpoints.run>>>;
   let endpoints: Endpoints | undefined;
+  let captured: Awaited<ReturnType<typeof captureDurableInitiator>> | undefined;
   const authorization: CommandAuthorization = {
     action: 'post:erase',
     resource: {
@@ -66,9 +77,12 @@ export async function beginAuthorErasure(
     },
     denied: () => new GrantDeniedError(),
     async prepare(attempt) {
+      captured = undefined;
+      endpoints = undefined;
       const preparation = commandAccessContext({ pool: deps.pool, deadline: context.deadline }, attempt);
       try {
         await requireCommandAdmission(deps.access, actor, preparation);
+        captured = await captureDurableInitiator(preparation, actor);
       } catch {
         throw new GrantDeniedError();
       }
@@ -102,7 +116,7 @@ export async function beginAuthorErasure(
       return 'execute';
     },
   };
-  return runCommand(
+  const outcome = await runCommand<AuthorErasureReceipt>(
     deps.pool,
     {
       ...identity,
@@ -112,14 +126,40 @@ export async function beginAuthorErasure(
       authorization,
       receipt: {
         kind: 'content.author-erasure',
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(canonicalize([identity, selection])!)
-          .digest(),
+        key: idempotencyKey,
+        digest: requestDigest,
       },
     },
     async (tx, { transactionId, time }) => {
-      if (!endpoints) throw new GrantDeniedError();
+      if (!endpoints || !captured) throw new GrantDeniedError();
+      const target = { route, id: firstPostId };
+      const sourceDigest = createHash('sha256')
+        .update(
+          canonicalize({
+            operation,
+            target,
+            selection: {
+              ...selection,
+              upperCreatedAt: endpoints.upper_created_at,
+              upperPostId: endpoints.upper_post_id,
+            },
+          })!,
+        )
+        .digest('hex');
+      const record: DurableInitiatorRecord = {
+        operation,
+        initiatorAccountId: snapshot.accountId,
+        actor: snapshot,
+        recordedTransactionId: transactionId,
+        sourceDigest,
+        ...captured,
+        creation: {
+          commandKind: operation.kind,
+          idempotencyKey,
+          requestDigest: requestDigest.toString('hex'),
+          target,
+        },
+      };
       await createOperation.run(tx, {
         route,
         operation_id: operationId,
@@ -134,13 +174,25 @@ export async function beginAuthorErasure(
         upper_post_id: endpoints.upper_post_id,
         at: authoritativeTimeValue(time),
         transaction_id: transactionId,
+        source_digest: sourceDigest,
+        original_minimum_authn_epoch: captured.originalAccount.minimumAuthnEpoch,
+        original_operator_account_id: captured.originalAccount.operatorAccountId,
+        original_delegation_transaction_id: captured.originalDelegation?.transactionId ?? null,
+        original_delegation_issued_valid: captured.originalDelegation?.issuedValid ?? null,
+        creation_command_kind: record.creation.commandKind,
+        creation_idempotency_key: record.creation.idempotencyKey,
+        creation_request_digest: record.creation.requestDigest,
+        creation_target_route: target.route,
+        creation_target_id: target.id,
       });
       return {
-        value: { operationId },
+        value: { operationId, durableInitiator: durableInitiatorCommitment(record) },
         events: [{ type: 'com.rezics.content.author-erasure.requested.v1', data: { operationId, ...selection } }],
       };
     },
   );
+  // runCommand replays the exact internal receipt; the public value stays ID-only.
+  return { ...outcome, value: { operationId: outcome.value.operationId } };
 }
 
 function counts(value: OperationResponse): OperationResponse {

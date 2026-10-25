@@ -14,6 +14,14 @@ export type AuthorErasureInput = Readonly<{
   authorId: string;
 }>;
 
+/** Internal creation receipt only. The operation row is its own immutable source
+ * (sourceId = operationId); native_workflow_id remains the DBOS workflow ID.
+ * durableInitiator commits the entire allowlisted DurableInitiatorRecord using
+ * Accounts' RFC 8785 SHA-256 commitment. Public callers receive only operationId.
+ * Historical rows without every required snapshot/receipt field cannot restore.
+ */
+export type AuthorErasureReceipt = Readonly<{ operationId: string; durableInitiator: string }>;
+
 /** Native DBOS counters must be finite nonnegative safe integers (0..Number.MAX_SAFE_INTEGER).
  * Producers enforce these bounds; the wire representation remains a number.
  */
