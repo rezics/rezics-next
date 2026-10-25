@@ -21,6 +21,7 @@ import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
 import claimStatement from './claim-media.sql';
 import { claimCoverMedia } from './cover-reference.ts';
+import { mediaParentBoard, mediaParentChain, mediaParentSnapshot, type MediaParent } from './media-parent.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
@@ -157,46 +158,6 @@ async function read(client: CommandTransaction, id: string, kind = 'media'): Pro
   if (rows.length > 1) throw new GrantDeniedError();
   return rows[0] ?? null;
 }
-type Container = Row & { kind: 'post' | 'thread' | 'board'; id: string; visibility: string; security_revision: string };
-async function chain(client: CommandTransaction, containerId: string): Promise<Container[]> {
-  const result: Container[] = [];
-  const seen = new Set<string>();
-  let id = containerId;
-  let kind = 'container';
-  let threadId: string | null = null;
-  let posts = 0;
-  while (result.length < 36) {
-    if (seen.has(id)) throw new GrantDeniedError();
-    seen.add(id);
-    const row = await read(client, id, kind);
-    if (
-      !row ||
-      (row.kind !== 'post' && row.kind !== 'thread' && row.kind !== 'board') ||
-      row.id !== id ||
-      !row.visibility ||
-      !row.security_revision ||
-      row.visibility === 'taken_down' ||
-      row.availability !== 'available'
-    )
-      throw new GrantDeniedError();
-    result.push(row as Container);
-    if (row.kind === 'board') return result;
-    if (row.kind === 'thread') {
-      if (threadId !== null && threadId !== row.id) throw new GrantDeniedError();
-      if (!row.board_id) throw new GrantDeniedError();
-      id = row.board_id;
-      kind = 'board';
-    } else {
-      if (++posts > 33 || !row.thread_id || (threadId !== null && threadId !== row.thread_id))
-        throw new GrantDeniedError();
-      threadId = row.thread_id;
-      id = row.parent_id ?? row.thread_id;
-      if (route(id) !== route(containerId)) throw new GrantDeniedError();
-      kind = row.parent_id ? 'post' : 'thread';
-    }
-  }
-  throw new GrantDeniedError();
-}
 
 export async function reserveMedia(
   dependencies: MediaDependencies,
@@ -220,7 +181,7 @@ export async function reserveMedia(
   const mediaId = newId(r);
   const resource = { route: r, id: mediaId };
   let insertedTransaction: string | undefined;
-  let preparedChain: Container[] = [];
+  let preparedChain: MediaParent[] = [];
   let disclosure: (AccessCheck | null)[] = [];
   const base = parentCreationAuthorization({
     access: dependencies.access,
@@ -229,7 +190,7 @@ export async function reserveMedia(
     parent: {
       resource: { route: r, id: body.containerId },
       async validate(client, time) {
-        const current = await chain(client, body.containerId);
+        const current = await mediaParentChain(client, body.containerId);
         if (current.length !== preparedChain.length) return false;
         for (let i = 0; i < current.length; i++) {
           const row = current[i]!;
@@ -237,6 +198,7 @@ export async function reserveMedia(
           if (
             row.id !== before.id ||
             row.kind !== before.kind ||
+            row.visibility !== before.visibility ||
             row.security_revision !== before.security_revision ||
             row.thread_id !== before.thread_id ||
             row.parent_id !== before.parent_id ||
@@ -274,7 +236,9 @@ export async function reserveMedia(
     async prepare(attempt) {
       // Prepare private-ancestor formula evidence before the parent checkout.
       // Every retry resolves the bounded chain again; no resource connection is retained.
-      preparedChain = await chain(dependencies.pool, body.containerId);
+      preparedChain = await mediaParentSnapshot(dependencies.pool, r, context.deadline, (client) =>
+        mediaParentChain(client, body.containerId),
+      );
       disclosure = [];
       for (const row of preparedChain) {
         disclosure.push(
@@ -289,6 +253,22 @@ export async function reserveMedia(
               ),
         );
       }
+      const boardId = preparedChain.at(-1)!.board_id!;
+      // Prepare independently, then read the board and apply the existing formula
+      // on its own native anchor. Public visibility needs no private read grant.
+      const boardRead = await accessCheck(
+        dependencies.access,
+        actor,
+        'board:read',
+        { route: route(boardId), id: boardId },
+        { pool: dependencies.pool, deadline: context.deadline },
+      );
+      await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, async (client) => {
+        const board = await mediaParentBoard(client, boardId);
+        if (board.visibility !== 'published' && !(await boardRead(client, attempt.time))) throw new GrantDeniedError();
+      });
+      // Release the board checkout before parent-at-T authorization and the new
+      // media-only write/initializer. These independent anchors are not atomic.
       return base.prepare!(attempt);
     },
   };
