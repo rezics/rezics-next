@@ -60,6 +60,9 @@
       "security_revision": {
         "type": "long"
       },
+      "public_collection_count": {
+        "type": "integer"
+      },
       "names": {
         "type": "text",
         "analyzer": "cjk_bigram_v2",

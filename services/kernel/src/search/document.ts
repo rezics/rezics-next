@@ -19,6 +19,8 @@ export type SubjectDocument = {
   statements: string[];
   /** One entry per facet-capable statement, in source order, with exact duplicates removed. */
   facts: SubjectFact[];
+  /** Active public Collections listing this subject. Omitted unless counts are supplied. */
+  public_collection_count?: number;
 };
 
 export type IndexAction =
@@ -79,7 +81,11 @@ function subjectDocument(partition: number, subject: IndexedSubject): SubjectDoc
   };
 }
 
-export function documentActions(snapshot: SubjectSnapshot, ids: readonly string[]): IndexAction[] {
+export function documentActions(
+  snapshot: SubjectSnapshot,
+  ids: readonly string[],
+  counts?: ReadonlyMap<string, number>,
+): IndexAction[] {
   const subjects = new Map<string, IndexedSubject>();
   for (const subject of snapshot.subjects) {
     if (subjectPartition(subject.id) !== snapshot.partition)
@@ -93,14 +99,15 @@ export function documentActions(snapshot: SubjectSnapshot, ids: readonly string[
     if (seen.has(id)) continue;
     seen.add(id);
     const subject = subjects.get(id);
-    if (subject?.visibility === 'visible' && subject.redirect === null)
+    if (subject?.visibility === 'visible' && subject.redirect === null) {
+      const document = subjectDocument(snapshot.partition, subject);
       actions.push({
         op: 'index',
         id,
         version: snapshot.position,
-        document: subjectDocument(snapshot.partition, subject),
+        document: counts === undefined ? document : { ...document, public_collection_count: counts.get(id) ?? 0 },
       });
-    else actions.push({ op: 'delete', id, version: snapshot.position });
+    } else actions.push({ op: 'delete', id, version: snapshot.position });
   }
   return actions;
 }
