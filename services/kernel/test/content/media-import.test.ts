@@ -152,17 +152,34 @@ test('required Access source-fence authorization executes on the existing Global
     },
     context: { ...boundary, partition: partitionOf(route) },
   });
-  const result = await runCommand(
-    db.pool,
-    {
-      ...principalCommandIdentity(actor),
-      partition: partitionOf(route),
-      deadline: boundary.deadline,
-      authorization,
-    },
-    async () => ({ value: { authorized: true }, events: [] }),
-  );
-  expect(result.value).toEqual({ authorized: true });
+  const effects = () =>
+    db.admin.query(
+      `SELECT
+         (SELECT count(*) FROM content.media WHERE route=$1) AS media,
+         (SELECT count(*) FROM core.outbox WHERE partition_no=$2) AS outbox`,
+      [route, partitionOf(route)],
+    );
+  const before = await effects();
+  const authorized = new Error('Authorized source-fence rollback probe');
+  let bodyReached = false;
+  await expect(
+    runCommand(
+      db.pool,
+      {
+        ...principalCommandIdentity(actor),
+        partition: partitionOf(route),
+        deadline: boundary.deadline,
+        authorization,
+      },
+      async () => {
+        bodyReached = true;
+        // Probe real authorization at T without committing an eventless command.
+        throw authorized;
+      },
+    ),
+  ).rejects.toBe(authorized);
+  expect(bodyReached).toBe(true);
+  expect((await effects()).rows).toEqual(before.rows);
 });
 
 test('focused native outcomes preserve current authorization and partition bounds', async () => {
