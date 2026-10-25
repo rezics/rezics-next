@@ -101,6 +101,7 @@ test('subject HTTP rejects document and media values before attempting storage',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
+          type: 'schema:Book',
           labels: { en: 'Example' },
           statements: {
             [property]: [{ property: { id: property }, value: { type: 'value', content } }],
