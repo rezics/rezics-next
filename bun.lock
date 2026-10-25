@@ -161,6 +161,7 @@
         "@dbos-inc/dbos-sdk": "5.4.6-preview",
         "@elysia/openapi": "2.0.0-rc.0",
         "@reylosql/postgres": "0.5.0",
+        "@rezics/auth": "workspace:*",
         "@rezics/definitions": "workspace:*",
         "@rezics/document": "workspace:*",
         "aws4fetch": "1.0.20",
@@ -179,7 +180,6 @@
         "typebox": "1.4.3",
       },
       "devDependencies": {
-        "@rezics/auth": "workspace:*",
         "@types/pg": "8.23.1",
         "@types/spdx-license-ids": "3.0.0",
         "dbmate": "2.37.0",

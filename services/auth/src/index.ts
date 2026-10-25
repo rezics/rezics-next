@@ -1,3 +1,9 @@
+export {
+  registerMembershipWorkflows,
+  type MembershipWorkflowPorts,
+  type MembershipWorkInput,
+  type MembershipWorkResult,
+} from './membership-workflows.ts';
 import type { Pool } from 'pg';
 import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';

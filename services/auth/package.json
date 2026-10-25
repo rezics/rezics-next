@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./membership-workflows": "./src/membership-workflows.ts"
   },
   "scripts": {
     "check": "bun scripts/check.ts",

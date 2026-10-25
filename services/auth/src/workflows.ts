@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { coordinateMembership } from './membership-workflows.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
 
@@ -682,14 +683,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       async (input: AccountOperation) => {
         if (input.kind === 'membership') {
           if (input.role === null && !input.reservationId) denied();
-          const reservationId = input.reservationId ?? (await reserveMember(input)).reservationId;
-          const membership = {
-            organizationId: input.organizationId,
-            memberAccountId: input.memberAccountId,
-            reservationId,
-          };
-          await changeMember({ ...membership, role: input.role }, input);
-          if (input.role === null) await releaseMember(membership);
+          await coordinateMembership({
+            leaving: input.role === null,
+            reserve: async () => ({
+              organizationId: input.organizationId,
+              memberAccountId: input.memberAccountId,
+              reservationId: input.reservationId ?? (await reserveMember(input)).reservationId,
+            }),
+            publish: (membership) => changeMember({ ...membership, role: input.role }, input),
+            release: releaseMember,
+          });
           return { accountId: input.memberAccountId };
         }
         if (input.kind === 'transfer') {

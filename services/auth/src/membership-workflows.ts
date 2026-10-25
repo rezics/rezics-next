@@ -1,0 +1,124 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+
+export type MembershipPrincipal = { kind: 'organization' | 'realm'; id: string };
+export type MembershipWorkInput =
+  | {
+      kind: 'membership';
+      principal: MembershipPrincipal;
+      memberAccountId: string;
+      role: 'owner' | 'member' | null;
+      reservationId?: string;
+      authorization: string;
+    }
+  | { kind: 'organization'; organizationId: string; authorization: string };
+export type MembershipWorkReservation = { accountId: string; principal: MembershipPrincipal; reservationId: string };
+export type MembershipWorkResult =
+  | { status: 'completed'; accountId: string; reservationId: string }
+  | { status: 'membership_limit'; code: 'membership_limit' };
+type Result<T> = Promise<{ value: T }>;
+export interface MembershipWorkflowPorts<Context> {
+  authorize(reference: string, input: MembershipWorkInput): Promise<Context>;
+  actorAccountId(context: Context): string;
+  reserve(input: { accountId: string; principal: MembershipPrincipal; key: string }): Result<MembershipWorkReservation>;
+  publish(
+    context: Context,
+    input: MembershipWorkInput,
+    reservation: MembershipWorkReservation,
+    key: string,
+  ): Promise<unknown>;
+  terminalize(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
+  release(input: MembershipWorkReservation & { key: string }): Promise<unknown>;
+}
+
+/** Shared ordering for the Auth host and the kernel registrar. Every callback
+ * is a registered durable step; this function performs no external I/O. */
+export async function coordinateMembership<Reservation>(input: {
+  leaving: boolean;
+  reserve(): Promise<Reservation>;
+  publish(reservation: Reservation): Promise<void>;
+  release(reservation: Reservation): Promise<void>;
+  compensate?(reservation: Reservation): Promise<void>;
+}): Promise<Reservation> {
+  const reservation = await input.reserve();
+  try {
+    await input.publish(reservation);
+  } catch (error) {
+    // The terminal barrier must commit before inverse cleanup. If publication
+    // won the race, terminalization fails and the extra inverse is retained.
+    if (!input.leaving && input.compensate) await input.compensate(reservation);
+    throw error;
+  }
+  if (input.leaving) await input.release(reservation);
+  return reservation;
+}
+
+export const MEMBERSHIP_WORKFLOW_NAME = 'accounts.membership';
+/** Pure registration: uses the caller's configured SDK, never launches it,
+ * creates a pool, accesses credentials, or installs queues/schedules. */
+export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPorts<Context>) {
+  const key = (phase: string) => `wf:${DBOS.workflowID!}:${phase}`;
+  async function authorized(input: MembershipWorkInput) {
+    if (typeof input.authorization !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9:_/-]{0,255}$/.test(input.authorization))
+      throw new Error('Membership authorization denied');
+    return ports.authorize(input.authorization, input);
+  }
+  const step = <A extends unknown[], R>(name: string, action: (...args: A) => Promise<R>) =>
+    DBOS.registerStep(
+      async (...args: A) => {
+        try {
+          return await action(...args);
+        } catch {
+          throw new Error(`Membership workflow step failed: ${name}`);
+        }
+      },
+      { name: `accounts.membership.${name}`, retriesAllowed: false },
+    );
+  const reserve = step('reserve', async (input: MembershipWorkInput) => {
+    const context = await authorized(input);
+    const accountId = input.kind === 'organization' ? ports.actorAccountId(context) : input.memberAccountId;
+    const principal =
+      input.kind === 'organization' ? { kind: 'organization' as const, id: input.organizationId } : input.principal;
+    if (input.kind === 'membership' && input.role === null && !input.reservationId)
+      throw new Error('Missing reservation');
+    if (input.kind === 'membership' && input.reservationId)
+      return { accountId, principal, reservationId: input.reservationId };
+    try {
+      return (await ports.reserve({ accountId, principal, key: key('reserve') })).value;
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'membership_limit')
+        return { status: 'membership_limit' as const, code: 'membership_limit' as const };
+      throw error;
+    }
+  });
+  const publish = step('publish', async (input: MembershipWorkInput, reservation: MembershipWorkReservation) => {
+    await ports.publish(await authorized(input), input, reservation, key('publish'));
+  });
+  const terminalize = step('terminalize', async (reservation: MembershipWorkReservation) => {
+    await ports.terminalize(reservation, key('terminalize'));
+  });
+  const release = step('release', async (reservation: MembershipWorkReservation) => {
+    await ports.release({ ...reservation, key: key('release') });
+  });
+  return DBOS.registerWorkflow(
+    async (input: MembershipWorkInput): Promise<MembershipWorkResult> => {
+      const reservation = await reserve(input);
+      if ('status' in reservation) return reservation;
+      await coordinateMembership({
+        leaving: input.kind === 'membership' && input.role === null,
+        reserve: async () => reservation,
+        publish: (held) => publish(input, held),
+        release,
+        compensate: async (held) => {
+          await terminalize(held);
+          await release(held);
+        },
+      });
+      return {
+        status: 'completed',
+        accountId: input.kind === 'organization' ? input.organizationId : input.memberAccountId,
+        reservationId: reservation.reservationId,
+      };
+    },
+    { name: MEMBERSHIP_WORKFLOW_NAME },
+  );
+}
