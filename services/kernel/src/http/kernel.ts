@@ -5,6 +5,7 @@ import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
+import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
@@ -69,13 +70,21 @@ export function createKernel(dependencies: KernelDependencies) {
       return resolveAccess({ actions: actionCatalogue(content) });
     },
   });
-  const granted = accessRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
+  const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    get access() {
+      return resolveAccess({ actions: actionCatalogue(granted) });
+    },
+  });
+  const granted = accessRoutes(media as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(granted) }),
   });
   declareKernelWriteRates(granted);
   return granted as typeof granted &
+    typeof media &
     typeof content &
     typeof searched &
     typeof payouts &

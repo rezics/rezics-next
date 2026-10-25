@@ -25,7 +25,7 @@ import { mediaParentBoard, mediaParentChain, mediaParentSnapshot, type MediaPare
 import type { Access, Actor } from '../request/access.ts';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
-import { unfinishedPort } from './model.ts';
+import { downloadMedia, type DownloadContext } from './media-download.ts';
 
 export type MediaPurpose = 'post-image' | 'cover';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
@@ -82,7 +82,14 @@ export type MediaCompletionInput = Readonly<{
   byteCount: number;
   sha256: string;
 }>;
-export type MediaDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+export type MediaDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  clock?: () => Date;
+  /** Trusted per-request host context; never supplied by request JSON. */
+  downloadContext?: DownloadContext;
+}>;
+
 export type DownloadVariant = 'original' | `webp-${number}` | `avif-${number}`;
 export type DownloadDecision =
   | Readonly<{
@@ -537,12 +544,18 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
   if (rows.length !== ids.length) throw new GrantDeniedError();
 }
 export function decideDownload(
-  _dependencies: MediaDependencies,
-  _mediaId: MediaId,
-  _actor: Actor,
-  _variant: DownloadVariant,
+  dependencies: MediaDependencies,
+  mediaId: MediaId,
+  actor: Actor,
+  variant: DownloadVariant,
 ): Promise<DownloadDecision> {
-  throw unfinishedPort('decideDownload');
+  return downloadMedia(
+    dependencies,
+    mediaId,
+    actor,
+    variant,
+    dependencies.downloadContext ?? { deadline: Date.now() + 2000 },
+  );
 }
 export async function readMediaState(pool: Pool, mediaId: MediaId): Promise<MediaState | null> {
   if (routeOf(mediaId) === null) return null;

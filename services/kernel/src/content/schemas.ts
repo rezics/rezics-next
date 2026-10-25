@@ -166,3 +166,76 @@ export const BoardThreadsResponseSchema = t.Object(
   { threads: t.Array(ThreadViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
   closed,
 );
+
+const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
+const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
+const reservationRequestId = t.String({ minLength: 1, maxLength: 255 });
+export const MediaReservationInputSchema = t.Object(
+  {
+    containerId: ContentIdSchema,
+    purpose: t.Literal('post-image'),
+    mediaType: t.Union([
+      t.Literal('image/avif'),
+      t.Literal('image/gif'),
+      t.Literal('image/jpeg'),
+      t.Literal('image/png'),
+      t.Literal('image/webp'),
+    ]),
+    byteCount: mediaLength,
+    sha256: t.Optional(mediaDigest),
+  },
+  closed,
+);
+export const MediaCompletionInputSchema = t.Object(
+  {
+    containerId: ContentIdSchema,
+    reservationRequestId,
+    byteCount: mediaLength,
+    sha256: mediaDigest,
+  },
+  closed,
+);
+export const MediaReservationResponseSchema = t.Object(
+  {
+    media: t.Object(
+      {
+        id: ContentIdSchema,
+        state: t.Union([
+          t.Literal('reserved'),
+          t.Literal('uploaded'),
+          t.Literal('available'),
+          t.Literal('rejected'),
+          t.Literal('erased'),
+        ]),
+        byteCount: mediaLength,
+        mediaType: t.String(),
+        sha256: t.Union([mediaDigest, t.Null()]),
+        containerId: ContentIdSchema,
+        uploaderId: ContentIdSchema,
+        key: t.String(),
+        reservationRequestId,
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+export const MediaCompletionResponseSchema = t.Object(
+  {
+    media: t.Object({ id: ContentIdSchema, state: t.Literal('uploaded') }, closed),
+  },
+  closed,
+);
+export const MediaDownloadQuerySchema = t.Object({ variant: t.String({ minLength: 1, maxLength: 32 }) }, closed);
+export const MediaDownloadResponseSchema = t.Object(
+  {
+    allowed: t.Literal(true),
+    key: t.String(),
+    sha256: mediaDigest,
+    mediaType: t.String(),
+    byteCount: t.Integer({ minimum: 1 }),
+    publicCache: t.Literal(false),
+    cacheControl: t.Union([t.Literal('private, no-cache'), t.Literal('private, no-store')]),
+  },
+  closed,
+);

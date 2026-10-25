@@ -31,5 +31,7 @@ export type ImportedFieldInput = Readonly<{
     language: string;
     document: unknown;
 }>;
+/** Validate the metadata byte and character caps before an import hook writes anything. */
+export declare function validateImportedFieldMetadata(value: unknown): string[];
 /** Stable route for a source record identity, shared by field fences and external claims. */
 export declare function tupleRoute(routeKey: Uint8Array, source: string, external_id: string): number;
