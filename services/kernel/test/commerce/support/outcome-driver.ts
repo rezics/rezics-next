@@ -1,3 +1,4 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -5,6 +6,7 @@ import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../..
 import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
+import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createCommerceCommands } from '../../../src/commerce/commands.ts';
 import { createCommerceWork } from '../../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
@@ -24,13 +26,25 @@ import { startFakeStripe } from './fake-stripe.ts';
 if (import.meta.main) {
   const instant = Number(process.env.COMMERCE_OUTCOME_TIME);
   const realNow = Date.now;
-  const offset = instant - realNow();
+  let offset = instant - realNow();
   Date.now = () => realNow() + offset;
+  process.on('message', (message: unknown) => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'advanceTo' in message &&
+      typeof message.advanceTo === 'number' &&
+      Number.isFinite(message.advanceTo)
+    )
+      offset = Math.max(offset, message.advanceTo - realNow());
+  });
   await startWorker(
     { databaseUrl: process.env.DATABASE_URL!, poolSize: 10, executorId: 'commerce-outcomes' },
     KERNEL_WORK_MODULES,
     process.env,
   );
+  // Shorten scheduling latency while preserving the production queues' concurrency policies.
+  for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
 }
 
@@ -54,6 +68,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   url.pathname = `/${authName}`;
   migrateAuth(url.toString());
   const authPool = new Pool({ connectionString: url.toString(), max: 2 });
+  authPool.on('error', () => {});
+  authPool.on('connect', (client) => client.on('error', () => {}));
   const fake = startFakeStripe();
   const configuration = {
     webhookSecret: fake.webhookSecret,
@@ -118,6 +134,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     try {
       return createKernel({
         pool: db.pool,
+        writeRate: createWriteRateLimiter({ secret: 'commerce-fixture-write-rate-secret-with-at-least-32-bytes' }),
         routeKey: new Uint8Array(32).fill(7),
         tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
         access: (config) =>
@@ -227,6 +244,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,
+        KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
         STRIPE_SECRET_KEY: 'sk_test_commerce',
         STRIPE_MANAGED_PAYMENTS: String(managedPayments),
         STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
@@ -350,8 +368,31 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       await startExecutor();
       for (;;) {
         const pending = (await client.listWorkflows({ limit: 10000 })).filter((row) => row.status !== 'SUCCESS');
-        if (!pending.length) break;
-        for (const row of pending) await client.retrieveWorkflow(row.workflowID).getResult();
+        if (pending.length) {
+          const runnable = pending.filter((row) => row.status !== 'DELAYED');
+          if (runnable.length) {
+            for (const row of runnable) await client.retrieveWorkflow(row.workflowID).getResult();
+            continue;
+          }
+          // Advance only the executor's scheduling clock to real durable queue deadlines.
+          // PostgreSQL still supplies all command and provider observation times.
+          const delayedUntil = Math.min(...pending.map((row) => row.delayUntilEpochMS ?? Infinity));
+          if (!Number.isFinite(delayedUntil)) throw new Error('Delayed workflow has no durable deadline');
+          child!.send({ advanceTo: delayedUntil });
+          for (const row of pending.filter((row) => row.delayUntilEpochMS === delayedUntil))
+            await client.retrieveWorkflow(row.workflowID).getResult();
+          continue;
+        }
+        // A finished workflow can append events which the production effects relay
+        // has yet to enqueue. Its checkpoint commits only after those enqueues finish.
+        const backlog = await db.admin.query(`SELECT 1 FROM core.partition AS p
+          LEFT JOIN core.consumer_checkpoint AS c ON c.partition_no=p.partition_no AND c.consumer='effects'
+          WHERE p.position > COALESCE(c.position,0) LIMIT 1`);
+        if (
+          !backlog.rowCount &&
+          (await client.listWorkflows({ limit: 10000 })).every((row) => row.status === 'SUCCESS')
+        )
+          break;
       }
     },
     stripe: {
