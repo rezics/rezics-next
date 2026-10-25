@@ -37,6 +37,35 @@ END $$;
 
 
 --
+-- Name: auth_barrier_proof_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_barrier_proof_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (to_jsonb(NEW) - 'applied_at') IS DISTINCT FROM (to_jsonb(OLD) - 'applied_at')
+    OR OLD.applied_at IS NOT NULL OR NEW.applied_at IS NULL THEN
+    RAISE EXCEPTION 'Barrier evidence is immutable';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_consent_revision(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_consent_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.revision := OLD.revision + CASE WHEN NEW.scopes IS DISTINCT FROM OLD.scopes THEN 1 ELSE 0 END;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_revoke_sessions(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -179,6 +208,32 @@ CREATE UNLOGGED TABLE public.auth_attempt_counter (
 
 
 --
+-- Name: auth_barrier_proof; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_barrier_proof (
+    reference text NOT NULL,
+    account_id text NOT NULL,
+    purpose text NOT NULL,
+    previous_epoch integer NOT NULL,
+    operation_key text NOT NULL,
+    digest text NOT NULL,
+    evidence jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    applied_at timestamp with time zone,
+    CONSTRAINT auth_barrier_proof_account_id_check CHECK (((length(account_id) >= 1) AND (length(account_id) <= 1024))),
+    CONSTRAINT auth_barrier_proof_check CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:05:00'::interval)))),
+    CONSTRAINT auth_barrier_proof_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT auth_barrier_proof_evidence_check CHECK (((jsonb_typeof(evidence) = 'array'::text) AND (octet_length((evidence)::text) <= 65536))),
+    CONSTRAINT auth_barrier_proof_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 128))),
+    CONSTRAINT auth_barrier_proof_previous_epoch_check CHECK ((previous_epoch >= 0)),
+    CONSTRAINT auth_barrier_proof_purpose_check CHECK ((purpose = ANY (ARRAY['consent-reduction'::text, 'recovery'::text]))),
+    CONSTRAINT auth_barrier_proof_reference_check CHECK ((reference ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
 -- Name: auth_client; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -236,7 +291,9 @@ CREATE TABLE public.auth_client_reduction_progress (
 CREATE TABLE public.auth_consent (
     account_id text NOT NULL,
     client_id text NOT NULL,
-    scopes text[] NOT NULL
+    scopes text[] NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT auth_consent_revision_check CHECK ((revision > 0))
 );
 
 
@@ -296,7 +353,11 @@ CREATE TABLE public.auth_recovery (
     account_id text NOT NULL,
     authn_epoch integer NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    CONSTRAINT auth_recovery_authn_epoch_check CHECK ((authn_epoch >= 0))
+    consumed_operation text,
+    consumed_verification_id text,
+    consumed_at timestamp with time zone,
+    CONSTRAINT auth_recovery_authn_epoch_check CHECK ((authn_epoch >= 0)),
+    CONSTRAINT auth_recovery_consumption CHECK ((((consumed_operation IS NULL) AND (consumed_verification_id IS NULL) AND (consumed_at IS NULL)) OR ((consumed_operation IS NOT NULL) AND (consumed_verification_id IS NOT NULL) AND (consumed_at IS NOT NULL))))
 );
 
 
@@ -463,6 +524,22 @@ ALTER TABLE ONLY public.account
 
 ALTER TABLE ONLY public.auth_attempt_counter
     ADD CONSTRAINT auth_attempt_counter_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: auth_barrier_proof auth_barrier_proof_account_id_purpose_operation_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_barrier_proof
+    ADD CONSTRAINT auth_barrier_proof_account_id_purpose_operation_key_key UNIQUE (account_id, purpose, operation_key);
+
+
+--
+-- Name: auth_barrier_proof auth_barrier_proof_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_barrier_proof
+    ADD CONSTRAINT auth_barrier_proof_pkey PRIMARY KEY (reference);
 
 
 --
@@ -712,6 +789,13 @@ CREATE INDEX auth_attempt_counter_retention ON public.auth_attempt_counter USING
 
 
 --
+-- Name: auth_barrier_proof_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_barrier_proof_expiry ON public.auth_barrier_proof USING btree (expires_at, reference);
+
+
+--
 -- Name: auth_consent_client_owner; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -789,6 +873,20 @@ CREATE INDEX verification_latest_idx ON public.verification USING btree (identif
 
 
 --
+-- Name: auth_barrier_proof auth_barrier_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_barrier_proof_immutable BEFORE UPDATE ON public.auth_barrier_proof FOR EACH ROW EXECUTE FUNCTION public.auth_barrier_proof_immutable();
+
+
+--
+-- Name: auth_consent auth_consent_revision; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_consent_revision();
+
+
+--
 -- Name: session session_capacity; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -815,6 +913,14 @@ CREATE TRIGGER session_identity BEFORE UPDATE OF id, "userId" ON public.session 
 
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT "account_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_barrier_proof auth_barrier_proof_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_barrier_proof
+    ADD CONSTRAINT auth_barrier_proof_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 
 
 --

@@ -138,7 +138,7 @@ never to request booleans or a second permission engine in Auth.
   and the exact credential purposes (`set-password`, `remove-password`,
   `add-key`, `remove-key`) cannot be interchanged. Auth also journals receipt IDs
   durably to prevent duplicate local issuance across instances.
-- `invalidateAccount({ accountId, previousEpoch, reason })` atomically checks the
+- `invalidateAccount({ accountId, previousEpoch, reason, proofReference, operationKey })` atomically checks the
   old floor and commits an increased account floor before returning an
   `InvalidationReceipt`. Its receipt ID, account and higher minimum epoch are
   mandatory. This port must never clear a fence. Auth uses it for
@@ -147,7 +147,7 @@ never to request booleans or a second permission engine in Auth.
   active human, including the current floor while fenced. Ordinary
   `readAccount` continues to deny that fence. No recovery read can establish a
   session or issue a token.
-- `authorizeRecovery({ accountId, proofEpoch })` atomically rejects a stale
+- `authorizeRecovery({ accountId, proofEpoch, proofReference, operationKey })` atomically rejects a stale
   recovery epoch and commits a higher floor with a durable receipt before any
   native password reset. It must retain any existing fence.
 
@@ -205,12 +205,17 @@ issuance epoch with a five-minute expiry. The delivery port receives the proof;
 HTTP never returns it. Start and completion both deny automation and
 organizations, missing evidence, inactive accounts and Access outages.
 
-Completion durably consumes Auth's proof binding before requesting the Access
-barrier, so concurrent attempts cannot both proceed. Access must compare the
-proof epoch atomically against its current floor. After its durable receipt,
-Better Auth atomically consumes its own verification token, revokes sessions
-and writes the password hash. An outage can spend a proof without resetting the
-password: request a fresh proof. Old proofs cannot undo a newer fence or floor.
+Completion resolves the token with Better Auth's installed native verifier, checks
+its account, expiry and issuance epoch, then atomically deletes that exact native
+verification row, marks the existing Auth recovery binding consumed and commits
+an immutable barrier receipt. Neither a missing token row nor a request field is
+consumption evidence. Access must compare the proof epoch in its native command
+transaction. Only after validating its returned account, higher floor and current
+exact floor does Auth use the installed password hasher and native bounded session
+revocation function to commit the credential CAS and applied receipt together.
+An Access failure leaves credentials unchanged. The same token and intended
+password can resume the committed consumption after restart until its original
+expiry; another password or superseded credential cannot claim it.
 Successful reset retains a fence. Only a later trusted Access lifecycle workflow
 may clear it using fresh recovery/establishment evidence at the exact new epoch;
 Auth exposes no fence-clearing effect and never upgrades an old session.
@@ -267,6 +272,44 @@ An Access outage before its receipt leaves consent unchanged. A failure after
 Access commits can leave a raised floor with the old Auth consent; it cannot
 restore old token authority. Cross-service retries must retain this barrier. `/token` accepts no client, scope, epoch or principal identity input. Its optional
 `requested_by` field is an untrusted assignment reference. Session cookie caching is disabled, including on subsequent database reads.
+
+## Purpose-specific barrier proofs
+
+`createBarrierProofVerifier({ database: Pool })` is an inert Auth-only factory:
+it neither launches DBOS nor opens a kernel database. Bind its
+`verify(reference, { accountId, purpose, previousEpoch, operationKey })` to the
+later concrete Access barrier adapter. It returns a frozen `BarrierProof` with
+those four bounded fields, an exact SHA-256 semantic `digest`, and ISO `expiresAt`,
+or `null` for missing, expired, superseded or mismatched evidence. Access still
+owns account authorization and compares the floor in its command transaction;
+a reference or a caller-supplied floor alone never authorizes a write.
+
+The actual `/consent` caller publishes only after a current human `SessionProof`
+and a reduction of that same owner's stored consent. Its digest binds the native
+session identity and claims, client and registered scopes, consent revision, and
+old/new scopes. A committed pending transition can resume with its original
+native session after a lost Access acknowledgement; this exception cannot mint
+another transition from a stale session. Expansion and noop produce no proof.
+The actual `/recovery/complete` caller publishes in the exact consumption
+transaction described above. Its digest binds the consumed native verification
+identity, account/epoch, credential fingerprint and a server-keyed digest of the
+intended reset. Receipts contain no tokens, passwords or bearer copies.
+
+Both callers always supply `proofReference` and deterministic `operationKey`.
+The optional input fields preserve structural fixture compatibility; a production
+Access adapter must deny either missing field and resolve the purpose-specific
+proof. Immutable receipt uniqueness and native CAS preserve exact retry identity.
+Neither callback fixtures nor this verifier alone establish a concrete native
+Access adapter. Evidence expires within five minutes and within the remaining
+native source lifetime; committed Auth rows and persistent server configuration
+suffice after process restart.
+
+Auth maintenance can separately schedule
+`createBarrierProofVerifier({ database }).sweep({ limit })`, where `limit` is an
+integer from 1 through 1000. One invocation returns `{ removed, hasMore }`, deleting
+at most that many expired receipts with indexed admission and bounded lock probes.
+It never drains history. This task does not register a maintenance schedule;
+expiry denies immediately even while receipts await scheduled cleanup.
 
 ## Kernel claim and verification contract
 
@@ -623,6 +666,7 @@ Touches specifies independent growth axes and fixed inputs, without adding tests
 | Native attempt rate limiter     | Installed Better Auth 1.7.12 production native admission uses PostgreSQL customStorage.consume: one atomic upsert by auth_attempt_counter_pkey per charge, returning at most one row across service instances. Common 1x/8x/64x seed grows same-family unrelated counter keys C, owners/credentials, clients/reductions, unrelated and subject session/recovery history and expired verifications R. Capture entire wrong-password (known/missing email), recovery-start and invalid-proof handlers through two fresh instances, including native cold schema metadata; three Origin rejections, twelve charges, shared 429 budgets, generic denials and unchanged epoch floor. No second limiter or request-time history sweep.                                                                                                                                                                 | R=O(1), B=O(log C + log R); Q=42 and 1294 examined rows per twelve-charge cohort, including both replicas' cold catalog SQL. Each native charge: Q=1, ≤1 upsert row, B=O(log C). Empty reduction scans cost zero rows/blocks.                                                | `growth-auth-rate.test.ts` (whole handler + native counter)         |
 | Password sign-in                | Email: `user_email_key` SELECT + `account_userId_idx`/`credential_owner_unique` SELECT, ≤1 each, plus client precheck; ID: one `credential_owner_unique(userId,providerId)` SELECT with accountId residual, then `user_pkey` SELECT. Local password verification; establishment checks client/consent, INSERTs one session, then `proof`. Grow A and S; fix credential, client/scopes, crypto parameters and outcome.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | R=O(1) per table/visit, B=O(L), Q=8–10 email or 7–9 ID, constant including failure cleanup.                                                                                                                                                                                  | `Password sign-in stays within its bound as A grows`                |
 | Public-key sign-in              | Client/consent check, one `auth_public_key_pkey(account_id,kid)` SELECT, local JOSE verification, one `auth_key_assertion_pkey(account_id,jti)` INSERT + user FK; establishment reads one owner, checks client/consent, INSERTs one session and runs `proof`. Grow A, S, P, J; fix owner/kid, assertion size, client/scopes and one fresh JTI per attempt.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | R=O(1) per table/visit, B=O(L), Q=9–12 (constant); replay denial uses one key read and one conflicting INSERT.                                                                                                                                                               | `Public-key sign-in stays within its bound as J grows`              |
+| Auth barrier proofs             | Native session/consent point reads or native verification lookup and exact recovery consumption; one immutable purpose/account/operation receipt insert and point resolution, credential/consent CAS, and existing bounded session revocation. Digest binds the exact transition; no account/history scans. All new owner references lead with account_id in the unique index for erasure. Expiry index admits B+1 keys (one hasMore peek), locks/deletes at most B≤1000, with no drain loop. One seed grows same-owner proof/consent/recovery history and unrelated owners at 1x/8x/64x; valid/invalid requests and expired batch stay fixed.                                                                                                                                                                                                                                                   | R=N+U*t+M plus Auth receipts: request rows/statements O(1), blocks O(log R); sweep rows O(1+B), blocks O((1+B)log R), Q=1. Varying the admitted batch measures linear cleanup; locked prefixes remain bounded. Scheduling remains separate; expiry already denies.           | `barrier-proofs.test.ts`, `growth-barrier-proofs.test.ts`           |
 | Clients and consent             | Client/consent reads use client/coverage/reduction/pair PKs. First-party consent is materialized in `auth_consent` before website/password/key/operator session or token issuance under the shared client barrier; begin takes its exclusive counterpart. Page: operation PK + one `auth_consent_client_owner(client_id,account_id)` seek, ≤b+1 owners (b≤100); local planner controls prevent scan/sort plans. Floors/receipts/cursors use known anchors; each DBOS page holds ≤64 owners. Cleanup deletes ≤100 sessions/owner once per floor receipt; retained rows fail proof. Finish checks the terminal cursor/receipt; immutable operation history survives. Existing clients need ≤100-owner deployment backfill after old issuers stop plus a 300s JWT drain. Grow unrelated A and affected owners separately at 1x/8x/64x; fix page/cursor. One common seed drives all growth measures. | Page rows O(b), blocks O(b log population), Q=O(1); floor fanout O(affected owners × log population), independent of A. Finish O(1) probes; issuance adds one exact pair upsert. Native session erasure retains its separate s bound. Consent reduction remains O(s+1) rows. | `checkGrowth: client reduction A, affected owners, page and total`  |
 | Provisioning and owner creation | Trusted provisioning/account checks, local hash; password provisioning BEGIN + INSERT one `user` (`user_pkey`, `user_email_key`) + one credential + COMMIT (4 Q). Idempotent form adds lock, `auth_provisioning_receipt_pkey` SELECT and INSERT with `auth_provisioning_receipt_account_id_key` (7 Q new, 4 replay). `owner`/`provisionCredentialless`: lock, owner PK read, optional same two INSERTs in transaction, unlock (3/7 Q). Grow A, T; fix pending/active account, idempotency key, email/password sizes and retry branch.                                                                                                                                                                                                                                                                                                                                                            | R=O(1) per table/visit, B=O(log A+log T), Q≤7 (constant).                                                                                                                                                                                                                    | `Provisioning and owner creation stays within its bound as A grows` |
 | Authorized account effects      | `consume`: human `proof` (twice for opening), constant subject/human Access checks and receipt validation, one `auth_effect_receipt_pkey` INSERT. `setCredential`: one indexed credential read, `owner`, one credential UPDATE or `auth_public_key_pkey` INSERT/DELETE (≤1 each), optional session erasure. `openAutomatedSession`: `owner`, establishment and one `auth_session_opening_pkey`/receipt-unique INSERT + user FK. Grow A, P, E, O with human/subject, credential/client, receipt size and s fixed; separately grow s for destructive effects.                                                                                                                                                                                                                                                                                                                                      | R=O(1), B=O(L), Q=9–14 credential effect (+2 revocation), 17–25 opening; destructive effects R=Θ(s+1), B=O(L+s), Q=O(1) exceeds the criterion: uncapped session erasure.                                                                                                     | `Authorized account effects stays within its bound as s grows`      |

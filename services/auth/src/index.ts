@@ -1,3 +1,4 @@
+export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 export {
   registerMembershipWorkflows,
   type MembershipWorkflowPorts,
@@ -85,12 +86,19 @@ export interface TrustedAccessPorts {
         accountId: string;
         previousEpoch: number;
         reason: 'consent-reduction';
+        proofReference?: string;
+        operationKey?: string;
       }) => Promise<InvalidationReceipt>)
     | undefined;
   /** Recovery-only authoritative read may expose a fenced active human's current floor. */
   readRecoveryAccount?(accountId: string): Promise<AccessAccount | null>;
   /** Reject a stale proof; commit an invalidation barrier without clearing any fence. */
-  authorizeRecovery?(input: { accountId: string; proofEpoch: number }): Promise<InvalidationReceipt>;
+  authorizeRecovery?(input: {
+    accountId: string;
+    proofEpoch: number;
+    proofReference?: string;
+    operationKey?: string;
+  }): Promise<InvalidationReceipt>;
 }
 
 export interface AuthServiceOptions {

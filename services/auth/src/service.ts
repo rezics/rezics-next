@@ -11,6 +11,8 @@ import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { clientAuthority } from './account-workflows.ts';
+import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
+import type { PoolClient } from 'pg';
 import type {
   AccessAccount,
   AuthService,
@@ -120,6 +122,61 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   // request cannot install it through a header, body or native endpoint name.
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
+
+  const barrierProofs = createBarrierProofVerifier({ database });
+  const digestOf = (value: unknown) => proofHash(JSON.stringify(value));
+  // This private writer is reachable only after native session/consent validation
+  // or exact native recovery consumption. No HTTP evidence can call it directly.
+  async function publishBarrier(
+    connection: PoolClient,
+    purpose: BarrierProof['purpose'],
+    accountId: string,
+    previousEpoch: number,
+    operationKey: string,
+    evidence: unknown[],
+    sourceExpiry: Date,
+    existingOnly = false,
+  ) {
+    const digest = digestOf(evidence);
+    const reference = digestOf(['auth-barrier-reference-v1', operationKey, digest]);
+    if (!existingOnly)
+      await connection.query(
+        `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,LEAST($8,statement_timestamp()+interval '5 minutes'))
+         ON CONFLICT (account_id,purpose,operation_key) DO NOTHING`,
+        [reference, accountId, purpose, previousEpoch, operationKey, digest, JSON.stringify(evidence), sourceExpiry],
+      );
+    const row = (
+      await connection.query(
+        `SELECT reference FROM auth_barrier_proof WHERE account_id=$1 AND purpose=$2 AND operation_key=$3
+       AND previous_epoch=$4 AND digest=$5 AND reference=$6 AND applied_at IS NULL AND expires_at>statement_timestamp()`,
+        [accountId, purpose, operationKey, previousEpoch, digest, reference],
+      )
+    ).rows[0];
+    if (!row) throw new Denied();
+    return { reference, accountId, purpose, previousEpoch, operationKey };
+  }
+  async function applyBarrier(
+    connection: PoolClient,
+    reference: string,
+    receipt: InvalidationReceipt,
+    purpose: BarrierProof['purpose'],
+  ) {
+    if (
+      !(
+        await connection.query(
+          `UPDATE auth_barrier_proof SET applied_at=statement_timestamp() WHERE reference=$1
+       AND applied_at IS NULL AND expires_at>statement_timestamp() RETURNING reference`,
+          [reference],
+        )
+      ).rowCount
+    )
+      throw new Denied();
+    await connection.query(
+      'INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch) VALUES ($1,$2,$3,$4)',
+      [receipt.receiptId, receipt.accountId, purpose, receipt.minimumAuthnEpoch],
+    );
+  }
 
   async function activeActor(accountId: string): Promise<AccessAccount> {
     const account = await trustedAccess.readAccount(accountId);
@@ -810,20 +867,115 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           )
             throw new Denied(400);
           const account = await recoveryAccount(accountId);
-          const result = await database.query<{ authn_epoch: number }>(
-            'DELETE FROM auth_recovery WHERE proof_hash=$1 AND account_id=$2 AND expires_at>CURRENT_TIMESTAMP RETURNING authn_epoch',
-            [proofHash(token), accountId],
-          );
-          const proof = result.rows[0];
-          if (!proof || proof.authn_epoch !== account.authnEpoch) throw new Denied();
-          const receipt = await trustedAccess.authorizeRecovery!({ accountId, proofEpoch: proof.authn_epoch });
-          invalidation(receipt, accountId, proof.authn_epoch);
-          if ((await recoveryAccount(accountId)).authnEpoch !== receipt.minimumAuthnEpoch) throw new Denied();
-          await database.query(
-            'INSERT INTO auth_effect_receipt (receipt_id, account_id, purpose, minimum_authn_epoch) VALUES ($1,$2,$3,$4)',
-            [receipt.receiptId, accountId, 'recovery', receipt.minimumAuthnEpoch],
-          );
-          await getAuth().api.resetPassword({ body: { token, newPassword } });
+          const sourceHash = proofHash(token);
+          const operationKey = digestOf(['auth-recovery-v1', accountId, sourceHash]);
+          const connection = await database.connect();
+          const lock = `auth-recovery:${sourceHash}`;
+          try {
+            await connection.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lock]);
+            await connection.query('BEGIN');
+            const source = (
+              await connection.query<{
+                authn_epoch: number;
+                expires_at: Date;
+                consumed_operation: string | null;
+                consumed_verification_id: string | null;
+              }>(
+                `SELECT authn_epoch,expires_at,consumed_operation,consumed_verification_id FROM auth_recovery
+                WHERE proof_hash=$1 AND account_id=$2 AND expires_at>statement_timestamp() FOR UPDATE`,
+                [sourceHash, accountId],
+              )
+            ).rows[0];
+            if (!source) throw new Denied();
+            const credential = await (await getContext()).internalAdapter.findCredentialAccount(accountId);
+            if (!credential) throw new Denied();
+            let verificationId = source.consumed_verification_id;
+            let sourceExpiry = source.expires_at;
+            if (!source.consumed_operation) {
+              if (source.authn_epoch !== account.authnEpoch) throw new Denied();
+              // Resolve with the installed native token processing before touching
+              // receipt data. Delete that exact native row and consume its Auth
+              // epoch binding in the same transaction as the immutable receipt.
+              const nativeProof = await (
+                await getContext()
+              ).internalAdapter.findVerificationValue(`reset-password:${token}`);
+              if (!nativeProof || nativeProof.value !== accountId || nativeProof.expiresAt.getTime() <= Date.now())
+                throw new Denied();
+              verificationId = nativeProof.id;
+              sourceExpiry = new Date(Math.min(sourceExpiry.getTime(), nativeProof.expiresAt.getTime()));
+              if (
+                !(
+                  await connection.query(
+                    'DELETE FROM verification WHERE id=$1 AND value=$2 AND "expiresAt">statement_timestamp() RETURNING id',
+                    [verificationId, accountId],
+                  )
+                ).rowCount
+              )
+                throw new Denied();
+              await connection.query(
+                `UPDATE auth_recovery SET consumed_operation=$2,consumed_verification_id=$3,
+                 consumed_at=statement_timestamp(),expires_at=$4 WHERE proof_hash=$1 AND consumed_operation IS NULL`,
+                [sourceHash, operationKey, verificationId, sourceExpiry],
+              );
+            } else if (source.consumed_operation !== operationKey) throw new Denied();
+            const fingerprint = digestOf([credential.password, credential.updatedAt.toISOString()]);
+            const evidence = [
+              'recovery-v1',
+              accountId,
+              source.authn_epoch,
+              sourceHash,
+              verificationId,
+              credential.id,
+              fingerprint,
+              'set-password',
+              createHmac('sha256', options.secret)
+                .update(JSON.stringify(['auth-recovery-password-v1', accountId, sourceHash, newPassword]))
+                .digest('hex'),
+            ];
+            const proof = await publishBarrier(
+              connection,
+              'recovery',
+              accountId,
+              source.authn_epoch,
+              operationKey,
+              evidence,
+              sourceExpiry,
+              !!source.consumed_operation,
+            );
+            await connection.query('COMMIT');
+            if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
+            const receipt = await trustedAccess.authorizeRecovery!({
+              accountId,
+              proofEpoch: proof.previousEpoch,
+              proofReference: proof.reference,
+              operationKey,
+            });
+            invalidation(receipt, accountId, proof.previousEpoch);
+            if ((await recoveryAccount(accountId)).authnEpoch !== receipt.minimumAuthnEpoch) throw new Denied();
+            // The native token is already spent. Use the installed native password
+            // hasher and bounded native session revocation, with a credential CAS,
+            // so a lost acknowledgement can retry only this exact intended reset.
+            const passwordHash = await (await getContext()).password.hash(newPassword);
+            await connection.query('BEGIN');
+            const current = (
+              await connection.query('SELECT password,"updatedAt" FROM account WHERE id=$1 FOR UPDATE', [credential.id])
+            ).rows[0];
+            if (!current || digestOf([current.password, current.updatedAt.toISOString()]) !== fingerprint)
+              throw new Denied();
+            await connection.query('SELECT auth_revoke_sessions($1)', [accountId]);
+            await connection.query('UPDATE account SET password=$2,"updatedAt"=statement_timestamp() WHERE id=$1', [
+              credential.id,
+              passwordHash,
+            ]);
+            await applyBarrier(connection, proof.reference, receipt, 'recovery');
+            await connection.query('COMMIT');
+          } catch (error) {
+            await connection.query('ROLLBACK');
+            throw error;
+          } finally {
+            await connection.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lock]);
+            connection.release();
+          }
           return json({ success: true });
         }
         if (url.pathname === '/signin/key') {
@@ -945,52 +1097,105 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (url.pathname === '/consent') {
           fields(body, ['client_id', 'scope']);
           return await withIssuance(text(body.client_id), async () => {
-            const proof = await sessionProof(request.headers);
+            const native = await getAuth().api.getSession({
+              headers: request.headers,
+              query: { disableCookieCache: true, disableRefresh: true },
+            });
+            if (!native) throw new Denied();
+            const session = native.session;
+            const account = await activeActor(session.userId);
+            if (account.automated) throw new Denied();
             const client = await clientFor(text(body.client_id));
             const granted = scopes(body.scope);
             if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
             const connection = await database.connect();
+            const lock = `auth-consent:${account.accountId}:${client.client_id}`;
             let reducing = false;
             try {
+              await connection.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lock]);
               await connection.query('BEGIN');
-              await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-                `auth-consent:${proof.account_id}:${client.client_id}`,
-              ]);
               const previous = (
-                await connection.query<{ scopes: string[] }>(
-                  'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-                  [proof.account_id, client.client_id],
+                await connection.query<{ scopes: string[]; revision: string }>(
+                  'SELECT scopes,revision::text FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                  [account.accountId, client.client_id],
                 )
               ).rows[0];
               reducing = !!previous?.scopes.some((scope) => !granted.includes(scope));
               if (reducing) {
                 if (!trustedAccess.invalidateAccount) throw new Denied();
-                const current = await activeActor(proof.account_id);
-                if (proof.authn_epoch < current.authnEpoch) throw new Denied();
-                const previousEpoch = current.authnEpoch;
+                const evidence = [
+                  'consent-v1',
+                  account.accountId,
+                  session.authnEpoch,
+                  session.id,
+                  session.clientId,
+                  session.grantedScope,
+                  session.authTime,
+                  session.authMethods,
+                  client.client_id,
+                  client.scopes,
+                  previous!.revision,
+                  previous!.scopes,
+                  granted,
+                ];
+                const operationKey = digestOf(['auth-consent-v1', evidence]);
+                // A current human SessionProof is mandatory for first publication.
+                // A stale cookie can only resume a previously committed exact
+                // transition whose native session and consent still match.
+                const resuming = session.authnEpoch < account.authnEpoch;
+                if (!resuming) {
+                  const human = await humanProof(request.headers);
+                  if (human.account_id !== account.accountId || human.authn_epoch !== account.authnEpoch)
+                    throw new Denied();
+                }
+                const proof = await publishBarrier(
+                  connection,
+                  'consent-reduction',
+                  account.accountId,
+                  session.authnEpoch,
+                  operationKey,
+                  evidence,
+                  session.expiresAt,
+                  resuming,
+                );
+                await connection.query('COMMIT');
+                if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
                 const receipt = await trustedAccess.invalidateAccount({
-                  accountId: proof.account_id,
-                  previousEpoch,
+                  accountId: account.accountId,
+                  previousEpoch: proof.previousEpoch,
                   reason: 'consent-reduction',
+                  proofReference: proof.reference,
+                  operationKey,
                 });
-                invalidation(receipt, proof.account_id, previousEpoch);
+                invalidation(receipt, account.accountId, proof.previousEpoch);
+                if ((await activeActor(account.accountId)).authnEpoch !== receipt.minimumAuthnEpoch) throw new Denied();
+                await connection.query('BEGIN');
+                if (
+                  !(
+                    await connection.query(
+                      'UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2 AND revision=$4 RETURNING account_id',
+                      [account.accountId, client.client_id, granted, previous!.revision],
+                    )
+                  ).rowCount
+                )
+                  throw new Denied();
+                await applyBarrier(connection, proof.reference, receipt, 'consent-reduction');
+              } else {
+                await humanProof(request.headers);
                 await connection.query(
-                  'INSERT INTO auth_effect_receipt (receipt_id, account_id, purpose, minimum_authn_epoch) VALUES ($1,$2,$3,$4)',
-                  [receipt.receiptId, proof.account_id, 'consent-reduction', receipt.minimumAuthnEpoch],
+                  'INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes',
+                  [account.accountId, client.client_id, granted],
                 );
               }
-              await connection.query(
-                'INSERT INTO auth_consent (account_id, client_id, scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id, client_id) DO UPDATE SET scopes=EXCLUDED.scopes',
-                [proof.account_id, client.client_id, granted],
-              );
               await connection.query('COMMIT');
             } catch (error) {
               await connection.query('ROLLBACK');
               throw error;
             } finally {
+              await connection.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lock]);
               connection.release();
             }
-            if (reducing) await (await getContext()).internalAdapter.deleteUserSessions(proof.account_id);
+            if (reducing) await (await getContext()).internalAdapter.deleteUserSessions(account.accountId);
             return json({ client_id: client.client_id, scope: granted });
           });
         }
