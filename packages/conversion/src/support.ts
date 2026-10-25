@@ -11,6 +11,106 @@ export type ConversionContext = {
   readonly source?: string;
 };
 
+/** Canonical BCP 47 syntax, without source-specific language mappings. */
+export function canonicalLanguageTag(tag: string): string | null {
+  if (tag.length === 0 || tag.length > 64) return null;
+  try {
+    return Intl.getCanonicalLocales(tag)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const inLanguagePattern = /^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$/;
+
+/** Semantic language values permit only language, script and region. */
+export function inLanguageTag(tag: string): string | null {
+  const canonical = canonicalLanguageTag(tag);
+  return canonical !== null && canonical !== 'und' && inLanguagePattern.test(canonical) ? canonical : null;
+}
+
+const marcLanguageReplacements: Readonly<Record<string, string | null>> = Object.freeze({
+  // ISO 639-2 bibliographic codes need terminology equivalents before Intl.
+  alb: 'sqi',
+  arm: 'hye',
+  baq: 'eus',
+  bur: 'mya',
+  chi: 'zho',
+  cze: 'ces',
+  dut: 'nld',
+  fre: 'fra',
+  geo: 'kat',
+  ger: 'deu',
+  gre: 'ell',
+  ice: 'isl',
+  mac: 'mkd',
+  mao: 'mri',
+  may: 'msa',
+  per: 'fas',
+  rum: 'ron',
+  slo: 'slk',
+  tib: 'bod',
+  wel: 'cym',
+  // All discontinued codes in the Library of Congress MARC Code List:
+  // https://www.loc.gov/marc/languages/language_code.html
+  // Replacements: https://www.loc.gov/marc/isochange_ann.html
+  // Later changes: https://www.loc.gov/marc/languages/languagechg.html
+  // Aljamía has no language replacement; Eskimo languages split into several codes.
+  ajm: null,
+  cam: 'khm',
+  esk: null,
+  esp: 'epo',
+  eth: 'gez',
+  far: 'fao',
+  fri: 'fry',
+  gae: 'gla',
+  gag: 'glg',
+  gal: 'orm',
+  gua: 'grn',
+  int: 'ina',
+  iri: 'gle',
+  kus: 'kos',
+  lan: 'oci',
+  lap: 'smi',
+  max: 'glv',
+  mla: 'mlg',
+  mol: 'ron', // MARC replacement rum, expressed as its terminology equivalent.
+  sao: 'smo',
+  scc: 'srp',
+  scr: 'hrv',
+  sho: 'sna',
+  snh: 'sin',
+  sso: 'sot',
+  swz: 'ssw',
+  tag: 'tgl',
+  taj: 'tgk',
+  tar: 'tat',
+  tru: 'chk',
+  tsw: 'tsn',
+});
+
+/** Open Library language identifiers contain lowercase three-letter MARC codes. */
+export function marcLanguageTag(code: string): string | null {
+  if (code.length !== 3 || !/^[a-z]{3}$/.test(code)) return null;
+  const replacement = marcLanguageReplacements[code];
+  return replacement === null ? null : inLanguageTag(replacement ?? code);
+}
+
+/** Keep this literal aligned with the shipped presentation/core locale files. */
+export const platformLabelLanguages: readonly string[] = Object.freeze([
+  'de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant',
+]);
+
+const platformLabelPrimaryLanguages = new Set(platformLabelLanguages.map((tag) => tag.split('-')[0]!));
+
+/** Labels retain platform language families and the multilingual default. */
+export function labelLanguageTag(tag: string): string | null {
+  const canonical = canonicalLanguageTag(tag);
+  return canonical !== null && (canonical === 'mul' || platformLabelPrimaryLanguages.has(canonical.split('-')[0]!))
+    ? canonical
+    : null;
+}
+
 // Match the importer's default record budget. No catalogue/history state is retained.
 const recordBytes = 2 * 1024 * 1024;
 const documentBytes = 32 * 1024;
