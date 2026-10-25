@@ -15,14 +15,14 @@ test('resumed rollout records increments within the attempt window, ignoring rep
   expect(measureLog(exec, { baseline: { input: 1000, cached: 0, output: 0 } }).tokens.input).toBe(300);
   expect(classifyStep('wait', '')).toBe('wait'); expect(classifyStep('reasoning', '')).toBe('decision');
 });
-test('import creates a complete measurement record without launching a worker', () => {
+test('import creates a complete measurement record without launching a worker', async () => {
   const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const record = importAttempt(h.tasks, fixture, { taskId: task.id, startedAt: '2026-10-25T00:01:00Z', endedAt: '2026-10-25T00:02:00Z',
       profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'max', poolClass: 'codex' }, pool: 'fixture' });
     expect(record.tokens.input).toBe(800); expect(record.classifierVersion).toBe(CLASSIFIER_VERSION);
-    expect(record.steps).toBe(4); expect(record.tableVersion).toBe('imported-before-1');
+    expect(record.steps).toBe(4); expect(record.tableVersion).toBe(`imported-before-${(await Bun.file(join(import.meta.dir, '../routing.json')).json()).version}`);
     expect(h.store.records()).toEqual([record]);
   } finally { h.dispose(); }
 });
