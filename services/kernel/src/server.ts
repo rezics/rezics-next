@@ -1,6 +1,7 @@
 import { createPool } from './database/pool.ts';
 import { createKernel } from './http/kernel.ts';
 import type { KeyRing } from './tokens/seal.ts';
+import { startRelays } from './events/relays.ts';
 
 export type ServerConfig = {
   databaseUrl: string;
@@ -62,6 +63,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
 export function startServer(config: ServerConfig) {
   const pool = createPool(config.databaseUrl);
   const app = createKernel({ pool, routeKey: config.routeKey, tokens: config.tokens });
+  const relays = startRelays(pool, []);
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
@@ -73,7 +75,11 @@ export function startServer(config: ServerConfig) {
       try {
         await server.stop(true);
       } finally {
-        await pool.end();
+        try {
+          await relays.stop();
+        } finally {
+          await pool.end();
+        }
       }
     },
   };
