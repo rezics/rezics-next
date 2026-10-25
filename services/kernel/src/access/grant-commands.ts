@@ -80,12 +80,19 @@ export function createGrantCommands(config: {
     const actions = [...new Set(input.actions)].sort();
     const oldActions = previous ? [...new Set(previous.actions)].sort() : [];
     if (new Set([...actions, ...oldActions]).size > 1000) throw new GrantDeniedError();
+    const selfRenunciation =
+      operation === 'revoke' &&
+      context.actor.kind === 'account' &&
+      subject.kind === 'identity' &&
+      subject.role === '' &&
+      subject.id === context.actor.accountId;
     return grantCommand(
       config,
       context,
       {
         resource: input.resource,
-        actions: [config.managementAction, ...actions, ...oldActions],
+        actions: [...(selfRenunciation ? [] : [config.managementAction]), ...actions, ...oldActions],
+        ...(selfRenunciation ? { consentedActions: actions } : {}),
         kind: `access.grant.${operation}`,
         key: input.key,
         input,

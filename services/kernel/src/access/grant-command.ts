@@ -59,6 +59,7 @@ export async function grantCommand<T>(
   options: {
     resource: Resource;
     actions: readonly string[];
+    consentedActions?: readonly string[];
     kind: string;
     key: string;
     input: unknown;
@@ -86,6 +87,7 @@ export async function grantCommand<T>(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(config.access, actor, preparation);
+        if (options.consentedActions?.some((action) => !actor.scopes.includes(action))) throw options.denied();
         const actions = [...new Set(options.actions)];
         const checks: AccessCheck[] = [];
         for (const action of actions)
