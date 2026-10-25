@@ -160,6 +160,22 @@ const validator = Compile(schema);
 const own = (value: object, key: string) => Object.hasOwn(value, key);
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** A code facet is a string property whose release definition declares a pattern. */
+function codeFacet(property: { datatype: string; value: object }): boolean {
+  if (property.datatype !== 'string' || !record(property.value)) return false;
+  const pattern = property.value.pattern;
+  return typeof pattern === 'string' && pattern.length > 0;
+}
+
+function facetable(property: { datatype: string; value: object }): boolean {
+  return (
+    property.datatype === 'wikibase-item' ||
+    property.datatype === 'time' ||
+    property.datatype === 'quantity' ||
+    codeFacet(property)
+  );
+}
 const at = (pointer: string, key: string | number) =>
   `${pointer}/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
 
@@ -293,12 +309,7 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
     type.facets.forEach((facet, index) => {
       const facetPointer = at(at(pointer, 'facets'), index);
       const property = release.properties[facet];
-      if (
-        expand(facet) === undefined ||
-        !type.properties.includes(facet) ||
-        !property ||
-        !['wikibase-item', 'time', 'quantity'].includes(property.datatype)
-      )
+      if (expand(facet) === undefined || !type.properties.includes(facet) || !property || !facetable(property))
         add(facetPointer);
     });
   }

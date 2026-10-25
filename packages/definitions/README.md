@@ -9,9 +9,10 @@ otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
 Validation checks references, CURIE expansion, sorted unique lists, type bases and
 facets, datatype-specific members, fixed value schemas, context defaults, saved
-filters, and regular-expression safety. Pattern checks use recheck's in-process synchronous
-entry point, with a three-second timeout per distinct pattern; inconclusive
-results fail validation.
+filters, and regular-expression safety. A facet is an item, a time, a quantity, or
+a code: a `string` whose release definition has a `pattern`. Pattern checks use
+recheck's in-process synchronous entry point, with a three-second timeout per
+distinct pattern; inconclusive results fail validation.
 
 Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
 type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
@@ -52,6 +53,13 @@ catalogue, presentation, context-settings, and saved-filter YAML files for
 compilation. Each type release records its structural `bases` as CURIEs, nearest
 first, and its registered `facets` in display order. Each vertical declares its own
 facets.
+
+`schema:inLanguage` is the BCP 47 language tag of the resource. The catalogue stores
+the canonical case of the subtags it uses: a lowercase language, an optional
+title-case script, and an optional region. Its pattern is
+`^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$`. `ja`, `zh-Hant`,
+`pt-BR` and `es-419` match. Writers produce that spelling with
+`Intl.getCanonicalLocales`.
 
 To add a vertical, add its schema as `catalogue/<vertical>.yaml`, add that schema
 to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
@@ -200,9 +208,12 @@ Source conventions:
   most 64.
 - A class may set `annotations.facets` to a space-separated list of slot names.
   A type inherits its ancestors' declarations from root to leaf, retaining that
-  display order. Each facet must be one of the type's properties and have the
-  `wikibase-item`, `time`, or `quantity` datatype. A slot may appear only once
-  in the inheritance chain, and a type may have at most 16 facets. The type
+  display order. Each facet must be one of the type's properties. Its datatype is
+  `wikibase-item`, `time`, or `quantity`, or `string` with a `pattern` in the
+  release definition. That fourth kind is a code: an identifier such as a language
+  tag. A `string` without a pattern, and every other datatype, is refused at the
+  same pointer and code as any other unfilterable facet. A slot may appear only
+  once in the inheritance chain, and a type may have at most 16 facets. The type
   itself is always a facet and is not listed in this annotation.
 - A type's `bases` list contains its `is_a` ancestors that declare `class_uri`,
   nearest first. It omits the type's own CURIE and repeated CURIEs; ancestors

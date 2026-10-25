@@ -36,6 +36,22 @@ type Node = Record<string, unknown>;
 type Location = { file: string; pointer: string };
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const record = (value: unknown): value is Node => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** A code facet is a string property whose release definition declares a pattern. */
+function codeFacet(property: PropertyDefinition): boolean {
+  if (property.datatype !== 'string' || !record(property.value)) return false;
+  const pattern = property.value.pattern;
+  return typeof pattern === 'string' && pattern.length > 0;
+}
+
+function facetable(property: PropertyDefinition): boolean {
+  return (
+    property.datatype === 'wikibase-item' ||
+    property.datatype === 'time' ||
+    property.datatype === 'quantity' ||
+    codeFacet(property)
+  );
+}
 const object = (value: unknown): Node => (record(value) ? value : (Object.create(null) as Node));
 const dictionary = <T>(): Record<string, T> => Object.create(null) as Record<string, T>;
 const at = (pointer: string, key: string | number) =>
@@ -533,7 +549,7 @@ export async function compileCatalogue(input: {
   for (const [key, type] of Object.entries(release.types))
     for (const facet of type.facets) {
       const property = release.properties[facet];
-      if (property && !['wikibase-item', 'time', 'quantity'].includes(property.datatype)) {
+      if (property && !facetable(property)) {
         const origin = facetOrigins.get(key)?.get(facet);
         add(
           origin?.location ?? { file: input.root, pointer: at(at('/types', key), 'facets') },
