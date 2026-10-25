@@ -227,6 +227,19 @@ END;
 $$;
 
 
+--
+-- Name: workflow_approval_immutable(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.workflow_approval_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Workflow approvals are immutable';
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -630,6 +643,39 @@ CREATE TABLE access.standing_parent_installation (
 
 
 --
+-- Name: workflow_approval; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.workflow_approval (
+    route integer NOT NULL,
+    approval_id uuid NOT NULL,
+    actor_id uuid NOT NULL,
+    client_id text NOT NULL,
+    scopes text[] NOT NULL,
+    requested_by text,
+    authn_epoch bigint NOT NULL,
+    operation_key text NOT NULL,
+    operation jsonb NOT NULL,
+    digest text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    jwt_expires_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT workflow_approval_authn_epoch_check CHECK (((authn_epoch > 0) AND (authn_epoch <= '9007199254740991'::bigint))),
+    CONSTRAINT workflow_approval_check CHECK ((route = ((get_byte(uuid_send(approval_id), 10) * 256) + get_byte(uuid_send(approval_id), 11)))),
+    CONSTRAINT workflow_approval_check1 CHECK ((route = ((get_byte(uuid_send(actor_id), 10) * 256) + get_byte(uuid_send(actor_id), 11)))),
+    CONSTRAINT workflow_approval_check2 CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:05:00'::interval)) AND (expires_at <= jwt_expires_at))),
+    CONSTRAINT workflow_approval_client_id_check CHECK (((length(client_id) >= 1) AND (length(client_id) <= 1024))),
+    CONSTRAINT workflow_approval_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT workflow_approval_operation_check CHECK (((jsonb_typeof(operation) = 'object'::text) AND (octet_length((operation)::text) <= 16384))),
+    CONSTRAINT workflow_approval_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 255))),
+    CONSTRAINT workflow_approval_requested_by_check CHECK ((length(requested_by) <= 100)),
+    CONSTRAINT workflow_approval_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT workflow_approval_scopes_check CHECK (((cardinality(scopes) <= 6450) AND (octet_length(array_to_string(scopes, ' '::text)) <= 12900)))
+);
+
+
+--
 -- Name: write_rate_counter; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -800,6 +846,14 @@ ALTER TABLE ONLY access.standing_parent_installation
 
 
 --
+-- Name: workflow_approval workflow_approval_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.workflow_approval
+    ADD CONSTRAINT workflow_approval_pkey PRIMARY KEY (route, approval_id);
+
+
+--
 -- Name: write_rate_counter write_rate_counter_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -847,6 +901,13 @@ CREATE INDEX organization_member_owner_probe ON access.organization_member USING
 --
 
 CREATE INDEX resource_denial_permission ON access.resource_denial USING gist (route, resource_id, action, subject_id, subject_role, valid);
+
+
+--
+-- Name: workflow_approval_expiry; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX workflow_approval_expiry ON access.workflow_approval USING btree (route, expires_at, approval_id);
 
 
 --
@@ -917,6 +978,13 @@ CREATE TRIGGER membership_inverse_terminal_guard BEFORE DELETE OR UPDATE ON acce
 --
 
 CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.advance_operator_relation();
+
+
+--
+-- Name: workflow_approval workflow_approval_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
 
 
 --

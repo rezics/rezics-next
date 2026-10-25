@@ -2,6 +2,7 @@ import type { Access, AccessConfig as KernelAccessConfig, Actor, Resource } from
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
+import { installApprovalIdentityBridge } from './approved-identity.ts';
 
 export {
   createResourcePublicEligibility,
@@ -75,6 +76,14 @@ export function createAccess(config: AccessConfig): Access {
       }
     },
   };
+  installApprovalIdentityBridge(access, {
+    scope: authentication.approvalScope,
+    expiry(actor, context) {
+      const identity = authentication.identity(actor);
+      return identity?.pool === context.pool ? identity.expires : undefined;
+    },
+    restore: authentication.restoreApproval,
+  });
   installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
   return access;
 }
@@ -106,3 +115,15 @@ export {
 export { initializeResourceGrants } from './resource-initialization.ts';
 export { installStandingParentGrant } from './standing-parent.ts';
 export type { ResourceRoleCatalogue } from './resource-roles.ts';
+
+export {
+  createWorkflowApprovals,
+  sweepWorkflowApprovals,
+  workflowApprovalBinding,
+  MAX_WORKFLOW_APPROVAL_LIFETIME_MS,
+  WorkflowApprovalUnavailableError,
+  type WorkflowApproval,
+  type WorkflowApprovalConfig,
+  type WorkflowApprovalRequest,
+  type WorkflowApprovalBinding,
+} from './workflow-approvals.ts';

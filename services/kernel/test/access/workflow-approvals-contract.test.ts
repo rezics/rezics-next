@@ -16,7 +16,7 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 function untouched<T extends object>(): T {
   return new Proxy({} as T, {
     get() {
-      throw new Error('The unavailable contract must not inspect dependencies or input');
+      throw new Error('Malformed evidence must fail closed');
     },
   });
 }
@@ -56,7 +56,7 @@ test('durable workflow approval interface constructs with explicit trusted confi
   expect(Object.keys(approvals).sort()).toEqual(['approve', 'resolve', 'resolveForCaller']);
 });
 
-test('unimplemented approval and resolution throw fail closed', async () => {
+test('malformed approval and resolution evidence fails closed', async () => {
   const { approvals, context } = fixture();
   const operation: AccountOperation = { kind: 'organization', handle: 'example', authorization: 'reference' };
   const hostile = {
@@ -85,8 +85,8 @@ test('unimplemented approval and resolution throw fail closed', async () => {
   }
 });
 
-test('contract never retains a bearer or starts Auth', async () => {
-  // Inert dependencies must never authenticate, query, sign or start a runtime.
+test('failed contract requests never expose bearers or retain contexts', async () => {
+  // Unavailable native dependencies must deny without exposing the supplied token.
   const { approvals, context } = fixture();
   const token = 'private-bearer-must-not-escape';
   const operation: AccountOperation = { kind: 'revoke', accountId: 'account' };

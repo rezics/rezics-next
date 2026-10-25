@@ -8,6 +8,7 @@ import {
   type AccessContext,
   type AccountActor,
 } from '../request/access.ts';
+import { approvedIdentityClaims, type ApprovedIdentity } from './approved-identity.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAssignment } from './delegation-commands.ts';
 import { bindAccountRateIdentity } from './write-rate-identity.ts';
@@ -130,6 +131,7 @@ function claims(payload: JWTPayload, config: AuthenticationConfig): void {
 
 /** Each factory owns its key cache and its opaque, immutable request identities. */
 export function createAuthenticator(configuration?: AuthenticationConfig) {
+  const approvalScope = Object.freeze({});
   const identities = new WeakMap<AccountActor, Identity>();
   const deadlines = new AsyncLocalStorage<number>();
   let verifier: { config: AuthenticationConfig; keys: ReturnType<typeof createRemoteJWKSet> } | undefined;
@@ -232,6 +234,44 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
   };
   return {
     authenticate,
+    approvalScope,
+    /** Internal native approval proof only. Reconstructed actors have no proof. */
+    async restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor> {
+      try {
+        const facts = approvedIdentityClaims(proof, approvalScope, context.pool);
+        if (!facts) throw invalid();
+        const { actor, expires } = facts;
+        remaining(Math.min(context.deadline, expires));
+        const client = deadlineClient(context.pool, Math.min(context.deadline, expires));
+        const account = await readAccount(client, routeOf(actor.accountId), actor.accountId);
+        if (
+          !account ||
+          account.kind !== 'actor' ||
+          account.state !== 'active' ||
+          account.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch <= 0 ||
+          BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+        )
+          throw invalid();
+        if (
+          actor.requestedBy !== null &&
+          (await readAssignment(client, actor.requestedBy, actor.accountId)).kind !== 'resolved'
+        )
+          throw invalid();
+        remaining(Math.min(context.deadline, expires));
+        identities.set(actor, {
+          account: Object.freeze(account),
+          pool: context.pool,
+          deadline: context.deadline,
+          expires,
+        });
+        bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
+        return actor;
+      } catch {
+        throw invalid();
+      }
+    },
     identity(actor: AccountActor): Identity | undefined {
       return identities.get(actor);
     },

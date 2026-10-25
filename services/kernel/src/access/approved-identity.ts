@@ -1,0 +1,106 @@
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import type { Access, AccessContext, AccountActor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { unseal, type KeyRing } from '../tokens/seal.ts';
+import receiptRead from '../command/read-receipt.sql';
+import approvalRead from './workflow-approvals-read.sql';
+
+export const APPROVAL_REFERENCE_PURPOSE = 'access.workflow-approval.v1';
+export type ApprovalRow = NonNullable<Awaited<ReturnType<typeof approvalRead.run>>>;
+declare const approvedIdentity: unique symbol;
+/** Internal opaque evidence. Only a verified native row can mint this brand. */
+export type ApprovedIdentity = { readonly [approvedIdentity]: true };
+type Claims = { actor: AccountActor; expires: number; scope: object; pool: AccessContext['pool'] };
+const proofs = new WeakMap<ApprovedIdentity, Claims>();
+type Bridge = {
+  scope: object;
+  expiry(actor: AccountActor, context: AccessContext): number | undefined;
+  restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
+};
+const bridges = new WeakMap<Access, Bridge>();
+
+/** Factory composition only; no actor JSON registration or public bearer port. */
+export function installApprovalIdentityBridge(access: Access, bridge: Bridge): void {
+  if (bridges.has(access)) throw new Error('Approval identity bridge already installed');
+  bridges.set(access, Object.freeze(bridge));
+}
+export function approvedIdentityClaims(
+  proof: ApprovedIdentity,
+  scope: object,
+  pool: AccessContext['pool'],
+): Claims | undefined {
+  const facts = proofs.get(proof);
+  return facts?.scope === scope && facts.pool === pool ? facts : undefined;
+}
+export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
+  const expires = bridges.get(access)?.expiry(actor, context);
+  if (expires === undefined || Date.now() >= expires) throw new Error('Native bearer evidence unavailable');
+  return expires;
+}
+/** Bind every immutable column, including original scope ceiling and JWT expiry. */
+export function approvalRowDigest(row: ApprovalRow): string {
+  return createHash('sha256').update(canonicalize(row)!).digest('hex');
+}
+
+/** This is the only approval identity minting path. It requires the configured
+ * MAC, exact native row, immutable binding and strict live native expiry. The
+ * authenticator additionally reads the current actor and assignment on its pool.
+ */
+export async function readApprovedIdentity(
+  access: Access,
+  keys: KeyRing,
+  reference: string,
+  context: AccessContext,
+): Promise<{ row: ApprovalRow; actor: AccountActor }> {
+  const bridge = bridges.get(access);
+  if (!bridge || typeof reference !== 'string' || reference.length > 4096) throw new Error('Approval unavailable');
+  const locator = unseal(keys, APPROVAL_REFERENCE_PURPOSE, reference) as
+    | { route?: unknown; id?: unknown; binding?: unknown }
+    | undefined;
+  if (
+    !locator ||
+    typeof locator.id !== 'string' ||
+    routeOf(locator.id) !== locator.route ||
+    typeof locator.binding !== 'string'
+  )
+    throw new Error('Approval unavailable');
+  const row = await approvalRead.run(context.pool, { route: locator.route as number, approval_id: locator.id });
+  if (!row || approvalRowDigest(row) !== locator.binding) throw new Error('Approval unavailable');
+  const expires = Math.min(Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
+  if (!Number.isFinite(expires) || Date.now() >= expires) throw new Error('Approval unavailable');
+  // A row-shaped fixture, restored dump fragment or caller JSON is insufficient:
+  // approve must have committed this exact row and reference through core.
+  const receipt = await receiptRead.run(context.pool, {
+    partition_no: partitionOf(row.route),
+    actor_account_id: row.actorId,
+    command_kind: 'access.workflow-approval.create',
+    idempotency_key: `${row.route}:${row.approvalId}`,
+  });
+  const response = receipt?.response as { reference?: unknown; expiresAt?: unknown } | undefined;
+  if (
+    !receipt ||
+    receipt.transactionId !== row.transactionId ||
+    !Buffer.from(receipt.requestDigest).equals(Buffer.from(row.digest, 'hex')) ||
+    response?.reference !== reference ||
+    response.expiresAt !== new Date(row.expiresAt).toISOString()
+  )
+    throw new Error('Approval unavailable');
+  const scopes = row.scopes;
+  if (!scopes.every((scope): scope is string => typeof scope === 'string')) throw new Error('Approval unavailable');
+  const actor: AccountActor = Object.freeze({
+    kind: 'account',
+    accountId: row.actorId,
+    clientId: row.clientId,
+    scopes: Object.freeze([...scopes]),
+    requestedBy: row.requestedBy,
+    authnEpoch: Number(row.authnEpoch),
+  });
+  const proof = Object.freeze({}) as ApprovedIdentity;
+  proofs.set(proof, { actor, expires, scope: bridge.scope, pool: context.pool });
+  try {
+    return { row: Object.freeze(row), actor: await bridge.restore(proof, context) };
+  } finally {
+    proofs.delete(proof);
+  }
+}
