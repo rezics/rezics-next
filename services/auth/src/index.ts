@@ -228,6 +228,28 @@ export interface TrustedAccessPorts {
    * immutable stage before writing. Native capabilities reject the legacy variant.
    */
   consumeAuthorization?(input: AuthorizationConsumeInput): Promise<EffectAuthorization>;
+  /** Trusted native credential capability. Missing ports fail closed. Approval
+   * creates the exact native opening; revalidation repeats current authorization
+   * at the Auth commit boundary and before disclosing a saved result. The exact
+   * floor receipt permits only this in-flight operation against its own barrier. */
+  approveCredentialEffect?(input: {
+    stage: CredentialEffectBinding;
+    human: SessionProof;
+  }): Promise<{ reference: string; expiresAt: string }>;
+  /** Resolve the exact native opening from authorization and compare its binding
+   * to stage. Repeat the same formula, current human/operator/subject state,
+   * fences, floors, consent, evidence and original expiry on every call. replay
+   * permits saved-result disclosure only; it never reopens a consumed approval.
+   * floorReceipt permits only the exact in-flight own-human barrier exception.
+   * No proof or permission context may be retained after this callback. */
+  revalidateCredentialEffect?(input: {
+    stage: CredentialEffectBinding;
+    human: SessionProof;
+    authorization: string;
+    consumedOpening?: CredentialEffectAuthorization;
+    floorReceipt?: CredentialFloorReceipt;
+    replay: boolean;
+  }): Promise<void>;
   advanceCredentialFloor?: CredentialFloorPort;
   /** Commit a durable floor increase before returning; never clear an existing fence. */
   invalidateAccount?:
@@ -343,7 +365,7 @@ export interface AuthService {
     /** Auth-owned read closure; composition receives no database or credential material. */
     resolveRecoveryEstablishment(reference: unknown): Promise<RecoveryEstablishmentEvidence | null>;
     /** Trusted server composition only; the exact native human proof is live only
-     * during this instance's consumeAuthorization callback. Never persist it or its JWT. */
+     * during this instance's trusted authorization callbacks. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;
     /** One native expiry batch, at most 1000 rows; scheduled by the Auth host. */
     pruneExpiredVerifications(): Promise<number>;
@@ -379,7 +401,6 @@ export interface AuthService {
      * AES-GCM/AAD pattern. Bind all CredentialEffectBinding fields and the complete
      * normalized payload in Auth's keyed commitment. Changed input under a used key
      * conflicts forever, including after restart/consumption. Return locators only.
-     * Until native implementation, throw the existing unavailable error before I/O.
      */
     stageCredentialEffect(input: {
       key: string;
@@ -400,7 +421,6 @@ export interface AuthService {
      * accounts. No self-owner bypass/fake operator relation. Native opening rules
      * and expiry are specified by createCredentialCapability. Fresh authenticated
      * approval may resume only the same unfinished immutable operation.
-     * Until native implementation, throw unavailable before inspecting input/I/O.
      */
     approveCredentialEffect(input: {
       effectRef: string;
@@ -425,7 +445,7 @@ export interface AuthService {
      * Cost: O(log R + (1+K) log G), R=N+U*t+M, fixed selected rows/statements,
      * logarithmic buffers; no history/session scans. Native tasks prove growth with
      * checkGrowth at 1x/8x/64x separately growing consumed same-subject openings,
-     * old Auth effects and unrelated owners. Until native, throw unavailable pre-I/O.
+     * old Auth effects and unrelated owners.
      */
     applyCredentialEffect(input: {
       authorization: string;
@@ -434,7 +454,7 @@ export interface AuthService {
       subjectAccountId: string;
       headers: Headers;
     }): Promise<{ receiptId: string; replayed: boolean }>;
-    /** Auth-owned point-read verifier; no minting path. Unavailable until native. */
+    /** Auth-owned point-read verifier; no minting path. */
     verifyCredentialEffect: CredentialEffectVerifier;
     setCredential(input: {
       authorization: string;

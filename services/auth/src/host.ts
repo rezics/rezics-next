@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
+import { credentialEffects, CredentialEffectDenied } from './credential-effects.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts, type WorkflowContext } from './workflows.ts';
 import { AUTH_MAINTENANCE_CRON, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from './maintenance.ts';
 
@@ -126,7 +127,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     })());
   return {
     service,
-    handler: workflows.handler,
+    handler: credentialEffectTransport(service, workflows.handler, options),
     workflows,
     config,
     start() {
@@ -145,5 +146,97 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       })());
     },
     stop,
+  };
+}
+
+/** Auth-host transport only. Secret input never enters a workflow or its log. */
+export function credentialEffectTransport(
+  service: Awaited<ReturnType<typeof createAuthService>>,
+  fallback: (request: Request) => Promise<Response>,
+  options: Pick<AuthServiceOptions, 'database' | 'secret'>,
+): (request: Request) => Promise<Response> {
+  const effects = credentialEffects(options.database, options.secret);
+  return async (request) => {
+    const url = new URL(request.url);
+    const command = new Map([
+      ['/credential-effects/stage', 'stage'],
+      ['/credential-effects/approve', 'approve'],
+      ['/credential-effects/apply', 'apply'],
+    ]).get(url.pathname);
+    if (!command) return fallback(request);
+    const response = (body: unknown, status = 200) =>
+      Response.json(body, {
+        status,
+        headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+      });
+    const denied = (status: number) =>
+      response({ error: 'credential_effect_denied', effect_status: 'not_applied' }, status);
+    if (
+      request.method !== 'POST' ||
+      url.search ||
+      request.headers.get('origin') !== new URL(service.verifier.issuer).origin ||
+      request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json'
+    )
+      return denied(400);
+    try {
+      const reader = request.body?.getReader();
+      if (!reader) return denied(400);
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          size += next.value.byteLength;
+          if (size > 16384) return denied(413);
+          chunks.push(next.value);
+        }
+      } finally {
+        await reader.cancel();
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        return denied(400);
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return denied(400);
+      const body = parsed as Record<string, unknown>;
+      const names =
+        command === 'stage'
+          ? ['key', 'subjectId', 'credential']
+          : ['key', 'subjectId', 'effectRef', 'purpose', 'digest', ...(command === 'apply' ? ['reference'] : [])];
+      if (Object.keys(body).some((field) => !names.includes(field))) return denied(400);
+      const string = (value: unknown): string => {
+        if (typeof value !== 'string' || !value || value.length > 1024) throw new CredentialEffectDenied(400);
+        return value;
+      };
+      const input = { key: string(body.key), subjectAccountId: string(body.subjectId), headers: request.headers };
+      if (command === 'stage')
+        return response(
+          await service.internal.stageCredentialEffect({
+            ...input,
+            credential: body.credential as Parameters<typeof service.internal.stageCredentialEffect>[0]['credential'],
+          }),
+        );
+      const effectRef = string(body.effectRef);
+      // These hostile transport fields only compare with Auth's committed stage.
+      if (body.purpose !== undefined || body.digest !== undefined) {
+        const { binding: stage } = await effects.read(effectRef);
+        if (
+          (body.purpose !== undefined && body.purpose !== stage.purpose) ||
+          (body.digest !== undefined && body.digest !== stage.effectDigest)
+        )
+          return denied(401);
+      }
+      if (command === 'approve')
+        return response(await service.internal.approveCredentialEffect({ ...input, effectRef }));
+      return response(
+        await service.internal.applyCredentialEffect({ ...input, effectRef, authorization: string(body.reference) }),
+      );
+    } catch (error) {
+      const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+      return denied(typeof status === 'number' && [400, 401, 403, 409, 413, 415, 503].includes(status) ? status : 503);
+    }
   };
 }

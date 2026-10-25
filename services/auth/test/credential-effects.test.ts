@@ -39,10 +39,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
       }
     );
   };
-  const openings = new Map<
-    string,
-    { stage: CredentialEffectBinding; human: SessionProof; spent: boolean; expiresAt: string }
-  >();
+  const openings = new Map<string, { stage: CredentialEffectBinding; spent: boolean; expiresAt: string }>();
   let allowed = true;
   let afterConsume = async () => {};
   let service: AuthService;
@@ -60,10 +57,14 @@ export async function credentialFixture(suppliedPool?: Pool) {
         expect(await service.internal.accessTokenForProof(input.human)).toBeString();
         const reference = randomUUID();
         const expiresAt = new Date(Date.now() + 60000).toISOString();
-        openings.set(reference, { ...input, spent: false, expiresAt });
+        openings.set(reference, { stage: input.stage, spent: false, expiresAt });
         return { reference, expiresAt };
       },
-      async consumeAuthorization(input: { authorization: string; human: SessionProof; effectReference?: string }) {
+      async consumeAuthorization(input: {
+        authorization: string;
+        human: SessionProof;
+        effectReference?: string | undefined;
+      }) {
         const row = openings.get(input.authorization);
         if (!row || row.spent || !allowed || row.stage.effectReference !== input.effectReference)
           throw new Error('Fixture consume denied');
@@ -157,7 +158,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
     async stage(
       credential: Parameters<AuthService['internal']['stageCredentialEffect']>[0]['credential'],
       subjectAccountId = 'robot',
-      key = randomUUID(),
+      key: string = randomUUID(),
     ) {
       return service.internal.stageCredentialEffect({ key, subjectAccountId, credential, headers });
     },
@@ -289,7 +290,7 @@ test('only public ES256 keys are accepted', async () => {
       .setProtectedHeader({ alg: 'ES256', kid: 'new-key' })
       .setIssuer('robot')
       .setSubject('robot')
-      .setAudience(`${f.issuer}/signin/key`)
+      .setAudience(`${f.issuer}/token`)
       .setIssuedAt()
       .setExpirationTime('30s')
       .setJti(randomUUID())
@@ -316,6 +317,119 @@ test('authority lost after consume and credential row races leave the stage unfi
     });
     await expect(f.apply(op)).rejects.toThrow();
     expect((await f.pool.query("SELECT * FROM auth_public_key WHERE account_id='robot'")).rowCount).toBe(0);
+  } finally {
+    await f.close();
+  }
+}, 60000);
+
+test('Auth hashes passwords, separates first installation from replacement and rejects stale credential rows', async () => {
+  const f = await credentialFixture();
+  try {
+    const first = await f.stage({ kind: 'password', password: 'first installed password long enough' });
+    expect((await f.apply(first)).replayed).toBe(false);
+    expect((await f.pool.query("SELECT epoch FROM test_authority WHERE id='robot'")).rows[0].epoch).toBe(1);
+    const replacement = await f.stage({ kind: 'password', password: 'replacement password long enough' });
+    const competing = await f.stage({ kind: 'password', password: 'competing password long enough' });
+    expect((await f.apply(replacement)).replayed).toBe(false);
+    expect((await f.pool.query("SELECT epoch FROM test_authority WHERE id='robot'")).rows[0].epoch).toBe(2);
+    await expect(f.apply(competing)).rejects.toThrow();
+    const login = await f.service.handler(
+      new Request(`${f.issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: f.issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'human@credential.test',
+          password: 'wrong password long enough',
+          client_id: 'web',
+          scope: ['account:manage'],
+        }),
+      }),
+    );
+    expect(login.status).toBe(401);
+    const hash = (await f.pool.query('SELECT password FROM account WHERE "userId"=\'robot\'')).rows[0].password;
+    expect(hash).toBeString();
+    expect(hash).not.toContain('replacement password');
+    const { verifyPassword } = await import('better-auth/crypto');
+    expect(await verifyPassword({ hash, password: 'replacement password long enough' })).toBe(true);
+  } finally {
+    await f.close();
+  }
+}, 60000);
+
+test('Auth host transports only closed credential commands and redacts every denial', async () => {
+  const f = await credentialFixture();
+  try {
+    const { credentialEffectTransport } = await import('../src/host.ts');
+    const transport = credentialEffectTransport(f.service, (r) => f.service.handler(r), f.options);
+    const request = (command: string, body: unknown, authenticated = true) =>
+      transport(
+        new Request(`${f.issuer}/credential-effects/${command}`, {
+          method: 'POST',
+          headers: {
+            origin: f.issuer,
+            'content-type': 'application/json',
+            ...(authenticated ? { cookie: f.headers.get('cookie')! } : {}),
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+    const stageResponse = await request('stage', {
+      key: randomUUID(),
+      subjectId: 'robot',
+      credential: { kind: 'key', kid: 'new-key', publicJwk: f.publicJwk },
+    });
+    expect(stageResponse.status).toBe(200);
+    const op = await stageResponse.json();
+    for (const body of [
+      { ...op, purpose: 'session' },
+      { ...op, digest: 'hostile' },
+      { ...op, device: true },
+      { ...op, reference: 'broad' },
+    ]) {
+      const response = await request('approve', body);
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(await response.json()).toEqual({ error: 'credential_effect_denied', effect_status: 'not_applied' });
+    }
+    const unauthenticated = await request('approve', op, false);
+    expect(unauthenticated.status).toBe(401);
+    const approvalResponse = await request('approve', op);
+    expect(approvalResponse.status).toBe(200);
+    const approval = await approvalResponse.json();
+    const result = await request('apply', { ...op, reference: approval.reference });
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual({ receiptId: expect.any(String), replayed: false });
+    const unavailable = await createAuthService({
+      ...f.options,
+      trustedAccess: {
+        readAccount: f.options.trustedAccess.readAccount,
+        authorizeProvisioning: f.options.trustedAccess.authorizeProvisioning,
+      },
+    });
+    await expect(
+      unavailable.internal.approveCredentialEffect({ ...op, subjectAccountId: 'robot', headers: f.headers }),
+    ).rejects.toMatchObject({ status: 503 });
+  } finally {
+    await f.close();
+  }
+}, 60000);
+
+test('a spent approval cannot resume an unfinished stage and a wrong floor receipt cannot mutate', async () => {
+  const f = await credentialFixture();
+  try {
+    await f.pool.query("INSERT INTO auth_public_key VALUES ('robot','old',$1)", [f.publicJwk]);
+    const op = await f.stage({ kind: 'key', kid: 'old', remove: true });
+    const input = { ...op, subjectAccountId: 'robot', headers: f.headers };
+    const approval = await f.service.internal.approveCredentialEffect(input);
+    const advance = f.options.trustedAccess.advanceCredentialFloor;
+    f.options.trustedAccess.advanceCredentialFloor = async (input) => ({
+      ...(await advance(input)),
+      effectDigest: 'foreign receipt',
+    });
+    await expect(f.apply(op, approval.reference)).rejects.toThrow();
+    expect((await f.pool.query("SELECT * FROM auth_public_key WHERE account_id='robot'")).rowCount).toBe(1);
+    await expect(f.apply(op, approval.reference)).rejects.toThrow();
+    f.options.trustedAccess.advanceCredentialFloor = advance;
+    expect((await f.apply(op)).replayed).toBe(false);
   } finally {
     await f.close();
   }

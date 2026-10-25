@@ -66,6 +66,27 @@ END $$;
 
 
 --
+-- Name: auth_credential_stage_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_credential_stage_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (OLD.operation_key IS NULL AND NEW.operation_key IS NOT NULL) OR
+    (OLD.operation_key IS NOT NULL AND (
+    (to_jsonb(NEW) - ARRAY['opening_receipt_id','committed_result','committed_at','minimum_authn_epoch'])
+      IS DISTINCT FROM
+    (to_jsonb(OLD) - ARRAY['opening_receipt_id','committed_result','committed_at','minimum_authn_epoch'])
+    OR OLD.committed_at IS NOT NULL
+  )) THEN
+    RAISE EXCEPTION 'Credential stage is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_provisioning_receipt_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -364,6 +385,20 @@ CREATE TABLE public.auth_effect_receipt (
     account_id text NOT NULL,
     purpose text NOT NULL,
     minimum_authn_epoch integer NOT NULL,
+    operation_key text,
+    effect_reference text,
+    effect_digest text,
+    stage_version integer,
+    credential_row_id text,
+    credential_row_version text,
+    acting_human_id text,
+    client_id text,
+    scopes text[],
+    stage_ciphertext bytea,
+    opening_receipt_id text,
+    committed_result jsonb,
+    committed_at timestamp with time zone,
+    CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
     CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
 );
 
@@ -1162,6 +1197,20 @@ CREATE UNIQUE INDEX auth_consent_client_owner ON public.auth_consent USING btree
 
 
 --
+-- Name: auth_credential_operation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_credential_operation ON public.auth_effect_receipt USING btree (account_id, operation_key) WHERE (operation_key IS NOT NULL);
+
+
+--
+-- Name: auth_credential_reference; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_credential_reference ON public.auth_effect_receipt USING btree (effect_reference) WHERE (effect_reference IS NOT NULL);
+
+
+--
 -- Name: auth_provisioning_receipt_credential_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1376,6 +1425,13 @@ CREATE TRIGGER auth_barrier_proof_immutable BEFORE UPDATE ON public.auth_barrier
 --
 
 CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_consent_revision();
+
+
+--
+-- Name: auth_effect_receipt auth_credential_stage_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_credential_stage_immutable BEFORE UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_credential_stage_immutable();
 
 
 --

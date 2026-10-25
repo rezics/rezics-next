@@ -8,6 +8,7 @@ import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
+import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
@@ -30,6 +31,9 @@ import type {
   AccessAccount,
   AuthService,
   AuthServiceOptions,
+  CredentialAuthorizationInput,
+  CredentialEffectAuthorization,
+  CredentialFloorReceipt,
   EffectAuthorization,
   EffectPurpose,
   InvalidationReceipt,
@@ -144,6 +148,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
 
+  const credentials = credentialEffects(database, options.secret);
   const barrierProofs = createBarrierProofVerifier({ database });
   const recoveryEstablishment = createRecoveryEstablishmentVerifier({ database });
   const digestOf = (value: unknown) => proofHash(JSON.stringify(value));
@@ -472,6 +477,32 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const human = await sessionProof(headers);
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
+  }
+  async function withCredentialProof<T>(human: SessionProof, callback: () => Promise<T>): Promise<T> {
+    const scope = { proof: human, live: true };
+    return proofScope.run(scope, async () => {
+      try {
+        return await callback();
+      } finally {
+        scope.live = false;
+      }
+    });
+  }
+  async function credentialStage(
+    input: { key: string; effectRef: string; subjectAccountId: string },
+    human: SessionProof,
+  ) {
+    const stage = await credentials.read(text(input.effectRef));
+    const b = stage.binding;
+    if (
+      b.operationKey !== text(input.key) ||
+      b.subjectAccountId !== text(input.subjectAccountId) ||
+      b.actingHumanId !== human.account_id ||
+      b.clientId !== human.client_id ||
+      JSON.stringify(b.scopes) !== JSON.stringify(human.scope)
+    )
+      throw new Denied();
+    return stage;
   }
   function invalidation(receipt: InvalidationReceipt, accountId: string, previousEpoch: number): void {
     if (
@@ -876,18 +907,215 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
         await database.query('DELETE FROM "user" WHERE id=$1', [accountId]);
       },
-      async stageCredentialEffect() {
-        throw new Denied(503);
+      async stageCredentialEffect(input) {
+        const human = await humanProof(input.headers);
+        await activeActor(text(input.subjectAccountId));
+        const { credential } = await credentials.normalize(input.credential);
+        if (credential.kind === 'password' && credential.password !== null) {
+          const config = (await getContext()).password.config;
+          if (
+            credential.password.length < config.minPasswordLength ||
+            credential.password.length > config.maxPasswordLength
+          )
+            throw new Denied(400);
+        }
+        await owner(input.subjectAccountId);
+        const stage = await credentials.stage({ ...input, credential, human });
+        return {
+          effectRef: stage.effectReference,
+          key: stage.operationKey,
+          subjectId: stage.subjectAccountId,
+          purpose: stage.purpose,
+          digest: stage.effectDigest,
+        };
       },
-      async approveCredentialEffect() {
-        throw new Denied(503);
+      async approveCredentialEffect(input) {
+        if (!trustedAccess.approveCredentialEffect) throw new Denied(503);
+        const human = await humanProof(input.headers);
+        await activeActor(input.subjectAccountId);
+        const stage = await credentialStage(input, human);
+        if (!stage.row.committed_at) await credentials.current(database, stage);
+        const approval = await withCredentialProof(human, () =>
+          trustedAccess.approveCredentialEffect!({ stage: stage.binding, human }),
+        );
+        const expires = Date.parse(approval?.expiresAt);
+        const source = proofSources.get(human);
+        if (
+          !approval?.reference ||
+          !Number.isFinite(expires) ||
+          expires <= Date.now() ||
+          expires > Date.now() + 60000 ||
+          !source ||
+          expires > source.expiresAt
+        )
+          throw new Denied();
+        const live = await database.query(
+          "SELECT 1 WHERE $1::timestamptz > statement_timestamp() AND $1::timestamptz <= statement_timestamp()+interval '60 seconds'",
+          [approval.expiresAt],
+        );
+        if (live.rowCount !== 1) throw new Denied();
+        return { reference: approval.reference, expiresAt: approval.expiresAt };
       },
-      async applyCredentialEffect() {
-        throw new Denied(503);
+      async applyCredentialEffect(input) {
+        if (!trustedAccess.consumeAuthorization || !trustedAccess.revalidateCredentialEffect) throw new Denied(503);
+        const human = await humanProof(input.headers);
+        const subject = await activeActor(input.subjectAccountId);
+        const stage = await credentialStage(input, human);
+        const authorization = text(input.authorization);
+        const revalidate = async (
+          replay: boolean,
+          consumedOpening?: CredentialEffectAuthorization,
+          floorReceipt?: CredentialFloorReceipt,
+        ) => {
+          await withCredentialProof(human, () =>
+            trustedAccess.revalidateCredentialEffect!({
+              stage: stage.binding,
+              human,
+              authorization,
+              replay,
+              ...(consumedOpening ? { consumedOpening } : {}),
+              ...(floorReceipt ? { floorReceipt } : {}),
+            }),
+          );
+        };
+        if (stage.row.committed_at) {
+          await revalidate(true);
+          await humanProof(input.headers);
+          return { receiptId: stage.row.receipt_id, replayed: true };
+        }
+        await credentials.current(database, stage);
+        const receipt = await withCredentialProof(human, () =>
+          trustedAccess.consumeAuthorization!({
+            authorization,
+            subjectAccountId: input.subjectAccountId,
+            purpose: stage.binding.purpose,
+            operationKey: stage.binding.operationKey,
+            effectReference: stage.binding.effectReference,
+            human,
+          } satisfies CredentialAuthorizationInput),
+        );
+        const b = stage.binding;
+        if (
+          !receipt?.receiptId ||
+          receipt.operationKey !== b.operationKey ||
+          receipt.effectReference !== b.effectReference ||
+          receipt.effectDigest !== b.effectDigest ||
+          receipt.purpose !== b.purpose ||
+          receipt.subjectAccountId !== b.subjectAccountId ||
+          receipt.actingHumanId !== human.account_id ||
+          receipt.clientId !== human.client_id ||
+          JSON.stringify(receipt.scopes) !== JSON.stringify(human.scope) ||
+          receipt.humanEpoch !== human.authn_epoch ||
+          receipt.subjectEpoch !== subject.authnEpoch ||
+          !Number.isFinite(Date.parse(receipt.expiresAt)) ||
+          Date.parse(receipt.expiresAt) <= Date.now() ||
+          Date.parse(receipt.expiresAt) > Date.now() + 60000 ||
+          Date.parse(receipt.expiresAt) > (proofSources.get(human)?.expiresAt ?? 0) ||
+          (subject.automated
+            ? !receipt.operatorAccountId
+            : receipt.operatorAccountId !== null || human.account_id !== subject.accountId)
+        )
+          throw new Denied();
+        const consumed = receipt as CredentialEffectAuthorization;
+        const destructive =
+          b.purpose === 'remove-password' ||
+          b.purpose === 'remove-key' ||
+          (b.purpose === 'set-password' && b.credentialRowId !== null);
+        let hash: string | null = null;
+        if (stage.credential.kind === 'password' && stage.credential.password !== null)
+          hash = await (await getContext()).password.hash(stage.credential.password);
+        const connection = await database.connect();
+        try {
+          await connection.query('BEGIN');
+          // Same native owner lock as session issuance/revocation. Credential-row
+          // CAS still arbitrates recovery and legacy writers that use other locks.
+          await connection.query('SELECT auth_assert_session_capacity($1,true)', [subject.accountId]);
+          const locked = await credentials.read(input.effectRef, b, connection, true);
+          if (locked.row.committed_at) {
+            await revalidate(true);
+            await humanProof(input.headers);
+            await connection.query('COMMIT');
+            return { receiptId: locked.row.receipt_id, replayed: true };
+          }
+          await credentials.current(connection, locked);
+          if (!subject.automated && (b.purpose === 'remove-password' || b.purpose === 'remove-key')) {
+            const remaining = (
+              await connection.query(
+                `SELECT
+              EXISTS(SELECT 1 FROM account WHERE "userId"=$1 AND "providerId"='credential' AND password IS NOT NULL AND $2 <> 'remove-password')
+              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1) AS allowed`,
+                [subject.accountId, b.purpose, stage.credential.kind === 'key' ? stage.credential.kid : ''],
+              )
+            ).rows[0];
+            if (!remaining.allowed) throw new Denied(409);
+          }
+          await revalidate(false, consumed);
+          await humanProof(input.headers);
+          const before = await activeActor(subject.accountId);
+          if (before.authnEpoch !== subject.authnEpoch) throw new Denied();
+          let floor: CredentialFloorReceipt | undefined;
+          if (destructive) {
+            if (!trustedAccess.advanceCredentialFloor) throw new Denied(503);
+            floor = await withCredentialProof(human, () =>
+              trustedAccess.advanceCredentialFloor!({
+                stage: b,
+                consumedOpening: consumed,
+                expectedPreviousFloor: subject.authnEpoch,
+                key: b.operationKey,
+                purpose: b.purpose,
+              }),
+            );
+            if (
+              !floor?.receiptId ||
+              floor.accountId !== b.subjectAccountId ||
+              floor.operationKey !== b.operationKey ||
+              floor.effectReference !== b.effectReference ||
+              floor.effectDigest !== b.effectDigest ||
+              floor.purpose !== b.purpose ||
+              floor.openingReceiptId !== consumed.receiptId ||
+              floor.previousFloor !== subject.authnEpoch ||
+              floor.minimumAuthnEpoch !== subject.authnEpoch + 1 ||
+              floor.fenced !== !!before.fenced
+            )
+              throw new Denied();
+          }
+          const current = await activeActor(subject.accountId);
+          if (
+            current.authnEpoch !== (floor?.minimumAuthnEpoch ?? subject.authnEpoch) ||
+            !!current.fenced !== !!before.fenced
+          )
+            throw new Denied();
+          // A destructive own operation invalidates its source proof. Only the
+          // exact committed barrier can finish this in-flight operation; native
+          // revalidation must enforce that exception, never authorize a retry.
+          if (human.account_id !== subject.accountId || !floor) await humanProof(input.headers);
+          await credentials.mutate(connection, locked, hash);
+          if (destructive) await connection.query('SELECT auth_revoke_sessions($1)', [subject.accountId]);
+          await revalidate(false, consumed, floor);
+          if (human.account_id !== subject.accountId || !floor) await humanProof(input.headers);
+          if ((await activeActor(subject.accountId)).authnEpoch !== current.authnEpoch) throw new Denied();
+          await connection
+            .query('SELECT 1 WHERE $1::timestamptz > statement_timestamp()', [consumed.expiresAt])
+            .then((result) => {
+              if (result.rowCount !== 1) throw new Denied();
+            });
+          const result = { receiptId: locked.row.receipt_id, replayed: false };
+          const committed = await connection.query(
+            `UPDATE auth_effect_receipt SET opening_receipt_id=$2,minimum_authn_epoch=$3,committed_result=$4,committed_at=statement_timestamp()
+            WHERE receipt_id=$1 AND committed_at IS NULL`,
+            [locked.row.receipt_id, consumed.receiptId, current.authnEpoch, result],
+          );
+          if (committed.rowCount !== 1) throw new Denied();
+          await connection.query('COMMIT');
+          return result;
+        } catch (error) {
+          await connection.query('ROLLBACK');
+          throw error;
+        } finally {
+          connection.release();
+        }
       },
-      async verifyCredentialEffect() {
-        throw new Denied(503);
-      },
+      verifyCredentialEffect: credentials.verify,
       async setCredential(input) {
         const value = input.credential;
         const purpose =
