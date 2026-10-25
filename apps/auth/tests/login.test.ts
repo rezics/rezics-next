@@ -195,8 +195,7 @@ async function submit(page: Page) {
   return controls;
 }
 
-// Implement hydrated email/password sign-in and resume the authorization query to turn this into test(...).
-test.failing(
+test(
   'the login page signs in with email and password and resumes the authorization request',
   async () => {
     signInStatus = 200;
@@ -232,8 +231,7 @@ test.failing(
   timeout,
 );
 
-// Implement hydrated direct sign-in followed by /security to turn this into test(...).
-test.failing(
+test(
   'a direct sign-in without an authorization request goes to security settings',
   async () => {
     signInStatus = 200;
@@ -256,8 +254,7 @@ test.failing(
   timeout,
 );
 
-// Implement empty-field guards and focused, announced refusal messages that clear the password to turn this into test(...).
-test.failing(
+test(
   'a refused sign-in keeps the email, clears the password and says why',
   async () => {
     for (const status of [401, 429, 503] as const) {
@@ -346,8 +343,7 @@ async function visibleLabel(field: Locator, name: RegExp) {
   ).toBe(true);
 }
 
-// Implement localized labelled login fields and recovery/sign-up links in all locales to turn this into test(...).
-test.failing(
+test(
   'the login form is labelled, autocompletes and links to recovery and sign-up in every locale',
   async () => {
     const origin = await site();
@@ -357,6 +353,7 @@ test.failing(
     ];
     for (const { own, cookie } of visits) {
       const options: BrowserContextOptions = {
+        locale: 'ja',
         extraHTTPHeaders: { 'accept-language': 'ja' },
       };
       // Each of the first eight visits sets a real browser cookie, including English overriding Japanese.
