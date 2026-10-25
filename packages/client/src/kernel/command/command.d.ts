@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { Actor } from '../request/access.ts';
 export type CommandEvent = {
     type: string;
     subject?: string;
@@ -8,6 +9,47 @@ export type CommandTransaction = Pick<PoolClient, 'query'>;
 type CommandResult<T> = {
     value: T;
     events: CommandEvent[];
+};
+/** Principal kind marker only; never an account ID. */
+export declare const ANONYMOUS_PRINCIPAL_ID = "00000000-0000-0000-0000-000000000000";
+export type CommandPrincipal = {
+    kind: 'account';
+    id: string;
+} | {
+    kind: 'anonymous';
+    id: typeof ANONYMOUS_PRINCIPAL_ID;
+};
+type PrincipalCommandIdentity = Readonly<{
+    principal: Readonly<Extract<CommandPrincipal, {
+        kind: 'account';
+    }>>;
+    basis: Readonly<{
+        clientId: string;
+        requestedBy: string | null;
+    }>;
+}> | Readonly<{
+    principal: Readonly<Extract<CommandPrincipal, {
+        kind: 'anonymous';
+    }>>;
+    basis: Readonly<{
+        clientId: null;
+        requestedBy: null;
+    }>;
+}>;
+/** Trusted verified Actor context only, never request JSON or proof of authorization. */
+export declare function principalCommandIdentity(actor: Actor): PrincipalCommandIdentity;
+export type PrincipalCommandReceipt = {
+    kind: string;
+    key: string;
+    digest: Uint8Array;
+};
+export type PrincipalCommandOptions = PrincipalCommandIdentity & {
+    partition: number;
+    deadline?: number;
+    receipt?: PrincipalCommandReceipt;
+    authorization?: CommandAuthorization | undefined;
+    /** Trusted service configuration only, never a request timestamp. */
+    clock?: (() => Date) | undefined;
 };
 export type CommandReceipt = {
     actorAccountId: string;
@@ -80,12 +122,12 @@ export declare class IdempotencyConflictError extends Error {
     constructor(partition: number);
 }
 export declare class CommandUnavailableError extends Error {
-    readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
+    readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded' | 'anonymous-receipts';
     readonly partition: number;
     readonly movedTo: string | null;
     constructor(reason: CommandUnavailableError['reason'], partition: number, movedTo?: string | null);
 }
-export declare function runCommand<T>(pool: Pool, options: {
+type LegacyCommandOptions = {
     partition: number;
     deadline?: number;
     basis?: CommandBasis;
@@ -93,5 +135,7 @@ export declare function runCommand<T>(pool: Pool, options: {
     authorization?: CommandAuthorization | undefined;
     /** Trusted service configuration only, never a request timestamp. */
     clock?: (() => Date) | undefined;
-}, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
+};
+export declare function runCommand<T>(pool: Pool, options: LegacyCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
+export declare function runCommand<T>(pool: Pool, options: PrincipalCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
 export {};

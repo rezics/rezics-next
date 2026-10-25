@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { Actor } from '../request/access.ts';
 import fenceStatement from './fence.sql';
 import readReceipt from './read-receipt.sql';
 import readTime from './time.sql';
@@ -8,6 +9,45 @@ import { readPartition } from '../partition/partition.ts';
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
 type CommandResult<T> = { value: T; events: CommandEvent[] };
+
+/** Principal kind marker only; never an account ID. */
+export const ANONYMOUS_PRINCIPAL_ID = '00000000-0000-0000-0000-000000000000';
+export type CommandPrincipal =
+  | { kind: 'account'; id: string }
+  | { kind: 'anonymous'; id: typeof ANONYMOUS_PRINCIPAL_ID };
+type PrincipalCommandIdentity =
+  | Readonly<{
+      principal: Readonly<Extract<CommandPrincipal, { kind: 'account' }>>;
+      basis: Readonly<{ clientId: string; requestedBy: string | null }>;
+    }>
+  | Readonly<{
+      principal: Readonly<Extract<CommandPrincipal, { kind: 'anonymous' }>>;
+      basis: Readonly<{ clientId: null; requestedBy: null }>;
+    }>;
+
+/** Trusted verified Actor context only, never request JSON or proof of authorization. */
+export function principalCommandIdentity(actor: Actor): PrincipalCommandIdentity {
+  if (actor.kind === 'anonymous')
+    return Object.freeze({
+      principal: Object.freeze({ kind: 'anonymous', id: ANONYMOUS_PRINCIPAL_ID }),
+      basis: Object.freeze({ clientId: null, requestedBy: null }),
+    });
+  if (actor.accountId === ANONYMOUS_PRINCIPAL_ID) throw new TypeError('The anonymous marker is not an account ID');
+  return Object.freeze({
+    principal: Object.freeze({ kind: 'account', id: actor.accountId }),
+    basis: Object.freeze({ clientId: actor.clientId, requestedBy: actor.requestedBy }),
+  });
+}
+
+export type PrincipalCommandReceipt = { kind: string; key: string; digest: Uint8Array };
+export type PrincipalCommandOptions = PrincipalCommandIdentity & {
+  partition: number;
+  deadline?: number;
+  receipt?: PrincipalCommandReceipt;
+  authorization?: CommandAuthorization | undefined;
+  /** Trusted service configuration only, never a request timestamp. */
+  clock?: (() => Date) | undefined;
+};
 
 export type CommandReceipt = {
   actorAccountId: string;
@@ -101,7 +141,7 @@ export class IdempotencyConflictError extends Error {
 }
 
 export class CommandUnavailableError extends Error {
-  readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
+  readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded' | 'anonymous-receipts';
   readonly partition: number;
   readonly movedTo: string | null;
   constructor(reason: CommandUnavailableError['reason'], partition: number, movedTo: string | null = null) {
@@ -162,20 +202,57 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
   throw new CommandUnavailableError('fenced', partition);
 }
 
+type LegacyCommandOptions = {
+  partition: number;
+  deadline?: number;
+  basis?: CommandBasis;
+  receipt?: CommandReceipt;
+  authorization?: CommandAuthorization | undefined;
+  /** Trusted service configuration only, never a request timestamp. */
+  clock?: (() => Date) | undefined;
+};
+
+function normalizeOptions(options: LegacyCommandOptions | PrincipalCommandOptions): LegacyCommandOptions {
+  if (!('principal' in options)) return options;
+  const { principal, basis, receipt, ...rest } = options;
+  if (principal.kind === 'anonymous') {
+    if (principal.id !== ANONYMOUS_PRINCIPAL_ID || basis.clientId !== null || basis.requestedBy !== null)
+      throw new TypeError('Anonymous commands require the kind marker and null attribution');
+    // This guard remains required when anonymous receipt storage becomes available.
+    if (!options.authorization) throw new TypeError('Anonymous commands require authorization');
+    throw new CommandUnavailableError('anonymous-receipts', options.partition);
+  }
+  if (principal.kind !== 'account' || principal.id === ANONYMOUS_PRINCIPAL_ID || basis.clientId === null)
+    throw new TypeError('Invalid account command identity');
+  return {
+    ...rest,
+    basis: { actorAccountId: principal.id, clientId: basis.clientId, requestedBy: basis.requestedBy },
+    ...(receipt ? { receipt: { ...receipt, actorAccountId: principal.id } } : {}),
+  };
+}
+
+export function runCommand<T>(
+  pool: Pool,
+  options: LegacyCommandOptions,
+  body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
+): Promise<CommandOutcome<T>>;
+export function runCommand<T>(
+  pool: Pool,
+  options: PrincipalCommandOptions,
+  body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
+): Promise<CommandOutcome<T>>;
 export async function runCommand<T>(
   pool: Pool,
-  options: {
-    partition: number;
-    deadline?: number;
-    basis?: CommandBasis;
-    receipt?: CommandReceipt;
-    authorization?: CommandAuthorization | undefined;
-    /** Trusted service configuration only, never a request timestamp. */
-    clock?: (() => Date) | undefined;
-  },
+  input: LegacyCommandOptions | PrincipalCommandOptions,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
+  const options = normalizeOptions(input);
   const { partition } = options;
+  if (
+    options.basis?.actorAccountId === ANONYMOUS_PRINCIPAL_ID ||
+    options.receipt?.actorAccountId === ANONYMOUS_PRINCIPAL_ID
+  )
+    throw new TypeError('The anonymous marker is not an account ID');
   if (options.receipt && (!(options.receipt.digest instanceof Uint8Array) || options.receipt.digest.byteLength !== 32))
     throw new TypeError('A command receipt digest must be exactly 32 bytes');
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
