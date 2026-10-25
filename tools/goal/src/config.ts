@@ -183,7 +183,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     async mergedTasks(goal) { return new Set(tasks.completionScope(goal).filter(taskId => store.task(taskId).state === 'merged')); },
   });
   const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
-    `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,
     process.execPath, join(settings.mainCheckout, 'tools/goal/src/cli.ts')];
   const managerServices: ManagerServices = {
     command, checkCompletion,
