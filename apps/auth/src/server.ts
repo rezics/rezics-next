@@ -39,8 +39,9 @@ export default {
     if (url.pathname.startsWith(assetPrefix)) return new Response('Not Found', { status: 404 });
 
     if (import.meta.env.DEV && __AUTH_ORIGIN__) {
-      const requestUrl = new URL(request.url);
-      const target = new URL(request.url.slice(requestUrl.origin.length), __AUTH_ORIGIN__);
+      const target = new URL(__AUTH_ORIGIN__);
+      target.pathname = url.pathname;
+      target.search = url.search;
       return fetch(new Request(target, request), { redirect: 'manual' });
     }
 
