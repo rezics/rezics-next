@@ -272,7 +272,7 @@ afterAll(async () => {
 test.serial(
   "a Space owner granted realm:create creates the Space's one Realm with a classification Context and becomes its owner",
   async () => {
-    await grant(owner.accountId, ['space:create', 'realm:create']);
+    await grant(owner.accountId, ['realm:create', 'space:create']);
     await grant(contextAuthor.accountId, ['context:create']);
 
     const context = await call('POST', '/v1/contexts', {
@@ -282,29 +282,25 @@ test.serial(
     });
     expect(context.response.status).toBe(201);
     classificationContext = (context.value as { context: typeof classificationContext }).context;
-    expect(classificationContext).toEqual({
-      id: expect.any(String),
-      kind: 'community',
-      labels: { en: 'Editorial classification' },
-    });
+    expect(typeof classificationContext.id).toBe('string');
+    expect(classificationContext.kind).toBe('community');
+    expect(classificationContext.labels).toEqual({ en: 'Editorial classification' });
 
     const space = await createSpace('Realm host');
     const created = await createRealm(space.spaceId, 'protected', classificationContext.id, 'Owner Realm');
     expect(created.response.status).toBe(201);
     protectedRealm = created.value.realm as Realm;
-    expect(protectedRealm).toMatchObject({
-      realmId: expect.any(String),
-      spaceId: space.spaceId,
-      state: 'active',
-      visibility: 'protected',
-      contextId: classificationContext.id,
-      title: 'Owner Realm',
-      summary: 'Owner Realm summary',
-      creator: owner.accountId,
-      author: owner.accountId,
-      predecessor: null,
-    });
-    expect(protectedRealm.headRevisionId).toEqual(expect.any(String));
+    expect(typeof protectedRealm.realmId).toBe('string');
+    expect(protectedRealm.spaceId).toBe(space.spaceId);
+    expect(protectedRealm.state).toBe('active');
+    expect(protectedRealm.visibility).toBe('protected');
+    expect(protectedRealm.contextId).toBe(classificationContext.id);
+    expect(protectedRealm.title).toBe('Owner Realm');
+    expect(protectedRealm.summary).toBe('Owner Realm summary');
+    expect(protectedRealm.creator).toBe(owner.accountId);
+    expect(protectedRealm.author).toBe(owner.accountId);
+    expect(protectedRealm.predecessor).toBeNull();
+    expect(typeof protectedRealm.headRevisionId).toBe('string');
     expect(created.response.headers.get('location')).toBe(`/v1/realms/${protectedRealm.realmId}`);
     expect(created.response.headers.get('etag')).toBe(JSON.stringify(protectedRealm.headRevisionId));
 

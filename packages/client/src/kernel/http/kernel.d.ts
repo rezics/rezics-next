@@ -1743,6 +1743,429 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             };
         };
     };
+} & {
+    v1: {
+        spaces: {
+            ":spaceId": {
+                patch: {
+                    body: {
+                        title?: string;
+                        summary?: string;
+                    };
+                    params: {
+                        spaceId: string;
+                    };
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                        'if-match': string;
+                    };
+                    response: {
+                        200: {
+                            space: {
+                                spaceId: string;
+                                state: "active";
+                                headRevisionId: string;
+                                createdAt: string;
+                                creator: string;
+                                predecessor: string | null;
+                                title: string;
+                                summary: string;
+                                revisionCreatedAt: string;
+                                author: string;
+                            };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        429: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        500: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            post: {
+                body: {
+                    spaceId: string;
+                    title: string;
+                    summary?: string;
+                    visibility: "protected" | "public";
+                    contextId: string;
+                };
+                params: {};
+                query: unknown;
+                headers: {
+                    "idempotency-key": string;
+                };
+                response: {
+                    200: {
+                        realm: {
+                            realmId: string;
+                            spaceId: string;
+                            state: 'active';
+                            visibility: 'public' | 'protected';
+                            contextId: string;
+                            headRevisionId: string;
+                            createdAt: string;
+                            creator: string;
+                            predecessor: string | null;
+                            title: string;
+                            summary: string;
+                            revisionCreatedAt: string;
+                            author: string;
+                        };
+                    };
+                    201: {
+                        realm: {
+                            realmId: string;
+                            spaceId: string;
+                            state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
+                            headRevisionId: string;
+                            createdAt: string;
+                            creator: string;
+                            predecessor: string | null;
+                            title: string;
+                            summary: string;
+                            revisionCreatedAt: string;
+                            author: string;
+                        };
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    403: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    429: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    500: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        realmId: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            realm: {
+                                realmId: string;
+                                spaceId: string;
+                                state: "active";
+                                visibility: "protected" | "public";
+                                contextId: string;
+                                headRevisionId: string;
+                                createdAt: string;
+                                creator: string;
+                                predecessor: string | null;
+                                title: string;
+                                summary: string;
+                                revisionCreatedAt: string;
+                                author: string;
+                            };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        500: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("./admission.ts").Admission;
@@ -1762,9 +2185,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "patch", "/v1/spaces/:spaceId", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "patch", "/v1/realms/:realmId", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        spaceId: import("typebox").TString;
+        realmId: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
@@ -1778,16 +2201,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 input: {
                     title?: string;
                     summary?: string;
+                    visibility?: "protected" | "public";
+                    contextId?: string;
                 };
                 output: {
                     title?: string;
                     summary?: string;
+                    visibility?: "protected" | "public";
+                    contextId?: string;
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     title?: string;
                     summary?: string;
+                    visibility?: "protected" | "public";
+                    contextId?: string;
                 };
                 issues?: never;
             } | {
@@ -1800,10 +2229,14 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 input: () => import("typebox").TObject<{
                     title: import("typebox").TOptional<import("typebox").TString>;
                     summary: import("typebox").TOptional<import("typebox").TString>;
+                    visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>>;
+                    contextId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
                 output: () => import("typebox").TObject<{
                     title: import("typebox").TOptional<import("typebox").TString>;
                     summary: import("typebox").TOptional<import("typebox").TString>;
+                    visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>>;
+                    contextId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
             };
         };
@@ -1927,9 +2360,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 vendor: string;
                 types: {
                     input: {
-                        space: {
+                        realm: {
+                            realmId: string;
                             spaceId: string;
                             state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -1941,9 +2377,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                     };
                     output: {
-                        space: {
+                        realm: {
+                            realmId: string;
                             spaceId: string;
                             state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -1957,9 +2396,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        space: {
+                        realm: {
+                            realmId: string;
                             spaceId: string;
                             state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -1979,9 +2421,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        space: import("typebox").TObject<{
+                        realm: import("typebox").TObject<{
+                            realmId: import("typebox").TString;
                             spaceId: import("typebox").TString;
                             state: import("typebox").TLiteral<"active">;
+                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>;
+                            contextId: import("typebox").TString;
                             headRevisionId: import("typebox").TString;
                             createdAt: import("typebox").TString;
                             creator: import("typebox").TString;
@@ -1993,9 +2438,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         }>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        space: import("typebox").TObject<{
+                        realm: import("typebox").TObject<{
+                            realmId: import("typebox").TString;
                             spaceId: import("typebox").TString;
                             state: import("typebox").TLiteral<"active">;
+                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>;
+                            contextId: import("typebox").TString;
                             headRevisionId: import("typebox").TString;
                             createdAt: import("typebox").TString;
                             creator: import("typebox").TString;
@@ -2023,7 +2471,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             bearerAuth: never[];
         }[];
     };
-}, {}, "/v1/spaces/:spaceId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { spaceId }, body, headers, actor, admission, job, session, set }: {
+}, {}, "/v1/realms/:realmId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { realmId }, body, headers, actor, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -2146,9 +2594,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }[];
         };
         200: {
-            space: {
+            realm: {
+                realmId: string;
                 spaceId: string;
                 state: "active";
+                visibility: "protected" | "public";
+                contextId: string;
                 headRevisionId: string;
                 createdAt: string;
                 creator: string;
@@ -2274,9 +2725,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }[];
         };
         200: {
-            space: {
+            realm: {
+                realmId: string;
                 spaceId: string;
                 state: "active";
+                visibility: "protected" | "public";
+                contextId: string;
                 headRevisionId: string;
                 createdAt: string;
                 creator: string;
@@ -2290,7 +2744,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            spaceId: import("typebox").TString;
+            realmId: import("typebox").TString;
         }>;
         headers: import("typebox").TObject<{
             "idempotency-key": import("typebox").TString;
@@ -2304,16 +2758,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     input: {
                         title?: string;
                         summary?: string;
+                        visibility?: "protected" | "public";
+                        contextId?: string;
                     };
                     output: {
                         title?: string;
                         summary?: string;
+                        visibility?: "protected" | "public";
+                        contextId?: string;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
                         title?: string;
                         summary?: string;
+                        visibility?: "protected" | "public";
+                        contextId?: string;
                     };
                     issues?: never;
                 } | {
@@ -2326,10 +2786,14 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     input: () => import("typebox").TObject<{
                         title: import("typebox").TOptional<import("typebox").TString>;
                         summary: import("typebox").TOptional<import("typebox").TString>;
+                        visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>>;
+                        contextId: import("typebox").TOptional<import("typebox").TString>;
                     }>;
                     output: () => import("typebox").TObject<{
                         title: import("typebox").TOptional<import("typebox").TString>;
                         summary: import("typebox").TOptional<import("typebox").TString>;
+                        visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>>;
+                        contextId: import("typebox").TOptional<import("typebox").TString>;
                     }>;
                 };
             };
@@ -2453,9 +2917,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     vendor: string;
                     types: {
                         input: {
-                            space: {
+                            realm: {
+                                realmId: string;
                                 spaceId: string;
                                 state: "active";
+                                visibility: "protected" | "public";
+                                contextId: string;
                                 headRevisionId: string;
                                 createdAt: string;
                                 creator: string;
@@ -2467,9 +2934,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             };
                         };
                         output: {
-                            space: {
+                            realm: {
+                                realmId: string;
                                 spaceId: string;
                                 state: "active";
+                                visibility: "protected" | "public";
+                                contextId: string;
                                 headRevisionId: string;
                                 createdAt: string;
                                 creator: string;
@@ -2483,9 +2953,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            space: {
+                            realm: {
+                                realmId: string;
                                 spaceId: string;
                                 state: "active";
+                                visibility: "protected" | "public";
+                                contextId: string;
                                 headRevisionId: string;
                                 createdAt: string;
                                 creator: string;
@@ -2505,9 +2978,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
-                            space: import("typebox").TObject<{
+                            realm: import("typebox").TObject<{
+                                realmId: import("typebox").TString;
                                 spaceId: import("typebox").TString;
                                 state: import("typebox").TLiteral<"active">;
+                                visibility: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>;
+                                contextId: import("typebox").TString;
                                 headRevisionId: import("typebox").TString;
                                 createdAt: import("typebox").TString;
                                 creator: import("typebox").TString;
@@ -2519,9 +2995,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             }>;
                         }>;
                         output: () => import("typebox").TObject<{
-                            space: import("typebox").TObject<{
+                            realm: import("typebox").TObject<{
+                                realmId: import("typebox").TString;
                                 spaceId: import("typebox").TString;
                                 state: import("typebox").TLiteral<"active">;
+                                visibility: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>;
+                                contextId: import("typebox").TString;
                                 headRevisionId: import("typebox").TString;
                                 createdAt: import("typebox").TString;
                                 creator: import("typebox").TString;
@@ -2549,7 +3028,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 bearerAuth: never[];
             }[];
         };
-    }, {}, "/v1/spaces/:spaceId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/realms/:realmId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -2573,10 +3052,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     body: {
         title?: string;
         summary?: string;
+        visibility?: "protected" | "public";
+        contextId?: string;
     };
     query: Record<string, string | undefined>;
     params: {
-        spaceId: string;
+        realmId: string;
     };
     headers: {
         "idempotency-key": string;
@@ -2596,9 +3077,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    space: {
+    realm: {
+        realmId: string;
         spaceId: string;
         state: 'active';
+        visibility: 'public' | 'protected';
+        contextId: string;
         headRevisionId: string;
         createdAt: string;
         creator: string;
@@ -2610,7 +3094,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
 }>, {
     params: import("typebox").TObject<{
-        spaceId: import("typebox").TString;
+        realmId: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
@@ -2624,16 +3108,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 input: {
                     title?: string;
                     summary?: string;
+                    visibility?: "protected" | "public";
+                    contextId?: string;
                 };
                 output: {
                     title?: string;
                     summary?: string;
+                    visibility?: "protected" | "public";
+                    contextId?: string;
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     title?: string;
                     summary?: string;
+                    visibility?: "protected" | "public";
+                    contextId?: string;
                 };
                 issues?: never;
             } | {
@@ -2646,10 +3136,14 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 input: () => import("typebox").TObject<{
                     title: import("typebox").TOptional<import("typebox").TString>;
                     summary: import("typebox").TOptional<import("typebox").TString>;
+                    visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>>;
+                    contextId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
                 output: () => import("typebox").TObject<{
                     title: import("typebox").TOptional<import("typebox").TString>;
                     summary: import("typebox").TOptional<import("typebox").TString>;
+                    visibility: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>>;
+                    contextId: import("typebox").TOptional<import("typebox").TString>;
                 }>;
             };
         };
@@ -2773,9 +3267,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 vendor: string;
                 types: {
                     input: {
-                        space: {
+                        realm: {
+                            realmId: string;
                             spaceId: string;
                             state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -2787,9 +3284,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                     };
                     output: {
-                        space: {
+                        realm: {
+                            realmId: string;
                             spaceId: string;
                             state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -2803,9 +3303,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        space: {
+                        realm: {
+                            realmId: string;
                             spaceId: string;
                             state: "active";
+                            visibility: "protected" | "public";
+                            contextId: string;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -2825,9 +3328,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        space: import("typebox").TObject<{
+                        realm: import("typebox").TObject<{
+                            realmId: import("typebox").TString;
                             spaceId: import("typebox").TString;
                             state: import("typebox").TLiteral<"active">;
+                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>;
+                            contextId: import("typebox").TString;
                             headRevisionId: import("typebox").TString;
                             createdAt: import("typebox").TString;
                             creator: import("typebox").TString;
@@ -2839,9 +3345,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         }>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        space: import("typebox").TObject<{
+                        realm: import("typebox").TObject<{
+                            realmId: import("typebox").TString;
                             spaceId: import("typebox").TString;
                             state: import("typebox").TLiteral<"active">;
+                            visibility: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"protected">]>;
+                            contextId: import("typebox").TString;
                             headRevisionId: import("typebox").TString;
                             createdAt: import("typebox").TString;
                             creator: import("typebox").TString;

@@ -22,6 +22,15 @@ import {
   type Space,
   type SpaceDependencies,
 } from './space.ts';
+import {
+  createRealm,
+  readRealm,
+  RealmConflictError,
+  RealmInputError,
+  updateRealm,
+  type Realm,
+  type RealmDependencies,
+} from './realm.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -44,8 +53,46 @@ const space = t.Object(
   closed,
 );
 const spaceResponse = t.Object({ space }, closed);
+const realm = t.Object(
+  {
+    realmId: id,
+    spaceId: id,
+    state: t.Literal('active'),
+    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
+    contextId: id,
+    headRevisionId: id,
+    createdAt: instant,
+    creator: id,
+    predecessor: t.Union([id, t.Null()]),
+    title,
+    summary,
+    revisionCreatedAt: instant,
+    author: id,
+  },
+  closed,
+);
+const realmResponse = t.Object({ realm }, closed);
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
 const updateInput = t.Object({ title: t.Optional(title), summary: t.Optional(summary) }, closed);
+const createRealmInput = t.Object(
+  {
+    spaceId: id,
+    title,
+    summary: t.Optional(summary),
+    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
+    contextId: id,
+  },
+  closed,
+);
+const updateRealmInput = t.Object(
+  {
+    title: t.Optional(title),
+    summary: t.Optional(summary),
+    visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('protected')])),
+    contextId: t.Optional(id),
+  },
+  closed,
+);
 
 /** Standard-schema validation keeps unknown fields instead of removing them. */
 function strict<S extends TSchema>(schema: S) {
@@ -58,7 +105,7 @@ function strict<S extends TSchema>(schema: S) {
       validate(value: unknown) {
         return validator.Check(value)
           ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the Space schema' }] };
+          : { issues: [{ message: 'Value does not match the community request schema' }] };
       },
       jsonSchema: { input: () => schema, output: () => schema },
     },
@@ -103,6 +150,7 @@ const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const params = t.Object({ spaceId: t.String() }, closed);
+const realmParams = t.Object({ realmId: t.String() }, closed);
 
 export type CommunityRouteDependencies = {
   pool: Pool;
@@ -113,8 +161,9 @@ export type CommunityRouteDependencies = {
 
 function communityProblem(error: unknown): never {
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
+  if (error instanceof RealmInputError) throw new ProblemError('invalid_request');
   // A changed head is the same closed not_found as content post edit's failed compare-and-set.
-  if (error instanceof SpaceConflictError) throw new ProblemError('not_found');
+  if (error instanceof SpaceConflictError || error instanceof RealmConflictError) throw new ProblemError('not_found');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   throw error;
 }
@@ -146,8 +195,33 @@ function published(space: Space) {
   };
 }
 
+function publishedRealm(value: Realm) {
+  if (value.state !== 'active') throw new ProblemError('not_found');
+  return {
+    realmId: value.realmId,
+    spaceId: value.spaceId,
+    state: 'active' as const,
+    visibility: value.visibility as 'public' | 'protected',
+    contextId: value.contextId,
+    headRevisionId: value.headRevisionId,
+    createdAt: value.createdAt,
+    creator: value.creator,
+    predecessor: value.predecessor,
+    title: value.title,
+    summary: value.summary,
+    revisionCreatedAt: value.revisionCreatedAt,
+    author: value.author,
+  };
+}
+
 export function communityRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: CommunityRouteDependencies) {
   const spaceDependencies = (): SpaceDependencies => ({
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    access: dependencies.access(),
+  });
+  const realmDependencies = (): RealmDependencies => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
@@ -268,6 +342,129 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
             return { space: representation };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .post(
+      '/v1/realms',
+      {
+        headers: commandHeaders,
+        body: strict(createRealmInput),
+        response: {
+          201: withHeaders(strict(realmResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'realm.create',
+          'x-action': 'realm:create',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await createRealm(
+              realmDependencies(),
+              actor,
+              {
+                spaceId: body.spaceId,
+                title: body.title,
+                ...(body.summary === undefined ? {} : { summary: body.summary }),
+                visibility: body.visibility,
+                contextId: body.contextId,
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            const current = await readRealm(realmDependencies(), actor, result.value.realmId, {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
+            const representation = publishedRealm(current);
+            session.record(result);
+            set.status = 201;
+            set.headers.location = `/v1/realms/${representation.realmId}`;
+            set.headers.etag = JSON.stringify(representation.headRevisionId);
+            return { realm: representation };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId',
+      {
+        params: realmParams,
+        response: {
+          200: withHeaders(strict(realmResponse), { etag: t.String() }),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'realm.get',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, admission, job, set }) => {
+        const current = await admission.run('normal', job, () =>
+          readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline }),
+        );
+        if (!current) throw new ProblemError('not_found');
+        const representation = publishedRealm(current);
+        set.headers.etag = JSON.stringify(representation.headRevisionId);
+        return { realm: representation };
+      },
+    )
+    .patch(
+      '/v1/realms/:realmId',
+      {
+        params: realmParams,
+        headers: updateHeaders,
+        body: strict(updateRealmInput),
+        response: {
+          200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'realm.update',
+          'x-action': 'realm:manage',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await updateRealm(
+              realmDependencies(),
+              actor,
+              {
+                realmId,
+                expectedHead,
+                ...(body.title === undefined ? {} : { title: body.title }),
+                ...(body.summary === undefined ? {} : { summary: body.summary }),
+                ...(body.visibility === undefined ? {} : { visibility: body.visibility }),
+                ...(body.contextId === undefined ? {} : { contextId: body.contextId }),
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            const current = await readRealm(realmDependencies(), actor, result.value.realmId, {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
+            const representation = publishedRealm(current);
+            session.record(result);
+            set.headers.etag = JSON.stringify(representation.headRevisionId);
+            return { realm: representation };
           });
         } catch (error) {
           communityProblem(error);

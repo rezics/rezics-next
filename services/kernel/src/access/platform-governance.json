@@ -12,6 +12,7 @@
     "context:create",
     "offer:create",
     "payout_statement:mark_paid",
-    "space:create"
+    "space:create",
+    "realm:create"
   ]
 }
