@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
-import { createAuthService, createBarrierProofVerifier } from '../src/index.ts';
+import { createAuthService, createBarrierProofVerifier, type AuthService } from '../src/index.ts';
 import {
   capture,
   checkGrowth,
@@ -35,8 +36,7 @@ async function grow(db: GrowthDatabase, scale: number, previous: number) {
     `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,created_at,expires_at,applied_at)
     SELECT md5(owner||i)||md5(owner||i),owner,'recovery',1,encode(sha256(convert_to(owner||i,'UTF8')),'hex'),repeat('0',64),
       jsonb_build_array('recovery-v1',owner,1,md5(owner||i)||md5(owner||i),'spent-'||i,'historical-'||owner||i,repeat('0',64),'set-password',repeat('0',64)),
-      CASE WHEN i%2=0 THEN now()-interval '10 minutes' ELSE now() END,
-      CASE WHEN i%2=0 THEN now()-interval '9 minutes' ELSE now()+interval '4 minutes' END,now()
+      now(),now()+interval '4 minutes',now()
     FROM generate_series($1::integer,$2::integer) i CROSS JOIN LATERAL (VALUES ('hot'),('owner-'||i)) owners(owner)`,
     range,
   );
@@ -82,7 +82,7 @@ async function seedCleanupSweepState(db: GrowthDatabase, scale: number) {
     `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,created_at,expires_at)
     SELECT md5('cleanup-backlog-'||$1||'-'||i)||md5('cleanup-backlog-'||$1||'-'||i),'hot','recovery',1,'cleanup-backlog-'||$1||'-'||i,
       repeat('0',64),'[]',now()-interval '2 minutes',now()-interval '1 minute'
-    FROM generate_series(1,1000) i`,
+    FROM generate_series(1,2000) i`,
     [scale],
   );
 }
@@ -94,8 +94,11 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
     try {
       const issuer = 'https://growth.recovery.test';
       const password = 'sufficiently long native growth password';
+      const secret = 'persistent-native-growth-recovery-secret';
       const tokens = new Map<string, string>();
       let reference = '';
+      let service: AuthService;
+      const authorized = new Map<string, { accountId: string; receiptId: string; minimumAuthnEpoch: number }>();
       const proofs = createBarrierProofVerifier({ database: db.pool });
       await db.admin.query(`CREATE TABLE test_access (id text PRIMARY KEY,epoch integer NOT NULL,state text NOT NULL);
       INSERT INTO test_access VALUES ('hot',7,'pending'),('warmup',7,'pending')`);
@@ -109,11 +112,11 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
         ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
         kid: 'growth',
       };
-      const service = await createAuthService({
+      service = await createAuthService({
         database: db.pool,
         issuer,
         audience: 'https://api.test',
-        secret: 'persistent-native-growth-recovery-secret',
+        secret,
         signing: { activeKid: key.kid, privateKeys: [key] },
         trustedAccess: {
           readAccount,
@@ -138,7 +141,33 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
               ])
             ).rows[0];
             if (!row) throw new Error('Native floor CAS denied');
-            return { accountId: input.accountId, receiptId: input.operationKey!, minimumAuthnEpoch: row.epoch };
+            const expected = {
+              accountId: input.accountId,
+              receiptId: input.operationKey!,
+              minimumAuthnEpoch: row.epoch as number,
+            };
+            authorized.set(reference, expected);
+            return expected;
+          },
+          async completeRecovery(proofReference) {
+            const expected = authorized.get(proofReference);
+            const witness = await service.internal.resolveRecoveryEstablishment(proofReference);
+            const access = expected
+              ? (await db.pool.query('SELECT epoch,state FROM test_access WHERE id=$1', [expected.accountId])).rows[0]
+              : null;
+            if (
+              !expected ||
+              !witness ||
+              !access ||
+              access.state !== 'active' ||
+              witness.accountId !== expected.accountId ||
+              witness.receiptId !== expected.receiptId ||
+              witness.authnEpoch !== access.epoch ||
+              witness.minimumAuthnEpoch !== String(expected.minimumAuthnEpoch) ||
+              access.epoch !== expected.minimumAuthnEpoch
+            )
+              throw new Error('Recovery completion denied');
+            authorized.delete(proofReference);
           },
         },
         recoveryDelivery: {
@@ -169,28 +198,49 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
           token: tokens.get(accountId),
           new_password: password,
         });
+      async function startRecovery(accountId: 'hot' | 'warmup') {
+        const email = accountId === 'hot' ? 'hot@example.test' : 'warmup@example.test';
+        const deliveryKey = createHmac('sha256', secret)
+          .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+          .digest('hex');
+        await db.admin.query('DELETE FROM auth_attempt_counter WHERE key=$1', [deliveryKey]);
+        tokens.delete(accountId);
+        expect((await request('/recovery/start', { email })).status).toBe(200);
+        for (let attempt = 0; attempt < 500 && !tokens.has(accountId); attempt++) await Bun.sleep(10);
+        expect(tokens.has(accountId)).toBe(true);
+      }
       const report = await checkGrowth(db, {
         name: `native recovery establishment ${kind}`,
         repetitions: 1,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
         async grow(_, scale, previous) {
           await grow(db, scale, previous);
-          expect((await request('/recovery/start', { account_id: 'hot' })).status).toBe(200);
-          if (kind === 'complete')
-            expect((await request('/recovery/start', { account_id: 'warmup' })).status).toBe(200);
+          if (kind === 'complete' && scale === 1) {
+            // Keep the measured hot user's maximum 64-session set selective in
+            // PostgreSQL's plan by giving the session index an unrelated cohort.
+            await db.admin.query(
+              `INSERT INTO session (id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt")
+              SELECT 'unrelated-session-'||i,'unrelated-token-'||i,'owner-'||((i-1)%1024+1),now()+interval '1 day','web','read',1,1,'pwd',now()
+              FROM generate_series(1,4096) i`,
+            );
+          }
+          await startRecovery('hot');
+          if (kind === 'complete') await startRecovery('warmup');
           // Exercise the real maximum stored session set, never an uncapped history.
+          await db.admin.query('DELETE FROM session WHERE "userId"=ANY($1::text[])', [['hot', 'warmup']]);
           await db.admin.query(
             `INSERT INTO session (id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt")
           SELECT 'session-'||$1||'-'||i,'token-'||$1||'-'||i,'hot',now()+interval '1 day','web','read',7,1,'pwd',now() FROM generate_series(1,64) i`,
             [scale],
           );
-          if (kind === 'complete')
+          if (kind === 'complete') {
             await db.admin.query(
               `INSERT INTO session (id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt")
           SELECT 'warm-session-'||$1||'-'||i,'warm-token-'||$1||'-'||i,'warmup',now()+interval '1 day','web','read',7,1,'pwd',now() FROM generate_series(1,64) i`,
               [scale],
             );
-          else expect((await complete('hot')).status).toBe(200);
+          } else expect((await complete('hot')).status).toBe(200);
+          await db.admin.query('VACUUM (ANALYZE) session');
           if (kind === 'cleanup') await seedCleanupSweepState(db, scale);
         },
         async operation() {

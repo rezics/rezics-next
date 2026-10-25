@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
-import { createAuthService, createBarrierProofVerifier, type BarrierProof } from '../src/index.ts';
+import { createAuthService, createBarrierProofVerifier, type AuthService, type BarrierProof } from '../src/index.ts';
 import { withAuthTransport } from '../src/rate-limit.ts';
 import {
   capture,
@@ -76,7 +77,9 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
       const verifier = createBarrierProofVerifier({ database: db.pool });
       const issuer = 'https://growth.barrier.test';
       const password = 'growth password sufficiently long';
+      const secret = 'persistent-growth-barrier-secret-32-bytes';
       const tokens = new Map<string, string>();
+      let auth: AuthService;
       let cookie = '';
       let warmupCookie = '';
       let warmupPeer = '';
@@ -128,11 +131,11 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
         ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
         kid: 'growth-barrier',
       };
-      const auth = await createAuthService({
+      auth = await createAuthService({
         database: db.pool,
         issuer,
         audience: 'https://api.test',
-        secret: 'persistent-growth-barrier-secret-32-bytes',
+        secret,
         signing: { activeKid: key.kid, privateKeys: [key] },
         trustedAccess: {
           readAccount,
@@ -143,6 +146,24 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
           invalidateAccount: (v) =>
             barrier(v.accountId, 'consent-reduction', v.previousEpoch, v.proofReference, v.operationKey),
           authorizeRecovery: (v) => barrier(v.accountId, 'recovery', v.proofEpoch, v.proofReference, v.operationKey),
+          async completeRecovery(reference) {
+            const expected = latest!;
+            const witness = await auth.internal.resolveRecoveryEstablishment(reference);
+            const access = (
+              await db.pool.query('SELECT epoch,state FROM test_access WHERE id=$1', [expected.expected.accountId])
+            ).rows[0];
+            if (
+              reference !== expected.reference ||
+              !witness ||
+              !access ||
+              access.state !== 'active' ||
+              witness.accountId !== expected.expected.accountId ||
+              witness.receiptId !== expected.expected.operationKey ||
+              witness.authnEpoch !== access.epoch ||
+              witness.minimumAuthnEpoch !== String(access.epoch)
+            )
+              throw new Error('Recovery completion denied');
+          },
         },
         recoveryDelivery: {
           async deliver(v) {
@@ -165,6 +186,17 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
           );
         return peer ? withAuthTransport(peer, invoke) : invoke();
       };
+      async function startRecovery(accountId: 'hot' | 'warmup') {
+        const email = accountId === 'hot' ? 'hot@example.test' : 'warmup@example.test';
+        const deliveryKey = createHmac('sha256', secret)
+          .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+          .digest('hex');
+        await db.admin.query('DELETE FROM auth_attempt_counter WHERE key=$1', [deliveryKey]);
+        tokens.delete(accountId);
+        expect((await request('/recovery/start', { email })).status).toBe(200);
+        for (let attempt = 0; attempt < 500 && !tokens.has(accountId); attempt++) await Bun.sleep(10);
+        expect(tokens.has(accountId)).toBe(true);
+      }
       await auth.internal.provisionPassword({ authorization: 'approved', email: 'hot@example.test', password });
       if (kind === 'consent' || kind === 'recovery')
         await auth.internal.provisionPassword({
@@ -204,9 +236,9 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
               (await request('/consent', { client_id: 'external', scope: ['read', 'write'] }, warmupCookie)).status,
             ).toBe(200);
           } else if (kind === 'recovery') {
-            expect((await request('/recovery/start', { account_id: 'hot' })).status).toBe(200);
+            await startRecovery('hot');
             warmupPeer = `192.0.2.${scale}`;
-            expect((await request('/recovery/start', { account_id: 'warmup' }, '', warmupPeer)).status).toBe(200);
+            await startRecovery('warmup');
           }
         },
         async operation() {

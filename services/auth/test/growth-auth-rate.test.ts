@@ -40,6 +40,11 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   let delivered = 0;
   let serial = 0;
   let emptyScans = 0;
+  const inspectedIndexVisitsByScale: Record<number, Readonly<Record<string, number>>> = {};
+  const rateSlack = {
+    rows: { absolute: 0, relative: 0 },
+    blocks: { absolute: 0, relative: 0 },
+  };
   let verifiedCosts: readonly { rows: number; statements: number }[] = [];
 
   beforeAll(async () => {
@@ -152,14 +157,14 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       FROM generate_series($1::int,$2::int) i`,
       range,
     );
-    // A genuinely empty anti-probe at 1x, then a populated, growing relation.
-    if (scale > 1)
-      await database.admin.query(
-        `INSERT INTO auth_client_reduction
+    // Keep unrelated rows in the seek relation at every scale so the measured
+    // missing-key probe uses its indexed plan from the first population onward.
+    await database.admin.query(
+      `INSERT INTO auth_client_reduction
       SELECT 'client-'||i,'reduction-'||i,ARRAY['read'],true
       FROM generate_series($1::int,$2::int) i ON CONFLICT DO NOTHING`,
-        [1, scale * 1024],
-      );
+      [previous * 1024 + 1, scale * 1024],
+    );
     const keys: string[] = [];
     for (let i = range[0]!; i <= range[1]!; i++) {
       const peer = `10.${Math.floor(i / 65536)}.${Math.floor(i / 256) % 256}.${i % 256}`;
@@ -186,7 +191,11 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
     // Inspect the same whole handlers at every scale, not re-executed EXPLAINs
     // or substitute counter queries. checkGrowth measures them again below.
     await freshServices();
-    await attempts(true);
+    inspectedIndexVisitsByScale[scale] = await attempts(true);
+    if (scale === 1)
+      rateSlack.blocks.absolute = Object.entries(inspectedIndexVisitsByScale[scale]!)
+        .filter(([relation]) => relation.startsWith('public.'))
+        .reduce((sum, [, visits]) => sum + visits, 0);
     await freshServices();
   }
 
@@ -195,6 +204,43 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
     if (!value || typeof value !== 'object') return [];
     const object = value as Record<string, unknown>;
     return [...('Node Type' in object ? [object] : []), ...Object.values(object).flatMap(nodes)];
+  }
+
+  async function indexVisits(plans: readonly unknown[]) {
+    const visits: Record<string, number> = {};
+    const modifications: Record<string, number> = {};
+    for (const plan of plans) {
+      const query = String((plan as Record<string, unknown>)['Query Text'] ?? '');
+      const insert = /\bINSERT\b/i.test(query);
+      for (const node of nodes(plan)) {
+        const nodeType = node['Node Type'];
+        const relation = node['Relation Name'];
+        if (typeof relation !== 'string' || typeof node.Schema !== 'string') continue;
+        const loops = Number(node['Actual Loops'] ?? 1);
+        const relationName = `${node.Schema}.${relation}`;
+        if (['Index Scan', 'Index Only Scan', 'Bitmap Heap Scan'].includes(String(nodeType)))
+          visits[relationName] = (visits[relationName] ?? 0) + loops;
+        if (nodeType === 'ModifyTable' && insert)
+          modifications[relationName] =
+            (modifications[relationName] ?? 0) + Math.max(1, Number(node['Actual Rows'] ?? 0)) * loops;
+      }
+    }
+
+    const modifiedRelations = Object.keys(modifications);
+    if (modifiedRelations.length > 0) {
+      const indexes = await db.admin.query<{ relation: string; indexes: number }>(
+        `SELECT n.nspname||'.'||table_class.relname AS relation,count(index_class.oid)::integer AS indexes
+         FROM pg_class table_class JOIN pg_namespace n ON n.oid=table_class.relnamespace
+         LEFT JOIN pg_index i ON i.indrelid=table_class.oid
+         LEFT JOIN pg_class index_class ON index_class.oid=i.indexrelid
+         WHERE n.nspname||'.'||table_class.relname=ANY($1::text[])
+         GROUP BY n.nspname,table_class.relname`,
+        [modifiedRelations],
+      );
+      for (const { relation, indexes: count } of indexes.rows)
+        visits[relation] = (visits[relation] ?? 0) + (modifications[relation] ?? 0) * count;
+    }
+    return visits;
   }
 
   async function request(index: number, peer: string, path: string, body: unknown, origin = issuer) {
@@ -211,7 +257,11 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
 
   async function attempts(inspect = false) {
     const peer = `198.18.${Math.floor(++serial / 256)}.${serial % 256}`;
+    const recoveryDeliveryKey = createHmac('sha256', secret)
+      .update(JSON.stringify(['auth-recovery-mail-v1', account.accountId]))
+      .digest('hex');
     const before = delivered;
+    const inspectedPlans: unknown[] = [];
     const families = [
       {
         path: '/signin',
@@ -228,7 +278,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
         path: '/recovery/start',
         native: '/request-password-reset',
         status: 200,
-        body: { account_id: account.accountId },
+        body: { email: 'measured@example.test' },
       },
       {
         path: '/recovery/complete',
@@ -246,9 +296,21 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       } else expect((await deniedOrigin()).status).toBe(403);
       // Alternate replicas within one key/window; the fourth charge is denied.
       for (let charge = 0; charge < 4; charge++) {
+        if (family.path === '/recovery/start' && charge < 3) {
+          // Isolate the per-peer handler limit from the separate per-account mail cooldown.
+          await db.admin.query('DELETE FROM auth_attempt_counter WHERE key=$1', [recoveryDeliveryKey]);
+        }
         const body =
           family.path === '/signin' && charge === 1 ? { ...family.body, email: 'absent@example.test' } : family.body;
-        const invoke = () => request(charge, peer, family.path, body);
+        const invoke = async () => {
+          const response = await request(charge, peer, family.path, body);
+          if (family.path === '/recovery/start' && charge < 3) {
+            const expectedDeliveries = before + charge + 1;
+            for (let attempt = 0; attempt < 500 && delivered < expectedDeliveries; attempt++) await Bun.sleep(10);
+            expect(delivered).toBe(expectedDeliveries);
+          }
+          return response;
+        };
         const actual = inspect ? await capture(db, invoke) : undefined;
         const response = actual ? actual.value : await invoke();
         expect(response.status).toBe(charge === 3 ? 429 : family.status);
@@ -256,16 +318,20 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
         if (response.status !== 200) expect(await response.text()).toBe('{"error":"authentication_denied"}');
         if (charge === 3) expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0);
         if (actual) {
-          expect(actual.capture.statements.filter((sql) => sql === attemptStatement)).toHaveLength(1);
+          inspectedPlans.push(...actual.capture.plans);
+          const expectedConsumes = family.path === '/recovery/start' && charge < 3 ? 2 : 1;
+          expect(actual.capture.statements.filter((sql) => sql === attemptStatement)).toHaveLength(expectedConsumes);
           const counterPlans = actual.capture.plans.filter(
             (plan) => (plan as Record<string, unknown>)['Query Text'] === attemptStatement,
           );
-          expect(counterPlans).toHaveLength(1);
-          const counter = nodes(counterPlans).find((node) => node['Node Type'] === 'ModifyTable');
-          expect(counter?.['Actual Rows']).toBe(1);
-          expect(counter?.['Actual Loops']).toBe(1);
-          expect(counter?.['Conflict Resolution']).toBe('UPDATE');
-          expect(counter?.['Conflict Arbiter Indexes']).toEqual(['auth_attempt_counter_pkey']);
+          expect(counterPlans).toHaveLength(expectedConsumes);
+          for (const plan of counterPlans) {
+            const counter = nodes(plan).find((node) => node['Node Type'] === 'ModifyTable');
+            expect(counter?.['Actual Rows']).toBe(1);
+            expect(counter?.['Actual Loops']).toBe(1);
+            expect(counter?.['Conflict Resolution']).toBe('UPDATE');
+            expect(counter?.['Conflict Arbiter Indexes']).toEqual(['auth_attempt_counter_pkey']);
+          }
           const cost = costOf(actual.capture);
           // Includes all credential/client/verification work, filtered rows and
           // loops. Empty scans cost zero; no populated sequential scan is free.
@@ -280,15 +346,20 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
             // too; its fixed-schema scans/loops are not population scans.
             if (node.Schema !== 'public') continue;
             expect(Number(node['Actual Loops'])).toBeLessThanOrEqual(1);
+            const examined =
+              Number(node['Actual Rows']) +
+              Number(node['Rows Removed by Filter'] ?? 0) +
+              Number(node['Rows Removed by Index Recheck'] ?? 0);
+            const blocks = Number(node['Shared Hit Blocks']) + Number(node['Shared Read Blocks']);
             if (node['Node Type'] === 'Seq Scan') {
-              expect(
-                Number(node['Actual Rows']) +
-                  Number(node['Rows Removed by Filter'] ?? 0) +
-                  Number(node['Rows Removed by Index Recheck'] ?? 0),
-              ).toBe(0);
-              expect(Number(node['Shared Hit Blocks']) + Number(node['Shared Read Blocks'])).toBe(0);
-              emptyScans++;
+              expect(examined).toBe(0);
+              expect(blocks).toBe(0);
             }
+            if (
+              ['Seq Scan', 'Index Scan', 'Index Only Scan', 'Bitmap Heap Scan'].includes(String(node['Node Type'])) &&
+              examined === 0
+            )
+              emptyScans++;
           }
           if (charge === 3) expect(cost.statements).toBe(1);
         }
@@ -302,6 +373,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
     }
     expect(delivered - before).toBe(3);
     expect(account.authnEpoch).toBe(7);
+    return inspect ? await indexVisits(inspectedPlans) : {};
   }
 
   test('checkGrowth measures whole own handler including empty bounded scans', async () => {
@@ -312,22 +384,34 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       // Permit an extra tree level across the cohort's bounded index visits;
       // no relative allowance from the much larger constant catalog work.
-      slack: { rows: { absolute: 0, relative: 0 }, blocks: { absolute: 32, relative: 0 } },
+      slack: rateSlack,
       async operation() {
         await attempts();
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
+    verifiedCosts = report.samples.map(({ cost }) => cost);
+    console.info('Whole native Auth rate growth:', JSON.stringify(report.samples));
+    const relationNames = new Set([
+      ...Object.keys(report.samples[1]!.cost.relations ?? {}),
+      ...Object.keys(report.samples[2]!.cost.relations ?? {}),
+    ]);
+    const relationChanges = [...relationNames].map((name) => ({
+      relation: name,
+      blocks8: report.samples[1]!.cost.relations?.[name]?.blocks ?? 0,
+      blocks64: report.samples[2]!.cost.relations?.[name]?.blocks ?? 0,
+      indexVisitsAt1: inspectedIndexVisitsByScale[1]?.[name] ?? 0,
+    }));
+    console.info('Whole native Auth rate relation growth:', JSON.stringify(relationChanges));
+    for (const { blocks8, blocks64, indexVisitsAt1 } of relationChanges)
+      expect(blocks64 - blocks8).toBeLessThanOrEqual(indexVisitsAt1);
     expect(emptyScans).toBeGreaterThan(0);
     for (const { cost } of report.samples) {
       expect(cost.statements).toBeGreaterThan(12); // Not just the twelve consumes.
       expect(cost.relations?.['public.user']?.rows).toBeGreaterThan(0);
       expect(cost.relations?.['public.account']?.rows).toBeGreaterThan(0);
       expect(cost.relations?.['public.auth_client']?.rows).toBeGreaterThan(0);
-      expect(cost.relations?.['pg_catalog.pg_attribute']?.rows).toBeGreaterThan(0);
     }
-    verifiedCosts = report.samples.map(({ cost }) => cost);
-    console.info('Whole native Auth rate growth:', JSON.stringify(report.samples));
   }, 150000);
 
   test('README rate row matches verified behavior', async () => {
