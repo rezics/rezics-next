@@ -15,6 +15,7 @@ import {
   type LifecycleRequest,
 } from '../../src/access/lifecycle.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
+import { createOperatorCommands } from '../../src/access/operator.ts';
 import { accessCheck } from '../../src/request/access.ts';
 
 export type FixtureConfiguration = {
@@ -44,9 +45,17 @@ export async function handleFixture(
     ).rows[0];
     if (!row?.reservation_id) throw new Error('No durable pending registration');
     const route = routeOf(row.account_id)!;
-    const workflow = `accounts:${createHash('sha256')
-      .update(JSON.stringify(`registration:${row.request_key}`))
-      .digest('hex')}`;
+    const automated = (
+      await database.query<{ workflow_id: string }>(
+        "SELECT workflow_id FROM auth_workflow_request WHERE request->>'kind'='automated' AND request->>'registrationId'=$1",
+        [reference],
+      )
+    ).rows[0];
+    const workflow =
+      automated?.workflow_id ??
+      `accounts:${createHash('sha256')
+        .update(JSON.stringify(`registration:${row.request_key}`))
+        .digest('hex')}`;
     const receipt = await kernel.query<{ response: { accountId: string; registrationId: string } }>(
       "SELECT response FROM core.receipt WHERE partition_no=$1 AND actor_account_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
       [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:wf:${workflow}:pending-account`],
@@ -65,9 +74,7 @@ export async function handleFixture(
     async provisioningEvidence(proof) {
       if (typeof proof !== 'string') return null;
       const row = await pendingProof(proof);
-      const owner = await database.query('SELECT account_id FROM auth_provisioning_receipt WHERE account_id=$1', [
-        row.account_id,
-      ]);
+      const owner = await database.query('SELECT id FROM "user" WHERE id=$1', [row.account_id]);
       if (!owner.rowCount) return null;
       return {
         accountId: row.account_id,
@@ -78,6 +85,8 @@ export async function handleFixture(
     },
     recoveryEvidence: async () => null,
   });
+  const openings = new Map<string, LifecycleRequest>();
+  let operators: ReturnType<typeof createOperatorCommands>;
   const auth = await createAuthService({
     database,
     issuer: 'https://durable-handles.auth.test',
@@ -99,18 +108,50 @@ export async function handleFixture(
           : null;
       },
       authorizeProvisioning: async (reference) => ({ accountId: (await pendingProof(reference)).account_id }),
+      async consumeAuthorization(input) {
+        const context = openings.get(input.authorization);
+        if (
+          !context ||
+          input.purpose !== 'session' ||
+          context.actor.accountId !== input.human.account_id ||
+          context.actor.clientId !== input.human.client_id ||
+          context.actor.authnEpoch !== input.human.authn_epoch
+        )
+          throw new Error('Opening human mismatch');
+        const subject = await read(input.subjectAccountId);
+        if (!subject?.operatorAccountId) throw new Error('Missing operator');
+        const result = await operators.consumeOpening(context, {
+          operatorAccountId: subject.operatorAccountId,
+          subjectAccountId: input.subjectAccountId,
+          receiptId: input.authorization,
+          purpose: 'session',
+          key: `consume:${input.authorization}`,
+        });
+        return {
+          ...result.value,
+          purpose: 'session',
+          humanEpoch: input.human.authn_epoch,
+          subjectEpoch: Number(subject.minimumAuthnEpoch),
+        };
+      },
     },
   });
-  await auth.internal.registerClient({ clientId: 'durable-web', firstParty: true, scopes: ['account:update'] });
+  await auth.internal.registerClient({
+    clientId: 'durable-web',
+    firstParty: true,
+    scopes: ['account:update', 'account:delete', 'organization:membership', 'account:manage'],
+  });
   const verifier = createAuthenticator({
     ...auth.verifier,
     fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
   });
+  const actions = new Map([...LIFECYCLE_ACTIONS, ['account:manage', { anonymous: false }] as const]);
   const access = createAccess({
-    actions: LIFECYCLE_ACTIONS,
+    actions,
     accountEvidence: (actor) => verifier.identity(actor)?.account,
   });
   const commands = createLifecycleCommands({ pool: kernel, access });
+  operators = createOperatorCommands({ pool: kernel, access, actions, managementAction: 'account:manage' });
   const approvals = new Map<string, { token: string; operation?: AccountOperation }>();
   let fault: string | undefined;
   let beforeRevoke: ((accountId: string) => Promise<void>) | undefined;
@@ -131,6 +172,15 @@ export async function handleFixture(
   }
   const ports: AccountWorkflowPorts<LifecycleRequest> = {
     ...internal,
+    ...operators,
+    readAccount: read,
+    setMembership: commands.setMembership,
+    tombstone: commands.tombstone,
+    async authorizeOpening(context, input) {
+      const result = await operators.authorizeOpening(context, input);
+      openings.set(result.value.receiptId, context);
+      return result;
+    },
     transitionAccountHandle: commands.transitionAccountHandle,
     async provisioningReference({ accountId, reservationId }) {
       const row = (
@@ -152,18 +202,30 @@ export async function handleFixture(
       const context = { pool: kernel, deadline: Date.now() + 5000 };
       const actor = await verifier.authenticate(approval.token, context);
       if (actor.kind !== 'account') throw new Error('No authenticated actor');
-      if (operation.kind === 'rename') {
-        const check = await accessCheck(
-          access,
-          actor,
-          'account:update',
-          { route: routeOf(operation.accountId)!, id: operation.accountId },
-          context,
-        );
+      const target =
+        operation.kind === 'automated' || operation.kind === 'opening'
+          ? operation.operatorAccountId
+          : operation.kind === 'transfer'
+            ? operation.previous.operatorAccountId
+            : operation.kind === 'membership'
+              ? operation.organizationId
+              : 'accountId' in operation
+                ? operation.accountId
+                : null;
+      const action =
+        operation.kind === 'automated' || operation.kind === 'opening' || operation.kind === 'transfer'
+          ? 'account:manage'
+          : operation.kind === 'membership'
+            ? 'organization:membership'
+            : operation.kind === 'delete'
+              ? 'account:delete'
+              : 'account:update';
+      if (target && operation.kind !== 'revoke') {
+        const check = await accessCheck(access, actor, action, { route: routeOf(target)!, id: target }, context);
         if (!(await withConnection(kernel, (client) => check(client))))
-          throw new Error('Current rename authorization denied');
+          throw new Error('Current operation authorization denied');
       }
-      return { ...context, actor };
+      return { ...context, actor, account: await read(actor.accountId) };
     },
     actorAccountId: (context) => context.actor.accountId,
   };
@@ -174,6 +236,9 @@ export async function handleFixture(
     finalizeHandleTransition: internal.finalizeHandleTransition,
     redirectTransitionHandle: internal.redirectTransitionHandle,
     completeHandleTransition: internal.completeHandleTransition,
+    releaseMembershipCoordination: internal.releaseMembershipCoordination,
+    setMembership: commands.setMembership,
+    tombstone: commands.tombstone,
   };
   for (const phase of Object.keys(native) as (keyof typeof native)[]) {
     Object.assign(ports, { [phase]: intercept(phase, native[phase]) });
@@ -206,6 +271,7 @@ export async function handleFixture(
     kernel,
     internal,
     commands,
+    operators,
     auth,
     read,
     effects,

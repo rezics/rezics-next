@@ -9,6 +9,9 @@ export type {
   RegistrationReference,
   WorkflowHandleTransition,
   WorkflowFence,
+  WorkflowMembership,
+  WorkflowResponsibility,
+  WorkflowAccount,
 } from './workflows.ts';
 
 export interface AccessAccount {
@@ -152,6 +155,30 @@ export interface AuthService {
       subjectAccountId: string;
       headers: Headers;
       credential: CredentialEffect;
+    }): Promise<void>;
+    reduceConsent(input: {
+      accountId: string;
+      clientId: string;
+      scopes: string[];
+      barrier: InvalidationReceipt;
+    }): Promise<void>;
+    beginClientReduction(input: {
+      clientId: string;
+      operationId: string;
+      scopes: string[];
+      firstParty: boolean;
+    }): Promise<void>;
+    clientReductionPage(input: {
+      clientId: string;
+      operationId: string;
+      after: string;
+      limit: number;
+    }): Promise<{ items: string[]; next: string | null }>;
+    finishClientReduction(input: {
+      clientId: string;
+      operationId: string;
+      scopes: string[];
+      firstParty: boolean;
     }): Promise<void>;
     revokeSessions(accountId: string): Promise<void>;
     registerClient(input: { clientId: string; firstParty: boolean; scopes: string[] }): Promise<void>;

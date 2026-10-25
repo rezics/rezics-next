@@ -30,6 +30,8 @@ import activateStatement from './lifecycle-activate.sql';
 import updateStatement from './lifecycle-update.sql';
 import coordinationInsert from './lifecycle-coordination.sql';
 import coordinationRead from './lifecycle-coordination-read.sql';
+import membershipSlotRead from './lifecycle-membership-slot-read.sql';
+import membershipRelease from './lifecycle-membership-release.sql';
 import holdsRead from './lifecycle-holds.sql';
 import membershipChange from './lifecycle-membership.sql';
 import memberInsert from './lifecycle-member-insert.sql';
@@ -867,10 +869,50 @@ export function createLifecycleInternals(
         return null;
       return { accountId: claim.accountId, redirect: claim.state === 'reserved' };
     },
-    /** Actor/operator-anchor hold, separate from organization mutation. Holds
-     * remain after membership removal until a later durable workflow resolves
-     * responsibility. There is no unsafe time-based or caller-selected release.
-     */
+    /** Permanent organization-local terminal evidence is read and released
+     * before the member anchor command. Only this exact membership hold can be
+     * removed; a delayed activation cannot reopen its terminal slot. */
+    async releaseMembershipCoordination(input: {
+      organizationId: string;
+      memberAccountId: string;
+      reservationId: string;
+      key: string;
+    }) {
+      input = { ...input };
+      const slot = await withConnection(pool, (client) =>
+        membershipSlotRead.run(client, {
+          route: accountRoute(input.organizationId),
+          organization_id: input.organizationId,
+          member_id: input.memberAccountId,
+          reservation_id: input.reservationId,
+        }),
+      );
+      const route = accountRoute(input.memberAccountId);
+      return execute(
+        { route, id: input.memberAccountId, kind: 'membership-coordination-released', key: input.key, input },
+        async (tx) => {
+          await locked(tx, input.memberAccountId);
+          requireAllowed(slot?.terminal);
+          requireAllowed(
+            affected(
+              await membershipRelease.run(tx, {
+                route,
+                account_id: input.memberAccountId,
+                organization_id: input.organizationId,
+                reservation_id: input.reservationId,
+              }),
+            ),
+          );
+          return {
+            organizationId: input.organizationId,
+            memberAccountId: input.memberAccountId,
+            reservationId: input.reservationId,
+          };
+        },
+      );
+    },
+    /** Account-anchor hold acquired before a separately anchored relation.
+     * Holds never expire; release requires exact permanent terminal evidence. */
     async reserveCoordination(
       input: LifecycleCommand & { relatedAccountId: string; purpose: 'membership' | 'operator' },
     ) {

@@ -54,6 +54,18 @@ CREATE TABLE public.auth_client (
 
 
 --
+-- Name: auth_client_reduction; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_client_reduction (
+    client_id text NOT NULL,
+    operation_id text NOT NULL,
+    scopes text[] NOT NULL,
+    first_party boolean NOT NULL
+);
+
+
+--
 -- Name: auth_consent; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -258,6 +270,22 @@ ALTER TABLE ONLY public.auth_client
 
 
 --
+-- Name: auth_client_reduction auth_client_reduction_operation_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client_reduction
+    ADD CONSTRAINT auth_client_reduction_operation_id_key UNIQUE (operation_id);
+
+
+--
+-- Name: auth_client_reduction auth_client_reduction_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client_reduction
+    ADD CONSTRAINT auth_client_reduction_pkey PRIMARY KEY (client_id);
+
+
+--
 -- Name: auth_consent auth_consent_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -459,6 +487,14 @@ CREATE INDEX verification_identifier_idx ON public.verification USING btree (ide
 
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT "account_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_client_reduction auth_client_reduction_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client_reduction
+    ADD CONSTRAINT auth_client_reduction_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.auth_client(client_id);
 
 
 --

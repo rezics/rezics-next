@@ -10,7 +10,8 @@ organization authority or grants.
 Auth supplies guarded account effects through Better Auth, including operator
 session opening, actor-owned password and public-key credentials, human recovery
 and Access-first consent reduction. The explicit account workflow host adds DBOS
-registration, organization handle bootstrap, authorized rename and revocation.
+registration, organization and membership coordination, operator creation and transfer,
+deletion, fencing fanout, authorized rename and Access-first authority reductions.
 OIDC authorization, token exchange, CIBA and device authorization remain outside
 this service. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
@@ -102,8 +103,8 @@ Only trusted application code may call the internal effects:
 - `internal.registerClient({ clientId, firstParty, scopes })` persists trusted
   client configuration. Only trusted deployment/application code decides which
   clients are first party. Scope growth does not change existing sessions.
-  Removing scopes or changing a first-party client to third party is refused:
-  successful reduction requires a future durable multi-account coordinator.
+  Removing scopes or changing a first-party client to third party uses the workflow
+  host's `reduceClientScopes`; direct `registerClient` calls continue to refuse reductions.
 
 These are in-process methods, with no internal HTTP authorization endpoint.
 Registration command durability, retries and Access activation remain the
@@ -213,13 +214,12 @@ Successful reset retains a fence. Only a later trusted Access lifecycle workflow
 may clear it using fresh recovery/establishment evidence at the exact new epoch;
 Auth exposes no fence-clearing effect and never upgrades an old session.
 
-The operator, recovery and invalidation fixtures establish the Auth boundary
-using real Better Auth, PostgreSQL and JOSE. They are not final Goal proof.
-Binding actual Access operator consumption/lifecycle commands, durable retries
-and cleanup after cross-service failure, recovery fence clearing, registered
-client reduction across multiple accounts, and the full cross-service account
-lifecycle/permission outcome suites remain integration/workflow work. There is
-no unjournaled multi-account revocation loop in Auth.
+The original operator, recovery and invalidation fixtures establish the Auth
+boundary using real Better Auth, PostgreSQL and JOSE. They are not final Goal
+proof. The workflow suites below add native Access command bindings and durable
+failure recovery. Deployment approval resolution, recovery fence clearing and
+the complete lifecycle/permission outcome drivers remain application integration
+work. Multi-account revocation runs as bounded DBOS steps.
 
 ## Public HTTP contract
 
@@ -315,14 +315,19 @@ tokens; they also distinguish person and automated actor subjects.
 
 `createAccountWorkflows(options)` is exported from `src/index.ts` with
 `AccountWorkflowOptions`, `AccountWorkflowPorts`, `AccountOperation`,
-`RegistrationReference`, `WorkflowHandleTransition` and `WorkflowFence`.
+`RegistrationReference`, `WorkflowHandleTransition`, `WorkflowFence`,
+`WorkflowMembership`, `WorkflowResponsibility` and `WorkflowAccount`.
 The returned host exports:
 
 - `start()` and `close()` for the official pinned DBOS SDK executor;
 - `beginRegistration`, `installRegistrationCredential`, `activateRegistration`
   and `register` for staged human registration;
 - `expireDueRegistrations` for bounded expiry work using the authoritative clock;
-- `renameHandle`, `createOrganization`, `revokeSessions` and `resumeOperation`;
+- `renameHandle`, `createOrganization`, `setMembership`, `createAutomated`,
+  `transferOperator`, `deleteAccount`, `fenceOperator`, `reduceConsent`,
+  `revokeSessions` and `resumeOperation`;
+- `reduceClientScopes` and `resumeClientReduction` for bounded client reductions;
+- `openOperatorSession` for immediate native Access approval and Auth issuance;
 - `handler(Request): Promise<Response>`, which adds strict `POST /signup` with
   `{ key, handle, email, password }` and delegates other routes to the guarded Auth handler.
 
@@ -388,15 +393,92 @@ credential confidentiality. The original lifecycle and Auth outcome assertions
 remain unchanged. Final application transport bindings and the original complete
 lifecycle conformance driver remain an integration seam.
 
-The broader operator/member/client workflows are unfinished. In particular,
-Access exports `reserveCoordination` and `setMembership`, but no command releases
-a membership coordination reservation after the organization-local terminal slot.
-`operator.releaseResponsibility` accepts only `purpose = 'operator'`. Leaving the
-member hold prevents subsequent deletion forever; deleting it from Auth would
-bypass the Access command boundary. Adding that non-handle lifecycle command is
-outside the narrowly authorized handle implementation extension. The current
-host therefore does not expose membership removal, automated-account creation,
-operator session/transfer/deletion coordination, suspension fanout or client-scope
-reduction workflows. Their existing individual Auth/Access effects remain available
-to a later authorized integration. No Auth-only client-row update is treated as a
-completed authority reduction.
+Membership coordination uses `reserveCoordination` on the member anchor,
+`setMembership` on the organization anchor and `releaseMembershipCoordination`
+on the member anchor after removal or cancellation. Release independently reads
+the exact permanent terminal organization slot before checking out the member
+connection, then deletes only the matching membership-purpose hold in one native
+command. Active, absent, mismatched or nonterminal evidence denies. Operator
+responsibility release remains operator-only. The existing monotonic slot is
+sufficient; this release adds no schema or policy interval change.
+
+`workflow-membership-release.test.ts` covers real PostgreSQL terminal evidence,
+last-owner protection, delayed activation denial, exact-purpose cleanup, native
+receipt replay and deletion eligibility. `workflow-membership-durable.test.ts`
+binds actual member commands to DBOS, loses release acknowledgements and checks
+recovery from persisted history. It also binds actual operator reservation,
+relation, opening/consumption and transfer commands to real Auth sessions. Tokens
+and cookies stay outside DBOS. Real consent and client reductions demonstrate
+that previously issued JWTs deny at the next authoritative kernel account read.
+
+`test/workflow-operations.test.ts` supplies additional boundary sequencing
+coverage with its own migrated issuer database and separate DBOS system database.
+It journals deterministic Access responses and exercises actual credential owners,
+Auth erasure, consent and client configuration. It covers transfer/deletion failure,
+bounded fanout and interrupted client reduction; it supplies no Access policy.
+Final deployment approval resolution and the original lifecycle outcome driver
+remain application integration work, including binding state suspension to Access
+policy. `fenceOperator` provides the durable fencing fanout itself.
+
+## Account operation ports and ordering
+
+The optional operation ports deny their feature when absent. They use the native
+Access command inputs/results: `setMembership`,
+`releaseMembershipCoordination`, `reserveResponsibility`,
+`recordOperatorRelation`, `retireResponsibility`, `releaseResponsibility`,
+`responsibilityPage`, `provisionManagementDefaults`, `tombstone`,
+`redirectHandle` and `authorizeOpening`. `readAccount` supplies a current narrow
+account observation before deletion. The coordinator projects that observation
+before journaling it; private profile data stays outside workflow history.
+
+`authorizeOperation` must bind each complete request to fresh authenticated
+actor/client/principal context and its current Access approval. In particular,
+transfer/deletion responsibility inputs come from the actual durable relation
+receipt; they are never public account authority. An application must preserve
+that approval binding across executor restarts and resolve it again on replay.
+Fencing or deleting an account requires an administrator or another authorization
+that remains valid for recovery. An approval reference can be refreshed without
+changing the stored operation request.
+
+Automated creation stages optional credentials using the same Auth-only encryption
+as registration. It reserves operator responsibility before installing the
+subject-local relation, then creates exactly one credentialless or password owner,
+claims its handle and activates it. Human registration and organization bootstrap
+can install the native management defaults as a separate command. Transfer
+reserves the new operator, changes the subject relation (invalidating old relation
+approvals), revokes Auth sessions, terminalizes and releases the old hold. It
+never copies resource grants. Deletion commits the authorized Access tombstone
+and fence before Auth erasure, then retires/releases responsibility and reserves
+the former handle under the existing redirect policy. Native Access commands
+continue to enforce holds, operator eligibility and last-owner rules.
+
+`fenceOperator` first commits the operator fence, then enumerates native pages of
+at most 64 responsibility reservations. Each subject fence and Auth revocation
+is a separate DBOS step. It returns only after all pages finish. Failures preserve
+committed fences and successful step history. The host exposes no fence-clearing
+compensation. Fresh recovery remains bound to the resulting floor and receipt.
+
+`openOperatorSession` obtains `authorizeOpening` using the authenticated context
+and calls the existing `internal.openAutomatedSession`. Auth's trusted
+`consumeAuthorization` binding must call actual `consumeOpening`; an adapter
+cannot manufacture a consumed receipt. Cookies, headers and Auth's response are
+never workflow arguments or results. The one-use native opening deliberately
+fails closed if an issuance acknowledgement is lost; the caller requests a fresh
+opening rather than replaying a session cookie.
+
+Consent reduction commits the native account fence before Auth's
+`internal.reduceConsent` transaction records its barrier and shrinks consent.
+Client reduction first installs an Auth-only issuance gate with
+`internal.beginClientReduction`. It conservatively enumerates every current Auth
+credential owner, including owners with erased sessions but possibly live JWTs,
+in pages of at most 64. Each account gets its own native fence before
+`internal.finishClientReduction` changes client scopes/first-party status and
+removes the gate. This conservative invalidation also fences owners of unrelated
+clients; they require normal fresh recovery. An Auth outage keeps both the gate
+and the Access barriers. `clientReductionPage` and `resumeClientReduction` resume
+the persisted DBOS workflow; a pure Auth client-row mutation is never completion.
+
+The forward Auth migration records only the issuance gate. DBOS manages its
+system schema separately. Migration versions use actual UTC creation time and
+apply without fabricated global ordering; previously committed filenames remain
+unchanged.
