@@ -310,6 +310,21 @@ test('native Auth and mounted platform suspension commit the real terminal state
   await expect(commands.suspend(cached, cachedInput)).rejects.toThrow();
   await expect(commands.suspend(cached, { accountId: recipient.accountId, key: Bun.randomUUIDv7() })).rejects.toThrow();
   await grants.create(await context(root.bearer), { ...inputFor(recipient.accountId), key: Bun.randomUUIDv7() });
+  const published = await call(root.bearer, '/v1/definitions/releases', {
+    release: {
+      format: 'https://rezics.com/definitions/release/1',
+      catalogue: { id: 'https://rezics.com/catalogue/test', version: '1' },
+      generator: { name: 'test', version: '1' },
+      prefixes: {},
+      types: {},
+      properties: {},
+    },
+  });
+  expect(published.response.status).toBe(201);
+  const { digest } = published.value as { digest: string };
+  expect(
+    (await call(root.bearer, `/v1/definitions/releases/${digest}:activate`, { expected_head: null })).response.status,
+  ).toBe(200);
   expect((await call(recipient.bearer, '/v1/contexts', { labels: { en: 'Unrelated account' } })).response.status).toBe(
     201,
   );
