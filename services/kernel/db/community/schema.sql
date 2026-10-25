@@ -296,6 +296,27 @@ CREATE TABLE community.space (
 
 
 --
+-- Name: space_address_claim; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_address_claim (
+    route integer NOT NULL,
+    normalized_address text NOT NULL COLLATE pg_catalog."C",
+    space_id uuid NOT NULL,
+    state text NOT NULL,
+    expires_at timestamp with time zone,
+    reserved_until timestamp with time zone,
+    reservation_id uuid,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT space_address_claim_check CHECK ((route = ((get_byte(sha256(convert_to(normalized_address, 'UTF8'::name)), 0) * 256) + get_byte(sha256(convert_to(normalized_address, 'UTF8'::name)), 1)))),
+    CONSTRAINT space_address_claim_check1 CHECK ((((state = 'pending'::text) AND (expires_at IS NOT NULL) AND (reserved_until IS NULL)) OR ((state = 'active'::text) AND (expires_at IS NULL) AND (reserved_until IS NULL)) OR ((state = 'reserved'::text) AND (expires_at IS NULL) AND (reserved_until IS NOT NULL)))),
+    CONSTRAINT space_address_claim_normalized_address_check CHECK ((normalized_address ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
+    CONSTRAINT space_address_claim_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT space_address_claim_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'reserved'::text])))
+);
+
+
+--
 -- Name: space_revision; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -308,6 +329,7 @@ CREATE TABLE community.space_revision (
     summary text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     author uuid NOT NULL,
+    address text,
     CONSTRAINT space_revision_check CHECK ((predecessor <> revision_id)),
     CONSTRAINT space_revision_check1 CHECK ((route = ((get_byte(uuid_send(space_id), 10) * 256) + get_byte(uuid_send(space_id), 11)))),
     CONSTRAINT space_revision_check2 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
@@ -396,6 +418,14 @@ ALTER TABLE ONLY community.realm_revision
 
 ALTER TABLE ONLY community.realm
     ADD CONSTRAINT realm_route_space_id_key UNIQUE (route, space_id);
+
+
+--
+-- Name: space_address_claim space_address_claim_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_address_claim
+    ADD CONSTRAINT space_address_claim_pkey PRIMARY KEY (route, normalized_address);
 
 
 --

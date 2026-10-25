@@ -173,13 +173,13 @@ beforeAll(async () => {
   });
   const scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
   await auth.internal.registerClient({ clientId: 'space-address-test', firstParty: true, scopes });
-  for (const [name, route] of [
-    ['address_creator', 0x3100],
-    ['address_another', 0x3101],
-    ['address_holder', 0x3102],
-    ['address_org_owner', 0x3103],
-  ] as const) {
-    const accountId = newId(route);
+  const people = [
+    { name: 'address_creator', accountId: newId(0x3100) },
+    { name: 'address_another', accountId: newId(0x3101) },
+    { name: 'address_holder', accountId: newId(0x3102) },
+    { name: 'address_org_owner', accountId: newId(0x3103) },
+  ] as const;
+  for (const { name, accountId } of people) {
     approved.add(accountId);
     await admin.query(
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -191,10 +191,13 @@ beforeAll(async () => {
       accountId,
     ]);
   }
-  creator = { accountId: newId(0x3100), bearer: await issue('address_creator@space-address.test', scopes) };
-  another = { accountId: newId(0x3101), bearer: await issue('address_another@space-address.test', scopes) };
-  handleHolder = { accountId: newId(0x3102), bearer: await issue('address_holder@space-address.test', scopes) };
-  organizationOwner = { accountId: newId(0x3103), bearer: await issue('address_org_owner@space-address.test', scopes) };
+  creator = { accountId: people[0].accountId, bearer: await issue('address_creator@space-address.test', scopes) };
+  another = { accountId: people[1].accountId, bearer: await issue('address_another@space-address.test', scopes) };
+  handleHolder = { accountId: people[2].accountId, bearer: await issue('address_holder@space-address.test', scopes) };
+  organizationOwner = {
+    accountId: people[3].accountId,
+    bearer: await issue('address_org_owner@space-address.test', scopes),
+  };
   organizationId = newId(0x3200);
   await admin.query(
     "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'organization','active',$2)",
@@ -217,8 +220,8 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  if (authDatabase) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
   await authPool?.end();
+  if (authDatabase) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
   await pool?.end();
   await admin?.end();
 });

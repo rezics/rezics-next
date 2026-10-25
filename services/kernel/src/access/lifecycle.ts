@@ -71,9 +71,12 @@ function accountRoute(accountId: string): number {
   requireAllowed(route !== null);
   return route;
 }
-function normalized(handle: string): string {
+export function normalizeHandle(handle: string): string {
   requireAllowed(typeof handle === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(handle));
   return handle.toLowerCase();
+}
+function normalized(handle: string): string {
+  return normalizeHandle(handle);
 }
 function handleRoute(handle: string): number {
   return createHash('sha256').update(handle).digest().readUInt16BE(0);

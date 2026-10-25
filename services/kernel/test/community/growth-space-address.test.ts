@@ -7,10 +7,9 @@ import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
@@ -20,6 +19,7 @@ const routeKey = new Uint8Array(32).fill(93);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(94)]]) };
 const password = 'growth space address test password with enough entropy';
 const scales: [number, number, number] = [2048, 8192, 32768];
+const hotPartition = 173;
 
 type ProbeSpace = { spaceId: string; etag: string; address?: string };
 type Person = { accountId: string; bearer: string };
@@ -33,6 +33,21 @@ let actor: Person;
 
 function hashRoute(value: string) {
   return createHash('sha256').update(value).digest().readUInt16BE(0);
+}
+
+function addressInHotPartition(value: string): string {
+  for (let suffix = 0; ; suffix++) {
+    const address = `${value}-${suffix.toString(36)}`;
+    if (hashRoute(address) >>> 4 === hotPartition) return address;
+  }
+}
+
+function spaceKeyInHotPartition(): string {
+  for (let attempt = 0; ; attempt++) {
+    const key = `growth-address-probe-${attempt}-${randomUUID()}`;
+    const route = anchorRoute(routeKey, `${actor.accountId}\ncommunity.space.create\n${key}`);
+    if (partitionOf(route) === hotPartition) return key;
+  }
 }
 
 async function issue(email: string, scopes: string[]) {
@@ -83,7 +98,7 @@ async function call(
 async function createProbe(address?: string): Promise<ProbeSpace> {
   const created = await call('POST', '/v1/spaces', {
     bearer: actor.bearer,
-    key: randomUUID(),
+    key: spaceKeyInHotPartition(),
     body: { title: 'Growth probe', summary: '' },
   });
   expect(created.response.status).toBe(201);
@@ -100,10 +115,10 @@ async function createProbe(address?: string): Promise<ProbeSpace> {
   return { ...probe, etag: claim.response.headers.get('etag')!, address };
 }
 
-function population(name: string): Population {
+function population(name: string, positionBase: number): Population {
   return {
     name,
-    hotPartition: 173,
+    hotPartition,
     hotShare: 1,
     rows: ({ route, ordinal }) => {
       const spaceId = newId(route);
@@ -112,6 +127,8 @@ function population(name: string): Population {
       const handle = `population-handle-${ordinal.toString(36)}`;
       const at = '2026-10-25T00:00:00.000Z';
       const transactionId = spaceId;
+      const position = positionBase + ordinal * 100 + 1;
+      const value = { spaceId, revisionId };
       return {
         'community.space': [
           {
@@ -147,6 +164,75 @@ function population(name: string): Population {
             transaction_id: transactionId,
           },
         ],
+        'access.resource_initialization': [
+          {
+            route,
+            resource_id: spaceId,
+            resource_type: 'community.space',
+            creator_id: actor.accountId,
+            initialized_at: at,
+          },
+        ],
+        'core.receipt': [
+          {
+            partition_no: hotPartition,
+            principal_kind: 'account',
+            principal_id: actor.accountId,
+            command_kind: 'community.space.address',
+            idempotency_key: `seed-space-address-${ordinal}`,
+            request_digest: Buffer.alloc(32),
+            epoch: 1,
+            position,
+            transaction_id: transactionId,
+            response: value,
+          },
+        ],
+        'core.outbox': [
+          {
+            partition_no: hotPartition,
+            position,
+            event_seq: 0,
+            event_count: 1,
+            epoch: 1,
+            id: randomUUID(),
+            type: 'com.rezics.community.space.created.v1',
+            subject: spaceId,
+            data: value,
+          },
+        ],
+        'editorial.write_basis': [
+          {
+            partition_no: hotPartition,
+            transaction_id: transactionId,
+            epoch: 1,
+            position,
+            principal_kind: 'account',
+            principal_id: actor.accountId,
+            client_id: 'growth-space-address-test',
+            requested_by: null,
+            recorded_at: at,
+          },
+        ],
+        'access.resource_role_grant': [
+          {
+            route,
+            resource_id: spaceId,
+            subject_kind: 'identity',
+            subject_id: actor.accountId,
+            grant_role: 'community.space.owner',
+            valid: '(,)',
+            transaction_id: transactionId,
+          },
+          {
+            route,
+            resource_id: spaceId,
+            subject_kind: 'active_accounts',
+            subject_id: '00000000-0000-0000-0000-000000000000',
+            grant_role: 'community.space.standing',
+            valid: '(,)',
+            transaction_id: transactionId,
+          },
+        ],
         'access.handle_claim': [
           {
             route: hashRoute(handle),
@@ -159,6 +245,12 @@ function population(name: string): Population {
           },
         ],
       };
+    },
+    async finish(admin) {
+      await admin.query(
+        'UPDATE core.partition SET position=(SELECT max(position) FROM core.outbox WHERE partition_no=$1) WHERE partition_no=$1',
+        [hotPartition],
+      );
     },
   };
 }
@@ -247,8 +339,8 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  if (authDatabase) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
   await authPool?.end();
+  if (authDatabase) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
   await db?.close();
 });
 
@@ -257,11 +349,31 @@ test('address claim, change and resolve stay bounded as addresses, Spaces and ha
   for (const scale of scales) {
     probes.set(scale, {
       claim: await createProbe(),
-      change: await createProbe(`change-start-${scale}`),
-      resolve: await createProbe(`resolve-start-${scale}`),
+      change: await createProbe(addressInHotPartition(`change-start-${scale}`)),
+      resolve: await createProbe(addressInHotPartition(`resolve-start-${scale}`)),
     });
   }
-  const data = population(`space-address-growth-${randomUUID()}`);
+  const warmProbe = probes.get(scales[0])!.change;
+  const warmedAddress = addressInHotPartition(`change-warmed-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
+  const warmed = await call('PUT', `/v1/spaces/${warmProbe.spaceId}/address`, {
+    bearer: actor.bearer,
+    key: randomUUID(),
+    etag: warmProbe.etag,
+    body: { address: warmedAddress },
+  });
+  if (warmed.response.status !== 200) throw new Error('The change probe could not be warmed');
+  probes.set(scales[0], {
+    ...probes.get(scales[0])!,
+    change: { ...warmProbe, etag: warmed.response.headers.get('etag')!, address: warmedAddress },
+  });
+  const resolveProbe = probes.get(scales[0])!.resolve;
+  const resolved = await call('GET', `/v1/spaceAddresses/${resolveProbe.address}`);
+  if (resolved.response.status !== 200) throw new Error('The resolve probe could not be warmed');
+  const positionBase = Number(
+    (await db.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [hotPartition])).rows[0]
+      .position,
+  );
+  const data = population(`space-address-growth-${randomUUID()}`, positionBase);
   const report = await checkGrowth(db, {
     name: 'community space address claim change resolve',
     scales,
@@ -273,7 +385,7 @@ test('address claim, change and resolve stay bounded as addresses, Spaces and ha
     },
     async operation(_database, scale) {
       const probe = probes.get(scale)!;
-      const claimAddress = `claim-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+      const claimAddress = addressInHotPartition(`claim-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
       const claimed = await call('PUT', `/v1/spaces/${probe.claim.spaceId}/address`, {
         bearer: actor.bearer,
         key: randomUUID(),
@@ -282,7 +394,7 @@ test('address claim, change and resolve stay bounded as addresses, Spaces and ha
       });
       expect(claimed.response.status).toBe(200);
 
-      const changedAddress = `change-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+      const changedAddress = addressInHotPartition(`change-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
       const changed = await call('PUT', `/v1/spaces/${probe.change.spaceId}/address`, {
         bearer: actor.bearer,
         key: randomUUID(),
@@ -304,7 +416,7 @@ test('address claim, change and resolve stay bounded as addresses, Spaces and ha
       'community.space_revision',
       'access.handle_claim',
     ]) {
-      expect(sample.cost.relations[relation]?.sequentialScans ?? 0).toBe(0);
+      expect(sample.cost.relations![relation]?.sequentialScans ?? 0).toBe(0);
     }
   }
   expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);

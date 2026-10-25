@@ -35,6 +35,7 @@ export type Space = Readonly<{
   createdAt: string;
   creator: string;
   predecessor: string | null;
+  address: string | null;
   title: string;
   summary: string;
   revisionCreatedAt: string;
@@ -106,6 +107,7 @@ export async function readSpace(client: AccessClient, spaceId: string, time: str
     createdAt: new Date(row.created_at).toISOString(),
     creator: row.creator,
     predecessor: row.predecessor,
+    address: row.address,
     title: row.title,
     summary: row.summary,
     revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
@@ -162,7 +164,16 @@ export async function createSpace(deps: SpaceDependencies, actor: Actor, input: 
       metadata(body.title, body.summary);
       const at = authoritativeTimeValue(command.time);
       await insert.run(tx, { route, id: resource.id, revision, at, creator });
-      await append.run(tx, { route, id: resource.id, revision, predecessor: null, ...body, at, author: creator });
+      await append.run(tx, {
+        route,
+        id: resource.id,
+        revision,
+        predecessor: null,
+        address: null,
+        ...body,
+        at,
+        author: creator,
+      });
       inserted.add(tx);
       await initializeResourceGrants(tx, { resource, type: 'community.space', creator });
       return {
@@ -216,6 +227,7 @@ export async function updateSpace(deps: SpaceDependencies, actor: Actor, input: 
         id: body.spaceId,
         revision,
         predecessor: body.expectedHead,
+        address: previous.address,
         title,
         summary,
         at: authoritativeTimeValue(command.time),

@@ -21,9 +21,20 @@ The initial state is `active`; lifecycle transitions are outside this module's c
 Creator and author accounts are external identities and can have different routes from the Space.
 
 `readSpace(client, spaceId, time)` joins the identity to its exact head on the supplied connection.
-It returns metadata without implying permission. Callers compose Access `space:read` with
+It returns metadata and the head's active address without implying permission. Callers compose Access `space:read` with
 `spaceReadEligibility`, which prepares non-null domain evidence and verifies the current active
 Space and head at Access's authoritative time. Missing domain evidence denies public reading.
+
+`PUT /v1/spaces/{spaceId}/address` requires `space:manage`, `If-Match`, and `Idempotency-Key`.
+Addresses use Access's ASCII handle normalization but live in `community.space_address_claim`,
+their own namespace. A handle claim is checked by one routed point read: an active or unexpired
+reserved handle blocks the same address unless the claimant is that account or an owner of its
+organization. A free address is receipted as pending in its address partition, added to a new Space
+revision with a head compare-and-set, then activated in the address partition. A changed address's
+previous claim is reserved for 30 days. Pending claims expire after 30 minutes and can then be
+reclaimed. Every step is a separate single-partition command with the request's idempotency key;
+retries resume from the saved receipts. `GET /v1/spaceAddresses/{address}` point-reads an active
+claim and returns `{ spaceId }` only when the Space passes its ordinary `space:read` check.
 
 A Realm is the community carried by a Space. `createRealm` mints its distinct identity
 and initial revision on the Space's route, with `realm:create` on the Global Context
@@ -55,15 +66,18 @@ transaction. Access grant initialization uses fixed role templates and point ins
 rows in the relevant partition. See [Access Cost](../access/README.md#cost) for its account and
 grant lookup bounds.
 
-| Operation          | Touches                                                                                                                                                    | Bound                                     | Growth check                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------- |
-| Create Space       | One admission read and Global parent check (A); two inserts, a same-transaction creation proof and native grant initialization (C), in the Space partition | O(1) rows and statements; O(log R) blocks | `growth-space.test.ts`: create at 256, 2048 and 16384 other Spaces and revisions |
-| Update Space       | A on the Space with one point read joining its head; one revision insert and one head compare-and-set (C)                                                  | O(1) rows and statements; O(log R) blocks | `growth-space.test.ts`: update a fixed probe at the same scales                  |
-| Read Space         | One routed point read joining the exact head revision                                                                                                      | O(1) rows and statements; O(log R) blocks | `growth-space.test.ts`: read a fixed probe at the same scales                    |
-| Public eligibility | One prepared point read and one current point verification through Access                                                                                  | O(1) rows and statements; O(log R) blocks | Uses the same point-read shape                                                   |
+| Operation               | Touches                                                                                                                                                                                       | Bound                                                      | Growth check                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Create Space            | One admission read and Global parent check (A); two inserts, a same-transaction creation proof and native grant initialization (C), in the Space partition                                    | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: create at 256, 2048 and 16384 other Spaces and revisions   |
+| Update Space            | A on the Space with one point read joining its head; one revision insert and one head compare-and-set (C)                                                                                     | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: update a fixed probe at the same scales                    |
+| Read Space              | One routed point read joining the exact head revision                                                                                                                                         | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: read a fixed probe at the same scales                      |
+| Public eligibility      | One prepared point read and one current point verification through Access                                                                                                                     | O(1) rows and statements; O(log R) blocks                  | Uses the same point-read shape                                                     |
+| Claim or change address | One handle point read; one address-partition pending write; one Space head read, revision insert and head compare-and-set; one address activation and, for changes, one old-claim reservation | O(1) rows and statements; O(log A + S + H) blocks per step | `growth-space-address.test.ts`: 2048, 8192 and 32768 addresses, Spaces and handles |
+| Resolve address         | One active address point read and the Space's normal read authorization and exact-head read                                                                                                   | O(1) rows and statements; O(log A + S) blocks              | `growth-space-address.test.ts`: same population sizes                              |
 
 The growth checks use `checkGrowth` with other identities and their revisions growing around a
-fixed probe, and require zero sequential scans on community relations. Metadata byte sizes are
+fixed probe, and require zero sequential scans on community relations and the handle-claim table.
+Metadata byte sizes are
 bounded by the database character limits. Revision and predecessor lookups use exact routed keys;
 no operation walks revision history or counts Spaces. Command serialization uses a partition-local
 position counter.

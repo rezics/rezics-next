@@ -5,6 +5,7 @@ import { parseItem } from 'structured-headers';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { normalizeHandle } from '../access/lifecycle.ts';
 import { withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -23,6 +24,7 @@ import {
   type Space,
   type SpaceDependencies,
 } from './space.ts';
+import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from './space-address.ts';
 import { createRealm, RealmConflictError, RealmInputError, updateRealm, type RealmDependencies } from './realm.ts';
 import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
 import {
@@ -51,6 +53,7 @@ const space = t.Object(
     createdAt: instant,
     creator: id,
     predecessor: t.Union([id, t.Null()]),
+    address: t.Union([t.String(), t.Null()]),
     title,
     summary,
     revisionCreatedAt: instant,
@@ -106,6 +109,7 @@ const publicationParams = t.Object({ realmId: t.String(), subjectId: t.String() 
 
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
 const updateInput = t.Object({ title: t.Optional(title), summary: t.Optional(summary) }, closed);
+const addressInput = t.Object({ address: t.String({ minLength: 1, maxLength: 64 }) }, closed);
 const createRealmInput = t.Object(
   {
     spaceId: id,
@@ -182,6 +186,7 @@ const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const params = t.Object({ spaceId: t.String() }, closed);
+const addressParams = t.Object({ address: t.String() }, closed);
 const realmParams = t.Object({ realmId: t.String() }, closed);
 
 export type CommunityRouteDependencies = {
@@ -193,6 +198,7 @@ export type CommunityRouteDependencies = {
 
 function communityProblem(error: unknown): never {
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
+  if (error instanceof SpaceAddressConflictError) throw new ProblemError('conflict');
   if (error instanceof RealmInputError || error instanceof PublicationInputError)
     throw new ProblemError('invalid_request');
   if (error instanceof PublicationCursorError)
@@ -224,6 +230,7 @@ function published(space: Space) {
     createdAt: space.createdAt,
     creator: space.creator,
     predecessor: space.predecessor,
+    address: space.address,
     title: space.title,
     summary: space.summary,
     revisionCreatedAt: space.revisionCreatedAt,
@@ -350,6 +357,87 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const representation = published(current);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
         return { space: representation };
+      },
+    )
+    .put(
+      '/v1/spaces/:spaceId/address',
+      {
+        params,
+        headers: updateHeaders,
+        body: strict(addressInput),
+        response: {
+          200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
+          ...writeFailures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          operationId: 'space_address.change',
+          'x-action': 'space:manage',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await claimSpaceAddress(
+              spaceDependencies(),
+              actor,
+              { spaceId, expectedHead, address: body.address },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            const current = await readSpace(dependencies.pool, result.value.spaceId, observedAt());
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
+            const representation = published(current);
+            session.record(result);
+            set.headers.etag = JSON.stringify(representation.headRevisionId);
+            return { space: representation };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/spaceAddresses/:address',
+      {
+        params: addressParams,
+        response: {
+          200: strict(t.Object({ spaceId: id }, closed)),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'space_address.resolve',
+          'x-action': 'space:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { address }, authorize, admission, job }) => {
+        let normalized: string;
+        try {
+          normalized = normalizeHandle(address);
+        } catch {
+          throw new ProblemError('not_found');
+        }
+        const current = await admission.run('normal', job, async () => {
+          const claim = await withConnection(dependencies.pool, (client) => readSpaceAddress(client, normalized));
+          if (!claim) return null;
+          const route = routeOf(claim.spaceId);
+          if (route === null) return null;
+          const resource = { route, id: claim.spaceId };
+          const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
+          return withConnection(dependencies.pool, async (client) => {
+            if (!(await check(client))) return null;
+            const space = await readSpace(client, claim.spaceId, observedAt());
+            return space?.address === normalized ? space : null;
+          });
+        });
+        if (!current) throw new ProblemError('not_found');
+        published(current);
+        return { spaceId: current.spaceId };
       },
     )
     .patch(

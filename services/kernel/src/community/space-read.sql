@@ -8,7 +8,7 @@ WITH identity AS MATERIALIZED (
   WHERE route = :route::integer AND space_id = :id::uuid AND state = 'active'
 )
 SELECT s.space_id, s.state, s.head_revision_id, s.created_at::text, s.creator,
-       r.predecessor, r.title, r.summary, r.created_at::text AS revision_created_at, r.author,
+       r.predecessor, r.address, r.title, r.summary, r.created_at::text AS revision_created_at, r.author,
        s.inserted_here AND r.xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here
 FROM identity s
 JOIN community.space_revision r
