@@ -9,6 +9,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
+import { mediaModerationRoutes } from './media-moderation-routes.ts';
 import {
   ContentForbiddenError,
   ContentNotFoundError as CommandNotFoundError,
@@ -197,7 +198,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  return sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies)
+  return mediaModerationRoutes(
+    sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+    dependencies,
+  )
     .post(
       '/v1/threads',
       {

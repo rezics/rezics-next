@@ -390,7 +390,10 @@ test('current uploader, anonymous, suspended, scope and revoked replay denials r
   expect(await facts(db.admin, available)).toEqual(before);
   denied(await call(newId(route)), 403);
   const erased = await target();
-  await db.admin.query('UPDATE content.media SET erased=true WHERE route=$1 AND media_id=$2', [route, erased]);
+  await db.admin.query(
+    'UPDATE content.media SET erased=true, security_revision=security_revision+1 WHERE route=$1 AND media_id=$2',
+    [route, erased],
+  );
   denied(await call(erased), 403);
 });
 
