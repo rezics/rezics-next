@@ -13,6 +13,8 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarGroup,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -23,7 +25,7 @@ import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useEffect, useRef, useState } from 'react';
-import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, Sun } from 'lucide-react';
+import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, Sun, X } from 'lucide-react';
 import type { SessionState } from '../session/state.ts';
 
 const names = {
@@ -46,6 +48,7 @@ const messages = {
   shell_theme_dark: m.shell_theme_dark,
   nav_home: m.nav_home,
   shell_open_navigation: m.shell_open_navigation,
+  shell_close_navigation: m.shell_close_navigation,
   shell_collapse_navigation: m.shell_collapse_navigation,
   shell_expand_navigation: m.shell_expand_navigation,
   home_heading: m.home_heading,
@@ -64,10 +67,12 @@ function Mark() {
   );
 }
 function Logo({ locale: _locale }: { locale: string }) {
+  const { isMobile, setOpenMobile } = useSidebar();
   return (
     <Link
       to="/"
-      aria-label={`${m.nav_home()} REZICS`}
+      aria-label="REZICS"
+      onClick={() => isMobile && setOpenMobile(false)}
       className="flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5"
     >
       <Mark />
@@ -76,25 +81,40 @@ function Logo({ locale: _locale }: { locale: string }) {
   );
 }
 function Navigation({ current }: { current: string }) {
-  const { setOpenMobile } = useSidebar();
+  const { setOpenMobile, isMobile } = useSidebar();
   return (
     <nav aria-label={m.shell_navigation()}>
+      {isMobile && (
+        <SidebarHeader className="flex-row items-center justify-between">
+          <Logo locale={getLocale()} />
+          <Button
+            variant="ghost"
+            size="icon-md"
+            aria-label={m.shell_close_navigation()}
+            onClick={() => setOpenMobile(false)}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </SidebarHeader>
+      )}
       <SidebarContent>
-        <SidebarMenu>
-          {destinations.map((item) => {
-            const Icon = item.icon;
-            return (
-              <SidebarMenuItem key={item.to}>
-                <SidebarMenuButton asChild isActive={current === item.to} tooltip={item.message()}>
-                  <Link to={item.to} onClick={() => setOpenMobile(false)} data-autofocus className="text-primary">
-                    <Icon aria-hidden="true" className="size-5" />
-                    <span>{item.message()}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
+        <SidebarGroup>
+          <SidebarMenu>
+            {destinations.map((item) => {
+              const Icon = item.icon;
+              return (
+                <SidebarMenuItem key={item.to}>
+                  <SidebarMenuButton asChild isActive={current === item.to} tooltip={item.message()}>
+                    <Link to={item.to} onClick={() => setOpenMobile(false)} data-autofocus className="text-primary">
+                      <Icon aria-hidden="true" className="size-5" />
+                      <span>{item.message()}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
       </SidebarContent>
     </nav>
   );

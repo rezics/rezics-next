@@ -3,4 +3,3 @@
 @import '@fontsource-variable/geist-mono';
 @import '@rezics/ui/styles.css';
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
-@import 'tailwindcss';

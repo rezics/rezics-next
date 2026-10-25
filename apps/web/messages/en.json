@@ -11,6 +11,7 @@
   "shell_theme_dark": "Dark",
   "nav_home": "Home",
   "shell_open_navigation": "Open navigation",
+  "shell_close_navigation": "Close navigation",
   "shell_collapse_navigation": "Collapse navigation",
   "error_heading": "Something went wrong",
   "error_message": "Please try again.",

@@ -11,6 +11,7 @@
   "shell_theme_dark": "Dunkel",
   "nav_home": "Startseite",
   "shell_open_navigation": "Navigation öffnen",
+  "shell_close_navigation": "Navigation schließen",
   "shell_collapse_navigation": "Navigation einklappen",
   "error_heading": "Ein Fehler ist aufgetreten",
   "error_message": "Bitte versuchen Sie es erneut.",

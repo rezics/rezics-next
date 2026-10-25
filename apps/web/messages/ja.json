@@ -11,6 +11,7 @@
   "shell_theme_dark": "ダーク",
   "nav_home": "ホーム",
   "shell_open_navigation": "ナビゲーションを開く",
+  "shell_close_navigation": "ナビゲーションを閉じる",
   "shell_collapse_navigation": "ナビゲーションを折りたたむ",
   "error_heading": "エラーが発生しました",
   "error_message": "もう一度お試しください。",
