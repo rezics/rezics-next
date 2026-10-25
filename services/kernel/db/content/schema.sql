@@ -59,16 +59,29 @@ BEGIN
     RAISE EXCEPTION 'Revision identity must survive erasure' USING ERRCODE = '23514';
   END IF;
   IF ROW(NEW.route, NEW.thread_id, NEW.post_id, NEW.revision_id, NEW.body_sha256,
-         NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at)
+         NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at, NEW.media_ids)
      IS DISTINCT FROM
      ROW(OLD.route, OLD.thread_id, OLD.post_id, OLD.revision_id, OLD.body_sha256,
-         OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at)
+         OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at, OLD.media_ids)
      OR OLD.availability <> 'available' OR NEW.availability <> 'erased'
      OR NEW.body IS NOT NULL OR NEW.search_text IS NOT NULL THEN
     RAISE EXCEPTION 'Revisions are immutable except explicit erasure' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: media_routes_match(integer, uuid[]); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.media_routes_match(route integer, media_ids uuid[]) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  SELECT COALESCE(bool_and(media_id IS NOT NULL AND
+    route = get_byte(uuid_send(media_id), 10) * 256 + get_byte(uuid_send(media_id), 11)), true)
+  FROM unnest(media_ids) AS media_id
 $$;
 
 
@@ -88,10 +101,11 @@ CREATE TABLE content.board (
     visibility text NOT NULL,
     security_revision bigint NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     CONSTRAINT board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
     CONSTRAINT board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT board_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'private'::text, 'taken_down'::text])))
+    CONSTRAINT board_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
 );
 
 
@@ -182,6 +196,9 @@ CREATE TABLE content.post (
     visibility text NOT NULL,
     security_revision bigint NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    availability text DEFAULT 'available'::text NOT NULL,
+    CONSTRAINT post_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT post_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT post_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT post_check2 CHECK ((route = ((get_byte(uuid_send(reply_to_post_id), 10) * 256) + get_byte(uuid_send(reply_to_post_id), 11)))),
@@ -189,7 +206,7 @@ CREATE TABLE content.post (
     CONSTRAINT post_check4 CHECK ((reply_to_post_id <> post_id)),
     CONSTRAINT post_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT post_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT post_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'private'::text, 'taken_down'::text])))
+    CONSTRAINT post_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
 );
 
 
@@ -211,6 +228,7 @@ CREATE TABLE content.revision (
     availability text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     recorded_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    media_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
     CONSTRAINT revision_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
     CONSTRAINT revision_body_sha256_matches CHECK ((body_sha256 = sha256(body))),
@@ -219,7 +237,10 @@ CREATE TABLE content.revision (
     CONSTRAINT revision_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT revision_check2 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT revision_check3 CHECK ((((availability = 'erased'::text) AND (body IS NULL) AND (search_text IS NULL)) OR ((availability = 'available'::text) AND (body IS NOT NULL) AND (search_text IS NOT NULL)))),
-    CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT revision_media_ids_limit CHECK ((cardinality(media_ids) <= 32)),
+    CONSTRAINT revision_media_routes_check CHECK (content.media_routes_match(route, media_ids)),
+    CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT revision_subject_ids_limit CHECK ((cardinality(subject_ids) <= 128))
 );
 ALTER TABLE ONLY content.revision ALTER COLUMN body SET COMPRESSION lz4;
 
@@ -233,14 +254,18 @@ CREATE TABLE content.thread (
     thread_id uuid NOT NULL,
     author_account_id uuid NOT NULL,
     board_id uuid NOT NULL,
-    title text NOT NULL,
+    title text,
     visibility text NOT NULL,
     security_revision bigint NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    first_post_id uuid,
+    availability text DEFAULT 'available'::text NOT NULL,
+    CONSTRAINT thread_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT thread_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT thread_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT thread_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'private'::text, 'taken_down'::text])))
+    CONSTRAINT thread_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
 );
 
 
@@ -362,17 +387,38 @@ END)));
 
 
 --
+-- Name: post_thread_author_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_thread_author_page_idx ON content.post USING btree (route, thread_id, author_account_id, created_at, post_id);
+
+
+--
+-- Name: post_thread_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_thread_page_idx ON content.post USING btree (route, thread_id, created_at, post_id);
+
+
+--
+-- Name: revision_post_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX revision_post_page_idx ON content.revision USING btree (route, post_id, recorded_at, revision_id);
+
+
+--
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'subject_id');
+CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'subject_id', 'created_at');
 
 
 --
 -- Name: post post_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'post_id', 'reply_to_post_id', 'author_account_id');
+CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'post_id', 'reply_to_post_id', 'author_account_id', 'created_at');
 
 
 --
@@ -386,7 +432,7 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON content.revision FO
 -- Name: thread thread_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id');
+CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'created_at');
 
 
 --
@@ -427,6 +473,14 @@ ALTER TABLE ONLY content.post
 
 ALTER TABLE ONLY content.revision
     ADD CONSTRAINT revision_route_thread_id_post_id_fkey FOREIGN KEY (route, thread_id, post_id) REFERENCES content.post(route, thread_id, post_id);
+
+
+--
+-- Name: thread thread_first_post_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.thread
+    ADD CONSTRAINT thread_first_post_fk FOREIGN KEY (route, thread_id, first_post_id) REFERENCES content.post(route, thread_id, post_id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --

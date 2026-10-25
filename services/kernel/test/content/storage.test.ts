@@ -30,7 +30,7 @@ async function fixture(work: (client: pg.PoolClient) => Promise<void>): Promise<
     // The board, account and subject references need no rows in another module.
     await client.query(
       `INSERT INTO content.board (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-       VALUES ($1, $2, $3, 'Books', 'public', 1, $4)`,
+       VALUES ($1, $2, $3, 'Books', 'published', 1, $4)`,
       [0x9abc, board, subject, transaction],
     );
     await work(client);
@@ -57,7 +57,7 @@ async function thread(client: pg.PoolClient, thread_id = newId(route)) {
     author_account_id: author,
     board_id: board,
     title: 'Kokoro',
-    visibility: 'public',
+    visibility: 'published',
     security_revision: 1,
     transaction_id: transaction,
   });
@@ -75,7 +75,7 @@ async function post(client: pg.PoolClient, thread_id: string, reply_to_post_id: 
     reply_to_post_id,
     author_account_id: author,
     head_revision_id: revision_id,
-    visibility: 'public',
+    visibility: 'published',
     security_revision: 1,
     transaction_id: transaction,
   });
@@ -209,7 +209,7 @@ test('content containment and revisions preserve thread route', async () => {
         board_id: board,
         author_account_id: author,
         title: 'Kokoro',
-        visibility: 'public',
+        visibility: 'published',
         security_revision: '1',
         reply_to_post_id: root.post_id,
       },
