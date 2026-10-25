@@ -3,6 +3,8 @@ import { Elysia } from 'elysia';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { exportJWK, generateKeyPair, importJWK, SignJWT, decodeJwt } from 'jose';
 import { createAuthService } from '@rezics/auth';
+import { createInternalConsentHandler } from '../../../auth/src/internal-consent.ts';
+import { createAuthConsentReader, type CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -237,12 +239,48 @@ export async function standingFixture() {
       },
     };
   }
+  const edgeKey = await generateKeyPair('RS256', { extractable: true });
+  const edgeJwk = { ...(await exportJWK(edgeKey.publicKey)), kid: 'standing-edge' };
+  const readConsent: CurrentConsentReader = async (input) => {
+    const edge = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => Response.json({ keys: [edgeJwk] }) });
+    const edgeIssuer = edge.url.origin;
+    const handler = createInternalConsentHandler({
+      database: authPool,
+      issuer: edgeIssuer,
+      jwksUrl: `${edgeIssuer}/certs`,
+      audience: 'standing-worker',
+      allowedServiceTokenIds: ['worker.access'],
+    });
+    const read = createAuthConsentReader({
+      url: 'https://standing-private.test/internal/v1/consents:read',
+      serviceTokenId: 'worker.access',
+      serviceTokenSecret: 'test-secret',
+      async fetch(url, init) {
+        const assertion = await new SignJWT({ type: 'app', sub: '', common_name: 'worker.access' })
+          .setIssuer(edgeIssuer)
+          .setAudience(['standing-worker'])
+          .setIssuedAt()
+          .setExpirationTime('1m')
+          .setProtectedHeader({ alg: 'RS256', kid: 'standing-edge' })
+          .sign(edgeKey.privateKey);
+        const headers = new Headers(init.headers);
+        headers.set('Cf-Access-Jwt-Assertion', assertion);
+        return handler(new Request(url, { ...init, headers }));
+      },
+    });
+    try {
+      return await read(input);
+    } finally {
+      edge.stop(true);
+    }
+  };
   let closing: Promise<void> | undefined;
   return {
     parent,
     pool,
     reader,
     access,
+    readConsent,
     actor,
     principal,
     recipient,

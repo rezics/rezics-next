@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import type { DurableOperationAnchor, InitiatorRestorer } from '../access/durable-initiator.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   principalCommandIdentity,
@@ -27,6 +28,19 @@ export type ErasePostContext = Readonly<{
 }>;
 export type ErasePostInput = Readonly<{ postId: string; reason: string }>;
 
+/** Trusted workflow composition only. Attribution locates the original person's
+ * receipt; it supplies no authority. Restoration verifies the immutable source
+ * and returns a fresh native identity inside every command attempt's prepare.
+ */
+export type ErasureInitiator = Readonly<{
+  kind: 'durable-initiator';
+  operation: DurableOperationAnchor;
+  accountId: string;
+  clientId: string;
+  requestedBy: string | null;
+  restorer: InitiatorRestorer;
+}>;
+
 type Point =
   | Readonly<{ action: 'moderation:takedown'; kind: 'board' | 'thread' | 'post'; id: string; reason: string }>
   | Readonly<{ action: 'post:erase'; kind: 'post'; id: string; reason: string }>
@@ -41,13 +55,14 @@ type Scope = {
  * request bodies cannot supply authority, author selection or storage keys.
  * All account, scope, delegation and grant checks belong to shared Access.
  */
-export async function mutateContentPoint(
-  deps: ErasePostDependencies,
-  actor: Actor,
+async function mutateAuthorizedPoint(
+  deps: Omit<ErasePostDependencies, 'routeKey'>,
+  actor: Actor | ErasureInitiator,
   requested: Point,
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
-  if (actor.kind !== 'account') throw new GrantDeniedError();
+  if (actor.kind !== 'account' && actor.kind !== 'durable-initiator') throw new GrantDeniedError();
+  if (actor.kind === 'durable-initiator' && requested.action !== 'post:erase') throw new GrantDeniedError();
   const point = Object.freeze({ ...requested });
   const route = routeOf(point.id);
   if (route === null) throw new GrantDeniedError();
@@ -59,19 +74,60 @@ export async function mutateContentPoint(
   )
     throw new RangeError('Invalid moderation reason');
   const target = Object.freeze({ route, id: point.id });
-  const identity = principalCommandIdentity(actor);
+  const identity =
+    actor.kind === 'account'
+      ? principalCommandIdentity(actor)
+      : {
+          principal: { kind: 'account' as const, id: actor.accountId },
+          basis: { clientId: actor.clientId, requestedBy: actor.requestedBy },
+        };
   const parameters = { route, id: point.id, kind: point.kind };
   const args = (statement: { params: readonly string[] }) =>
     statement.params.map((name) => parameters[name as keyof typeof parameters]);
   let scope: Scope | undefined;
-  const admission = await accessCommandAuthorization(
-    deps.access,
-    actor,
-    point.action,
-    target,
-    { pool: deps.pool, deadline: context.deadline },
-    () => new GrantDeniedError(),
-  );
+  const ordinaryAdmission = (verified: Extract<Actor, { kind: 'account' }>) =>
+    accessCommandAuthorization(
+      deps.access,
+      verified,
+      point.action,
+      target,
+      { pool: deps.pool, deadline: context.deadline },
+      () => new GrantDeniedError(),
+    );
+  const admission: CommandAuthorization =
+    actor.kind === 'account'
+      ? await ordinaryAdmission(actor)
+      : {
+          action: point.action,
+          resource: target,
+          denied: () => new GrantDeniedError(),
+          async prepare(attempt) {
+            const verified = await actor.restorer.restoreInitiator(
+              {
+                operation: actor.operation,
+                action: point.action,
+                anchor: {
+                  resource: target,
+                  async validate(client) {
+                    const rows = await client.query<Scope>(readScope.sql, args(readScope));
+                    return rows.rows.length === 1;
+                  },
+                },
+                context: { pool: deps.pool, deadline: context.deadline },
+              },
+              attempt.time,
+            );
+            const current = await ordinaryAdmission(verified);
+            return { current, proof: await current.prepare!(attempt) };
+          },
+          async authorize(tx, attempt, evidence) {
+            const { current, proof } = evidence as {
+              current: CommandAuthorization;
+              proof: unknown;
+            };
+            return current.authorize(tx, attempt, proof);
+          },
+        };
   const authorization: CommandAuthorization = {
     ...admission,
     async authorize(tx, attempt, evidence) {
@@ -147,16 +203,26 @@ export async function mutateContentPoint(
   );
 }
 
+/** Ordinary point callers retain the original authenticated-actor boundary. */
+export function mutateContentPoint(
+  deps: ErasePostDependencies,
+  actor: Actor,
+  requested: Point,
+  context: ErasePostContext,
+): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
+  return mutateAuthorizedPoint(deps, actor, requested, context);
+}
+
 /** Erase one actual post without enumerating its revisions or media. Native
  * author-erasure work separately pages physical rows and authorizes each post.
  */
-export async function erasePostLogical(
-  deps: ErasePostDependencies,
-  actor: Actor,
+async function logicalErasure(
+  deps: Omit<ErasePostDependencies, 'routeKey'>,
+  actor: Actor | ErasureInitiator,
   input: ErasePostInput,
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ postId: string; securityRevision: string }>> {
-  const result = await mutateContentPoint(
+  const result = await mutateAuthorizedPoint(
     deps,
     actor,
     {
@@ -168,4 +234,25 @@ export async function erasePostLogical(
     context,
   );
   return { ...result, value: { postId: result.value.targetId, securityRevision: result.value.securityRevision } };
+}
+
+export function erasePostLogical(
+  deps: ErasePostDependencies,
+  actor: Actor,
+  input: ErasePostInput,
+  context: ErasePostContext,
+): Promise<CommandOutcome<{ postId: string; securityRevision: string }>> {
+  return logicalErasure(deps, actor, input, context);
+}
+
+/** Person-attributed native workflow variant; uses the identical point command,
+ * mutation, authorization/admission seam and source receipts as ordinary erasure.
+ */
+export function erasePostLogicalAsInitiator(
+  deps: Omit<ErasePostDependencies, 'routeKey'>,
+  initiator: ErasureInitiator,
+  input: ErasePostInput,
+  context: ErasePostContext,
+): Promise<CommandOutcome<{ postId: string; securityRevision: string }>> {
+  return logicalErasure(deps, initiator, input, context);
 }

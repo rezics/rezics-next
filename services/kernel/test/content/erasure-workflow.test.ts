@@ -353,13 +353,17 @@ async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, paus
     context(),
   );
   let envelope: Envelope | undefined;
-  await readBatch(fixture.pool, {
-    partition,
-    consumer: `erasure_${crypto.randomUUID().replaceAll('-', '')}`,
-    apply: async (envelopes) => {
-      envelope = envelopes.find((item) => item.position === source.position);
-    },
-  });
+  const consumer = `erasure_${crypto.randomUUID().replaceAll('-', '')}`;
+  while (!envelope) {
+    const batch = await readBatch(fixture.pool, {
+      partition,
+      consumer,
+      apply: async (envelopes) => {
+        envelope = envelopes.find((item) => item.position === source.position);
+      },
+    });
+    if (batch.status !== 'read') break;
+  }
   expect(envelope).toBeDefined();
   const tx = await fixture.pool.connect();
   try {
@@ -486,6 +490,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
             board_id: board,
             author_account_id: author,
             title: 'Unrelated',
+            security_revision: 1,
             visibility: 'published',
             recorded_transaction_id: thread,
           },
@@ -497,6 +502,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
             post_id: post,
             author_account_id: author,
             head_revision_id: revision,
+            security_revision: 1,
             visibility: 'published',
             recorded_transaction_id: post,
           },
@@ -525,6 +531,8 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
             uploader_id: author,
             reservation_request_id: `seed-${ordinal}`,
             purpose: 'post-image',
+            media_type: 'image/png',
+            byte_count: 256,
             state: 'reserved',
             key: `m/${media}/original`,
             transaction_id: media,
@@ -580,13 +588,13 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
     expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.blocks > 0)).toBe(true);
     console.info('Native erasure growth', JSON.stringify(report.samples));
     // Affected-row and byte growth is deliberate and separate from unrelated
-    // history: every revision has the same 256-byte body and exact parent key.
+    // history: every affected revision has the same fixed-size body and exact parent key.
     const linearScopes = new Map<number, Awaited<ReturnType<typeof scope>>>();
     const linear = await checkGrowth(db, {
       name: 'affected erasure revisions',
       scales: [1, 8, 64],
       bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
-      async grow(_target, scale) {
+      async grow(target, scale) {
         const value = await scope(1, scale);
         await erasePostLogical(
           { pool: fixture.pool, access: fixture.access, routeKey },
@@ -595,6 +603,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
           context(),
         );
         linearScopes.set(scale, value);
+        await target.admin.query('VACUUM (ANALYZE)');
       },
       async operation(target, scale) {
         const value = linearScopes.get(scale)!;

@@ -1,6 +1,6 @@
 -- Exact immutable source and exact creation receipt, in the same partition.
 -- Keep timestamp text at PostgreSQL precision for the source commitment.
-SELECT o.route, o.operation_id, o.initiator_account_id, o.author_account_id,
+SELECT o.route, o.operation_id, o.native_workflow_id, o.initiator_account_id, o.author_account_id,
        o.thread_id, o.actor_kind, o.actor_account_id, o.actor_client_id,
        o.actor_scopes, o.actor_requested_by, o.actor_authn_epoch,
        o.empty_scope, o.upper_created_at::text AS upper_created_at, o.upper_post_id,
