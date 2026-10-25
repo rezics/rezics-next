@@ -6,8 +6,10 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { appendImportedField, readImportedField } from '../../src/content/imported-fields.ts';
 import type { ImportedFieldInput } from '../../src/content/imported-contract.ts';
-import { beginAuthorErasure } from '../../src/content/operations.ts';
+import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
 import type { AuthorErasureDependencies } from '../../src/content/operation-contract.ts';
+import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
+import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
 import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -469,6 +471,145 @@ test('Author erasure request stays within its bound as p grows', async () => {
       const result = await beginAuthorErasure(deps, actor, input, context());
       expect(result.replayed).toBe(false);
       expect(routeOf(result.value.operationId)).toBe(route);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expectNoContentSequentialScans(report);
+}, 90_000);
+
+test('Author erasure binding and status stays within its bound as P grows', async () => {
+  const route = 0x6a42;
+  const threadId = newId(route);
+  const { actor, access } = await createActor(route, ['post:erase', 'account:read']);
+  const postId = newId(route);
+  const revisionId = newId(route);
+  const boardId = newId(route);
+  const transactionId = newId(route);
+  const body = Buffer.from('fixed operation status anchor');
+  await runCommand(db.pool, { partition: partitionOf(route) }, async (tx) => {
+    await tx.query(
+      `INSERT INTO content.thread
+         (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id, created_at)
+         VALUES ($1, $2, $3, $4, 'Growth operation thread', 'published', 1, $5, '2000-01-01T00:00:00.000Z')`,
+      [route, threadId, actor.accountId, boardId, transactionId],
+    );
+    await tx.query(
+      `INSERT INTO content.post
+         (route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'published', 1, $6, '2000-01-01T00:00:00.000Z')`,
+      [route, threadId, postId, actor.accountId, revisionId, transactionId],
+    );
+    await tx.query(
+      `INSERT INTO content.revision
+         (route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence, subject_ids, board_id, availability, recorded_transaction_id)
+         VALUES ($1, $2, $3, $4, $5, $6, 'fixed', 'CC0-1.0', '{}', $7, 'available', $8)`,
+      [route, threadId, postId, revisionId, body, createHash('sha256').update(body).digest(), boardId, transactionId],
+    );
+    return {
+      value: threadId,
+      events: [
+        {
+          type: 'com.rezics.content.thread.created.v1',
+          subject: threadId,
+          data: { threadId, itemId: postId, revisionId, actorId: actor.accountId },
+        },
+      ],
+    };
+  });
+  await addGrant(route, postId, actor.accountId, 'post:erase');
+  await addGrant(route, actor.accountId, actor.accountId, 'account:read');
+  const deps: AuthorErasureDependencies = {
+    pool: db.pool,
+    access,
+    clock: () => new Date(),
+    workflows: {
+      async enqueue() {
+        throw new Error('The growth check does not enqueue work');
+      },
+      async status() {
+        return null;
+      },
+    },
+  };
+  const input = { threadId, authorId: actor.accountId };
+  const context = () => ({ deadline: Date.now() + 10_000, idempotencyKey: randomUUID(), requestId: newId(route) });
+  const fixtures: { operationId: string; envelope: Envelope }[] = [];
+  for (let index = 0; index < 18; index++) {
+    const outcome = await beginAuthorErasure(deps, actor, input, context());
+    const consumer = `growth_author_erasure_${randomUUID().replaceAll('-', '')}`;
+    await db.admin.query(
+      `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+       VALUES ($1, $2, $3, $4)`,
+      [outcome.partition, consumer, outcome.position === 1n ? null : outcome.epoch, outcome.position - 1n],
+    );
+    let envelope: Envelope | undefined;
+    await readBatch(db.pool, {
+      partition: outcome.partition,
+      consumer,
+      apply: async (batch) => {
+        envelope = batch[0];
+      },
+    });
+    if (!envelope) throw new Error('Growth author-erasure event was not found');
+    fixtures.push({ operationId: outcome.value.operationId, envelope });
+  }
+
+  const auth: AccessPopulation = {
+    homeRoute: route,
+    actorId: actor.accountId,
+    actions: ['post:erase', 'account:read'],
+    roles: ['content.post.owner', 'content.media.owner', 'platform.governance'],
+    name: 'growth-operation-status',
+  };
+  // This population matches immutable operation identities and holds both account authorizations fixed.
+  const population: Population = {
+    name: `growth-operation-status-${randomUUID()}`,
+    hotPartition: partitionOf(route),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'content.operation': [
+        {
+          route,
+          operation_id: newId(route),
+          initiator_account_id: actor.accountId,
+          author_account_id: actor.accountId,
+          thread_id: threadId,
+          actor_kind: 'account',
+          actor_account_id: actor.accountId,
+          actor_client_id: actor.clientId,
+          actor_scopes: actor.scopes,
+          actor_requested_by: null,
+          actor_authn_epoch: 1,
+          empty_scope: true,
+          upper_created_at: null,
+          upper_post_id: null,
+          requested_at: new Date(),
+          recorded_transaction_id: newId(route),
+        },
+      ],
+      ...accessRows(ordinal, auth),
+    }),
+  };
+  const report = await checkGrowth(db, {
+    name: 'Author erasure binding and status',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_database, scale, previous) =>
+      seedScale(population, scale, previous, [
+        { table: 'content.operation', partition: partitionOf(route) },
+        { table: 'access.account', partition: partitionOf(route) },
+        { table: 'access.membership_inverse', partition: partitionOf(route) },
+        { table: 'access.resource_grant', partition: partitionOf(route) },
+        { table: 'access.resource_denial', partition: partitionOf(route) },
+        { table: 'access.resource_role_grant', partition: partitionOf(route) },
+      ]),
+    operation: async (_database, _scale, repetition) => {
+      const fixture = fixtures[repetition];
+      if (!fixture) throw new Error('Growth repetition has no pre-created operation fixture');
+      const workflowId = await bindAuthorErasureWorkflow(db.pool, fixture.operationId, fixture.envelope, 0);
+      const operation = await readOperation(deps, actor, fixture.operationId, { deadline: Date.now() + 10_000 });
+      expect(workflowId).toContain(fixture.operationId);
+      expect(operation?.done).toBe(false);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
