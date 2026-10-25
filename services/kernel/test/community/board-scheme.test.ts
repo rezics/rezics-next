@@ -344,8 +344,6 @@ test.serial(
 test.serial(
   'wrong type, unreadable or missing subject, non-owner, anonymous and stale head write nothing',
   async () => {
-    // account:suspend is not mounted; no direct account-state mutation stands in for that persona.
-    expect(actionCatalogue(kernel).has('account:suspend')).toBe(false);
     const unreadable = newId(28);
     const cases = [
       { scheme: wrongTypeId, bearer: owner.bearer, head: probe.headRevisionId, status: 403 },
@@ -382,6 +380,35 @@ test.serial('metadata edits preserve the selected board scheme in the new head r
     [routeOf(probe.realmId), probe.headRevisionId],
   );
   expect(revision.rows).toEqual([{ board_scheme_id: schemeId }]);
+});
+
+test.serial("a suspended account cannot set a Realm's board scheme and writes nothing", async () => {
+  const suspended = await person('scheme_suspended', scopes);
+  const granted = await call('POST', '/v1/grants', {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: {
+      resource: { route: routeOf(probe.realmId)!, id: probe.realmId },
+      subject: { kind: 'account', id: suspended.accountId },
+      actions: ['realm:manage'],
+      valid: '(,)',
+    },
+  });
+  expect(granted.response.status).toBe(201);
+  const result = await call('POST', `/v1/accounts/${suspended.accountId}:suspend`, {
+    bearer: governance.bearer,
+    key: crypto.randomUUID(),
+    body: {},
+  });
+  expect(result.response.status).toBe(200);
+  const before = await snapshot();
+  const denied = await put(schemeId, probe.headRevisionId, suspended.bearer);
+  expect(denied.response.status).toBe(401);
+  expect(denied.value).not.toHaveProperty('realm');
+  expect(await snapshot()).toEqual(before);
+  const read = await call('GET', `/v1/realms/${probe.realmId}`, { bearer: owner.bearer });
+  expect(read.response.status).toBe(200);
+  expect(read.value).toEqual({ realm: probe });
 });
 
 test.serial(

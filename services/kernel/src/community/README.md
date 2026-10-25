@@ -113,9 +113,11 @@ in `board-scheme.ts` includes the scheme in its exact head read, including HTTP 
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Set/read board scheme | One admission observation shared by Realm management and subject eligibility; one Realm head point read and Semantic's subject/type read at T; one revision insert and head compare-and-set in the Realm partition. Reading includes the scheme in the Realm head seek | O(1) rows and statements; O(log R) blocks, plus A | `board-scheme.test.ts`: fixed Realm and scheme at 2048, 8192 and 32768 other Realms and subjects; constant rows/statements and zero sequential scans on Realm and subject identities/revisions |
 
-The board scheme HTTP tests use genuine Auth-issued tokens and production Access.
-The kernel does not mount `account:suspend`, so the suspended-account persona is
-omitted rather than simulated by a database state mutation.
+The board scheme and publication HTTP tests use genuine Auth-issued tokens and
+production Access. They cover a suspended-account persona through the native
+`account:suspend` route, called by platform governance. The persona's existing
+bearer receives 401 when setting a board scheme, publishing, withdrawing or
+rejecting, with the Realm head and publication rows unchanged.
 
 Accounts owns the durable membership workflow and the actor-side inverse.
 `createRealmMembership` is the Realm partition adapter that workflow calls.

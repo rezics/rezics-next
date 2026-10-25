@@ -150,7 +150,10 @@ async function createRealm(
 async function snapshot() {
   const result = await admin.query(`SELECT
     (SELECT count(*)::integer FROM community.publication) AS records,
+    (SELECT jsonb_agg(p ORDER BY route, publication_id) FROM community.publication p) AS publications,
     (SELECT jsonb_agg(h ORDER BY realm_id, subject_id) FROM community.publication_head h) AS heads,
+    (SELECT jsonb_agg(r ORDER BY route, realm_id) FROM community.realm r) AS realms,
+    (SELECT count(*)::integer FROM community.realm_revision) AS revisions,
     (SELECT count(*)::integer FROM access.resource_initialization) AS initialized,
     (SELECT count(*)::integer FROM access.resource_role_grant) AS roles,
     (SELECT count(*)::integer FROM access.resource_grant) AS grants,
@@ -186,10 +189,10 @@ async function fixture(visibility: 'public' | 'protected' = 'public') {
   return { realm, subjectId: await subject(), path: `/v1/realms/${realm.realmId}/publications` };
 }
 
-async function grantModerator(realm: Realm) {
+async function grantModerator(realm: Realm, accountId = moderator.accountId) {
   const body = {
     resource: { route: routeOf(realm.realmId)!, id: realm.realmId },
-    subject: { kind: 'account', id: moderator.accountId },
+    subject: { kind: 'account', id: accountId },
     role: 'community.realm.moderator',
     valid: '(,)',
   };
@@ -435,8 +438,6 @@ test.serial(
 test.serial(
   'a non-moderator and a stale head are denied with no effect, and protected publications are the same 404 to a non-member',
   async () => {
-    // account:suspend has no native HTTP route on this kernel; omit that persona rather than patching account state.
-    expect(actionCatalogue(kernel).has('account:suspend')).toBe(false);
     const f = await fixture();
     let before = await snapshot();
     for (const bearer of [undefined, unrelated.bearer]) {
@@ -516,3 +517,36 @@ test.serial(
     }
   },
 );
+
+test.serial('a suspended account cannot publish, withdraw or reject and writes nothing', async () => {
+  const scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
+  const suspended = await person('publication_suspended', scopes);
+  const f = await fixture();
+  await grantModerator(f.realm, suspended.accountId);
+  const created = await call('POST', f.path, {
+    bearer: suspended.bearer,
+    key: crypto.randomUUID(),
+    body: { subjectId: f.subjectId },
+  });
+  expect(created.response.status).toBe(201);
+  const head = created.value.publication as Head;
+  const result = await call('POST', `/v1/accounts/${suspended.accountId}:suspend`, {
+    bearer: governance.bearer,
+    key: crypto.randomUUID(),
+    body: {},
+  });
+  expect(result.response.status).toBe(200);
+  const before = await snapshot();
+  for (const path of [f.path, `${f.path}/${f.subjectId}:withdraw`, `${f.path}/${f.subjectId}:reject`]) {
+    const denied = await call('POST', path, {
+      bearer: suspended.bearer,
+      key: crypto.randomUUID(),
+      headers: { 'if-match': JSON.stringify(head.publicationId) },
+      ...(path === f.path ? { body: { subjectId: f.subjectId } } : {}),
+    });
+    expect(denied.response.status).toBe(401);
+    expect(denied.value).toMatchObject({ effect_status: 'not_applied' });
+    expect(denied.value).not.toHaveProperty('publication');
+    expect(await snapshot()).toEqual(before);
+  }
+});
