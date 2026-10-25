@@ -1,4 +1,8 @@
-import type { HttpResponse, Json, Reference, Statement, StatementInput, Subject } from './semantic-driver';
+import type { BatchCommand, BatchStatement, Rights } from '@rezics/definitions/bulk';
+import type { GrowingRelation, SqliteStatement } from './imports-growth-driver';
+import type { Capture } from '../services/kernel/test/support/growth-cost';
+import type { GrowthDatabase, Population } from '../services/kernel/test/support/growth';
+import type { HttpResponse, Json, Reference, Statement, Subject } from './semantic-driver';
 
 /**
  * IMPORT_API_DRIVER is an absolute file path/URL exporting createImportApiDriver.
@@ -10,7 +14,10 @@ import type { HttpResponse, Json, Reference, Statement, StatementInput, Subject 
  * bulk has bulk permission. Revocation removes only bulk permission, preserving
  * the original token, other authority and stored receipts.
  * Every write uses the decided public authenticated bulk HTTP handlers (actual
- * createKernel.handle is acceptable). No guessed route is prescribed here.
+ * createKernel.handle is acceptable). Use POST /v1/subjects:batchWrite and @rezics/definitions/bulk.
+ * Grant subject:batch_write and bulk-import authority ONLY on Global
+ * {route:0,id:00000000-0000-8000-8000-000000000000}. Claims at
+ * (source,external_id) create-or-resolve one stable subject across all groups.
  * Setup, grants, community adoption and takedown use real module commands/API.
  * No fake policy, receipts, proposals, fences, privileged importer endpoint or
  * direct kernel write SQL. SQL observation is allowed. Factories clean partial
@@ -21,6 +28,18 @@ import type { HttpResponse, Json, Reference, Statement, StatementInput, Subject 
  * Keep HTTP bodies/headers intact. Proposal/field evidence must be extracted from
  * actual retrieved public bodies, with persisted revisions independently observed.
  * Semantic owns the public proposal/bulk schema. No expected output may be seeded.
+ * Only external source HTTP and object-store boundary fixtures are permitted,
+ * through production content adapters with deterministic encoded source bytes.
+ * Configure the production domain allowlist for the supplied fixture URL; keep
+ * source/redirect URL validation and byte/time/pixel caps active.
+ * Run the real registered content jobs/Sharp pipeline; no fake media state/job,
+ * Auth, Access, document persistence, tuple-home fences or evaluator.
+ * Cover transport uses POST /v1/media:importFromUrl {sourceUrl,credit,provenance}
+ * with the ordinary automated account bearer/bulk-import grant. No BFF, relay,
+ * media:complete, R2 credentials or service token bypass. Every refresh checks
+ * all tuple-home fences (unchanged included); preparation rechecks references;
+ * final public disclosure reads current fences independently of subject mapping.
+ * A cross-partition fence promises disclosure hiding, not physical write exclusion.
  */
 export type Source = 'bangumi' | 'vndb' | 'openlibrary' | 'wikidata';
 export interface Dump {
@@ -28,6 +47,13 @@ export interface Dump {
   snapshot: string;
   bytes: Uint8Array;
   converterRevision: string;
+  /** Raw archive entry streams; VNDB COPY TO STDOUT files plus matching .header. */
+  entries?: () => AsyncIterable<{
+    path: string;
+    kind: 'file';
+    declaredBytes: number;
+    bytes: AsyncIterable<Uint8Array>;
+  }>;
 }
 export interface Proposal {
   id: string;
@@ -47,6 +73,8 @@ export interface RecordView {
   responses: HttpResponse[];
   subject: Subject | null;
   proposals: Proposal[];
+  /** Actual source-retracted candidate IDs; historical proposals remain readable. */
+  retracted: string[];
   /** Actual stored subject revisions, including historical proposal revisions. */
   revisions: { revision: number; proposalIds: string[] }[];
   /** Effective community choice read through semantic's public API. */
@@ -79,25 +107,26 @@ export interface Run {
   vanished: string[];
 }
 export interface Counters {
+  /** Executions and actual rows delivered to SQLite store code, NOT examined rows. */
   statements: number;
-  rowsExamined: number;
-  fullScans: number;
-  sqliteFullscanSteps: number;
-  sqliteVmSteps: number;
-  pgRows: number;
-  pgBuffers: number;
+  rowsReturned: number;
+  sqlite: { analyzed: boolean; growingRelations: readonly GrowingRelation[]; executions: readonly SqliteStatement[] };
+  /** Raw shared growth.ts auto_explain capture, including nested Auth/Access/fence/receipt work. */
+  postgres: Capture;
   partitions: number;
   inputBytes: number;
   records: number;
   peakBufferedBytes: number;
   maxPageRecords: number;
-  /** Observed index heights, not computed from the supplied scale. */
-  indexLevels: number;
   /** Instrumented byte/token/field visits including revisits, never byte estimates. */
   workUnits: number;
 }
 export type CostPhase = 'reader' | 'converter' | 'reconcile' | 'api';
 export interface ImportApiDriver {
+  /** Same migrated/instrumented DB used by real kernel requests, opened via openGrowthDatabase. */
+  readonly growthDatabase: GrowthDatabase;
+  /** Shared seed(Population) setup grows BOTH hot partition and unrelated catalogue/history. */
+  readonly population: Population;
   /** Resolve bundled standard vocabulary IDs, not invented import properties. */
   readonly properties: { title: string; summary: string; cover: string; externalId: string };
   run(
@@ -114,6 +143,50 @@ export interface ImportApiDriver {
   ): Promise<Run>;
   read(source: Source, externalId: string): Promise<RecordView>;
   effects(): Promise<Effects>;
+  /** Actual captured bulk commands, never regenerated expected proposals. */
+  commands(run: Run): BatchCommand[];
+  /** Fetch through public content disclosure, then independently inspect persisted rows. No scalar-to-document synthesis. */
+  document(proposal: Proposal): Promise<{
+    response: { status: number; headers: Headers; bytes: Uint8Array };
+    stored: { id: string; digest: string; bytes: Uint8Array; rights: Rights; transactionId: string };
+    semantic: { documentId: string; digest: string; language: string; body: null; transactionId: string };
+  }>;
+  /** Public media GET plus independent native media/storage/job observations. */
+  media(proposal: Proposal): Promise<{
+    id: string;
+    state: string;
+    transitions: string[];
+    role: string;
+    credit: string;
+    sourceLink: string;
+    imageLicense: string | null;
+    provenance: unknown;
+    digest: string;
+    sourceBytes: Uint8Array;
+    storedBytes: Uint8Array;
+    response: { status: number; headers: Headers; bytes: Uint8Array; url: string };
+    sharedSharpPipeline: boolean;
+    /** Captured production transport and verified Auth context, not asserted by a fake job. */
+    transport: {
+      request: { url: string; method: string; headers: Headers; body: unknown };
+      importerId: string;
+      verifiedSub: string;
+      websiteSession: boolean;
+      serviceToken: boolean;
+      importerFetchedBytes: number;
+      contentFetches: string[];
+    };
+  }>;
+  /** All actual media:importFromUrl requests/jobs so a forbidden reimport cannot hide behind reuse. */
+  mediaImports(): Promise<{ requests: number; jobs: number }>;
+  /** Current restricted check and direct public content fetch using captured IDs. */
+  fence(
+    source: Source,
+    externalId: string,
+    fieldGroup: string,
+    as: 'bulk' | 'ordinary' | 'anonymous',
+  ): Promise<HttpResponse>;
+  disclose(proposal: Proposal): Promise<{ status: number; bytes: Uint8Array }>;
   baseline(source: Source): Promise<Baseline>;
   /** Durable importer acknowledgement for this stable batch key, never inferred from HTTP status. */
   acknowledged(key: string): Promise<boolean>;
@@ -132,7 +205,7 @@ export interface ImportApiDriver {
     converterRevision: string,
   ): Promise<{
     raw: unknown;
-    statements: StatementInput[];
+    statements: BatchStatement[];
   }>;
   /**
    * Performance-only setup: one deterministic method at ALL scales. May bulk-load
@@ -141,13 +214,22 @@ export interface ImportApiDriver {
    * Counts are target totals. Include historical importer keys in the measured
    * source and unrelated sources, without changing its active one-record baseline.
    * Include unrelated semantic/auth/editorial history in the measured partition.
-   * Seed records never share the measured key. Each scale uses a fresh factory.
+   * Seed records never share the measured key. Uses shared seed(growthDatabase,
+   * population, range), Population grows hot partition AND rest. Repeated calls
+   * grow to target totals and ANALYZE outside measurement; no approximate counts.
    */
   seed(input: { catalogueRecords: number; historyRows: number }): Promise<void>;
   /**
-   * Narrow bridge to the performance Goal's shared harness when available. Measure
-   * real executed statements/rows, SQLite stmt_status FULLSCAN_STEP/VM_STEP and
-   * PostgreSQL buffers/EXPLAIN actual rows, including Access/fence/receipt work.
+   * Mandatory shared growth.ts measure on growthDatabase (openGrowthDatabase),
+   * retaining auto_explain rows/buffers/statements including Auth/Access/fence/receipts.
+   * SQLite wraps actual Database prepare/query/run and executed Statement
+   * get/all/iterate/run plus exec/transaction control. Count each execution once,
+   * not preparation, and rows actually returned (including lazy iteration).
+   * ANALYZE outside measurement at every scale; EXPLAIN QUERY PLAN outside
+   * measurement for EVERY distinct executed SQL with its actual bound parameters.
+   * Supply actual schema/index metadata and every growing read alias for the
+   * indexed-key proof in test support. No status/FFI/VM/index-height estimates.
+   * SQLite blocks:0 means unavailable buffers, not zero physical IO.
    * Account every operation in a phase; no hidden adapter work or elapsed time.
    * Reader/converter counters include all parser/converter invocations and bytes.
    */

@@ -1,4 +1,11 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { checkBatchWrite } from '@rezics/definitions/bulk';
+import { documentText, parseDocument } from '@rezics/document';
+import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
+import { checkGrowth } from '../services/kernel/test/support/growth';
+import { costOf } from '../services/kernel/test/support/growth-cost';
+import { assertIndexedSqlite } from './support/verify-import-api';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Counters, Dump, ImportApiDriver, Proposal, RecordView, Run, Source } from './imports-api-driver';
@@ -43,7 +50,7 @@ async function scenario(action: (d: ImportApiDriver) => Promise<void>) {
   }
 }
 async function dump(source: Source): Promise<Dump> {
-  return {
+  const input: Dump = {
     source,
     snapshot: '2020-01-01',
     converterRevision: 'conversion-v1',
@@ -51,7 +58,55 @@ async function dump(source: Source): Promise<Dump> {
       await Bun.file(new URL(`./fixtures/imports/api/${files[source]}`, import.meta.url)).arrayBuffer(),
     ),
   };
+  if (source === 'vndb') {
+    // Synthetic realistic public COPY TO STDOUT entries; original fixtures stay intact.
+    const tables = {
+      vn: [
+        (await Bun.file(new URL('./fixtures/imports/vndb-tables/db/vn.header', import.meta.url)).text()).trimEnd(),
+        'v1\t\\N\t\\N\ten\t0\t\\N\t\\N\t\\N\t0\t0\t0\tJourney\tUNLICENSED_DESCRIPTION_SENTINEL\nv2\t\\N\t\\N\ten\t0\t\\N\t\\N\t\\N\t0\t0\t0\tSecond\tUNLICENSED_DESCRIPTION_SENTINEL',
+      ],
+      vn_titles: [
+        'id\tlang\tofficial\ttitle\tlatin',
+        'v1\ten\tt\tA Catalogue Journey\t\\N\nv2\ten\tt\tA Second Journey\t\\N',
+      ],
+      entry_meta: [
+        'id\tcreated\tlastmod\trevision\tnum_edits\tnum_users',
+        'v1\t2020-01-01\t2020-01-01\t7\t6\t3\nv2\t2020-01-02\t2020-01-02\t19\t18\t4',
+      ],
+    };
+    const entries = Object.entries(tables).flatMap(([name, [header, rows]]) => [
+      { path: `db/${name}.header`, bytes: encoder.encode(header + '\n') },
+      { path: `db/${name}`, bytes: encoder.encode(rows + '\n') },
+    ]);
+    input.bytes = new Uint8Array();
+    input.entries = () =>
+      (async function* () {
+        for (const item of entries) {
+          let passes = 0,
+            consumed = 0;
+          yield {
+            path: item.path,
+            kind: 'file' as const,
+            declaredBytes: item.bytes.length,
+            bytes: {
+              async *[Symbol.asyncIterator]() {
+                expect(++passes).toBe(1);
+                for (let offset = 0; offset < item.bytes.length; offset += 7) {
+                  const chunk = item.bytes.subarray(offset, offset + 7);
+                  consumed += chunk.length;
+                  yield chunk;
+                }
+              },
+            },
+          };
+          expect(passes).toBe(1);
+          expect(consumed).toBe(item.bytes.length);
+        }
+      })();
+  }
+  return input;
 }
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 function content(p: Proposal) {
   return p.statement?.value.content;
 }
@@ -62,7 +117,10 @@ function references(p: Proposal) {
 }
 function field(view: RecordView, property: string, value: unknown) {
   const matches = view.proposals.filter(
-    (p) => p.kind === 'value' && p.statement?.property.id === property && content(p) === value,
+    (p) =>
+      p.kind === 'value' &&
+      p.statement?.property.id === property &&
+      (property === 'schema:name' ? (content(p) as { text?: string })?.text === value : content(p) === value),
   );
   expect(matches.length).toBeGreaterThan(0);
   return matches[0]!;
@@ -82,7 +140,78 @@ function retrieved(view: RecordView) {
   }
 }
 function stored(view: RecordView) {
-  return { subject: view.subject, proposals: view.proposals, revisions: view.revisions, adopted: view.adopted };
+  return {
+    subject: view.subject,
+    proposals: view.proposals,
+    retracted: view.retracted,
+    revisions: view.revisions,
+    adopted: view.adopted,
+  };
+}
+async function summaryField(d: ImportApiDriver, view: RecordView, text: string) {
+  const proposals = view.proposals.filter((p) => p.statement?.property.id === d.properties.summary);
+  for (const proposal of proposals) {
+    const actual = await d.document(proposal);
+    expect(actual.response.status).toBe(200);
+    expect(JSON.stringify(proposal.statement)).toContain(actual.stored.id);
+    expect(JSON.stringify(proposal.statement)).toContain(actual.stored.digest);
+    expect(actual.response.bytes).toEqual(actual.stored.bytes);
+    expect(actual.stored.digest).toBe(sha256(actual.response.bytes));
+    const snapshot = parseDocument(JSON.parse(new TextDecoder().decode(actual.response.bytes)));
+    expect(snapshot.profile).toBe('text');
+    expect(actual.response.bytes.length).toBeLessThanOrEqual(32768);
+    expect(actual.semantic).toMatchObject({
+      documentId: actual.stored.id,
+      digest: actual.stored.digest,
+      body: null,
+      transactionId: actual.stored.transactionId,
+    });
+    expect(actual.stored.rights).toMatchObject({
+      license: 'CC-BY-SA-3.0',
+      obligations: expect.arrayContaining(['cc:Attribution', 'cc:ShareAlike']),
+    });
+    expect(actual.stored.rights.attribution).toMatch(/Bangumi.*contributors/i);
+    expect(actual.semantic.language.length).toBeGreaterThan(0);
+    if (documentText(snapshot) === text) return proposal;
+  }
+  throw new Error(`Missing disclosed full summary: ${text}`);
+}
+async function coverField(d: ImportApiDriver, proposal: Proposal) {
+  expect(typeof content(proposal)).toBe('string');
+  expect(String(content(proposal))).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+  const media = await d.media(proposal);
+  expect(media.id).toBe(String(content(proposal)));
+  expect(media.state).toBe('available');
+  expect(media.transitions).toEqual(['reserved', 'uploaded', 'available']);
+  expect(media.role).toBe('cover');
+  expect(media.credit).toContain('(c) Example Studio');
+  expect(media.credit).toContain('via Bangumi');
+  expect(media.sourceLink).toBe(urls.bangumi);
+  expect(media.imageLicense).toBeNull(); // unknown, never inherited metadata licence
+  expect(JSON.stringify(media.provenance)).toContain(urls.bangumi);
+  expect(media.sharedSharpPipeline).toBe(true);
+  const transport = media.transport;
+  expect(new URL(transport.request.url).pathname).toBe('/v1/media:importFromUrl');
+  expect(transport.request.method).toBe('POST');
+  expect(transport.request.headers.get('authorization')).toMatch(/^Bearer \S+$/);
+  expect(transport.request.body).toEqual({
+    sourceUrl: 'https://example.org/cover.jpg',
+    credit: expect.anything(),
+    provenance: expect.anything(),
+  });
+  expect(transport.verifiedSub).toBe(transport.importerId);
+  expect(transport.websiteSession).toBe(false);
+  expect(transport.serviceToken).toBe(false);
+  expect(transport.importerFetchedBytes).toBe(0);
+  expect(transport.contentFetches).toContain('https://example.org/cover.jpg');
+  expect(media.response.status).toBe(200);
+  expect(media.response.headers.get('location')).toBeNull();
+  expect(media.response.url).not.toBe('https://example.org/cover.jpg');
+  expect(media.response.bytes).toEqual(media.storedBytes);
+  expect(media.response.bytes).not.toEqual(media.sourceBytes);
+  expect(media.digest).toBe(sha256(media.storedBytes));
+  expect(sha256(media.response.bytes)).toBe(media.digest);
+  return media;
 }
 async function launch(d: ImportApiDriver, source: Source) {
   const input = await dump(source),
@@ -93,15 +222,19 @@ async function launch(d: ImportApiDriver, source: Source) {
   });
   for (const phase of ['reader', 'converter'] as const) {
     expect(measured[phase].statements).toBe(0);
-    expect(measured[phase].rowsExamined).toBe(0);
+    expect(measured[phase].rowsReturned).toBe(0);
     expect(measured[phase].partitions).toBe(0);
-    expect(measured[phase].sqliteVmSteps).toBe(0);
-    expect(measured[phase].pgBuffers).toBe(0);
+    expect(measured[phase].sqlite.executions).toEqual([]);
+    expect(measured[phase].postgres.statements).toEqual([]);
+    expect(measured[phase].postgres.plans).toEqual([]);
+    expect(costOf(measured[phase].postgres).blocks).toBe(0);
   }
   expect(run.outcome).toBe('complete');
   expect(run.exchanges.length).toBeGreaterThan(0);
   for (const x of run.exchanges) {
     expect(x.request.method).toBe('POST');
+    expect(new URL(x.request.url).pathname).toBe('/v1/subjects:batchWrite');
+    expect(checkBatchWrite(x.request.body)).toEqual([]);
     expect(x.request.headers.get('authorization')).toMatch(/^Bearer \S+$/);
     expect(x.request.key.length).toBeGreaterThan(0);
     expect(x.response.status).toBeGreaterThanOrEqual(200);
@@ -110,15 +243,24 @@ async function launch(d: ImportApiDriver, source: Source) {
   const view = await d.read(source, keys[source]);
   retrieved(view);
   expect(view.subject).not.toBeNull();
+  expect(d.properties.title).toBe('schema:name');
+  expect(d.properties.summary).toBe('schema:abstract');
+  expect(d.properties.cover).toBe('schema:image');
   const title = field(view, d.properties.title, 'A Catalogue Journey');
+  expect(content(title)).toMatchObject({ language: expect.any(String), text: 'A Catalogue Journey' });
   for (const p of view.proposals) {
     expect(p).toMatchObject({ source, externalId: keys[source], converterRevision: input.converterRevision });
-    expect(p.recordDigest.length).toBeGreaterThan(0);
+    expect(p.recordDigest).toMatch(/^[0-9a-f]{64}$/);
     expect(p.recordRevision.length).toBeGreaterThan(0);
     expect(p.subjectId).toBe(view.subject!.id);
-    expect(references(p)).toContain(urls[source]);
+    expect(references(p)).toContain(source === 'vndb' ? `${urls[source]}.${p.recordRevision}` : urls[source]);
   }
   expect(references(title)).toContain(licenses[source]);
+  for (const command of d.commands(run)) {
+    if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
+  }
+  if (source === 'bangumi') expect(title.recordRevision).toBe('unversioned');
+  if (source === 'vndb') expect(title.recordRevision).toBe('7');
   if (source === 'openlibrary') expect(title.recordRevision).toBe('1');
   if (source === 'wikidata') expect(title.recordRevision).toBe('101');
   const after = await d.effects();
@@ -147,18 +289,66 @@ async function catalogue(count: number, changed = false): Promise<Dump> {
 test('Bangumi dump preserves summary rights and separately credited cover', () =>
   scenario(async (d) => {
     const { view } = await launch(d, 'bangumi');
-    const summary = field(view, d.properties.summary, 'A traveller builds a catalogue.');
+    const summary = await summaryField(d, view, 'A traveller builds a catalogue.');
     expect(references(summary)).toContain(licenses.bangumi);
-    const cover = field(view, d.properties.cover, 'https://example.org/cover.jpg');
-    expect(references(cover)).toContain('Example Studio');
-    expect(references(cover)).not.toContain(licenses.bangumi);
+    const cover = view.proposals.find((p) => p.statement?.property.id === d.properties.cover)!;
+    expect(cover).toBeDefined();
+    await coverField(d, cover);
   }));
 test('VNDB COPY dump preserves permitted factual rights and source references', () =>
   scenario(async (d) => {
     const { view } = await launch(d, 'vndb');
+    expect(JSON.stringify(view)).not.toContain('UNLICENSED_DESCRIPTION_SENTINEL');
     expect(references(field(view, d.properties.title, 'A Catalogue Journey'))).toContain(
       'https://opendatacommons.org/licenses/dbcl/1.0/',
     );
+  }));
+test('original inline VNDB COPY fixture remains supported independently of public table entries', () =>
+  scenario(async (d) => {
+    const input = await dump('vndb');
+    input.entries = undefined;
+    input.bytes = new Uint8Array(
+      await Bun.file(new URL('./fixtures/imports/api/vndb.sql', import.meta.url)).arrayBuffer(),
+    );
+    expect((await d.run(input)).outcome).toBe('complete');
+    const view = await d.read('vndb', 'v1');
+    retrieved(view);
+    field(view, d.properties.title, 'A Catalogue Journey');
+    expect((await d.effects()).subjects).toBe(2);
+  }));
+test('truncated public VNDB table streams and mismatched headers cannot publish or checkpoint', () =>
+  scenario(async (d) => {
+    const input = await dump('vndb');
+    expect((await d.run(input)).outcome).toBe('complete');
+    const before = await d.effects(),
+      baseline = await d.baseline('vndb');
+    const view = await d.read('vndb', 'v1');
+    for (const mode of ['truncated', 'header'] as const) {
+      const entries: NonNullable<Dump['entries']> = () =>
+        (async function* () {
+          for await (const entry of input.entries!()) {
+            if (entry.path === (mode === 'header' ? 'db/vn_titles.header' : 'db/entry_meta')) {
+              const original = entry.bytes;
+              yield {
+                ...entry,
+                bytes: (async function* () {
+                  for await (const chunk of original) {
+                    if (mode === 'header') yield encoder.encode('wrong\tcolumns\n');
+                    else yield chunk.subarray(0, 1);
+                  }
+                })(),
+              };
+            } else yield entry;
+          }
+        })();
+      const run = await d.run({ ...input, snapshot: '2020-01-02', entries });
+      expect(run.outcome).toBe('invalid-input');
+      expect(run.exchanges).toEqual([]);
+      expect(run.vanished).toEqual([]);
+      expect(await d.effects()).toEqual(before);
+      expect(await d.baseline('vndb')).toEqual(baseline);
+      expect(stored(await d.read('vndb', 'v1'))).toEqual(stored(view));
+    }
   }));
 test('Open Library five-column TSV imports through public bulk API', () =>
   scenario(async (d) => {
@@ -208,6 +398,10 @@ test('changed records and converter revisions append proposals while community a
     const old = field(view, d.properties.title, 'A Catalogue Journey');
     const fresh = field(next, d.properties.title, 'Revised catalogue');
     expect(fresh.id).not.toBe(old.id);
+    expect(next.retracted).toContain(old.id);
+    expect(next.retracted).not.toContain(fresh.id);
+    expect(next.subject!.id).toBe(view.subject!.id);
+    expect(next.subject!.labels).toEqual(view.subject!.labels);
     expect(fresh.recordDigest).not.toBe(old.recordDigest);
     expect(fresh.recordRevision).toBe('2');
     expect(references(fresh)).toContain(urls.openlibrary);
@@ -313,7 +507,7 @@ test('takedown fences survive unchanged refresh payload changes restart and reco
   scenario(async (d) => {
     const { input, view } = await launch(d, 'bangumi');
     await launch(d, 'vndb');
-    const summary = field(view, d.properties.summary, 'A traveller builds a catalogue.');
+    const summary = await summaryField(d, view, 'A traveller builds a catalogue.');
     await d.takedown('bangumi', '1', summary.fieldGroup);
     const postTakedown = await d.read('bangumi', '1');
     expect(postTakedown.proposals.some((p) => p.id === summary.id)).toBe(false);
@@ -357,7 +551,7 @@ test('takedown fences survive unchanged refresh payload changes restart and reco
       effects = await d.effects();
     }
     field(await d.read('bangumi', '1'), d.properties.title, 'A Catalogue Journey');
-    field(await d.read('bangumi', '2'), d.properties.summary, 'Updated adjacent record.');
+    await summaryField(d, await d.read('bangumi', '2'), 'Updated adjacent record.');
     expect((await d.run({ ...(await dump('vndb')), converterRevision: 'conversion-v2' })).outcome).toBe('complete');
     const other = await d.read('vndb', 'v1');
     field(other, d.properties.title, 'A Catalogue Journey');
@@ -366,7 +560,7 @@ test('takedown fences survive unchanged refresh payload changes restart and reco
 test('server fence recheck blocks a takedown arriving after client preflight', () =>
   scenario(async (d) => {
     const { input, view } = await launch(d, 'bangumi');
-    const summary = field(view, d.properties.summary, 'A traveller builds a catalogue.');
+    const summary = await summaryField(d, view, 'A traveller builds a catalogue.');
     let reached = 0;
     const run = await d.run(
       { ...input, converterRevision: 'conversion-v2' },
@@ -382,6 +576,51 @@ test('server fence recheck blocks a takedown arriving after client preflight', (
     const after = await d.read('bangumi', '1');
     expect(after.proposals.filter((p) => p.fieldGroup === summary.fieldGroup)).toEqual([]);
     field(after, d.properties.title, 'A Catalogue Journey');
+  }));
+test('cover fences prevent reimport on unchanged and changed refresh and hide later disclosures', () =>
+  scenario(async (d) => {
+    const { input, view } = await launch(d, 'bangumi');
+    const cover = view.proposals.find((p) => p.statement?.property.id === d.properties.cover)!;
+    await coverField(d, cover);
+    const summary = await summaryField(d, view, 'A traveller builds a catalogue.');
+    const denied = await d.fence('bangumi', '1', cover.fieldGroup, 'anonymous');
+    expect([401, 403]).toContain(denied.status);
+    expect((await d.fence('bangumi', '1', cover.fieldGroup, 'ordinary')).status).toBe(403);
+    const initial = await d.fence('bangumi', '1', cover.fieldGroup, 'bulk');
+    expect(initial.status).toBe(200);
+    expect(initial.body).toMatchObject({ fenced: false, securityRevision: expect.anything() });
+    await d.takedown('bangumi', '1', cover.fieldGroup);
+    const fenced = await d.fence('bangumi', '1', cover.fieldGroup, 'bulk');
+    expect(fenced.status).toBe(200);
+    expect(fenced.body.fenced).toBe(true);
+    expect(fenced.body.securityRevision).not.toEqual(initial.body.securityRevision);
+    // No refresh is needed for final disclosure to observe a later fence.
+    expect((await d.disclose(cover)).status).toBe(404);
+    expect((await d.disclose(summary)).status).toBe(200);
+    const imports = await d.mediaImports();
+    expect(imports.requests).toBeGreaterThan(0);
+    expect(imports.jobs).toBeGreaterThan(0);
+    for (const changed of [false, true]) {
+      const bytes = changed
+        ? encoder.encode(
+            new TextDecoder()
+              .decode(input.bytes)
+              .replace('cover.jpg', 'replacement.jpg')
+              .replace('A Catalogue Journey', 'Adjacent cover title'),
+          )
+        : input.bytes;
+      expect((await d.run({ ...input, bytes })).outcome).toBe('complete');
+      expect(await d.mediaImports()).toEqual(imports);
+      const after = await d.read('bangumi', '1');
+      expect(after.proposals.filter((p) => p.fieldGroup === cover.fieldGroup)).toEqual([]);
+      expect((await d.disclose(cover)).status).toBe(404);
+      await summaryField(d, after, 'A traveller builds a catalogue.');
+      if (changed) field(after, d.properties.title, 'Adjacent cover title');
+    }
+    await d.takedown('bangumi', '1', summary.fieldGroup);
+    const hidden = await d.disclose(summary);
+    expect(hidden.status).toBe(404);
+    expect(new TextDecoder().decode(hidden.bytes)).not.toContain('A traveller builds a catalogue.');
   }));
 test('ordinary actors and revoked bulk replays are denied before receipt disclosure', () =>
   scenario(async (d) => {
@@ -474,6 +713,12 @@ test('malformed and truncated dumps never publish disappearances or advance snap
   scenario(async (d) => {
     for (const source of Object.keys(files) as Source[]) {
       const input = await dump(source);
+      if (source === 'vndb') {
+        input.entries = undefined;
+        input.bytes = new Uint8Array(
+          await Bun.file(new URL('./fixtures/imports/api/vndb.sql', import.meta.url)).arrayBuffer(),
+        );
+      }
       await d.run(input);
       const before = await d.effects(),
         baseline = await d.baseline(source),
@@ -510,7 +755,7 @@ test('hostile user posts and oversized records never become imported content', (
     const view = await d.read('bangumi', '1');
     retrieved(view);
     expect(JSON.stringify(view)).not.toContain('PRIVATE USER POST SENTINEL');
-    field(view, d.properties.summary, 'A traveller builds a catalogue.');
+    await summaryField(d, view, 'A traveller builds a catalogue.');
     const before = await d.effects(),
       baseline = await d.baseline('bangumi');
     records[0].summary = 'x'.repeat(65537);
@@ -522,30 +767,42 @@ test('hostile user posts and oversized records never become imported content', (
     expect(await d.baseline('bangumi')).toEqual(baseline);
   }));
 
-// Fixed test configuration: B=8, M<=64, record bytes<=65536. No wall-clock ratios.
-// A point operation can visit at most 16 index paths per record. The additive
-// constants cover fixed Auth/Access/receipt/fence work; none depend on history.
+// Returned SQLite rows and exact execution counts cannot prove indexed work alone.
+// Validate raw plans at each scale; buffers are unavailable, not zero physical IO.
 function indexed(c: Counters, fields: number) {
-  for (const value of Object.values(c)) {
-    expect(Number.isFinite(value)).toBe(true);
+  for (const value of [
+    c.statements,
+    c.rowsReturned,
+    c.partitions,
+    c.inputBytes,
+    c.records,
+    c.peakBufferedBytes,
+    c.maxPageRecords,
+    c.workUnits,
+  ]) {
+    expect(Number.isSafeInteger(value)).toBe(true);
     expect(value).toBeGreaterThanOrEqual(0);
   }
-  expect(c.fullScans).toBe(0);
-  expect(c.sqliteFullscanSteps).toBe(0);
   expect(c.maxPageRecords).toBeLessThanOrEqual(8);
   expect(c.partitions).toBeLessThanOrEqual(8);
+  expect(c.statements).toBe(c.sqlite.executions.length);
+  expect(c.rowsReturned).toBe(c.sqlite.executions.reduce((n, statement) => n + statement.rowsReturned, 0));
+  for (const statement of c.sqlite.executions) assertIndexedSqlite(statement, c.sqlite);
   expect(c.statements).toBeLessThanOrEqual(64 + 16 * fields);
-  expect(c.rowsExamined).toBeLessThanOrEqual(128 + 32 * fields + 16 * 8 * c.indexLevels);
-  expect(c.pgRows).toBeLessThanOrEqual(128 + 32 * fields);
-  expect(c.pgBuffers).toBeLessThanOrEqual(128 + 32 * fields + 16 * 8 * c.indexLevels);
-  expect(c.sqliteVmSteps).toBeLessThanOrEqual(1024 + 256 * fields + 128 * 8 * c.indexLevels);
+  expect(c.rowsReturned).toBeLessThanOrEqual(128 + 32 * fields);
+  const pg = costOf(c.postgres);
+  expect(pg.rows).toBeLessThanOrEqual(128 + 32 * fields);
+  expect(pg.statements).toBeLessThanOrEqual(64 + 16 * fields);
 }
 test('fixed changes have bounded indexed work as unrelated catalogue and history grow independently', async () => {
-  for (const dimension of ['catalogueRecords', 'historyRows'] as const) {
+  for (const dimension of ['catalogueRecords', 'historyRows', 'both'] as const) {
     const samples: Record<'reconcile' | 'api' | 'stop' | 'removal' | 'removalApi', Counters>[] = [];
     for (const scale of [32, 128, 512])
       await scenario(async (d) => {
-        await d.seed({ catalogueRecords: 32, historyRows: 32, [dimension]: scale });
+        await d.seed({
+          catalogueRecords: dimension === 'historyRows' ? 32 : scale,
+          historyRows: dimension === 'catalogueRecords' ? 32 : scale,
+        });
         await d.run(await catalogue(1));
         const before = await d.effects();
         const measured = await d.measure(async () => {
@@ -553,22 +810,19 @@ test('fixed changes have bounded indexed work as unrelated catalogue and history
         });
         expect((await d.effects()).subjects).toBe(before.subjects);
         expect((await d.effects()).proposals).toBeGreaterThan(before.proposals);
-        for (const phase of ['reconcile', 'api'] as const) {
-          const c = measured[phase];
-          indexed(c, 3);
-          expect(c.statements).toBeGreaterThan(0);
-          expect(c.rowsExamined).toBeGreaterThan(0);
-          expect(c.indexLevels).toBeGreaterThan(0);
-        }
-        expect(measured.reconcile.sqliteVmSteps).toBeGreaterThan(0);
-        expect(measured.api.pgBuffers).toBeGreaterThan(0);
+        for (const phase of ['reconcile', 'api'] as const) indexed(measured[phase], 3);
+        expect(measured.reconcile.statements).toBeGreaterThan(0);
+        expect(measured.reconcile.rowsReturned).toBeGreaterThan(0);
+        expect(costOf(measured.api.postgres).statements).toBeGreaterThan(0);
+        expect(costOf(measured.api.postgres).rows).toBeGreaterThan(0);
+        expect(costOf(measured.api.postgres).blocks).toBeGreaterThan(0);
         const stop = await d.measure(async () => {
           const run = await d.run(await catalogue(0));
           expect(run.outcome).toBe('mass-disappearance');
           expect(run.exchanges).toEqual([]);
         });
         indexed(stop.reconcile, 3);
-        await d.run(await catalogue(5)); // Setup a fixed permitted one-key disappearance.
+        await d.run(await catalogue(5));
         const removal = await d.measure(async () => {
           const run = await d.run({ ...(await catalogue(4)), snapshot: '2020-01-03' });
           expect(run.outcome).toBe('complete');
@@ -579,19 +833,50 @@ test('fixed changes have bounded indexed work as unrelated catalogue and history
         samples.push({ ...measured, stop: stop.reconcile, removal: removal.reconcile, removalApi: removal.api });
       });
     for (const phase of ['reconcile', 'api', 'stop', 'removal', 'removalApi'] as const) {
-      const base = samples[0]![phase];
-      for (const sample of samples.slice(1)) {
-        const c = sample[phase];
-        const levels = Math.max(0, c.indexLevels - base.indexLevels);
-        expect(c.statements).toBeLessThanOrEqual(base.statements);
-        expect(c.pgRows).toBeLessThanOrEqual(base.pgRows);
-        expect(c.rowsExamined).toBeLessThanOrEqual(base.rowsExamined + 16 * 8 * levels);
-        expect(c.pgBuffers).toBeLessThanOrEqual(base.pgBuffers + 16 * 8 * levels);
-        expect(c.sqliteVmSteps).toBeLessThanOrEqual(base.sqliteVmSteps + 128 * 8 * levels);
-      }
+      const sqlite: GrowthSample[] = samples.map((sample, i) => ({
+        scale: [32, 128, 512][i]!,
+        cost: { rows: sample[phase].rowsReturned, blocks: 0, statements: sample[phase].statements },
+      }));
+      assertGrowth(sqlite, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+      assertGrowth(
+        samples.map((sample, i) => ({ scale: sqlite[i]!.scale, cost: costOf(sample[phase].postgres) })),
+        { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      );
     }
   }
 });
+test('shared PostgreSQL harness measures real bounded API Auth Access fences and receipts', () =>
+  scenario(async (d) => {
+    for (const operation of ['changed', 'stop', 'removal'] as const) {
+      const report = await checkGrowth(d.growthDatabase, {
+        name: `imports-${operation}`,
+        scales: [32, 128, 512],
+        repetitions: 1,
+        warmups: 0,
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        grow: async (_db, scale) => {
+          // d.seed uses shared seed/Population and one deterministic setup at every scale.
+          await d.seed({ catalogueRecords: scale, historyRows: scale });
+          await d.run(await catalogue(operation === 'removal' ? 5 : 1));
+        },
+        operation: async () => {
+          const run = await d.run(
+            await catalogue(operation === 'stop' ? 0 : operation === 'removal' ? 4 : 1, operation === 'changed'),
+          );
+          expect(run.outcome).toBe(operation === 'stop' ? 'mass-disappearance' : 'complete');
+          if (operation === 'stop') expect(run.exchanges).toEqual([]);
+          if (operation === 'removal') expect(run.vanished).toEqual(['5']);
+        },
+      });
+      expect(report.samples).toHaveLength(3);
+      if (operation !== 'stop')
+        for (const sample of report.samples) {
+          expect(sample.cost.statements).toBeGreaterThan(0);
+          expect(sample.cost.rows).toBeGreaterThan(0);
+          expect(sample.cost.blocks).toBeGreaterThan(0);
+        }
+    }
+  }));
 test('full dump reading scales with supplied bytes and keeps fixed page memory', async () => {
   for (const count of [32, 128, 512])
     await scenario(async (d) => {
@@ -614,11 +899,18 @@ test('full dump reading scales with supplied bytes and keeps fixed page memory',
       expect(reader.peakBufferedBytes).toBeLessThanOrEqual(65536 + 8 * maxRecordBytes);
       expect(reader.maxPageRecords).toBeLessThanOrEqual(8);
       expect(reader.statements).toBe(0);
-      expect(reader.rowsExamined).toBe(0);
+      expect(reader.rowsReturned).toBe(0);
+      expect(reader.sqlite.executions).toEqual([]);
+      expect(reader.postgres.statements).toEqual([]);
+      expect(reader.postgres.plans).toEqual([]);
       expect(reader.partitions).toBe(0);
       expect(measured.converter.records).toBe(count);
       expect(measured.converter.statements).toBe(0);
-      expect(measured.converter.rowsExamined).toBe(0);
+      expect(measured.converter.rowsReturned).toBe(0);
+      expect(measured.converter.partitions).toBe(0);
+      expect(measured.converter.sqlite.executions).toEqual([]);
+      expect(measured.converter.postgres.statements).toEqual([]);
+      expect(measured.converter.postgres.plans).toEqual([]);
       expect(measured.converter.peakBufferedBytes).toBeLessThanOrEqual(65536);
       expect((await d.effects()).subjects).toBe(count);
       const effects = await d.effects();
@@ -658,17 +950,19 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
           const actual = converted.statements.filter((s) => s.property.id === d.properties.externalId);
           expect(actual.length).toBe(fields);
           for (let i = 0; i < fields; i++) {
-            expect(actual.some((s) => s.value.content === `OL${900000 + i}W`)).toBe(true);
+            expect(actual.some((s) => s.value.type === 'value' && s.value.content === `OL${900000 + i}W`)).toBe(true);
             expect(JSON.stringify(converted.raw)).toContain(`OL${900000 + i}W`);
           }
         }
       });
       for (const c of Object.values(measured)) {
         expect(c.statements).toBe(0);
-        expect(c.rowsExamined).toBe(0);
+        expect(c.rowsReturned).toBe(0);
         expect(c.partitions).toBe(0);
-        expect(c.pgBuffers).toBe(0);
-        expect(c.sqliteVmSteps).toBe(0);
+        expect(costOf(c.postgres).blocks).toBe(0);
+        expect(c.sqlite.executions).toEqual([]);
+        expect(c.postgres.statements).toEqual([]);
+        expect(c.postgres.plans).toEqual([]);
       }
       expect(measured.converter.records).toBe(1);
       expect(measured.converter.workUnits).toBeGreaterThan(0);
@@ -682,7 +976,10 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
     });
     for (const c of Object.values(rejected)) {
       expect(c.statements).toBe(0);
-      expect(c.rowsExamined).toBe(0);
+      expect(c.rowsReturned).toBe(0);
+      expect(c.sqlite.executions).toEqual([]);
+      expect(c.postgres.statements).toEqual([]);
+      expect(c.postgres.plans).toEqual([]);
       expect(c.partitions).toBe(0);
     }
   }));
