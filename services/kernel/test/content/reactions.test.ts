@@ -67,7 +67,7 @@ export async function reactionFixture() {
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: new Map(actions.map((action) => [action, { anonymous: action.endsWith(':read') }])),
     auth: {
       issuer,
       audience: 'https://api.rezics.test',
@@ -235,7 +235,7 @@ if (Bun.main === import.meta.path) {
         const event = (
           await f.db.admin.query(
             `SELECT partition_no, type, data FROM core.outbox WHERE partition_no=$1 AND position=$2`,
-            [result!.transactionId],
+            [result!.partition, result!.position.toString()],
           )
         ).rows[0];
         expect(event.partition_no).toBe(partitionOf(f.home));

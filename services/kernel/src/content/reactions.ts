@@ -1,0 +1,218 @@
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import type { Pool } from 'pg';
+import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
+import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { authoritativeTimeValue, principalCommandIdentity, runCommand } from '../command/command.ts';
+import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { REACTION_KINDS } from './events.ts';
+import { mediaParentBoard, mediaParentSnapshot } from './media-parent.ts';
+import type { RequestContext } from './model.ts';
+import slotStatement from './reaction-slot.sql';
+import targetStatement from './reaction-target.sql';
+
+export { REACTION_KINDS };
+export type ReactionKind = (typeof REACTION_KINDS)[number];
+export type ReactionDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+export type ReactionTarget = Readonly<{ targetKind: 'thread' | 'post'; targetId: string }>;
+export type SetReactionInput = ReactionTarget & Readonly<{ kind: ReactionKind }>;
+class Unchanged extends Error {}
+function route(id: string): number {
+  const value = routeOf(id);
+  if (value === null) throw new GrantDeniedError();
+  return value;
+}
+
+async function mutate(
+  deps: ReactionDependencies,
+  actor: Actor,
+  input: ReactionTarget,
+  kind: ReactionKind | null,
+  context: RequestContext,
+) {
+  if (!['thread', 'post'].includes(input.targetKind)) throw new TypeError('Invalid reaction target kind');
+  if (actor.kind !== 'account') throw new GrantDeniedError();
+  const body = { targetKind: input.targetKind, targetId: input.targetId, kind };
+  const home = route(actor.accountId),
+    targetRoute = route(body.targetId);
+  const partition = partitionOf(home);
+  const resource = { route: targetRoute, id: body.targetId };
+  let checks: AccessCheck[] = [];
+  const base = resourceAuthorization({
+    access: deps.access,
+    actor,
+    action: 'reaction:set',
+    anchor: {
+      resource,
+      async validate(client, time) {
+        for (const check of checks) if (!(await check(client, time))) throw new GrantDeniedError();
+        return true;
+      },
+    },
+    context: { pool: deps.pool, deadline: context.deadline, partition },
+  });
+  const authorization = {
+    ...base,
+    async prepare(attempt: Parameters<NonNullable<typeof base.prepare>>[0]) {
+      const preparation = commandAccessContext({ pool: deps.pool, deadline: context.deadline }, attempt);
+      await requireCommandAdmission(deps.access, actor, preparation);
+      // This observation belongs to this live T and is discarded on retry. No
+      // resource connection survives evidence preparation or actor-home checkout.
+      const rows = await mediaParentSnapshot(deps.pool, targetRoute, context.deadline, (client) =>
+        targetStatement.run(client, { route: targetRoute, id: body.targetId, kind: body.targetKind }),
+      );
+      const thread = rows[0],
+        last = rows.at(-1);
+      if (
+        !thread ||
+        thread.kind !== 'thread' ||
+        !thread.board_id ||
+        rows.length < 2 ||
+        last?.parent_id !== null ||
+        rows.some(
+          (row, index) =>
+            row.depth !== index ||
+            row.availability !== 'available' ||
+            row.visibility === 'taken_down' ||
+            (row.visibility === 'draft' && row.author_id !== actor.accountId),
+        ) ||
+        (body.targetKind === 'post' && rows[1]?.id !== body.targetId)
+      )
+        throw new GrantDeniedError();
+      checks = [];
+      for (const row of rows) {
+        if (!row.id) throw new GrantDeniedError();
+        const target = { route: targetRoute, id: row.id };
+        const action = `${row.kind}:read`;
+        checks.push(
+          await accessCheck(
+            deps.access,
+            actor,
+            action,
+            {
+              ...target,
+              eligibility: createResourcePublicEligibility({
+                resource: target,
+                action,
+                async prepare() {
+                  return row;
+                },
+                async verify({ at }) {
+                  if (at !== authoritativeTimeValue(attempt.time)) throw new GrantDeniedError();
+                  return row.visibility === 'published' && row.availability === 'available';
+                },
+              }),
+            },
+            preparation,
+          ),
+        );
+      }
+      const boardId = thread.board_id;
+      const boardResource = { route: route(boardId), id: boardId };
+      // Board eligibility and Access run on the board's home, even if co-located.
+      const boardAction = 'board:read';
+      const boardCheck = await accessCheck(
+        deps.access,
+        actor,
+        boardAction,
+        {
+          ...boardResource,
+          eligibility: createResourcePublicEligibility({
+            resource: boardResource,
+            action: boardAction,
+            async prepare() {
+              return attempt.time;
+            },
+            async verify({ client, at }) {
+              if (at !== authoritativeTimeValue(attempt.time)) throw new GrantDeniedError();
+              const board = await mediaParentBoard(client, boardId);
+              if (board.visibility === 'draft') throw new GrantDeniedError();
+              return board.visibility === 'published';
+            },
+          }),
+        },
+        preparation,
+      );
+      await mediaParentSnapshot(deps.pool, boardResource.route, context.deadline, async (client) => {
+        if (!(await boardCheck(client, attempt.time))) throw new GrantDeniedError();
+      });
+      return base.prepare!(attempt);
+    },
+  };
+  const identity = principalCommandIdentity(actor);
+  const commandKind = kind === null ? 'content.reaction.clear' : 'content.reaction.set';
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...identity,
+        partition,
+        clock: deps.clock,
+        deadline: context.deadline,
+        authorization,
+        receipt: {
+          kind: commandKind,
+          key: context.idempotencyKey,
+          digest: createHash('sha256')
+            .update(canonicalize([identity, commandKind, body])!)
+            .digest(),
+        },
+      },
+      async (tx, command) => {
+        const rows = await slotStatement.run(tx, {
+          route: home,
+          actor_id: actor.accountId,
+          target_kind: body.targetKind,
+          target_route: targetRoute,
+          target_id: body.targetId,
+          kind,
+          at: authoritativeTimeValue(command.time),
+        });
+        // The executor requires an event for a committed command. Roll back the
+        // unchanged slot, receipt and position together instead of emitting noise.
+        const changed = rows[0];
+        if (!changed) throw new Unchanged();
+        return {
+          value: body,
+          events: [
+            {
+              type: 'com.rezics.content.reaction.changed.v1',
+              subject: body.targetId,
+              data: {
+                actorId: actor.accountId,
+                targetKind: body.targetKind,
+                targetId: body.targetId,
+                previousKind: changed.previous_kind,
+                kind: changed.kind,
+              },
+            },
+          ],
+        };
+      },
+    );
+  } catch (error) {
+    if (error instanceof Unchanged) return null;
+    throw error;
+  }
+}
+/** A changed slot returns its command outcome; an unchanged slot returns null. */
+export function setReaction(
+  deps: ReactionDependencies,
+  actor: Actor,
+  input: SetReactionInput,
+  context: RequestContext,
+) {
+  if (!REACTION_KINDS.includes(input.kind)) return Promise.reject(new TypeError('Invalid reaction kind'));
+  return mutate(deps, actor, input, input.kind, context);
+}
+export function clearReaction(
+  deps: ReactionDependencies,
+  actor: Actor,
+  input: ReactionTarget,
+  context: RequestContext,
+) {
+  return mutate(deps, actor, input, null, context);
+}

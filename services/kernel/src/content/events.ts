@@ -8,6 +8,9 @@ import { OPERATION_EVENTS } from './operation-events.ts';
 import { REPORT_EVENTS } from './report-events.ts';
 import { SOURCE_FENCE_EVENTS } from './source-fence-events.ts';
 
+export const REACTION_KINDS = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'] as const;
+const reactionKind = Type.Union(REACTION_KINDS.map((kind) => Type.Literal(kind)));
+
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 
 /** Closed content event catalogue. Envelope identity and ordering belong to the kernel. */
@@ -29,6 +32,16 @@ export const CONTENT_EVENTS = {
   ...MEDIA_MODERATION_EVENTS,
   ...MODERATION_EVENTS,
   ...REPORT_EVENTS,
+  'com.rezics.content.reaction.changed.v1': Type.Object(
+    {
+      actorId: UUID,
+      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
+      targetId: UUID,
+      previousKind: Type.Union([reactionKind, Type.Null()]),
+      kind: Type.Union([reactionKind, Type.Null()]),
+    },
+    { additionalProperties: false },
+  ),
   ...OPERATION_EVENTS,
   ...BOARD_EVENTS,
   ...SOURCE_FENCE_EVENTS,

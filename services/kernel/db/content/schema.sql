@@ -542,6 +542,27 @@ CREATE TABLE content.post (
 
 
 --
+-- Name: reaction; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.reaction (
+    route integer NOT NULL,
+    actor_account_id uuid NOT NULL,
+    target_kind text NOT NULL,
+    target_route integer NOT NULL,
+    target_id uuid NOT NULL,
+    kind text NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT reaction_check CHECK ((route = ((get_byte(uuid_send(actor_account_id), 10) * 256) + get_byte(uuid_send(actor_account_id), 11)))),
+    CONSTRAINT reaction_check1 CHECK ((target_route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT reaction_kind_check CHECK ((kind = ANY (ARRAY['upvote'::text, 'downvote'::text, 'like'::text, 'love'::text, 'laugh'::text, 'insightful'::text, 'sad'::text]))),
+    CONSTRAINT reaction_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT reaction_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text]))),
+    CONSTRAINT reaction_target_route_check CHECK (((target_route >= 0) AND (target_route <= 65535)))
+);
+
+
+--
 -- Name: revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -707,6 +728,14 @@ ALTER TABLE ONLY content.post
 
 ALTER TABLE ONLY content.post
     ADD CONSTRAINT post_route_thread_id_post_id_key UNIQUE (route, thread_id, post_id);
+
+
+--
+-- Name: reaction reaction_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.reaction
+    ADD CONSTRAINT reaction_pkey PRIMARY KEY (route, actor_account_id, target_id);
 
 
 --
