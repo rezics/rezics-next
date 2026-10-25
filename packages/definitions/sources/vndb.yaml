@@ -1,0 +1,2857 @@
+# Inventory of the official VNDB 2026-10-25 dump.
+# Snapshot field and column names are frozen from schema_vndbid.sql.
+source: https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst
+snapshot:
+  dump: https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst
+  readme:
+    file: README.txt
+    sha256: 49dc1574d7a656fa43fe0809f1981e09c401a0fa0c3c365d9fc0509c3c71e454
+  schema:
+    file: schema_vndbid.sql
+    sha256: d608ec4022029bdb65a5c780bbf8ca46e3348f16eaa7b88290efde35e2dd4758
+  licence:
+    database:
+      name: Open Database License 1.0 (ODbL)
+      url: http://opendatacommons.org/licenses/odbl/1.0/
+    contents:
+      name: Database Contents License 1.0 (DbCL)
+      identifier: LicenseRef-DbCL-1.0
+      url: http://opendatacommons.org/licenses/dbcl/1.0/
+    attribution: VNDB
+enumerations:
+  language: &id017
+    - {
+        value: ar,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Arabic as a language value.,
+        citations: &id001 ['https://schema.org/inLanguage', 'https://www.wikidata.org/wiki/Property:P407'],
+      }
+    - {
+        value: be,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Belarusian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: bg,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Bulgarian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: bs,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Bosnian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ca,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Catalan as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: cs,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Czech as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ck,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Cherokee as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: da,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Danish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: de,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: German as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: el,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Greek as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: en,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: English as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: eo,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Esperanto as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: es,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Spanish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: et,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Estonian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: eu,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Basque as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: fa,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Persian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: fi,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Finnish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: fr,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: French as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ga,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Irish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: gl,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Galician as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: gd,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Scottish Gaelic as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: he,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Hebrew as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: hi,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Hindi as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: hr,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Croatian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: hu,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Hungarian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: id,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Indonesian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: it,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Italian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: iu,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Inuktitut as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ja,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Japanese as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: kk,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Kazakh as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ko,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Korean as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: mk,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Macedonian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ms,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Malay as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ne,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Nepali as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: la,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Latin as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: lt,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Lithuanian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: lv,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Latvian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: nl,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Dutch as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: 'no',
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Norwegian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: pl,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Polish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: pt-pt,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Portuguese (Portugal) as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: pt-br,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Portuguese (Brazil) as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ro,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Romanian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ru,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Russian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: sk,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Slovak as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: sl,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Slovene as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: sr,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Serbian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: sv,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Swedish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ta,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Tagalog as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: th,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Thai as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: tr,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Turkish as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: uk,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Ukrainian as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: ur,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Urdu as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: vi,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Vietnamese as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: zh,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Chinese as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: zh-Hans,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Simplified Chinese as a language value.,
+        citations: *id001,
+      }
+    - {
+        value: zh-Hant,
+        term: 'schema:inLanguage',
+        mapping: 'wdt:P407',
+        meaning: Traditional Chinese as a language value.,
+        citations: *id001,
+      }
+  platform: &id027
+    - {
+        value: win,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Windows platform selected for a release.,
+        citations: &id002 ['https://schema.org/gamePlatform', 'https://www.wikidata.org/wiki/Property:P400'],
+      }
+    - {
+        value: dos,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: DOS platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: lin,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Linux platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: mac,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Mac OS platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: ios,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Apple iProduct platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: and,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Android platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: dvd,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: DVD Player platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: bdp,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Blu-ray Player platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: fm7,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: FM-7 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: fm8,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: FM-8 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: fmt,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: FM Towns platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: gba,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Game Boy Advance platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: gbc,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Game Boy Color platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: msx,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: MSX platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: nds,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Nintendo DS platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: nes,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Famicom platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: p88,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PC-88 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: p98,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PC-98 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: pce,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PC Engine platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: pcf,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PC-FX platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: psp,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation Portable platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: ps1,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation 1 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: ps2,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation 2 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: ps3,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation 3 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: ps4,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation 4 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: ps5,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation 5 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: psv,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: PlayStation Vita platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: drc,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Dreamcast platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: smd,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Sega Mega Drive platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: scd,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Sega Mega-CD platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: sat,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Sega Saturn platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: sfc,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Super Famicom platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: swi,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Nintendo Switch platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: sw2,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Nintendo Switch 2 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: wii,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Nintendo Wii platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: wiu,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Nintendo Wii U platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: n3d,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Nintendo 3DS platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: vnd,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: VNDS platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: x1s,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Sharp X1 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: x68,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Sharp X68000 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: xb1,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Xbox platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: xb3,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Xbox 360 platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: xbo,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Xbox One platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: xxs,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Xbox X/S platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: web,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Website platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: tdo,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: 3DO platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: mob,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Other (mobile) platform selected for a release.,
+        citations: *id002,
+      }
+    - {
+        value: oth,
+        term: 'schema:gamePlatform',
+        mapping: 'wdt:P400',
+        meaning: Other platform selected for a release.,
+        citations: *id002,
+      }
+  producer_type: &id022
+    - {
+        value: co,
+        term: 'schema:Organization',
+        mapping: 'wd:Q43229',
+        meaning: Company producer profile.,
+        citations: &id003 ['https://schema.org/Organization', 'https://www.wikidata.org/wiki/Q43229'],
+      }
+    - {
+        value: in,
+        term: 'schema:Person',
+        mapping: 'wd:Q5',
+        meaning: Individual producer profile.,
+        citations: &id013 ['https://schema.org/Person', 'https://www.wikidata.org/wiki/Q5'],
+      }
+    - {
+        value: ng,
+        term: 'schema:Organization',
+        mapping: 'wd:Q43229',
+        meaning: Amateur-group producer profile.,
+        citations: *id003,
+      }
+  credit_type: &id044
+    - {
+        value: scenario,
+        term: 'schema:author',
+        mapping: 'wdt:P50',
+        meaning: A scenario-writing credit.,
+        citations: ['https://schema.org/author', 'https://www.wikidata.org/wiki/Property:P50'],
+      }
+    - {
+        value: chardesign,
+        term: 'schema:illustrator',
+        mapping: 'wdt:P110',
+        meaning: A character-design credit.,
+        citations: &id004 ['https://schema.org/illustrator', 'https://www.wikidata.org/wiki/Property:P110'],
+      }
+    - {
+        value: art,
+        term: 'schema:illustrator',
+        mapping: 'wdt:P110',
+        meaning: An art or illustration credit.,
+        citations: *id004,
+      }
+    - {
+        value: music,
+        term: 'schema:musicBy',
+        mapping: 'wdt:P86',
+        meaning: A music-composition credit.,
+        citations: &id005 ['https://schema.org/musicBy', 'https://www.wikidata.org/wiki/Property:P86'],
+      }
+    - {
+        value: songs,
+        term: 'schema:musicBy',
+        mapping: 'wdt:P86',
+        meaning: A song-composition credit.,
+        citations: *id005,
+      }
+    - {
+        value: director,
+        term: 'schema:director',
+        mapping: 'wdt:P57',
+        meaning: A direction credit.,
+        citations: ['https://schema.org/director', 'https://www.wikidata.org/wiki/Property:P57'],
+      }
+    - {
+        value: translator,
+        term: 'schema:translator',
+        mapping: 'wdt:P655',
+        meaning: A translation credit.,
+        citations: ['https://schema.org/translator', 'https://www.wikidata.org/wiki/Property:P655'],
+      }
+    - {
+        value: editor,
+        term: 'schema:contributor',
+        mapping: 'wdt:P767',
+        meaning: An editing credit.,
+        citations: &id006 ['https://schema.org/contributor', 'https://www.wikidata.org/wiki/Property:P767'],
+      }
+    - {
+        value: qa,
+        term: 'schema:contributor',
+        mapping: 'wdt:P767',
+        meaning: A quality-assurance credit.,
+        citations: *id006,
+      }
+    - {
+        value: staff,
+        term: 'schema:contributor',
+        mapping: 'wdt:P767',
+        meaning: A general staff credit.,
+        citations: *id006,
+      }
+  char_role: &id020
+    - {
+        value: main,
+        term: 'wdt:P3831',
+        mapping: 'wdt:P3831',
+        meaning: Main role on a character-appearance statement.,
+        citations: &id007 ['https://www.wikidata.org/wiki/Property:P3831'],
+      }
+    - {
+        value: primary,
+        term: 'wdt:P3831',
+        mapping: 'wdt:P3831',
+        meaning: Primary role on a character-appearance statement.,
+        citations: *id007,
+      }
+    - {
+        value: side,
+        term: 'wdt:P3831',
+        mapping: 'wdt:P3831',
+        meaning: Supporting or side role on a character-appearance statement.,
+        citations: *id007,
+      }
+    - {
+        value: appears,
+        term: 'wdt:P3831',
+        mapping: 'wdt:P3831',
+        meaning: Appearance without a main or side designation on a character-appearance statement.,
+        citations: *id007,
+      }
+  vn_relation: &id041
+    - {
+        value: seq,
+        term: 'wdt:P155',
+        mapping: 'wdt:P155',
+        meaning: The subject work follows the target work.,
+        citations: ['https://www.wikidata.org/wiki/Property:P155'],
+      }
+    - {
+        value: preq,
+        term: 'wdt:P156',
+        mapping: 'wdt:P156',
+        meaning: The subject work is followed by the target work.,
+        citations: ['https://www.wikidata.org/wiki/Property:P156'],
+      }
+    - {
+        value: set,
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
+        meaning: The works share a setting or belong to a set.,
+        citations: &id008 ['https://www.wikidata.org/wiki/Property:P361'],
+      }
+    - {
+        value: alt,
+        term: 'wdt:P1889',
+        mapping: 'wdt:P1889',
+        meaning: The target is an alternative telling in the same setting with the same characters.,
+        citations: ['https://www.wikidata.org/wiki/Property:P1889'],
+      }
+    - {
+        value: char,
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
+        meaning: The works share character appearances; no Wikidata property directly models this work-to-work relation.,
+        citations: *id008,
+      }
+    - {
+        value: side,
+        term: 'wdt:P144',
+        mapping: 'wdt:P144',
+        meaning: The subject work is a side story based on the target parent story.,
+        citations: &id009 ['https://www.wikidata.org/wiki/Property:P144'],
+      }
+    - {
+        value: par,
+        term: 'wdt:P4969',
+        mapping: 'wdt:P4969',
+        meaning: The target work is a side story derived from the subject parent story.,
+        citations: ['https://www.wikidata.org/wiki/Property:P4969'],
+      }
+    - {
+        value: ser,
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
+        meaning: The works belong to the same series grouping.,
+        citations: *id008,
+      }
+    - {
+        value: fan,
+        term: 'wdt:P2512',
+        mapping: 'wdt:P2512',
+        meaning: The target work is a fandisc spin-off of the subject work.,
+        citations: ['https://www.wikidata.org/wiki/Property:P2512'],
+      }
+    - {
+        value: orig,
+        term: 'wdt:P144',
+        mapping: 'wdt:P144',
+        meaning: The subject work is a fandisc based on the target original game.,
+        citations: *id009,
+      }
+  producer_relation: &id023
+    - {
+        value: old,
+        term: 'wdt:P1365',
+        mapping: 'wdt:P1365',
+        meaning: The current producer was formerly known as the selected producer.,
+        citations: ['https://www.wikidata.org/wiki/Property:P1365'],
+      }
+    - {
+        value: new,
+        term: 'wdt:P1366',
+        mapping: 'wdt:P1366',
+        meaning: The selected producer succeeded the current producer.,
+        citations: ['https://www.wikidata.org/wiki/Property:P1366'],
+      }
+    - {
+        value: sub,
+        term: 'wdt:P355',
+        mapping: 'wdt:P355',
+        meaning: The selected producer is a subsidiary of the current producer.,
+        citations: ['https://www.wikidata.org/wiki/Property:P355'],
+      }
+    - {
+        value: par,
+        term: 'wdt:P749',
+        mapping: 'wdt:P749',
+        meaning: The selected producer is the parent organization of the current producer.,
+        citations: ['https://www.wikidata.org/wiki/Property:P749'],
+      }
+    - {
+        value: imp,
+        term: 'wdt:P527',
+        mapping: 'wdt:P527',
+        meaning: The selected producer is an imprint brand used by the same group as the current producer.,
+        citations: ['https://www.wikidata.org/wiki/Property:P527'],
+      }
+    - {
+        value: ipa,
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
+        meaning: The selected producer is the parent brand of the current imprint.,
+        citations: *id008,
+      }
+    - {
+        value: spa,
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
+        meaning: The selected producer was formed by former members of the current producer; no Wikidata property directly models this origin relation.,
+        citations: *id008,
+      }
+    - {
+        value: ori,
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
+        meaning: The current producer was formed by former members of the selected producer; no Wikidata property directly models this origin relation.,
+        citations: *id008,
+      }
+  release_type: &id032
+    - {
+        value: complete,
+        term: 'wdt:P31',
+        mapping: 'wdt:P31',
+        meaning: Complete release of the linked work.,
+        citations: &id010 ['https://www.wikidata.org/wiki/Property:P31'],
+      }
+    - {
+        value: partial,
+        term: 'wdt:P31',
+        mapping: 'wdt:P31',
+        meaning: Partial release of the linked work.,
+        citations: *id010,
+      }
+    - {
+        value: trial,
+        term: 'wdt:P31',
+        mapping: 'wdt:P31',
+        meaning: Trial release of the linked work.,
+        citations: *id010,
+      }
+  tag_category: &id036
+    - {
+        value: cont,
+        term: 'wd:Q6423319',
+        mapping: 'wd:Q6423319',
+        meaning: Content taxonomy scheme.,
+        citations: &id011 ['https://www.wikidata.org/wiki/Q6423319'],
+      }
+    - {
+        value: ero,
+        term: 'wd:Q6423319',
+        mapping: 'wd:Q6423319',
+        meaning: Erotic-content taxonomy scheme.,
+        citations: *id011,
+      }
+    - {
+        value: tech,
+        term: 'wd:Q6423319',
+        mapping: 'wd:Q6423319',
+        meaning: Technical taxonomy scheme.,
+        citations: *id011,
+      }
+  release_image_type: &id025
+    - {
+        value: pkgfront,
+        term: 'schema:image',
+        mapping: 'wdt:P18',
+        meaning: front release image assigned to the cover group.,
+        citations: &id012 ['https://schema.org/image', 'https://www.wikidata.org/wiki/Property:P18'],
+      }
+    - {
+        value: pkgback,
+        term: 'schema:image',
+        mapping: 'wdt:P18',
+        meaning: back release image assigned to the cover group.,
+        citations: *id012,
+      }
+    - {
+        value: pkgcontent,
+        term: 'schema:image',
+        mapping: 'wdt:P18',
+        meaning: content release image assigned to the cover group.,
+        citations: *id012,
+      }
+    - {
+        value: pkgside,
+        term: 'schema:image',
+        mapping: 'wdt:P18',
+        meaning: side release image assigned to the cover group.,
+        citations: *id012,
+      }
+    - {
+        value: pkgmed,
+        term: 'schema:image',
+        mapping: 'wdt:P18',
+        meaning: med release image assigned to the cover group.,
+        citations: *id012,
+      }
+    - {
+        value: dig,
+        term: 'schema:image',
+        mapping: 'wdt:P18',
+        meaning: digital release image assigned to the cover group.,
+        citations: *id012,
+      }
+table_types:
+  bf:Instance:
+    status: existing
+    mapping: wd:Q3331189
+    meaning: A specific release or edition instance.
+    citations: ['https://www.wikidata.org/wiki/Q3331189']
+  schema:CreativeWork:
+    status: proposed
+    mapping: wd:Q17537576
+    meaning: A documentation creative-work record.
+    citations: ['https://schema.org/CreativeWork', 'https://www.wikidata.org/wiki/Q17537576']
+  schema:ImageObject:
+    status: proposed
+    mapping: wd:Q478798
+    meaning: Image metadata record.
+    citations: ['https://schema.org/ImageObject', 'https://www.wikidata.org/wiki/Q478798']
+  schema:ItemList:
+    status: proposed
+    mapping: wd:Q12139612
+    meaning: A list of items.
+    citations: ['https://schema.org/ItemList', 'https://www.wikidata.org/wiki/Q12139612']
+  schema:Person:
+    status: existing
+    mapping: wd:Q5
+    meaning: Person profile.
+    citations: *id013
+  schema:Quotation:
+    status: proposed
+    mapping: wd:Q815341
+    meaning: A quotation record.
+    citations: ['https://schema.org/Quotation', 'https://www.wikidata.org/wiki/Q815341']
+  schema:SoftwareApplication:
+    status: proposed
+    mapping: wd:Q166142
+    meaning: Software application or game-engine record.
+    citations: ['https://schema.org/SoftwareApplication', 'https://www.wikidata.org/wiki/Q166142']
+  schema:Thing:
+    status: proposed
+    mapping: wd:Q35120
+    meaning: Common entity type for producer rows, whose Person or Organization subtype is selected by producers.type.
+    citations: ['https://schema.org/Thing', 'https://www.wikidata.org/wiki/Q35120']
+  schema:VideoGame:
+    status: existing
+    mapping: wd:Q7889
+    meaning: Video game profile context.
+    citations: ['https://schema.org/VideoGame', 'https://www.wikidata.org/wiki/Q7889']
+  schema:character:
+    status: proposed
+    mapping: wdt:P674
+    meaning: Character appearing in a creative work.
+    citations:
+      &id019 [
+        'https://schema.org/character',
+        'https://www.wikidata.org/wiki/Property:674',
+        'https://www.wikidata.org/wiki/Property:P674',
+      ]
+  schema:contributor:
+    status: proposed
+    mapping: wdt:P767
+    meaning: Staff contribution statement.
+    citations:
+      &id043 [
+        'https://schema.org/contributor',
+        'https://www.wikidata.org/wiki/Property:767',
+        'https://www.wikidata.org/wiki/Property:P767',
+      ]
+  schema:exampleOfWork:
+    status: existing
+    mapping: wdt:P629
+    meaning: Release instance of a visual novel work.
+    citations:
+      [
+        'https://schema.org/exampleOfWork',
+        'https://www.wikidata.org/wiki/Property:629',
+        'https://www.wikidata.org/wiki/Property:P629',
+      ]
+  schema:gamePlatform:
+    status: proposed
+    mapping: wdt:P400
+    meaning: Platform for which a work was developed or released.
+    citations:
+      &id026 [
+        'https://schema.org/gamePlatform',
+        'https://www.wikidata.org/wiki/Property:400',
+        'https://www.wikidata.org/wiki/Property:P400',
+      ]
+  schema:genre:
+    status: proposed
+    mapping: wdt:P136
+    meaning: Genre or tag association for a work.
+    citations:
+      &id038 [
+        'https://schema.org/genre',
+        'https://www.wikidata.org/wiki/Property:136',
+        'https://www.wikidata.org/wiki/Property:P136',
+      ]
+  schema:image:
+    status: existing
+    mapping: wdt:P18
+    meaning: Image reference that resolves through the image group.
+    citations:
+      &id014 [
+        'https://schema.org/image',
+        'https://www.wikidata.org/wiki/Property:18',
+        'https://www.wikidata.org/wiki/Property:P18',
+      ]
+  schema:name:
+    status: existing
+    mapping: wdt:P1476
+    meaning: Name or title value.
+    citations:
+      &id018 [
+        'https://schema.org/name',
+        'https://www.wikidata.org/wiki/Property:1476',
+        'https://www.wikidata.org/wiki/Property:P1476',
+      ]
+  schema:publisher:
+    status: existing
+    mapping: wdt:P123
+    meaning: Producer publishing a release.
+    citations:
+      &id029 [
+        'https://schema.org/publisher',
+        'https://www.wikidata.org/wiki/Property:123',
+        'https://www.wikidata.org/wiki/Property:P123',
+      ]
+  schema:sameAs:
+    status: existing
+    mapping: wdt:P2888
+    meaning: Link to an external identity or URL.
+    citations:
+      [
+        'https://schema.org/sameAs',
+        'https://www.wikidata.org/wiki/Property:2888',
+        'https://www.wikidata.org/wiki/Property:P2888',
+      ]
+  wd:Q1107:
+    status: proposed
+    mapping: wd:Q1107
+    meaning: Anime record from the separately licensed AniDB-derived table.
+    citations: ['https://www.wikidata.org/wiki/Q1107']
+  wd:Q151885:
+    status: proposed
+    mapping: wd:Q151885
+    meaning: A taxonomy concept; SKOS semantic type skos:Concept.
+    citations: ['https://www.wikidata.org/wiki/Q151885']
+    semantic_term: skos:Concept
+  wd:Q689445:
+    status: existing
+    mapping: wd:Q689445
+    meaning: Visual novel profile type, bundled by the catalogue.
+    citations: ['https://www.wikidata.org/wiki/Q689445']
+  wdt:P1352:
+    status: proposed
+    mapping: wdt:P1352
+    meaning: A ranking or rating record that is intentionally excluded.
+    citations: ['https://www.wikidata.org/wiki/Property:1352', 'https://www.wikidata.org/wiki/Property:P1352']
+  wdt:P144:
+    status: proposed
+    mapping: wdt:P144
+    meaning: Work used as the basis for an adaptation or fan work.
+    citations: ['https://www.wikidata.org/wiki/Property:144', 'https://www.wikidata.org/wiki/Property:P144']
+  wdt:P155:
+    status: proposed
+    mapping: wdt:P155
+    meaning: Predecessor or superseded-release relation.
+    citations: &id030 ['https://www.wikidata.org/wiki/Property:155', 'https://www.wikidata.org/wiki/Property:P155']
+  wdt:P1552:
+    status: proposed
+    mapping: wdt:P1552
+    meaning: Quality or DRM attribute association.
+    citations: &id015 ['https://www.wikidata.org/wiki/Property:1552', 'https://www.wikidata.org/wiki/Property:P1552']
+  wdt:P248:
+    status: proposed
+    mapping: wdt:P248
+    meaning: Source-stated record metadata.
+    citations: ['https://www.wikidata.org/wiki/Property:248', 'https://www.wikidata.org/wiki/Property:P248']
+  wdt:P279:
+    status: proposed
+    mapping: wdt:P279
+    meaning: Broader concept relationship; SKOS semantic type skos:broader.
+    citations: &id037 ['https://www.wikidata.org/wiki/Property:279', 'https://www.wikidata.org/wiki/Property:P279']
+    semantic_term: skos:broader
+  wdt:P361:
+    status: proposed
+    mapping: wdt:P361
+    meaning: Membership in a related work or concept scheme.
+    citations: &id035 ['https://www.wikidata.org/wiki/Property:361', 'https://www.wikidata.org/wiki/Property:P361']
+  wdt:P437:
+    status: proposed
+    mapping: wdt:P437
+    meaning: Distribution format or physical release medium.
+    citations: ['https://www.wikidata.org/wiki/Property:437', 'https://www.wikidata.org/wiki/Property:P437']
+  wdt:P725:
+    status: proposed
+    mapping: wdt:P725
+    meaning: Voice actor assigned to a character.
+    citations: &id042 ['https://www.wikidata.org/wiki/Property:725', 'https://www.wikidata.org/wiki/Property:P725']
+  wdt:P749:
+    status: proposed
+    mapping: wdt:P749
+    meaning: Parent-organization relationship.
+    citations: ['https://www.wikidata.org/wiki/Property:749', 'https://www.wikidata.org/wiki/Property:P749']
+tables:
+  - name: anime
+    type: wd:Q1107
+    columns:
+      - name: id
+        status: omitted
+        reason: AniDB anime row identifier; this non-VN entity is excluded from profiles.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+      - name: ann_id
+        status: omitted
+        reason: AniDB identifiers belong to the separately licensed anime dataset, outside the VN profile.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+      - name: type
+        status: omitted
+        reason: Anime format classification belongs to the separately licensed anime dataset.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+      - name: year
+        status: omitted
+        reason: Anime year belongs to the separately licensed anime dataset, outside the VN profile.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+      - name: title_romaji
+        status: omitted
+        reason: Anime title belongs to the separately licensed anime dataset, outside the VN profile.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+      - name: title_kanji
+        status: omitted
+        reason: Anime title belongs to the separately licensed anime dataset, outside the VN profile.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+      - name: mal_id
+        status: omitted
+        reason: MyAnimeList identifiers belong to the separately licensed anime dataset, outside the VN profile.
+        licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
+  - name: chars
+    type: schema:Person
+    columns:
+      - name: id
+        status: existing
+        term: wdt:P3180
+        'on': schema:Person
+        mapping: wdt:P3180
+        meaning: VNDB character identity.
+        citations:
+          &id021 ['https://www.wikidata.org/wiki/Property:3180', 'https://www.wikidata.org/wiki/Property:P3180']
+      - name: image
+        status: existing
+        term: schema:image
+        'on': schema:Person
+        mapping: wdt:P18
+        meaning: Resolve the character image ID through the image group.
+        citations: *id014
+        licence: Image content has separate source conditions; download availability is not a republication grant.
+      - name: bloodt
+        status: omitted
+        reason: Blood type is source-specific character trivia with no selected profile term.
+      - name: cup_size
+        status: omitted
+        reason: Cup-size category is source-specific character trivia with no selected profile term.
+      - name: sex
+        status: omitted
+        reason: Sex classification is retained only as a source-specific enum; the profile maps gender, not this field.
+      - name: spoil_sex
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing the spoiler level of a sex value; no standard property represents this qualifier.
+        citations: *id015
+      - name: gender
+        status: proposed
+        term: schema:gender
+        mapping: wdt:P21
+        meaning: Source-described gender of a fictional character.
+        citations:
+          &id033 [
+            'https://schema.org/gender',
+            'https://www.wikidata.org/wiki/Property:21',
+            'https://www.wikidata.org/wiki/Property:P21',
+          ]
+      - name: spoil_gender
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing the spoiler level of a gender value; no standard property represents this qualifier.
+        citations: *id015
+      - name: main
+        status: omitted
+        reason: Related-character key used to mark a main-character relation; the source relation is not a standalone profile field.
+      - name: main_spoil
+        status: omitted
+        reason: Spoiler qualifier for the source main-character relation; omit with that unmodeled source relation.
+      - name: s_bust
+        status: omitted
+        reason: Source-specific bust measurement has no selected profile property.
+      - name: s_waist
+        status: omitted
+        reason: Source-specific waist measurement has no selected profile property.
+      - name: s_hip
+        status: omitted
+        reason: Source-specific hip measurement has no selected profile property.
+      - name: birthday
+        status: omitted
+        reason: The dump stores a month/day without a year, so it cannot be represented as schema:birthDate.
+      - name: height
+        status: proposed
+        term: schema:height
+        mapping: wdt:P2048
+        meaning: Character height as a physical measurement.
+        citations:
+          [
+            'https://schema.org/height',
+            'https://www.wikidata.org/wiki/Property:2048',
+            'https://www.wikidata.org/wiki/Property:P2048',
+          ]
+      - name: weight
+        status: proposed
+        term: schema:weight
+        mapping: wdt:P2067
+        meaning: Character weight as a physical measurement.
+        citations:
+          [
+            'https://schema.org/weight',
+            'https://www.wikidata.org/wiki/Property:2067',
+            'https://www.wikidata.org/wiki/Property:P2067',
+          ]
+      - name: age
+        status: omitted
+        reason: Age is source-specific fictional-character metadata without a stable date of birth.
+      - name: description
+        status: omitted
+        reason: Character description is creative text with separate source conditions and is not included in the profile.
+        licence: Separate source conditions stated in the dump README; no blanket republication grant.
+  - name: chars_alias
+    type: schema:Person
+    columns:
+      - name: id
+        status: omitted
+        reason: Character key joining the alias to its profile.
+      - name: spoil
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing a spoiler level on an alternative character name; no standard property represents this qualifier.
+        citations: *id015
+      - name: name
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: An alternative character name.
+        citations:
+          &id016 [
+            'https://schema.org/alternateName',
+            'https://www.wikidata.org/wiki/Property:2561',
+            'https://www.wikidata.org/wiki/Property:P2561',
+          ]
+      - name: latin
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Romanized alternative character name.
+        citations: *id016
+  - name: chars_names
+    type: schema:Person
+    columns:
+      - name: id
+        status: omitted
+        reason: Character key joining the localized name to its profile.
+      - name: lang
+        status: proposed
+        term: schema:inLanguage
+        mapping: wdt:P407
+        meaning: Language of the character-name statement.
+        citations:
+          &id024 [
+            'https://schema.org/inLanguage',
+            'https://www.wikidata.org/wiki/Property:407',
+            'https://www.wikidata.org/wiki/Property:P407',
+          ]
+        values: *id017
+      - name: name
+        status: existing
+        term: schema:name
+        'on': schema:Person
+        mapping: wdt:P1476
+        meaning: A character name in its stated language.
+        citations: *id018
+      - name: latin
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Romanized alternative form of a character name.
+        citations: *id016
+  - name: chars_traits
+    type: wd:Q151885
+    columns:
+      - name: id
+        status: omitted
+        reason: Character key anchoring the trait association.
+      - name: tid
+        status: proposed
+        term: wdt:P1552
+        mapping: wdt:P1552
+        meaning: A Wikidata-mapped trait concept associated with the character.
+        citations: *id015
+        semantic_term: skos:Concept
+      - name: spoil
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing the spoiler level of a character trait; no standard property represents this qualifier.
+        citations: *id015
+      - name: lie
+        status: omitted
+        reason: User-maintained false-positive flag on a trait association; it is not a profile fact.
+  - name: chars_vns
+    type: schema:character
+    columns:
+      - name: id
+        status: proposed
+        term: schema:character
+        mapping: wdt:P674
+        meaning: Character who appears in the visual novel.
+        citations: *id019
+        qualifiers:
+          - term: wdt:P3831
+            mapping: wdt:P3831
+            source_column: role
+            meaning: Detailed appearance role concept.
+            citations:
+              - https://www.wikidata.org/wiki/Property:P3831
+          - term: rezics:spoilerLevel
+            mapping: wdt:P1552
+            source_column: spoil
+            meaning: Spoiler disclosure qualifier.
+            citations:
+              - https://www.wikidata.org/wiki/Property:P1552
+      - name: vid
+        status: omitted
+        reason: Visual-novel key joining the character appearance to the work profile.
+      - name: rid
+        status: omitted
+        reason: Release key adds source-specific appearance context; no release-scoped appearance term is selected.
+      - name: role
+        status: proposed
+        term: wdt:P3831
+        mapping: wdt:P3831
+        meaning: Character appearance role as a concept-valued qualifier.
+        citations: ['https://www.wikidata.org/wiki/Property:3831', 'https://www.wikidata.org/wiki/Property:P3831']
+        qualifiers:
+          - schema:character
+        values: *id020
+      - name: spoil
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing the spoiler level of this character appearance; no standard property represents this qualifier.
+        citations: *id015
+    statement:
+      main_value: schema:character
+      qualifiers:
+        - wdt:P3831
+        - rezics:spoilerLevel
+  - name: docs
+    type: schema:CreativeWork
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal documentation record key.
+      - name: title
+        status: omitted
+        reason: VNDB documentation page content is not a visual-novel, character, or series profile field.
+      - name: content
+        status: omitted
+        reason: VNDB documentation prose is not a profile field.
+  - name: drm
+    type: schema:VideoGame
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal DRM dictionary key.
+      - name: disc
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: cdkey
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: activate
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: alimit
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: account
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: online
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: cloud
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: physical
+        status: omitted
+        reason: Source-specific DRM capability flag; no profile term is selected.
+      - name: name
+        status: omitted
+        reason: DRM dictionary label is release-technical metadata outside the selected profile.
+      - name: description
+        status: omitted
+        reason: DRM dictionary prose is release-technical metadata outside the selected profile.
+  - name: engines
+    type: schema:SoftwareApplication
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal game-engine dictionary key.
+      - name: name
+        status: omitted
+        reason: Game-engine dictionary label is release-technical metadata outside the selected profile.
+      - name: description
+        status: omitted
+        reason: Game-engine description is release-technical metadata outside the selected profile.
+  - name: entry_meta
+    type: wdt:P248
+    columns:
+      - name: id
+        status: omitted
+        reason: Source entry key used only to join snapshot metadata to a dump row.
+      - name: created
+        status: omitted
+        reason: Source creation timestamp is import bookkeeping, not a profile fact.
+      - name: lastmod
+        status: omitted
+        reason: Source modification timestamp is import bookkeeping, not a profile fact.
+      - name: revision
+        status: omitted
+        reason: Source revision counter is import bookkeeping.
+      - name: num_edits
+        status: omitted
+        reason: Source edit count is an internal activity statistic.
+      - name: num_users
+        status: omitted
+        reason: Source editor count is an internal activity statistic.
+  - name: extlinks
+    type: schema:sameAs
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal external-link dictionary key.
+      - name: site
+        status: omitted
+        reason: Source site code selects URL parsing rules and is not a profile statement.
+      - name: value
+        status: omitted
+        reason: VNDB extlinks.value is source-specific technical or organizational metadata with no selected profile statement.
+  - name: image_votes
+    type: wdt:P1352
+    columns:
+      - name: id
+        status: omitted
+        reason: Image key anchoring a user vote.
+      - name: uid
+        status: omitted
+        reason: User identifier is personal data and is excluded.
+      - name: date
+        status: omitted
+        reason: Timestamp of a user image vote is personal activity data.
+      - name: sexual
+        status: omitted
+        reason: User-submitted image rating is a vote statistic.
+      - name: violence
+        status: omitted
+        reason: User-submitted image rating is a vote statistic.
+      - name: ignore
+        status: omitted
+        reason: User-specific image-vote preference is personal data.
+  - name: images
+    type: schema:ImageObject
+    columns:
+      - name: id
+        status: existing
+        term: schema:image
+        'on': bf:Instance
+        mapping: wdt:P18
+        meaning: Resolve this VNDB image ID through the cover group.
+        citations: *id014
+        licence: Image content has separate source conditions; download availability is not a republication grant.
+      - name: width
+        status: omitted
+        reason: Image file dimensions are media-processing metadata, not a profile fact.
+      - name: height
+        status: omitted
+        reason: Image file dimensions are media-processing metadata, not a profile fact.
+      - name: c_votecount
+        status: omitted
+        reason: Community image vote count is a popularity statistic.
+      - name: c_sexual_avg
+        status: omitted
+        reason: Community sexual-content vote average is a user rating statistic.
+      - name: c_sexual_stddev
+        status: omitted
+        reason: Community sexual-content vote deviation is a user rating statistic.
+      - name: c_violence_avg
+        status: omitted
+        reason: Community violence vote average is a user rating statistic.
+      - name: c_violence_stddev
+        status: omitted
+        reason: Community violence vote deviation is a user rating statistic.
+      - name: c_weight
+        status: omitted
+        reason: Community image preference weight is a popularity statistic.
+  - name: producers
+    type: schema:Thing
+    columns:
+      - name: id
+        status: existing
+        term: wdt:P3180
+        'on': schema:Organization
+        mapping: wdt:P3180
+        meaning: VNDB producer identity.
+        citations: *id021
+      - name: type
+        status: proposed
+        term: wdt:P31
+        mapping: wdt:P31
+        meaning: Producer profile class selected by the source entity type.
+        citations: &id031 ['https://www.wikidata.org/wiki/Property:31', 'https://www.wikidata.org/wiki/Property:P31']
+        values: *id022
+      - name: lang
+        status: proposed
+        term: schema:knowsLanguage
+        mapping: wdt:P1412
+        meaning: Primary working language associated with the producer.
+        citations:
+          &id034 [
+            'https://schema.org/knowsLanguage',
+            'https://www.wikidata.org/wiki/Property:1412',
+            'https://www.wikidata.org/wiki/Property:P1412',
+          ]
+        values: *id017
+      - name: name
+        status: existing
+        term: schema:name
+        'on': schema:Organization
+        mapping: wdt:P1476
+        meaning: Producer name.
+        citations: *id018
+      - name: latin
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Romanized alternative producer name.
+        citations: *id016
+      - name: alias
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Alternative producer name.
+        citations: *id016
+      - name: description
+        status: omitted
+        reason: Producer prose is outside the selected profile projection.
+  - name: producers_extlinks
+    type: schema:sameAs
+    columns:
+      - name: id
+        status: omitted
+        reason: Producer key joining the external link to its profile.
+      - name: link
+        status: omitted
+        reason: External-link dictionary key; the resolved URL is inventoried under extlinks.value.
+  - name: producers_relations
+    type: wdt:P749
+    columns:
+      - name: id
+        status: omitted
+        reason: Producer key anchoring the relation statement.
+      - name: pid
+        status: omitted
+        reason: Related producer key used as the relation target.
+      - name: relation
+        status: omitted
+        reason: VNDB producers_relations.relation is source-specific technical or organizational metadata with no selected profile statement.
+        values: *id023
+  - name: quotes
+    type: schema:Quotation
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal quote record key.
+      - name: vid
+        status: omitted
+        reason: Visual-novel key attached to a quote record; quote content is excluded.
+      - name: cid
+        status: omitted
+        reason: Character key attached to a quote record; quote content is excluded.
+      - name: score
+        status: omitted
+        reason: Community quote score is a user rating statistic.
+      - name: quote
+        status: omitted
+        reason: Creative dialogue text is outside the permitted metadata profile.
+  - name: releases
+    type: bf:Instance
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key joins release details to linked VN rows.
+      - name: gtin
+        status: proposed
+        term: schema:gtin
+        mapping: wdt:P3962
+        meaning: Global Trade Item Number for this release.
+        citations:
+          [
+            'https://schema.org/gtin',
+            'https://www.wikidata.org/wiki/Property:3962',
+            'https://www.wikidata.org/wiki/Property:P3962',
+          ]
+      - name: olang
+        status: existing
+        term: schema:inLanguage
+        'on': bf:Instance
+        mapping: wdt:P407
+        meaning: Original language of this release.
+        citations: *id024
+        values: *id017
+      - name: released
+        status: existing
+        term: schema:datePublished
+        'on': bf:Instance
+        mapping: wdt:P577
+        meaning: Release publication date.
+        citations:
+          [
+            'https://schema.org/datePublished',
+            'https://www.wikidata.org/wiki/Property:577',
+            'https://www.wikidata.org/wiki/Property:P577',
+          ]
+      - name: voiced
+        status: omitted
+        reason: Voice-coverage scale is source-specific release metadata without a matching property.
+      - name: reso_x
+        status: omitted
+        reason: Source screen-resolution detail is release-technical metadata.
+      - name: reso_y
+        status: omitted
+        reason: Source screen-resolution detail is release-technical metadata.
+      - name: minage
+        status: omitted
+        reason: Source age-rating threshold has no selected standard profile term.
+      - name: ani_story
+        status: omitted
+        reason: Source animation quantity code is release-technical metadata.
+      - name: ani_ero
+        status: omitted
+        reason: Source animation quantity code is release-technical metadata.
+      - name: ani_story_sp
+        status: omitted
+        reason: Source animation flag is release-technical metadata.
+      - name: ani_story_cg
+        status: omitted
+        reason: Source animation flag is release-technical metadata.
+      - name: ani_cutscene
+        status: omitted
+        reason: Source animation flag is release-technical metadata.
+      - name: ani_ero_sp
+        status: omitted
+        reason: Source animation flag is release-technical metadata.
+      - name: ani_ero_cg
+        status: omitted
+        reason: Source animation flag is release-technical metadata.
+      - name: ani_bg
+        status: omitted
+        reason: Source animation-background flag is release-technical metadata.
+      - name: ani_face
+        status: omitted
+        reason: Source animation-face flag is release-technical metadata.
+      - name: has_ero
+        status: omitted
+        reason: Source adult-content flag is release-specific metadata without a selected profile term.
+      - name: patch
+        status: omitted
+        reason: Source patch flag is release-specific metadata without a selected profile term.
+      - name: freeware
+        status: omitted
+        reason: Source freeware flag has no selected profile statement.
+      - name: uncensored
+        status: omitted
+        reason: Source censorship flag is release-specific metadata without a selected profile term.
+      - name: official
+        status: omitted
+        reason: Source official-status flag is release-specific metadata without a selected profile term.
+      - name: catalog
+        status: omitted
+        reason: Source catalog number is internal release metadata without a selected identifier property.
+      - name: notes
+        status: omitted
+        reason: Free-form release notes are source prose outside the selected profile projection.
+      - name: engine
+        status: omitted
+        reason: Game-engine key joins to a source dictionary that is not part of the profile.
+  - name: releases_drm
+    type: wdt:P1552
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key anchoring the DRM association.
+      - name: drm
+        status: omitted
+        reason: DRM dictionary key; no DRM statement is selected for the profile.
+      - name: notes
+        status: omitted
+        reason: Free-form DRM notes are release-technical source prose.
+  - name: releases_extlinks
+    type: schema:sameAs
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key joining an external link to the release.
+      - name: link
+        status: omitted
+        reason: External-link dictionary key; the resolved URL is inventoried under extlinks.value.
+  - name: releases_images
+    type: schema:image
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key anchoring a release image.
+      - name: img
+        status: existing
+        term: schema:image
+        'on': bf:Instance
+        mapping: wdt:P18
+        meaning: Resolve the image ID through the release cover group.
+        citations: *id014
+        licence: Image content has separate source conditions; download availability is not a republication grant.
+      - name: vid
+        status: omitted
+        reason: Visual-novel key is a join context for the release image.
+      - name: itype
+        status: existing
+        term: schema:image
+        'on': bf:Instance
+        mapping: wdt:P18
+        meaning: Image category selecting its role in the release cover group.
+        citations: *id014
+        values: *id025
+      - name: lang
+        status: existing
+        term: schema:inLanguage
+        'on': bf:Instance
+        mapping: wdt:P407
+        meaning: Language associated with the release image.
+        citations: *id024
+        values: *id017
+  - name: releases_media
+    type: wdt:P437
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key anchoring the physical-media detail.
+      - name: medium
+        status: omitted
+        reason: Carrier-medium code is source-specific packaging detail.
+      - name: qty
+        status: omitted
+        reason: Carrier quantity is packaging detail, including source-defined zero for unknown or nonphysical media.
+  - name: releases_platforms
+    type: schema:gamePlatform
+    columns:
+      - name: id
+        status: omitted
+        reason: Source key joins related dump rows; the key is not emitted as a standalone profile statement.
+      - name: platform
+        status: proposed
+        term: schema:gamePlatform
+        mapping: wdt:P400
+        meaning: A platform on which the visual novel release can run.
+        citations: *id026
+        values: *id027
+  - name: releases_producers
+    type: schema:publisher
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key anchoring a producer credit.
+      - name: pid
+        status: proposed
+        term: wdt:P178
+        mapping: wdt:P178
+        meaning: Producer identity used as the value of the developer or publisher credit selected by the role flags.
+        citations: &id028 ['https://www.wikidata.org/wiki/Property:178', 'https://www.wikidata.org/wiki/Property:P178']
+        values:
+          - {
+              value: developer,
+              term: 'wdt:P178',
+              mapping: 'wdt:P178',
+              meaning: Producer credited as developer of the release.,
+              citations: *id028,
+            }
+          - {
+              value: publisher,
+              term: 'schema:publisher',
+              mapping: 'wdt:P123',
+              meaning: Producer credited as publisher of the release.,
+              citations: *id029,
+            }
+      - name: developer
+        status: omitted
+        reason: 'Boolean selector: when true, the linked producer is the developer value of a wdt:P178 credit statement.'
+      - name: publisher
+        status: omitted
+        reason: 'Boolean selector: when true, the linked producer is the publisher value of a schema:publisher credit statement.'
+    statement:
+      main_value: producer value on the role-selected credit property
+      role_selectors:
+        developer: wdt:P178
+        publisher: schema:publisher
+  - name: releases_supersedes
+    type: wdt:P155
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key anchoring the supersession statement.
+      - name: rid
+        status: proposed
+        term: wdt:P155
+        mapping: wdt:P155
+        meaning: Release that this release follows or supersedes.
+        citations: *id030
+  - name: releases_titles
+    type: schema:name
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key joining the title to its release.
+      - name: lang
+        status: existing
+        term: schema:inLanguage
+        'on': bf:Instance
+        mapping: wdt:P407
+        meaning: Language of the release title.
+        citations: *id024
+        values: *id017
+      - name: mtl
+        status: omitted
+        reason: Machine-translation flag is source-specific title metadata, not a title statement.
+      - name: title
+        status: existing
+        term: schema:name
+        'on': bf:Instance
+        mapping: wdt:P1476
+        meaning: Release title in its stated language.
+        citations: *id018
+      - name: latin
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Romanized alternative form of the release title.
+        citations: *id016
+  - name: releases_vn
+    type: schema:exampleOfWork
+    columns:
+      - name: id
+        status: omitted
+        reason: Release key anchoring its visual-novel work relation.
+      - name: vid
+        status: omitted
+        reason: Visual-novel key is the target of the release-of-work statement.
+      - name: rtype
+        status: proposed
+        term: wdt:P31
+        mapping: wdt:P31
+        meaning: Completeness class of this release-to-work link.
+        citations: *id031
+        values: *id032
+  - name: rlists
+    type: schema:ItemList
+    columns:
+      - name: uid
+        status: omitted
+        reason: User identifier and personal release-list membership are excluded.
+      - name: rid
+        status: omitted
+        reason: Release key in a personal user list is private list data.
+      - name: added
+        status: omitted
+        reason: Personal list activity timestamp is user data.
+      - name: status
+        status: omitted
+        reason: Private user release-list status is user data.
+  - name: staff
+    type: schema:Person
+    columns:
+      - name: id
+        status: existing
+        term: wdt:P3180
+        'on': schema:Person
+        mapping: wdt:P3180
+        meaning: VNDB staff identity.
+        citations: *id021
+      - name: gender
+        status: proposed
+        term: schema:gender
+        mapping: wdt:P21
+        meaning: Source-described gender of a staff member.
+        citations: *id033
+      - name: lang
+        status: proposed
+        term: schema:knowsLanguage
+        mapping: wdt:P1412
+        meaning: Language known by this person.
+        citations: *id034
+        values: *id017
+      - name: main
+        status: omitted
+        reason: Alias key selecting the preferred staff label; it is source join bookkeeping.
+      - name: description
+        status: omitted
+        reason: Staff biography text is outside the permitted metadata profile.
+      - name: prod
+        status: omitted
+        reason: Producer key is an internal association with no selected staff-profile property.
+  - name: staff_alias
+    type: schema:Person
+    columns:
+      - name: id
+        status: omitted
+        reason: Staff key joining aliases to the staff profile.
+      - name: aid
+        status: omitted
+        reason: Internal staff-alias key referenced by the preferred-name selector.
+      - name: name
+        status: existing
+        term: schema:name
+        'on': schema:Person
+        mapping: wdt:P1476
+        meaning: A source name for the staff member.
+        citations: *id018
+      - name: latin
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Romanized staff name.
+        citations: *id016
+  - name: staff_extlinks
+    type: schema:sameAs
+    columns:
+      - name: id
+        status: omitted
+        reason: Staff key joining an external link to the person profile.
+      - name: link
+        status: omitted
+        reason: External-link dictionary key; the resolved URL is inventoried under extlinks.value.
+  - name: tags
+    type: wd:Q151885
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal tag concept identifier; the concept and its source identity are retained by the taxonomy import.
+      - name: cat
+        status: proposed
+        term: wdt:P361
+        mapping: wdt:P361
+        meaning: The concept scheme that owns this tag tree.
+        citations: *id035
+        semantic_term: skos:inScheme
+        values: *id036
+      - name: defaultspoil
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing a tag default spoiler level; no standard property represents this qualifier.
+        citations: *id015
+      - name: searchable
+        status: omitted
+        reason: VNDB search-index flag is catalogue bookkeeping, not concept meaning.
+      - name: applicable
+        status: omitted
+        reason: VNDB applicability flag is catalogue bookkeeping, not concept meaning.
+      - name: name
+        status: proposed
+        term: wdt:P1705
+        mapping: wdt:P1705
+        meaning: Preferred label of a tag concept.
+        citations:
+          &id039 ['https://www.wikidata.org/wiki/Property:1705', 'https://www.wikidata.org/wiki/Property:P1705']
+        semantic_term: skos:prefLabel
+      - name: alias
+        status: proposed
+        term: wdt:P2561
+        mapping: wdt:P2561
+        meaning: Alternative label of a tag concept.
+        citations:
+          &id040 ['https://www.wikidata.org/wiki/Property:2561', 'https://www.wikidata.org/wiki/Property:P2561']
+        semantic_term: skos:altLabel
+      - name: description
+        status: omitted
+        reason: Long tag description is not part of the concise profile taxonomy projection.
+    concept_scheme:
+      term: wd:Q6423319
+      semantic_term: skos:ConceptScheme
+      meaning: Separate scheme for each VNDB tag category.
+  - name: tags_parents
+    type: wdt:P279
+    columns:
+      - name: id
+        status: omitted
+        reason: Tag concept key anchoring a broader-concept edge.
+      - name: parent
+        status: proposed
+        term: wdt:P279
+        mapping: wdt:P279
+        meaning: Broader parent concept in the tag tree.
+        citations: *id037
+        semantic_term: skos:broader
+      - name: main
+        status: omitted
+        reason: VNDB preferred-parent selector is source tree bookkeeping; all parent edges use skos:broader.
+  - name: tags_vn
+    type: schema:genre
+    columns:
+      - name: date
+        status: omitted
+        reason: Timestamp of a user tag vote is personal activity data.
+      - name: tag
+        status: proposed
+        term: schema:genre
+        mapping: wdt:P136
+        meaning: Tag concept describing the visual novel.
+        citations: *id038
+      - name: vid
+        status: omitted
+        reason: Visual-novel key anchoring a voted tag association.
+      - name: uid
+        status: omitted
+        reason: User identifier is personal data and is excluded.
+      - name: vote
+        status: omitted
+        reason: User tag vote is a rating statistic.
+      - name: spoiler
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing the spoiler level of a tag assignment; no standard property represents this qualifier.
+        citations: *id015
+      - name: ignore
+        status: omitted
+        reason: User-specific tag exclusion is personal data.
+      - name: lie
+        status: omitted
+        reason: User-maintained false-positive flag is not a profile fact.
+      - name: notes
+        status: omitted
+        reason: User-authored tag note is personal content and is excluded.
+  - name: traits
+    type: wd:Q151885
+    columns:
+      - name: id
+        status: omitted
+        reason: Internal trait concept identifier; the concept and source identity are retained by the taxonomy import.
+      - name: gid
+        status: proposed
+        term: wdt:P361
+        mapping: wdt:P361
+        meaning: Concept scheme or broader grouping for this character-trait concept.
+        citations: *id035
+        semantic_term: skos:inScheme
+      - name: gorder
+        status: omitted
+        reason: VNDB trait-group display order is source tree bookkeeping.
+      - name: defaultspoil
+        status: proposed
+        term: rezics:spoilerLevel
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing a trait default spoiler level; no standard property represents this qualifier.
+        citations: *id015
+      - name: sexual
+        status: omitted
+        reason: VNDB trait classification flag is source-specific filtering metadata.
+      - name: searchable
+        status: omitted
+        reason: VNDB search-index flag is catalogue bookkeeping, not concept meaning.
+      - name: applicable
+        status: omitted
+        reason: VNDB applicability flag is catalogue bookkeeping, not concept meaning.
+      - name: name
+        status: proposed
+        term: wdt:P1705
+        mapping: wdt:P1705
+        meaning: Preferred label of a character-trait concept.
+        citations: *id039
+        semantic_term: skos:prefLabel
+      - name: alias
+        status: proposed
+        term: wdt:P2561
+        mapping: wdt:P2561
+        meaning: Alternative label of a character-trait concept.
+        citations: *id040
+        semantic_term: skos:altLabel
+      - name: description
+        status: omitted
+        reason: Long trait description is not part of the concise profile taxonomy projection.
+    concept_scheme:
+      term: wd:Q6423319
+      semantic_term: skos:ConceptScheme
+      meaning: The VNDB character-trait taxonomy scheme.
+  - name: traits_parents
+    type: wdt:P279
+    columns:
+      - name: id
+        status: omitted
+        reason: Trait concept key anchoring a broader-concept edge.
+      - name: parent
+        status: proposed
+        term: wdt:P279
+        mapping: wdt:P279
+        meaning: Broader parent concept in the trait tree.
+        citations: *id037
+        semantic_term: skos:broader
+      - name: main
+        status: omitted
+        reason: VNDB preferred-parent selector is source tree bookkeeping; all parent edges use skos:broader.
+  - name: ulist_labels
+    type: schema:name
+    columns:
+      - name: uid
+        status: omitted
+        reason: User identifier and personal list labels are excluded.
+      - name: id
+        status: omitted
+        reason: Private label identifier within a user list.
+      - name: label
+        status: omitted
+        reason: User-created private list label is personal data.
+  - name: ulist_vns
+    type: schema:ItemList
+    columns:
+      - name: uid
+        status: omitted
+        reason: User identifier and personal visual-novel list membership are excluded.
+      - name: vid
+        status: omitted
+        reason: Visual-novel key in a private user list is user data.
+      - name: added
+        status: omitted
+        reason: Personal list activity timestamp is user data.
+      - name: lastmod
+        status: omitted
+        reason: Personal list modification timestamp is user data.
+      - name: vote_date
+        status: omitted
+        reason: Personal rating timestamp is user data.
+      - name: started
+        status: omitted
+        reason: Personal reading-progress date is user data.
+      - name: finished
+        status: omitted
+        reason: Personal reading-progress date is user data.
+      - name: vote
+        status: omitted
+        reason: Private personal rating is user data and a vote statistic.
+      - name: notes
+        status: omitted
+        reason: Private personal notes are user-authored content.
+      - name: labels
+        status: omitted
+        reason: Private user-label assignments are personal list data.
+  - name: users
+    type: schema:Person
+    columns:
+      - name: id
+        status: omitted
+        reason: User identifier is personal data and is excluded.
+      - name: ign_votes
+        status: omitted
+        reason: User vote preference is personal data.
+      - name: perm_imgvote
+        status: omitted
+        reason: User permission setting is personal data.
+      - name: perm_tag
+        status: omitted
+        reason: User permission setting is personal data.
+      - name: perm_lengthvote
+        status: omitted
+        reason: User permission setting is personal data.
+      - name: username
+        status: omitted
+        reason: User account name is personal data and is excluded.
+  - name: vn
+    type: wd:Q689445
+    columns:
+      - name: id
+        status: existing
+        term: wdt:P3180
+        'on': wd:Q689445
+        mapping: wdt:P3180
+        meaning: VNDB visual novel identity.
+        citations: *id021
+      - name: image
+        status: existing
+        term: schema:image
+        'on': wd:Q689445
+        mapping: wdt:P18
+        meaning: Resolve this VNDB image ID through the work cover group.
+        citations: *id014
+        licence: Image content has separate source conditions; download availability is not a republication grant.
+      - name: c_image
+        status: existing
+        term: schema:image
+        'on': wd:Q689445
+        mapping: wdt:P18
+        meaning: Resolve this VNDB image ID through the work cover group.
+        citations: *id014
+        licence: Image content has separate source conditions; download availability is not a republication grant.
+      - name: olang
+        status: existing
+        term: schema:inLanguage
+        'on': wd:Q689445
+        mapping: wdt:P407
+        meaning: Original language of the visual novel.
+        citations: *id024
+        values: *id017
+      - name: c_votecount
+        status: omitted
+        reason: Community vote count is a popularity statistic.
+      - name: c_rating
+        status: omitted
+        reason: Community Bayesian rating is a vote statistic.
+      - name: c_average
+        status: omitted
+        reason: Community vote average is a vote statistic.
+      - name: c_length
+        status: omitted
+        reason: Community-estimated length is a vote statistic.
+      - name: c_lengthnum
+        status: omitted
+        reason: Count of community length votes is a vote statistic.
+      - name: length
+        status: omitted
+        reason: VNDB length bucket is not a duration and cannot be mapped to schema:timeRequired.
+      - name: devstatus
+        status: omitted
+        reason: Source development-status code has no selected profile property.
+      - name: alias
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: A source-provided alternative name for the visual novel.
+        citations: *id016
+      - name: description
+        status: omitted
+        reason: Visual-novel description is creative text with separate source conditions and is not included in the profile.
+        licence: Separate source conditions stated in the dump README; no blanket republication grant.
+  - name: vn_anime
+    type: wdt:P144
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key joining a row to separately licensed anime data.
+      - name: aid
+        status: omitted
+        reason: AniDB key belongs to the separately licensed anime dataset.
+  - name: vn_editions
+    type: schema:ItemList
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key anchoring a source staff-edition grouping.
+      - name: lang
+        status: proposed
+        term: schema:inLanguage
+        mapping: wdt:P407
+        meaning: Language associated with the staff-credit list.
+        citations: *id024
+        values: *id017
+      - name: eid
+        status: omitted
+        reason: Local edition-group identifier is unstable source bookkeeping.
+      - name: official
+        status: omitted
+        reason: Source staff-edition flag is grouping metadata, not a profile fact.
+      - name: name
+        status: proposed
+        term: schema:name
+        mapping: wdt:P1476
+        meaning: Name of the staff-credit list.
+        citations: *id018
+  - name: vn_extlinks
+    type: schema:sameAs
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key joining an external link to the work.
+      - name: link
+        status: omitted
+        reason: External-link dictionary key; the resolved URL is inventoried under extlinks.value.
+  - name: vn_image_votes
+    type: wdt:P1352
+    columns:
+      - name: vid
+        status: omitted
+        reason: Visual-novel key anchoring private image-vote data.
+      - name: uid
+        status: omitted
+        reason: User identifier and personal image-vote record are excluded.
+      - name: img
+        status: omitted
+        reason: Image key in a personal image vote; no image-vote statistic is retained.
+  - name: vn_length_votes
+    type: wdt:P1352
+    columns:
+      - name: vid
+        status: omitted
+        reason: Visual-novel key anchoring personal length estimates.
+      - name: uid
+        status: omitted
+        reason: User identifier and personal estimate are excluded.
+      - name: date
+        status: omitted
+        reason: Timestamp of a personal length estimate is user data.
+      - name: length
+        status: omitted
+        reason: Individual community length estimate is voting data.
+      - name: speed
+        status: omitted
+        reason: Individual reading-speed estimate is voting data.
+      - name: rid
+        status: omitted
+        reason: Release keys attached to a personal length estimate are user data.
+      - name: notes
+        status: omitted
+        reason: User-authored length-estimate notes are personal content.
+      - name: lang
+        status: omitted
+        reason: Languages attached to personal length estimates are user data.
+  - name: vn_relations
+    type: wdt:P361
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key anchoring the relation statement.
+      - name: vid
+        status: proposed
+        term: wdt:P361
+        mapping: wdt:P361
+        meaning: Related visual novel; relation-specific mappings below select the Wikidata property.
+        citations: *id035
+      - name: relation
+        status: proposed
+        term: wdt:P361
+        mapping: wdt:P361
+        meaning: A relation type selecting the property used between visual novels.
+        citations: *id035
+        values: *id041
+      - name: official
+        status: omitted
+        reason: Source relation approval flag is moderation metadata, not a relation value.
+  - name: vn_screenshots
+    type: schema:image
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key anchoring a screenshot association.
+      - name: scr
+        status: omitted
+        reason: Screenshot ID is not a cover-group identifier and screenshot content is excluded.
+        licence: Image content has separate source conditions; download availability is not a republication grant.
+      - name: rid
+        status: omitted
+        reason: Release key supplies screenshot context but not a profile fact.
+  - name: vn_seiyuu
+    type: wdt:P725
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key supplies context for the character voice credit.
+      - name: cid
+        status: proposed
+        term: schema:character
+        mapping: wdt:P674
+        meaning: Character whose voice is credited.
+        citations: *id019
+      - name: aid
+        status: proposed
+        term: wdt:P725
+        mapping: wdt:P725
+        meaning: Voice actor credited for the associated character.
+        citations: *id042
+        qualifiers:
+          - term: wdt:P1932
+            mapping: wdt:P1932
+            source_column: note
+            meaning: Credited-as display name.
+            citations:
+              - https://www.wikidata.org/wiki/Property:P1932
+          - term: schema:character
+            mapping: wdt:P674
+            source_column: cid
+            meaning: Character whose voice is credited.
+            citations:
+              - https://schema.org/character
+              - https://www.wikidata.org/wiki/Property:P674
+      - name: note
+        status: proposed
+        term: wdt:P1932
+        mapping: wdt:P1932
+        meaning: Credited-as name qualifier for the voice-actor statement.
+        citations:
+          &id045 ['https://www.wikidata.org/wiki/Property:1932', 'https://www.wikidata.org/wiki/Property:P1932']
+    statement:
+      main_value: wdt:P725
+      qualifiers:
+        - wdt:P1932
+        - schema:character
+      order_source: No source order column exists.
+  - name: vn_staff
+    type: schema:contributor
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key supplies context for the credit statement.
+      - name: aid
+        status: proposed
+        term: schema:contributor
+        mapping: wdt:P767
+        meaning: Staff member credited on the visual novel using the role property selected below.
+        citations: *id043
+      - name: role
+        status: proposed
+        term: schema:contributor
+        mapping: wdt:P767
+        meaning: Select the credit property that is the main statement value; detailed role remains a qualifier.
+        citations: *id043
+        values: *id044
+        qualifiers:
+          - term: wdt:P1932
+            mapping: wdt:P1932
+            source_column: note
+            meaning: Credited-as display name.
+            citations:
+              - https://www.wikidata.org/wiki/Property:P1932
+          - term: schema:position
+            mapping: wdt:P1545
+            source_column: null
+            reason: The dump has no credit-order field; do not infer order.
+            citations:
+              - https://schema.org/position
+              - https://www.wikidata.org/wiki/Property:P1545
+          - term: wdt:P3831
+            mapping: wdt:P3831
+            source_column: role
+            meaning: Detailed role concept.
+            citations:
+              - https://www.wikidata.org/wiki/Property:P3831
+      - name: eid
+        status: omitted
+        reason: Edition-group key is local staff-list organization, not credit order.
+      - name: note
+        status: proposed
+        term: wdt:P1932
+        mapping: wdt:P1932
+        meaning: Credited-as name qualifier for the credit statement.
+        citations: *id045
+    statement:
+      main_value: role-selected credit property
+      qualifiers:
+        - wdt:P1932
+        - schema:position
+        - wdt:P3831
+      order_source: No source order column exists; schema:position / Wikidata P1545 cannot be populated.
+  - name: vn_titles
+    type: schema:name
+    columns:
+      - name: id
+        status: omitted
+        reason: Visual-novel key joining the title to the work profile.
+      - name: lang
+        status: existing
+        term: schema:inLanguage
+        'on': wd:Q689445
+        mapping: wdt:P407
+        meaning: Language of the source title.
+        citations: *id024
+        values: *id017
+      - name: official
+        status: omitted
+        reason: Source curation or selection flag is bookkeeping rather than a standalone profile fact.
+      - name: title
+        status: existing
+        term: schema:name
+        'on': wd:Q689445
+        mapping: wdt:P1476
+        meaning: A VN title in its stated language.
+        citations: *id018
+      - name: latin
+        status: proposed
+        term: schema:alternateName
+        mapping: wdt:P2561
+        meaning: Romanized alternative form of a VN title.
+        citations: *id016
+  - name: wikidata
+    type: schema:sameAs
+    columns:
+      - name: id
+        status: omitted
+        reason: Wikidata item identifier is part of a separate CC0 crosswalk, not VNDB profile data.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: enwiki
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: jawiki
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: website
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: vndb
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: mobygames
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: mobygames_company
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: gamefaqs_game
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: gamefaqs_company
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: anidb_anime
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: anidb_person
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: ann_anime
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: ann_manga
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: musicbrainz_artist
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: twitter
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: vgmdb_product
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: vgmdb_artist
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: discogs_artist
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: acdb_char
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: acdb_source
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: indiedb_game
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: howlongtobeat
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: crunchyroll
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: igdb_game
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: giantbomb
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: pcgamingwiki
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: steam
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: gog
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: pixiv_user
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: doujinshi_author
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: soundcloud
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: humblestore
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: itchio
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: playstation_jp
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: playstation_na
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: playstation_eu
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: lutris
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: wine
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
+      - name: mobygames_game
+        status: omitted
+        reason: Wikidata crosswalk field is outside the VNDB profile projection; its separate CC0 source is inventoried only.
+        licence: CC0 (Wikidata source); https://creativecommons.org/publicdomain/zero/1.0/
