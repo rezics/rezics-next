@@ -56,6 +56,23 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: consumer_checkpoint; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.consumer_checkpoint (
+    partition_no integer NOT NULL,
+    consumer text NOT NULL,
+    epoch integer,
+    "position" bigint DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT consumer_checkpoint_check CHECK (((epoch IS NULL) = ("position" = 0))),
+    CONSTRAINT consumer_checkpoint_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text)),
+    CONSTRAINT consumer_checkpoint_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT consumer_checkpoint_position_check CHECK (("position" >= 0))
+);
+
+
+--
 -- Name: outbox; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -183,6 +200,14 @@ CREATE TABLE semantic.subject (
 
 
 --
+-- Name: consumer_checkpoint consumer_checkpoint_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.consumer_checkpoint
+    ADD CONSTRAINT consumer_checkpoint_pkey PRIMARY KEY (partition_no, consumer);
+
+
+--
 -- Name: outbox outbox_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -244,6 +269,14 @@ ALTER TABLE ONLY semantic.fact
 
 ALTER TABLE ONLY semantic.subject
     ADD CONSTRAINT subject_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: consumer_checkpoint consumer_checkpoint_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.consumer_checkpoint
+    ADD CONSTRAINT consumer_checkpoint_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
 
 
 --
