@@ -116,7 +116,13 @@ function paid(): SettlementState {
   return apply(initial(), decideCheckout(initial(), snapshot()));
 }
 
-const settlementCases: { name: string; patch: Partial<CheckoutSnapshot>; settlement: string; action: string }[] = [
+const settlementCases: {
+  name: string;
+  patch: Partial<CheckoutSnapshot>;
+  settlement: string;
+  action: string;
+  changed?: false;
+}[] = [
   // https://docs.stripe.com/api/checkout/sessions/object.md — status and payment_status.
   { name: 'immediate pay', patch: {}, settlement: 'paid', action: 'grant' },
   // https://docs.stripe.com/api/payment_intents/object.md — processing.
@@ -125,6 +131,7 @@ const settlementCases: { name: string; patch: Partial<CheckoutSnapshot>; settlem
     patch: { paymentStatus: 'unpaid', paymentIntentStatus: 'processing' },
     settlement: 'pending',
     action: 'none',
+    changed: false,
   },
   // https://docs.stripe.com/api/payment_intents/object.md — succeeded.
   { name: 'async succeeded', patch: { paymentIntentStatus: 'succeeded' }, settlement: 'paid', action: 'grant' },
@@ -145,7 +152,13 @@ const settlementCases: { name: string; patch: Partial<CheckoutSnapshot>; settlem
   // https://docs.stripe.com/api/checkout/sessions/object.md — expired.
   { name: 'expired', patch: { status: 'expired', paymentStatus: 'unpaid' }, settlement: 'failed', action: 'none' },
   // https://docs.stripe.com/api/checkout/sessions/object.md — open.
-  { name: 'open', patch: { status: 'open', paymentStatus: 'unpaid' }, settlement: 'pending', action: 'none' },
+  {
+    name: 'open',
+    patch: { status: 'open', paymentStatus: 'unpaid' },
+    settlement: 'pending',
+    action: 'none',
+    changed: false,
+  },
   // https://docs.stripe.com/api/checkout/sessions/object.md — amount_subtotal.
   { name: 'amount mismatch', patch: { amountSubtotalMinor: 999 }, settlement: 'unknown', action: 'none' },
   // https://docs.stripe.com/api/checkout/sessions/object.md — currency.
@@ -165,11 +178,15 @@ const settlementCases: { name: string; patch: Partial<CheckoutSnapshot>; settlem
 
 for (const row of settlementCases) {
   test(`settlement: ${row.name}`, () => {
-    expect(decideCheckout(initial(), snapshot(row.patch))).toMatchObject({
-      changed: true,
-      settlement: row.settlement,
-      entitlement: { kind: row.action },
-    });
+    if (row.changed === false) {
+      expect(decideCheckout(initial(), snapshot(row.patch))).toEqual({ changed: false });
+    } else {
+      expect(decideCheckout(initial(), snapshot(row.patch))).toMatchObject({
+        changed: true,
+        settlement: row.settlement,
+        entitlement: { kind: row.action },
+      });
+    }
   });
 }
 
@@ -339,18 +356,12 @@ test('new transactions alone change the decision, retain order and exclude recor
   expect(decideCheckout(apply(state, decision), current)).toEqual({ changed: false });
 });
 
-test('a PaymentIntent-only change is recorded once, including with the same observation time', () => {
+test('a PaymentIntent-only difference is no change, including with the same observation time', () => {
   const state = initial();
   state.order.observedAt = time(1);
   const current = snapshot({ paymentStatus: 'unpaid', paymentIntentStatus: 'processing' });
   const decision = decideCheckout(state, current);
-  expect(decision).toMatchObject({
-    changed: true,
-    settlement: 'pending',
-    paymentIntentId: 'pi_order',
-    entitlement: { kind: 'none' },
-    newTransactions: [],
-  });
+  expect(decision).toEqual({ changed: false });
   expect(decideCheckout(apply(state, decision), current)).toEqual({ changed: false });
 });
 
