@@ -83,10 +83,29 @@ async function snapshot() {
   const events = await reader.query('SELECT * FROM core.outbox WHERE partition_no=0 AND type=$1 ORDER BY position', [
     audit,
   ]);
-  return { marker: marker.rows, grants: grants.rows, events: events.rows };
+  const standing = await reader.query(
+    "SELECT * FROM access.standing_parent_installation WHERE route=0 AND resource_id=$1 AND actions=ARRAY['organization:create']::text[]",
+    [PLATFORM_RESOURCE.id],
+  );
+  const standingGrants = await reader.query(
+    "SELECT * FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND action='organization:create'",
+    [PLATFORM_RESOURCE.id],
+  );
+  return {
+    marker: marker.rows,
+    grants: grants.rows,
+    events: events.rows,
+    standing: standing.rows,
+    standingGrants: standingGrants.rows,
+  };
 }
 async function reset() {
   // Starting facts for independent one-time installation scenarios; no fixture installs the outcome.
+  await reader.query(
+    "DELETE FROM access.standing_parent_installation WHERE actions=ARRAY['organization:create']::text[]",
+  );
+  await reader.query("DELETE FROM access.resource_grant WHERE route=0 AND action='organization:create'");
+  await reader.query("DELETE FROM core.receipt WHERE command_kind='access.standing-parent.install'");
   await reader.query('DELETE FROM access.governance_bootstrap');
   await reader.query('DELETE FROM access.resource_role_grant WHERE route=0 AND resource_id=$1', [PLATFORM_RESOURCE.id]);
   await reader.query('DELETE FROM core.outbox WHERE partition_no=0 AND type=$1', [audit]);
@@ -236,6 +255,14 @@ test('exact root CLI installs one durable normal Global role and one registered 
   const first = await snapshot();
   expect(first.marker).toHaveLength(1);
   expect(first.marker[0]).toMatchObject({ route: 0, resource_id: PLATFORM_RESOURCE.id, account_id: person });
+  expect(first.standing).toHaveLength(1);
+  expect(first.standingGrants).toHaveLength(1);
+  expect(first.standingGrants[0]).toMatchObject({
+    subject_kind: 'active_accounts',
+    action: 'organization:create',
+    resource_id: PLATFORM_RESOURCE.id,
+  });
+  expect(first.standing[0].transaction_id).toBe(first.standingGrants[0].transaction_id);
   expect(first.grants).toHaveLength(1);
   expect(first.grants[0]).toMatchObject({
     subject_kind: 'identity',
@@ -394,7 +421,7 @@ test('missing or nonhuman, inactive or fenced accounts refuse without marker, gr
     [routeOf(organization), organization],
   );
   await invoke(organization, false);
-  expect(await snapshot()).toEqual({ marker: [], grants: [], events: [] });
+  expect(await snapshot()).toEqual({ marker: [], grants: [], events: [], standing: [], standingGrants: [] });
 });
 
 test('only the seeded real Global row admits installation and native failure rolls everything back', async () => {
@@ -409,7 +436,7 @@ test('only the seeded real Global row admits installation and native failure rol
       await reader.query(`ALTER TABLE core.outbox ADD CONSTRAINT bootstrap_failure CHECK (type <> '${audit}')`);
     try {
       await invoke(person, false);
-      expect(await snapshot()).toEqual({ marker: [], grants: [], events: [] });
+      expect(await snapshot()).toEqual({ marker: [], grants: [], events: [], standing: [], standingGrants: [] });
     } finally {
       if (failure === 'audit') await reader.query('ALTER TABLE core.outbox DROP CONSTRAINT bootstrap_failure');
       else
@@ -419,6 +446,43 @@ test('only the seeded real Global row admits installation and native failure rol
         );
     }
   }
+});
+
+test('organization standing setup has its own marker and resumes an interrupted deployment', async () => {
+  await reset();
+  // The existing Semantic standing setup already occupies the Global parent.
+  await reader.query(
+    `INSERT INTO access.standing_parent_installation(route,resource_id,actions,transaction_id)
+    VALUES(0,$1,ARRAY['statement:propose','subject:create'],$1)`,
+    [PLATFORM_RESOURCE.id],
+  );
+  await reader.query(`ALTER TABLE access.standing_parent_installation ADD CONSTRAINT interrupted_organization_setup
+    CHECK (actions <> ARRAY['organization:create']::text[])`);
+  try {
+    await invoke(person, false);
+    const partial = await snapshot();
+    expect(partial.marker).toHaveLength(1);
+    expect(partial.grants).toHaveLength(1);
+    expect(partial.standing).toHaveLength(0);
+    expect(partial.standingGrants).toHaveLength(0);
+  } finally {
+    await reader.query(
+      'ALTER TABLE access.standing_parent_installation DROP CONSTRAINT interrupted_organization_setup',
+    );
+  }
+  await invoke(person);
+  const completed = await snapshot();
+  expect(completed.standing).toHaveLength(1);
+  expect(completed.standingGrants).toHaveLength(1);
+  await invoke(person);
+  expect(await snapshot()).toEqual(completed);
+  expect(
+    (
+      await reader.query('SELECT 1 FROM access.standing_parent_installation WHERE route=0 AND resource_id=$1', [
+        PLATFORM_RESOURCE.id,
+      ])
+    ).rows,
+  ).toHaveLength(2);
 });
 
 test('concurrent same and different named CLI calls linearize to one durable winner', async () => {

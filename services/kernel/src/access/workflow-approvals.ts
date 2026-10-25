@@ -78,12 +78,11 @@ const id = (value: unknown): value is string => typeof value === 'string' && rou
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
 
-type NativeKind = 'rename' | 'delete' | 'membership' | 'automated' | 'opening' | 'client-reduction';
+type NativeKind = 'rename' | 'delete' | 'membership' | 'automated' | 'opening' | 'organization' | 'client-reduction';
 type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' | 'global' };
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
-  organization: 'organization creation parent',
   transfer: 'operator responsibility transfer',
   revoke: 'Auth session revocation',
   'fence-operator': 'operator fence',
@@ -151,6 +150,11 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       );
       fields = ['kind', 'operatorAccountId', 'subjectAccountId', 'authorization'];
       descriptor = { action: 'account:manage', target: operation.operatorAccountId, targetKind: 'either' };
+      break;
+    case 'organization':
+      requireAllowed(handle(operation.handle));
+      fields = ['kind', 'handle', 'authorization'];
+      descriptor = { action: 'organization:create', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
       break;
     case 'rename':
       requireAllowed(
@@ -265,7 +269,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     observeDeadline?: (deadline: number) => void,
   ): CommandAuthorization {
     requireAllowed(config.actions.has(descriptor.action));
-    return resourceAuthorization({
+    const authority = resourceAuthorization({
       access: observeDeadline
         ? {
             ...config.access,
@@ -284,7 +288,20 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       anchor: anchor(descriptor),
       context: { ...context, partition: partitionOf(routeOf(actor.accountId)!) },
     });
+    if (descriptor.action !== 'organization:create') return authority;
+    return {
+      ...authority,
+      async prepare(attempt) {
+        await requireHuman(actor);
+        return authority.prepare?.(attempt);
+      },
+    };
   }
+  async function requireHuman(actor: AccountActor) {
+    const account = await readAccount(config.pool, routeOf(actor.accountId)!, actor.accountId);
+    requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null && actor.requestedBy === null);
+  }
+
   async function resolve(
     reference: string,
     input: AccountOperation,
@@ -303,6 +320,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           caller.requestedBy === actor.requestedBy &&
           canonicalize([...caller.scopes].sort()) === canonicalize([...actor.scopes].sort())),
     );
+    if (operation.kind === 'organization') await requireHuman(actor);
     let approvedOperation = operation;
     if (operation.kind === 'automated' && operation.registrationId !== '') {
       if (!creationBinding) throw new WorkflowApprovalUnavailableError();

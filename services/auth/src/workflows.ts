@@ -397,10 +397,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         }
       },
     );
-    const defaults = step('operator-management-defaults', async (operatorAccountId: string) => {
-      if (access.provisionManagementDefaults)
-        await access.provisionManagementDefaults({ operatorAccountId, key: commandKey('management-defaults') });
-    });
+    const defaults = step(
+      'operator-management-defaults',
+      async (operatorAccountId: string, request?: AccountOperation) => {
+        if (access.provisionManagementDefaults)
+          await access.provisionManagementDefaults({
+            operatorAccountId,
+            key: await authorizedKey(request, 'management-defaults'),
+          });
+      },
+    );
     const complete = step('registration-complete', async (id: string, request?: AccountOperation) => {
       if (request) await approved(request);
       await database.query(
@@ -519,6 +525,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         });
       },
     );
+    const organizationKey = step('organization-key', async (request: AccountOperation, phase: string) => {
+      const context = await approved(request);
+      return required(access.stableCommandKey)(context, phase);
+    });
     const reserveOwner = step('reserve-owner', async (input: AccountOperation, organizationId: string) => {
       const context = await approved(input);
       const ownerAccountId = required(access.actorAccountId)(context);
@@ -527,30 +537,35 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           accountId: ownerAccountId,
           relatedAccountId: organizationId,
           purpose: 'membership',
-          key: commandKey('reserve-owner'),
+          key: access.stableCommandKey?.(context, 'reserve-owner') ?? commandKey('reserve-owner'),
         })
       ).value;
     });
     const organization = step(
       'create-organization',
-      async (organizationId: string, ownerAccountId: string, ownerReservationId: string) =>
+      async (organizationId: string, ownerAccountId: string, ownerReservationId: string, request: AccountOperation) =>
         (
           await required(access.createOrganization)({
             organizationId,
             ownerAccountId,
             ownerReservationId,
-            key: commandKey('organization'),
+            key: await authorizedKey(request, 'organization'),
           })
         ).value,
     );
     const bootstrap = step(
       'bootstrap-organization-handle',
-      async (input: WorkflowHandleTransition, ownerAccountId: string, ownerReservationId: string) => {
+      async (
+        input: WorkflowHandleTransition,
+        ownerAccountId: string,
+        ownerReservationId: string,
+        request: AccountOperation,
+      ) => {
         await required(access.bootstrapOrganizationHandle)({
           ...input,
           ownerAccountId,
           ownerReservationId,
-          key: commandKey('bootstrap-handle'),
+          key: await authorizedKey(request, 'bootstrap-handle'),
         });
       },
     );
@@ -858,11 +873,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         }
         if (input.kind === 'rename' || input.kind === 'organization') {
           const accountId =
-            input.kind === 'rename' ? input.accountId : access.registrationTarget(commandKey('organization-id'));
+            input.kind === 'rename'
+              ? input.accountId
+              : access.registrationTarget(await organizationKey(input, 'organization-id'));
           const owner = input.kind === 'organization' ? await reserveOwner(input, accountId) : null;
           if (owner) {
-            await organization(accountId, owner.accountId, owner.reservationId);
-            await defaults(accountId);
+            await organization(accountId, owner.accountId, owner.reservationId, input);
+            await defaults(accountId, input);
           }
           const claim = await reserve({ account_id: accountId, handle: input.handle } as Stage, input);
           const transition = {
@@ -870,11 +887,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             handle: claim.handle,
             reservationId: claim.reservationId,
             expectedHandle: input.kind === 'rename' ? input.expectedHandle : null,
-            operationId: required(DBOS.workflowID),
-            key: commandKey('transition'),
+            operationId:
+              input.kind === 'organization'
+                ? await organizationKey(input, 'handle-operation')
+                : required(DBOS.workflowID),
+            key: input.kind === 'organization' ? await organizationKey(input, 'transition') : commandKey('transition'),
           };
           await hold(transition, input);
-          if (owner) await bootstrap(transition, owner.accountId, owner.reservationId);
+          if (owner) await bootstrap(transition, owner.accountId, owner.reservationId, input);
           else await publish(transition, input);
           await finalize(transition, input);
           if (transition.expectedHandle !== null) await redirect(transition, input);

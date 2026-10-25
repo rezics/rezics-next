@@ -6,6 +6,10 @@ import { routeOf } from '../route/route.ts';
 import accountRead from './bootstrap-governance-account.sql';
 import bootstrapRead from './bootstrap-governance-read.sql';
 import install from './bootstrap-governance-install.sql';
+import { readAccount } from './account-data.ts';
+import { createAccess } from './permission.ts';
+import { installStandingParentGrant } from './standing-parent.ts';
+import type { AccountActor } from '../request/access.ts';
 
 export const PLATFORM_GOVERNANCE_ROLE = 'platform.governance';
 // Bind the existing Global identity without loading Semantic's runtime command dependencies.
@@ -72,6 +76,7 @@ export async function bootstrapGovernance(pool: Pool, accountId: string): Promis
   // A concurrent unique-key insert may report 23505 before core's serializable
   // fence detects the conflict. Re-enter the native executor to read the winner;
   // all other failures are closed, and every failed attempt rolls back completely.
+  let replayed = false;
   for (let conflict = 0; conflict < 3; conflict++) {
     try {
       await runCommand(pool, { partition: 0, deadline, authorization }, async (tx, { transactionId }) => {
@@ -90,10 +95,60 @@ export async function bootstrapGovernance(pool: Pool, accountId: string): Promis
           ],
         };
       });
-      return { ...value, replayed: false };
+      break;
     } catch (error) {
-      if (error instanceof AlreadyBootstrapped) return { ...value, replayed: true };
-      if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') continue;
+      if (error instanceof AlreadyBootstrapped) {
+        replayed = true;
+        break;
+      }
+      if (conflict < 2 && typeof error === 'object' && error !== null && 'code' in error && error.code === '23505')
+        continue;
+      throw new BootstrapGovernanceUnavailableError();
+    }
+  }
+  // Separate durable installation lets an interrupted deployment resume without
+  // restoring a revoked grant. The real governance role must delegate the action.
+  for (let conflict = 0; conflict < 3; conflict++) {
+    try {
+      const account = await readAccount(pool, route, accountId);
+      if (!account) throw new BootstrapGovernanceUnavailableError();
+      const actor: AccountActor = {
+        kind: 'account',
+        accountId,
+        clientId: 'governance-bootstrap',
+        requestedBy: null,
+        scopes: ['organization:create'],
+        authnEpoch: Number(account.minimumAuthnEpoch),
+      };
+      const access = createAccess({
+        actions: new Map([['organization:create', { anonymous: false }]]),
+        accountEvidence: () => account,
+      });
+      await installStandingParentGrant({
+        access,
+        context: { pool, deadline, actor },
+        actions: ['organization:create'],
+        parent: {
+          resource: PLATFORM_RESOURCE,
+          async validate(tx) {
+            return !!(await bootstrapRead.run(tx, { route: 0, resource_id: PLATFORM_RESOURCE.id }))?.global;
+          },
+        },
+        authority: {
+          ...authorization,
+          async authorize(tx) {
+            const current = await bootstrapRead.run(tx, { route: 0, resource_id: PLATFORM_RESOURCE.id });
+            if (!current?.global || current.account_id !== accountId) throw new BootstrapGovernanceUnavailableError();
+            if (current.organization_installed) throw new AlreadyBootstrapped();
+            return 'execute';
+          },
+        },
+      });
+      return { ...value, replayed };
+    } catch (error) {
+      if (error instanceof AlreadyBootstrapped) return { ...value, replayed };
+      if (conflict < 2 && typeof error === 'object' && error !== null && 'code' in error && error.code === '23505')
+        continue;
       throw new BootstrapGovernanceUnavailableError();
     }
   }

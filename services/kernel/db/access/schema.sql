@@ -930,7 +930,7 @@ ALTER TABLE ONLY access.resource_role_grant
 --
 
 ALTER TABLE ONLY access.standing_parent_installation
-    ADD CONSTRAINT standing_parent_installation_pkey PRIMARY KEY (route, resource_id);
+    ADD CONSTRAINT standing_parent_installation_pkey PRIMARY KEY (route, resource_id, actions);
 
 
 --

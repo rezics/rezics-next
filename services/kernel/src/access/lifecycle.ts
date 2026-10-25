@@ -57,6 +57,7 @@ export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['account:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
   ['account:delete', { anonymous: false, replay: 'self-account-read' }],
+  ['organization:create', { anonymous: false }],
   ['organization:membership', { anonymous: false }],
 ]);
 const ACTOR_ACTIONS = ['account:update', 'account:delete'];
@@ -994,7 +995,13 @@ export function createLifecycleInternals(
           // The owner's coordination row is on the owner anchor. Observe it again
           // under that row lock so a committed suspension fails closed.
           const owner = await locked(tx, input.ownerAccountId);
-          requireAllowed(owner.state === 'active' && reservation);
+          requireAllowed(
+            owner.kind === 'actor' &&
+              owner.operatorAccountId === null &&
+              owner.state === 'active' &&
+              !owner.fenced &&
+              reservation,
+          );
           requireAllowed(
             await membershipEvidence.run(tx, {
               route: accountRoute(input.ownerAccountId),
