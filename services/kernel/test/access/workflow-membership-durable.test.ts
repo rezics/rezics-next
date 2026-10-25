@@ -176,3 +176,145 @@ test('active hold and last owner cannot be released through the durable workflow
   expect(await holds(owner)).toEqual([ownerReservation]);
   expect(await holds(member)).toEqual([reservationId]);
 }, 60000);
+
+async function operatorLogin(accountId: string) {
+  const signin = await fixture.auth.handler(
+    new Request(`${issuer}/signin`, {
+      method: 'POST',
+      headers: { origin: issuer, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        account_id: accountId,
+        password,
+        client_id: 'durable-web',
+        scope: ['account:update', 'account:delete', 'account:manage'],
+      }),
+    }),
+  );
+  expect(signin.status).toBe(200);
+  const cookie = signin.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  const issued = await fixture.auth.handler(
+    new Request(`${issuer}/token`, {
+      method: 'POST',
+      headers: { origin: issuer, cookie, 'content-type': 'application/json' },
+      body: '{}',
+    }),
+  );
+  expect(issued.status).toBe(200);
+  return { cookie, token: ((await issued.json()) as { access_token: string }).access_token };
+}
+
+test('real automated creation and operator session consume native receipts and transfer releases the separately anchored old hold', async () => {
+  const owner = await person('workflow_operator');
+  const next = await person('workflow_next_operator');
+  const login = await operatorLogin(owner);
+  fixture.approve('operator', login.token);
+  const actor = await fixture.workflows.createAutomated({
+    key: 'real_automated',
+    authorization: 'operator',
+    operatorAccountId: owner,
+    handle: 'real_automated',
+  });
+  expect(await fixture.read(actor.accountId)).toMatchObject({
+    kind: 'actor',
+    state: 'active',
+    operatorAccountId: owner,
+  });
+  expect(
+    (await fixture.database.query('SELECT "userId",password FROM account WHERE "userId"=$1', [actor.accountId])).rows,
+  ).toEqual([{ userId: actor.accountId, password: null }]);
+  const response = await fixture.workflows.openOperatorSession({
+    key: 'real_opening',
+    authorization: 'operator',
+    operatorAccountId: owner,
+    subjectAccountId: actor.accountId,
+    headers: new Headers({ cookie: login.cookie, origin: issuer }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ account_id: actor.accountId, amr: ['operator'] });
+  const cookie = response.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  expect(
+    (
+      await fixture.kernel.query(
+        'SELECT consumed_at IS NOT NULL AS consumed FROM access.operator_opening_receipt WHERE route=$1 AND operator_account_id=$2 AND subject_account_id=$3',
+        [routeOf(owner), owner, actor.accountId],
+      )
+    ).rows,
+  ).toEqual([{ consumed: true }]);
+  const relation = (
+    await fixture.kernel.query<{ reservation_id: string; version: string }>(
+      'SELECT operator_reservation_id::text AS reservation_id,operator_relation_version::text AS version FROM access.account WHERE route=$1 AND account_id=$2',
+      [routeOf(actor.accountId), actor.accountId],
+    )
+  ).rows[0]!;
+  const grants = (
+    await fixture.kernel.query(
+      'SELECT subject_id::text,action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 ORDER BY action,subject_id',
+      [routeOf(actor.accountId), actor.accountId],
+    )
+  ).rows;
+  await fixture.workflows.transferOperator({
+    key: 'real_transfer',
+    authorization: 'operator',
+    previous: { operatorAccountId: owner, subjectAccountId: actor.accountId, reservationId: relation.reservation_id },
+    expectedVersion: relation.version,
+    operatorAccountId: next,
+  });
+  expect(await fixture.read(actor.accountId)).toMatchObject({ operatorAccountId: next });
+  expect(
+    (
+      await fixture.kernel.query(
+        "SELECT reservation_id FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2 AND purpose='operator'",
+        [routeOf(owner), owner],
+      )
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (
+      await fixture.kernel.query(
+        'SELECT subject_id::text,action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 ORDER BY action,subject_id',
+        [routeOf(actor.accountId), actor.accountId],
+      )
+    ).rows,
+  ).toEqual(grants);
+  expect(
+    (await fixture.auth.handler(new Request(`${issuer}/session`, { headers: { cookie } }))).status,
+  ).toBeGreaterThanOrEqual(400);
+  await expect(
+    fixture.workflows.openOperatorSession({
+      key: 'stale_real_opening',
+      authorization: 'operator',
+      operatorAccountId: owner,
+      subjectAccountId: actor.accountId,
+      headers: new Headers({ cookie: login.cookie, origin: issuer }),
+    }),
+  ).rejects.toThrow();
+  fixture.approve('next-operator', (await operatorLogin(next)).token);
+  const nextLogin = await operatorLogin(next);
+  expect(
+    (
+      await fixture.workflows.openOperatorSession({
+        key: 'next_real_opening',
+        authorization: 'next-operator',
+        operatorAccountId: next,
+        subjectAccountId: actor.accountId,
+        headers: new Headers({ cookie: nextLogin.cookie, origin: issuer }),
+      })
+    ).status,
+  ).toBe(200);
+  let serialized = '';
+  for (const { tablename } of (
+    await system.query<{ tablename: string }>("SELECT tablename FROM pg_tables WHERE schemaname='dbos'")
+  ).rows)
+    serialized += JSON.stringify(
+      (await system.query(`SELECT row_to_json(t) FROM dbos."${tablename.replaceAll('"', '""')}" t`)).rows,
+    );
+  expect(serialized).not.toContain(login.token);
+  expect(serialized).not.toContain(login.cookie);
+  expect(serialized).not.toContain(cookie);
+}, 60000);
