@@ -42,10 +42,11 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
     const declaration = detail?.['x-rate-limit'] as RateLimitDeclaration | undefined;
     if (declaration === undefined) {
       const action = detail?.['x-action'];
-      // Explicit semantic read actions cover read-only POSTs. Method alone never exempts a POST.
+      // Validated mounted read/list verbs also cover read-only custom methods.
       if (typeof action === 'string') {
         try {
-          if (/:(read|list)$/.test(actionLabelOfMountedRoute(mounted))) return;
+          // Require a nonempty suffix and the absolute end, including for line terminators.
+          if (/:(?:read|list)(?:_[a-z][a-z_]*)?(?![\s\S])/.test(actionLabelOfMountedRoute(mounted))) return;
         } catch {
           throw unavailable();
         }
