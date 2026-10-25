@@ -13,6 +13,7 @@ import { readBatch, type Envelope } from '../../src/events/log.ts';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { readMediaImportStatus, type MediaImportDependencies } from '../../src/content/media-import.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
+import { takedownSourceFence, type SourceFenceDependencies } from '../../src/content/source-fence-command.ts';
 import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
 import {
   authoritativeTimeValue,
@@ -671,6 +672,10 @@ function mediaContext() {
   return { deadline: Date.now() + 15_000, idempotencyKey: randomUUID(), requestId: newId(mediaRoute) };
 }
 
+function contentContext(route: number) {
+  return { deadline: Date.now() + 15_000, idempotencyKey: randomUUID(), requestId: newId(route) };
+}
+
 async function reserveMediaAnchor(
   route: number,
   actorId: string,
@@ -861,6 +866,85 @@ test('URL status stays within its bound as T grows', async () => {
     operation: async () => {
       const result = await readMediaImportStatus(deps, actor, mediaId, { deadline: Date.now() + 10_000 });
       expect(result?.media.id).toBe(mediaId);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expectNoContentSequentialScans(report);
+}, 90_000);
+
+test('Source fence takedown stays within its bound as T grows', async () => {
+  let externalId = `growth-fence-anchor-${randomUUID()}`;
+  while (partitionOf(tupleRoute(mediaRouteKey, 'catalogue', externalId)) !== partitionOf(mediaRoute))
+    externalId = `growth-fence-anchor-${randomUUID()}`;
+  const sourceRoute = tupleRoute(mediaRouteKey, 'catalogue', externalId);
+  const { actor, access } = await createActor(sourceRoute, ['source_fence:takedown']);
+  await addGrant(0, mediaRoot.id, actor.accountId, 'source_fence:takedown');
+  const deps: SourceFenceDependencies = {
+    pool: db.pool,
+    access,
+    routeKey: mediaRouteKey,
+    clock: () => new Date(),
+  };
+  const input = {
+    source: 'catalogue',
+    external_id: externalId,
+    field_group: 'cover' as const,
+    reason: 'Growth fixture',
+  };
+  const anchor = await takedownSourceFence(deps, actor, input, contentContext(sourceRoute));
+  expect(anchor.replayed).toBe(false);
+
+  const auth: AccessPopulation = {
+    homeRoute: sourceRoute,
+    actorId: actor.accountId,
+    actions: ['source_fence:takedown'],
+    roles: ['platform.governance'],
+    receiptKind: 'content.source-fence.takedown',
+    name: 'growth-source-fence-takedown',
+  };
+  // This population matches source-fence tuples and holds the uncapped Access history at 500 rows.
+  const population: Population = {
+    name: `growth-source-fence-takedown-${randomUUID()}`,
+    hotPartition: partitionOf(sourceRoute),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'content.source_fences': [
+        {
+          route: sourceRoute,
+          source: 'catalogue',
+          external_id: `growth-fence-neighbour-${ordinal}`,
+          field_group: 'cover',
+          taken_down: false,
+          security_revision: 1,
+        },
+      ],
+      'semantic.context': [
+        { route: 0, context_id: newId(0), kind: 'community', labels: {}, recorded_transaction_id: newId(0) },
+      ],
+      ...accessRows(ordinal, auth),
+    }),
+  };
+  const report = await checkGrowth(db, {
+    name: 'Source fence takedown',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_database, scale, previous) =>
+      seedScale(population, scale, previous, [
+        { table: 'content.source_fences', partition: partitionOf(sourceRoute) },
+        { table: 'semantic.context', partition: 0 },
+        { table: 'access.account', partition: partitionOf(sourceRoute) },
+        { table: 'access.membership_inverse', partition: partitionOf(sourceRoute) },
+        { table: 'access.resource_grant', partition: partitionOf(sourceRoute) },
+        { table: 'access.resource_grant', partition: 0 },
+        { table: 'access.resource_denial', partition: partitionOf(sourceRoute) },
+        { table: 'access.resource_denial', partition: 0 },
+        { table: 'access.resource_role_grant', partition: partitionOf(sourceRoute) },
+        { table: 'access.resource_role_grant', partition: 0 },
+        { table: 'core.receipt', routeColumn: 'partition_no', partition: partitionOf(sourceRoute) },
+      ]),
+    operation: async () => {
+      const result = await takedownSourceFence(deps, actor, input, contentContext(sourceRoute));
+      expect(result.replayed).toBe(false);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
