@@ -245,8 +245,6 @@ test('Active profile lookup stays within its bound as P grows', async () => {
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => activeProfile(d.pool),
-    repetitions: 1,
-    warmups: 0,
   });
 }, 90_000);
 
