@@ -209,27 +209,6 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
     store.savePromotion(next);
     return next;
   }
-  const failedBoundaryIndex = run.boundaries.indexOf(failed);
-  const failedPrefix = results.get(failed.taskId)!;
-  const initial = failedPrefix.find(result => !result.passed)!;
-  const culpritPrefixTasks = tasks.slice(0, failedBoundaryIndex + 1);
-  const prefixCommands = commandsFor(run.rootGate, culpritPrefixTasks);
-  const commandIndex = prefixCommands.findIndex(command => JSON.stringify(command) === JSON.stringify(initial.command));
-  const confirmationLabel = 'confirm-culprit';
-  const confirmationLog = join(options.settings.stateDirectory, `promotion-${run.id}-${confirmationLabel}-0.log`);
-  const initialLog = join(options.settings.stateDirectory, `promotion-${run.id}-prefix-${failedBoundaryIndex}-${commandIndex}.log`);
-  const confirmation = (await gateAt(options, run, failed.commit, [initial.command], confirmationLabel,
-    'prefixResults', true))[0]!;
-  if (confirmation.passed || confirmation.firstFailure?.fingerprint !== initial.firstFailure?.fingerprint) {
-    const event: PromotionFlakeEvent = { kind: 'promotion-flake', taskId: failed.taskId, commit: failed.commit,
-      command: [...initial.command], initial, confirmation, logs: [initialLog, confirmationLog] };
-    const currentDev = head(options.settings.mainCheckout, options.settings.integrationBranch);
-    const currentMain = head(options.settings.mainCheckout, options.settings.mainBranch);
-    const next = createRun(options, currentMain, currentDev, boundaryTasks(options, currentMain, currentDev)) as PromotionRunWithFlakes;
-    next.flakeEvents = [...((run as PromotionRunWithFlakes).flakeEvents ?? []), event];
-    store.savePromotion(next);
-    return next;
-  }
   const culprit = store.task(failed.taskId);
   const closure = dependentClosure(tasks, culprit.id);
   run.culpritTaskId = culprit.id; run.culpritAttempt = culprit.currentAttempt;
