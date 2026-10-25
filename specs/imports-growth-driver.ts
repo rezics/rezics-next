@@ -26,10 +26,31 @@
  * PostgreSQL retains actual examined rows and shared hits plus reads via growth.ts.
  *
  * N = unrelated catalogue/importer keys; history = unrelated U x t, including
- * history on the measured subject/source. M = fields/proposals, capped at 512;
- * recordBytes <= 65536; reconciliation/keyset page B = 8. Fixed operations allow
- * 24 statements per item and 64 * (items + M) rows per engine, independent of
- * N/history (SQLite returned rows; PostgreSQL examined plus appended rows).
+ * history on the measured subject/source. N/history scales are 32/128/512;
+ * independent M (supported source collection entries) scales are 1/8/64.
+ * The lowest collection cap is 64: bangumi normalize tags, vndbLimits.maxTitles,
+ * wikidataLimits.terms, open-library array fieldCap. M is NOT command count.
+ * Source projection caps differ from the platform reader's 65536-byte record cap.
+ * Reconciliation/keyset page B = 8; rows <=64 * (items + M) per engine.
+ *
+ * The former 24 statements/item cannot cover the released two-phase path:
+ * record-bindings.ts prepare(create) = BEGIN + binding + entry + record insert
+ * + journal insert + COMMIT = 6; acknowledge(create) = BEGIN + binding + entry
+ * + record update + journal update + COMMIT = 6. First prepare(propose) = BEGIN
+ * + binding + entry + group read + group insert + two capacity updates + journal
+ * insert + COMMIT = 9; acknowledge(propose) = BEGIN + binding + entry + candidate
+ * read + candidate insert + journal update + COMMIT = 7. Thus one bootstrap plus
+ * one candidate already costs 28 SQLite statements BEFORE RunStore or Auth/Access.
+ * Later proposals omit the first group insert (8 prepare + 7 acknowledge).
+ * Exact combined budgets await real binding: declare additive per-method ceilings
+ * before seed/measure, derived from production branches, never from observations.
+ * Include retries, controls, nested security/receipt/fence paths and RunStore
+ * prepare/acknowledge. Each term has fixed + per-item + per-field coefficients;
+ * no dependence on N/history. Ratio checks remain mandatory for the full capture.
+ * Setup excludes database/schema/credential creation, deterministic bulk seeding,
+ * ANALYZE and staging the run only; measured phase includes bootstrap, binding,
+ * reconciliation, plan persistence, dispatch and acknowledgements. Acquisition is
+ * separately O(supplied input), never charged as hidden nested database setup.
  * Three equal-ratio scales use shared assertGrowth: constant statements and
  * returned/examined rows for fixed operations, linear in bounded changed payload;
  * PostgreSQL blocks are logarithmic in catalogue/history. SQLite indexed-key
@@ -38,10 +59,13 @@
  * seed() is the ONLY setup method. Use the same deterministic algorithm at all
  * scales; bulk-load unrelated state outside measurement. It returns valid raw
  * fixtures, never derived product outcomes. All four converter export paths must
- * identify real independent production functions. Their fixtures have exactly M
- * fields, deterministic bytes independent of N/history, an oversized valid
- * record, and a valid 513-field record below the byte cap. seed replaces the
- * previous fixture outside measurement. dumpRecord is one framed record, <= 1024
+ * identify real independent production functions in bangumi/vndb/wikidata/open-library
+ * order. Fixtures encode JSON ConversionInput with native IDs/revisions, not
+ * invented source mappings. Count M entries in tags/vn_titles/labels/publishers.
+ * Boundary fixtures use normalized supported fields only: exact source projection
+ * byte/collection caps and cap+1; all other constraints remain valid. No ignored
+ * filler. Input bytes and boundary fixtures are independent of N/history.
+ * seed replaces the previous fixture outside measurement. dumpRecord is one framed record, <=1024
  * bytes. stream() invokes the real dump reader directly on the supplied iterable
  * (no adapter buffering, rereading, pre-parsing or alternate acquisition).
  *
@@ -59,8 +83,10 @@
  * with reference rechecks at command preparation and current-fence reads at final
  * disclosure. Tuple-home authority is independent of subject mapping; a later
  * cross-partition fence hides a write, without promising physical write exclusion.
- * Public writes occur only for D changed records. Bulk requests contain M bounded
- * commands. Seed/setup may NOT fake Auth or Access; real API paths use both.
+ * Public writes occur only for D changed records. A private bulk plan may contain
+ * 300 commands, dispatched through production splitting into <=100 commands AND
+ * <=65536 UTF-8 bytes per public envelope. M replacements require 2*M commands.
+ * Seed/setup may NOT fake Auth or Access; real API paths use both.
  */
 export type Scenario = 'new' | 'unchanged' | 'changed' | 'revision' | 'mass-disappearance' | 'vanished-page' | 'bulk';
 export interface Seed {
@@ -74,15 +100,23 @@ export interface Seed {
 export interface Fixture {
   converters: readonly [ConverterFixture, ConverterFixture, ConverterFixture, ConverterFixture];
   dumpRecord: Uint8Array;
+  /** Framed valid records: 65536 and 65537 content bytes, excluding delimiter. */
+  dumpAtCap: Uint8Array;
+  dumpOverCap: Uint8Array;
   /** Real subject/source-record and bounded Access/receipt anchors only. */
   partitions: readonly string[];
   /** Seeded vanished keys in index order, excluding source/generation decoys. */
   vanishedKeys: readonly string[];
 }
 export interface ConverterFixture {
+  /** Export/code-derived collection and normalized projection limits, exposed by seed. */
+  limits: { bytes: number; fields: number };
   exportPath: string;
   input: Uint8Array;
+  /** Exact normalized projection cap and cap+1; otherwise valid supported data. */
+  atByteCap: Uint8Array;
   oversized: Uint8Array;
+  atFieldCap: Uint8Array;
   tooManyFields: Uint8Array;
 }
 export type SqliteValue = null | string | number | bigint | Uint8Array;
@@ -132,6 +166,9 @@ export interface Counters {
   peakRetainedRecords: number;
 }
 export type Operation =
+  /** Submit one actual invalid public envelope, bypassing private-plan splitting. */
+  | { kind: 'public-bulk'; commands: 101 }
+  | { kind: 'private-plan'; commands: 300; byteHeavy: true }
   | { kind: 'convert'; exportPath: string; input: Uint8Array }
   | { kind: Scenario; source: 'growth-source'; key: 'fixed-record'; fields: number; pageCap: 8; cursor?: string };
 export interface Outcome {
@@ -141,8 +178,21 @@ export interface Outcome {
   serverFenceChecks: number;
   visitedKeys: readonly string[];
   nextCursor?: string;
+  /** Actual serialized public requests, in dispatch order, including all commands. */
+  envelopes?: readonly string[];
+}
+export interface StatementBudgetTerm {
+  engine: 'sqlite' | 'postgres';
+  method: string;
+  /** Production path, branch/loop counts and nested callees; reviewable derivation. */
+  derivation: string;
+  fixed: number;
+  perItem: number;
+  perField: number;
 }
 export interface ImportGrowthDriver {
+  /** Static binding declarations, identical across instances/scales; never measured maxima. */
+  statementBudgets: Readonly<Record<Scenario, readonly StatementBudgetTerm[]>>;
   seed(options: Readonly<Seed>): Promise<Fixture>;
   /** Flush setup; capture all real counters until callback settles, also on rejection. */
   measure<T>(operation: () => Promise<T>): Promise<{ value: T; counters: Counters }>;
