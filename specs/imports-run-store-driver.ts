@@ -24,7 +24,8 @@
  * staged/current metadata and atomically persists typed command bytes and keys
  * before returning. Identical metadata/projection must not fabricate a revision.
  * Fence decisions are supplied by orchestration: only explicit fenced omissions
- * with a security revision discharge a group, never an unfenced rejection.
+ * with a non-null opaque string security revision discharge a group, never an
+ * unfenced rejection. Preserve the supplied revision exactly, without coercion.
  *
  * pagePending returns immutable per-record request envelopes (at most 100
  * commands/65536 UTF-8 bytes), including all original keys; partially resolved
@@ -67,7 +68,7 @@ export interface Staged {
 export interface Omission {
   field_group: FieldGroup;
   disposition: 'fenced';
-  securityRevision: number;
+  securityRevision: string;
 }
 export type Seal = {
   status: 'ready' | 'invalid-input' | 'mass-disappearance';

@@ -394,21 +394,49 @@ test('explicit persisted fenced omission resolves only its group and never ackno
     await expect(
       h.d.classify(run, 'Q1', {
         commands: [],
-        omissions: [{ field_group: 'facts', disposition: 'unfenced', securityRevision: 2 } as never],
+        omissions: [{ field_group: 'facts', disposition: 'unfenced', securityRevision: '2' } as never],
       }),
     ).rejects.toThrow();
+    for (const unproved of [
+      { field_group: 'facts', disposition: 'fenced', securityRevision: null },
+      { field_group: 'facts', disposition: 'fenced' },
+    ]) {
+      await expect(h.d.classify(run, 'Q1', { commands: [], omissions: [unproved as never] })).rejects.toThrow();
+    }
     expect(await h.d.finalize(run, 8)).toBe('incomplete');
     expect((await h.d.key(SOURCE, 'Q1')).acknowledged).toBeNull();
     await h.d.classify(run, 'Q1', {
       commands: [],
-      omissions: [{ field_group: 'summary', disposition: 'fenced', securityRevision: 2 }],
+      omissions: [{ field_group: 'summary', disposition: 'fenced', securityRevision: '2' }],
     });
     expect(await h.d.finalize(run, 8)).toBe('incomplete');
     expect((await h.drain(run)).flatMap((p) => p.keys)).toEqual(command.map((c) => c.key));
-    const omission = { field_group: 'facts' as const, disposition: 'fenced' as const, securityRevision: 3 };
+    const omission = { field_group: 'facts' as const, disposition: 'fenced' as const, securityRevision: '3' };
     await h.d.classify(run, 'Q1', { commands: [], omissions: [omission] });
     run = await h.reopen(run);
     expect((await h.d.key(SOURCE, 'Q1', run)).omissions).toContainEqual(omission);
+    expect(await h.drain(run)).toEqual([]);
+    await h.finish(run);
+    expect((await h.d.key(SOURCE, 'Q1')).baseline).toEqual(record.row);
+  }));
+
+test('fenced omission retains the actual opaque content security revision', async () =>
+  withStore(async (h) => {
+    const record = input();
+    let run = await h.ready([record]);
+    // Orchestration supplies the actual non-null readFences proof; storage keeps its exact bytes.
+    const omission = {
+      field_group: 'facts' as const,
+      disposition: 'fenced' as const,
+      securityRevision: '9007199254740993',
+    };
+    await h.d.classify(run, 'Q1', { commands: [], omissions: [omission] });
+    expect((await h.d.key(SOURCE, 'Q1', run)).omissions).toEqual([omission]);
+    run = await h.reopen(run);
+    const stored = (await h.d.key(SOURCE, 'Q1', run)).omissions;
+    expect(stored).toEqual([omission]);
+    expect(stored[0]!.securityRevision).toBe('9007199254740993');
+    expect(typeof stored[0]!.securityRevision).toBe('string');
     expect(await h.drain(run)).toEqual([]);
     await h.finish(run);
     expect((await h.d.key(SOURCE, 'Q1')).baseline).toEqual(record.row);
@@ -593,7 +621,7 @@ test(
         for (const record of vanished)
           await h.d.classify(run, record.row.recordKey, {
             commands: [],
-            omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: 1 }],
+            omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '1' }],
           });
         let status = 'more';
         const total = { rows: 0, blocks: 0 as const, statements: 0 };
