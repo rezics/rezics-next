@@ -1,4 +1,5 @@
 import { mock } from 'bun:test';
+import { Pool } from 'pg';
 import sharp, { type SharpInput, type SharpOptions } from 'sharp';
 import type {
   ContentMediaDriver,
@@ -56,11 +57,17 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
   const system = await createContentSystem({ databaseUrl });
   const pool = system.database.pool;
   const observer = observeSql(pool);
+  // The API and trusted worker run in separate hosts. Separate real pools also
+  // keep their process-local command gates independent during PostgreSQL races.
+  const jobPool = new Pool({ ...pool.options, max: 4 });
+  const jobObserver = observeSql(jobPool);
   const bytes = createMediaStorage();
   let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
       observeSharp = undefined;
+      await jobObserver.close();
+      await jobPool.end();
       await observer.close();
       bytes.close();
       await system.close();
@@ -90,9 +97,9 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
     const references = new Map<string, { body: Record<string, unknown>; path: string; match?: string }>();
     const processing = new Map<string, SharpOptions[]>();
     let now: string | undefined;
-    const collection = createCollectionJob(pool, bytes.storage, { clock: () => new Date(now ?? Date.now()) });
-    const image = createImageJob(pool, bytes.storage);
-    const erasure = createErasureJob(pool, bytes.storage);
+    const collection = createCollectionJob(jobPool, bytes.storage, { clock: () => new Date(now ?? Date.now()) });
+    const image = createImageJob(jobPool, bytes.storage);
+    const erasure = createErasureJob(jobPool, bytes.storage);
     // Service capabilities are closed over here. HTTP personas have credentials,
     // never an image/collection capability; their denial does not inspect account names.
     const jobCapabilities = new Map<Persona, { image: typeof image; collection: typeof collection }>([
@@ -201,7 +208,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
     async function collect(as: Persona, partition: number): Promise<CollectionRun> {
       const capability = jobCapabilities.get(as);
       if (!capability) return { outcome: 'denied', selections: [] };
-      const start = observer.records.length;
+      const start = jobObserver.records.length;
       let result: Outcome = 'permitted';
       try {
         await capability.collection.collectPartition(partition, 100);
@@ -209,7 +216,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         if (!(error instanceof StorageDeleteFailure)) throw error;
         result = 'denied';
       }
-      const selections = observer.records
+      const selections = jobObserver.records
         .slice(start)
         .filter((record) => record.statement === selectCandidates.sql)
         .map((record) => {
@@ -508,7 +515,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           const claimLocked = observer.hold({ statement: claimMedia.sql }, 'after');
           const claim = reference('author', input);
           await claimLocked.entered;
-          const collectionFence = observer.hold({ statement: fenceCollection.sql }, 'before');
+          const collectionFence = jobObserver.hold({ statement: fenceCollection.sql }, 'before');
           const collecting = collect('job', partition);
           await collectionFence.entered;
           collectionFence.release();
@@ -516,7 +523,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           const [claimResult, collectionResult] = await Promise.all([claim, collecting]);
           return { claim: claimResult, collection: collectionResult };
         }
-        const collectionLocked = observer.hold({ statement: fenceCollection.sql }, 'after');
+        const collectionLocked = jobObserver.hold({ statement: fenceCollection.sql }, 'after');
         const collecting = collect('job', partition);
         await collectionLocked.entered;
         const claimStarted = observer.hold({ statement: claimMedia.sql }, 'before');
