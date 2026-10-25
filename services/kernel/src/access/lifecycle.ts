@@ -1,14 +1,8 @@
+import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
-import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import {
-  runCommand,
-  authoritativeTimeValue,
-  currentCommand,
-  type CommandAuthorization,
-  type CommandTransaction,
-  type CommandOutcome,
-} from '../command/command.ts';
+import { authoritativeTimeValue, currentCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAuthorization,
@@ -17,7 +11,7 @@ import {
   type AccessClient,
   type ActionCatalogue,
 } from '../request/access.ts';
-import { anchorRoute, derivedId, routeOf, partitionOf } from '../route/route.ts';
+import { anchorRoute, derivedId, routeOf } from '../route/route.ts';
 import type { PermissionContext } from './permission.ts';
 import accountRead from './lifecycle-account.sql';
 import handleRead from './lifecycle-handle-read.sql';
@@ -30,8 +24,9 @@ import activateStatement from './lifecycle-activate.sql';
 import updateStatement from './lifecycle-update.sql';
 import coordinationInsert from './lifecycle-coordination.sql';
 import coordinationRead from './lifecycle-coordination-read.sql';
-import membershipSlotRead from './lifecycle-membership-slot-read.sql';
-import membershipRelease from './lifecycle-membership-release.sql';
+import membershipEvidence from './membership-inverse-20261025093747-evidence.sql';
+import terminalizeMembership from './lifecycle-20261025093747-terminalize.sql';
+import { createMembershipInverseCommands } from './membership-inverse.ts';
 import holdsRead from './lifecycle-holds.sql';
 import membershipChange from './lifecycle-membership.sql';
 import memberInsert from './lifecycle-member-insert.sql';
@@ -66,15 +61,8 @@ export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
 ]);
 const ACTOR_ACTIONS = ['account:update', 'account:delete'];
 const ORGANIZATION_ACTIONS = [...ACTOR_ACTIONS, 'organization:membership'];
-const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
 const ID_NAMESPACE = '9e068400-e1f4-8ba0-925e-098dec304890';
 
-export class LifecycleDeniedError extends Error {
-  constructor() {
-    super('Account lifecycle command denied');
-    this.name = 'LifecycleDeniedError';
-  }
-}
 function requireAllowed(value: unknown): asserts value {
   if (!value) throw new LifecycleDeniedError();
 }
@@ -204,84 +192,22 @@ export type LifecycleFenceReceipt = {
   priorOperatorAccountId: string | null;
 };
 type TransactionAccount = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
-type Mutation = {
-  route: number;
-  id: string;
-  kind: string;
-  key: string;
-  input: unknown;
-  actor?: AccountActor;
-  deadline?: number;
-  authorization?: CommandAuthorization;
-};
-
-/** All idempotency digests include the anchor, actual kernel actor/client and
- * requested_by. Core's partition receipt key is explicitly prefixed by route.
- * Responses/events contain identity and coordination facts, never patch bodies.
- */
-function executor(pool: Pool, clock?: () => Date) {
-  return async function execute<T>(
-    options: Mutation,
-    body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
-  ): Promise<CommandOutcome<T>> {
-    requireAllowed(typeof options.key === 'string' && options.key.length > 0 && options.key.length <= 256);
-    const actor = options.actor;
-    requireAllowed(!actor || options.authorization);
-    const basis = {
-      actorAccountId: actor?.accountId ?? SERVICE_ID,
-      clientId: actor?.clientId ?? 'internal-access',
-      requestedBy: actor?.requestedBy ?? null,
-    };
-    const digest = createHash('sha256')
-      .update(canonicalize([options.route, options.id, options.kind, basis, options.input])!)
-      .digest();
-    const outcome = await runCommand(
-      pool,
-      {
-        partition: partitionOf(options.route),
-        ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
-        basis,
-        clock,
-        authorization: options.authorization,
-        receipt: {
-          actorAccountId: basis.actorAccountId,
-          kind: `access.${options.kind}`,
-          key: `${options.route}:${options.key}`,
-          digest,
-        },
-      },
-      async (tx, { transactionId }) => {
-        const value = await body(tx, transactionId);
-        return { value, events: [{ type: `com.rezics.access.${options.kind}.v1`, subject: options.id, data: value }] };
-      },
-    );
-    // Expose snapshots: callers cannot accidentally mutate the response retained
-    // by a workflow while passing receipt objects to another service boundary.
-    return {
-      ...outcome,
-      get value() {
-        return structuredClone(outcome.value);
-      },
-    };
-  };
-}
 async function locked(tx: AccessClient, accountId: string): Promise<TransactionAccount> {
   const account = await accountRead.run(tx, { route: accountRoute(accountId), account_id: accountId });
   requireAllowed(account);
   return account;
 }
 async function memberReservation(pool: Pool, accountId: string, organizationId: string, reservationId: string) {
+  requireAllowed(accountRoute(reservationId) === accountRoute(accountId));
   return withConnection(pool, async (client) => {
     // This is an independent actor-anchor read before organization checkout.
     // Holds never expire and prevent subsequent deletion/automation on that actor.
-    const reservation = await coordinationRead.run(client, {
+    return membershipEvidence.run(client, {
       route: accountRoute(accountId),
       account_id: accountId,
+      group_id: organizationId,
       reservation_id: reservationId,
     });
-    return reservation?.purpose === 'membership' && reservation.relatedAccountId === organizationId
-      ? reservation
-      : null;
   });
 }
 async function grants(
@@ -410,8 +336,9 @@ export function createLifecycleInternals(
 ) {
   const { pool } = config;
   const clock = config.clock ?? (() => new Date());
-  const execute = executor(pool, config.clock);
+  const execute = lifecycleExecutor(pool, config.clock);
   const routeKey = new Uint8Array(config.routeKey);
+  const inverse = createMembershipInverseCommands(config);
   return {
     /** Stable route AND identity: the coordinator's durable registration key is
      * namespaced independently from handle spelling. Keep routeKey stable. */
@@ -895,9 +822,8 @@ export function createLifecycleInternals(
         return null;
       return { accountId: claim.accountId, redirect: claim.state === 'reserved' };
     },
-    /** Permanent organization-local terminal evidence is read and released
-     * before the member anchor command. Only this exact membership hold can be
-     * removed; a delayed activation cannot reopen its terminal slot. */
+    /** Release the exact member hold and inverse together, after independently
+     * reading immutable organization-local terminal evidence. */
     async releaseMembershipCoordination(input: {
       organizationId: string;
       memberAccountId: string;
@@ -905,40 +831,24 @@ export function createLifecycleInternals(
       key: string;
     }) {
       input = { ...input };
-      const slot = await withConnection(pool, (client) =>
-        membershipSlotRead.run(client, {
-          route: accountRoute(input.organizationId),
-          organization_id: input.organizationId,
-          member_id: input.memberAccountId,
-          reservation_id: input.reservationId,
-        }),
-      );
-      const route = accountRoute(input.memberAccountId);
-      return execute(
-        { route, id: input.memberAccountId, kind: 'membership-coordination-released', key: input.key, input },
-        async (tx) => {
-          await locked(tx, input.memberAccountId);
-          requireAllowed(slot?.terminal);
-          requireAllowed(
-            affected(
-              await membershipRelease.run(tx, {
-                route,
-                account_id: input.memberAccountId,
-                organization_id: input.organizationId,
-                reservation_id: input.reservationId,
-              }),
-            ),
-          );
-          return {
-            organizationId: input.organizationId,
-            memberAccountId: input.memberAccountId,
-            reservationId: input.reservationId,
-          };
+      const outcome = await inverse.release({
+        accountId: input.memberAccountId,
+        principal: { kind: 'organization', id: input.organizationId },
+        reservationId: input.reservationId,
+        key: input.key,
+      });
+      return {
+        ...outcome,
+        value: {
+          organizationId: input.organizationId,
+          memberAccountId: input.memberAccountId,
+          reservationId: input.reservationId,
         },
-      );
+      };
     },
-    /** Account-anchor hold acquired before a separately anchored relation.
-     * Holds never expire; release requires exact permanent terminal evidence. */
+    /** Actor/operator-anchor hold, separate from organization mutation. Holds
+     * remain until the durable workflow releases them using terminal proof.
+     */
     async reserveCoordination(
       input: LifecycleCommand & { relatedAccountId: string; purpose: 'membership' | 'operator' },
     ) {
@@ -947,6 +857,22 @@ export function createLifecycleInternals(
       accountRoute(input.relatedAccountId);
       requireAllowed(input.purpose === 'membership' || input.purpose === 'operator');
       requireAllowed(input.accountId !== input.relatedAccountId);
+      if (input.purpose === 'membership') {
+        const outcome = await inverse.reserve({
+          accountId: input.accountId,
+          principal: { kind: 'organization', id: input.relatedAccountId },
+          key: input.key,
+        });
+        return {
+          ...outcome,
+          value: {
+            accountId: input.accountId,
+            relatedAccountId: input.relatedAccountId,
+            purpose: input.purpose,
+            reservationId: outcome.value.reservationId,
+          },
+        };
+      }
       return execute(
         {
           route,
@@ -961,7 +887,7 @@ export function createLifecycleInternals(
             account.state === 'active' &&
               !account.fenced &&
               account.operatorAccountId === null &&
-              (input.purpose === 'operator' || account.kind === 'actor'),
+              input.purpose === 'operator',
           );
           const reservationId = derivedId(ID_NAMESPACE, `${transactionId}:coordination`, route);
           await coordinationInsert.run(tx, {
@@ -978,6 +904,41 @@ export function createLifecycleInternals(
             purpose: input.purpose,
             reservationId,
           };
+        },
+      );
+    },
+    /** Abort an unpublished organization reservation on its authoritative anchor.
+     * A committed terminal slot permanently prevents delayed publication. Active
+     * memberships must first use public setMembership(role: null). No actor
+     * connection is held here; the later inverse release reads this proof anew.
+     */
+    async terminalizeMembership(input: {
+      organizationId: string;
+      memberAccountId: string;
+      reservationId: string;
+      key: string;
+    }) {
+      input = { ...input };
+      const route = accountRoute(input.organizationId);
+      requireAllowed(accountRoute(input.reservationId) === accountRoute(input.memberAccountId));
+      return execute(
+        { route, id: input.organizationId, kind: 'membership-terminalized', key: input.key, input },
+        async (tx, transactionId) => {
+          // An existing organization serializes with its own membership commands.
+          // A failed organization creation may have no account row yet.
+          await accountRead.run(tx, { route, account_id: input.organizationId });
+          requireAllowed(
+            affected(
+              await terminalizeMembership.run(tx, {
+                route,
+                organization_id: input.organizationId,
+                member_id: input.memberAccountId,
+                reservation_id: input.reservationId,
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return { ...input, transactionId };
         },
       );
     },
@@ -1086,7 +1047,7 @@ export function createLifecycleInternals(
  */
 export function createLifecycleCommands(config: Boundary & { access: Access }) {
   const { pool, access } = config;
-  const execute = executor(pool, config.clock);
+  const execute = lifecycleExecutor(pool, config.clock);
   async function authorize(context: LifecycleRequest, action: string, accountId: string) {
     return accessCommandAuthorization(
       access,

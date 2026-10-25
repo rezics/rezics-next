@@ -156,6 +156,56 @@ END;
 $$;
 
 
+--
+-- Name: guard_membership_inverse(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_membership_inverse() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' AND EXISTS (
+    SELECT 1 FROM access.membership_inverse_terminal t
+    WHERE t.route = OLD.route AND t.account_id = OLD.account_id
+      AND t.kind = OLD.kind AND t.group_id = OLD.group_id
+      AND t.reservation_id = OLD.reservation_id
+      AND t.reservation_transaction_id = OLD.transaction_id
+  ) THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'Membership inverse requires verified terminal compensation' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
+-- Name: guard_membership_terminal(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_membership_terminal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Membership terminal proof is immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
+-- Name: initialize_membership_inverse(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.initialize_membership_inverse() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Accounts born after the writer barrier have no historical memberships.
+  NEW.membership_inverse_complete := true;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -187,6 +237,7 @@ CREATE TABLE access.account (
     operator_relation_version bigint DEFAULT 0 NOT NULL,
     operator_reservation_id uuid,
     handle_operation_id text,
+    membership_inverse_complete boolean DEFAULT false NOT NULL,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
@@ -317,6 +368,42 @@ CREATE TABLE access.lifecycle_registration_expiry (
     handle text NOT NULL,
     transaction_id uuid NOT NULL,
     CONSTRAINT lifecycle_registration_expiry_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))))
+);
+
+
+--
+-- Name: membership_inverse; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.membership_inverse (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL,
+    group_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    source_transaction_id uuid,
+    CONSTRAINT membership_inverse_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT membership_inverse_kind_check CHECK ((kind = ANY (ARRAY['organization'::text, 'realm'::text]))),
+    CONSTRAINT membership_inverse_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: membership_inverse_terminal; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.membership_inverse_terminal (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL,
+    group_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    reservation_transaction_id uuid NOT NULL,
+    proof_transaction_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT membership_inverse_terminal_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT membership_inverse_terminal_kind_check CHECK ((kind = ANY (ARRAY['organization'::text, 'realm'::text])))
 );
 
 
@@ -588,6 +675,22 @@ ALTER TABLE ONLY access.lifecycle_registration_expiry
 
 
 --
+-- Name: membership_inverse membership_inverse_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.membership_inverse
+    ADD CONSTRAINT membership_inverse_pkey PRIMARY KEY (route, account_id, kind, group_id);
+
+
+--
+-- Name: membership_inverse_terminal membership_inverse_terminal_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.membership_inverse_terminal
+    ADD CONSTRAINT membership_inverse_terminal_pkey PRIMARY KEY (route, account_id, kind, group_id, reservation_id);
+
+
+--
 -- Name: operator_opening_receipt operator_opening_receipt_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -682,10 +785,31 @@ CREATE INDEX write_rate_counter_expiry ON access.write_rate_counter USING btree 
 
 
 --
+-- Name: lifecycle_membership_live; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX lifecycle_membership_live ON access.lifecycle_membership_slot USING btree (route, organization_id, member_account_id) WHERE (NOT terminal);
+
+
+--
+-- Name: organization_member_change; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX organization_member_change ON access.organization_member USING btree (route, organization_id, member_account_id, transaction_id);
+
+
+--
 -- Name: account account_identity; Type: TRIGGER; Schema: access; Owner: -
 --
 
 CREATE TRIGGER account_identity BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_account_identity();
+
+
+--
+-- Name: account account_membership_inverse; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_membership_inverse BEFORE INSERT ON access.account FOR EACH ROW EXECUTE FUNCTION access.initialize_membership_inverse();
 
 
 --
@@ -696,10 +820,31 @@ CREATE TRIGGER assignment_identity BEFORE INSERT OR UPDATE ON access.principal_a
 
 
 --
+-- Name: lifecycle_membership_slot lifecycle_membership_terminal_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER lifecycle_membership_terminal_guard BEFORE DELETE OR UPDATE ON access.lifecycle_membership_slot FOR EACH ROW WHEN (old.terminal) EXECUTE FUNCTION access.guard_membership_terminal();
+
+
+--
 -- Name: account lifecycle_responsibility; Type: TRIGGER; Schema: access; Owner: -
 --
 
 CREATE TRIGGER lifecycle_responsibility BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_lifecycle_responsibility();
+
+
+--
+-- Name: membership_inverse membership_inverse_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER membership_inverse_guard BEFORE DELETE OR UPDATE ON access.membership_inverse FOR EACH ROW EXECUTE FUNCTION access.guard_membership_inverse();
+
+
+--
+-- Name: membership_inverse_terminal membership_inverse_terminal_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER membership_inverse_terminal_guard BEFORE DELETE OR UPDATE ON access.membership_inverse_terminal FOR EACH ROW EXECUTE FUNCTION access.guard_membership_terminal();
 
 
 --
