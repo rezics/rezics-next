@@ -17,7 +17,7 @@ import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
   hostSweepIntervalMs?: number;
-  codeIsCurrent?(): boolean; recoverOrphans?(): Promise<void>;
+  codeIsCurrent?(): boolean; recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>;
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   supermanager?: string;
   fence: AttemptFence; sink: GateOutcomeSink;

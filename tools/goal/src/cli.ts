@@ -14,7 +14,8 @@ export async function run(argv: string[], factory: () => Runtime | IntegrationRu
   let runtime: Runtime | IntegrationRuntime | undefined;
   try {
     runtime = await factory();
-    if (runtime.recoverOrphans) await runtime.recoverOrphans();
+    // A command settles only orphans whose worker has exited; the host adopts the ones still running.
+    if (runtime.recoverOrphans) await runtime.recoverOrphans({ adoptRunning: false });
     if (workerCommands.includes(command)) {
       if (!('job' in runtime)) throw new Error('Worker commands require the shared runtime');
       await recordManagerCommand(runtime);

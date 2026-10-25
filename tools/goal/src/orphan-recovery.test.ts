@@ -123,3 +123,29 @@ test('an exception in the driver ends the attempt as an environment failure deli
     expect(inbox[0]?.summary).toContain('driver landing adapter failed');
   } finally { h.dispose(); }
 });
+
+test('a short command leaves an orphan whose worker runs to the host and skips a held lease without waiting', async () => {
+  const h = harness(waitingWorker);
+  let release = '';
+  let worker: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    worker = await h.tasks.retry(task.id);
+    release = join(task.worktree, '.worker-release');
+    await waitForFile(join(task.worktree, '.worker-started'));
+    h.store.updateAttempt(worker.attempt, attempt => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadIdentity();
+    });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const started = Date.now();
+    await job.recoverOrphans({ adoptRunning: false });
+    const held = acquireDirectoryLease(join(h.tasks.settings.stateDirectory, 'leases', task.id));
+    try { await job.recoverOrphans(); } finally { held.release(); }
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(h.store.task(task.id).state).toBe('running');
+  } finally {
+    if (release) writeFileSync(release, 'release');
+    if (worker) await worker.exited;
+    h.dispose();
+  }
+});

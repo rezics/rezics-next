@@ -1,9 +1,9 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
-import { sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
+import { groupMembers, sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
-import { acquireDirectoryLeaseWaiting } from './lease.ts';
+import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure } from './failures.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
@@ -154,8 +154,13 @@ export class WorkerJob implements GateOutcomeSink {
       });
     } finally { lease?.release(); }
   }
-  /** Settle attempts left behind by a dead driver while holding the same lease used for retries and stops. */
-  async recoverOrphans(): Promise<void> {
+  /**
+   * Settle attempts left behind by a dead driver while holding the same lease used for retries and stops. A lease
+   * held elsewhere is skipped, never waited for. Short-lived commands pass `adoptRunning: false`: an orphan whose
+   * worker still runs is left to the manager host, which can wait for it without blocking a command.
+   */
+  async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
+    const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
     const stateDirectory = resolve(this.tasks.settings.stateDirectory);
     const ownsRunLog = (logPath: string) => {
@@ -166,7 +171,10 @@ export class WorkerJob implements GateOutcomeSink {
       && (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath));
     for (const candidate of candidates) {
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
-      const lease = await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+      if (!adoptRunning && candidate.process && groupMembers(candidate.process.group).length) continue;
+      let lease: DirectoryLease;
+      try { lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId)); }
+      catch (error) { if (error instanceof LeaseHeldError) continue; throw error; }
       try {
         if (store.task(ref.taskId).currentAttempt !== ref.attempt) continue;
         const attempt = store.attempt(ref);

@@ -203,6 +203,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   };
   return { db, ...settings, settings, store, tasks, job, queue, inbox, train, fence: store, sink: job,
     managerSocket: settings.integration.managerSocket, supermanager: settings.integration.supermanager, managerServices, landing, manager, pump,
-    hostCommand: command, codeIsCurrent, recoverOrphans: () => job.recoverOrphans(),
+    hostCommand: command, codeIsCurrent, recoverOrphans: (options?: { adoptRunning?: boolean }) => job.recoverOrphans(options),
     async drain() { await pump(); await job.drain(); }, close() { db.close(); } };
 }
