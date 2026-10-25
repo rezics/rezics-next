@@ -42,14 +42,14 @@ test('manager startup follows installed protocol and two managers share one app-
     const first = await s.managers.start(s.spec); await s.managers.flush();
     const requests = s.requests().filter(r => r.id && r.method !== 'initialize');
     expect(requests.slice(0, 3).map(r => r.method)).toEqual(['thread/start', 'thread/goal/set', 'turn/start']);
-    expect(requests[0].params).toEqual({ cwd: s.path, model: 'gpt-6.1-sol',
+    expect(requests[0].params).toEqual({ approvalPolicy: 'never', sandbox: 'danger-full-access', cwd: s.path, model: 'gpt-6.1-sol',
       config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 } });
     expect(requests[1].params.tokenBudget).toBe(40000); expect(requests[1].params.status).toBe('active');
     expect(first.threadId).toBe('thread-1'); expect(first.activeTurnId).toBe('turn-1');
     expect(s.managers.get(s.spec.id).turns).toBe(1);
     await s.managers.start({ ...s.spec, id: 'second' });
     expect(s.connections).toBe(1);
-    expect(s.windows[0]?.argv).toContain('resume'); expect(s.windows[0]?.argv).toContain('thread-1');
+    expect(s.windows[0]?.argv).toContain('resume'); expect(s.windows[0]?.argv).toContain('--dangerously-bypass-approvals-and-sandbox'); expect(s.windows[0]?.argv).toContain('thread-1');
   } finally { await s.close(); }
 });
 
@@ -154,7 +154,7 @@ test('Claude manager opens the requested CLI and counts turns through hooks', as
     const argv = s.windows[0]!.argv;
     expect(argv).toContain('claude-opus-5-5'); expect(argv).toContain('--autocompact'); expect(argv).toContain('300000');
     expect(argv.at(-1)).toContain('inbox wait manager'); expect(argv).toContain('--settings');
-    expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 2)).toEqual(['--permission-mode', 'auto']);
+    expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 2)).toEqual(['--permission-mode', 'bypassPermissions']);
     expect(argv.some(arg => arg.startsWith('CLAUDE_CONFIG_DIR='))).toBe(true);
     const defaults = await setup();
     try {
@@ -192,7 +192,7 @@ test('host recovery rejoins an existing thread and dispatches committed events w
     expect(recovered.get(state.id).threadId).toBe(state.threadId);
     expect(recovered.get(state.id).activeTurnId).toBe(state.activeTurnId);
     expect(s.requests().filter(r => r.method === 'thread/start')).toHaveLength(1);
-    expect(s.requests().some(r => r.method === 'thread/resume')).toBe(true);
+    expect(s.requests().find(r => r.method === 'thread/resume')?.params).toMatchObject({ approvalPolicy: 'never', sandbox: 'danger-full-access' });
     expect(s.requests().some(r => r.method === 'thread/goal/get')).toBe(true);
     expect(s.inbox.notifications(state.id)).toHaveLength(0);
   } finally { await recovered?.close(); closeTransport(); await s.close(); }

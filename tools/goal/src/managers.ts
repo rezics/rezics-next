@@ -10,6 +10,9 @@ import { SqliteManagerInbox } from './inbox.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
+// Managers run with full access, like workers; the maintainer is not there to answer approval requests.
+const FULL_ACCESS = { approvalPolicy: 'never', sandbox: 'danger-full-access' } as const;
+
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
 export type ManagerSpec = {
   id: string; goal: string; objective: string; brief: string; cwd: string;
@@ -137,7 +140,7 @@ export class ManagerSessions {
       'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.';
   }
   private registerCodexViewer(state: ManagerState, client: AppServer): void {
-    const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
+    const viewer = [state.pool.executable ?? 'codex', 'resume', '--dangerously-bypass-approvals-and-sandbox', state.threadId!];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     this.services.windows.register(state.id, ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`,
       ...viewer], state.cwd);
@@ -155,7 +158,7 @@ export class ManagerSessions {
       try {
         if (spec.engine === 'codex') {
           const client = await this.client(spec.pool);
-          const started = await client.request('thread/start', { cwd: spec.cwd, model: 'gpt-6.1-sol',
+          const started = await client.request('thread/start', { ...FULL_ACCESS, cwd: spec.cwd, model: 'gpt-6.1-sol',
             config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 } });
           state.threadId = started.thread.id;
           this.save(state);
@@ -168,7 +171,7 @@ export class ManagerSessions {
         } else {
           const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
           const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
-          const settings = { hooks: {
+          const settings = { skipDangerousModePermissionPrompt: true, hooks: {
             UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
             Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
           } };
@@ -176,7 +179,7 @@ export class ManagerSessions {
           // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
           const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
           this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
-            '--permission-mode', 'auto', '--name', `${spec.goal} manager`,
+            '--permission-mode', 'bypassPermissions', '--name', `${spec.goal} manager`,
             '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
           state.status = 'running';
         }
@@ -241,7 +244,7 @@ export class ManagerSessions {
       if (state.activeTurnId) {
         try { await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId }); }
         catch {
-          const resumed = await client.request('thread/resume', { threadId: state.threadId });
+          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           if (active) await client.request('turn/interrupt', { threadId: state.threadId, turnId: active.id });
         }
@@ -266,7 +269,7 @@ export class ManagerSessions {
           await client.request('turn/steer', { threadId: state.threadId, expectedTurnId: state.activeTurnId, input: textInput(event.event.summary) });
         } catch (error) {
           // A completion can race the steer precondition. Rejoin to learn the live turn, then start/steer.
-          const resumed = await client.request('thread/resume', { threadId: state.threadId });
+          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           state.activeTurnId = active?.id ?? null; this.save(state);
           if (active) await client.request('turn/steer', { threadId: state.threadId, expectedTurnId: active.id, input: textInput(event.event.summary) });
@@ -322,7 +325,7 @@ export class ManagerSessions {
       await this.serial(state.id, async () => {
         if (state.engine === 'codex' && state.threadId) {
           const client = await this.client(state.pool);
-          const resumed = await client.request('thread/resume', { threadId: state.threadId });
+          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
           state.activeTurnId = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
           const goal = await client.request('thread/goal/get', { threadId: state.threadId });
           state.goalState = goal.goal;
