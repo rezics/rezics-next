@@ -306,6 +306,9 @@ CREATE TABLE public.auth_consent (
     client_id text NOT NULL,
     scopes text[] NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
+    pending_scopes text[],
+    pending_reference text,
+    CONSTRAINT auth_consent_pending_pair CHECK (((pending_scopes IS NULL) = (pending_reference IS NULL))),
     CONSTRAINT auth_consent_revision_check CHECK ((revision > 0))
 );
 

@@ -75,9 +75,32 @@ export function clientAuthority(
     if (firstParty)
       await database.query(
         `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
-         ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes`,
+         ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes
+         WHERE auth_consent.pending_reference IS NULL`,
         [accountId, clientId, scopes],
       );
+  }
+  async function withConsent<T>(
+    accountId: string,
+    clientId: string,
+    action: (connection: PoolClient) => Promise<T>,
+  ): Promise<T> {
+    if (issuance.getStore()?.clientId !== clientId) deny();
+    const connection = await database.connect();
+    try {
+      await connection.query('BEGIN');
+      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `auth-consent:${accountId}:${clientId}`,
+      ]);
+      const value = await action(connection);
+      await connection.query('COMMIT');
+      return value;
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
   async function transaction<T>(clientId: string, action: (connection: PoolClient) => Promise<T>): Promise<T> {
     const connection = await pool.connect();
@@ -338,5 +361,5 @@ export function clientAuthority(
       );
     });
   }
-  return { database, withIssuance, materialize, internal, cleanupFencedSessions };
+  return { database, withIssuance, withConsent, materialize, internal, cleanupFencedSessions };
 }

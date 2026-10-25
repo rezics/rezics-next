@@ -84,7 +84,7 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
           return null;
         const target = (
           await database.query(
-            `SELECT c.revision::text,c.scopes,a.scopes AS client_scopes,a.first_party
+            `SELECT c.revision::text,c.scopes,c.pending_scopes,c.pending_reference,a.scopes AS client_scopes,a.first_party
           FROM auth_consent c JOIN auth_client a ON a.client_id=c.client_id
           WHERE c.account_id=$1 AND c.client_id=$2
             AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=a.client_id AND v.ready)
@@ -98,6 +98,8 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
           !same(target.client_scopes, e[9]) ||
           target.revision !== e[10] ||
           !same(target.scopes, e[11]) ||
+          target.pending_reference !== reference ||
+          !same(target.pending_scopes, e[12]) ||
           !Array.isArray(e[12]) ||
           !(e[11] as string[]).some((scope) => !(e[12] as string[]).includes(scope)) ||
           (e[12] as string[]).some((scope) => !target.client_scopes.includes(scope))

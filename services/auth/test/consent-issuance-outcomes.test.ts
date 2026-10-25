@@ -12,9 +12,7 @@ import {
 // establishment. The default driver is the native composition; only the spec
 // verifier selects a synthetic control, which proves assertion sensitivity only.
 const references = ['correct', 'stale', 'deny-all', 'bad-order'] as const;
-// Cases the product fails today run as test.failing so the workspace gate stays
-// green; SPEC_STRICT=1 runs them as plain test, as the spec verifier does.
-const failing = process.env.SPEC_STRICT === '1' ? test : test.failing;
+const failing = test;
 function driver(max = 4): Promise<ConsentIssuanceDriver> {
   const behavior = process.env.CONSENT_OUTCOME_REFERENCE;
   if (!behavior) return createNativeDriver(max);
@@ -76,7 +74,6 @@ function completedEvidence(gap: Evidence, end: Evidence, mode: 'resume' | 'resta
 }
 
 for (const mode of ['resume', 'restart'] as const) {
-  // Becomes test(...) once issuance honours the pending reduction recorded on the exact consent row.
   failing(
     `removed scope is never usable after reduction when establishment races (${mode})`,
     async () => {
@@ -162,7 +159,6 @@ test('HTTP and durable evidence order matches the exact native receipt', async (
   }
 }, 90_000);
 
-// Becomes test(...) once /consent holds no Auth pool connection across the Access floor call.
 failing(
   'native max=1 Auth pool progresses through held-connection proxy',
   async () => {
