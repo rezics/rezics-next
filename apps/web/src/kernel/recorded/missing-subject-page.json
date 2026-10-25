@@ -1,0 +1,9 @@
+{
+  "type": "https://rezics.com/problems/not_found",
+  "title": "Not Found",
+  "status": 404,
+  "code": "not_found",
+  "retryable": false,
+  "effect_status": "not_applicable",
+  "request_id": "01a174cf-28a3-73da-a22f-7df325db11e0"
+}

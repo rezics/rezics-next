@@ -1,0 +1,98 @@
+{
+  "subject": "01a174cf-27b2-7390-9534-1b214fadbec2",
+  "profile": "sha256:860534b8356dab814f365ef3284ab9f836f16c1576e42166720479be4ac4115f",
+  "template": { "scope": "base", "key": "schema:CreativeWork" },
+  "document": {
+    "root": { "props": {} },
+    "content": [
+      {
+        "type": "Slot",
+        "props": {
+          "id": "header",
+          "name": "header",
+          "children": [
+            { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+            { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+          ]
+        }
+      },
+      {
+        "type": "Statements",
+        "props": {
+          "id": "statements",
+          "properties": [
+            "schema:author",
+            "schema:illustrator",
+            "schema:translator",
+            "schema:publisher",
+            "schema:datePublished",
+            "schema:inLanguage",
+            "schema:genre",
+            "schema:isPartOf"
+          ]
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "editions",
+          "limit": 12,
+          "title": {
+            "de": "Ausgaben",
+            "en": "Editions",
+            "es": "Ediciones",
+            "fr": "Éditions",
+            "ja": "版",
+            "ko": "판",
+            "zh-Hans": "版本",
+            "zh-Hant": "版本"
+          },
+          "property": "schema:exampleOfWork"
+        }
+      },
+      { "type": "MoreStatements", "props": { "id": "more-statements" } }
+    ]
+  },
+  "reads": {
+    "r0": {
+      "status": 200,
+      "body": {
+        "subject": {
+          "id": "01a174cf-27b2-7390-9534-1b214fadbec2",
+          "type": "schema:Book",
+          "revision": 1,
+          "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
+          "context": "00000000-0000-8000-8000-000000000000",
+          "resolution": {},
+          "labels": {
+            "zh-Hant": "小王子",
+            "en": "The Little Prince",
+            "zh-Hans": "小王子",
+            "ja": "星の王子さま",
+            "es": "El Principito",
+            "ko": "어린 왕자",
+            "fr": "Le Petit Prince",
+            "de": "Der kleine Prinz"
+          },
+          "descriptions": {},
+          "aliases": {},
+          "statements": {}
+        },
+        "related": {}
+      }
+    },
+    "r1": {
+      "status": 503,
+      "body": {
+        "type": "https://rezics.com/problems/index_not_ready",
+        "title": "Search Index Not Ready",
+        "status": 503,
+        "code": "index_not_ready",
+        "retryable": true,
+        "effect_status": "not_applicable",
+        "request_id": "01a174cf-2899-7778-bdf8-92447b1adea2"
+      }
+    }
+  },
+  "status": 200
+}

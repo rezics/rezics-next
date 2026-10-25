@@ -351,6 +351,32 @@ async function main(): Promise<void> {
   };
   await expectStatus('subject', `/v1/subjects/${subjectId}`, 200);
   await expectStatus('missing-subject', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
+  const missingSubjectId = '00000000-0000-4000-8000-000000000000';
+  const savePost = async (name: string, payload: unknown) => {
+    const response = await fetch(new URL('/v1/pages:read', origin), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = objectBody(await response.json(), name);
+    recorded.set(name, { ...body, status: response.status });
+    return response.status;
+  };
+  if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
+    throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
+  const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
+  const template = objectBody(subjectPage.template, 'subject-page template');
+  if (
+    subjectPage.subject !== subjectId ||
+    typeof subjectPage.profile !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(subjectPage.profile) ||
+    typeof template.scope !== 'string'
+  )
+    throw new Error(`subject-page is not a page for the recorded subject: ${JSON.stringify(subjectPage)}`);
+  if ((await savePost('missing-subject-page', { target: { subject: missingSubjectId } })) !== 404)
+    throw new Error(`missing-subject-page returned ${JSON.stringify(recorded.get('missing-subject-page'))}`);
+  if (recorded.get('missing-subject-page')?.code !== 'not_found')
+    throw new Error(`missing-subject-page is not not_found: ${JSON.stringify(recorded.get('missing-subject-page'))}`);
   await expectStatus('board', `/v1/boards/${boardId}`, 200);
   await expectStatus('board-threads', `/v1/boards/${boardId}/threads`, 200);
   await expectStatus('thread', `/v1/threads/${threadId}`, 200);
