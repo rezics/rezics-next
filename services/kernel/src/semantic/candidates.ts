@@ -93,7 +93,7 @@ export async function proposeStatement(
         `SELECT s.type, latest.revision FROM semantic.subject s
        JOIN LATERAL (SELECT revision FROM semantic.revision WHERE route = s.route AND subject_id = s.subject_id
          ORDER BY revision DESC LIMIT 1) latest ON true
-       WHERE s.route = $1 AND s.subject_id = $2`,
+       WHERE s.route = $1 AND s.subject_id = $2 AND s.visibility = 'visible'`,
         [route, options.subject],
       );
       if (!subject.rows[0]) throw new SubjectNotFoundError();
@@ -248,14 +248,16 @@ export async function decideCandidate(
          ) latest ON true
          JOIN semantic.candidate c
            ON c.route = s.route AND c.subject_id = s.subject_id AND c.candidate_id = $3
-         WHERE s.route = $1 AND s.subject_id = $2`,
+         WHERE s.route = $1 AND s.subject_id = $2 AND s.visibility = 'visible'`,
         [route, options.subject, options.candidate],
       );
       let candidate = found.rows[0];
       if (!candidate) {
         const compact = await tx.query<CandidateRow>(
           `SELECT r.revision, r.release, f.statement_id::text AS candidate_id, f.property, f.slot_id::text AS slot_id
-           FROM semantic.fact f JOIN LATERAL (
+           FROM semantic.fact f
+           JOIN semantic.subject s ON s.route = f.route AND s.subject_id = f.subject_id AND s.visibility = 'visible'
+           JOIN LATERAL (
              SELECT revision, release FROM semantic.revision
              WHERE route = f.route AND subject_id = f.subject_id
                AND recorded_transaction_id = f.recorded_transaction_id
@@ -373,7 +375,7 @@ export async function adoptCandidates(
            SELECT revision FROM semantic.revision
            WHERE route = s.route AND subject_id = s.subject_id ORDER BY revision DESC LIMIT 1
          ) latest ON true
-         WHERE s.route = $1 AND s.subject_id = $2`,
+         WHERE s.route = $1 AND s.subject_id = $2 AND s.visibility = 'visible'`,
         [route, options.subject],
       );
       if (!subject.rows[0]) throw new SubjectNotFoundError();
@@ -505,11 +507,12 @@ async function page<T>(
     try {
       await client.query("SET LOCAL statement_timeout = '300ms'");
       const partition = await readPartition(client, partitionOf(route));
-      const subject = await client.query('SELECT 1 FROM semantic.subject WHERE route = $1 AND subject_id = $2', [
-        route,
-        options.subject,
-      ]);
-      if (!partition || !subject.rowCount || !(await options.authorize(client))) throw new SubjectNotFoundError();
+      const subject = await client.query<{ visibility: string }>(
+        'SELECT visibility FROM semantic.subject WHERE route = $1 AND subject_id = $2',
+        [route, options.subject],
+      );
+      if (!partition || subject.rows[0]?.visibility !== 'visible' || !(await options.authorize(client)))
+        throw new SubjectNotFoundError();
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const result = await read(client, cursor?.after ?? null);
       await client.query('COMMIT');

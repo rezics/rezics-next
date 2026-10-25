@@ -44,7 +44,7 @@ export declare function createApp({ pool, admission, access, tokens, writeRate, 
             record(component: SessionComponent): void;
         };
         readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -82,7 +82,7 @@ export declare function createApp({ pool, admission, access, tokens, writeRate, 
                 record(component: SessionComponent): void;
             };
             readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -106,7 +106,7 @@ export declare function createApp({ pool, admission, access, tokens, writeRate, 
         record(component: SessionComponent): void;
     };
     readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     status: 'ok';
 }>, import("elysia").InputSchema<never> & {

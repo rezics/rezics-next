@@ -27,6 +27,12 @@ import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { subjectReadEligibility } from '../eligibility.ts';
 import { customMethod } from '../../http/custom-method.ts';
+import {
+  moderateSubject,
+  ModerationConflictError,
+  ModerationSubjectNotFoundError,
+  readSubjectVisibility,
+} from '../moderation.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const ValueSchema = t.Union([
@@ -171,9 +177,45 @@ const adoptionResponse = t.Object(
   },
   { additionalProperties: false },
 );
+const ReasonModerationBody = t.Object(
+  { reason: t.String({ minLength: 1, maxLength: 500 }) },
+  { additionalProperties: false },
+);
+const Rfc3339 =
+  '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$';
+const TakedownModerationBody = t.Object(
+  {
+    notice: t.Object(
+      {
+        complaint: t.String({ minLength: 1, maxLength: 2000 }),
+        received_at: t.String({ pattern: Rfc3339 }),
+        scope: t.Optional(t.String({ maxLength: 500 })),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+const visibilityResponse = t.Object(
+  {
+    subject: t.String({ format: 'uuid' }),
+    visibility: t.Union([t.Literal('visible'), t.Literal('hidden'), t.Literal('taken_down')]),
+    security_revision: t.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
 type SubjectRouteDependencies = { pool: Pool; routeKey: Uint8Array; tokens: KeyRing };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
+}
+
+function moderationError(error: unknown): never {
+  if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
+  if (error instanceof ModerationSubjectNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof ModerationConflictError) throw new ProblemError('conflict');
+  if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
+    throw new ProblemError('forbidden');
+  throw error;
 }
 
 function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<string> } {
@@ -331,6 +373,179 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
         return { subject: result.subject, related };
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id', 'hide'),
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: ReasonModerationBody,
+        response: {
+          200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject.hide',
+          'x-action': 'moderation:hide',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const target = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
+        if (!target) throw new ProblemError('not_found');
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const result = await admission.run('normal', job, () =>
+            moderateSubject(pool, {
+              actor,
+              subject: params.id,
+              action: 'hide',
+              body,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.hide', actor, { subject: params.id, body }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(result.component);
+          return {
+            subject: result.subject,
+            visibility: result.visibility,
+            security_revision: result.security_revision,
+          };
+        } catch (error) {
+          return moderationError(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id', 'takedown'),
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: TakedownModerationBody,
+        response: {
+          200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject.take_down',
+          'x-action': 'moderation:takedown',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const target = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
+        if (!target) throw new ProblemError('not_found');
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const result = await admission.run('normal', job, () =>
+            moderateSubject(pool, {
+              actor,
+              subject: params.id,
+              action: 'take_down',
+              body,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.take_down', actor, { subject: params.id, body }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(result.component);
+          return {
+            subject: result.subject,
+            visibility: result.visibility,
+            security_revision: result.security_revision,
+          };
+        } catch (error) {
+          return moderationError(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id', 'restore'),
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: ReasonModerationBody,
+        response: {
+          200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject.restore',
+          'x-action': 'moderation:hide',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const expected = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
+        if (!expected) throw new ProblemError('not_found');
+        const action = expected.visibility === 'taken_down' ? 'moderation:takedown' : 'moderation:hide';
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+          action,
+        );
+        try {
+          const result = await admission.run('normal', job, () =>
+            moderateSubject(pool, {
+              actor,
+              subject: params.id,
+              action: 'restore',
+              body,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.restore', actor, { subject: params.id, body }),
+              authorization,
+              deadline: job.deadline,
+              expected,
+            }),
+          );
+          session.record(result.component);
+          return {
+            subject: result.subject,
+            visibility: result.visibility,
+            security_revision: result.security_revision,
+          };
+        } catch (error) {
+          return moderationError(error);
+        }
       },
     )
     .post(

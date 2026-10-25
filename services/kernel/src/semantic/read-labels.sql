@@ -4,7 +4,7 @@ FROM unnest(:subject_ids::uuid[]) AS input(id)
 JOIN LATERAL (
   SELECT route, subject_id FROM semantic.subject
   WHERE route = get_byte(uuid_send(input.id), 10) * 256 + get_byte(uuid_send(input.id), 11)
-    AND subject_id = input.id
+    AND subject_id = input.id AND visibility = 'visible'
   LIMIT 1
 ) AS s ON true
 LEFT JOIN LATERAL (

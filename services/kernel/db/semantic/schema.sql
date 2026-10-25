@@ -24,6 +24,32 @@ CREATE SCHEMA semantic;
 
 
 --
+-- Name: guard_subject_security(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_subject_security() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.security_revision < OLD.security_revision
+     OR (NEW.visibility IS DISTINCT FROM OLD.visibility AND NEW.security_revision <= OLD.security_revision) THEN
+    RAISE EXCEPTION 'Visibility changes require an increasing security revision' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: prevent_moderation_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.prevent_moderation_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'Semantic moderation records are immutable' USING ERRCODE = '23514'; END; $$;
+
+
+--
 -- Name: prevent_revision_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -204,6 +230,28 @@ CREATE TABLE semantic.fact (
 
 
 --
+-- Name: moderation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.moderation (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    security_revision bigint NOT NULL,
+    action text NOT NULL,
+    visibility text NOT NULL,
+    actor uuid NOT NULL,
+    body jsonb NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT moderation_action_check CHECK ((action = ANY (ARRAY['hide'::text, 'take_down'::text, 'restore'::text]))),
+    CONSTRAINT moderation_body_check CHECK ((jsonb_typeof(body) = 'object'::text)),
+    CONSTRAINT moderation_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT moderation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT moderation_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT moderation_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+);
+
+
+--
 -- Name: revision; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -231,9 +279,13 @@ CREATE TABLE semantic.subject (
     subject_id uuid NOT NULL,
     type text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    visibility text DEFAULT 'visible'::text NOT NULL,
+    security_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text))
+    CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
+    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text)),
+    CONSTRAINT subject_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
 );
 
 
@@ -299,6 +351,14 @@ ALTER TABLE ONLY semantic.definition_release
 
 ALTER TABLE ONLY semantic.fact
     ADD CONSTRAINT fact_pkey PRIMARY KEY (route, subject_id, slot_id, log_seq);
+
+
+--
+-- Name: moderation moderation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.moderation
+    ADD CONSTRAINT moderation_pkey PRIMARY KEY (route, subject_id, security_revision);
 
 
 --
@@ -409,6 +469,20 @@ CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH
 
 
 --
+-- Name: moderation moderation_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER moderation_immutable BEFORE DELETE OR UPDATE ON semantic.moderation FOR EACH ROW EXECUTE FUNCTION semantic.prevent_moderation_mutation();
+
+
+--
+-- Name: moderation moderation_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER moderation_immutable_truncate BEFORE TRUNCATE ON semantic.moderation FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_moderation_mutation();
+
+
+--
 -- Name: revision revision_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -420,6 +494,13 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON semantic.revision F
 --
 
 CREATE TRIGGER revision_immutable_truncate BEFORE TRUNCATE ON semantic.revision FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: subject subject_security_revision; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_security_revision BEFORE UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.guard_subject_security();
 
 
 --
@@ -516,6 +597,14 @@ ALTER TABLE ONLY semantic.definition_activation
 
 ALTER TABLE ONLY semantic.fact
     ADD CONSTRAINT fact_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: moderation moderation_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.moderation
+    ADD CONSTRAINT moderation_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --

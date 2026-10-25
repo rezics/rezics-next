@@ -14,5 +14,5 @@ LEFT JOIN LATERAL (
   WHERE route = s.route AND subject_id = s.subject_id AND recorded_transaction_id = f.recorded_transaction_id
   LIMIT 1
 ) AS r ON true
-WHERE s.route = :route::integer AND s.subject_id = :subject_id::uuid
+WHERE s.route = :route::integer AND s.subject_id = :subject_id::uuid AND s.visibility = 'visible'
 ORDER BY f.slot_id, f.log_seq;

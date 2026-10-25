@@ -3,7 +3,6 @@ import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import subjectPublicEvidence from './subject-public-evidence.sql';
-import subjectExists from './subject-exists.sql';
 
 export type GlobalReadAction = 'subject:read' | 'definitions:read' | 'presentation:read';
 
@@ -34,8 +33,10 @@ export function subjectReadEligibility(resource: { route: number; id: string }):
       const row = await subjectPublicEvidence.run(pool, { route: identity.route, subject_id: identity.id });
       return row ?? null;
     },
-    async verify({ client }) {
-      return (await subjectExists.run(client, { route: resource.route, subject_id: resource.id })) !== null;
+    async verify({ client, evidence }) {
+      if (evidence.visibility !== 'visible') return false;
+      const current = await subjectPublicEvidence.run(client, { route: resource.route, subject_id: resource.id });
+      return current?.visibility === 'visible' && current.security_revision === evidence.security_revision;
     },
   });
 }

@@ -152,9 +152,9 @@ export function createApp({
           const { checkedAccess, action, context } = permission();
           return accessCheck(checkedAccess, actor, action, resource, context);
         },
-        authorizeCommand: (resource: Resource, denied: () => Error) => {
+        authorizeCommand: (resource: Resource, denied: () => Error, actionOverride?: string) => {
           const { checkedAccess, action, context } = permission();
-          return accessCommandAuthorization(checkedAccess, actor, action, resource, context, denied);
+          return accessCommandAuthorization(checkedAccess, actor, actionOverride ?? action, resource, context, denied);
         },
       };
     })

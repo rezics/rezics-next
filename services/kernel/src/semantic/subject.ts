@@ -62,32 +62,6 @@ export async function createSubject(
   const dataTypes = Object.fromEntries(
     Object.entries(options.release.release.properties).map(([id, property]) => [id, property.datatype]),
   );
-  const grouped = new Map<number, Set<string>>();
-  for (const item of checked.targets) {
-    const itemRoute = routeOf(item.id);
-    if (itemRoute === null) continue;
-    const itemPartition = partitionOf(itemRoute);
-    const ids = grouped.get(itemPartition) ?? new Set<string>();
-    ids.add(item.id);
-    grouped.set(itemPartition, ids);
-  }
-  const itemTypes = new Map<string, string>();
-  await Promise.all(
-    [...grouped].map(async ([partition_no, ids]) => {
-      const rows = (await readTypesStatement.run(pool, { partition_no, subject_ids: [...ids] })) as {
-        id: string;
-        type: string;
-      }[];
-      for (const row of rows) itemTypes.set(row.id, row.type);
-    }),
-  );
-  const targetErrors = checked.targets.flatMap((item) => {
-    const targetType = itemTypes.get(item.id);
-    return targetType && item.targets.includes(targetType)
-      ? []
-      : [{ pointer: item.pointer, code: 'out_of_range' as const }];
-  });
-  if (targetErrors.length) throw new SubjectInputError(targetErrors);
   const partition = partitionOf(route);
   const command = await runCommand(
     pool,
@@ -116,6 +90,30 @@ export async function createSubject(
       },
     },
     async (tx, { transactionId }) => {
+      const grouped = new Map<number, Set<string>>();
+      for (const item of checked.targets) {
+        const itemRoute = routeOf(item.id);
+        if (itemRoute === null) continue;
+        const itemPartition = partitionOf(itemRoute);
+        const ids = grouped.get(itemPartition) ?? new Set<string>();
+        ids.add(item.id);
+        grouped.set(itemPartition, ids);
+      }
+      const itemTypes = new Map<string, string>();
+      for (const [partition_no, ids] of grouped) {
+        const rows = (await readTypesStatement.run(tx, { partition_no, subject_ids: [...ids] })) as {
+          id: string;
+          type: string;
+        }[];
+        for (const row of rows) itemTypes.set(row.id, row.type);
+      }
+      const targetErrors = checked.targets.flatMap((item) => {
+        const targetType = itemTypes.get(item.id);
+        return targetType && item.targets.includes(targetType)
+          ? []
+          : [{ pointer: item.pointer, code: 'out_of_range' as const }];
+      });
+      if (targetErrors.length) throw new SubjectInputError(targetErrors);
       await insertSubject.run(tx, {
         route,
         subject_id: subjectId,
