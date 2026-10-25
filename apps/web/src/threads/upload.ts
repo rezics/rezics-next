@@ -1,6 +1,7 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { UploadedImage } from '@rezics/ui';
 import type { ReservationInput } from '../media/kernel';
+import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 
 /** Kernel reservation accepts only these image types. */
 const postImageTypes = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
@@ -17,7 +18,7 @@ const maxDelay = 2_000;
 const maxWait = 60_000;
 const maxReads = 32;
 
-export type UploadRefusalReason = 'type' | 'too-large' | 'rejected' | 'rate-limited' | 'unavailable';
+export type UploadRefusalReason = 'closed' | 'type' | 'too-large' | 'rejected' | 'rate-limited' | 'unavailable';
 
 export class UploadRefusal extends Error {
   readonly reason: UploadRefusalReason;
@@ -64,6 +65,16 @@ function parseRetryAfter(value: string | null): number | undefined {
 }
 
 async function refusalFrom(response: Response): Promise<UploadRefusal> {
+  if (response.status === 403) {
+    const body = await response
+      .clone()
+      .json()
+      .catch(() => undefined);
+    if (isPlatformClosedProblem(response.status, body)) {
+      await response.body?.cancel().catch(() => {});
+      return new UploadRefusal('closed');
+    }
+  }
   await response.body?.cancel().catch(() => {});
   if (response.status === 415) return new UploadRefusal('type');
   if (response.status === 413) return new UploadRefusal('too-large');
