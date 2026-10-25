@@ -37,7 +37,7 @@ import {
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
-const ordinalsPerScale = 250;
+const ordinalsPerScale = 500;
 const baselineOrdinals = 2_000;
 const operationsPerCheck = 18;
 const resourceSchema = 'growth_access_commands';
@@ -166,7 +166,13 @@ async function organization(ownerId: string, partition: number) {
 
 async function check(population: Population, operation: GrowthCheck['operation'], name: string): Promise<GrowthReport> {
   const queryTexts = new Set<string>();
-  const observedClients = new Map<PoolClient, (notice: { message: string | undefined }) => void>();
+  const statementRuns = new Map<number, string[]>();
+  const callsPerScale = new Map<number, number>();
+  const observedClients = new Map<
+    PoolClient,
+    { notice: (notice: { message: string | undefined }) => void; query: PoolClient['query'] }
+  >();
+  let activeStatementRun: string[] | undefined;
   const observeClient = (client: PoolClient) => {
     if (observedClients.has(client)) return;
     const observeNotice = (notice: { message: string | undefined }) => {
@@ -179,7 +185,13 @@ async function check(population: Population, operation: GrowthCheck['operation']
         // The harness already reports malformed auto_explain notices for measured operations.
       }
     };
-    observedClients.set(client, observeNotice);
+    const originalQuery = client.query;
+    client.query = ((...args: Parameters<PoolClient['query']>) => {
+      const statement = statementText(args[0]);
+      if (activeStatementRun && statement !== undefined) activeStatementRun.push(statement);
+      return originalQuery.apply(client, args);
+    }) as PoolClient['query'];
+    observedClients.set(client, { notice: observeNotice, query: originalQuery });
     client.on('notice', observeNotice);
   };
   db.pool.on('acquire', observeClient);
@@ -198,17 +210,57 @@ async function check(population: Population, operation: GrowthCheck['operation']
           to: scale * ordinalsPerScale,
         });
       },
-      operation,
+      operation: async (growthDb, scale, repetition) => {
+        const calls = callsPerScale.get(scale) ?? 0;
+        callsPerScale.set(scale, calls + 1);
+        // Capture the first measured run after its warm-up at the smallest and largest scales.
+        const captureRun = (scale === 1 || scale === 64) && calls === 1;
+        const statements = captureRun ? [] : undefined;
+        if (statements) statementRuns.set(scale, statements);
+        activeStatementRun = statements;
+        try {
+          return await operation(growthDb, scale, repetition);
+        } finally {
+          activeStatementRun = undefined;
+        }
+      },
     });
     printCatalogQueryTexts(report.samples, queryTexts);
     return report;
   } catch (error) {
-    if (isGrowthFailure(error)) printCatalogQueryTexts(error.samples, queryTexts);
+    if (isGrowthFailure(error)) {
+      printStatementRuns(name, statementRuns);
+      printCatalogQueryTexts(error.samples, queryTexts);
+    }
     throw error;
   } finally {
     db.pool.off('acquire', observeClient);
-    for (const [client, observeNotice] of observedClients) client.off('notice', observeNotice);
+    for (const [client, observed] of observedClients) {
+      client.off('notice', observed.notice);
+      client.query = observed.query;
+    }
     await clearFixtureRows();
+  }
+}
+
+function statementText(query: unknown): string | undefined {
+  if (typeof query === 'string') return query;
+  if (typeof query !== 'object' || query === null || !('text' in query)) return undefined;
+  return typeof query.text === 'string' ? query.text : undefined;
+}
+
+function printStatementRuns(name: string, runs: ReadonlyMap<number, readonly string[]>): void {
+  for (const scale of [1, 64]) {
+    const statements = runs.get(scale);
+    if (!statements) continue;
+    const firstLines = statements.map(
+      (statement) =>
+        statement
+          .split(/\r?\n/)
+          .find((line) => line.trim())
+          ?.trim() ?? '',
+    );
+    console.info(`${name} scale ${scale} statement texts (first line per statement):\n${firstLines.join('\n')}`);
   }
 }
 
@@ -1107,7 +1159,7 @@ test.serial(
     );
     expect(report).toMatchObject({ bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } });
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1152,7 +1204,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1218,7 +1270,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1266,7 +1318,7 @@ test.serial(
     expect(context.account.accountId).toBe(actor.accountId);
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1309,7 +1361,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1377,7 +1429,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1426,7 +1478,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1473,7 +1525,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1516,7 +1568,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
 
 test.serial(
@@ -1563,5 +1615,5 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  90_000,
+  150_000,
 );
