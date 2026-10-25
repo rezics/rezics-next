@@ -1,7 +1,7 @@
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import type { Capture } from './growth-cost.ts';
 
-export type RawCapture = { readonly statements: readonly string[]; readonly plans: readonly unknown[] };
 export type GrowthDatabase = {
   readonly url: string;
   /** createPool(url) from src/database/pool.ts with every connection instrumented; pass it to the code under test. */
@@ -106,7 +106,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
 export async function capture<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
-): Promise<{ value: T; capture: RawCapture }> {
+): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
   if (state.active) throw new Error('A growth capture is already active for this database');

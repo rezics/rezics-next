@@ -48,6 +48,15 @@ schema dump, runs TypeScript, lint and formatting checks, then runs each test fi
 database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
 database is removed at the end.
 
+## Growth checks
+
+A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
+shared blocks and statements, never time. Use `checkGrowth` from `test/support/growth.ts` with `seed` in `grow` to
+add rows between scales. Grow both the total data and hot partition, while keeping the operation's own neighbourhood
+fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
+`linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
+API from `test/support/growth.ts`.
+
 ## HTTP contract
 
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client

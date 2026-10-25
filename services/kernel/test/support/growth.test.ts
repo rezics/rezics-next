@@ -17,6 +17,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 
 const schema = 'growth_api_test';
 const table = `${schema}.records`;
+const ordinalsPerScale = 500;
 const population: Population = {
   name: 'growth-api',
   hotPartition: 37,
@@ -47,8 +48,9 @@ afterAll(async () => {
 
 async function reset(database: GrowthDatabase): Promise<void> {
   await database.admin.query(`TRUNCATE ${table}`);
-  await database.admin.query(`INSERT INTO ${table} (route, id, payload) VALUES ($1, 0, '{"group":"anchor"}')`, [
+  await database.admin.query(`INSERT INTO ${table} (route, id, payload) VALUES ($1, 0, $2)`, [
     anchor.route,
+    { group: 'anchor' },
   ]);
 }
 
@@ -57,86 +59,75 @@ function check(database: GrowthDatabase, operation: GrowthCheck['operation'], bo
     name: 'growth table scan',
     bounds,
     grow: async (growthDb, scale, previous) => {
-      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale });
+      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+        from: previous * ordinalsPerScale,
+        to: scale * ordinalsPerScale,
+      });
     },
     operation,
   });
 }
 
-test(
-  'a primary-key point read passes constant rows and logarithmic blocks as the table grows',
-  async () => {
-    const database = db!;
-    await reset(database);
-    const report = await check(
+test('a primary-key point read passes constant rows and logarithmic blocks as the table grows', async () => {
+  const database = db!;
+  await reset(database);
+  const report = await check(
+    database,
+    (growthDb) =>
+      withConnection(growthDb.pool, async (client) => {
+        const result = await client.query(`SELECT payload FROM ${table} WHERE route = $1 AND id = 0`, [anchor.route]);
+        return result.rows[0]?.payload;
+      }),
+    { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+  );
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+  expect(report.samples.every(({ cost }) => cost.rows === 1)).toBe(true);
+}, 60_000);
+
+test('an unindexed payload filter fails logarithmic rows and reports the table evidence', async () => {
+  const database = db!;
+  await reset(database);
+  await expect(
+    check(
       database,
       (growthDb) =>
         withConnection(growthDb.pool, async (client) => {
-          const result = await client.query(`SELECT payload FROM ${table} WHERE route = $1 AND id = 0`, [anchor.route]);
-          return result.rows[0]?.payload;
+          const result = await client.query(`SELECT id FROM ${table} WHERE payload->>'group' = 'seeded'`);
+          return result.rowCount;
         }),
-      { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    );
-    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-    expect(report.samples.every(({ cost }) => cost.rows === 1)).toBe(true);
-  },
-  60_000,
-);
+      { rows: 'logarithmic', blocks: 'linear', statements: 'constant' },
+    ),
+  ).rejects.toMatchObject({
+    name: 'GrowthBoundError',
+    violations: expect.arrayContaining([expect.objectContaining({ metric: 'rows' })]),
+    message: expect.stringContaining(table),
+  });
+}, 60_000);
 
-test(
-  'an unindexed payload filter fails logarithmic rows and reports the table evidence',
-  async () => {
-    const database = db!;
-    await reset(database);
-    await expect(
-      check(
-        database,
-        (growthDb) =>
-          withConnection(growthDb.pool, async (client) => {
-            const result = await client.query(`SELECT id FROM ${table} WHERE payload = '{"group":"seeded"}'`);
-            return result.rowCount;
-          }),
-        { rows: 'logarithmic', blocks: 'linear', statements: 'constant' },
-      ),
-    ).rejects.toMatchObject({
-      name: 'GrowthBoundError',
-      violations: expect.arrayContaining([expect.objectContaining({ metric: 'rows' })]),
-      message: expect.stringContaining(table),
-    });
-  },
-  60_000,
-);
+test('restricting an unindexed filter to the hot partition routes still exposes partition scans', async () => {
+  const database = db!;
+  await reset(database);
+  const routes = Array.from({ length: 16 }, (_, index) => population.hotPartition * 16 + index);
+  await expect(
+    check(
+      database,
+      (growthDb) =>
+        withConnection(growthDb.pool, async (client) => {
+          const result = await client.query(
+            `SELECT id FROM ${table} WHERE route = ANY($1::integer[]) AND payload->>'group' = 'seeded'`,
+            [routes],
+          );
+          return result.rowCount;
+        }),
+      { rows: 'logarithmic', blocks: 'linear', statements: 'constant' },
+    ),
+  ).rejects.toMatchObject({
+    name: 'GrowthBoundError',
+    violations: expect.arrayContaining([expect.objectContaining({ metric: 'rows' })]),
+  });
+}, 60_000);
 
-test(
-  'restricting an unindexed filter to the hot partition routes still exposes partition scans',
-  async () => {
-    const database = db!;
-    await reset(database);
-    const routes = Array.from({ length: 16 }, (_, index) => population.hotPartition * 16 + index);
-    await expect(
-      check(
-        database,
-        (growthDb) =>
-          withConnection(growthDb.pool, async (client) => {
-            const result = await client.query(
-              `SELECT id FROM ${table} WHERE route = ANY($1::integer[]) AND payload = '{"group":"seeded"}'`,
-              [routes],
-            );
-            return result.rowCount;
-          }),
-        { rows: 'logarithmic', blocks: 'linear', statements: 'constant' },
-      ),
-    ).rejects.toMatchObject({
-      name: 'GrowthBoundError',
-      violations: expect.arrayContaining([expect.objectContaining({ metric: 'rows' })]),
-    });
-  },
-  60_000,
-);
-
-test(
-  'measure counts request statements through the production pool',
-  async () => {
+test('measure counts request statements through the production pool', async () => {
   const database = db!;
   const result = await measure(database, () =>
     withConnection(database.pool, async (client) => {
@@ -147,9 +138,7 @@ test(
     }),
   );
   expect(result.cost).toMatchObject({ statements: 2, controlStatements: 2 });
-  },
-  60_000,
-);
+}, 60_000);
 
 test('a linear-in-change operation passes linear and fails constant bounds', async () => {
   const database = db!;
@@ -159,9 +148,10 @@ test('a linear-in-change operation passes linear and fails constant bounds', asy
       await client.query('BEGIN');
       await client.query(
         `INSERT INTO ${table} (route, id, payload)
-         SELECT $1, $2 + n, '{"group":"change"}'::jsonb FROM generate_series(0, $3 - 1) AS n`,
-        [anchor.route, 1_000_000 + repetition * 100_000, scale],
+         SELECT $1, $2 + n, $4 FROM generate_series(0, $3 - 1) AS n`,
+        [anchor.route, 1_000_000 + repetition * 100_000, scale, { group: 'change' }],
       );
+      await client.query(`SELECT id FROM ${table} WHERE payload->>'group' = 'change'`);
       await client.query('ROLLBACK');
     });
   const bounds = { rows: 'linear', blocks: 'linear', statements: 'constant' } as const;
@@ -172,7 +162,7 @@ test('a linear-in-change operation passes linear and fails constant bounds', asy
     bounds,
     repetitions: 1,
   });
-  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 8, 64]);
+  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([2, 9, 65]);
 
   await expect(
     checkGrowth(database, {
