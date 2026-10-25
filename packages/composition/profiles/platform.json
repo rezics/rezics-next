@@ -1,0 +1,54 @@
+{
+  "format": "https://rezics.com/presentation/profile/1",
+  "generic": {
+    "root": { "props": {} },
+    "content": [
+      {
+        "type": "Slot",
+        "props": {
+          "id": "header",
+          "name": "header",
+          "children": [{ "type": "SubjectHeader", "props": { "id": "subject-header" } }]
+        }
+      },
+      { "type": "MoreStatements", "props": { "id": "more-statements" } }
+    ]
+  },
+  "bases": [
+    {
+      "base": "schema:CreativeWork",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "Slot",
+            "props": {
+              "id": "header",
+              "name": "header",
+              "children": [{ "type": "SubjectHeader", "props": { "id": "subject-header" } }]
+            }
+          },
+          {
+            "type": "Statements",
+            "props": {
+              "id": "statements",
+              "properties": [
+                "schema:author",
+                "schema:illustrator",
+                "schema:translator",
+                "schema:publisher",
+                "schema:datePublished",
+                "schema:inLanguage",
+                "schema:genre",
+                "schema:isPartOf"
+              ]
+            }
+          },
+          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+        ]
+      }
+    }
+  ],
+  "types": [],
+  "routes": []
+}

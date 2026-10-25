@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts",
+    "./profiles/*.json": "./profiles/*.json",
     "./schema/*.json": "./schema/*.json"
   },
   "scripts": {

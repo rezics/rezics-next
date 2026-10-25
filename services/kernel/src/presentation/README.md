@@ -1,3 +1,20 @@
+## Platform profile
+
+`platformProfile` is the shipped presentation profile, loaded from
+`@rezics/composition/profiles/platform.json`. Its generic template is a header slot holding
+`SubjectHeader`, then `MoreStatements`. Its only base template is `schema:CreativeWork`: that
+same header, then `Statements` for `schema:author`, `schema:illustrator`, `schema:translator`,
+`schema:publisher`, `schema:datePublished`, `schema:inLanguage`, `schema:genre` and
+`schema:isPartOf`, then `MoreStatements`. There are no type templates, route templates or lists.
+`setupPresentation` bootstraps it once at startup, immediately after `setupSemantic`. When a
+profile is already active, that bootstrap is one pointer read.
+
+Build checks in `test/presentation/platform-profile.test.ts`:
+
+- the platform profile is valid and gives every bundled type a default page
+- every list in a shipped document is admitted by the bundled release
+- setup activates the platform profile once
+
 ## Cost
 
 These bounds follow `profiles.ts`, its SQL, and the presentation profile migration and schema dump; they are derivations, not measurements.

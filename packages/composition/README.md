@@ -277,3 +277,23 @@ The result is `{ scope, key, document }`. `scope` is `route`, `type`, `base` or 
 Lookups are binary searches over the sorted lists. Resolution is O(log T) for T ≤ 128
 templates, plus at most one lookup for each structural base. Bases come from the definition
 release, nearest first, bounded by its class depth. A page read never scans the profile.
+
+## Platform profile
+
+`profiles/platform.json` is the presentation profile a launch vertical uses when it ships no
+page of its own. The package exports it as `@rezics/composition/profiles/platform.json`, so
+the website's fake kernel and stories serve the same templates.
+
+`generic` is a `header` slot holding `SubjectHeader`, then `MoreStatements`.
+
+`bases` has one template, for `schema:CreativeWork`, the structural base of the bundled work
+types. That document is the same header slot, then a `Statements` node, then `MoreStatements`.
+The `Statements` properties are the work facts the bundled release defines, in this order:
+`schema:author`, `schema:illustrator`, `schema:translator`, `schema:publisher`,
+`schema:datePublished`, `schema:inLanguage`, `schema:genre`, `schema:isPartOf`.
+
+There are no type templates, no route templates and no lists. Lists for people, organisations,
+concepts and characters come with a later profile change, once the release registers those
+facets. The profile has no headings or other text. Resolution is route, then type, then base,
+then generic, so a bundled work type uses the `schema:CreativeWork` template and every other
+bundled type uses `generic`.

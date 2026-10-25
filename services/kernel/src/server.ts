@@ -10,6 +10,7 @@ import { createWorkClient } from './work/client.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { setupPresentation } from './presentation/setup.ts';
 import { setupSemantic } from './semantic/setup.ts';
 
 export type ServerConfig = {
@@ -86,6 +87,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
 export async function startServer(config: ServerConfig) {
   const pool = createPool(config.databaseUrl);
   await setupSemantic(pool, bundledRelease);
+  await setupPresentation(pool);
   const workClient = createWorkClient(config.databaseUrl);
   // Observe startup rejection immediately; the webhook and stop still receive it.
   void workClient.catch(() => {});
