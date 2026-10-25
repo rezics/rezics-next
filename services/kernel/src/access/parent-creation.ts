@@ -6,13 +6,12 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { type Access, type AccessClient, type AccessContext, type Actor, type Resource } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';
-import { deadlineClient, within } from './authenticate.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
+import { resourceAuthorization } from './resource-authorization.ts';
 import { CreationManifestUnavailableError, type ResourceCreationManifest } from './creation-manifest.ts';
 
 /** The owning module supplies this port in service code after binding the actual
@@ -116,7 +115,7 @@ export function parentCreationAuthorization(input: {
     actor.kind === 'account'
       ? { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy }
       : null;
-  const proofs = new WeakMap<object, { attempt: CommandAttempt; deadline: number }>();
+  const proofs = new WeakMap<object, { authorization: CommandAuthorization; deadline: number }>();
   const denied = () => new GrantDeniedError();
   function bound(attempt: CommandAttempt): boolean {
     return (
@@ -137,36 +136,34 @@ export function parentCreationAuthorization(input: {
     denied,
     async prepare(attempt) {
       if (!bound(attempt)) throw denied();
-      const evidence = await access.prepare?.(actor, action, parent, { pool, deadline });
-      const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-      if (Date.now() >= proofDeadline) throw denied();
-      await within(proofDeadline, () =>
-        withConnection(pool, async (client) => {
-          const bounded = deadlineClient(client, proofDeadline);
-          if (
-            !(await validate(bounded, attempt.time)) ||
-            !(await access.authorize(bounded, actor, action, parent, evidence, attempt.time))
-          )
-            throw denied();
-        }),
-      );
-      if (!bound(attempt)) throw denied();
-      const proof = Object.freeze({});
-      proofs.set(proof, { attempt, deadline: proofDeadline });
+      let proofDeadline = -Infinity;
+      // One helper per attempt lets the creation wrapper retain the exact evidence
+      // deadline without exposing it or adding creation rights to the generic API.
+      const authorization = resourceAuthorization({
+        access: {
+          authenticate: access.authenticate.bind(access),
+          authorize: access.authorize.bind(access),
+          async prepare(...args) {
+            const evidence = await access.prepare?.(...args);
+            proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+            return evidence;
+          },
+        },
+        actor,
+        action,
+        anchor: { resource: parent, validate },
+        context: { pool, deadline, partition: partitionOf(resource.route) },
+      });
+      const proof = await authorization.prepare!(attempt);
+      if (typeof proof !== 'object' || proof === null || !bound(attempt)) throw denied();
+      proofs.set(proof, { authorization, deadline: proofDeadline });
       return proof;
     },
     async authorize(tx, attempt, proof) {
       const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
-      if (
-        !bound(attempt) ||
-        !prepared ||
-        prepared.attempt.time !== attempt.time ||
-        prepared.attempt.basis !== attempt.basis ||
-        prepared.attempt.partition !== attempt.partition ||
-        Date.now() >= prepared.deadline
-      )
-        throw denied();
+      if (!bound(attempt) || !prepared || Date.now() >= prepared.deadline) throw denied();
       proofs.delete(proof as object);
+      if ((await prepared.authorization.authorize(tx, attempt, proof)) !== 'execute') throw denied();
       creations.set(tx, {
         access,
         actorId: basis!.actorAccountId,

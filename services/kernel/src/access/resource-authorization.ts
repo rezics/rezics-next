@@ -1,4 +1,15 @@
-import type { AuthoritativeTime, CommandAuthorization } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  commandTime,
+  type AuthoritativeTime,
+  type CommandAttempt,
+  type CommandAuthorization,
+} from '../command/command.ts';
+import { withConnection } from '../database/pool.ts';
+import { deadlineClient, within } from './authenticate.ts';
+import { validResource } from './grant-command.ts';
+import { GrantDeniedError } from './grant-commands.ts';
+import { permissionEvidenceDeadline } from './permission.ts';
 import type { Access, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
 
 /** Trusted server binding to the authorization resource. validate checks THAT
@@ -30,30 +41,96 @@ export class ResourceAuthorizationUnavailableError extends Error {
   }
 }
 
-/** Action-general authorization seam; the authority is input.anchor.resource.
- * Stable tuple/upsert targets need only their actual partition, with no new UUID,
- * unique INSERT or ResourceCreationPort. This never mints creationCapability or
- * grants initialization rights; parentCreationAuthorization retains that distinct
- * unique-resource creation proof and its strict owner-role initialization checks.
+/** Prepare bounded actor/principal/group evidence for every attempt, then validate
+ * the trusted authority anchor and run the sole Access formula at that attempt's
+ * T. Release that connection before the executor checks out the target partition.
+ * The opaque, single-use proof permits execution only for the prepared basis,
+ * authority, action, target partition, live attempt and evidence deadline.
  *
- * The eventual implementation must bind identity/client/delegator, action, anchor,
- * target partition, attempt and deadline. At each attempt T it must validate the
- * anchor and use the SAME Access formula on an independently checked-out authority
- * resource connection, releasing it before target checkout. Denied replay must
- * disclose neither receipt nor body. No content-local policy belongs here.
+ * Stable tuple/upsert targets need no resource UUID or unique INSERT. This helper
+ * never mints creationCapability; parentCreationAuthorization adds that proof.
+ * Protected platform commands supply the seeded Global Context anchor (route 0,
+ * id 00000000-0000-8000-8000-000000000000) and require real account grants/scopes.
+ * Neither anonymous eligibility nor receipt-only replay grants authority here.
  *
- * Platform gates use the existing Global Context anchor supplied by consumers:
- * { route: 0, id: '00000000-0000-8000-8000-000000000000' }. Consumers supply their
- * exact action (including subject:create, subject:batch_write, media:importFromUrl,
- * source_fence:read and takedown). This helper creates or seeds no other root.
- * New media placement follows its subject, without per-subject grants or new roles.
- *
- * This unavailable stub always throws synchronously: O(1), zero partitions, SQL
- * or callbacks, and no execute/receipt-only proof. Intended evaluation uses bounded
- * actor memberships K <= 1000 per identity, one authority resource probe at T and
- * matched-group anchored reads O((1 + K) log G + matches), with no ACL enumeration
- * or target query in the authority check. That implementation is a separate change.
+ * Cost includes the owning module's exact existence/revision validation seek:
+ * bounded actor inverses and matched group anchors, then one authority anchor,
+ * O((1 + K) log G + L log R), K <= 1000 per account. No target read or ACL scan.
  */
-export function resourceAuthorization(_input: ResourceAuthorizationInput): CommandAuthorization {
-  throw new ResourceAuthorizationUnavailableError();
+export function resourceAuthorization(input: ResourceAuthorizationInput): CommandAuthorization {
+  const { access, actor, action } = input;
+  const resource = Object.freeze({ ...input.anchor.resource });
+  const { pool, deadline, partition } = input.context;
+  const validate = input.anchor.validate.bind(input.anchor);
+  const prepare = access.prepare?.bind(access);
+  const authorize = access.authorize.bind(access);
+  // Keep the verified actor object: production Access binds identity by reference.
+  const identity = JSON.stringify(actor);
+  const basis =
+    actor.kind === 'account'
+      ? { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy }
+      : null;
+  const proofs = new WeakMap<object, { attempt: CommandAttempt; deadline: number }>();
+  const denied = () => new GrantDeniedError();
+  function bound(attempt: CommandAttempt): boolean {
+    try {
+      authoritativeTimeValue(attempt.time);
+    } catch {
+      return false;
+    }
+    return (
+      basis !== null &&
+      JSON.stringify(actor) === identity &&
+      attempt.basis?.actorAccountId === basis.actorAccountId &&
+      attempt.basis.clientId === basis.clientId &&
+      attempt.basis.requestedBy === basis.requestedBy &&
+      validResource(resource) &&
+      Number.isInteger(partition) &&
+      partition >= 0 &&
+      partition < 4096 &&
+      attempt.partition === partition &&
+      Number.isFinite(deadline) &&
+      Date.now() < deadline
+    );
+  }
+  return Object.freeze<CommandAuthorization>({
+    action,
+    resource,
+    denied,
+    async prepare(attempt) {
+      if (!bound(attempt) || !prepare) throw denied();
+      const evidence = await within(deadline, () => prepare(actor, action, resource, { pool, deadline }));
+      const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+      if (Date.now() >= proofDeadline) throw denied();
+      await within(proofDeadline, () =>
+        withConnection(pool, async (client) => {
+          const bounded = deadlineClient(client, proofDeadline);
+          if (
+            !(await validate(bounded, attempt.time)) ||
+            !(await authorize(bounded, actor, action, resource, evidence, attempt.time))
+          )
+            throw denied();
+        }),
+      );
+      if (!bound(attempt) || Date.now() >= proofDeadline) throw denied();
+      const proof = Object.freeze({});
+      proofs.set(proof, { attempt, deadline: proofDeadline });
+      return proof;
+    },
+    async authorize(tx, attempt, proof) {
+      const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (
+        !bound(attempt) ||
+        !prepared ||
+        commandTime(tx) !== attempt.time ||
+        prepared.attempt.time !== attempt.time ||
+        prepared.attempt.basis !== attempt.basis ||
+        prepared.attempt.partition !== attempt.partition ||
+        Date.now() >= prepared.deadline
+      )
+        throw denied();
+      proofs.delete(proof as object);
+      return 'execute';
+    },
+  });
 }
