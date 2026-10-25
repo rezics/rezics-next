@@ -101,7 +101,7 @@ test('readBoard returns current public metadata with an authoritative partition 
   expect(result.value).toMatchObject({ id: board.id, route, title: 'Public board', securityRevision: '1' });
   const partition = await readPartition(database.admin, partitionOf(route));
   expect(partition).not.toBeNull();
-  expect(result.anchor).toEqual({ partition, epoch: partition!.epoch, position: partition!.position });
+  expect(result.anchor).toEqual({ partition: partition!, epoch: partition!.epoch, position: partition!.position });
 });
 
 test('checkGrowth bounds real board disclosure as unrelated data in the same partition grows', async () => {
