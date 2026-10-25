@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { AsyncResource } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import {
@@ -33,6 +34,7 @@ import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts'
 import { APPROVAL_REFERENCE_PURPOSE } from '../../src/access/approved-identity.ts';
 import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 import { OperatorDeniedError } from '../../src/access/operator.ts';
+import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { unseal } from '../../src/tokens/seal.ts';
 
@@ -42,6 +44,7 @@ const scopes = [
   'account:read',
   'account:update',
   'account:delete',
+  'account:suspend',
   'organization:membership',
   'access:grant',
 ].sort();
@@ -97,9 +100,11 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   let approvals: ReturnType<typeof createWorkflowApprovals>;
   const issuer = `https://credential-${suffix}.auth.test`;
   const audience = 'https://credential.api.test';
-  const clientId = 'credential-consented';
+  let clientId = 'credential-consented';
   const loginClient = 'credential-login';
   const callers = new Map<string, Caller>();
+  const consentCallers = new Map<string, string>();
+  const organizationFixtures = new Map<string, { owner: string; memberReservationId: string }>();
   const routeKey = randomBytes(32);
   const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
   const stagingKey = randomBytes(32);
@@ -327,6 +332,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       password: originalPassword,
     });
     const initial = await login(email, originalPassword, loginClient);
+    consentCallers.set(email, initial);
     for (const id of [clientId, 'credential-other-client'])
       await successful(await request('/consent', { client_id: id, scope: scopes }, initial), 'native consent');
     const caller = await login(email);
@@ -422,22 +428,52 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   return {
     async seed(mode, sessions = 1) {
       const root = await governance();
+      clientId = `credential-${randomUUID()}`;
+      await service.internal.registerClient({ clientId, firstParty: false, scopes });
       const human = await person();
       const other = await person();
+      const owner = mode === 'organization-operator' ? await person() : human;
       const organizationId = newId(routeOf(human.accountId)!);
       const reservation = await bindings.internalLifecycle.reserveCoordination({
-        accountId: human.accountId,
+        accountId: owner.accountId,
         relatedAccountId: organizationId,
         purpose: 'membership',
         key: randomUUID(),
       });
       await bindings.internalLifecycle.createOrganization({
         organizationId,
-        ownerAccountId: human.accountId,
+        ownerAccountId: owner.accountId,
         ownerReservationId: reservation.value.reservationId,
         key: randomUUID(),
       });
       await bindings.operators.provisionManagementDefaults({ operatorAccountId: organizationId, key: randomUUID() });
+      if (mode === 'organization-operator') {
+        const member = await bindings.internalLifecycle.reserveCoordination({
+          accountId: human.accountId,
+          relatedAccountId: organizationId,
+          purpose: 'membership',
+          key: randomUUID(),
+        });
+        await bindings.lifecycle.setMembership(await context(owner.caller), {
+          organizationId,
+          memberAccountId: human.accountId,
+          reservationId: member.value.reservationId,
+          role: 'member',
+          key: randomUUID(),
+        });
+        await bindings.grants.create(await context(owner.caller), {
+          resource: { route: routeOf(organizationId)!, id: organizationId },
+          subjectId: human.accountId,
+          subjectRole: '',
+          actions: ['account:manage'],
+          valid: '(,)',
+          key: randomUUID(),
+        });
+        organizationFixtures.set(organizationId, {
+          owner: owner.caller,
+          memberReservationId: member.value.reservationId,
+        });
+      }
       const operatorId = mode === 'own-human' ? null : mode === 'human-operator' ? human.accountId : organizationId;
       const automated = async (operator: string) => {
         const key = randomUUID();
@@ -665,42 +701,107 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     async revoke(f, fact) {
       const gov = await governance();
       if (fact === 'actor-grant') {
-        const resourceId = f.operatorId ?? f.subjectId;
-        await bindings.grants.revoke(await context(f.caller), {
-          resource: { route: routeOf(resourceId)!, id: resourceId },
-          subjectId: f.operatorId === f.organizationId ? f.organizationId : f.humanId,
-          subjectRole: f.operatorId === f.organizationId ? 'owner' : '',
+        const organization = required(organizationFixtures.get(f.organizationId), 'Missing organization owner');
+        await bindings.grants.revoke(await context(organization.owner), {
+          resource: { route: routeOf(f.organizationId)!, id: f.organizationId },
+          subjectId: f.humanId,
+          subjectRole: '',
           actions: ['account:manage'],
           valid: '(,)',
           key: randomUUID(),
         });
       } else if (fact === 'consent') {
+        const human = required(callers.get(f.caller), 'Missing consenting human');
+        const current = required(consentCallers.get(human.email), 'Missing current consenting session');
         await successful(
           await request(
             '/consent',
-            { client_id: clientId, scope: scopes.filter((scope) => scope !== 'account:manage') },
-            f.caller,
+            { client_id: f.clientId, scope: scopes.filter((scope) => scope !== 'account:manage') },
+            current,
           ),
           'native consent revocation',
         );
-      } else if (
-        fact === 'subject-fenced' ||
-        fact === 'human-floor' ||
-        fact === 'subject-floor' ||
-        fact === 'operator-floor'
-      ) {
-        if (fact === 'subject-fenced')
-          await bindings.internalLifecycle.raiseFence({ accountId: f.subjectId, key: randomUUID() });
-        else
-          throw new Error(
-            `Native credential fixture cannot advance ${fact} without a committed Auth barrier; services/kernel/src/access/lifecycle.ts requires native proof`,
-          );
-      } else if (fact === 'subject-deleted')
-        await bindings.lifecycle.tombstone(await context(gov.caller), { accountId: f.subjectId, key: randomUUID() });
-      else
-        throw new Error(
-          `No product command bound for native revocation ${fact}; services/kernel/src/access/native-account-bindings.ts`,
+      } else if (fact === 'scope') {
+        const key = randomUUID();
+        const operation = {
+          kind: 'client-reduction' as const,
+          clientId: f.clientId,
+          firstParty: false,
+          scopes: scopes.filter((scope) => scope !== 'account:manage'),
+          authorization: 'approval-request',
+        };
+        const approval = await approvals.approve(
+          await bearer(gov.caller),
+          { operationKey: key, operation },
+          { pool: kernel(), deadline: Date.now() + 10000 },
         );
+        await currentHost().workflows.reduceClientScopes({ ...operation, authorization: approval.reference, key });
+      } else if (fact === 'missing-evidence') {
+        const resourceId = f.operatorId ?? f.subjectId;
+        const owner = organizationFixtures.get(f.organizationId)?.owner;
+        await bindings.grants.revoke(await context(owner ?? f.caller), {
+          resource: { route: routeOf(resourceId)!, id: resourceId },
+          subjectId: f.humanId,
+          subjectRole: '',
+          actions: ['account:manage'],
+          valid: '(,)',
+          key: randomUUID(),
+        });
+      } else if (fact === 'human-floor' || fact === 'subject-floor' || fact === 'operator-floor') {
+        const subjectId =
+          fact === 'human-floor'
+            ? f.humanId
+            : fact === 'subject-floor'
+              ? f.subjectId
+              : required(f.operatorId, 'Missing operator');
+        const human = required(callers.get(f.caller), 'Missing managing human');
+        const current = await login(human.email, human.password, human.clientId, human.scopes);
+        const password = `barrier password ${randomUUID()}`;
+        await install(current, subjectId, { kind: 'password', password });
+        const subject = required(
+          callers.get(subjectId === f.humanId ? f.caller : f.automatedCaller),
+          'Missing subject credentials',
+        );
+        for (const caller of callers.values()) if (caller.email === subject.email) caller.password = password;
+      } else if (fact === 'human-suspended') {
+        await createSuspensionCommands({ pool: kernel(), access, clock: () => new Date() }).suspend(
+          await context(gov.caller),
+          { accountId: f.humanId, key: randomUUID() },
+        );
+      } else if (fact === 'organization-membership') {
+        const organization = required(organizationFixtures.get(f.organizationId), 'Missing organization owner');
+        await bindings.lifecycle.setMembership(await context(organization.owner), {
+          organizationId: f.organizationId,
+          memberAccountId: f.humanId,
+          reservationId: organization.memberReservationId,
+          role: null,
+          key: randomUUID(),
+        });
+      } else if (fact === 'operator-relation') {
+        const opening = await bindings.operators.authorizeOpening(await context(f.caller), {
+          operatorAccountId: required(f.operatorId, 'Missing operator'),
+          subjectAccountId: f.subjectId,
+          purpose: 'credential-management',
+          key: randomUUID(),
+        });
+        const reservation = await bindings.operators.reserveResponsibility({
+          operatorAccountId: f.otherSubjectId,
+          subjectAccountId: f.subjectId,
+          key: randomUUID(),
+        });
+        await bindings.operators.recordOperatorRelation({
+          ...reservation.value,
+          expectedOperatorAccountId: f.operatorId,
+          expectedVersion: opening.value.version,
+          key: randomUUID(),
+        });
+      } else if (fact === 'subject-fenced') {
+        await bindings.internalLifecycle.raiseFence({ accountId: f.subjectId, key: randomUUID() });
+      } else if (fact === 'subject-deleted')
+        await bindings.lifecycle.tombstone(await context(f.subjectId === f.humanId ? f.caller : f.automatedCaller), {
+          accountId: f.subjectId,
+          key: randomUUID(),
+        });
     },
     async signInAutomated(f, credential) {
       const { email } = required(callers.get(f.automatedCaller), 'Missing automated fixture caller');
@@ -818,10 +919,12 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     run: () => Promise<void>,
     operation: () => Promise<T>,
   ): Promise<T> {
-    const database = at === 'committed' || at === 'before-consume' ? auth() : kernel();
+    const runOutsideCommand = AsyncResource.bind(run);
+    const databases = at === 'consumed' ? [kernel(), auth()] : [auth()];
     const originals = new Map<PoolClient, PoolClient['query']>();
     let fired = false;
-    const intercept = (client: PoolClient) => {
+    let nativeCommitted = false;
+    const intercept = (database: Pool) => (client: PoolClient) => {
       if (originals.has(client)) return;
       const query = client.query.bind(client);
       originals.set(client, client.query);
@@ -837,32 +940,58 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         if (/UPDATE access\.(workflow_approval|operator_opening_receipt)[\s\S]*SET consumed_at/.test(sql))
           consumed = true;
         if (sql.includes('UPDATE auth_effect_receipt SET opening_receipt_id')) committed = true;
+        const invoke = query as (...values: unknown[]) => unknown;
+        const last = args.at(-1);
+        // Let the native command release its client and partition gate. Pause
+        // the next Auth read instead of holding the command's COMMIT response.
+        if (at === 'consumed' && database === kernel() && sql === 'COMMIT' && consumed) {
+          if (typeof last === 'function') {
+            const callback = last as (error: unknown, value?: unknown) => void;
+            return invoke(...args.slice(0, -1), (error: unknown, value: unknown) => {
+              if (!error) nativeCommitted = true;
+              callback(error, value);
+            });
+          }
+          return (invoke(...args) as Promise<unknown>).then((value) => {
+            nativeCommitted = true;
+            return value;
+          });
+        }
         const match =
           at === 'before-consume'
             ? /SELECT (?:id,password,)?xmin::text AS version FROM (?:account|auth_public_key)/.test(sql)
-            : sql === 'COMMIT' && (at === 'consumed' ? consumed : committed);
-        const invoke = query as (...values: unknown[]) => unknown;
+            : at === 'consumed'
+              ? database === auth() && nativeCommitted
+              : sql === 'COMMIT' && committed;
         if (fired || !match) return invoke(...args);
         fired = true;
-        const last = args.at(-1);
+        if (at === 'consumed') {
+          if (typeof last === 'function') {
+            const callback = last as (error: unknown, value?: unknown) => void;
+            void runOutsideCommand().then(() => invoke(...args), callback);
+            return;
+          }
+          return runOutsideCommand().then(() => invoke(...args));
+        }
         if (typeof last === 'function') {
           const callback = last as (error: unknown, value?: unknown) => void;
           return invoke(...args.slice(0, -1), (error: unknown, value: unknown) => {
             if (error) return callback(error);
-            void run().then(() => callback(null, value), callback);
+            void runOutsideCommand().then(() => callback(null, value), callback);
           });
         }
         return (invoke(...args) as Promise<unknown>).then(async (value) => {
-          await run();
+          await runOutsideCommand();
           return value;
         });
       }) as typeof client.query;
     };
-    database.on('acquire', intercept);
+    const listeners = databases.map((database) => ({ database, listener: intercept(database) }));
+    for (const { database, listener } of listeners) database.on('acquire', listener);
     try {
       return await operation();
     } finally {
-      database.off('acquire', intercept);
+      for (const { database, listener } of listeners) database.off('acquire', listener);
       for (const [client, query] of originals) client.query = query;
     }
   }

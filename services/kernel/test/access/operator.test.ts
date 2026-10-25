@@ -159,6 +159,7 @@ const consume = async (
   });
 async function deny(result: Promise<unknown>) {
   await expect(result).rejects.toBeInstanceOf(OperatorDeniedError);
+  await expect(result).rejects.toHaveProperty('status', 403);
 }
 
 test('only eligible operators with management authority can approve an automated session', async () => {

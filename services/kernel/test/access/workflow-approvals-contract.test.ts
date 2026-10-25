@@ -3,6 +3,7 @@ import type { AccountOperation } from '@rezics/auth';
 import type { Pool } from 'pg';
 import {
   MAX_WORKFLOW_APPROVAL_LIFETIME_MS,
+  WorkflowApprovalDeniedError,
   WorkflowApprovalUnavailableError,
   createWorkflowApprovals,
   type WorkflowApproval,
@@ -67,7 +68,7 @@ test('malformed approval and resolution evidence fails closed', async () => {
   };
   for (const input of [hostile, untouched<WorkflowApprovalRequest>(), null as unknown as WorkflowApprovalRequest]) {
     await expect(approvals.approve('unverified-bearer', input, context)).rejects.toBeInstanceOf(
-      WorkflowApprovalUnavailableError,
+      WorkflowApprovalDeniedError,
     );
   }
   for (const input of [
@@ -77,16 +78,16 @@ test('malformed approval and resolution evidence fails closed', async () => {
     null as unknown as AccountOperation,
   ]) {
     await expect(approvals.resolve('unverified-reference', input, context)).rejects.toBeInstanceOf(
-      WorkflowApprovalUnavailableError,
+      WorkflowApprovalDeniedError,
     );
     await expect(
       approvals.resolveForCaller('other-caller', 'unverified-reference', input, context),
-    ).rejects.toBeInstanceOf(WorkflowApprovalUnavailableError);
+    ).rejects.toBeInstanceOf(WorkflowApprovalDeniedError);
   }
 });
 
 test('failed contract requests never expose bearers or retain contexts', async () => {
-  // Unavailable native dependencies must deny without exposing the supplied token.
+  // Malformed requests must deny without exposing the supplied token.
   const { approvals, context } = fixture();
   const token = 'private-bearer-must-not-escape';
   const operation: AccountOperation = { kind: 'revoke', accountId: 'account' };
@@ -96,12 +97,39 @@ test('failed contract requests never expose bearers or retain contexts', async (
     approvals.resolveForCaller(token, 'reference', operation, context),
   ];
   for (const attempt of attempts) {
-    await expect(attempt).rejects.toBeInstanceOf(WorkflowApprovalUnavailableError);
-    await expect(attempt).rejects.toHaveProperty('name', 'WorkflowApprovalUnavailableError');
+    await expect(attempt).rejects.toBeInstanceOf(WorkflowApprovalDeniedError);
+    await expect(attempt).rejects.toHaveProperty('name', 'WorkflowApprovalDeniedError');
     const error = await attempt.catch((error: Error) => error);
+    expect(error).toHaveProperty('status', 403);
     expect(String(error)).not.toContain(token);
     expect(JSON.stringify(error)).not.toContain(token);
   }
   expect(Reflect.ownKeys(approvals).sort()).toEqual(['approve', 'resolve', 'resolveForCaller']);
   expect(JSON.stringify(approvals)).toBe('{}');
+});
+
+test('missing native workflow adapter remains unavailable', async () => {
+  const pool = untouched<Pool>();
+  const approvals = createWorkflowApprovals({
+    pool,
+    access: untouched<Access>(),
+    actions: untouched<ActionCatalogue>(),
+    referenceKeys: untouched<KeyRing>(),
+  });
+  const request = approvals.approve(
+    'bearer',
+    {
+      operationKey: 'client-reduction',
+      operation: {
+        kind: 'client-reduction',
+        clientId: 'client',
+        firstParty: false,
+        scopes: [],
+        authorization: 'reference',
+      },
+    },
+    { pool, deadline: Date.now() + 5000 },
+  );
+  await expect(request).rejects.toBeInstanceOf(WorkflowApprovalUnavailableError);
+  await expect(request).rejects.toHaveProperty('status', 503);
 });

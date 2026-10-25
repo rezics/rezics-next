@@ -48,6 +48,8 @@ const EVIDENCE_TTL_MS = 1000;
 const NAMESPACE = '134e9749-1120-8a0c-97d0-71287a629cef';
 const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
 export class OperatorDeniedError extends Error {
+  readonly status = 403;
+
   constructor() {
     super('Operator command denied');
     this.name = 'OperatorDeniedError';
@@ -649,7 +651,7 @@ export function createOperatorCommands(config: OperatorConfig) {
               expires_at: new Date(
                 Math.min(
                   verifiedBearerExpiry(access, context.actor, { pool, deadline: context.deadline }),
-                  Date.parse(facts.databaseDeadline),
+                  Date.parse(authoritativeTimeValue(currentCommand(tx).time)) + OPERATOR_RECEIPT_TTL_MS,
                 ),
               ).toISOString(),
             });

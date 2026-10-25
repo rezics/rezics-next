@@ -15,6 +15,7 @@ import {
   APPROVAL_REFERENCE_PURPOSE,
   approvalRowDigest,
   readApprovedIdentity,
+  ApprovalIdentityUnavailableError,
   verifiedBearerExpiry,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
@@ -47,12 +48,22 @@ export function workflowApprovalBinding(request: LifecycleRequest): WorkflowAppr
   return bindings.get(request);
 }
 export class WorkflowApprovalUnavailableError extends Error {
+  readonly status = 503;
+
   constructor() {
     super('Durable workflow approvals are unavailable');
     this.name = 'WorkflowApprovalUnavailableError';
   }
 }
-const denied = () => new WorkflowApprovalUnavailableError();
+export class WorkflowApprovalDeniedError extends Error {
+  readonly status = 403;
+
+  constructor() {
+    super('Durable workflow approval denied');
+    this.name = 'WorkflowApprovalDeniedError';
+  }
+}
+const denied = () => new WorkflowApprovalDeniedError();
 function requireAllowed(value: unknown): asserts value {
   if (!value) throw denied();
 }
@@ -80,7 +91,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
   const encoded = canonicalize(value);
   requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= 12000);
   const operation = JSON.parse(encoded) as NativeOperation;
-  requireAllowed(!Object.hasOwn(unavailableAdapters, operation.kind));
+  if (Object.hasOwn(unavailableAdapters, operation.kind)) throw new WorkflowApprovalUnavailableError();
   let descriptor: Descriptor;
   let fields: string[];
   switch (operation.kind) {
@@ -278,7 +289,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     );
     let approvedOperation = operation;
     if (operation.kind === 'automated' && operation.registrationId !== '') {
-      requireAllowed(creationBinding && operation.operationKey === row.operationKey);
+      if (!creationBinding) throw new WorkflowApprovalUnavailableError();
+      requireAllowed(operation.operationKey === row.operationKey);
       const initial = await creationBinding({
         registrationId: operation.registrationId,
         operationKey: row.operationKey,
@@ -444,7 +456,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         },
       );
       return result.value;
-    } catch {
+    } catch (error) {
+      if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
+        throw error;
       throw denied();
     }
   }
@@ -578,7 +592,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     async resolve(reference: string, operation: AccountOperation, context: AccessContext): Promise<LifecycleRequest> {
       try {
         return await resolve(reference, operation, context);
-      } catch {
+      } catch (error) {
+        if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
+          throw error;
         throw denied();
       }
     },
@@ -592,7 +608,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         const bounded = boundary(context);
         const caller = await config.access.authenticate(token, bounded);
         return await resolve(reference, operation, bounded, caller);
-      } catch {
+      } catch (error) {
+        if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
+          throw error;
         throw denied();
       }
     },

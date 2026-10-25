@@ -6,6 +6,23 @@ import { unseal, type KeyRing } from '../tokens/seal.ts';
 import receiptRead from '../command/read-receipt.sql';
 import approvalRead from './workflow-approvals-read.sql';
 
+export class ApprovalIdentityDeniedError extends Error {
+  readonly status = 403;
+
+  constructor() {
+    super('Approval denied');
+    this.name = 'ApprovalIdentityDeniedError';
+  }
+}
+export class ApprovalIdentityUnavailableError extends Error {
+  readonly status = 503;
+
+  constructor() {
+    super('Approval identity bridge unavailable');
+    this.name = 'ApprovalIdentityUnavailableError';
+  }
+}
+
 export const APPROVAL_REFERENCE_PURPOSE = 'access.workflow-approval.v1';
 export type ApprovalRow = NonNullable<Awaited<ReturnType<typeof approvalRead.run>>>;
 declare const approvedIdentity: unique symbol;
@@ -34,8 +51,10 @@ export function approvedIdentityClaims(
   return facts?.scope === scope && facts.pool === pool ? facts : undefined;
 }
 export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
-  const expires = bridges.get(access)?.expiry(actor, context);
-  if (expires === undefined || Date.now() >= expires) throw new Error('Native bearer evidence unavailable');
+  const bridge = bridges.get(access);
+  if (!bridge) throw new ApprovalIdentityUnavailableError();
+  const expires = bridge.expiry(actor, context);
+  if (expires === undefined || Date.now() >= expires) throw new ApprovalIdentityDeniedError();
   return expires;
 }
 /** Bind every immutable column, including original scope ceiling and JWT expiry. */
@@ -54,7 +73,8 @@ export async function readApprovedIdentity(
   context: AccessContext,
 ): Promise<{ row: ApprovalRow; actor: AccountActor }> {
   const bridge = bridges.get(access);
-  if (!bridge || typeof reference !== 'string' || reference.length > 4096) throw new Error('Approval unavailable');
+  if (!bridge) throw new ApprovalIdentityUnavailableError();
+  if (typeof reference !== 'string' || reference.length > 4096) throw new ApprovalIdentityDeniedError();
   const locator = unseal(keys, APPROVAL_REFERENCE_PURPOSE, reference) as
     | { route?: unknown; id?: unknown; binding?: unknown }
     | undefined;
@@ -64,11 +84,11 @@ export async function readApprovedIdentity(
     routeOf(locator.id) !== locator.route ||
     typeof locator.binding !== 'string'
   )
-    throw new Error('Approval unavailable');
+    throw new ApprovalIdentityDeniedError();
   const row = await approvalRead.run(context.pool, { route: locator.route as number, approval_id: locator.id });
-  if (!row || approvalRowDigest(row) !== locator.binding) throw new Error('Approval unavailable');
+  if (!row || approvalRowDigest(row) !== locator.binding) throw new ApprovalIdentityDeniedError();
   const expires = Math.min(Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
-  if (!Number.isFinite(expires) || Date.now() >= expires) throw new Error('Approval unavailable');
+  if (!Number.isFinite(expires) || Date.now() >= expires) throw new ApprovalIdentityDeniedError();
   // A row-shaped fixture, restored dump fragment or caller JSON is insufficient:
   // approve must have committed this exact row and reference through core.
   const receipt = await receiptRead.run(context.pool, {
@@ -86,9 +106,9 @@ export async function readApprovedIdentity(
     response?.reference !== reference ||
     response.expiresAt !== new Date(row.expiresAt).toISOString()
   )
-    throw new Error('Approval unavailable');
+    throw new ApprovalIdentityDeniedError();
   const scopes = row.scopes;
-  if (!scopes.every((scope): scope is string => typeof scope === 'string')) throw new Error('Approval unavailable');
+  if (!scopes.every((scope): scope is string => typeof scope === 'string')) throw new ApprovalIdentityDeniedError();
   const actor: AccountActor = Object.freeze({
     kind: 'account',
     accountId: row.actorId,

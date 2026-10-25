@@ -99,10 +99,11 @@ function configured(value: unknown): asserts value {
  * credential binding columns; a broad opening alone fails. Four separate purposes
  * never substitute for each other, sessions or devices in either direction.
  *
- * Expiry is min(native created T + 60s, source proof/session lifetime, evidence
- * lifetime), checked against command T AND database time. Retention never renews
- * rows. Every consume/retry re-runs the SAME formula, current state, fences, floors
- * and operator checks, including before disclosure of an exact saved Auth result.
+ * Operator opening expiry is min(native created T + 60s, verified bearer expiry),
+ * checked against command T AND database time. The evidence read window bounds
+ * creation reads, not the opening lifetime. Retention never renews rows. Every
+ * consume/retry re-runs the SAME formula, current state, fences, floors and operator
+ * checks, including before disclosure of an exact saved Auth result.
  * Revalidate at the Auth commit boundary: revocation after consumption spends the
  * opening without mutation. An opening without exact committed Auth success fails
  * closed; NEW authenticated approval may resume only the same immutable operation.
