@@ -38,8 +38,11 @@ function taskCommits(options: PromotionOptions, task: Task): string[] {
   try { return git(options.settings.mainCheckout, 'rev-list', '--reverse', `${base}..${task.integratedCommit}`).split('\n').filter(Boolean); }
   catch { return []; }
 }
+// Specification and research tasks deliver suites that stay red until a later task binds them; the root gate covers them.
+const RED_BY_DESIGN = new Set(['specification', 'research']);
 function commandsFor(rootGate: readonly string[], tasks: readonly Task[]): string[][] {
-  return [rootGate, ...tasks.map(task => task.brief.acceptance.command)].map(command => [...command]);
+  return [rootGate, ...tasks.filter(task => !RED_BY_DESIGN.has(task.taskClass)).map(task => task.brief.acceptance.command)]
+    .map(command => [...command]);
 }
 function resultKey(result: PromotionGateResult): string { return `${result.commit}\n${JSON.stringify(result.command)}`; }
 function appendResult(run: PromotionRun, target: 'headResults' | 'prefixResults', result: PromotionGateResult): PromotionRun {
