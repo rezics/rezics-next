@@ -382,3 +382,31 @@ callback and H container hops. No receipt-history scan or nil-account lookup is 
 It holds one execute/replay/conflict sequence fixed, checks constant statements/rows and logarithmic shared-buffer
 growth, and rejects receipt sequential scans. The trusted authorization fixture isolates core executor cost;
 the owning eligibility callback and H-hop costs remain additional.
+
+### Native Auth current consent: usage, security and cost
+
+`src/access/auth-consent.ts` exports `CurrentConsentReader` and
+`createAuthConsentReader({ url, serviceTokenId, serviceTokenSecret, fetch? })`.
+Trusted server composition supplies the exact private HTTPS
+`/internal/v1/consents:read` URL and the existing kernel worker's Cloudflare Access
+service token; literal loopback HTTP is accepted for isolated tests. The transport
+uses `CF-Access-Client-Id` and `CF-Access-Client-Secret`, with redirects disabled.
+No environment variables are read by this module.
+
+Call the reader with `{ actorAccountId, clientId, deadline }` only for durable
+person-attributed steps. Inject this port into the restorer when composing that
+workflow. Each invocation reads Auth's current fact at Auth's native instant;
+the existing Access clock and evaluator T retain their meaning. Ordinary
+`requestJSON` does not call this port. Kernel receives no Auth database
+credentials, provider keys, cookies or session/introspection capability.
+
+The response must contain only the exact requested identities and bounded scopes;
+missing, unavailable, malformed, foreign-identity and late responses fail closed
+as null. No raw transport error or service secret is exposed. Request and response
+sizes are bounded, and both fetch and body consumption obey the caller deadline
+with a three-second upper bound. Responses are never retained as durable consent
+authority. Per invocation cost is one bounded request/response plus Auth's one
+exact consent/client/coverage/reduction SQL statement, fixed rows and O(log R)
+blocks. The Auth native growth probe retains its SQL and plans in
+`.temp/current-consent-growth.json`; later durable Access growth checks must
+include this Auth probe as well.

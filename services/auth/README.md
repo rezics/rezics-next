@@ -902,3 +902,46 @@ transfer, session revocation, operator fencing, consent and client management
 remain separate adapter work and fail closed in the native approval adapter.
 Ordinary native issuance does not establish the remaining whole-lifecycle,
 permission or website/provider outcomes.
+
+### Native current consent: usage, security and cost
+
+`@rezics/auth/current-consent` exports
+`createCurrentConsentReader({ database }).readCurrentConsent({ actorAccountId, clientId })`.
+It reads one exact Auth-owned consent, intersected with the current registered
+client ceiling. Missing consent/client/ready coverage or an active client
+reduction returns null. First-party standing consent requires the native issuer's
+actual materialized row; this reader performs no materialization or refresh.
+Access epochs and caller timestamps do not replace this current fact.
+
+`@rezics/auth/internal-consent` exports `createInternalConsentHandler` with the
+Auth pool, `issuer`, `jwksUrl`, `audience` and `allowedServiceTokenIds` supplied
+by trusted server configuration. Its only route is
+`POST /internal/v1/consents:read` with exactly `{ actorAccountId, clientId }`.
+Bind it on a separate private listener behind Cloudflare Tunnel, with no public
+hostname, public Auth handler mount or diagnostic route. The JSDoc provides the
+listener composition recipe; retain the pool in the existing Auth host.
+This exact read is the narrow exception to the in-process internal-method rule
+above; other internal effects remain in process.
+
+Configure the existing kernel worker's service token in an Access Service Auth
+policy. Verify `Cf-Access-Jwt-Assertion` against the configured Access JWKS,
+issuer and sole application audience using RS256 and mandatory current expiry.
+Cloudflare's [application token contract](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)
+defines service authentication by an empty subject and the Client ID in
+`common_name`; the allowlist contains those Client IDs. Human subjects, provider
+signing keys, cookies and bearer authorization cannot authorize this listener.
+See also [JWT verification](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
+and [service token transport](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
+Missing trust configuration fails startup. Runtime denial and unavailability are
+sanitized, and every response is `private, no-store`. No credentials, emails,
+other owners or history are selected or returned.
+
+Each invocation executes one statement: the consent `(account_id, client_id)` PK,
+client PK, coverage PK and reduction PK, with fixed rows and O(log R) indexed
+blocks. No issuance, refresh, mutation, owner scan, delegation enumeration or
+consent cache is involved. One bounded HTTP request/response is added per durable
+step; unauthorized requests execute zero SQL. `growth-current-consent.test.ts`
+uses native `checkGrowth` at 1/8/64 × 500, grows unrelated owners/clients and the
+selected person's other-client/history rows, and retains full SQL/auto_explain
+provenance in `.temp/current-consent-growth.json`. No planner overrides or
+wall-clock growth gate are used.

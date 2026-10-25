@@ -4,7 +4,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./membership-workflows": "./src/membership-workflows.ts"
+    "./membership-workflows": "./src/membership-workflows.ts",
+    "./current-consent": "./src/current-consent.ts",
+    "./internal-consent": "./src/internal-consent.ts"
   },
   "scripts": {
     "check": "bun scripts/check.ts",
