@@ -4,7 +4,9 @@ import { withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import type { createApp } from '../../http/app.ts';
+import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
+import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { createSearchService } from '../service.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
@@ -28,7 +30,12 @@ const unauthorized = problemSchema('authentication_required', 'invalid_credentia
 const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
 const resource = { route: 0, id: GLOBAL_CONTEXT };
 
-export function searchRoutes<App>(app: App, { pool, search }: { pool: Pool; search?: SearchService }) {
+export function searchRoutes<App>(
+  app: App,
+  { pool, search, access }: { pool: Pool; search?: SearchService; access?: Access | AccessFactory },
+) {
+  // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
+  const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
   const routed = (app as ReturnType<typeof createApp>)
     .post(
       customMethod('/v1/subjects', 'search'),
@@ -55,7 +62,10 @@ export function searchRoutes<App>(app: App, { pool, search }: { pool: Pool; sear
         detail: { operationId: 'subject.search', 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] },
       },
       async ({ body, authorize, admission, job, actor }) => {
-        const check = await authorize(resource);
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+        });
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
@@ -79,7 +89,10 @@ export function searchRoutes<App>(app: App, { pool, search }: { pool: Pool; sear
       async ({ query, authorize, admission, job }) => {
         if (query.limit !== undefined && (query.limit < 1 || query.limit > 10))
           throw new ProblemError('invalid_request', { errors: [{ pointer: '/limit', code: 'out_of_range' }] });
-        const check = await authorize(resource);
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+        });
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });

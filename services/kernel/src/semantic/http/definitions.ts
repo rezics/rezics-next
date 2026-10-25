@@ -7,7 +7,8 @@ import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import type { subjectRoutes } from './subjects.ts';
-import { AuthenticationError } from '../../request/access.ts';
+import { AuthenticationError, type Access, type AccessFactory } from '../../request/access.ts';
+import { globalReadEligibility } from '../eligibility.ts';
 import {
   activateRelease,
   activeRelease,
@@ -48,7 +49,12 @@ function definitionProblem(error: unknown): never {
   throw error;
 }
 
-export function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }: { pool: Pool }) {
+export function definitionRoutes(
+  app: ReturnType<typeof subjectRoutes>,
+  { pool, access }: { pool: Pool; access?: Access | AccessFactory },
+) {
+  // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
+  const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
   return app
     .post(
       '/v1/definitions/releases',
@@ -115,7 +121,10 @@ export function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }
         },
       },
       async ({ params, authorize, admission, job, set }) => {
-        const check = await authorize(resource);
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
+        });
         const release = await admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
           return readRelease(pool, params.digest);
@@ -142,7 +151,10 @@ export function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }
         },
       },
       async ({ authorize, admission, job }) => {
-        const check = await authorize(resource);
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
+        });
         const active = await admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
           return activeRelease(pool);
