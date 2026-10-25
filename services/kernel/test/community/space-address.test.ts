@@ -4,6 +4,7 @@ import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -32,6 +33,8 @@ let creator: Person;
 let another: Person;
 let handleHolder: Person;
 let organizationOwner: Person;
+let governance: Person;
+let suspendedOwner: Person;
 let organizationId: string;
 
 async function issue(email: string, scopes: string[]) {
@@ -178,6 +181,8 @@ beforeAll(async () => {
     { name: 'address_another', accountId: newId(0x3101) },
     { name: 'address_holder', accountId: newId(0x3102) },
     { name: 'address_org_owner', accountId: newId(0x3103) },
+    { name: 'address_governance', accountId: newId(0x3104) },
+    { name: 'address_suspended', accountId: newId(0x3105) },
   ] as const;
   for (const { name, accountId } of people) {
     approved.add(accountId);
@@ -198,6 +203,14 @@ beforeAll(async () => {
     accountId: people[3].accountId,
     bearer: await issue('address_org_owner@space-address.test', scopes),
   };
+  governance = {
+    accountId: people[4].accountId,
+    bearer: await issue('address_governance@space-address.test', scopes),
+  };
+  suspendedOwner = {
+    accountId: people[5].accountId,
+    bearer: await issue('address_suspended@space-address.test', scopes),
+  };
   organizationId = newId(0x3200);
   await admin.query(
     "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'organization','active',$2)",
@@ -209,7 +222,7 @@ beforeAll(async () => {
      VALUES ($1,$2,$3,'owner','(,)'::tstzrange,$3)`,
     [routeOf(organizationId), organizationId, organizationOwner.accountId],
   );
-  for (const person of [creator, another, handleHolder, organizationOwner]) {
+  for (const person of [creator, another, handleHolder, organizationOwner, suspendedOwner]) {
     await admin.query(
       `INSERT INTO access.resource_grant
         (route, resource_id, subject_id, action, valid, transaction_id)
@@ -217,6 +230,7 @@ beforeAll(async () => {
       [GLOBAL_CONTEXT, person.accountId],
     );
   }
+  await bootstrapGovernance(pool, governance.accountId);
 }, 60_000);
 
 afterAll(async () => {
@@ -302,3 +316,33 @@ test.serial(
     expect(organization.response.status).toBe(200);
   },
 );
+
+test.serial('a suspended account cannot claim an address or change its Space', async () => {
+  const owned = await createSpace(suspendedOwner);
+  const suspended = await call('POST', `/v1/accounts/${suspendedOwner.accountId}:suspend`, {
+    bearer: governance.bearer,
+    key: randomUUID(),
+    body: { reason: 'Space address acceptance test' },
+  });
+  expect(suspended.response.status).toBe(200);
+  expect(suspended.value.suspension).toMatchObject({ accountId: suspendedOwner.accountId, state: 'suspended' });
+
+  const address = `suspended-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const rejected = await claim(String(owned.space.spaceId), owned.etag, suspendedOwner, address);
+  expect(rejected.response.status).toBe(401);
+
+  const current = await call('GET', `/v1/spaces/${owned.space.spaceId}`);
+  expect(current.response.status).toBe(200);
+  const currentSpace = current.value.space as Record<string, unknown>;
+  expect(currentSpace.address).toBeNull();
+  expect(currentSpace.headRevisionId).toBe(owned.space.headRevisionId);
+
+  const resolved = await call('GET', `/v1/spaceAddresses/${address}`);
+  expect(resolved.response.status).toBe(404);
+  const route = createHash('sha256').update(address).digest().readUInt16BE(0);
+  const claims = await admin.query(
+    'SELECT 1 FROM community.space_address_claim WHERE route=$1 AND normalized_address=$2',
+    [route, address],
+  );
+  expect(claims.rowCount).toBe(0);
+});
