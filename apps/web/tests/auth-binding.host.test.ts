@@ -234,12 +234,16 @@ async function signIn(accountId: string) {
   expect(grant.form.get('resource')).toBe(resource);
   const session = cookie(response, sessionName);
   expect(session.slice(sessionName.length + 1)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  const page = await fetch(`${site}/en`, { headers: { cookie: session } });
+  expect(page.status).toBe(200);
+  const csrfToken = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await page.text())?.[1];
+  expect(csrfToken).toBeDefined();
   const visible = `${start.headers.getSetCookie()}\n${callback}\n${response.headers.getSetCookie()}\n${await response.text()}`;
   for (const token of [grant.tokens.access_token, grant.tokens.refresh_token, grant.tokens.id_token]) {
     expect(token).toBeTruthy();
     expect(visible).not.toContain(token);
   }
-  return { session, authorize, tokens: grant.tokens };
+  return { session, csrfToken: csrfToken!, authorize, tokens: grant.tokens };
 }
 
 async function credential(session?: string) {
@@ -310,7 +314,7 @@ test(
     const response = await fetch(`${site}/auth/sign-out`, {
       method: 'POST',
       redirect: 'manual',
-      headers: { cookie: signed.session, origin: site },
+      headers: { cookie: signed.session, origin: site, 'X-CSRF-Token': signed.csrfToken },
     });
     expect(response.status).toBe(303);
     expect(cookie(response, sessionName)).toBe(`${sessionName}=`);

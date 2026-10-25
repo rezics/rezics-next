@@ -3,6 +3,7 @@ import { dependencyUnavailable } from '../media/kernel.ts';
 import type { SessionStore } from './store.ts';
 
 export type SessionEnv = {
+  SITE_ORIGINS?: string;
   AUTH_ISSUER: string;
   API_RESOURCE: string;
   WEBSITE_SCOPES: string;

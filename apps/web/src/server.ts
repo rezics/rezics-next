@@ -1,10 +1,17 @@
 import { env } from 'cloudflare:workers';
 import { authRequest } from './session/routes.ts';
 import { prepareSession } from './session/request.ts';
-import { cookie, clearCookie, SESSION_COOKIE } from './session/cookies.ts';
+import { cookie, clearCookie, SESSION_COOKIE, validId } from './session/cookies.ts';
 import type { SessionEnv } from './session/client.ts';
 import { readSessionIdentity } from './session/state.ts';
 import { sessionSubject } from './session/request.ts';
+import {
+  carriesSession,
+  csrfTokenFromRequest,
+  csrfTokenMatches,
+  isAllowedSiteOrigin,
+  isUnsafeRequest,
+} from './session/csrf.ts';
 import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { suggestSubjects } from './search/suggestions.ts';
@@ -37,13 +44,13 @@ const fetchHandler = createStartHandler(defaultStreamHandler);
 export default {
   async fetch(request: Request) {
     const url = new URL(request.url);
+    const sessionEnv = env as Partial<SessionEnv>;
     if (
-      cookie(request, SESSION_COOKIE) !== undefined &&
-      !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
-      request.headers.get('origin') !== url.origin
+      isUnsafeRequest(request) &&
+      carriesSession(request) &&
+      !isAllowedSiteOrigin(request, request.headers.get('origin'), sessionEnv.SITE_ORIGINS)
     )
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-
     const isRead = request.method === 'GET' || request.method === 'HEAD';
     const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
     let clearSessionCookie = false;
@@ -67,7 +74,35 @@ export default {
       if (mediaSessionError !== undefined) return problemResponse(mediaSessionError);
     }
 
-    if (url.pathname.startsWith('/auth/')) return authRequest(request, env as Partial<SessionEnv>);
+    if (url.pathname.startsWith('/auth/')) {
+      if (isUnsafeRequest(request) && carriesSession(request)) {
+        const id = cookie(request, SESSION_COOKIE);
+        const token = await csrfTokenFromRequest(request);
+        if (url.pathname === '/auth/sign-out') {
+          if (!validId(id) || !sessionEnv.SESSIONS) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+          try {
+            const ended = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).end(token);
+            if (typeof ended !== 'object' || ended === null || !ended.allowed)
+              return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+            return authRequest(request, sessionEnv, { idToken: ended.idToken });
+          } catch (error) {
+            return problemResponse(error);
+          }
+        }
+        if (!validId(id) || !sessionEnv.SESSIONS || token === null)
+          return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+        try {
+          const result = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).signedIn();
+          const signedIn = typeof result === 'object' ? result.signedIn : Boolean(result);
+          const csrfToken = typeof result === 'object' ? (result.csrfToken ?? undefined) : undefined;
+          if (!signedIn || !csrfTokenMatches(csrfToken, token))
+            return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+        } catch {
+          return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+        }
+      }
+      return authRequest(request, sessionEnv);
+    }
     if (url.pathname === '/api/search/suggestions') {
       if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
       const query = url.searchParams.get('q')?.trim() ?? '';

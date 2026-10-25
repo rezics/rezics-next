@@ -210,9 +210,13 @@ async function signIn(sub: string) {
   expect(answer.status, await answer.clone().text()).toBe(303);
   const value = cookieValue(answer, sessionCookie);
   expect(value).toBeDefined();
+  const page = await fetch(`${origin}/en`, { headers: { cookie: `${sessionCookie}=${value}` } });
+  expect(page.status).toBe(200);
+  const csrfToken = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await page.text())?.[1];
+  expect(csrfToken).toBeDefined();
   return {
     origin,
-    headers: { cookie: `${sessionCookie}=${value}`, origin },
+    headers: { cookie: `${sessionCookie}=${value}`, origin, 'X-CSRF-Token': csrfToken! },
     authorization: `Bearer ${[...tokens].findLast(([, person]) => person === sub)![0]}`,
   };
 }

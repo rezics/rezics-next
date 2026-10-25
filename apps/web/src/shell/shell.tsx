@@ -235,13 +235,14 @@ function LanguageControl() {
     </>
   );
 }
-function SessionControl({ session }: { session: SessionState }) {
+function SessionControl({ session, csrfToken }: { session: SessionState; csrfToken: string | null }) {
   const location = useLocation();
   const className = 'size-9 p-0 sm:w-auto sm:px-3.5';
   if (session === 'unavailable') return null;
   if (session === 'signed-in')
     return (
       <form method="post" action="/auth/sign-out">
+        <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
         <Button type="submit" variant="outline" className={className}>
           <LogOut aria-hidden="true" className="size-5" />
           <span className="sr-only sm:not-sr-only">{m.account_sign_out()}</span>
@@ -263,11 +264,13 @@ export function AppShell({
   theme = 'system',
   collapsed = false,
   session,
+  csrfToken = null,
 }: {
   children: React.ReactNode;
   theme?: string;
   collapsed?: boolean;
   session: SessionState;
+  csrfToken?: string | null;
 }) {
   const location = useLocation();
   const router = useRouter();
@@ -300,7 +303,7 @@ export function AppShell({
               <ShellSearch />
               <LanguageControl />
               <ThemeControl />
-              <SessionControl session={session} />
+              <SessionControl session={session} csrfToken={csrfToken} />
             </div>
           </div>
         </header>

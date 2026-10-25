@@ -1,6 +1,7 @@
 import * as oidc from 'openid-client';
 import { dependencyUnavailable, problem, problemResponse } from '../media/kernel.ts';
 import { authClient, configured, unreachable, type SessionEnv } from './client.ts';
+import { newCsrfToken } from './csrf.ts';
 import {
   clearCookie,
   cookie,
@@ -98,6 +99,7 @@ async function callback(request: Request, env: SessionEnv): Promise<Response> {
     accessExpiresAt: Date.now() + tokens.expires_in * 1000,
     refreshToken: tokens.refresh_token,
     idToken: tokens.id_token,
+    csrfToken: newCsrfToken(),
     expiresAt: Date.now() + SESSION_SECONDS * 1000,
   });
   const response = redirect(transaction.returnTo);
@@ -105,9 +107,19 @@ async function callback(request: Request, env: SessionEnv): Promise<Response> {
   return response;
 }
 
-async function signOut(request: Request, env: SessionEnv): Promise<Response> {
+async function signOut(
+  request: Request,
+  env: SessionEnv,
+  endedSession?: { idToken?: string | undefined },
+): Promise<Response> {
   const id = cookie(request, SESSION_COOKIE);
-  const idToken = validId(id) ? await env.SESSIONS.get(env.SESSIONS.idFromName(id)).end() : undefined;
+  const ended =
+    endedSession !== undefined
+      ? endedSession.idToken
+      : validId(id)
+        ? await env.SESSIONS.get(env.SESSIONS.idFromName(id)).end()
+        : undefined;
+  const idToken = typeof ended === 'string' ? ended : undefined;
   let location = '/';
   if (idToken) {
     try {
@@ -127,7 +139,11 @@ async function signOut(request: Request, env: SessionEnv): Promise<Response> {
   return response;
 }
 
-export async function authRequest(request: Request, env: Partial<SessionEnv>): Promise<Response> {
+export async function authRequest(
+  request: Request,
+  env: Partial<SessionEnv>,
+  endedSession?: { idToken?: string | undefined },
+): Promise<Response> {
   const path = new URL(request.url).pathname;
   let response: Response;
   try {
@@ -137,7 +153,7 @@ export async function authRequest(request: Request, env: Partial<SessionEnv>): P
       response = problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: method });
     } else if (path === '/auth/sign-in') response = await signIn(request, env);
     else if (path === '/auth/callback') response = await callback(request, env);
-    else if (path === '/auth/sign-out') response = await signOut(request, env);
+    else if (path === '/auth/sign-out') response = await signOut(request, env, endedSession);
     else response = problemResponse(invalid());
   } catch (error) {
     response = problemResponse(error);

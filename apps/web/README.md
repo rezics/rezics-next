@@ -23,12 +23,14 @@ This transport is for website uploads; imported covers use content's own server-
 
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
-Only routes that use the credential resolve tokens, currently `/media` and `/media/…`. Pages read the session's presence and lifetime
-from its Durable Object alongside theme preferences, without refreshing tokens or contacting Auth. Missing, invalid,
+Only routes that use the credential resolve tokens, currently `/media` and `/media/…`. Pages read the session's presence,
+lifetime and CSRF token from its Durable Object alongside theme preferences, without refreshing tokens or contacting Auth. Missing, invalid,
 expired or unreadable sessions render as signed out without changing the cookie. Media requests resolve before calling
 the kernel, so unreachable Auth returns 502 even for downloads that otherwise conceal upstream errors. An explicit
-`Authorization` header skips session resolution.
-Unsafe requests carrying that cookie require an `Origin` equal to the site's own origin.
+`Authorization` header skips credential resolution; an unsafe request with a session cookie still validates its token.
+Unsafe requests carrying that cookie require an exact allowed `Origin` and the session's CSRF token in
+`X-CSRF-Token`. The only form-field exception is the sign-out form's `csrf_token` field. The signed-in document head
+contains the token in a `csrf-token` meta element; it is never placed in a cookie.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
 The header offers a sign-in document link returning to the current path and query, or a sign-out form that revokes
@@ -50,9 +52,12 @@ Configure these variables in the environment of `bun run dev`:
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   public reads need no scope. Sign-in requests `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
+- `SITE_ORIGINS`: comma-separated exact origins (scheme, host and optional port, with no trailing slash). Production
+  requires this variable. Development uses the dev server's own origin when it is unset.
 - `WEBSITE_CLIENT_KEY`: a private P-256 JWK with a `kid`, used for ES256 client assertions. In production this is a
   Worker secret; supply it through Cloudflare's secret management, never through a config file or build output.
-  `AUTH_ISSUER`, `API_RESOURCE`, `WEBSITE_SCOPES` and `WEBSITE_CLIENT_ID` are production Worker text variables.
+  `AUTH_ISSUER`, `SITE_ORIGINS`, `API_RESOURCE`, `WEBSITE_SCOPES` and `WEBSITE_CLIENT_ID` are production Worker text
+  variables.
 
 Auth must register the website client's redirect URI `<site origin>/auth/callback`, its post-logout redirect URI
 `<site origin>/`, and the `private_key_jwt` authentication method with the corresponding public key and `kid`.
@@ -67,7 +72,8 @@ If any auth variable is missing, `/auth/` routes return 503
 A refresh that Auth refuses with `invalid_grant` ends the session. Any other refresh failure keeps it, and
 credential-using routes answer 502 `dependency_unavailable` until Auth answers again.
 
-For production, set `WEBSITE_CLIENT_ID=rezics-website`, `API_RESOURCE=https://api.rezics.com`,
+For production, set `WEBSITE_CLIENT_ID=rezics-website`, `SITE_ORIGINS=https://rezics.com`,
+`API_RESOURCE=https://api.rezics.com`,
 and `AUTH_ISSUER` to the deployment's canonical Auth issuer origin, without a trailing slash.
 Register exactly `https://rezics.com/auth/callback` and post-logout URI `https://rezics.com/`.
 The trusted Auth bootstrap entry is `createAuthService(options)` followed by
@@ -167,8 +173,10 @@ M is one media object's bytes, and t is tokens or stored entries in one session 
 subject reads have no pagination or app-side cap on s. Board and thread reads use the kernel's default page size, at most
 100 entries.
 Each SQLite object has one `record` and an expiry alarm: a login record holds state, nonce, PKCE verifier, return path
-and expiry (10 minutes); a session record holds subject, access/refresh/ID tokens and expiries (30 days from sign-in).
-Thus t is capped by one fixed-shape record with three token slots; refresh overwrites them rather than appending history.
+and expiry (10 minutes); a session record holds subject, access/refresh/ID tokens, a 128-bit CSRF token and expiries
+(30 days from sign-in).
+Thus t is capped by one fixed-shape record with three OAuth token slots and one CSRF token; refresh overwrites tokens rather
+than appending history.
 Metadata, text and token lengths have no explicit byte caps here, so O(s) and O(t) byte bounds assume fixed-size entries;
 otherwise use their actual encoded bytes. Constant buffers below mean independent of s, M and t, excluding those inputs.
 Auth discovery is cached per configuration and execution context, with failed discovery evicted; A below names endpoint
@@ -194,6 +202,7 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 | Token refresh                                 | Within D: read record → A token grant when access expiry is less than 60 seconds away → replace tokens; concurrent callers share one promise                                                    | No additional D/K/R; ≤1 refresh grant per shared attempt plus cold discovery/JWKS work; O(t) bytes, no accumulated tokens; only `invalid_grant` deletes the record; any other failure keeps it and returns unavailable                     | `tests/session.test.ts`: `the session refreshes its tokens once under concurrent requests, and ends when refresh fails` asserts one refresh for five concurrent calls and none after deletion                                                                               |
 | Sign-in (`GET /auth/sign-in`)                 | Auth configuration/discovery → D login `create` → browser authorization redirect                                                                                                                | 1 D, no token grant; cold discovery only in Worker, then one browser authorization request; constant record/body size relative to s/M/t (return path length is input-dependent)                                                            | `tests/request-cost.test.ts`: `sign-in stays within its bound as s grows`                                                                                                                                                                                                   |
 | Callback (`GET /auth/callback`)               | D `takeLogin` consumes transaction → A code exchange/ID-token validation → D session `create` → redirect                                                                                        | ≤2 D; ≤1 token grant plus cold discovery/JWKS work; O(t) token/record bytes; mismatched state or declined authorization stops before exchange                                                                                              | `tests/session.test.ts`: `a callback that does not match the sign-in it answers is refused` asserts no token request for forged/missing state or declined authorization; `tests/request-cost.test.ts`: `callback stays within its bound as s grows`                         |
+| CSRF validation (unsafe requests with a session) | Exact `SITE_ORIGINS` check and constant-time token comparison before dispatch; token is carried by the existing `signedIn`, `credential` and `end` reads                                        | No new Durable Object method or write; one existing session read for unsafe Start requests; fixed-size token work                                                                                                                          | Existing `tests/request-cost.test.ts` bounds remain unchanged                                                                                                                                                                                                               |
 | Sign-out (`POST /auth/sign-out`)              | D `end` waits for in-flight refresh, deletes record/alarm → A refresh-token revocation → Worker builds browser logout redirect                                                                  | ≤1 D; ≤1 revocation plus cold discovery in D and Worker contexts; any already-running refresh has the bound above; ≤1 browser logout request; O(t) bytes, no scan of other sessions                                                        | `tests/request-cost.test.ts`: `sign-out stays within its bound as s grows`                                                                                                                                                                                                  |
 | Reserve (`POST /media`)                       | Credential prelude → K reserve on the named container                                                                                                                                           | ≤1 D by unguessable session id, exactly 1 K for a valid reservation; 0 R; body bounded at 4 KiB; constant in N media objects and U × t uploads over time, no lists or scans; add credential A; kernel work follows content's reserve bound | `tests/media-reserve.test.ts`: `a signed-in uploader reserves through the site and uploads to the address it returns` records the reserve call; shared performance harness growth check pending                                                                             |
 | Reservation state (`GET /media/<id>`)         | Credential prelude → K read of the named reservation                                                                                                                                            | ≤1 D by unguessable session id, exactly 1 K; 0 R; constant in N media objects and U × t uploads over time, no lists or scans; add credential A; kernel work follows content's read bound                                                   | `tests/media-reserve.test.ts`: `reservations are read through the site by their uploader only` records every read call; shared performance harness growth check pending                                                                                                     |

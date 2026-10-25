@@ -340,7 +340,7 @@ function tokenBytes(token: string | null) {
 }
 
 // Enforce the exact SITE_ORIGINS allowlist, with the dev origin as the default, to turn this into test(...).
-test.failing(
+test(
   "an unsafe request that carries the session is refused unless its Origin is exactly one of the site's origins",
   async () => {
     const { origin, value, access } = await signIn(true);
@@ -390,7 +390,7 @@ test.failing(
 );
 
 // Validate the session's synchronizer token before dispatching unsafe requests to turn this into test(...).
-test.failing(
+test(
   "an unsafe request that carries the session is refused without that session's CSRF token",
   async () => {
     const first = await signIn();
@@ -413,7 +413,7 @@ test.failing(
 );
 
 // Render the session's token in the signed-in document head to turn this into test(...).
-test.failing(
+test(
   "a signed-in page carries its session's CSRF token and a signed-out page carries none",
   async () => {
     const { origin, value } = await signIn();
@@ -431,7 +431,7 @@ test.failing(
 );
 
 // Create a fresh random 128-bit token with each session and keep it out of cookies to turn this into test(...).
-test.failing(
+test(
   'the CSRF token changes with the session and is never in a cookie',
   async () => {
     const first = await signIn();

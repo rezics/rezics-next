@@ -20,7 +20,8 @@ const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
     theme,
     origin: `${protocol}://${host}`,
     collapsed: /(?:^|;\s*)rezics_nav=collapsed(?:;|$)/.test(cookie),
-    session,
+    session: session.state,
+    csrfToken: session.csrfToken,
   };
 });
 export const Route = createRootRoute({
@@ -30,6 +31,7 @@ export const Route = createRootRoute({
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: m.home_heading() },
+      ...(loaderData?.csrfToken ? [{ name: 'csrf-token', content: loaderData.csrfToken }] : []),
     ],
     links: [
       { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
@@ -46,7 +48,7 @@ export const Route = createRootRoute({
   errorComponent: ErrorPage,
 });
 function Root() {
-  const { theme, collapsed, session } = Route.useLoaderData();
+  const { theme, collapsed, session, csrfToken } = Route.useLoaderData();
   useLayoutEffect(() => {
     document.documentElement.dataset.hydrated = '';
   }, []);
@@ -56,7 +58,7 @@ function Root() {
         <HeadContent />
       </head>
       <body>
-        <AppShell theme={theme} collapsed={collapsed} session={session}>
+        <AppShell theme={theme} collapsed={collapsed} session={session} csrfToken={csrfToken}>
           <Outlet />
         </AppShell>
         <Scripts />

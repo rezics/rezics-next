@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import * as oidc from 'openid-client';
 import { authClient, type SessionEnv } from './client.ts';
+import { csrfTokenMatches } from './csrf.ts';
 
 export type Login = {
   kind: 'login';
@@ -17,12 +18,14 @@ export type Session = {
   accessExpiresAt: number;
   refreshToken: string;
   idToken: string;
+  csrfToken: string;
   expiresAt: number;
 };
 type Credential =
-  | { status: 'active'; subject: string; accessToken: string }
+  | { status: 'active'; subject: string; accessToken: string; csrfToken: string }
   | { status: 'absent' }
-  | { status: 'unavailable' };
+  | { status: 'unavailable'; csrfToken?: string };
+type EndResult = { allowed: false } | { allowed: true; idToken?: string };
 
 export class SessionStore extends DurableObject<SessionEnv> {
   private refreshing: Promise<Credential> | undefined;
@@ -45,9 +48,18 @@ export class SessionStore extends DurableObject<SessionEnv> {
   }
 
   // Pages need only the session's lifetime, never an access token or a refresh.
-  async signedIn(): Promise<string | undefined> {
+  async signedIn(): Promise<{ signedIn: boolean; subject?: string; csrfToken: string | null }> {
     const record = await this.ctx.storage.get<Login | Session>('record');
-    return !this.ending && record?.kind === 'session' && record.expiresAt > Date.now() ? record.subject : undefined;
+    const signedIn =
+      !this.ending &&
+      record?.kind === 'session' &&
+      record.expiresAt > Date.now() &&
+      typeof record.csrfToken === 'string';
+    return {
+      signedIn,
+      ...(signedIn && record?.kind === 'session' ? { subject: record.subject } : {}),
+      csrfToken: signedIn && record?.kind === 'session' ? record.csrfToken : null,
+    };
   }
 
   // A storage input gate does not span the token endpoint fetch. All callers share
@@ -86,7 +98,7 @@ export class SessionStore extends DurableObject<SessionEnv> {
           await this.ctx.storage.deleteAlarm();
           return { status: 'absent' };
         }
-        return { status: 'unavailable' };
+        return { status: 'unavailable', csrfToken: record.csrfToken };
       }
     }
     if (record.expiresAt <= Date.now()) {
@@ -96,22 +108,31 @@ export class SessionStore extends DurableObject<SessionEnv> {
     }
     return this.ending
       ? { status: 'absent' }
-      : { status: 'active', subject: record.subject, accessToken: record.accessToken };
+      : { status: 'active', subject: record.subject, accessToken: record.accessToken, csrfToken: record.csrfToken };
   }
 
-  async end(): Promise<string | undefined> {
+  async end(token?: string | null): Promise<string | undefined | EndResult> {
+    const csrfProtected = token !== undefined;
+    if (this.ending) return csrfProtected ? { allowed: false } : undefined;
     this.ending = true;
     await this.refreshing;
     const record = await this.ctx.storage.get<Login | Session>('record');
+    const session = record?.kind === 'session' && record.expiresAt > Date.now() ? record : undefined;
+    if (csrfProtected && (!session || !csrfTokenMatches(session.csrfToken, token ?? null))) {
+      this.ending = false;
+      return { allowed: false };
+    }
     await this.ctx.storage.deleteAll();
     await this.ctx.storage.deleteAlarm();
-    if (record?.kind !== 'session' || record.expiresAt <= Date.now()) return undefined;
+    if (!session) return undefined;
     try {
-      await oidc.tokenRevocation(await authClient(this.env), record.refreshToken, { token_type_hint: 'refresh_token' });
+      await oidc.tokenRevocation(await authClient(this.env), session.refreshToken, {
+        token_type_hint: 'refresh_token',
+      });
     } catch {
       // Local sign-out succeeds even if Auth cannot revoke the refresh token.
     }
-    return record.idToken;
+    return csrfProtected ? { allowed: true, idToken: session.idToken } : session.idToken;
   }
 
   async alarm(): Promise<void> {

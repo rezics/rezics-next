@@ -299,6 +299,14 @@ async function credentialOf(value?: string): Promise<string | null> {
   return call!.authorization;
 }
 
+async function csrfTokenOf(origin: string, value: string): Promise<string> {
+  const response = await fetch(`${origin}/en`, { headers: { cookie: `${session}=${value}` } });
+  expect(response.status).toBe(200);
+  const token = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await response.text())?.[1];
+  expect(token).toBeDefined();
+  return token!;
+}
+
 test(
   'signing in runs the authorization code flow with PKCE and keeps the tokens on the server',
   async () => {
@@ -418,6 +426,8 @@ test(
   "unsafe requests that carry the session need the site's own Origin",
   async () => {
     const { origin, session: value } = await signIn();
+    const csrfToken = await csrfTokenOf(origin, value!);
+    const token = { 'X-CSRF-Token': csrfToken };
     const put = async (headers: Record<string, string>) => {
       const id = randomUUID();
       const response = await fetch(`${origin}/media/${id}`, {
@@ -429,12 +439,12 @@ test(
       return { response, call: kernelCalls.find((entry) => entry.path.startsWith(`/v1/media/${id}`)) };
     };
     for (const headers of [{}, { origin: 'https://evil.example' }, { origin: 'null' }]) {
-      const { response, call } = await put({ cookie: `${session}=${value}`, ...headers });
+      const { response, call } = await put({ cookie: `${session}=${value}`, ...token, ...headers });
       expect(response.status, JSON.stringify(headers)).toBe(403);
       expect(response.headers.get('content-type')).toStartWith('application/problem+json');
       expect(call).toBeUndefined();
     }
-    const same = await put({ cookie: `${session}=${value}`, origin });
+    const same = await put({ cookie: `${session}=${value}`, ...token, origin });
     expect(same.call?.authorization).toBe(`Bearer ${accessTokens.at(-1)}`);
     // Without the session there is no ambient credential to protect.
     const bare = await put({});
@@ -444,7 +454,7 @@ test(
     const refused = await fetch(`${origin}/auth/sign-out`, {
       method: 'POST',
       redirect: 'manual',
-      headers: { cookie: `${session}=${value}` },
+      headers: { cookie: `${session}=${value}`, ...token },
     });
     expect(refused.status).toBe(403);
     expect(await credentialOf(value)).toBe(`Bearer ${accessTokens.at(-1)}`);
@@ -456,6 +466,7 @@ test(
   'signing out revokes the tokens at Auth, deletes the session and ends the Auth session',
   async () => {
     const { origin, session: value } = await signIn();
+    const csrfToken = await csrfTokenOf(origin, value!);
     const refresh = `refresh-${counter}`;
     const idToken = idTokens.at(-1)!;
     expect(
@@ -466,7 +477,7 @@ test(
     const out = await fetch(`${origin}/auth/sign-out`, {
       method: 'POST',
       redirect: 'manual',
-      headers: { cookie: `${session}=${value}`, origin },
+      headers: { cookie: `${session}=${value}`, origin, 'X-CSRF-Token': csrfToken },
     });
     expect(out.status).toBe(303);
     const location = new URL(out.headers.get('location')!);

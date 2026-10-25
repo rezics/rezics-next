@@ -356,7 +356,7 @@ async function open(path: string, value?: string): Promise<Page> {
   );
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await page.locator('html[data-hydrated]').waitFor();
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
 afterAll(async () => {

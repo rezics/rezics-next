@@ -2,7 +2,7 @@ import { configured, type SessionEnv } from './client.ts';
 import { cookie, SESSION_COOKIE, validId } from './cookies.ts';
 
 export type SessionState = 'signed-in' | 'signed-out' | 'unavailable';
-export type SessionIdentity = { state: SessionState; subject?: string };
+export type SessionIdentity = { state: SessionState; subject?: string; csrfToken: string | null };
 
 const identities = new WeakMap<Request, Promise<SessionIdentity>>();
 
@@ -16,19 +16,24 @@ export function readSessionIdentity(request: Request, env: Partial<SessionEnv>):
 }
 
 async function resolveSessionIdentity(request: Request, env: Partial<SessionEnv>): Promise<SessionIdentity> {
-  if (!configured(env)) return { state: 'unavailable' };
+  if (!configured(env)) return { state: 'unavailable', csrfToken: null };
   try {
     const id = cookie(request, SESSION_COOKIE);
-    if (!validId(id)) return { state: 'signed-out' };
+    if (!validId(id)) return { state: 'signed-out', csrfToken: null };
     const result = await env.SESSIONS.get(env.SESSIONS.idFromName(id)).signedIn();
-    if (typeof result === 'string' && result) return { state: 'signed-in', subject: result };
-    return result ? { state: 'signed-in' } : { state: 'signed-out' };
+    if (typeof result === 'string' && result)
+      return { state: 'signed-in', subject: result, csrfToken: null };
+    if (typeof result === 'boolean')
+      return { state: result ? 'signed-in' : 'signed-out', csrfToken: null };
+    return result.signedIn
+      ? { state: 'signed-in', subject: result.subject, csrfToken: result.csrfToken }
+      : { state: 'signed-out', csrfToken: null };
   } catch {
     // A page remains usable when the local session cannot be read.
-    return { state: 'signed-out' };
+    return { state: 'signed-out', csrfToken: null };
   }
 }
 
-export async function readSessionState(request: Request, env: Partial<SessionEnv>): Promise<SessionState> {
-  return (await readSessionIdentity(request, env)).state;
+export async function readSessionState(request: Request, env: Partial<SessionEnv>): Promise<SessionIdentity> {
+  return readSessionIdentity(request, env);
 }
