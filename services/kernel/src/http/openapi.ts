@@ -1,5 +1,6 @@
 import { toOpenAPISchema } from '@elysia/openapi';
 import type { AnyElysia } from 'elysia/base';
+import { customMethodPath } from './custom-method.ts';
 import { PROBLEMS, type ProblemCode } from './problem.ts';
 
 const SECURITY_SCHEMES = {
@@ -208,5 +209,8 @@ export function openApiDocument(app: AnyElysia): OpenApiDocument {
     }
   }
 
+  document.paths = Object.fromEntries(
+    Object.entries(document.paths).map(([path, operations]) => [customMethodPath(path), operations]),
+  );
   return canonical(document) as OpenApiDocument;
 }

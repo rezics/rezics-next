@@ -7,6 +7,7 @@ import { accessCheck, actorOf, type Access, type AccessFactory, type Resource } 
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
+import { customMethodVerb } from './custom-method.ts';
 import { ProblemError, problemResponse } from './problem.ts';
 import { actionCatalogue, actionForRequest, SESSION_HEADER } from './request.ts';
 import healthCheck from './health.sql';
@@ -114,5 +115,22 @@ export function createApp({
       }
     });
   mountedApp = app;
+  app.wrap((handle) => {
+    const verbs = new Set(app.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined));
+    return (request) => {
+      const url = new URL(request.url);
+      const path = url.pathname;
+      // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
+      if (/\/(?:\$|%24)/i.test(path))
+        return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
+
+      const colon = path.lastIndexOf(':');
+      if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
+        url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
+        return handle(new Request(url, request));
+      }
+      return handle(request);
+    };
+  });
   return app;
 }

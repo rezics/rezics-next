@@ -20,8 +20,15 @@ export type KernelClientOptions = {
 /** Creates one viewer's client and keeps its session token so the viewer's reads see its own writes. */
 export function createKernelClient(origin: string, options: KernelClientOptions = {}) {
   let session = options.session;
+  const fetcher = options.fetch ?? globalThis.fetch;
   const config = {
-    ...(options.fetch === undefined ? {} : { fetcher: options.fetch }),
+    fetcher: ((input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const path = url.pathname.replace(/\/\$([a-z][A-Za-z0-9]*)$/, ':$1');
+      if (path === url.pathname) return fetcher(input, init);
+      url.pathname = path;
+      return fetcher(input instanceof Request ? new Request(url, input) : url.href, init);
+    }) as typeof fetch,
     parseDate: false,
     headers: () => ({
       ...options.headers,

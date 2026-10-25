@@ -33,6 +33,16 @@ When the HTTP contract changes, regenerate both `contracts/openapi.json` with `b
 declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
 stale.
 
+Register AIP-136 custom methods with `customMethod(resourcePath, verb)` from `src/http/custom-method.ts`, then use
+that path with `.post(...)`. The resource path must not end in `/` and the verb must match `^[a-z][A-Za-z0-9]*$`
+(lowerCamelCase). For example, `customMethod('/v1/media/:id', 'complete')` registers `/v1/media/:id/$complete`
+internally and serves `POST /v1/media/{id}:complete`; `customMethod('/v1/subjects', 'merge')` serves
+`POST /v1/subjects:merge`. Every app from `createApp` translates the last literal colon in the last path segment
+when its suffix is a registered custom verb. Parameters can contain colons; `%3A` never acts as the separator.
+Internal `/$` paths return `404 not_found`. OpenAPI uses the public AIP paths. Eden exposes custom methods as
+`client.media({ id }).$complete.post(body)` or `client.subjects.$merge.post(body)` and the client fetcher sends
+them to their public AIP paths.
+
 ## Database changes
 
 Kernel-owned migrations live in `db/migrations/` and their dump lives in `db/schema.sql`. Each module has its code and
