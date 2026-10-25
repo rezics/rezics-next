@@ -78,14 +78,16 @@ test('durable sanitized projections admit legal larger records and reject the ha
     };
     const normalizedRecord = native(300 * 1024).payload;
     store.stage(run, { row, projection: { sourceKind: 'openlibrary', normalizedRecord } });
-    expect(store.pageStaged(run, { limit: 1 })[0]!.projection.normalizedRecord).toEqual(normalizedRecord);
     expect(() =>
       store.stage(run, {
         row: { ...row, recordKey: '/works/OL100001W' },
         projection: { sourceKind: 'openlibrary', normalizedRecord: native(HARD + 1).payload },
       }),
     ).toThrow();
-    expect(store.pageStaged(run, { limit: 2 })).toHaveLength(1);
+    expect(store.seal(run, { complete: true }).status).toBe('ready');
+    const page = store.pageStaged(run, { limit: 2 });
+    expect(page).toHaveLength(1);
+    expect(page[0]!.projection.normalizedRecord).toEqual(normalizedRecord);
   } finally {
     store.close();
     database.close();
