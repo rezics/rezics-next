@@ -1,0 +1,272 @@
+import { expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import entity from './fixtures/imports/wikidata/entity.json';
+import excluded from './fixtures/imports/wikidata/excluded.json';
+import { loadWikidataDriver, type WikidataDriver } from './imports-wikidata-driver';
+import type { StatementInput } from './semantic-driver';
+
+const author = '00000000-0000-8000-8000-000100000042';
+const otherAuthor = '00000000-0000-8000-8000-000100000043';
+const resolved = Object.freeze({ Q42: author });
+const fresh = () => structuredClone(entity);
+
+/** Resolve real output locations, never accept detached adapter-made values. */
+function at<T = unknown>(raw: unknown, pointer: string): T {
+  expect(pointer === '' || pointer.startsWith('/')).toBe(true);
+  let current = raw;
+  for (const part of pointer === '' ? [] : pointer.slice(1).split('/')) {
+    const key = part.replaceAll('~1', '/').replaceAll('~0', '~');
+    expect(current !== null && typeof current === 'object').toBe(true);
+    expect(Object.hasOwn(current as object, key)).toBe(true);
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current as T;
+}
+const inside = (parent: string, child: string) => expect(child.startsWith(`${parent}/`)).toBe(true);
+function leaves(value: unknown): unknown[] {
+  return value !== null && typeof value === 'object' ? Object.values(value).flatMap(leaves) : [value];
+}
+function freeze(value: unknown): void {
+  if (value !== null && typeof value === 'object') {
+    Object.freeze(value);
+    Object.values(value).forEach(freeze);
+  }
+}
+function checked(driver: WikidataDriver, raw: unknown) {
+  expect(driver.converter_revision.trim().length).toBeGreaterThan(0);
+  const view = driver.observe(raw);
+  expect(view.outcome).toBe('converted');
+  expect(view.proposals.length).toBeGreaterThan(0);
+  expect(new Set(view.proposals.map(p => p.command)).size).toBe(view.proposals.length);
+  for (const proposal of view.proposals) {
+    const command = at(raw, proposal.command);
+    expect(command).toBeInstanceOf(Object);
+    expect(proposal.fieldGroups.length).toBeGreaterThan(0);
+    for (const pointer of proposal.fieldGroups) {
+      inside(proposal.command, pointer);
+      expect(at<string>(raw, pointer).trim().length).toBeGreaterThan(0);
+    }
+    expect(proposal.citations.length).toBeGreaterThan(0);
+    for (const cite of proposal.citations) {
+      for (const pointer of Object.values(cite)) inside(proposal.command, pointer);
+      expect(at(raw, cite.reference)).toBeInstanceOf(Object);
+      expect(at(raw, cite.rights)).toBeInstanceOf(Object);
+      expect(at(raw, cite.source)).toBe('wikidata');
+      expect(at(raw, cite.externalId)).toBe('Q571');
+      expect(String(at(raw, cite.sourceRevision))).toBe('24681012');
+      expect(at(raw, cite.license)).toBe('CC0-1.0');
+      const url = new URL(at<string>(raw, cite.url));
+      expect(url.protocol).toBe('https:');
+      expect(url.hostname).toBe('www.wikidata.org');
+      expect(['/wiki/Q571', '/entity/Q571', '/wiki/Special:EntityData/Q571.json']).toContain(url.pathname);
+    }
+    for (const pointer of [proposal.labels, proposal.descriptions, proposal.aliases, proposal.subjectType, ...proposal.statements])
+      if (pointer !== undefined) inside(proposal.command, pointer);
+    // Structural acceptance must consume the very proposals inspected above.
+    const accepted = driver.accept(command);
+    expect(accepted.command).toEqual(command);
+    expect(accepted.citations).toEqual(proposal.citations.map(c => at(raw, c.reference)));
+  }
+  return view;
+}
+function statements(driver: WikidataDriver, raw: unknown): StatementInput[] {
+  return checked(driver, raw).proposals.flatMap(p => p.statements.map(pointer => at<StatementInput>(raw, pointer)));
+}
+function invalid(driver: WikidataDriver, input: unknown) {
+  const raw = driver.convert(input, resolved);
+  const view = driver.observe(raw);
+  expect(view.outcome).toBe('invalid');
+  expect(view.proposals).toEqual([]);
+  expect(view.diagnostics.length).toBeGreaterThan(0);
+  for (const diagnostic of view.diagnostics) {
+    expect(diagnostic.code.trim().length).toBeGreaterThan(0);
+    expect(diagnostic.pointer === '' || diagnostic.pointer.startsWith('/')).toBe(true);
+  }
+}
+
+test('Mapped Wikidata facts and terms are cited command proposals accepted by the semantic consumer', async () => {
+  const driver = await loadWikidataDriver();
+  const raw = driver.convert(fresh(), resolved);
+  const view = checked(driver, raw);
+  expect(view.proposals.flatMap(p => p.subjectType === undefined ? [] : [at(raw, p.subjectType)])).toEqual(['schema:Book']);
+  for (const [field, expected] of Object.entries({
+    labels: { en: 'The Example Book', 'en-GB': 'Example Book' },
+    descriptions: { en: 'A synthetic book work for conversion tests' },
+    aliases: { en: ['Example Volume'] },
+  })) {
+    const pointers = view.proposals.flatMap(p => {
+      const pointer = p[field as 'labels' | 'descriptions' | 'aliases'];
+      return pointer === undefined ? [] : [pointer];
+    });
+    expect(pointers).toHaveLength(1);
+    expect(at(raw, pointers[0]!)).toEqual(expected);
+  }
+  const facts = statements(driver, raw);
+  expect(facts.map(s => s.property.id).sort()).toEqual(['schema:author', 'schema:datePublished', 'schema:url']);
+  expect(facts.find(s => s.property.id === 'schema:url')?.value).toEqual({ type: 'value', content: 'https://books.example.org/example' });
+  expect(facts.find(s => s.property.id === 'schema:datePublished')?.value).toEqual({ type: 'value', content: {
+    time: '+2001-02-03T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+  } });
+});
+
+test('Supported qualifier reference URL and preferred rank survive on the mapped author statement', async () => {
+  const driver = await loadWikidataDriver();
+  const facts = statements(driver, driver.convert(fresh(), resolved));
+  const authors = facts.filter(s => s.property.id === 'schema:author');
+  expect(authors).toHaveLength(1);
+  expect(authors[0]).toMatchObject({ rank: 'preferred', value: { type: 'value', content: author },
+    qualifiers: [{ property: { id: 'schema:position' }, value: { type: 'value', content: '1' } }] });
+  expect(authors[0]!.references).toEqual(expect.arrayContaining([expect.objectContaining({ parts: expect.arrayContaining([
+    expect.objectContaining({ property: expect.objectContaining({ id: 'schema:url' }),
+      value: { type: 'value', content: 'https://catalogue.example.org/books/example' } }),
+  ]) })]));
+});
+
+test('Changed supported source values flow into proposals instead of returning a fabricated fixture snapshot', async () => {
+  const driver = await loadWikidataDriver();
+  const changed = fresh();
+  changed.labels.en.value = 'Another Example Book';
+  changed.aliases.en[0]!.value = 'Another Volume';
+  changed.descriptions.en.value = 'A changed description';
+  changed.claims.P856[0]!.mainsnak.datavalue.value = 'https://books.example.org/changed';
+  changed.claims.P577[0]!.mainsnak.datavalue.value.time = '+2002-03-04T00:00:00Z';
+  const sourceAuthor = changed.claims.P50[0]!;
+  sourceAuthor.rank = 'deprecated';
+  sourceAuthor.qualifiers!.P1545[0]!.datavalue.value = '2';
+  sourceAuthor.references![0]!.snaks.P854[0]!.datavalue.value = 'https://catalogue.example.org/books/changed';
+  const raw = driver.convert(changed, resolved);
+  const view = checked(driver, raw);
+  for (const [field, expected] of Object.entries({ labels: { en: 'Another Example Book', 'en-GB': 'Example Book' },
+    aliases: { en: ['Another Volume'] }, descriptions: { en: 'A changed description' } })) {
+    expect(view.proposals.flatMap(p => {
+      const pointer = p[field as 'labels' | 'aliases' | 'descriptions'];
+      return pointer === undefined ? [] : [at(raw, pointer)];
+    })).toEqual([expected]);
+  }
+  const facts = statements(driver, raw);
+  expect(facts).toHaveLength(3);
+  expect(facts.find(s => s.property.id === 'schema:url')?.value.content).toBe('https://books.example.org/changed');
+  expect(facts.find(s => s.property.id === 'schema:datePublished')?.value.content).toMatchObject({ time: '+2002-03-04T00:00:00Z' });
+  const mappedAuthor = facts.find(s => s.property.id === 'schema:author')!;
+  expect(mappedAuthor).toMatchObject({ rank: 'deprecated', value: { type: 'value', content: author },
+    qualifiers: [{ property: { id: 'schema:position' }, value: { type: 'value', content: '2' } }] });
+  expect(mappedAuthor.references!.flatMap(r => r.parts).map(p => p.value.content)).toContain('https://catalogue.example.org/books/changed');
+});
+
+test('Unknown Wikidata properties cannot invent schema fields or carry their sentinel into proposals', async () => {
+  const driver = await loadWikidataDriver();
+  const raw = driver.convert(fresh(), resolved);
+  const facts = statements(driver, raw);
+  expect(facts).toHaveLength(3);
+  expect(facts.every(s => ['schema:author', 'schema:datePublished', 'schema:url'].includes(s.property.id))).toBe(true);
+  for (const p of checked(driver, raw).proposals) {
+    expect(leaves(at(raw, p.command))).not.toContain('UNKNOWN_PROPERTY_SENTINEL');
+    expect(leaves(at(raw, p.command))).not.toContain('P999999');
+  }
+});
+
+test('Only supplied entity resolutions become REZICS relations and unresolved entities never acquire invented IDs', async () => {
+  const driver = await loadWikidataDriver();
+  const missing = statements(driver, driver.convert(fresh(), {}));
+  expect(missing.filter(s => s.property.id === 'schema:author')).toEqual([]);
+  const one = statements(driver, driver.convert(fresh(), resolved));
+  expect(one.filter(s => s.property.id === 'schema:author').map(s => s.value)).toEqual([{ type: 'value', content: author }]);
+  const both = statements(driver, driver.convert(fresh(), { ...resolved, Q999999999: otherAuthor }));
+  expect(both.filter(s => s.property.id === 'schema:author').map(s => s.value.content).sort()).toEqual([author, otherAuthor]);
+});
+
+test('Revision citations track the exact entity revision while converter revision remains explicit and stable', async () => {
+  const driver = await loadWikidataDriver();
+  const revision = driver.converter_revision;
+  const first = driver.convert(fresh(), resolved);
+  checked(driver, first);
+  const changed = fresh();
+  changed.lastrevid = 24681013;
+  const second = driver.convert(changed, resolved);
+  const view = driver.observe(second);
+  expect(view.outcome).toBe('converted');
+  expect(view.proposals.length).toBeGreaterThan(0);
+  for (const p of view.proposals) {
+    expect(p.citations.length).toBeGreaterThan(0);
+    for (const c of p.citations) expect(String(at(second, c.sourceRevision))).toBe('24681013');
+    expect(driver.accept(at(second, p.command)).citations).toEqual(p.citations.map(c => at(second, c.reference)));
+  }
+  expect(second).not.toEqual(first);
+  expect(driver.converter_revision).toBe(revision);
+});
+
+test('Conversion is synchronous deterministic and does not mutate input or perform ambient I/O', async () => {
+  const driver = await loadWikidataDriver();
+  const input = fresh();
+  const before = structuredClone(input);
+  freeze(input);
+  const deny = () => { throw new Error('Pure conversion attempted ambient I/O or nondeterminism'); };
+  const guards = [spyOn(globalThis, 'fetch').mockImplementation(Object.assign(deny, { preconnect: deny })), spyOn(Date, 'now').mockImplementation(deny),
+    spyOn(Math, 'random').mockImplementation(deny), spyOn(Bun, 'file').mockImplementation(deny),
+    spyOn(Bun, 'write').mockImplementation(deny), spyOn(Bun, 'spawn').mockImplementation(deny),
+    spyOn(Bun, 'spawnSync').mockImplementation(deny), spyOn(Bun, 'connect').mockImplementation(deny),
+    spyOn(fs, 'readFileSync').mockImplementation(deny), spyOn(fs, 'writeFileSync').mockImplementation(deny),
+    spyOn(fsp, 'readFile').mockImplementation(deny), spyOn(fsp, 'writeFile').mockImplementation(deny)];
+  let expected: unknown;
+  let again: unknown;
+  try {
+    expected = driver.convert(input, resolved);
+    again = driver.convert(input, resolved);
+  } finally { guards.forEach(g => g.mockRestore()); }
+  checked(driver, expected);
+  expect(expected).not.toBeInstanceOf(Promise);
+  expect(again).not.toBeInstanceOf(Promise);
+  expect(again).toEqual(expected);
+  expect(input).toEqual(before);
+  expect(resolved).toEqual({ Q42: author });
+  expect(driver.convert(fresh(), resolved)).toEqual(expected);
+});
+
+test('User and talk pages account records and private extensions produce no imported text', async () => {
+  const driver = await loadWikidataDriver();
+  for (const page of excluded) {
+    const raw = driver.convert(structuredClone(page), resolved);
+    const view = driver.observe(raw);
+    expect(['ignored', 'invalid']).toContain(view.outcome);
+    expect(view.proposals).toEqual([]);
+  }
+  const dirty = driver.convert(fresh(), resolved);
+  const clean = fresh();
+  const { posts: _posts, account: _account, ...entityOnly } = clean;
+  const safe = driver.convert(entityOnly, resolved);
+  const commands = (raw: unknown) => checked(driver, raw).proposals.map(p => at(raw, p.command));
+  expect(commands(dirty)).toEqual(commands(safe));
+  expect(statements(driver, dirty)).toHaveLength(3);
+});
+
+test('Malformed entities IDs revisions and mainsnaks reject clearly without command proposals', async () => {
+  const driver = await loadWikidataDriver();
+  for (const input of [null, [], {}, 'not an entity', ...['', 'Q0', 'Q-1', 'q571', 'Q571/../../User:Example', 'P571']
+    .map(id => ({ ...fresh(), id })), { ...fresh(), type: 'property' }, { ...fresh(), lastrevid: -1 },
+    { ...fresh(), lastrevid: 'not-a-revision' }, { ...fresh(), lastrevid: null }, { ...fresh(), lastrevid: 1.5 },
+    { ...fresh(), claims: [] }]) invalid(driver, input);
+  const broken = fresh();
+  delete (broken.claims.P856[0]!.mainsnak as Partial<typeof broken.claims.P856[0]['mainsnak']>).datavalue;
+  invalid(driver, broken);
+});
+
+test('Unsafe mapped URLs and reference URLs reject without proposals or unsafe citations', async () => {
+  const driver = await loadWikidataDriver();
+  for (const url of ['javascript:alert(1)', 'data:text/html,PRIVATE_TEXT_SENTINEL', 'file:///etc/passwd',
+    'https://user:secret@example.org/', 'https://example.org/\r\nX-Injected:yes']) {
+    const main = fresh();
+    main.claims.P856[0]!.mainsnak.datavalue.value = url;
+    invalid(driver, main);
+    const reference = fresh();
+    reference.claims.P50[0]!.references![0]!.snaks.P854[0]!.datavalue.value = url;
+    invalid(driver, reference);
+  }
+});
+
+test('The semantic consumer rejects empty and SQL-shaped output instead of fabricating acceptance', async () => {
+  const driver = await loadWikidataDriver();
+  checked(driver, driver.convert(fresh(), resolved));
+  for (const command of [null, {}, [], { sql: 'INSERT INTO subjects DEFAULT VALUES' }, { proposals: [] }])
+    expect(() => driver.accept(command)).toThrow();
+});

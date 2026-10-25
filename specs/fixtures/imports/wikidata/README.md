@@ -1,0 +1,10 @@
+These small synthetic fixtures follow the [Wikibase entity JSON format](https://doc.wikimedia.org/Wikibase/master/php/docs_topics_json.html).
+The entity ID and revision are test identities, not a claim about a real Wikidata revision.
+The entity has deliberately hostile extra post/account fields; the separate page/account records test exclusion.
+Source claims use the catalogue's existing P50, P1545, P577 and P856 mappings; P31 identifies a book work.
+P854 supplies a reference URL. P999999 is deliberately unsupported, and Q999999999 is initially unresolved.
+No Wikipedia article body is included or fetched from the sitelink.
+
+Wikidata's [copyright policy](https://www.wikidata.org/wiki/Wikidata:Copyright) distinguishes CC0 structured data
+from other namespaces' text. The tests require CC0-1.0 source citations with the exact entity revision;
+user/talk text and private account fields never receive that structured-data treatment.
