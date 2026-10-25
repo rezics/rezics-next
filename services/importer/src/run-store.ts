@@ -1,0 +1,827 @@
+import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { randomBytes } from 'node:crypto';
+import {
+  BatchStatementSchema,
+  checkBatchWrite,
+  checkBatchWriteResult,
+  FIELD_GROUPS,
+  type BatchCommand,
+  type BatchStatement,
+  type FieldGroup,
+} from '@rezics/definitions/bulk';
+import type { ImportBatchRequest, ImportBatchResult } from './import-contract.ts';
+import type { RecordRow } from './record-store.ts';
+
+export type Run = { source: string; id: string; lease: string };
+export type Staged = { row: RecordRow; projection: BatchStatement[] };
+export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: number };
+export type Pending = { after: string; recordKey: string; bytes: string; keys: string[] };
+export type Seal = {
+  status: 'ready' | 'invalid-input' | 'mass-disappearance';
+  prior: number;
+  seenSurvivors: number;
+  supplied: number;
+  diagnostic: string;
+};
+type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
+type Source = {
+  source: string;
+  sequence: number;
+  lease_run: string | null;
+  generation: string | null;
+  present_count: number;
+};
+type Generation = {
+  source: string;
+  id: string;
+  seq: number;
+  lease: string;
+  status: string;
+  threshold: number;
+  prior: number;
+  supplied: number;
+  survivors: number;
+  invalid: number;
+  classified: number;
+  resolved: number;
+  expected: number;
+  changed: number;
+  prepared: number;
+  cursor: string;
+};
+type Entry = {
+  source: string;
+  run_id: string;
+  record_key: string;
+  row_json: string;
+  projection_json: string;
+  kind: Kind | null;
+  resolved: number;
+  bytes: string | null;
+  keys_json: string;
+  omissions_json: string;
+  pending: number;
+  remaining: number;
+};
+type Member = { source: string; record_key: string; active: number; seen: number; row_json: string };
+type Command = {
+  source: string;
+  run_id: string;
+  command_key: string;
+  record_key: string;
+  field_group: FieldGroup;
+  done: number;
+};
+
+export const RUN_TABLES = [
+  'run_sources',
+  'run_generations',
+  'run_entries',
+  'run_members',
+  'run_acknowledged',
+  'run_commands',
+  'run_payloads',
+] as const;
+
+function fail(): never {
+  throw new TypeError('Invalid run-store input');
+}
+function exact(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): asserts value is Record<string, unknown> {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    required.some((k) => !Object.hasOwn(value, k)) ||
+    Object.keys(value).some((k) => !required.includes(k) && !optional.includes(k))
+  )
+    fail();
+}
+function identifier(value: unknown, cap: number, pattern: RegExp): asserts value is string {
+  if (typeof value !== 'string' || Buffer.byteLength(value) > cap || !pattern.test(value)) fail();
+}
+function sourceId(value: unknown): asserts value is string {
+  identifier(value, 64, /^[a-z][a-z0-9_-]*$/u);
+}
+function keyId(value: unknown): asserts value is string {
+  identifier(value, 512, /^[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*$/u);
+}
+function validateRun(run: Run) {
+  exact(run, ['source', 'id', 'lease']);
+  sourceId(run.source);
+  identifier(run.id, 32, /^[1-9][0-9]*$/u);
+  identifier(run.lease, 48, /^[a-f0-9]{48}$/u);
+}
+function pageLimit(value: number) {
+  if (!Number.isInteger(value) || value < 1 || value > 100) fail();
+}
+function boundedJson(value: unknown, cap = 65536): string {
+  let budget = cap;
+  const parents = new Set<object>();
+  function visit(v: unknown, depth: number) {
+    if (depth > 64 || (budget -= 2) < 0) fail();
+    if (typeof v === 'string') {
+      budget -= Buffer.byteLength(v);
+      if (budget < 0) fail();
+      return;
+    }
+    if (v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) return;
+    if (!v || typeof v !== 'object' || parents.has(v)) fail();
+    if (!Array.isArray(v) && Object.getPrototypeOf(v) !== Object.prototype) fail();
+    parents.add(v);
+    for (const [k, item] of Object.entries(v)) {
+      budget -= Buffer.byteLength(k);
+      visit(item, depth + 1);
+    }
+    parents.delete(v);
+  }
+  try {
+    visit(value, 0);
+    const bytes = JSON.stringify(value);
+    if (Buffer.byteLength(bytes) > cap) fail();
+    return bytes;
+  } catch {
+    return fail();
+  }
+}
+function validateRow(row: unknown): asserts row is RecordRow {
+  exact(row, ['source', 'recordKey', 'recordRevision', 'digest', 'converter_revision', 'state']);
+  sourceId(row.source);
+  keyId(row.recordKey);
+  identifier(row.recordRevision, 256, /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]*$/u);
+  identifier(row.converter_revision, 128, /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]*$/u);
+  identifier(row.digest, 64, /^[a-f0-9]{64}$/u);
+  if (row.state !== 'present' && row.state !== 'vanished') fail();
+}
+// Validate the exported portable statement schema without a second statement contract.
+// BatchStatementSchema uses only these JSON Schema keywords. Unknown keywords fail closed.
+function matchesStatementSchema(schema: unknown, value: unknown): boolean {
+  const s = schema as {
+    anyOf?: unknown[];
+    type?: string;
+    const?: unknown;
+    properties?: Record<string, unknown>;
+    required?: string[];
+    items?: unknown;
+    minItems?: number;
+    maxItems?: number;
+    minLength?: number;
+  };
+  if (
+    Object.keys(s).some(
+      (k) =>
+        !['anyOf', 'type', 'const', 'properties', 'required', 'items', 'minItems', 'maxItems', 'minLength'].includes(k),
+    )
+  )
+    return false;
+  if (s.anyOf) return s.anyOf.some((variant) => matchesStatementSchema(variant, value));
+  if (Object.hasOwn(s, 'const')) return value === s.const;
+  if (s.type === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const v = value as Record<string, unknown>;
+    return (
+      (s.required ?? []).every((k) => Object.hasOwn(v, k)) &&
+      Object.keys(v).every(
+        (k) => !!s.properties && Object.hasOwn(s.properties, k) && matchesStatementSchema(s.properties[k], v[k]),
+      )
+    );
+  }
+  if (s.type === 'array')
+    return (
+      Array.isArray(value) &&
+      value.length >= (s.minItems ?? 0) &&
+      value.length <= (s.maxItems ?? Infinity) &&
+      value.every((v) => matchesStatementSchema(s.items, v))
+    );
+  if (s.type === 'string') return typeof value === 'string' && [...value].length >= (s.minLength ?? 0);
+  return Object.keys(s).length === 0;
+}
+const token = () => randomBytes(24).toString('hex');
+const rowBytes = (row: RecordRow) =>
+  JSON.stringify({
+    source: row.source,
+    recordKey: row.recordKey,
+    recordRevision: row.recordRevision,
+    digest: row.digest,
+    converter_revision: row.converter_revision,
+    state: row.state,
+  });
+
+/**
+ * Importer-only state: no transport, source mapping, subject identity generation or kernel authority.
+ * Current acknowledgements and completed source snapshots are separate authorities for separate facts.
+ * run_acknowledged is this store's acknowledgement authority. A future RecordStore integration MUST
+ * supply a transaction adapter on this same Database, replacing these exact acknowledgement reads/
+ * writes inside this transaction; independently calling RecordStore.put would create two authorities
+ * and cannot atomically discharge journal commands. No such adapter is installed implicitly.
+ *
+ * All methods are synchronous bounded operations, suitable for an async coordinator to forward.
+ * The constructor instruments the actual handle before schema work or preparing any statement.
+ */
+export class RunStore {
+  readonly database: Database;
+  private closed = false;
+  constructor(path: string | Database, options: { instrumentDatabase?: (database: Database) => Database } = {}) {
+    const db = typeof path === 'string' ? new Database(path, { create: true, strict: true }) : path;
+    try {
+      this.database = options.instrumentDatabase?.(db) ?? db;
+      this.database.exec('PRAGMA journal_mode=WAL');
+      this.database.exec('PRAGMA busy_timeout=5000');
+      this.database.exec('PRAGMA synchronous=NORMAL');
+      // Schema initialization happens once per connection, never in a run operation.
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_sources (
+        source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT,
+        generation TEXT, present_count INTEGER NOT NULL) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_generations (
+        source TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, lease TEXT NOT NULL,
+        status TEXT NOT NULL, threshold REAL NOT NULL, prior INTEGER NOT NULL,
+        supplied INTEGER NOT NULL DEFAULT 0, survivors INTEGER NOT NULL DEFAULT 0,
+        invalid INTEGER NOT NULL DEFAULT 0, classified INTEGER NOT NULL DEFAULT 0,
+        resolved INTEGER NOT NULL DEFAULT 0, expected INTEGER NOT NULL DEFAULT 0,
+        changed INTEGER NOT NULL DEFAULT 0, prepared INTEGER NOT NULL DEFAULT 0,
+        cursor TEXT NOT NULL DEFAULT '', PRIMARY KEY(source,id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_entries (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
+        row_json TEXT NOT NULL, projection_json TEXT NOT NULL, kind TEXT,
+        resolved INTEGER NOT NULL DEFAULT 0, bytes TEXT, keys_json TEXT NOT NULL DEFAULT '[]',
+        omissions_json TEXT NOT NULL DEFAULT '[]', pending INTEGER NOT NULL DEFAULT 0,
+        remaining INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_pending ON run_entries(source,run_id,pending,record_key)`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_members (
+        source TEXT NOT NULL, record_key TEXT NOT NULL, active INTEGER NOT NULL,
+        seen INTEGER NOT NULL, row_json TEXT NOT NULL, PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
+      // active=1 excludes all vanished history; seen<generation excludes the S staged survivors.
+      // (seen,key) is the composite disappearance cursor. Even failed stages keep seen<next generation.
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_missing ON run_members(source,active,seen,record_key)`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_acknowledged (
+        source TEXT NOT NULL, record_key TEXT NOT NULL, row_json TEXT NOT NULL,
+        projection_json TEXT NOT NULL, PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_commands (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, command_key TEXT NOT NULL,
+        record_key TEXT NOT NULL, field_group TEXT NOT NULL, done INTEGER NOT NULL,
+        PRIMARY KEY(source,run_id,command_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_payloads (
+        source TEXT NOT NULL, command_key TEXT NOT NULL, body TEXT NOT NULL,
+        PRIMARY KEY(source,command_key)) WITHOUT ROWID`);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+  }
+  private query(sql: string) {
+    if (this.closed) throw new Error('Run store is closed');
+    return this.database.prepare(sql);
+  }
+  private get<T>(sql: string, ...args: SQLQueryBindings[]): T | null {
+    const statement = this.query(sql);
+    try {
+      return statement.get(...args) as T | null;
+    } finally {
+      statement.finalize();
+    }
+  }
+  private all<T>(sql: string, ...args: SQLQueryBindings[]): T[] {
+    const statement = this.query(sql);
+    try {
+      return statement.all(...args) as T[];
+    } finally {
+      statement.finalize();
+    }
+  }
+  private write(sql: string, ...args: SQLQueryBindings[]) {
+    const statement = this.query(sql);
+    try {
+      return statement.run(...args);
+    } finally {
+      statement.finalize();
+    }
+  }
+  private transaction<T>(fn: () => T): T {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const value = fn();
+      this.database.exec('COMMIT');
+      return value;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  private generation(run: Run, terminal = false): Generation {
+    validateRun(run);
+    const g = this.get<Generation>('SELECT * FROM run_generations WHERE source=? AND id=?', run.source, run.id);
+    if (!g || g.lease !== run.lease || (!terminal && !['staging', 'ready', 'finalizing'].includes(g.status)))
+      throw new Error('Run capability is stale or terminal');
+    return g;
+  }
+  private release(run: Run, status: string) {
+    this.write('UPDATE run_generations SET status=? WHERE source=? AND id=?', status, run.source, run.id);
+    this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', run.source, run.id);
+  }
+  begin(source: string, options: { disappearanceThreshold?: number } = {}): Run | 'busy' {
+    sourceId(source);
+    exact(options, [], ['disappearanceThreshold']);
+    const threshold = options.disappearanceThreshold ?? 0.2;
+    if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) fail();
+    return this.transaction(() => {
+      const s = this.get<Source>('SELECT * FROM run_sources WHERE source=?', source);
+      if (s?.lease_run) return 'busy';
+      const seq = (s?.sequence ?? 0) + 1;
+      if (!Number.isSafeInteger(seq)) throw new Error('Source sequence exhausted');
+      const run = { source, id: String(seq), lease: token() };
+      this.write(
+        `INSERT INTO run_sources(source,sequence,lease_run,generation,present_count) VALUES(?,?,?,?,?)
+        ON CONFLICT(source) DO UPDATE SET sequence=excluded.sequence,lease_run=excluded.lease_run`,
+        source,
+        seq,
+        run.id,
+        s?.generation ?? null,
+        s?.present_count ?? 0,
+      );
+      this.write(
+        `INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior) VALUES(?,?,?,?,?,?,?)`,
+        source,
+        run.id,
+        seq,
+        run.lease,
+        'staging',
+        threshold,
+        s?.present_count ?? 0,
+      );
+      return run;
+    });
+  }
+  reopen(run: Run): Run {
+    return this.transaction(() => {
+      this.generation(run);
+      const lease = token();
+      this.write('UPDATE run_generations SET lease=? WHERE source=? AND id=?', lease, run.source, run.id);
+      return { source: run.source, id: run.id, lease };
+    });
+  }
+  abandon(run: Run): 'abandoned' | 'pending-work' {
+    return this.transaction(() => {
+      const g = this.generation(run);
+      if (g.prepared || g.status === 'finalizing') return 'pending-work';
+      this.release(run, 'abandoned');
+      return 'abandoned';
+    });
+  }
+  stage(run: Run, record: Staged): void {
+    exact(record, ['row', 'projection']);
+    validateRow(record.row);
+    if (record.row.source !== run.source || record.row.state !== 'present' || !Array.isArray(record.projection)) fail();
+    const projection = boundedJson(record.projection);
+    if (!record.projection.every((p) => matchesStatementSchema(BatchStatementSchema, p))) fail();
+    const duplicate = this.transaction(() => {
+      const g = this.generation(run);
+      if (g.status !== 'staging') throw new Error('Run is sealed');
+      const inserted = this.write(
+        `INSERT OR IGNORE INTO run_entries(source,run_id,record_key,row_json,projection_json)
+        VALUES(?,?,?,?,?)`,
+        run.source,
+        run.id,
+        record.row.recordKey,
+        rowBytes(record.row),
+        projection,
+      );
+      if (!inserted.changes) {
+        this.write('UPDATE run_generations SET invalid=1 WHERE source=? AND id=?', run.source, run.id);
+        return true;
+      }
+      const m = this.get<Member>(
+        'SELECT * FROM run_members WHERE source=? AND record_key=?',
+        run.source,
+        record.row.recordKey,
+      );
+      const survivor = m?.active === 1 && m.seen !== g.seq ? 1 : 0;
+      if (survivor)
+        this.write(
+          'UPDATE run_members SET seen=? WHERE source=? AND record_key=?',
+          g.seq,
+          run.source,
+          record.row.recordKey,
+        );
+      this.write(
+        'UPDATE run_generations SET supplied=supplied+1,survivors=survivors+? WHERE source=? AND id=?',
+        survivor,
+        run.source,
+        run.id,
+      );
+      return false;
+    });
+    if (duplicate) throw new Error('Duplicate staged key invalidates input');
+  }
+  seal(run: Run, input: { complete: true } | { complete: false; reason: 'malformed' | 'truncated' }): Seal {
+    if (input.complete === true) exact(input, ['complete']);
+    else {
+      exact(input, ['complete', 'reason']);
+      if (input.complete !== false || !['malformed', 'truncated'].includes(input.reason)) fail();
+    }
+    return this.transaction(() => {
+      const g = this.generation(run);
+      if (g.status !== 'staging') throw new Error('Run is already sealed');
+      const missing = g.prior - g.survivors;
+      const status =
+        !input.complete || g.invalid
+          ? 'invalid-input'
+          : g.prior > 0 && (missing === g.prior || missing / g.prior > g.threshold)
+            ? 'mass-disappearance'
+            : 'ready';
+      if (status !== 'ready') this.release(run, status);
+      else
+        this.write(
+          'UPDATE run_generations SET status=?,expected=? WHERE source=? AND id=?',
+          'ready',
+          g.supplied + missing,
+          run.source,
+          run.id,
+        );
+      return {
+        status,
+        prior: g.prior,
+        seenSurvivors: g.survivors,
+        supplied: g.supplied,
+        diagnostic:
+          status === 'ready'
+            ? 'Input sealed'
+            : status === 'invalid-input'
+              ? 'Input is incomplete or invalid'
+              : 'Disappearance threshold exceeded',
+      };
+    });
+  }
+  private entry(run: Run, key: string) {
+    return this.get<Entry>(
+      'SELECT * FROM run_entries WHERE source=? AND run_id=? AND record_key=?',
+      run.source,
+      run.id,
+      key,
+    );
+  }
+  private resolve(run: Run, entry: Entry) {
+    if (entry.resolved || entry.remaining) return;
+    this.write(
+      'UPDATE run_entries SET resolved=1,pending=0 WHERE source=? AND run_id=? AND record_key=?',
+      run.source,
+      run.id,
+      entry.record_key,
+    );
+    this.write(
+      `INSERT INTO run_acknowledged(source,record_key,row_json,projection_json) VALUES(?,?,?,?)
+      ON CONFLICT(source,record_key) DO UPDATE SET row_json=excluded.row_json,projection_json=excluded.projection_json`,
+      run.source,
+      entry.record_key,
+      entry.row_json,
+      entry.projection_json,
+    );
+    this.write('UPDATE run_generations SET resolved=resolved+1 WHERE source=? AND id=?', run.source, run.id);
+  }
+  classify(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
+    keyId(key);
+    exact(input, ['commands'], ['omissions']);
+    if (!Array.isArray(input.commands) || input.commands.length > 100) fail();
+    const request: ImportBatchRequest = { commands: input.commands };
+    const bytes = boundedJson(request);
+    if (input.commands.length && checkBatchWrite(request).length) fail();
+    const omissions = input.omissions ?? [];
+    if (!Array.isArray(omissions) || omissions.length > 3) fail();
+    const groups = new Set<FieldGroup>();
+    for (const o of omissions) {
+      exact(o, ['field_group', 'disposition', 'securityRevision']);
+      if (
+        !FIELD_GROUPS.includes(o.field_group) ||
+        o.disposition !== 'fenced' ||
+        !Number.isSafeInteger(o.securityRevision) ||
+        o.securityRevision < 0 ||
+        groups.has(o.field_group)
+      )
+        fail();
+      groups.add(o.field_group);
+    }
+    return this.transaction(() => {
+      const g = this.generation(run);
+      if (g.status !== 'ready') throw new Error('Run is not ready for classification');
+      let e = this.entry(run, key);
+      if (!e) {
+        const m = this.get<Member>('SELECT * FROM run_members WHERE source=? AND record_key=?', run.source, key);
+        if (!m || !m.active || m.seen >= g.seq) throw new Error('Key is outside this snapshot');
+        const row: RecordRow = { ...JSON.parse(m.row_json), state: 'vanished' };
+        this.write(
+          `INSERT INTO run_entries(source,run_id,record_key,row_json,projection_json) VALUES(?,?,?,?,?)`,
+          run.source,
+          run.id,
+          key,
+          rowBytes(row),
+          '[]',
+        );
+        e = this.entry(run, key)!;
+      }
+      const row = JSON.parse(e.row_json) as RecordRow;
+      for (const c of input.commands) {
+        if (
+          c.source.source !== run.source ||
+          c.source.external_id !== key ||
+          c.source.digest !== row.digest ||
+          c.source.record_revision !== row.recordRevision ||
+          c.source.converter_revision !== row.converter_revision
+        )
+          fail();
+      }
+      if (e.kind && input.commands.length && e.bytes !== bytes)
+        throw new Error('Prepared command envelope is immutable');
+      if (!e.kind) {
+        const current = this.get<{ row_json: string; projection_json: string }>(
+          'SELECT row_json,projection_json FROM run_acknowledged WHERE source=? AND record_key=?',
+          run.source,
+          key,
+        );
+        e.kind =
+          row.state === 'vanished'
+            ? 'vanished'
+            : !current
+              ? 'new'
+              : current.row_json === e.row_json && current.projection_json === e.projection_json
+                ? 'unchanged'
+                : 'changed';
+        // A successful omission can acknowledge a record in an abandoned generation.
+        // Snapshot equality must still compare against the complete pointer, not that ack.
+        const baseline = this.get<{ row_json: string; projection_json: string }>(
+          `SELECT b.row_json,b.projection_json FROM run_sources AS s JOIN run_entries AS b
+            ON b.source=s.source AND b.run_id=s.generation AND b.record_key=? WHERE s.source=?`,
+          key,
+          run.source,
+        );
+        const snapshotChanged =
+          !baseline || baseline.row_json !== e.row_json || baseline.projection_json !== e.projection_json;
+        const keys: string[] = [];
+        // Each original request envelope is stored before this transaction returns to a caller/transport.
+        for (const c of input.commands) {
+          const body = boundedJson(c);
+          const old = this.get<{ body: string }>(
+            'SELECT body FROM run_payloads WHERE source=? AND command_key=?',
+            run.source,
+            c.key,
+          );
+          if (old && old.body !== body) throw new Error('Command key already has a different payload');
+          if (!old)
+            this.write('INSERT INTO run_payloads(source,command_key,body) VALUES(?,?,?)', run.source, c.key, body);
+          this.write(
+            'INSERT INTO run_commands(source,run_id,command_key,record_key,field_group,done) VALUES(?,?,?,?,?,?)',
+            run.source,
+            run.id,
+            c.key,
+            key,
+            c.source.field_group,
+            0,
+          );
+          keys.push(c.key);
+        }
+        e.bytes = keys.length ? bytes : null;
+        e.keys_json = JSON.stringify(keys);
+        e.remaining = keys.length;
+        this.write(
+          `UPDATE run_entries SET kind=?,bytes=?,keys_json=?,remaining=?,pending=? WHERE source=? AND run_id=? AND record_key=?`,
+          e.kind,
+          e.bytes,
+          e.keys_json,
+          e.remaining,
+          e.remaining ? 1 : 0,
+          run.source,
+          run.id,
+          key,
+        );
+        this.write(
+          `UPDATE run_generations SET classified=classified+1,changed=changed+?,prepared=prepared+?
+          WHERE source=? AND id=?`,
+          snapshotChanged ? 1 : 0,
+          keys.length ? 1 : 0,
+          run.source,
+          run.id,
+        );
+      }
+      const saved: Omission[] = JSON.parse(e.omissions_json);
+      for (const omission of omissions) {
+        const i = saved.findIndex((o) => o.field_group === omission.field_group);
+        if (i < 0) saved.push(omission);
+        else if (saved[i]!.securityRevision <= omission.securityRevision) saved[i] = omission;
+      }
+      if (omissions.length) {
+        this.write(
+          'UPDATE run_entries SET omissions_json=? WHERE source=? AND run_id=? AND record_key=?',
+          JSON.stringify(saved),
+          run.source,
+          run.id,
+          key,
+        );
+        for (const commandKey of JSON.parse(e.keys_json) as string[]) {
+          const c = this.get<Command>(
+            'SELECT * FROM run_commands WHERE source=? AND run_id=? AND command_key=?',
+            run.source,
+            run.id,
+            commandKey,
+          )!;
+          if (!c.done && saved.some((o) => o.field_group === c.field_group)) {
+            this.write(
+              'UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key=?',
+              run.source,
+              run.id,
+              commandKey,
+            );
+            e.remaining--;
+          }
+        }
+        this.write(
+          'UPDATE run_entries SET remaining=? WHERE source=? AND run_id=? AND record_key=?',
+          e.remaining,
+          run.source,
+          run.id,
+          key,
+        );
+      }
+      if (e.bytes || e.kind === 'unchanged' || saved.length) this.resolve(run, e);
+      return e.kind;
+    });
+  }
+  pagePending(run: Run, page: { after?: string; limit: number }): Pending[] {
+    exact(page, ['limit'], ['after']);
+    pageLimit(page.limit);
+    if (page.after !== undefined) keyId(page.after);
+    const g = this.generation(run, true);
+    if (!['ready', 'finalizing'].includes(g.status)) return [];
+    return this.all<Entry>(
+      `SELECT * FROM run_entries INDEXED BY run_pending
+      WHERE source=? AND run_id=? AND pending=1 AND record_key>? ORDER BY record_key LIMIT ?`,
+      run.source,
+      run.id,
+      page.after ?? '',
+      page.limit,
+    ).map((e) => ({ after: e.record_key, recordKey: e.record_key, bytes: e.bytes!, keys: JSON.parse(e.keys_json) }));
+  }
+  pageVanished(run: Run, page: { after?: string; limit: number }): RecordRow[] {
+    validateRun(run);
+    exact(page, ['limit'], ['after']);
+    pageLimit(page.limit);
+    if (page.after !== undefined) keyId(page.after);
+    // A capability check with zero returned rows keeps the page's returned-row bound exactly M.
+    // The no-op update is an exact run key seek; no in-memory lease cache can bypass a reopen fence.
+    if (
+      !this.write(
+        `UPDATE run_generations SET lease=lease WHERE source=? AND id=? AND lease=? AND status='ready'`,
+        run.source,
+        run.id,
+        run.lease,
+      ).changes
+    )
+      throw new Error('Run is not ready');
+    // after is the last emitted key. Its exact membership lookup recovers the seen half of
+    // the durable composite cursor, including after failed staging touched some prior members.
+    const after = page.after ?? '';
+    return this.all<{ row_json: string }>(
+      `SELECT m.row_json FROM run_members AS m INDEXED BY run_missing
+      WHERE m.source=? AND m.active=1
+        AND m.seen<(SELECT seq FROM run_generations WHERE source=? AND id=?)
+        AND (m.seen,m.record_key)>(COALESCE((SELECT seen FROM run_members WHERE source=? AND record_key=?),-1),?)
+      ORDER BY m.seen,m.record_key LIMIT ?`,
+      run.source,
+      run.source,
+      run.id,
+      run.source,
+      after,
+      after,
+      page.limit,
+    ).map((m) => JSON.parse(m.row_json) as RecordRow);
+  }
+  acknowledge(run: Run, result: ImportBatchResult): void {
+    boundedJson(result);
+    if (
+      checkBatchWriteResult(result).length ||
+      new Set(result.results.map((r) => r.key)).size !== result.results.length
+    )
+      fail();
+    this.transaction(() => {
+      const g = this.generation(run, true);
+      if (!['ready', 'complete'].includes(g.status)) throw new Error('Run is not ready');
+      for (const r of result.results) {
+        const c = this.get<Command>(
+          'SELECT * FROM run_commands WHERE source=? AND run_id=? AND command_key=?',
+          run.source,
+          run.id,
+          r.key,
+        );
+        if (!c) throw new Error('Unknown command result');
+        if (c.done || (r.status !== 200 && r.status !== 201)) continue;
+        const e = this.entry(run, c.record_key)!;
+        this.write(
+          'UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key=?',
+          run.source,
+          run.id,
+          r.key,
+        );
+        e.remaining--;
+        this.write(
+          'UPDATE run_entries SET remaining=? WHERE source=? AND run_id=? AND record_key=?',
+          e.remaining,
+          run.source,
+          run.id,
+          c.record_key,
+        );
+        this.resolve(run, e);
+      }
+    });
+  }
+  finalize(run: Run, pageCap: number): 'incomplete' | 'more' | 'complete' {
+    pageLimit(pageCap);
+    return this.transaction(() => {
+      const g = this.generation(run, true);
+      if (g.status === 'complete') return 'complete';
+      if (!['ready', 'finalizing'].includes(g.status)) throw new Error('Run cannot finalize');
+      if (g.classified !== g.expected || g.resolved !== g.expected) return 'incomplete';
+      const entries = this.all<Entry>(
+        `SELECT * FROM run_entries WHERE source=? AND run_id=? AND record_key>?
+        ORDER BY record_key LIMIT ?`,
+        run.source,
+        run.id,
+        g.cursor,
+        pageCap,
+      );
+      for (const e of entries) {
+        const row = JSON.parse(e.row_json) as RecordRow;
+        this.write(
+          `INSERT INTO run_members(source,record_key,active,seen,row_json) VALUES(?,?,?,?,?)
+          ON CONFLICT(source,record_key) DO UPDATE SET active=excluded.active,seen=excluded.seen,row_json=excluded.row_json`,
+          run.source,
+          e.record_key,
+          row.state === 'present' ? 1 : 0,
+          g.seq,
+          e.row_json,
+        );
+      }
+      if (entries.length === pageCap) {
+        this.write(
+          'UPDATE run_generations SET status=?,cursor=? WHERE source=? AND id=?',
+          'finalizing',
+          entries[entries.length - 1]!.record_key,
+          run.source,
+          run.id,
+        );
+        return 'more';
+      }
+      // The complete pointer switches only after the durable S+D cursor is exhausted.
+      // Old run_entries remain immutable baseline snapshots across partial/crashed finalization.
+      this.write(
+        `UPDATE run_sources SET generation=CASE WHEN generation IS NULL OR ? > 0 THEN ? ELSE generation END,
+        present_count=?,lease_run=NULL WHERE source=? AND lease_run=?`,
+        g.changed,
+        run.id,
+        g.supplied,
+        run.source,
+        run.id,
+      );
+      this.write('UPDATE run_generations SET status=? WHERE source=? AND id=?', 'complete', run.source, run.id);
+      return 'complete';
+    });
+  }
+  source(source: string): { generation: string | null; count: number } {
+    sourceId(source);
+    const s = this.get<Source>('SELECT * FROM run_sources WHERE source=?', source);
+    return { generation: s?.generation ?? null, count: s?.present_count ?? 0 };
+  }
+  /** Optional bounded key observation; production staging never collects a source's keys. */
+  key(
+    source: string,
+    key: string,
+    run?: Run,
+  ): { baseline: RecordRow | null; acknowledged: RecordRow | null; staged: Staged | null; omissions: Omission[] } {
+    sourceId(source);
+    keyId(key);
+    const s = this.source(source);
+    const baseline = s.generation ? this.entry({ source, id: s.generation, lease: '' }, key) : null;
+    const ack = this.get<{ row_json: string }>(
+      'SELECT row_json FROM run_acknowledged WHERE source=? AND record_key=?',
+      source,
+      key,
+    );
+    let e: Entry | null = null;
+    if (run) {
+      if (run.source !== source) fail();
+      const g = this.generation(run, true);
+      if (['staging', 'ready', 'finalizing', 'complete'].includes(g.status)) e = this.entry(run, key);
+    }
+    return {
+      baseline: baseline ? JSON.parse(baseline.row_json) : null,
+      acknowledged: ack ? JSON.parse(ack.row_json) : null,
+      staged: e ? { row: JSON.parse(e.row_json), projection: JSON.parse(e.projection_json) } : null,
+      omissions: e ? JSON.parse(e.omissions_json) : [],
+    };
+  }
+  close(): void {
+    if (!this.closed) {
+      this.database.close();
+      this.closed = true;
+    }
+  }
+}
