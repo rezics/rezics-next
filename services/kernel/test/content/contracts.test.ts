@@ -373,6 +373,7 @@ function publishedModels(): void {
         subjectIds?: readonly string[];
         boardId?: string;
         mediaIds?: readonly string[];
+        expectedRevisionId?: string | null;
       }>
     >
   >();
@@ -398,6 +399,7 @@ function publishedModels(): void {
         securityRevision: string;
         availability: 'available' | 'erased';
         createdAt: string;
+        revisedAt: string | null;
         sha256: string;
         mediaIds: readonly string[];
       }>
@@ -416,6 +418,7 @@ function publishedModels(): void {
         subjectIds: readonly string[];
         boardId: string;
         createdAt: string;
+        revisedAt: string | null;
         sha256: string;
         mediaIds: readonly string[];
       }>

@@ -27,6 +27,12 @@ const fixtures = {
   'com.rezics.content.thread.created.v1': authored,
   'com.rezics.content.post.created.v1': authored,
   'com.rezics.content.revision.created.v1': authored,
+  'com.rezics.content.board.created.v1': {
+    boardId: containerId,
+    realmId: crypto.randomUUID(),
+    conceptId: crypto.randomUUID(),
+    actorId,
+  },
   'com.rezics.content.media.reserved.v1': { ...media, actorId },
   'com.rezics.content.media.uploaded.v1': { ...media, actorId },
   'com.rezics.content.media.available.v1': media,
@@ -44,6 +50,7 @@ const fixtures = {
   'com.rezics.content.post.erased.v1': { postId: itemId, securityRevision: '9223372036854775807' },
   'com.rezics.content.moderation.erasure.v1': { threadId, postIds: [itemId], mediaIds: [mediaId] },
   'com.rezics.content.report.created.v1': { reportId, targetKind: 'post', targetId: itemId, revisionId },
+  'com.rezics.content.report-target.projected.v1': { reportId, targetKind: 'post', targetId: itemId },
   'com.rezics.content.reaction.changed.v1': {
     actorId,
     targetKind: 'post',

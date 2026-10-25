@@ -20,6 +20,7 @@ import { composeWork } from '../../src/work/registry.ts';
 const routeKey = Buffer.alloc(32, 59).toString('base64url');
 const actions = ['realm:join', 'realm:manage', 'realm:participate', 'realm:read', 'realm:publish', 'access:grant'];
 const scopes = [...new Set(actions)];
+const authenticationHooks = new Map<string, () => Promise<void>>();
 
 let admin: Pool;
 let pool: ReturnType<typeof createPool>;
@@ -130,6 +131,12 @@ beforeAll(async () => {
   access = createAccess({
     actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
     accountEvidence: (_actor, context) => context.account,
+    async authenticate(ref) {
+      const accountId = /^authenticated-fixture\.(.+)$/.exec(ref)?.[1];
+      if (!accountId || routeOf(accountId) === null) throw new Error('No approval');
+      await authenticationHooks.get(ref)?.();
+      return actor(accountId);
+    },
     realmRoleReader: (connection, input) => roleReader(connection, input),
   });
   membership = createRealmMembership({ pool, access });
@@ -141,12 +148,6 @@ beforeAll(async () => {
     env: { KERNEL_ROUTE_KEY: routeKey },
   });
   await runtime.launch();
-
-  async function authorize(ref: string) {
-    const accountId = /^authenticated-fixture\.(.+)$/.exec(ref)?.[1];
-    if (!accountId || routeOf(accountId) === null) throw new Error('No approval');
-    return requestFor(accountId);
-  }
 }, 120_000);
 
 afterAll(async () => {
@@ -156,11 +157,44 @@ afterAll(async () => {
   await admin?.end();
 });
 
-async function authorize(ref: string) {
-  const accountId = /^authenticated-fixture\.(.+)$/.exec(ref)?.[1];
-  if (!accountId || routeOf(accountId) === null) throw new Error('No approval');
-  return requestFor(accountId);
+async function authorize(): Promise<LifecycleRequest> {
+  throw new Error('Realm work must use the installed Realm authorization port');
 }
+
+test('Realm authorization resolves identity and current self-join or management permission through Access', async () => {
+  const installed = await install();
+  const input = {
+    kind: 'membership' as const,
+    principal: { kind: 'realm' as const, id: installed.realmId },
+    memberAccountId: installed.memberId,
+    role: 'member' as const,
+    authorization: await reference(installed.memberId),
+  };
+  const resolved = await membership.authorize(input.authorization, input);
+  expect(resolved.actor).toEqual(actor(installed.memberId));
+  expect(resolved.account?.accountId).toBe(installed.memberId);
+  expect(resolved.deadline).toBeGreaterThan(Date.now());
+  const manager = await membership.authorize(await reference(installed.managerId), input);
+  expect(manager.actor.accountId).toBe(installed.managerId);
+  await expect(membership.authorize(await reference(installed.strangerId), input)).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
+  await expect(membership.authorize('invalid-reference', input)).rejects.toThrow();
+  await expect(membership.authorize(input.authorization, { ...input, role: 'owner' })).rejects.toBeInstanceOf(
+    RealmMembershipRoleError,
+  );
+  await expect(
+    membership.authorize(input.authorization, { ...input, principal: { kind: 'organization', id: installed.realmId } }),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(
+    membership.authorize(input.authorization, { ...input, memberAccountId: 'invalid' }),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+  await admin.query('DELETE FROM access.resource_grant WHERE resource_id = $1 AND subject_id = $2', [
+    installed.realmId,
+    installed.memberId,
+  ]);
+  await expect(membership.authorize(input.authorization, input)).rejects.toBeInstanceOf(GrantDeniedError);
+});
 
 test("accounts' membership workflow with the community Realm adapter joins an account to a Realm, and the role reader proves membership from T with a valid range", async () => {
   const installed = await install();
@@ -511,6 +545,22 @@ test('leave commits a terminal slot so release completes, terminalize closes onl
 
   const blockedId = newId(0x2260);
   await account(blockedId);
+  await admin.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1,$2,$3,'realm:join','(,)',$3)`,
+    [installed.route, installed.realmId, blockedId],
+  );
+  const blockedReference = await reference(blockedId);
+  let resolutions = 0;
+  authenticationHooks.set(blockedReference, async () => {
+    if (++resolutions === 2) {
+      await admin.query('DELETE FROM access.resource_grant WHERE resource_id = $1 AND subject_id = $2', [
+        installed.realmId,
+        blockedId,
+      ]);
+      authenticationHooks.delete(blockedReference);
+    }
+  });
   const failedId = `realm-membership-failed-${crypto.randomUUID()}`;
   const failed = await enqueueMembership(client, failedId, {
     kind: 'membership',
