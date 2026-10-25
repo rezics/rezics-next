@@ -269,7 +269,10 @@ test('all unclaimed states collect at exactly 24 hours; younger, claimed, erased
     erased = await media();
   const remote = await media('available', old, route + 16);
   await admin.query('UPDATE content.media SET claimed_at=$3 WHERE route=$1 AND media_id=$2', [route, claimed.id, at]);
-  await admin.query('UPDATE content.media SET erased=true WHERE route=$1 AND media_id=$2', [route, erased.id]);
+  await admin.query(
+    'UPDATE content.media SET erased=true, security_revision=security_revision+1 WHERE route=$1 AND media_id=$2',
+    [route, erased.id],
+  );
   const retained = [younger, claimed, erased, remote].flatMap((m) =>
     [...storage.keys.keys()].filter((key) => key.startsWith(`m/${m.id}/`)),
   );
@@ -498,7 +501,8 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
             'content.media_variant': variantRows,
             'core.receipt': history.map((h) => ({
               partition_no: h.partition_no,
-              actor_account_id: h.actor_account_id,
+              principal_kind: 'account',
+              principal_id: h.actor_account_id,
               command_kind: 'content.media.collection.fence',
               idempotency_key: h.media_id,
               request_digest: createHash('sha256').update(`content.media.collection.fence:${h.media_id}`).digest(),
@@ -523,7 +527,8 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
               transaction_id: h.transaction_id,
               epoch: h.epoch,
               position: h.position,
-              actor_account_id: h.actor_account_id,
+              principal_kind: 'account',
+              principal_id: h.actor_account_id,
               client_id: 'website',
               requested_by: null,
             })),
