@@ -46,8 +46,9 @@ export interface ImportIdentity {
  * Bootstrap only through bootstrap-governance.ts --account <id> or its exported entrypoint;
  * no Access-row inserts or public HTTP bootstrap. All later grants use the normal formula.
  * Setup namespace/schema/migration SQL and read-only observation are the only SQL exemptions.
- * Auth may own an isolated realm/database; clean it even when opening fails. Nested Auth,
- * Access and receipts must share database's actual auto_explain capture via its pools.
+ * Auth may own an isolated realm/database; clean it even when opening fails. Application
+ * Access/receipt operations use database.pool; later API assembly captures nested Auth
+ * work with shared GrowthDatabase instrumentation, never fixture-generated counters.
  * Fixed actors/grants and <=1000 memberships; exact partition/marker/account/grant seeks,
  * never a full Access scan, history enumeration, static cost counters or timing oracle.
  */
