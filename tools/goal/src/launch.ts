@@ -49,6 +49,7 @@ export function workerPrompt(task: Task, evidence: string | undefined, consultat
     readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
     task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',
     'The task contract follows:', task.brief.markdown,
+    'A failure outside your declared paths is not your blocker: when your acceptance command passes, report success and name any such failure in your summary.',
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.` : '',
