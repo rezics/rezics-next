@@ -88,8 +88,20 @@ const opening = Type.Object(
   { additionalProperties: false },
 );
 
+const exposure = (open: boolean) =>
+  Type.Object(
+    {
+      group: Type.String({ pattern: '^(?!any$|open$|close$)[a-z][a-z_]{0,62}$(?![\\s\\S])' }),
+      open: Type.Literal(open),
+      changed: Type.Boolean(),
+    },
+    { additionalProperties: false },
+  );
+
 /** Exact public command return values; command keys, credentials and opening context stay private. */
 export const ACCESS_EVENTS = {
+  'com.rezics.access.exposure.opened.v1': exposure(true),
+  'com.rezics.access.exposure.closed.v1': exposure(false),
   'com.rezics.access.account.suspended.v1': Type.Object(
     {
       accountId: identity,

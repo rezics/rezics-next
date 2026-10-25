@@ -1,12 +1,5 @@
 import type { Pool } from 'pg';
-import { Type } from 'typebox';
-import { ACCESS_EVENTS } from '../access/events.ts';
-import { COMMERCE_EVENTS } from '../commerce/events.ts';
-import { COMMUNITY_EVENTS } from '../community/events.ts';
-import { CONTENT_EVENTS } from '../content/events.ts';
-import { LIBRARY_EVENTS } from '../library/events.ts';
-import { SEMANTIC_EVENTS } from '../semantic/events.ts';
-import { Value } from 'typebox/value';
+import { lookupEventType } from './catalogue.ts';
 import { withConnection } from '../database/pool.ts';
 import advanceCheckpoint from './advance-checkpoint.sql';
 import compareAdvanceCheckpoint from './compare-advance-checkpoint.sql';
@@ -14,56 +7,15 @@ import ensureCheckpoint from './ensure-checkpoint.sql';
 import lockCheckpoint from './lock-checkpoint.sql';
 import readLog from './read-log.sql';
 
-export const BATCH_ENVELOPES = 64;
+export { EVENT_TYPES } from './catalogue.ts';
 
-const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
-const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
-export const EVENT_TYPES = {
-  ...ACCESS_EVENTS,
-  ...COMMERCE_EVENTS,
-  ...COMMUNITY_EVENTS,
-  ...CONTENT_EVENTS,
-  ...LIBRARY_EVENTS,
-  ...SEMANTIC_EVENTS,
-  'com.rezics.definitions.published.v1': Type.Object({ digest }, { additionalProperties: false }),
-  'com.rezics.definitions.activated.v1': Type.Object(
-    { digest, head: Type.Integer({ minimum: 1 }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.presentation.profile.published.v1': Type.Object({ digest }, { additionalProperties: false }),
-  'com.rezics.presentation.profile.activated.v1': Type.Object(
-    { digest, head: Type.Integer({ minimum: 1 }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.subject.created.v1': Type.Object({ id: Type.String({ pattern: UUID }) }, { additionalProperties: false }),
-  'com.rezics.subject.visibility_changed.v1': Type.Object(
-    {
-      id: Type.String({ pattern: UUID }),
-      visibility: Type.Union([Type.Literal('visible'), Type.Literal('hidden'), Type.Literal('taken_down')]),
-      security_revision: Type.Integer({ minimum: 1 }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.subject.statement_visibility_changed.v1': Type.Object(
-    {
-      id: Type.String({ pattern: UUID }),
-      candidate: Type.String({ pattern: UUID }),
-      visibility: Type.Union([Type.Literal('visible'), Type.Literal('hidden'), Type.Literal('taken_down')]),
-      security_revision: Type.Integer({ minimum: 1 }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.semantic.context.created.v1': Type.Object(
-    { id: Type.String({ pattern: UUID }) },
-    { additionalProperties: false },
-  ),
-} as const;
+export const BATCH_ENVELOPES = 64;
 
 export type CloudEvent = {
   specversion: '1.0';
   id: string;
   source: string;
-  type: keyof typeof EVENT_TYPES;
+  type: string;
   subject?: string;
   time: string;
   datacontenttype: 'application/json';
@@ -143,12 +95,12 @@ function parseRows(
     }
     const events: CloudEvent[] = [];
     for (const row of groupRows) {
-      if (row.type === null || !Object.hasOwn(EVENT_TYPES, row.type)) {
+      const validator = row.type === null ? undefined : lookupEventType(row.type);
+      if (!validator) {
         reason = 'unknown_type';
         break;
       }
-      const schema = EVENT_TYPES[row.type as keyof typeof EVENT_TYPES];
-      if (!Value.Check(schema, row.data)) {
+      if (!validator.Check(row.data)) {
         reason = 'invalid_data';
         break;
       }
@@ -156,7 +108,7 @@ function parseRows(
         specversion: '1.0',
         id: row.id!,
         source: `urn:rezics:log:${partition}.${envelopeEpoch}`,
-        type: row.type as keyof typeof EVENT_TYPES,
+        type: row.type!,
         ...(row.subject === null ? {} : { subject: row.subject }),
         time: row.time!,
         datacontenttype: 'application/json',

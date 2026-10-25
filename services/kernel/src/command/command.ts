@@ -4,6 +4,7 @@ import fenceStatement from './fence.sql';
 import readReceipt from './read-receipt.sql';
 import readTime from './time.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
 import { enterCommandGate } from './gate.ts';
 
@@ -430,6 +431,7 @@ export async function runCommand<T>(
             if (row) {
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
               await client.query('COMMIT');
+              sealEventTypes();
               return {
                 value: row.response as T,
                 partition,
@@ -446,6 +448,23 @@ export async function runCommand<T>(
           if (response.events.length === 0) throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
             throw new TooManyEventsError(partition, response.events.length);
+          const events = response.events.map(({ type, subject, data: inputData }) => {
+            const validator = lookupEventType(type);
+            if (!validator) throw new TypeError(`Unregistered event type: ${type}`);
+            let data: unknown;
+            try {
+              const serialized = JSON.stringify(inputData);
+              if (serialized === undefined) throw new TypeError('Event data must be JSON serializable');
+              data = JSON.parse(serialized);
+            } catch (error) {
+              throw new TypeError(`Invalid event data for ${type}: ${String(error)}`);
+            }
+            if (!validator.Check(data)) {
+              const error = validator.Errors(data)[0]!;
+              throw new TypeError(`Invalid event data for ${type}: ${error.instancePath} ${error.message}`);
+            }
+            return { type, subject, data, id: Bun.randomUUIDv7() };
+          });
           await authorization?.finalize?.(tx, attempt, evidence);
           let receipt: Record<string, unknown> | null = null;
           let value = response.value;
@@ -463,7 +482,6 @@ export async function runCommand<T>(
               throw new TypeError('A command receipt value must be JSON serializable');
             value = receipt.response as T;
           }
-          const events = response.events.map((event) => ({ ...event, id: Bun.randomUUIDv7() }));
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
           const row = await fenceStatement.run(client, {
             partition_no: partition,
@@ -492,6 +510,7 @@ export async function runCommand<T>(
             throw new CommandUnavailableError('deadline', partition);
           }
           await client.query('COMMIT');
+          sealEventTypes();
           return {
             value,
             partition,

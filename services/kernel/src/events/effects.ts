@@ -4,7 +4,8 @@ import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
 import { WORK_QUEUES } from '../work/queues.ts';
 import type { Relay } from './relays.ts';
-import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from './log.ts';
+import { lookupEventType } from './catalogue.ts';
+import { readBatch, type CloudEvent, type Envelope } from './log.ts';
 
 export { DBOS_SCHEMA } from '../work/client.ts';
 export const EFFECTS_QUEUE = 'effects';
@@ -29,8 +30,7 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
     if (names.has(effect.name)) throw new RangeError(`Duplicate effect name: ${effect.name}`);
     names.add(effect.name);
     for (const type of effect.types) {
-      if (!Object.hasOwn(EVENT_TYPES, type))
-        throw new RangeError(`Unknown event type for effect ${effect.name}: ${type}`);
+      if (!lookupEventType(type)) throw new RangeError(`Unknown event type for effect ${effect.name}: ${type}`);
     }
   }
 
