@@ -88,13 +88,19 @@ const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const uuidPattern = new RegExp(`^${uuid}$`);
 const requestedByPattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
 const routeOf = (id: string): number => Number.parseInt(id.slice(24, 28), 16);
+/** `at` is the configured instant, or PostgreSQL time when no clock is bound.
+ * `databaseAt` is always PostgreSQL `clock_timestamp()`. A caller that stubs only
+ * `at` leaves `databaseAt` unset; preparation then fails closed.
+ */
 async function readPermissionTime(
   client: Parameters<typeof timeRead.run>[0],
   clock?: () => Date,
-): Promise<string | undefined> {
+): Promise<{ at: string; databaseAt: string | undefined } | undefined> {
   const configured = clock?.();
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
-  return (await timeRead.run(client, { at: configured?.toISOString() ?? '' }))?.at;
+  const row = await timeRead.run(client, { at: configured?.toISOString() ?? '' });
+  if (!row?.at) return undefined;
+  return { at: row.at, databaseAt: row.databaseAt };
 }
 const bind = (actor: Actor, action: string, resource: Resource): string =>
   JSON.stringify([
@@ -146,7 +152,7 @@ export async function checkPermission(
       return false;
     // Obtain one authoritative T on this attempt's own resource client. Domain
     // verification and the permission formula must evaluate exactly this instant.
-    const at = time ? authoritativeTimeValue(time) : await readPermissionTime(client, clock);
+    const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock))?.at;
     if (!at) return false;
     const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
     const floor = facts.admitsAnonymous && domainEligible;
@@ -234,11 +240,11 @@ export function createAccess(config: PermissionConfig): Access {
         // Every query uses the pool independently before resource checkout. None
         // of these reads holds a connection while another partition is consulted.
         const recorded = await readPermissionTime(context.pool, config.clock);
-        if (!recorded) return evidence;
+        if (!recorded?.databaseAt) return evidence;
         // Commands prepare after their executor mints T. Negative membership
         // proofs must start at that same T, not at a later preparation clock.
         const attempt = accessCommandAttempt(context);
-        const at = attempt ? authoritativeTimeValue(attempt.time) : recorded;
+        const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
         let principalId: string | null = null;
         let valid = '(,)';
         const members: { accountId: string; automated: boolean }[] = [];
@@ -376,10 +382,13 @@ export function createAccess(config: PermissionConfig): Access {
           }
         }
         // Short-lived account/assignment/membership observations never survive the
-        // request deadline. The final SQL also checks their actual validity ranges.
-        // The SQL compares its deadline with `at`, so both values must use the
-        // same command/database timeline. The wall-clock check above stays local.
-        const databaseDeadline = new Date(Date.parse(at) + Math.max(0, deadline - Date.now())).toISOString();
+        // request deadline. The final SQL also checks their actual validity ranges
+        // at T. The evidence deadline guards elapsed database time: databaseAt plus
+        // the remaining budget, compared only with observed_at. The wall-clock
+        // check above stays local.
+        const origin = Date.parse(recorded.databaseAt);
+        if (!Number.isFinite(origin)) return evidence;
+        const databaseDeadline = new Date(origin + Math.max(0, deadline - Date.now())).toISOString();
         if (binding !== bind(actor, action, resource) || Date.now() >= deadline) return evidence;
         prepared.set(evidence, {
           binding,

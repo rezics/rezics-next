@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
+import { readAccount } from '../../src/access/account-data.ts';
 import { accessCheck, accessCommandAuthorization } from '../../src/request/access.ts';
 import { runCommand, type CommandAttempt } from '../../src/command/command.ts';
-import { partitionOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { grantFixture } from './grant-fixture.ts';
 
 let f: Awaited<ReturnType<typeof grantFixture>>;
@@ -82,6 +84,90 @@ test('a command behind PostgreSQL remains denied after its evidence deadline exp
   const behind = new Date((await databaseNow()) - 500);
 
   await expect(checkInCommand(context, () => behind, 1_150)).rejects.toThrow('Permission denied');
+});
+
+test('a command ahead of PostgreSQL is refused after its evidence deadline expires', async () => {
+  const context = await f.context();
+  const ahead = new Date((await databaseNow()) + 30_000);
+
+  await expect(checkInCommand(context, () => ahead, 1_150)).rejects.toThrow('Permission denied');
+});
+
+function monthsBefore(base: number, months: number): Date {
+  const date = new Date(base);
+  date.setUTCMonth(date.getUTCMonth() - months);
+  return date;
+}
+
+/** A day around `instant`, so database time months later is outside the grant. */
+async function cover(instant: Date) {
+  await f.reader.query(
+    `UPDATE access.resource_grant
+     SET valid = tstzrange($5::timestamptz, $6::timestamptz, '[)')
+     WHERE route = $1 AND resource_id = $2 AND subject_id = $3 AND action = $4`,
+    [
+      f.resource.route,
+      f.resource.id,
+      f.actor,
+      action,
+      new Date(instant.getTime() - 86_400_000).toISOString(),
+      new Date(instant.getTime() + 86_400_000).toISOString(),
+    ],
+  );
+}
+
+async function readAt(clock?: () => Date): Promise<boolean> {
+  const context = await f.context();
+  const actor = context.actor;
+  const account = await readAccount(f.pool, routeOf(actor.accountId)!, actor.accountId);
+  if (!account) throw new Error('Fixture account is missing');
+  const access = clock
+    ? createPermissionAccess({
+        actions: new Map([[action, { anonymous: false }]]),
+        accountEvidence: () => account,
+        clock,
+      })
+    : f.access;
+  const check = await accessCheck(access, actor, action, f.resource, context);
+  return check(f.pool);
+}
+
+test('a command months behind PostgreSQL is permitted by its grant within its budget', async () => {
+  const databaseAt = await databaseNow();
+  const behind = monthsBefore(databaseAt, 4);
+  expect(databaseAt - behind.getTime()).toBeGreaterThan(90 * 24 * 60 * 60 * 1000);
+  await cover(behind);
+
+  await expect(checkInCommand(await f.context(), () => behind)).resolves.toMatchObject({ value: true });
+  await expect(checkInCommand(await f.context(), () => new Date(databaseAt))).rejects.toThrow('Permission denied');
+});
+
+test('a read months behind PostgreSQL is permitted by its grant within its budget', async () => {
+  const databaseAt = await databaseNow();
+  const behind = monthsBefore(databaseAt, 4);
+  expect(databaseAt - behind.getTime()).toBeGreaterThan(90 * 24 * 60 * 60 * 1000);
+  await cover(behind);
+
+  expect(await readAt(() => behind)).toBe(true);
+  expect(await readAt(() => new Date(databaseAt))).toBe(false);
+  expect(await readAt()).toBe(false);
+});
+
+test('a read whose request budget has run out is refused whichever way its clock differs', async () => {
+  const databaseAt = await databaseNow();
+  for (const instant of [monthsBefore(databaseAt, 4), new Date(databaseAt + 30_000)]) {
+    const context = await f.context();
+    const account = await readAccount(f.pool, routeOf(context.actor.accountId)!, context.actor.accountId);
+    if (!account) throw new Error('Fixture account is missing');
+    const access = createPermissionAccess({
+      actions: new Map([[action, { anonymous: false }]]),
+      accountEvidence: () => account,
+      clock: () => instant,
+    });
+    const check = await accessCheck(access, context.actor, action, f.resource, context);
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_150));
+    expect(await check(f.pool)).toBe(false);
+  }
 });
 
 test('a non-command permission read continues to use database time', async () => {

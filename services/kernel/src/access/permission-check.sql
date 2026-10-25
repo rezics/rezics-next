@@ -39,7 +39,7 @@ WITH input AS NOT MATERIALIZED (
   FROM keys k
 )
 SELECT (
-  t.at < i.deadline AND t.observed_at < i.deadline
+  t.observed_at < i.deadline
   AND :evidence_valid::tstzrange @> t.at
   AND (i.floor OR (NOT i.anonymous AND (
     EXISTS (SELECT 1 FROM probes p WHERE p.account_id = i.actor_id AND p.granted AND p.member AND p.valid @> t.at)

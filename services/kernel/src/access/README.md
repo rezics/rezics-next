@@ -122,9 +122,11 @@ A Realm owner or member is a `GrantSubject` `{ kind: 'realm', id, role }` with r
 
 ## Evaluator time
 
-Permission preparation and the final formula evaluate at one instant T. Inside a command attempt, T is that attempt's authoritative time, minted from the kernel clock given to the executor. Outside a command, one time statement binds the clock configured on Access, with the same validation and ISO instant as command time. When Access has no clock, the bound parameter is empty and PostgreSQL `clock_timestamp()` supplies T. The formula's observed-at and expiry-second guards stay on PostgreSQL `clock_timestamp()`.
+Permission preparation and the final formula evaluate grant, assignment and membership validity at one instant T. Inside a command attempt, T is that attempt's authoritative time, minted from the kernel clock given to the executor. Outside a command, one time statement binds the clock configured on Access, with the same validation and ISO instant as command time. When Access has no clock, the bound parameter is empty and PostgreSQL `clock_timestamp()` supplies T.
 
-That read is still one statement per non-command check. Binding the instant does not change its bound; `test/access/growth-permission.test.ts` covers the formula's cost.
+The evidence deadline guards elapsed time on the database clock only. That time statement also returns PostgreSQL `clock_timestamp()` as `databaseAt`, and the deadline given to the formula is `databaseAt` plus the remaining request budget. The formula keeps `observed_at < deadline` and does not compare T with that deadline. In-process wall-clock deadline checks stay. The observed-at guard stays on PostgreSQL `clock_timestamp()`.
+
+That read is still one statement per non-command check and returns one more column. Its bound is unchanged; `test/access/growth-permission.test.ts` covers the formula's cost.
 
 ## Cost
 
