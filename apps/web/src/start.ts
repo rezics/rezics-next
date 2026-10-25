@@ -1,4 +1,6 @@
 import { createCsrfMiddleware, createMiddleware, createServerOnlyFn, createStart } from '@tanstack/react-start';
+import { securityHeaders, viteNonceMarker } from './security/headers.ts';
+import { createNonce } from './security/nonce.ts';
 import { problem, problemResponse } from './media/kernel.ts';
 import type { SessionEnv } from './session/client.ts';
 import { cookie, SESSION_COOKIE, validId } from './session/cookies.ts';
@@ -48,4 +50,37 @@ const tokenMiddleware = createMiddleware().server(async ({ request, next }) => {
   return next();
 });
 
-export const startInstance = createStart(() => ({ requestMiddleware: [originMiddleware, tokenMiddleware] }));
+const pageSecurity = createMiddleware().server(async ({ request, next }) => {
+  const nonce = createNonce(request);
+  const result = await next();
+  if (!result.response.headers.get('content-type')?.includes('text/html')) return result;
+  const { env } = await import('cloudflare:workers');
+  const headers = new Headers(result.response.headers);
+  securityHeaders(request, nonce, (env as Partial<SessionEnv>).AUTH_ISSUER ?? '', import.meta.env.DEV).forEach(
+    (value, name) => headers.set(name, value),
+  );
+  let response = new Response(result.response.body, {
+    status: result.response.status,
+    statusText: result.response.statusText,
+    headers,
+  });
+  if (import.meta.env.DEV) {
+    // Only Vite's explicitly marked assets are trusted; never bless unnonced content.
+    response = new HTMLRewriter()
+      .on('script, style, link, meta[property="csp-nonce"]', {
+        element(element) {
+          if (
+            element.getAttribute('nonce') === viteNonceMarker ||
+            (element.tagName === 'meta' && element.getAttribute('content') === nonce)
+          )
+            element.setAttribute('nonce', nonce);
+        },
+      })
+      .transform(response);
+  }
+  return { ...result, response };
+});
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [pageSecurity, originMiddleware, tokenMiddleware],
+}));

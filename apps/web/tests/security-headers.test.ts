@@ -11,6 +11,8 @@ import fixtures from '../src/kernel/fixtures.json';
 import { download } from '../src/media/download.ts';
 import type { MediaEnv } from '../src/media/index.ts';
 
+type Messages = Record<string, string>;
+
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
@@ -220,6 +222,7 @@ function site(): Promise<string> {
     };
     const env = {
       ...process.env,
+      NODE_ENV: 'production',
       KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
       WEBSITE_CLIENT_ID: clientId,

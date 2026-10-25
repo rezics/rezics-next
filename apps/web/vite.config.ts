@@ -1,3 +1,4 @@
+import { viteNonceMarker } from './src/security/headers.ts';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
@@ -23,6 +24,9 @@ if (configuredInspectorPort !== undefined) {
 }
 
 export default defineConfig({
+  html: { cspNonce: viteNonceMarker },
+  // Fonts must stay on the site origin; the page policy does not allow data: fonts.
+  build: { assetsInlineLimit: 0 },
   optimizeDeps: {
     include: [
       '@ark-ui/react',

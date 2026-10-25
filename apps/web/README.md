@@ -175,6 +175,47 @@ The defaults are every story, `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr`
 1280 pixels wide, and `.temp/screenshots/`. The script captures four pages at a time, prints one path per file and
 then the total, and stops the server when it exits.
 
+## Security headers
+
+Page HTML receives a fresh base64 nonce from one 16-byte cryptographic random draw. Request middleware keeps
+it with the request and passes it to TanStack Router's `ssr.nonce`, including its streamed scripts. Client
+navigation reuses the document's nonce. Pages remain private and uncacheable; media downloads retain their
+separate `default-src 'none'; sandbox` policy.
+
+The production Content Security Policy is defined in `src/security/headers.ts`:
+
+| Directive                                                                 | Purpose                                                                                                                                                |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `default-src 'self'`                                                      | Restrict unspecified resource types, including fonts, to the site. Vite emits font files instead of data URLs.                                         |
+| `script-src 'nonce-…' 'strict-dynamic' https://challenges.cloudflare.com` | Trust scripts carrying this response's nonce and scripts they load. The Cloudflare host supports Turnstile in browsers without strict-dynamic support. |
+| `style-src 'self' 'nonce-…'`                                              | Permit site stylesheets and explicitly nonced style elements.                                                                                          |
+| `style-src-attr 'unsafe-inline'`                                          | Permit React's server-rendered style attributes.                                                                                                       |
+| `img-src 'self' blob: data:`                                              | Permit site media, local upload previews and embedded image data.                                                                                      |
+| `connect-src 'self'`                                                      | Browser requests go through the site; the Worker calls Auth and the kernel.                                                                            |
+| `frame-src https://challenges.cloudflare.com`                             | Permit Turnstile's challenge frame.                                                                                                                    |
+| `form-action 'self' <AUTH_ISSUER origin>`                                 | Permit local forms and sign-out's redirect to Auth; issuer paths are excluded. There is currently no checkout form redirecting to Stripe.              |
+| `base-uri 'none'`                                                         | Prevent an injected base element from changing relative URLs.                                                                                          |
+| `object-src 'none'`                                                       | Disable plugin content.                                                                                                                                |
+| `frame-ancestors 'none'`                                                  | Refuse embedding the site in any frame.                                                                                                                |
+| `upgrade-insecure-requests`                                               | Upgrade insecure resource URLs on secure pages.                                                                                                        |
+
+Development adds only the dev server's exact WebSocket origin to `connect-src` for Vite's module reloading.
+`html.cspNonce` marks Vite's injected assets; development middleware replaces that marker with the request
+nonce while streaming HTML. It never adds a nonce to unmarked content. Production has no WebSocket allowance
+or HTML rewriting. Neither environment permits script `unsafe-inline`, `unsafe-eval` or wildcard hosts.
+
+Pages also send `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()` and
+`Cross-Origin-Opener-Policy: same-origin`. HTTPS pages send
+`Strict-Transport-Security: max-age=31536000; includeSubDomains`; HTTP pages do not. HSTS deliberately excludes
+`preload`, since preloading is hard to undo.
+
+To add an outside origin, identify the browser request and its directive, add only its exact scheme/host/port
+in `src/security/headers.ts`, document why it is needed, and update the exact policy expectation and production
+browser coverage in `tests/security-headers.test.ts`. Keep server-only upstreams out of browser directives.
+Configure `AUTH_ISSUER` rather than hardcoding an Auth host. Give new inline script or style producers the
+document nonce explicitly; do not relax the policy to accommodate them.
+
 ## Cost
 
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,
@@ -207,6 +248,7 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 | Operation                                        | Touches                                                                                                                                                                                         | Bound                                                                                                                                                                                                                                      | Growth check                                                                                                                                                                                                                                                                |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page security headers                            | Request-local nonce → SSR and response headers                                                                                                                                                  | 0 added K/D/R/A; one 16-byte random draw and a fixed-size header string per response; no production body buffering                                                                                                                         | No growth check applies                                                                                                                                                                                                                                                     |
 | Read rate limits (GET/HEAD)                      | Two local Cloudflare rate-limit bindings before route handling, keyed by active account, valid session/login cookie, or client IP                                                               | 2 `limit()` calls; 0 added K/D/R/A; the request's existing session read supplies the signed-in key; refusals stop before K                                                                                                                 | constant per request; request-cost counts unchanged                                                                                                                                                                                                                         |
 | Locale resolution (`/`)                          | URL, locale cookie, then weighted `Accept-Language`, then English; redirect before page loaders                                                                                                 | K/D/R/A = 0; no body buffered; header parsing/sorting depends on header length, not database size                                                                                                                                          | `tests/request-cost.test.ts`: `locale resolution stays within its bound as s grows`                                                                                                                                                                                         |
 | Search page (`/<locale>/search`)                 | One kernel `POST /v1/subjects:search` for a non-empty query, at most 100 results; an empty query renders only the form                                                                          | 1 K (one page of at most s ≤ 100 results), ≤1 D, 0 R and 0 A. Work and buffered JSON are O(s), and an empty query makes 0 K                                                                                                                | `tests/request-cost.test.ts`: `search page stays within its bound as s grows`                                                                                                                                                                                               |
