@@ -19,9 +19,21 @@ Run `bun run db up`, then `bun run dev` from this workspace to serve the API loc
 secrets once and keeps them in `.env` across restarts.
 
 Bearer tokens are verified against the Auth service. The first request that carries one reads `AUTH_ISSUER`
-(the Auth service's HTTPS origin), `AUTH_AUDIENCE` (the API's HTTPS URL) and `AUTH_JWKS_URL` (the Auth
-service's HTTPS JWKS URL, on the issuer's origin). Without them the kernel still starts and serves anonymous
+(the Auth service's canonical origin), `AUTH_AUDIENCE` (the API's HTTPS URL) and `AUTH_JWKS_URL` (the Auth
+service's public JWKS URL, on the exact issuer origin). Without them the kernel still starts and serves anonymous
 requests, and refuses every bearer token.
+
+Issuers require HTTPS except for canonical HTTP origins on exactly `127.0.0.1`,
+`localhost` or `[::1]`, including the configured port. Issuers have no userinfo,
+path, trailing slash, query or fragment. Numeric aliases, suffix tricks, other
+private/LAN addresses and `0.0.0.0` are rejected. HTTP public JWKS is permitted
+only for an approved HTTP issuer on the exact same origin and port, with no
+userinfo, query or fragment. Token issuer identity includes the port; request
+Host headers do not configure it. The API audience remains HTTPS, including for
+local issuers: `https://api.rezics.com` in production without a trailing slash,
+and `https://api.rezics.test` in tests. Verification still uses standard JOSE,
+cached public keys and current account state, epoch floor and fence checks;
+failures retain the `invalid_token` response.
 
 ## Check
 

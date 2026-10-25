@@ -71,19 +71,20 @@ function settings(config?: AuthenticationConfig): AuthenticationConfig {
   const issuer = new URL(value.issuer);
   const audience = new URL(value.audience);
   const jwks = new URL(value.jwksUrl);
+  const localHttp = issuer.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(issuer.hostname);
   if (
-    issuer.protocol !== 'https:' ||
+    (issuer.protocol !== 'https:' && !localHttp) ||
     issuer.origin !== value.issuer ||
     audience.protocol !== 'https:' ||
     audience.username ||
     audience.password ||
     audience.hash ||
-    jwks.protocol !== 'https:' ||
+    jwks.protocol !== issuer.protocol ||
     jwks.origin !== issuer.origin ||
+    jwks.href !== value.jwksUrl ||
     jwks.username ||
     jwks.password ||
-    jwks.hash ||
-    jwks.search
+    /[?#]/.test(value.jwksUrl)
   )
     throw invalid();
   return { ...value };

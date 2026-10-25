@@ -6,6 +6,7 @@ import { setSessionCookie } from 'better-auth/cookies';
 import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
+import { issuerOrigin } from './issuer.ts';
 import type {
   AccessAccount,
   AuthService,
@@ -92,9 +93,7 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
   const { database, trustedAccess } = options;
-  const issuer = new URL(options.issuer);
-  if (issuer.origin !== options.issuer || issuer.protocol !== 'https:')
-    throw new Error('Issuer must be an HTTPS origin');
+  issuerOrigin(options.issuer);
   const audience = new URL(options.audience);
   if (audience.protocol !== 'https:') throw new Error('The API audience must be an HTTPS URL');
   if (!options.secret || options.secret.length < 32)

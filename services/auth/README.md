@@ -267,6 +267,24 @@ input. Session cookie caching is disabled, including on subsequent database read
 
 ## Kernel claim and verification contract
 
+The configured issuer must be a canonical origin without userinfo, a path
+(including a trailing slash), query or fragment. HTTPS is required except for
+HTTP on exactly `127.0.0.1`, `localhost` or `[::1]`, with an optional configured
+port, such as `http://localhost:4200`. Other loopback spellings, numeric aliases,
+suffixes, private/LAN addresses and `0.0.0.0` are rejected. The configured origin
+and port define the identity; request Host headers never select an issuer.
+Better Auth chooses its native cookie security from this origin; HTTPS keeps
+secure cookies. No environment mode or global insecure switch enables HTTP.
+
+The API audience always uses HTTPS: production is `https://api.rezics.com`
+without a trailing slash, and tests use `https://api.rezics.test`. A local HTTP
+issuer does not permit an HTTP audience. Tokens retain the exact issuer and port;
+own-key assertions must target exactly `${issuer}/token`, including that port.
+Kernel may fetch HTTP public JWKS only on that same approved HTTP issuer origin.
+The local issuer tests use separate migrated Auth databases; kernel tests run
+password signin, token issuance and public JWKS verification over real loopback
+sockets for all three approved hosts.
+
 `SessionProof` contains only `account_id`, `client_id`, `scope: string[]`,
 `authn_epoch`, `auth_time` and `amr`. Successful password verification installs
 the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Own-key

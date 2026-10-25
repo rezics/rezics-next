@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
-import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
+import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -115,6 +115,35 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         clientId: 'web',
         authnEpoch: 1,
       });
+      const credential = await generateKeyPair('ES256');
+      await authPool.query('INSERT INTO auth_public_key (account_id,kid,public_jwk) VALUES ($1,$2,$3)', [
+        person,
+        'own-key',
+        { ...(await exportJWK(credential.publicKey)), alg: 'ES256' },
+      ]);
+      for (const aud of [
+        `http://${host}/token`,
+        `http://${host}:${port + 1}/token`,
+        `${issuer}/token/`,
+        `${issuer}/token`,
+      ]) {
+        const assertion = await new SignJWT({})
+          .setProtectedHeader({ alg: 'ES256', kid: 'own-key' })
+          .setIssuer(person)
+          .setSubject(person)
+          .setAudience(aud)
+          .setIssuedAt()
+          .setExpirationTime('30s')
+          .setJti(crypto.randomUUID())
+          .sign(credential.privateKey);
+        const response = await post('/signin/key', {
+          account_id: person,
+          assertion,
+          client_id: 'web',
+          scope: ['read'],
+        });
+        expect(response.status).toBe(aud === `${issuer}/token` ? 200 : 401);
+      }
       for (const origin of [
         'http://evil.test',
         `http://${host}:${port + 1}`,
@@ -183,7 +212,9 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         `https://${host}:${port}/jwks`,
         'http://localhost.example/jwks',
         `${issuer}/jwks?query=1`,
+        `${issuer}/jwks?`,
         `${issuer}/jwks#fragment`,
+        `${issuer}/jwks#`,
         `${issuer.replace('http://', 'http://user@')}/jwks`,
         `http://2130706433:${port}/jwks`,
       ])
@@ -217,13 +248,13 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [route, person, state]);
         await invalid(access.authenticate(token, context()));
       }
-      await pool.query(
-        "UPDATE access.account SET state='active', minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2",
-        [route, person],
-      );
+      await pool.query("UPDATE access.account SET state='active', authn_fenced=true WHERE route=$1 AND account_id=$2", [
+        route,
+        person,
+      ]);
       await invalid(access.authenticate(token, context()));
       await pool.query(
-        'UPDATE access.account SET minimum_authn_epoch=1, authn_fenced=true WHERE route=$1 AND account_id=$2',
+        'UPDATE access.account SET minimum_authn_epoch=2, authn_fenced=false WHERE route=$1 AND account_id=$2',
         [route, person],
       );
       await invalid(access.authenticate(token, context()));
