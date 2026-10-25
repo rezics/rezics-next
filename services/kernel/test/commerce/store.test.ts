@@ -235,8 +235,10 @@ test('store statement counts do not grow with unrelated rows', async () => {
         const result = await c.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.sql}`, statement.values);
         const plan: Plan = result.rows[0]['QUERY PLAN'][0].Plan;
         const scans = nodes(plan).filter((n) => n['Relation Name']);
-        expect(scans.length).toBeGreaterThan(0);
-        expect(scans.every((n) => /Index|Bitmap|ModifyTable/.test(n['Node Type']))).toBe(true);
+        if (scale > 0) {
+          expect(scans.length).toBeGreaterThan(0);
+          expect(scans.every((n) => /Index|Bitmap|ModifyTable/.test(n['Node Type']))).toBe(true);
+        }
         used.push(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']);
         await c.query('ROLLBACK TO SAVEPOINT explain');
       }
@@ -245,9 +247,9 @@ test('store statement counts do not grow with unrelated rows', async () => {
   }
   expect(counts[1]).toEqual(counts[0]);
   expect(counts[2]).toEqual(counts[0]);
-  // A B-tree can add a level; unrelated heap pages must never be visited.
-  for (let i = 0; i < buffers[0]!.length; i++) {
-    expect(buffers[1]![i]!).toBeLessThanOrEqual(buffers[0]![i]! + 12);
-    expect(buffers[2]![i]!).toBeLessThanOrEqual(buffers[0]![i]! + 12);
+  // Near-empty tables can use sequential scans. Compare the populated scales:
+  // a B-tree can add a level; unrelated heap pages must never be visited.
+  for (let i = 0; i < buffers[1]!.length; i++) {
+    expect(buffers[2]![i]!).toBeLessThanOrEqual(buffers[1]![i]! + 12);
   }
 });
