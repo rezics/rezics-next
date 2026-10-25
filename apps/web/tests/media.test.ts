@@ -3,11 +3,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { exportJWK, generateKeyPair, jwtVerify } from 'jose';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
-const clientId = 'rezics-site-worker';
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 type Media = {
@@ -17,14 +15,12 @@ type Media = {
 type Decision = { allowed: true; key: string; sha256: string; mediaType: string; byteCount: number; publicCache: false; cacheControl: string };
 type Seen = { method: string; path: string; authorization: string | null; idempotencyKey: string | null; body: unknown };
 
-// The content media API and the Auth token endpoint as the frozen contracts describe them, recording every call.
+// The content media API as the frozen contract describes it, recording every call. A bearer token `user:<id>` stands for
+// a person's access token from the site session: sub is the person, client_id is the website, and only the website
+// client may receive the media:complete scope it carries.
 const media = new Map<string, Media>();
 const decisions = new Map<string, Decision>();
-const issued = new Set<string>();
-const assertions = new Set<string>();
 const seen: Seen[] = [];
-const keys = await generateKeyPair('ES256', { extractable: true });
-const privateJwk = { ...(await exportJWK(keys.privateKey)), alg: 'ES256', kid: 'site-worker-1' };
 
 const problem = (status: number, code: string) => Response.json(
   { type: `https://rezics.com/problems/${code}`, title: code, status, code, retryable: false, effect_status: 'not_applicable', request_id: randomUUID() },
@@ -35,30 +31,6 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
-    const issuer = `${url.origin}/auth`;
-    const tokenEndpoint = `${issuer}/oauth2/token`;
-    if (url.pathname === '/auth/.well-known/openid-configuration')
-      return Response.json({ issuer, token_endpoint: tokenEndpoint, token_endpoint_auth_methods_supported: ['private_key_jwt'],
-        token_endpoint_auth_signing_alg_values_supported: ['ES256'], grant_types_supported: ['client_credentials'] });
-    if (url.pathname === '/auth/oauth2/token' && request.method === 'POST') {
-      const form = new URLSearchParams(await request.text());
-      if (form.get('grant_type') !== 'client_credentials' || form.get('scope') !== 'media:complete'
-        || form.get('client_assertion_type') !== 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
-        return Response.json({ error: 'invalid_request' }, { status: 400 });
-      try {
-        const { payload } = await jwtVerify(form.get('client_assertion') ?? '', keys.publicKey, {
-          issuer: clientId, subject: clientId, audience: [issuer, tokenEndpoint], algorithms: ['ES256'], maxTokenAge: '5m',
-        });
-        if (!payload.jti || assertions.has(payload.jti) || !payload.exp) throw new Error('replayed or unbounded assertion');
-        assertions.add(payload.jti);
-      } catch {
-        return Response.json({ error: 'invalid_client' }, { status: 401 });
-      }
-      const token = `worker-${randomUUID()}`;
-      issued.add(token);
-      return Response.json({ access_token: token, token_type: 'Bearer', expires_in: 300, scope: 'media:complete' });
-    }
-
     const match = /^\/v1\/media\/([^/:]+)(?::(complete|authorizeDownload))?$/.exec(url.pathname);
     if (!match) return problem(404, 'not_found');
     const [, id, method] = match as unknown as [string, string, string | undefined];
@@ -72,11 +44,11 @@ const fake = Bun.serve({
       return Response.json({ media: entry });
     }
     if (method === 'complete' && request.method === 'POST') {
-      const token = authorization?.replace(/^Bearer /, '');
-      if (!token || !issued.has(token)) return problem(403, 'forbidden');
       if (!request.headers.get('idempotency-key')) return problem(400, 'invalid_request');
       const sent = body as Record<string, unknown>;
-      if (!entry || entry.state !== 'reserved' || sent.uploaderId !== entry.uploaderId || sent.containerId !== entry.containerId
+      if (Object.keys(sent).sort().join() !== 'byteCount,containerId,reservationRequestId,sha256') return problem(400, 'invalid_request');
+      // The uploader is the token's subject, never a field of the body.
+      if (!entry || entry.state !== 'reserved' || authorization !== `Bearer user:${entry.uploaderId}` || sent.containerId !== entry.containerId
         || sent.reservationRequestId !== entry.reservationRequestId || sent.byteCount !== entry.byteCount
         || (entry.sha256 !== null && sent.sha256 !== entry.sha256)) return problem(403, 'forbidden');
       entry.state = 'uploaded';
@@ -112,7 +84,7 @@ function freePort(): Promise<number> {
 let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
 
-// The documented command, pointed at the fakes through the environment it reads in development.
+// The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
@@ -120,8 +92,7 @@ function site(): Promise<string> {
     const keep = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KERNEL_ORIGIN: fake.url.origin, AUTH_ISSUER: `${fake.url.origin}/auth`,
-        MEDIA_CLIENT_ID: clientId, MEDIA_CLIENT_KEY: JSON.stringify(privateJwk) },
+      env: { ...process.env, KERNEL_ORIGIN: fake.url.origin },
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
@@ -172,12 +143,12 @@ test('an upload streams the reserved bytes to storage and completes the reservat
   const calls = seen.filter(call => call.path.startsWith(`/v1/media/${entry.id}`));
   expect(calls.map(call => call.method)).toEqual(['GET', 'complete']);
   expect(calls[0]!.authorization).toBe(`Bearer user:${entry.uploaderId}`);
-  // Completion carries the Worker's own short-lived token, never the user's, and an idempotency key.
+  // Completion carries the same person's token, an idempotency key, and what the Worker measured.
   const completion = calls[1]!;
-  expect(issued.has(completion.authorization!.replace(/^Bearer /, ''))).toBe(true);
+  expect(completion.authorization).toBe(`Bearer user:${entry.uploaderId}`);
   expect(completion.idempotencyKey).toBeTruthy();
-  expect(completion.body).toEqual({ uploaderId: entry.uploaderId, containerId: entry.containerId,
-    reservationRequestId: entry.reservationRequestId, byteCount: bytes.length, sha256: sha256(bytes) });
+  expect(completion.body).toEqual({ containerId: entry.containerId, reservationRequestId: entry.reservationRequestId,
+    byteCount: bytes.length, sha256: sha256(bytes) });
   expect(media.get(entry.id)!.state).toBe('uploaded');
   expect(await stored(entry)).toEqual(bytes);
 

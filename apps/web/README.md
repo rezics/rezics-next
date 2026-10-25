@@ -7,16 +7,11 @@ Locale selection uses URL, `rezics_locale` cookie, `Accept-Language`, then Engli
 
 Media bytes use the `MEDIA` R2 binding for the `rezics-media` bucket. Development simulates this bucket locally.
 `PUT /media/<id>` transports a reserved upload; `GET` and `HEAD /media/<id>/<variant>` ask content for permission on every request.
-Viewer credentials currently come from `Authorization`; no cookie is read yet.
+Viewer credentials currently come from `Authorization`, forwarded unchanged for reservation reads, completion and
+download decisions. This is a development stand-in for the website's server-side session. The browser will hold only a
+session cookie; access and refresh tokens will stay in the Worker. No cookie is read yet, and introducing the session
+must add cross-site request protection for these routes.
 
-Set these in the environment of `bun run dev`:
-
-- `KERNEL_ORIGIN`: origin of the content API.
-- `AUTH_ISSUER`: issuer identifier used for OpenID discovery and the Worker assertion audience.
-- `MEDIA_CLIENT_ID`: the site Worker's OAuth client ID.
-- `MEDIA_CLIENT_KEY`: private ES256 JWK JSON, including its `kid`.
-
-Production uses the first three as Worker variables and `MEDIA_CLIENT_KEY` as a Worker secret.
-Keep the private key out of config files, build output and the repository. The config declares only the secret's name;
-local development obtains its value from the launching environment. The Worker obtains and caches its own short-lived
-`media:complete` token with `private_key_jwt`. When any media setting is missing, media routes return 503 while pages continue to work.
+Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example
+`KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. Production supplies it as a Worker variable.
+When it is missing, media routes return 503 while the rest of the site continues to work.

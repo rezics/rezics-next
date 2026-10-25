@@ -20,7 +20,7 @@ export type DownloadDecision = {
   cacheControl: string;
 };
 export type Completion = { media: { id: string; state: 'uploaded' } };
-export type CompletionInput = Pick<Media, 'uploaderId' | 'containerId' | 'reservationRequestId' | 'byteCount'> & { sha256: string };
+export type CompletionInput = Pick<Media, 'containerId' | 'reservationRequestId' | 'byteCount'> & { sha256: string };
 
 type ProblemBody = { type: string; title: string; status: number; code: string };
 export class MediaProblem extends Error {
@@ -64,11 +64,13 @@ export async function readReservation(origin: string, id: string, credential: st
   return (await call<{ media: Media }>(mediaUrl(origin, id), { headers: viewerHeaders(credential) })).media;
 }
 
-export function completeReservation(origin: string, id: string, token: string, input: CompletionInput): Promise<Completion> {
+export function completeReservation(origin: string, id: string, credential: string | null, input: CompletionInput): Promise<Completion> {
+  const headers = viewerHeaders(credential);
+  headers.set('content-type', 'application/json');
+  headers.set('idempotency-key', JSON.stringify(`complete-${id}-${input.sha256}`));
   return call(`${mediaUrl(origin, id)}:complete`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
-      'idempotency-key': JSON.stringify(`complete-${id}-${input.sha256}`) },
+    headers,
     body: JSON.stringify(input),
   });
 }

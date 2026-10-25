@@ -1,14 +1,12 @@
 import { download, validVariant } from './download.ts';
 import { dependencyUnavailable, notFound, problem, problemResponse } from './kernel.ts';
 import { upload } from './upload.ts';
-import type { MediaIdentity } from './auth.ts';
 
-export type MediaEnv = MediaIdentity & { KERNEL_ORIGIN: string; MEDIA: R2Bucket };
+export type MediaEnv = { KERNEL_ORIGIN: string; MEDIA: R2Bucket };
 
 export async function mediaRequest(request: Request, env: Partial<MediaEnv> = {}): Promise<Response> {
   try {
-    if (!env.MEDIA || !env.KERNEL_ORIGIN || !env.AUTH_ISSUER || !env.MEDIA_CLIENT_ID || !env.MEDIA_CLIENT_KEY)
-      throw dependencyUnavailable(503);
+    if (!env.MEDIA || !env.KERNEL_ORIGIN) throw dependencyUnavailable(503);
     const path = /^\/media\/([A-Za-z0-9_-]+)(?:\/([^/]+))?$/.exec(new URL(request.url).pathname);
     if (!path || (path[2] !== undefined && !validVariant(path[2]))) throw notFound();
     const [, id, variant] = path;
