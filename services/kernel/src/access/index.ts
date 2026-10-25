@@ -8,6 +8,7 @@ import type { Access, AccessConfig as KernelAccessConfig, Actor, Resource } from
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
+import { installDurableIdentityBridge } from './durable-identity.ts';
 import { installApprovalIdentityBridge } from './approved-identity.ts';
 
 export {
@@ -22,7 +23,14 @@ export {
 
 export type AccessConfig = KernelAccessConfig & { auth?: AuthenticationConfig };
 
-type Prepared = { actor: Actor; action: string; route: number; id: string; deadline: number };
+type Prepared = {
+  actor: Actor;
+  action: string;
+  route: number;
+  id: string;
+  deadline: number;
+  durableTime?: import('../command/command.ts').AuthoritativeTime;
+};
 
 /**
  * App-local Access factory; the kernel supplies the mounted route catalogue.
@@ -50,6 +58,8 @@ export function createAccess(config: AccessConfig): Access {
         const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
         if (actor.kind === 'account' && (!identity || identity.pool !== context.pool)) return null;
         const attempt = accessCommandAttempt(context);
+        if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
+          return null;
         if (attempt && actor.kind === 'account' && !(await admission(actor, context))) return null;
         const deadline = Math.min(
           context.deadline,
@@ -70,7 +80,14 @@ export function createAccess(config: AccessConfig): Access {
           ),
         );
         if (typeof evidence !== 'object' || evidence === null) return null;
-        prepared.set(evidence, { actor, action, route: resource.route, id: resource.id, deadline });
+        prepared.set(evidence, {
+          actor,
+          action,
+          route: resource.route,
+          id: resource.id,
+          deadline,
+          ...(identity?.durableTime ? { durableTime: identity.durableTime } : {}),
+        });
         return evidence;
       } catch {
         return null;
@@ -84,7 +101,8 @@ export function createAccess(config: AccessConfig): Access {
         facts.actor !== actor ||
         facts.action !== action ||
         facts.route !== resource.route ||
-        facts.id !== resource.id
+        facts.id !== resource.id ||
+        (facts.durableTime !== undefined && facts.durableTime !== time)
       )
         return false;
       try {
@@ -97,11 +115,16 @@ export function createAccess(config: AccessConfig): Access {
     },
   };
   installCommandAdmission(access, admission);
+  installDurableIdentityBridge(access, {
+    scope: authentication.durableScope,
+    restore: authentication.restoreDurable,
+    discard: authentication.discardDurable,
+  });
   installApprovalIdentityBridge(access, {
     scope: authentication.approvalScope,
     expiry(actor, context) {
       const identity = authentication.identity(actor);
-      return identity?.pool === context.pool ? identity.expires : undefined;
+      return identity?.pool === context.pool && identity.durableTime === undefined ? identity.expires : undefined;
     },
     restore: authentication.restoreApproval,
   });

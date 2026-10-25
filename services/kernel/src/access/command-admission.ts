@@ -19,7 +19,13 @@ export function accessCommandAttempt(context: AccessContext): CommandAttempt | u
   return attempt;
 }
 
-type Snapshot = Readonly<{ account: Account; pool: AccessContext['pool']; deadline: number; expires: number }>;
+type Snapshot = Readonly<{
+  account: Account;
+  pool: AccessContext['pool'];
+  deadline: number;
+  expires: number;
+  durableTime?: import('../command/command.ts').AuthoritativeTime;
+}>;
 type Admission = (actor: Actor, context: AccessContext) => Promise<Account | null>;
 const admissions = new WeakMap<Access, Admission>();
 export function installCommandAdmission(access: Access, admission: Admission): void {
@@ -70,6 +76,7 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
     if (
       !snapshot ||
       snapshot.pool !== context.pool ||
+      (snapshot.durableTime !== undefined && snapshot.durableTime !== attempt.time) ||
       Date.now() >= deadline ||
       !Number.isFinite(deadline) ||
       attempt.basis?.actorAccountId !== actor.accountId ||
@@ -77,6 +84,9 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
       attempt.basis.requestedBy !== actor.requestedBy
     )
       return null;
+    // Restoration already made this independently anchored observation at the
+    // same live step T, comparing the immutable creation floor/operator snapshot.
+    if (snapshot.durableTime === attempt.time) return snapshot.account;
     let actors = observations.get(attempt.time);
     if (!actors) {
       actors = new WeakMap();

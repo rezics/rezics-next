@@ -10,6 +10,7 @@ import {
   type InitiatorRestorerConfig,
   type InitiatorRestorer,
 } from '../../src/access/durable-initiator.ts';
+import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { AuthorizationAnchor } from '../../src/access/resource-authorization.ts';
 import type { AuthoritativeTime, CommandAuthorization } from '../../src/command/command.ts';
 import type { Access, AccessClient, AccessContext, AccountActor } from '../../src/request/access.ts';
@@ -24,6 +25,15 @@ test('durable initiator contract accepts an anchored nonsecret committed tuple r
       initiatorAccountId: string;
       actor: AccountActor;
       recordedTransactionId: string;
+      sourceDigest: string;
+      originalDelegation: Readonly<{ transactionId: string; issuedValid: string }> | null;
+      originalAccount: Readonly<{ minimumAuthnEpoch: string; operatorAccountId: string | null }>;
+      creation: Readonly<{
+        commandKind: string;
+        idempotencyKey: string;
+        requestDigest: string;
+        target: Readonly<{ route: number; id: string }>;
+      }>;
     }>
   >();
   expectTypeOf<DurableInitiatorReader>().toEqualTypeOf<
@@ -37,7 +47,7 @@ test('durable initiator contract accepts an anchored nonsecret committed tuple r
     Readonly<{ operation: DurableOperationAnchor; action: string; anchor: AuthorizationAnchor; context: AccessContext }>
   >();
   expectTypeOf<InitiatorRestorerConfig>().toEqualTypeOf<
-    Readonly<{ pool: Pool; access: Access; readOperation: DurableInitiatorReader }>
+    Readonly<{ pool: Pool; access: Access; readOperation: DurableInitiatorReader; readConsent: CurrentConsentReader }>
   >();
   expectTypeOf<InitiatorRestorer>().toEqualTypeOf<
     Readonly<{ restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor> }>
@@ -47,7 +57,7 @@ test('durable initiator contract accepts an anchored nonsecret committed tuple r
   >();
 
   // Server composition receives T from prepare, before target checkout. This is
-  // a type example only: the stub cannot produce an actor or authorization proof.
+  // a type example only; the native formula must still authorize the step.
   const compose =
     (restorer: InitiatorRestorer, input: InitiatorRestoreInput): CommandAuthorization['prepare'] =>
     async (attempt) => {
@@ -59,10 +69,17 @@ test('durable initiator contract accepts an anchored nonsecret committed tuple r
 });
 
 test('callers pass no bearer or arbitrary identity-registration port', () => {
-  expectTypeOf<keyof InitiatorRestorerConfig>().toEqualTypeOf<'pool' | 'access' | 'readOperation'>();
+  expectTypeOf<keyof InitiatorRestorerConfig>().toEqualTypeOf<'pool' | 'access' | 'readOperation' | 'readConsent'>();
   expectTypeOf<keyof InitiatorRestoreInput>().toEqualTypeOf<'operation' | 'action' | 'anchor' | 'context'>();
   expectTypeOf<keyof DurableInitiatorRecord>().toEqualTypeOf<
-    'operation' | 'initiatorAccountId' | 'actor' | 'recordedTransactionId'
+    | 'operation'
+    | 'initiatorAccountId'
+    | 'actor'
+    | 'recordedTransactionId'
+    | 'sourceDigest'
+    | 'originalAccount'
+    | 'originalDelegation'
+    | 'creation'
   >();
   expectTypeOf<keyof AccountActor>().toEqualTypeOf<
     'kind' | 'accountId' | 'clientId' | 'scopes' | 'requestedBy' | 'authnEpoch'
@@ -73,7 +90,7 @@ test('callers pass no bearer or arbitrary identity-registration port', () => {
   expectTypeOf<() => Promise<boolean>>().not.toExtend<DurableInitiatorReader>();
 });
 
-test('stub denies before storage, identity admission or caller-data inspection', async () => {
+test('missing trusted current-consent configuration denies with zero I/O or caller-data inspection', async () => {
   const calls: string[] = [];
   const unreadable = <T extends object>(value: T, label: string): T =>
     new Proxy(value, {
@@ -83,12 +100,12 @@ test('stub denies before storage, identity admission or caller-data inspection',
       },
     });
   const pool = unreadable({} as Pool, 'pool');
-  const config: InitiatorRestorerConfig = {
+  const config: Omit<InitiatorRestorerConfig, 'readConsent'> = {
     pool,
     access: unreadable({} as Access, 'access'),
     async readOperation() {
       calls.push('readOperation');
-      throw new Error('The stub must not read storage');
+      throw new Error('Missing trusted consent must not read storage');
     },
   };
   const input: InitiatorRestoreInput = {
@@ -106,7 +123,7 @@ test('stub denies before storage, identity admission or caller-data inspection',
   // A denial test may supply hostile time; it never represents a live command T.
   const time = unreadable({} as AuthoritativeTime, 'time');
   for (const installed of [config, unreadable(config, 'config')]) {
-    const restorer = createInitiatorRestorer(installed);
+    const restorer = createInitiatorRestorer(installed as InitiatorRestorerConfig);
     expect(calls).toEqual([]);
     for (const operation of [input, unreadable(input, 'input')]) {
       await expect(restorer.restoreInitiator(operation, time)).rejects.toBeInstanceOf(DurableInitiatorUnavailableError);

@@ -8,6 +8,8 @@ import {
   type AccessContext,
   type AccountActor,
 } from '../request/access.ts';
+import { consumeDurableIdentity, type DurableIdentity } from './durable-identity.ts';
+import type { AuthoritativeTime } from '../command/command.ts';
 import { approvedIdentityClaims, type ApprovedIdentity } from './approved-identity.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAssignment } from './delegation-commands.ts';
@@ -27,6 +29,8 @@ type Identity = {
   deadline: number;
   expires: number;
   observedAt: number;
+  durableTime?: AuthoritativeTime;
+  durableAction?: string;
 };
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const uuidPattern = new RegExp(`^${uuid}$`);
@@ -138,6 +142,7 @@ function claims(payload: JWTPayload, config: AuthenticationConfig): void {
 /** Each factory owns its key cache and its opaque, immutable request identities. */
 export function createAuthenticator(configuration?: AuthenticationConfig) {
   const approvalScope = Object.freeze({});
+  const durableScope = Object.freeze({});
   const identities = new WeakMap<AccountActor, Identity>();
   const deadlines = new AsyncLocalStorage<number>();
   let verifier: { config: AuthenticationConfig; keys: ReturnType<typeof createRemoteJWKSet> } | undefined;
@@ -243,6 +248,32 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
   return {
     authenticate,
     approvalScope,
+    durableScope,
+    /** Private operation proof, not a row/Actor registration API. */
+    async restoreDurable(
+      proof: DurableIdentity,
+      context: AccessContext,
+      time: AuthoritativeTime,
+    ): Promise<AccountActor> {
+      const facts = consumeDurableIdentity(proof, durableScope, context, time);
+      if (!facts) throw invalid();
+      const { actor, account, deadline } = facts;
+      remaining(deadline);
+      identities.set(actor, {
+        account,
+        pool: context.pool,
+        deadline,
+        expires: deadline,
+        observedAt: Date.now(),
+        durableTime: time,
+        durableAction: facts.action,
+      });
+      bindAccountRateIdentity(actor, { ...context, actor }, account, deadline);
+      return actor;
+    },
+    discardDurable(actor: AccountActor): void {
+      if (identities.get(actor)?.durableTime) identities.delete(actor);
+    },
     /** Internal native approval proof only. Reconstructed actors have no proof. */
     async restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor> {
       try {
