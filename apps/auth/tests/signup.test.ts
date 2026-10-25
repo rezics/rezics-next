@@ -345,7 +345,9 @@ test(
       await page.waitForFunction(
         () => ((window as unknown as { __turnstileRenders?: unknown[] }).__turnstileRenders?.length ?? 0) > 0,
       );
-      expect(await controls.submit.isEnabled(), 'submitting waits for a Turnstile token').toBe(false);
+      expect(await controls.submit.isEnabled(), 'the submit button stays available before Turnstile is ready').toBe(
+        true,
+      );
       await page.evaluate(() =>
         (window as unknown as { __issueTurnstileToken: () => boolean }).__issueTurnstileToken(),
       );
@@ -430,14 +432,23 @@ test(
     calls.length = 0;
     const { page } = await open();
     const bodies: string[] = [];
+    let firstRequestArrived!: () => void;
+    const firstRequest = new Promise<void>((resolve) => (firstRequestArrived = resolve));
+    let releaseFirstRequest!: () => void;
+    const firstResponse = new Promise<void>((resolve) => (releaseFirstRequest = resolve));
     await page.route('**/signup', async (route) => {
       if (route.request().method() !== 'POST') {
         await route.continue();
         return;
       }
       bodies.push(route.request().postData() ?? '');
-      if (bodies.length === 1) await route.abort('connectionfailed');
-      else await route.continue();
+      if (bodies.length === 1) {
+        firstRequestArrived();
+        await firstResponse;
+        await route.abort('connectionfailed');
+      } else {
+        await route.continue();
+      }
     });
     try {
       const controls = await fill(page);
@@ -445,10 +456,15 @@ test(
         (window as unknown as { __turnstileManual?: boolean }).__turnstileManual = true;
       });
       await controls.submit.click();
+      await firstRequest;
       await page.waitForFunction(() => {
         const button = document.querySelector('button[type="submit"]');
         return button instanceof HTMLButtonElement && button.disabled;
       });
+      releaseFirstRequest();
+      await page.waitForFunction(
+        () => ((window as unknown as { __turnstileResets?: number }).__turnstileResets ?? 0) > 0,
+      );
       expect(bodies).toHaveLength(1);
       expect(await controls.handle.inputValue()).toBe(handle);
       expect(await controls.email.inputValue()).toBe(email);
@@ -485,6 +501,7 @@ test(
       expect(second.email).toBe(email);
       expect(second.password).toBe(password);
     } finally {
+      releaseFirstRequest();
       await page.context().close();
     }
   },

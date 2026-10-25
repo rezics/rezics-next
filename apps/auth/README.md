@@ -16,9 +16,11 @@ parameters and removing every `sig`, `exp` and `prompt`. It keeps `max_age`. Wit
 `/security`. The response body never supplies a navigation target. Recovery links to `/recovery`; sign-up preserves
 the login query.
 
-Empty fields and pending requests prevent submission. A refusal keeps the email, clears the password and focuses an
-alert: 401 reports incorrect email or password without identifying an account, 429 includes valid `Retry-After`
-seconds, and other responses or network failures report an unavailable Auth service.
+The submit button stays enabled until a request is pending. Submission validates the email and password, marks each
+invalid field with a linked error, and focuses the first invalid field. The password uses the shared in-field show and
+hide control. A refusal keeps the email, clears the password and focuses a destructive alert with an icon and title:
+401 reports incorrect email or password without identifying an account, 429 includes valid `Retry-After` seconds,
+and other responses or network failures report an unavailable Auth service.
 
 ## Recovery
 
@@ -35,13 +37,16 @@ ask the person to try again later.
 ## Sign-up
 
 The sign-up page keeps the query it was opened with. Its sign-in link keeps that same query. The form has a handle,
-email and password. Email uses `autocomplete="email"`. Password uses `autocomplete="new-password"` and a show/hide
-control. A field error is tied to its input with `aria-describedby`, and focus moves to the first one.
+email and password. Email uses `autocomplete="email"`. Password uses `autocomplete="new-password"` and the shared
+in-field show and hide control. Submission validates the handle, email and password. Field errors are tied to their
+inputs with `aria-describedby`, and focus moves to the first invalid field.
 
 The page creates one random key for the form and reuses it when a submit is retried after a network failure. It loads
 the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`, `action: "signup"`
-and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. Submitting stays disabled
-until a token arrives, and every submit uses a new token. The widget resets after every submit that does not end in 201.
+and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. The submit button is enabled
+before a token arrives; submitting without one shows a localized message beside the widget and sends no request.
+While a request is pending, the button shows its loading state. Every request uses a new token, and the widget resets
+after every request that does not end in 201.
 
 `POST /signup` sends `{ key, handle, email, password, turnstile_token }` as JSON with same-origin credentials. In
 development that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. A 201 response is `{ accountId }`
@@ -56,8 +61,9 @@ ask the person to try again later.
 
 `/consent?client_id=<id>&scope=<space-separated scopes>` reviews a third-party client's request. One browser
 `GET /consent/<client_id>` with the session cookie loads its display name (falling back to its id), registered scopes
-and this person's current consent. The page makes no kernel reads. Each requested scope is shown as already granted,
-new or not available; known protocol scopes have localized descriptions, and other scopes retain their raw ids.
+and this person's current consent. The page makes no kernel reads. Each requested scope shows a localized description
+first and its identifier in muted monospace afterward, followed by its already granted, new or not available state.
+Unknown scopes keep their raw identifier after a generic localized description.
 
 Approval uses the shared Auth client to send one same-origin JSON `POST /consent` with only `client_id` and `scope`.
 The approved set is the union of current grants and requested registered scopes, since the write replaces consent.
@@ -75,19 +81,24 @@ development. Auth's response returns unchanged, without page headers.
 
 ## Security
 
-The security page reads the signed-in account from `GET /session` and its sessions from `GET /sessions`, with at most
-64 session rows. The view makes no kernel reads. A password change uses three Auth calls and a revoke uses one. A
-signed-out response offers a link to `/login`.
+The security page has Password and Sessions sections in a content column up to 42rem wide. It reads the signed-in
+account from `GET /session` and its sessions from one `GET /sessions`, with at most 64 session rows. The view makes no
+kernel reads. A password change uses three Auth calls and signing out one session uses one. A signed-out response
+offers a link to `/login`.
 
 Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
 then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as
 success. A `step_up_required` response sends the person to `/step-up` with `/security` as the return target and clears
 the password field; no password is put in the URL.
 
-Sessions show a readable device when the browser and system are recognized, the client id, and created and expiry
-dates formatted for the page locale and time zone. The current session appears first. Revocation asks for confirmation;
-revoking another session removes it from the list, while revoking the current session sends the person to `/login`.
-Passkeys are not shown until that feature is available.
+Sessions are an item list with separators. A local browser and system map formats recognized user agents as a device;
+unrecognized values show a localized unknown-device label, and user agents are never sent elsewhere. The muted
+description contains the app name and signed-in and expiry dates formatted for the page locale and time zone. A
+response `client_display_name` is used when present; `login` maps to the localized REZICS account name,
+`rezics-website` maps to REZICS, and other client ids remain muted monospace. The current session appears first and is
+marked This device. Each row offers Sign out with an accessible name containing its device. Signing out asks for
+confirmation; another session disappears from the list, while signing out the current session clears its cookie and
+sends the person to `/login`. Passkeys are not shown until that feature is available.
 
 ## Step-up
 
@@ -102,8 +113,10 @@ browser then resumes at `/authorize` with that query, removing every `sig`, `exp
 keeping `max_age`. With no authorization query left, it goes to `/security`. The response body never
 supplies a navigation target. Passkey confirmation comes later.
 
-A wrong password, rate limit or outage uses `failureMessage` for 401, 429 and 503 and keeps the person
-on the page. Empty fields and a pending request prevent another submit.
+A wrong password, rate limit or outage uses a destructive alert with an icon and title for 401, 429 and 503 and keeps
+the person on the page. Submission validates email and password, links field errors to their inputs and focuses the
+first invalid field. Password visibility uses the shared in-field control. The submit button stays enabled until a
+request is pending and shows its loading state while waiting.
 
 ## Screenshots
 

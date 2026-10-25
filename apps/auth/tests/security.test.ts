@@ -332,14 +332,14 @@ test(
     calls.length = 0;
     const { page } = await open('/security', { locale: 'en', timezoneId: 'America/Los_Angeles' });
     try {
-      const list = page.getByRole('list', { name: 'Your sessions' });
+      const list = page.getByRole('list', { name: 'Sessions' });
       await list.waitFor({ state: 'visible' });
       expect(await list.count()).toBe(1);
       const rows = list.getByRole('listitem');
       expect(await rows.count()).toBe(2);
       expect(await rows.first().innerText()).toContain('Unknown device');
-      expect(await rows.first().innerText()).toContain('login');
-      expect(await rows.first().innerText()).toContain('Current session');
+      expect(await rows.first().innerText()).toContain('REZICS account');
+      expect(await rows.first().innerText()).toContain('This device');
       expect(await rows.nth(1).innerText()).toContain('Firefox on Linux');
       expect(await rows.nth(1).innerText()).toContain('website');
       const formattedDate = new Intl.DateTimeFormat('en', {
@@ -356,7 +356,7 @@ test(
       });
       await Promise.all([
         page.waitForResponse((response) => new URL(response.url()).pathname === '/sessions/revoke'),
-        rows.nth(1).getByRole('button', { name: 'Revoke', exact: true }).click(),
+        rows.nth(1).getByRole('button', { name: 'Sign out Firefox on Linux', exact: true }).click(),
       ]);
       expect(confirmations).toBe(1);
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'older-session' });
@@ -378,13 +378,13 @@ test(
     calls.length = 0;
     const { page, origin } = await open();
     try {
-      const current = page.getByRole('listitem').filter({ hasText: 'Current session' });
+      const current = page.getByRole('listitem').filter({ hasText: 'This device' });
       await current.waitFor({ state: 'visible' });
       expect(await current.count()).toBe(1);
       page.once('dialog', (dialog) => dialog.accept());
       await Promise.all([
         page.waitForURL(`${origin}/login`),
-        current.getByRole('button', { name: 'Revoke', exact: true }).click(),
+        current.getByRole('button', { name: 'Sign out Unknown device', exact: true }).click(),
       ]);
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'current-session' });
       expect(await page.context().cookies(origin)).not.toContainEqual(

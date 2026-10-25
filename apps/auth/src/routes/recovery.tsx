@@ -1,11 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/button';
-import { Field, FieldLabel } from '@rezics/ui/field';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { authPost, failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
+import { ErrorAlert } from '../alert';
+
+const emailId = 'recovery-email';
+const emailErrorId = 'recovery-email-error';
+const passwordId = 'recovery-password';
+const passwordErrorId = 'recovery-password-error';
 
 export const Route = createFileRoute('/recovery')({
   component: RecoveryPage,
@@ -19,6 +26,8 @@ function RecoveryPage() {
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const [message, setMessage] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordFieldError, setPasswordFieldError] = useState('');
   const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
@@ -37,17 +46,21 @@ function RecoveryPage() {
   }, []);
 
   useLayoutEffect(() => {
-    if (message) alert.current?.focus();
-  }, [message]);
+    if (emailError) emailInput.current?.focus();
+    else if (passwordFieldError) document.getElementById(passwordId)?.focus();
+    else if (message) alert.current?.focus();
+  }, [emailError, passwordFieldError, message]);
 
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || pending) return;
-    if (!emailInput.current?.checkValidity()) {
+    const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
+    if (invalidEmail) {
       setNotice('');
-      setMessage(failureMessage(400, 'invalid_request', null));
+      setEmailError(email.trim() ? m.auth_form_email_invalid() : m.auth_form_required());
       return;
     }
+    setEmailError('');
     submitting.current = true;
     setPending(true);
     setNotice('');
@@ -67,9 +80,12 @@ function RecoveryPage() {
     if (submitting.current || pending) return;
     const passwordLength = Array.from(password).length;
     if (passwordLength < 8 || passwordLength > 128) {
-      setMessage(failureMessage(400, 'invalid_password', null));
+      const error = password ? m.auth_recovery_password_invalid() : m.auth_form_required();
+      setPasswordFieldError(error);
+      setMessage(error);
       return;
     }
+    setPasswordFieldError('');
     if (!credentials?.accountId || !credentials.token) {
       setMessage(failureMessage(401, 'invalid_recovery', null));
       return;
@@ -104,27 +120,45 @@ function RecoveryPage() {
           noValidate
           onSubmit={submitComplete}
         >
-          <Field required>
-            <FieldLabel>{m.auth_recovery_password()}</FieldLabel>
-            <Input
+          <Field required invalid={Boolean(passwordFieldError)}>
+            <FieldLabel htmlFor={passwordId}>{m.auth_recovery_password()}</FieldLabel>
+            <PasswordInput
               name="new_password"
-              type="password"
               autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              readOnly={pending}
               required
-            />
+              readOnly={pending}
+              invalid={Boolean(passwordFieldError)}
+              translations={{
+                visibilityTrigger: (visible) =>
+                  visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+              }}
+            >
+              <PasswordInputGroup>
+                <PasswordInputInput
+                  id={passwordId}
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setPasswordFieldError('');
+                    setMessage('');
+                  }}
+                  aria-invalid={passwordFieldError ? true : undefined}
+                  aria-describedby={passwordFieldError ? passwordErrorId : undefined}
+                />
+                <PasswordInputTrigger />
+              </PasswordInputGroup>
+            </PasswordInput>
+            {passwordFieldError ? <FieldError id={passwordErrorId}>{passwordFieldError}</FieldError> : null}
           </Field>
           {message ? (
-            <div className="auth-login-alert" role="alert" tabIndex={-1} ref={alert}>
+            <ErrorAlert tabIndex={-1} ref={alert}>
               {message}
-            </div>
+            </ErrorAlert>
           ) : null}
           {message === failureMessage(401, 'invalid_recovery', null) ? (
             <a href="/recovery">{m.auth_recovery_new_link()}</a>
           ) : null}
-          <Button type="submit" disabled={pending || !password} isLoading={pending}>
+          <Button type="submit" disabled={pending} isLoading={pending}>
             {m.auth_recovery_complete_submit()}
           </Button>
         </form>
@@ -135,18 +169,25 @@ function RecoveryPage() {
   return (
     <AuthPage heading={m.auth_recovery_heading()}>
       <form className="auth-login-form" method="post" action="/recovery/start" noValidate onSubmit={submitStart}>
-        <Field required>
-          <FieldLabel>{m.auth_recovery_email()}</FieldLabel>
+        <Field required invalid={Boolean(emailError)}>
+          <FieldLabel htmlFor={emailId}>{m.auth_recovery_email()}</FieldLabel>
           <Input
             ref={emailInput}
+            id={emailId}
             name="email"
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setEmailError('');
+            }}
+            aria-invalid={emailError ? true : undefined}
+            aria-describedby={emailError ? emailErrorId : undefined}
             readOnly={pending}
             required
           />
+          {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
         </Field>
         {notice ? (
           <div className="auth-login-alert" role="status">
@@ -154,11 +195,11 @@ function RecoveryPage() {
           </div>
         ) : null}
         {message ? (
-          <div className="auth-login-alert" role="alert" tabIndex={-1} ref={alert}>
+          <ErrorAlert tabIndex={-1} ref={alert}>
             {message}
-          </div>
+          </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending || !email.trim()} isLoading={pending}>
+        <Button type="submit" disabled={pending} isLoading={pending}>
           {m.auth_recovery_start_submit()}
         </Button>
       </form>

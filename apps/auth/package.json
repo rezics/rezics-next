@@ -9,8 +9,8 @@
     "typecheck": "bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json",
     "generate": "bun scripts/generate.ts",
     "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
-    "screenshots": "bun scripts/screenshots.ts",
-    "test": "bun test"
+    "screenshots": "bun scripts/isolated.ts bun scripts/screenshots.ts",
+    "test": "bun scripts/isolated.ts bun test"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.v.4",
@@ -24,6 +24,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",
+    "lucide-react": "1.61.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tailwindcss": "4.3.3"

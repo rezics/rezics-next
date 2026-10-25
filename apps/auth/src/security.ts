@@ -8,6 +8,7 @@ export type SecuritySession = {
   expires_at: string;
   user_agent: string | null;
   current: boolean;
+  client_display_name?: string;
 };
 
 export type SecurityLoadResult =
@@ -172,12 +173,12 @@ export async function revokeSession(sessionId: string): Promise<{ ok: true } | {
 
 export function securityDevice(userAgent: string | null): { browser: string; system: string } | null {
   if (!userAgent) return null;
-  const browser = userAgent.includes('Edg/')
+  const browser = /(?:Edg|EdgA|EdgiOS)\//.test(userAgent)
     ? 'Microsoft Edge'
-    : userAgent.includes('Firefox/')
+    : /(?:Firefox|FxiOS)\//.test(userAgent)
       ? 'Firefox'
-      : userAgent.includes('Chrome/')
-        ? 'Chrome'
+      : /(?:Chrome|CriOS)\//.test(userAgent)
+        ? 'Google Chrome'
         : userAgent.includes('Safari/') && userAgent.includes('Version/')
           ? 'Safari'
           : null;

@@ -158,7 +158,7 @@ afterAll(async () => {
 
 async function form(page: Page) {
   const address = page.getByLabel(/email/i);
-  const secret = page.getByLabel(/password/i);
+  const secret = page.locator('input[name="password"]');
   // Assert the missing behaviour before the hydration wait, so the current heading-only page fails as a specification.
   expect(await address.count(), 'the login page has a labelled email field').toBe(1);
   expect(await secret.count(), 'the login page has a labelled password field').toBe(1);
@@ -264,7 +264,7 @@ test(
       try {
         const { address, secret, submit: button } = await form(page);
         const login = page.url();
-        // Try both the button and Enter: disabled submit controls must also guard keyboard submission.
+        // The enabled button validates by field and prevents invalid requests for both click and Enter.
         for (const [addressValue, secretValue] of [
           ['', ''],
           [email, ''],
@@ -272,9 +272,16 @@ test(
         ]) {
           await address.fill(addressValue!);
           await secret.fill(secretValue!);
-          if (await button.isEnabled()) await button.click();
+          await button.click();
+          const firstInvalidName = addressValue ? 'password' : 'email';
+          await page.waitForFunction(
+            (name) =>
+              document.activeElement?.getAttribute('name') === name &&
+              document.activeElement?.getAttribute('aria-invalid') === 'true',
+            firstInvalidName,
+          );
           await (addressValue ? address : secret).press('Enter');
-          await page.waitForTimeout(300);
+          await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
           expect(signIns(), `no request with an empty field (${status})`).toEqual([]);
         }
         await submit(page);
@@ -380,7 +387,7 @@ test(
         expect(await page.locator('html').getAttribute('lang'), own.locale).toBe(own.locale);
         expect(await page.getByRole('heading', { name: own.heading, exact: true }).count(), own.locale).toBe(1);
         const address = page.getByLabel(own.email);
-        const secret = page.getByLabel(own.password);
+        const secret = page.locator('input[name="password"]');
         expect(await address.count(), `${own.locale}: the email field has a localized label`).toBe(1);
         expect(await secret.count(), `${own.locale}: the password field has a localized label`).toBe(1);
         expect(await address.getAttribute('type')).toBe('email');

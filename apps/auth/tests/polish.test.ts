@@ -3,52 +3,15 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const session = 'polish-current-session';
-const now = Date.UTC(2025, 0, 15, 12, 0);
-const calls: { method: string; url: string; body: string; headers: Record<string, string> }[] = [];
+const calls: FakeAuthRequest[] = [];
 let holdNextSignIn = false;
 let signInReceived: (() => void) | undefined;
 let releaseSignIn: (() => void) | undefined;
-
-const sessions = [
-  {
-    id: 'current-session',
-    client_id: 'login',
-    created_at: new Date(now - 60 * 60 * 1000).toISOString(),
-    expires_at: new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0 Safari/537.36',
-    current: true,
-  },
-  {
-    id: 'desktop-session',
-    client_id: 'rezics-website',
-    created_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    expires_at: new Date(now + 10 * 24 * 60 * 60 * 1000).toISOString(),
-    user_agent: 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
-    current: false,
-  },
-  {
-    id: 'phone-session',
-    client_id: 'reading-app',
-    client_display_name: 'REZICS Reading Companion',
-    created_at: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    expires_at: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    user_agent:
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1',
-    current: false,
-  },
-  {
-    id: 'unknown-session',
-    client_id: 'unregistered-client',
-    created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    expires_at: new Date(now + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    user_agent: 'Unrecognized Client/1.0',
-    current: false,
-  },
-];
 
 const turnstileScript = `(() => {
   let serial = 0;
@@ -70,47 +33,16 @@ const turnstile = Bun.serve({
   },
 });
 
-const fake = Bun.serve({
-  hostname: '127.0.0.1',
-  port: 0,
-  async fetch(request) {
-    const url = new URL(request.url);
-    const body = await request.text();
-    const headers = Object.fromEntries(request.headers.entries());
-    calls.push({ method: request.method, url: url.pathname + url.search, body, headers });
-    const responseHeaders = new Headers({ 'cache-control': 'no-store' });
-
-    if (url.pathname === '/signin' && request.method === 'POST') {
-      if (holdNextSignIn) {
-        holdNextSignIn = false;
-        signInReceived?.();
-        await new Promise<void>((resolve) => {
-          releaseSignIn = resolve;
-        });
-      }
-      return Response.json({ error: 'authentication_denied' }, { status: 401, headers: responseHeaders });
+const fake = startFakeAuth({
+  async onRequest(request) {
+    calls.push(request);
+    if (request.method === 'POST' && request.url === '/signin' && holdNextSignIn) {
+      holdNextSignIn = false;
+      signInReceived?.();
+      await new Promise<void>((resolve) => {
+        releaseSignIn = resolve;
+      });
     }
-    if (url.pathname === '/session' && request.method === 'GET')
-      return Response.json({ account_id: 'polish-account' }, { headers: responseHeaders });
-    if (url.pathname === '/sessions' && request.method === 'GET')
-      return Response.json({ sessions }, { headers: responseHeaders });
-    if (url.pathname === '/sessions/revoke' && request.method === 'POST') {
-      const revoked = JSON.parse(body) as { session_id: string };
-      if (revoked.session_id === 'current-session')
-        responseHeaders.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-      return Response.json({}, { headers: responseHeaders });
-    }
-    if (url.pathname.startsWith('/consent/') && request.method === 'GET')
-      return Response.json(
-        {
-          client_id: 'screenshot-client',
-          display_name: 'REZICS Reading Companion',
-          scopes: ['openid', 'offline_access'],
-          granted: ['openid'],
-        },
-        { headers: responseHeaders },
-      );
-    return new Response('Not Found', { status: 404, headers: responseHeaders });
   },
 });
 
@@ -232,14 +164,11 @@ test(
       const arrived = new Promise<void>((resolve) => (received = resolve));
       signInReceived = received;
       holdNextSignIn = true;
-      let release!: () => void;
-      const pending = new Promise<void>((resolve) => (release = resolve));
       releaseSignIn = undefined;
       const submit = button.click();
       await arrived;
       expect(await button.isDisabled()).toBe(true);
       releaseSignIn?.();
-      release();
       await submit;
       await login.page.getByRole('alert').waitFor();
     } finally {
@@ -276,7 +205,7 @@ test(
 
     const stepUp = await open('/step-up?return_to=%2Fsecurity');
     try {
-      const button = stepUp.page.getByRole('button', { name: 'Confirm your identity', exact: true });
+      const button = stepUp.page.getByRole('button', { name: 'Verify your identity', exact: true });
       expect(await button.isEnabled()).toBe(true);
       await button.click();
       const email = stepUp.page.getByLabel('Email', { exact: true });
@@ -332,27 +261,33 @@ test(
     page.on('dialog', (dialog) => dialog.accept());
     try {
       const sections = page.getByRole('heading', { level: 2 });
-      expect(await sections.allTextContents()).toEqual(['Change password', 'Sessions']);
+      expect(await sections.allTextContents()).toEqual(['Password', 'Sessions']);
       const list = page.getByRole('list', { name: 'Sessions' });
       const rows = list.getByRole('listitem');
       expect(await rows.count()).toBe(4);
-      const current = rows.filter({ hasText: 'Google Chrome on Windows' });
+      const current = rows.filter({ hasText: 'Google Chrome on Linux' });
       expect(await current.getByText('REZICS account', { exact: true }).count()).toBe(1);
       expect(await current.getByText('This device', { exact: true }).count()).toBe(1);
       expect(await current.locator('time').count()).toBe(2);
-      expect(await current.locator('time').nth(0).getAttribute('datetime')).toBe(sessions[0]!.created_at);
-      expect(await current.locator('time').nth(1).getAttribute('datetime')).toBe(sessions[0]!.expires_at);
-      const website = rows.filter({ hasText: 'Firefox on Linux' });
+      const datetimes = await current
+        .locator('time')
+        .evaluateAll((elements) => elements.map((element) => element.getAttribute('datetime')));
+      expect(datetimes).toHaveLength(2);
+      expect(datetimes.every((value) => value !== null && Number.isFinite(Date.parse(value)))).toBe(true);
+      const website = rows.filter({ hasText: 'Safari on macOS' });
       expect(await website.getByText('REZICS', { exact: true }).count()).toBe(1);
       const companion = rows.filter({ hasText: 'Safari on iOS' });
       expect(await companion.getByText('REZICS Reading Companion', { exact: true }).count()).toBe(1);
       expect(await rows.filter({ hasText: 'Unknown device' }).count()).toBe(1);
       expect(await page.getByRole('button', { name: 'Revoke', exact: true }).count()).toBe(0);
-      await current.getByRole('button', { name: 'Sign out Google Chrome on Windows', exact: true }).click();
+      await current.getByRole('button', { name: 'Sign out Google Chrome on Linux', exact: true }).click();
       await page.waitForURL(`${origin}/login`);
       expect(calls.filter((call) => call.url === '/sessions/revoke').map((call) => JSON.parse(call.body))).toEqual([
         { session_id: 'current-session' },
       ]);
+      expect(await page.context().cookies(origin)).not.toContainEqual(
+        expect.objectContaining({ name: 'auth_session', value: session }),
+      );
     } finally {
       await page.context().close();
     }

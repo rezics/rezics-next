@@ -1,11 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
-import { Field, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemSeparator, ItemTitle } from '@rezics/ui/item';
+import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { failureMessage } from '../api';
+import { ErrorAlert } from '../alert';
 import {
   changePassword,
   formatSecurityDate,
@@ -27,10 +30,10 @@ function SecurityPage() {
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
   const [loadMessage, setLoadMessage] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [passwordFieldError, setPasswordFieldError] = useState('');
   const [sessionPending, setSessionPending] = useState('');
   const [sessionNotice, setSessionNotice] = useState('');
   const [sessionError, setSessionError] = useState('');
@@ -59,17 +62,20 @@ function SecurityPage() {
   }, []);
 
   useLayoutEffect(() => {
-    if (passwordError) passwordAlert.current?.focus();
-  }, [passwordError]);
+    if (passwordFieldError) passwordInput.current?.focus();
+    else if (passwordError) passwordAlert.current?.focus();
+  }, [passwordFieldError, passwordError]);
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submittingPassword.current || passwordPending) return;
-    if (Array.from(password).length < 8 || Array.from(password).length > 128) {
+    const passwordLength = Array.from(password).length;
+    if (passwordLength < 8 || passwordLength > 128) {
       setPasswordNotice('');
-      setPasswordError(failureMessage(400, 'invalid_password', null));
+      setPasswordFieldError(password ? m.auth_security_password_invalid() : m.auth_form_required());
       return;
     }
+    setPasswordFieldError('');
     submittingPassword.current = true;
     setPasswordPending(true);
     setPasswordNotice('');
@@ -79,14 +85,11 @@ function SecurityPage() {
     setPasswordPending(false);
     if (result.ok) {
       setPassword('');
-      setShowPassword(false);
       setPasswordNotice(m.auth_security_password_changed());
       return;
     }
     if (result.reason === 'step-up') {
       setPassword('');
-      if (passwordInput.current) passwordInput.current.value = '';
-      setShowPassword(false);
       window.location.assign('/step-up?return_to=%2Fsecurity');
       return;
     }
@@ -125,9 +128,7 @@ function SecurityPage() {
   if (loadState === 'failure')
     return (
       <AuthPage heading={m.auth_security_heading()}>
-        <div className="auth-login-alert" role="alert">
-          {loadMessage}
-        </div>
+        <ErrorAlert>{loadMessage}</ErrorAlert>
       </AuthPage>
     );
 
@@ -136,110 +137,143 @@ function SecurityPage() {
 
   return (
     <AuthPage heading={m.auth_security_heading()}>
-      {loadState === 'loading' ? null : (
-        <>
-          <section aria-labelledby="security-password-heading">
-            <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
-            <form
-              className="auth-login-form"
-              method="post"
-              action="/credential-effects/stage"
-              noValidate
-              onSubmit={submitPassword}
-            >
-              <Field required>
-                <FieldLabel>{m.auth_security_new_password()}</FieldLabel>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Input
-                    ref={passwordInput}
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    readOnly={passwordPending}
-                    required
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowPassword((shown) => !shown)}
-                    disabled={passwordPending}
-                    aria-pressed={showPassword}
-                  >
-                    {showPassword ? m.auth_security_hide_password() : m.auth_security_show_password()}
-                  </Button>
-                </div>
-              </Field>
-              {passwordNotice ? (
-                <div className="auth-login-alert" role="status">
-                  {passwordNotice}
-                </div>
-              ) : null}
-              {passwordError ? (
-                <div className="auth-login-alert" role="alert" tabIndex={-1} ref={passwordAlert}>
-                  {passwordError}
-                </div>
-              ) : null}
-              <Button
-                type="submit"
-                disabled={passwordPending || !password}
-                isLoading={passwordPending}
-                className="w-full"
+      <div className="auth-security-page">
+        {loadState === 'loading' ? null : (
+          <>
+            <section aria-labelledby="security-password-heading">
+              <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
+              <form
+                className="auth-login-form"
+                method="post"
+                action="/credential-effects/stage"
+                noValidate
+                onSubmit={submitPassword}
               >
-                {m.auth_security_password_submit()}
-              </Button>
-            </form>
-          </section>
+                <Field required invalid={Boolean(passwordFieldError)}>
+                  <FieldLabel htmlFor="security-new-password">{m.auth_security_new_password()}</FieldLabel>
+                  <PasswordInput
+                    name="password"
+                    autoComplete="new-password"
+                    required
+                    readOnly={passwordPending}
+                    invalid={Boolean(passwordFieldError)}
+                    translations={{
+                      visibilityTrigger: (visible) =>
+                        visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+                    }}
+                  >
+                    <PasswordInputGroup>
+                      <PasswordInputInput
+                        ref={passwordInput}
+                        id="security-new-password"
+                        value={password}
+                        onChange={(event) => {
+                          setPassword(event.target.value);
+                          setPasswordFieldError('');
+                        }}
+                        aria-invalid={passwordFieldError ? true : undefined}
+                        aria-describedby={passwordFieldError ? 'security-password-error' : undefined}
+                      />
+                      <PasswordInputTrigger />
+                    </PasswordInputGroup>
+                  </PasswordInput>
+                  {passwordFieldError ? (
+                    <FieldError id="security-password-error">{passwordFieldError}</FieldError>
+                  ) : null}
+                </Field>
+                {passwordNotice ? (
+                  <div className="auth-login-alert" role="status">
+                    {passwordNotice}
+                  </div>
+                ) : null}
+                {passwordError ? (
+                  <ErrorAlert tabIndex={-1} ref={passwordAlert}>
+                    {passwordError}
+                  </ErrorAlert>
+                ) : null}
+                <Button type="submit" disabled={passwordPending} isLoading={passwordPending} className="w-full">
+                  {m.auth_security_password_submit()}
+                </Button>
+              </form>
+            </section>
 
-          <section className="auth-login-form" aria-labelledby="security-sessions-heading">
-            <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
-            {sessionNotice ? (
-              <div className="auth-login-alert" role="status">
-                {sessionNotice}
-              </div>
-            ) : null}
-            {sessionError ? (
-              <div className="auth-login-alert" role="alert">
-                {sessionError}
-              </div>
-            ) : null}
-            <ul aria-label={m.auth_security_sessions_heading()}>
-              {orderedSessions.map((session) => {
-                const device = securityDevice(session.user_agent);
-                return (
-                  <li key={session.id}>
-                    <article>
-                      <h3>{device ? m.auth_security_device(device) : m.auth_security_unknown_device()}</h3>
-                      {session.current ? <p>{m.auth_security_current_session()}</p> : null}
-                      <p>{session.client_id}</p>
-                      <p>
-                        {m.auth_security_created_at()}{' '}
-                        <time dateTime={session.created_at}>{formatSecurityDate(session.created_at, locale)}</time>
-                      </p>
-                      <p>
-                        {m.auth_security_expires_at()}{' '}
-                        <time dateTime={session.expires_at}>{formatSecurityDate(session.expires_at, locale)}</time>
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void revoke(session)}
-                        disabled={Boolean(sessionPending)}
-                        isLoading={sessionPending === session.id}
-                      >
-                        {m.auth_security_revoke_session()}
-                      </Button>
-                    </article>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        </>
-      )}
+            <section aria-labelledby="security-sessions-heading">
+              <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
+              {sessionNotice ? (
+                <div className="auth-login-alert" role="status">
+                  {sessionNotice}
+                </div>
+              ) : null}
+              {sessionError ? <ErrorAlert>{sessionError}</ErrorAlert> : null}
+              <ItemGroup aria-label={m.auth_security_sessions_heading()}>
+                {orderedSessions.map((session, index) => {
+                  const parsedDevice = securityDevice(session.user_agent);
+                  const device = parsedDevice ? m.auth_security_device(parsedDevice) : m.auth_security_unknown_device();
+                  const clientName =
+                    session.client_display_name?.trim() ||
+                    (session.client_id === 'login'
+                      ? m.auth_security_rezics_account()
+                      : session.client_id === 'rezics-website'
+                        ? m.auth_security_rezics()
+                        : session.client_id);
+                  const rawClientId =
+                    !session.client_display_name?.trim() && !['login', 'rezics-website'].includes(session.client_id);
+                  return (
+                    <div className="contents" key={session.id}>
+                      {index > 0 ? <ItemSeparator /> : null}
+                      <Item asChild variant="outline">
+                        <li>
+                          <article className="contents">
+                            <ItemContent>
+                              <ItemTitle asChild>
+                                <h3>
+                                  {device}
+                                  {session.current ? (
+                                    <Badge variant="soft" size="sm">
+                                      {m.auth_security_this_device()}
+                                    </Badge>
+                                  ) : null}
+                                </h3>
+                              </ItemTitle>
+                              <ItemDescription>
+                                <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
+                                {' · '}
+                                <span>
+                                  {m.auth_security_created_at()}{' '}
+                                  <time dateTime={session.created_at}>
+                                    {formatSecurityDate(session.created_at, locale)}
+                                  </time>
+                                  {' · '}
+                                  {m.auth_security_expires_at()}{' '}
+                                  <time dateTime={session.expires_at}>
+                                    {formatSecurityDate(session.expires_at, locale)}
+                                  </time>
+                                </span>
+                              </ItemDescription>
+                            </ItemContent>
+                            <ItemActions>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void revoke(session)}
+                                disabled={Boolean(sessionPending)}
+                                isLoading={sessionPending === session.id}
+                                aria-label={m.auth_security_sign_out_session({ device })}
+                              >
+                                {m.auth_security_sign_out()}
+                              </Button>
+                            </ItemActions>
+                          </article>
+                        </li>
+                      </Item>
+                    </div>
+                  );
+                })}
+              </ItemGroup>
+            </section>
+          </>
+        )}
+      </div>
     </AuthPage>
   );
 }

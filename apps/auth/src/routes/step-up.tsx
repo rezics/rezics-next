@@ -3,9 +3,17 @@ import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { FieldError } from '@rezics/ui/field';
+import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { confirmStepUp } from '../step-up';
+import { ErrorAlert } from '../alert';
+
+const emailId = 'step-up-email';
+const emailErrorId = 'step-up-email-error';
+const passwordId = 'step-up-password';
+const passwordErrorId = 'step-up-password-error';
 
 export const Route = createFileRoute('/step-up')({
   component: StepUpPage,
@@ -16,19 +24,31 @@ function StepUpPage() {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
+  const emailInput = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
-    if (message) alert.current?.focus();
-  }, [message]);
+    if (emailError) emailInput.current?.focus();
+    else if (passwordError) document.getElementById(passwordId)?.focus();
+    else if (message) alert.current?.focus();
+  }, [emailError, passwordError, message]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || !email.trim() || !password) return;
+    if (submitting.current || pending) return;
+    const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
+    const invalidPassword = !password;
+    setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
+    setPasswordError(invalidPassword ? m.auth_form_required() : '');
+    if (invalidEmail || invalidPassword) return;
     submitting.current = true;
     setPending(true);
     setMessage('');
+    setEmailError('');
+    setPasswordError('');
     const outcome = await confirmStepUp(email, password, window.location.search, window.location.origin);
     setPassword('');
     if (outcome.ok) {
@@ -42,38 +62,63 @@ function StepUpPage() {
 
   return (
     <AuthPage heading={m.auth_step_up_heading()}>
-      <form className="auth-login-form" method="post" action="/signin" onSubmit={submit}>
+      <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
         <p>{m.auth_step_up_explanation()}</p>
-        <Field required>
-          <FieldLabel>{m.auth_login_email()}</FieldLabel>
+        <Field required invalid={Boolean(emailError)}>
+          <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
           <Input
+            ref={emailInput}
+            id={emailId}
             name="email"
             type="email"
             autoComplete="username"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setEmailError('');
+            }}
+            aria-invalid={emailError ? true : undefined}
+            aria-describedby={emailError ? emailErrorId : undefined}
             readOnly={pending}
             required
           />
+          {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
         </Field>
-        <Field required>
-          <FieldLabel>{m.auth_login_password()}</FieldLabel>
-          <Input
+        <Field required invalid={Boolean(passwordError)}>
+          <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
+          <PasswordInput
             name="password"
-            type="password"
             autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            readOnly={pending}
             required
-          />
+            readOnly={pending}
+            invalid={Boolean(passwordError)}
+            translations={{
+              visibilityTrigger: (visible) =>
+                visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+            }}
+          >
+            <PasswordInputGroup>
+              <PasswordInputInput
+                id={passwordId}
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setPasswordError('');
+                }}
+                aria-invalid={passwordError ? true : undefined}
+                aria-describedby={passwordError ? passwordErrorId : undefined}
+              />
+              <PasswordInputTrigger />
+            </PasswordInputGroup>
+          </PasswordInput>
+          {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
         </Field>
         {message ? (
-          <div className="auth-login-alert" role="alert" tabIndex={-1} ref={alert}>
+          <ErrorAlert tabIndex={-1} ref={alert}>
             {message}
-          </div>
+          </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending || !email.trim() || !password} isLoading={pending}>
+        <Button type="submit" disabled={pending} isLoading={pending}>
           {m.auth_step_up_heading()}
         </Button>
       </form>

@@ -5,6 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { authPost, failureMessage } from '../api';
 import { approvedScopes, readConsent, type Consent } from '../consent';
+import { ErrorAlert } from '../alert';
 
 export const Route = createFileRoute('/consent')({
   component: ConsentPage,
@@ -20,10 +21,10 @@ function ConsentPage() {
 
 type State = 'loading' | 'ready' | 'signed-out' | 'not-found' | 'failed' | 'approved' | 'declined';
 
-function scopeDescription(scope: string): string | null {
+function scopeDescription(scope: string): string {
   if (scope === 'openid') return m.auth_consent_scope_openid();
   if (scope === 'offline_access') return m.auth_consent_scope_offline_access();
-  return null;
+  return m.auth_consent_scope_unrecognized();
 }
 
 function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }) {
@@ -102,8 +103,8 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
                   const description = scopeDescription(id);
                   return (
                     <li key={id} className="grid gap-1 wrap-anywhere">
-                      <code>{id}</code>
-                      {description ? <span>{description}</span> : null}
+                      <span>{description}</span>
+                      <code className="font-mono text-sm text-muted-foreground">{id}</code>
                       <span className="text-sm text-muted-foreground">
                         {!available
                           ? m.auth_consent_not_available()
@@ -137,9 +138,9 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
           </>
         ) : null}
         {message ? (
-          <div className="auth-login-alert" role="alert" tabIndex={-1} ref={alert}>
+          <ErrorAlert tabIndex={-1} ref={alert}>
             {message}
-          </div>
+          </ErrorAlert>
         ) : null}
       </div>
     </AuthPage>
