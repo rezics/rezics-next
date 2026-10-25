@@ -41,7 +41,7 @@ if (process.env.NODE_ENV !== 'production') {
   async function nativeOwner(database: Pool, id: string) {
     await database.query(`INSERT INTO "user" (id,name,email,"emailVerified") VALUES ($1,'',NULL,false)`, [id]);
     await database.query(
-      `INSERT INTO auth_client VALUES ('bounded-web',true,ARRAY['read','write']) ON CONFLICT DO NOTHING`,
+      `INSERT INTO auth_client VALUES ('bounded-native',true,ARRAY['read','write']) ON CONFLICT DO NOTHING`,
     );
   }
   function native(database: Pool) {
@@ -53,7 +53,7 @@ if (process.env.NODE_ENV !== 'production') {
       userId,
       false,
       {
-        clientId: 'bounded-web',
+        clientId: 'bounded-native',
         grantedScope: 'read',
         authnEpoch: 1,
         authTime: 123,
@@ -128,6 +128,7 @@ if (process.env.NODE_ENV !== 'production') {
     };
     const first = await createAuthService(options);
     const second = await createAuthService({ ...options, database: other });
+    await first.internal.registerClient({ clientId: 'bounded-web', firstParty: true, scopes: ['read', 'write'] });
     accounts.set('human', { accountId: 'human', state: 'pending', kind: 'actor', authnEpoch: 1, automated: false });
     await first.internal.provisionPassword({ authorization: 'human', email: 'human@bounded.test', password });
     accounts.get('human')!.state = 'active';
@@ -223,14 +224,14 @@ if (process.env.NODE_ENV !== 'production') {
       migrate(fixture.url, directory);
       await nativeOwner(database, 'legacy');
       await database.query(`INSERT INTO session (id,token,"userId","clientId","expiresAt","createdAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
-      SELECT 'legacy-'||i,'legacy-'||i,'legacy','bounded-web','2000-01-01','2000-01-01'::timestamptz+i*interval '1 second',now(),'read',1,123,'pwd' FROM generate_series(1,2100) i`);
+      SELECT 'legacy-'||i,'legacy-'||i,'legacy','bounded-native','2000-01-01','2000-01-01'::timestamptz+i*interval '1 second',now(),'read',1,123,'pwd' FROM generate_series(1,2100) i`);
       migrate(fixture.url);
       const ctx = await native(database).$context;
       expect(await sessionUpgradePage(database, '', 1)).toEqual(['legacy']);
       expect(await sessionUpgradePage(database, 'legacy', 1)).toEqual([]);
       await expect(
         ctx.internalAdapter.createSession('legacy', false, {
-          clientId: 'bounded-web',
+          clientId: 'bounded-native',
           grantedScope: 'read',
           authnEpoch: 1,
           authTime: 123,
@@ -273,7 +274,7 @@ if (process.env.NODE_ENV !== 'production') {
           data: {
             userId: 'rollback',
             token: 'rolled-back-token',
-            clientId: 'bounded-web',
+            clientId: 'bounded-native',
             grantedScope: 'read',
             authnEpoch: 1,
             authTime: 123,
@@ -297,7 +298,7 @@ if (process.env.NODE_ENV !== 'production') {
     import { betterAuthOptions } from './src/better-auth.ts';
     const pool = new Pool({connectionString:process.env.BOUNDED_RESTART_DATABASE});
     const context = await betterAuth(betterAuthOptions(pool,'https://bounded.auth.test','bounded-session-tests-persistent-secret-at-least-32')).$context;
-    await context.internalAdapter.createSession('rollback',false,{clientId:'bounded-web',grantedScope:'read',authnEpoch:1,authTime:123,authMethods:'pwd'});
+    await context.internalAdapter.createSession('rollback',false,{clientId:'bounded-native',grantedScope:'read',authnEpoch:1,authTime:123,authMethods:'pwd'});
     await pool.end();
   `,
       ],
@@ -391,6 +392,7 @@ if (process.env.NODE_ENV !== 'production') {
     };
     const service = await createAuthService(options);
     const second = await createAuthService({ ...options, database: other });
+    await service.internal.registerClient({ clientId: 'bounded-web', firstParty: true, scopes: ['read', 'write'] });
     accounts.set('effects-human', {
       accountId: 'effects-human',
       kind: 'actor',
