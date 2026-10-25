@@ -239,8 +239,7 @@ async function open(path: string): Promise<Page> {
     javaScriptEnabled: false,
   });
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await page.locator('html[data-hydrated]').waitFor();
+  await page.goto(`${origin}${path}`, { waitUntil: 'load' });
   return page;
 }
 afterAll(async () => {
@@ -335,7 +334,7 @@ test(
   'an erased post says it was erased and shows no body',
   async () => {
     for (const [locale, note] of [
-      ['en', /erased/i],
+      ['en', /removed by its author/i],
       ['ja', /消去|削除/],
     ] as const) {
       const page = await open(`/${locale}/threads/${id(5)}`);

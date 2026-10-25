@@ -152,7 +152,6 @@ export function PostComposer<T>({
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
   const [editorReady, setEditorReady] = useState(false);
-  const [showPlainEditor, setShowPlainEditor] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
   const [failure, setFailure] = useState<WriteFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
@@ -184,7 +183,7 @@ export function PostComposer<T>({
     observer.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ['contenteditable'] });
     return () => observer.disconnect();
   }, []);
-  const plainEditorVisible = !editorReady || showPlainEditor;
+  const plainEditorVisible = !editorReady;
 
   function updateBody(next: DocumentSnapshot) {
     bodyRef.current = next;
@@ -231,7 +230,6 @@ export function PostComposer<T>({
       bodyRef.current = empty;
       setBody(empty);
       setBodyCanSend(false);
-      setShowPlainEditor(true);
       setUploadNotice(null);
       setIdempotencyKey(crypto.randomUUID());
       onSuccess(result.value);
@@ -281,7 +279,6 @@ export function PostComposer<T>({
               aria-multiline="true"
               className="min-h-[50dvh] rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6"
               contentEditable
-              onBlur={() => setShowPlainEditor(false)}
               role="textbox"
               suppressContentEditableWarning
             />

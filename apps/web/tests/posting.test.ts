@@ -433,7 +433,8 @@ afterAll(async () => {
       process.kill(-child.pid, 'SIGTERM');
     } catch {}
 });
-const writes = () => calls.filter((call) => call.method === 'POST');
+// Page reads use POST too, including the home-page probe that starts the dev server.
+const writes = () => calls.filter((call) => call.method === 'POST' && call.path !== '/v1/pages:read');
 const editor = (page: Page) => page.locator('main').getByRole('textbox', { name: /body|reply|content|本文|返信/i });
 const title = (page: Page) => page.getByRole('textbox', { name: /title|タイトル/i });
 const send = (page: Page) => page.locator('main').getByRole('button', { name: /send|publish|post|送信|投稿/i });
