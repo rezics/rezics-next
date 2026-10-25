@@ -77,3 +77,22 @@ test('invalid IDs and extra authority/bulk fields deny before SQL', async () => 
     expect(await reader.readCurrentConsent(input)).toBeNull();
   expect(queries).toBe(0);
 });
+
+test('pending scope validation and intersection cannot add authority or treat an empty ceiling as absent', async () => {
+  for (const [pending, scopes] of [
+    [null, ['read', 'write']],
+    [['read', 'old', 'new'], ['read']],
+    [[], []],
+    [['bad scope'], null],
+    ['read', null],
+  ] as const) {
+    const reader = createCurrentConsentReader({
+      database: {
+        async query() {
+          return { rows: [{ consent: ['write', 'old', 'read', 'read'], ceiling: ['read', 'write', 'new'], pending }] };
+        },
+      } as unknown as Pool,
+    });
+    expect(await reader.readCurrentConsent(selected)).toEqual(scopes === null ? null : { ...selected, scopes });
+  }
+});

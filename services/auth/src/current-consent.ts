@@ -41,8 +41,8 @@ export function createCurrentConsentReader({ database }: { database: Pool }): {
     async readCurrentConsent(input) {
       if (!validConsentInput(input)) return null;
       const { actorAccountId, clientId } = input;
-      const result = await database.query<{ consent: unknown; ceiling: unknown }>(
-        `SELECT c.scopes AS consent, a.scopes AS ceiling
+      const result = await database.query<{ consent: unknown; ceiling: unknown; pending: unknown }>(
+        `SELECT c.scopes AS consent, a.scopes AS ceiling, c.pending_scopes AS pending
          FROM auth_consent c JOIN auth_client a ON a.client_id=c.client_id
          JOIN auth_client_coverage v ON v.client_id=a.client_id AND v.ready
          WHERE c.account_id=$1 AND c.client_id=$2
@@ -50,12 +50,23 @@ export function createCurrentConsentReader({ database }: { database: Pool }): {
         [actorAccountId, clientId],
       );
       const row = result.rows[0];
-      if (!row || !validConsentScopes(row.consent) || !validConsentScopes(row.ceiling)) return null;
+      if (
+        !row ||
+        !validConsentScopes(row.consent) ||
+        !validConsentScopes(row.ceiling) ||
+        (row.pending !== null && !validConsentScopes(row.pending))
+      )
+        return null;
       const ceiling = new Set(row.ceiling);
+      // This durable ceiling belongs to the selected consent, independently of
+      // proof expiry/collection and acknowledgement of the Access floor.
+      const pending = row.pending === null ? null : new Set(row.pending);
       return {
         actorAccountId,
         clientId,
-        scopes: [...new Set(row.consent.filter((scope) => ceiling.has(scope)))].sort(),
+        scopes: [
+          ...new Set(row.consent.filter((scope) => ceiling.has(scope) && (!pending || pending.has(scope)))),
+        ].sort(),
       };
     },
   };
