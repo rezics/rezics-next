@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
@@ -8,6 +8,7 @@ import { matchesPath } from './briefs.ts';
 import { firstFailure, gateRunner, git, type GateRunner } from './merge.ts';
 import { stopProcessesUnder } from './process.ts';
 import type { DerivedFile } from './merge-train.ts';
+import type { FirstFailure } from './contracts.ts';
 import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
 import type { Settings } from './types.ts';
@@ -149,6 +150,18 @@ async function gateAt(options: PromotionOptions, run: PromotionRun, commit: stri
   git(main, 'worktree', 'add', '--detach', tree, commit);
   try {
     results.length = 0;
+    // A fresh worktree has no node_modules; only the root gate installs by itself, and a narrowed or acceptance
+    // command would fail on every commit without this.
+    if (existsSync(join(tree, 'package.json'))) {
+      const installed = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
+      appendFileSync(logFor(0), `$ bun install --frozen-lockfile (cwd: ${tree})\n${installed.stdout ?? ''}${installed.stderr ?? ''}`);
+      if (installed.status !== 0) {
+        const result = { commit, command: [...commands[0]!], passed: false, timedOut: false,
+          firstFailure: firstFailure(`bun install --frozen-lockfile failed: ${installed.stderr || installed.error?.message || ''}`) };
+        appendResult(run, target, result); store.savePromotion(run);
+        return [result];
+      }
+    }
     for (let index = 0; index < commands.length; index++) {
       const command = [...commands[index]!];
       const cached = force ? undefined : run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
@@ -225,14 +238,29 @@ function reportEnvironment(options: PromotionOptions, run: PromotionRun): void {
   if (failure && task) options.job.reportPromotionEnvironment(task.id, failure);
 }
 
+// The root gate names its failing workspaces on its last line. Bisecting on the first one's check costs a fraction of
+// the root gate per probe, and a flake in another workspace cannot decide a probe.
+function narrowedFailure(options: PromotionOptions, run: PromotionRun, failed: PromotionGateResult, label: string,
+  index: number): { command: string[]; failure: FirstFailure } {
+  const fallback = { command: [...failed.command], failure: failed.firstFailure ?? firstFailure('Promotion gate failed') };
+  const logPath = join(options.settings.stateDirectory, `promotion-${run.id}-${label}-${index}.log`);
+  if (JSON.stringify(failed.command) !== JSON.stringify(run.rootGate) || !existsSync(logPath)) return fallback;
+  const log = readFileSync(logPath, 'utf8');
+  const workspace = /^Failed workspaces: (\S+)/m.exec(log)?.[1];
+  if (!workspace) return fallback;
+  const block = log.split(/^(?=Workspace )/m).find(part => part.split('\n', 2)[1]?.trimEnd().endsWith(`(${workspace})`));
+  return { command: ['bun', 'run', '--cwd', workspace, 'check'], failure: firstFailure(block ?? log) };
+}
+
 async function saveHeadDecision(options: PromotionOptions, run: PromotionRun, result: PromotionGateResult[]): Promise<PromotionRun> {
   const failed = result.find(item => !item.passed);
   if (!failed) {
     run.phase = 'publish-main'; run.promoteHead = run.devHead; run.promoteTaskIds = [...run.taskIds];
     options.job.tasks.store.savePromotion(run); return run;
   }
-  run.firstFailure = failed.firstFailure ?? firstFailure('Promotion gate failed');
-  run.failedCommand = [...failed.command]; run.phase = 'classify-main';
+  const narrowed = narrowedFailure(options, run, failed, 'head', result.indexOf(failed));
+  run.firstFailure = narrowed.failure;
+  run.failedCommand = narrowed.command; run.phase = 'classify-main';
   options.job.tasks.store.savePromotion(run); return run;
 }
 
@@ -286,6 +314,8 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
     if (results.get(high)!.passed) { run.phase = 'report-environment'; store.savePromotion(run); return run; }
   }
   while (low < high) {
+    // Pausing stops a bisection between rounds; its probe results stay cached for when it resumes.
+    if (pausedAt(options.settings)) return run;
     const span = high - low, count = Math.min(run.promotionParallelism, span);
     const picks = [...new Set(Array.from({ length: count }, (_, k) => low + Math.floor(((k + 1) * span) / (count + 1))))]
       .filter(index => index < high).sort((a, b) => a - b);
@@ -401,11 +431,13 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
   store.clearPromotion();
 }
 
+// A local switch: while dev is known to be red, gating and bisecting it only spends the machine.
+function pausedAt(settings: Settings): boolean { return existsSync(join(settings.stateDirectory, 'promotion.paused')); }
+
 /** Gate integrated work, publish passing commits on main, or isolate the first failing task on dev. */
 export async function promote(options: PromotionOptions): Promise<void> {
   const { settings, job } = options, store = job.tasks.store;
-  // A local switch: while dev is known to be red, gating and bisecting it only spends the machine.
-  const paused = () => existsSync(join(settings.stateDirectory, 'promotion.paused'));
+  const paused = () => pausedAt(settings);
   if (paused()) return;
   let lease;
   try { lease = acquireDirectoryLease(join(settings.stateDirectory, 'promotion.lease')); }
@@ -461,7 +493,10 @@ export async function promote(options: PromotionOptions): Promise<void> {
         run = await saveHeadDecision(options, run, checked);
       }
       if (run.phase === 'classify-main') run = await resolveMainFailure(options, run);
-      if (run.phase === 'classify-prefixes') run = await resolveCulprit(options, run);
+      if (run.phase === 'classify-prefixes') {
+        run = await resolveCulprit(options, run);
+        if (run.phase === 'classify-prefixes') return;
+      }
       // A flaky confirmation stores a fresh gate-head run; start gating that snapshot under this lease.
       if (run.phase === 'gate-head') continue;
       if (run.phase === 'report-environment') { reportEnvironment(options, run); return; }
@@ -514,8 +549,9 @@ export async function promote(options: PromotionOptions): Promise<void> {
         if (failed) {
           run.devHead = promoteHead; run.taskIds = remaining.map(task => task.id); run.boundaries = remaining
             .filter(task => task.integratedCommit).map(task => ({ taskId: task.id, commit: task.integratedCommit! }));
-          run.headResults = []; run.prefixResults = []; run.firstFailure = failed.firstFailure ?? firstFailure('Promotion gate failed');
-          run.failedCommand = [...failed.command]; run.phase = 'classify-main'; store.savePromotion(run);
+          const narrowed = narrowedFailure(options, run, failed, 'remainder', checked.indexOf(failed));
+          run.headResults = []; run.prefixResults = []; run.firstFailure = narrowed.failure;
+          run.failedCommand = narrowed.command; run.phase = 'classify-main'; store.savePromotion(run);
           continue;
         }
         run.promoteHead = promoteHead; run.promoteTaskIds = remaining.map(task => task.id); run.phase = 'publish-main'; store.savePromotion(run);
