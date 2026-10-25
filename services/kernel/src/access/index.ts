@@ -1,4 +1,5 @@
 import type { Access, AccessConfig as KernelAccessConfig, Actor, Resource } from '../request/access.ts';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
 
@@ -19,9 +20,10 @@ export function createAccess(config: AccessConfig): Access {
   const prepared = new WeakMap<object, Prepared>();
   const permissions = permissionAccess({
     actions,
+    resourceRoles: config.resourceRoles,
     accountEvidence: (actor) => authentication.identity(actor)?.account,
   });
-  return {
+  const access: Access = {
     authenticate: authentication.authenticate,
     replayAuthorization: (action) => actions.get(action)?.replay,
     async prepare(actor, action, resource, context) {
@@ -63,7 +65,20 @@ export function createAccess(config: AccessConfig): Access {
       }
     },
   };
+  installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
+  return access;
 }
 
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
 export const access: Access = createAccess({ actions: new Map() });
+
+export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
+export {
+  parentCreationAuthorization,
+  type ParentAnchor,
+  type ParentCreationContext,
+  type ResourceCreationPort,
+} from './parent-creation.ts';
+export { initializeResourceGrants } from './resource-initialization.ts';
+export { installStandingParentGrant } from './standing-parent.ts';
+export type { ResourceRoleCatalogue } from './resource-roles.ts';

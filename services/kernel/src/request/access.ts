@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
 import { commandTime, type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
 
 export type AccountActor = {
@@ -17,7 +18,7 @@ export type Resource = { route: number; id: string };
 export type ActionCatalogue = ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
 
 /** Actions available to an access implementation for one application. */
-export type AccessConfig = { actions: ActionCatalogue };
+export type AccessConfig = { actions: ActionCatalogue; resourceRoles?: ResourceRoleCatalogue };
 
 /** Builds an access implementation from an application's configuration. */
 export type AccessFactory = (config: AccessConfig) => Access;

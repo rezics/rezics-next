@@ -7,7 +7,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
-import { accessCheck } from '../../src/request/access.ts';
+import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function standingFixture() {
@@ -96,16 +96,19 @@ export async function standingFixture() {
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
     await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
   }
+  const app = new Elysia();
+  for (const [index, action] of actions.entries()) {
+    const detail = { operationId: action.replace(':', '.'), 'x-action': action, security: [{ bearerAuth: [] }] };
+    app.get(
+      `/fixture/${index}`,
+      {
+        detail,
+      },
+      () => null,
+    );
+  }
   const access = createAccess({
-    actions: actionCatalogue(
-      actions.reduce(
-        (app, action, index) =>
-          app.get(`/fixture/${index}`, () => null, {
-            detail: { operationId: action.replace(':', '.'), 'x-action': action, security: [{ bearerAuth: [] }] },
-          }),
-        new Elysia(),
-      ),
-    ),
+    actions: actionCatalogue(app),
     resourceRoles: {
       roles: { 'fixture.owner': ['fixture:own'], 'fixture.unmounted': ['unmounted:action'] },
       types: {
@@ -150,12 +153,28 @@ export async function standingFixture() {
         .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
         .sign(await importJWK(signingKey, 'ES256'));
     const boundary = { pool, deadline: Date.now() + 5000 };
-    return { ...boundary, actor: await access.authenticate(token, boundary) };
+    return {
+      ...boundary,
+      creation: {
+        async validate(tx: AccessClient, target: Resource) {
+          return (
+            (
+              await tx.query(
+                'SELECT 1 FROM public.standing_resource WHERE route=$1 AND id=$2 AND creation_xid=pg_current_xact_id()',
+                [target.route, target.id],
+              )
+            ).rowCount === 1
+          );
+        },
+      },
+      actor: await access.authenticate(token, boundary),
+    };
   }
   async function grant(subject: string, action: string, target = resource, valid = '(,)') {
     await reader.query(
       `INSERT INTO access.resource_grant
-      (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,$5::tstzrange,$3)`,
+      (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,$5::tstzrange,$3)
+      ON CONFLICT DO NOTHING`,
       [target.route, target.id, subject, action, valid],
     );
   }
@@ -163,6 +182,7 @@ export async function standingFixture() {
     await reader.query('DELETE FROM public.standing_resource');
     await reader.query('INSERT INTO public.standing_resource VALUES ($1,$2)', [resource.route, resource.id]);
     await reader.query('DELETE FROM access.resource_grant');
+    await reader.query('DELETE FROM access.resource_role_grant');
     await reader.query('DELETE FROM access.resource_denial');
     await reader.query('DELETE FROM access.principal_assignment');
     for (const id of [actor, principal, recipient]) {
@@ -194,7 +214,7 @@ export async function standingFixture() {
     return { rows: rows.rows, ...effects.rows[0] };
   }
   await reader.query(
-    'CREATE TABLE public.standing_resource (route integer NOT NULL, id uuid NOT NULL, PRIMARY KEY(route,id))',
+    'CREATE TABLE public.standing_resource (route integer NOT NULL, id uuid NOT NULL, creation_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), PRIMARY KEY(route,id))',
   );
   async function parent() {
     return {

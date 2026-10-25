@@ -12,6 +12,7 @@ import {
   type Actor,
   type Resource,
 } from '../request/access.ts';
+import { resolveResourceRoles, installResourceRoleCatalogue, type ResourceRoleCatalogue } from './resource-roles.ts';
 import candidatesRead from './permission-candidates.sql';
 import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
@@ -25,6 +26,7 @@ export type PermissionContext = AccessContext & { account?: Account | null };
 
 export type PermissionConfig = {
   actions: ActionCatalogue;
+  resourceRoles?: ResourceRoleCatalogue | undefined;
   /** Retrieve the already-read account from the request; do not query again here. */
   accountEvidence: (actor: AccountActor, context: PermissionContext) => Account | null | undefined;
   authenticate?: Access['authenticate'];
@@ -39,11 +41,18 @@ type Prepared = {
   valid: string;
   roles: RoleEvidence[];
   anonymous: boolean;
+  grantRoles: readonly string[];
 };
 
 // Object identity is the trust boundary: serialized, spread, and caller-created
 // objects can never become evidence. The registry retains no request after GC.
 const prepared = new WeakMap<object, Prepared>();
+/** Internal evidence lifetime for separately anchored command proofs. This is
+ * read from the opaque registry, never from caller-supplied authorization JSON.
+ */
+export function permissionEvidenceDeadline(evidence: unknown): number | undefined {
+  return typeof evidence === 'object' && evidence !== null ? prepared.get(evidence)?.deadline : undefined;
+}
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const uuidPattern = new RegExp(`^${uuid}$`);
 const requestedByPattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
@@ -94,6 +103,7 @@ export async function checkPermission(
       principal_id: facts.principalId ?? '',
       anonymous: facts.anonymous,
       roles: facts.roles,
+      grant_roles: [...facts.grantRoles],
       evidence_valid: facts.valid,
       deadline: facts.databaseDeadline,
       at: time ? authoritativeTimeValue(time) : '',
@@ -109,7 +119,8 @@ export async function checkPermission(
 export function createAccess(config: PermissionConfig): Access {
   // Copy metadata so later mutation of the caller's map cannot expand a mounted catalogue.
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
-  return {
+  const catalogue = resolveResourceRoles(actions, config.resourceRoles);
+  const access: Access = {
     replayAuthorization: (action) => actions.get(action)?.replay,
     authenticate:
       config.authenticate ??
@@ -180,12 +191,14 @@ export function createAccess(config: PermissionConfig): Access {
             members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
           }
         }
+        const grantRoles = [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
         const roles: RoleEvidence[] = [];
         if (actor.kind === 'account') {
           const candidates = await candidatesRead.run(context.pool, {
             route: resource.route,
             resource_id: resource.id,
             action,
+            grant_roles: grantRoles,
           });
           for (const candidate of candidates) {
             for (const member of members) {
@@ -230,6 +243,7 @@ export function createAccess(config: PermissionConfig): Access {
           valid,
           roles,
           anonymous: actor.kind === 'anonymous',
+          grantRoles,
         });
       } catch {
         // Missing tables, unresolved accounts and failed separately anchored reads deny.
@@ -238,6 +252,8 @@ export function createAccess(config: PermissionConfig): Access {
     },
     authorize: checkPermission,
   };
+  installResourceRoleCatalogue(access, catalogue);
+  return access;
 }
 
 /** Prepare each proposed permission before checkout, then check all of them on

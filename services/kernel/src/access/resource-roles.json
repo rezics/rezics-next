@@ -1,0 +1,18 @@
+{
+  "roles": {
+    "content.board.owner": ["board:read", "board:manage", "thread:create"],
+    "content.board.standing": ["thread:create", "report:create"],
+    "content.thread.owner": ["thread:read", "post:create", "media:create"],
+    "content.thread.standing": ["post:create", "media:create", "report:create"],
+    "content.post.owner": ["post:read", "post:revise", "post:erase", "media:create"],
+    "content.post.standing": ["report:create"],
+    "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"]
+  },
+  "types": {
+    "content.board": { "owner": "content.board.owner", "standing": ["content.board.standing"] },
+    "content.thread": { "owner": "content.thread.owner", "standing": ["content.thread.standing"] },
+    "content.post": { "owner": "content.post.owner", "standing": ["content.post.standing"] },
+    "content.media": { "owner": "content.media.owner", "standing": [] },
+    "content.report": { "standing": [] }
+  }
+}

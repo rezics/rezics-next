@@ -346,11 +346,67 @@ CREATE TABLE access.resource_grant (
     action text NOT NULL,
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
+    subject_kind text DEFAULT 'identity'::text NOT NULL,
     CONSTRAINT resource_grant_action_check CHECK ((action ~ '^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$'::text)),
     CONSTRAINT resource_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT resource_grant_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT resource_grant_subject_check CHECK ((((subject_kind = 'identity'::text) AND (subject_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((subject_kind = 'active_accounts'::text) AND (subject_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (subject_role = ''::text)))),
+    CONSTRAINT resource_grant_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['identity'::text, 'active_accounts'::text]))),
     CONSTRAINT resource_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
     CONSTRAINT resource_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: resource_initialization; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.resource_initialization (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    resource_type text NOT NULL,
+    creator_id uuid NOT NULL,
+    initialized_at timestamp with time zone NOT NULL,
+    CONSTRAINT resource_initialization_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT resource_initialization_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: resource_role_grant; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.resource_role_grant (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    subject_kind text DEFAULT 'identity'::text NOT NULL,
+    subject_id uuid NOT NULL,
+    subject_role text DEFAULT ''::text NOT NULL,
+    grant_role text NOT NULL,
+    valid tstzrange NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT resource_role_grant_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT resource_role_grant_check1 CHECK ((((subject_kind = 'identity'::text) AND (subject_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((subject_kind = 'active_accounts'::text) AND (subject_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (subject_role = ''::text)))),
+    CONSTRAINT resource_role_grant_grant_role_check CHECK ((grant_role ~ '^[a-z][a-z0-9_.-]*$'::text)),
+    CONSTRAINT resource_role_grant_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT resource_role_grant_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['identity'::text, 'active_accounts'::text]))),
+    CONSTRAINT resource_role_grant_subject_role_check CHECK ((subject_role = ANY (ARRAY[''::text, 'owner'::text, 'member'::text]))),
+    CONSTRAINT resource_role_grant_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+);
+
+
+--
+-- Name: standing_parent_installation; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.standing_parent_installation (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    actions text[] NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT standing_parent_installation_actions_check CHECK ((cardinality(actions) > 0)),
+    CONSTRAINT standing_parent_installation_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT standing_parent_installation_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -439,7 +495,31 @@ ALTER TABLE ONLY access.resource_denial
 --
 
 ALTER TABLE ONLY access.resource_grant
-    ADD CONSTRAINT resource_grant_pkey PRIMARY KEY (route, resource_id, subject_id, subject_role, action, valid WITHOUT OVERLAPS);
+    ADD CONSTRAINT resource_grant_pkey PRIMARY KEY (route, resource_id, subject_kind, subject_id, subject_role, action, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: resource_initialization resource_initialization_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_initialization
+    ADD CONSTRAINT resource_initialization_pkey PRIMARY KEY (route, resource_id);
+
+
+--
+-- Name: resource_role_grant resource_role_grant_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_role_grant
+    ADD CONSTRAINT resource_role_grant_pkey PRIMARY KEY (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid WITHOUT OVERLAPS);
+
+
+--
+-- Name: standing_parent_installation standing_parent_installation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.standing_parent_installation
+    ADD CONSTRAINT standing_parent_installation_pkey PRIMARY KEY (route, resource_id);
 
 
 --

@@ -3,6 +3,12 @@ WITH input AS NOT MATERIALIZED (
          NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id,
          :anonymous::boolean AS anonymous, :roles::jsonb AS roles,
          :evidence_valid::tstzrange AS evidence_valid, :deadline::timestamptz AS deadline
+), grants AS NOT MATERIALIZED (
+  SELECT g.subject_kind, g.subject_id, g.subject_role, g.valid FROM access.resource_grant g CROSS JOIN input i
+  WHERE g.route = i.route AND g.resource_id = i.resource_id AND g.action = i.action
+  UNION ALL
+  SELECT g.subject_kind, g.subject_id, g.subject_role, g.valid FROM access.resource_role_grant g CROSS JOIN input i
+  WHERE g.route = i.route AND g.resource_id = i.resource_id AND g.grant_role = ANY(:grant_roles::nullable(text[]))
 ), authority AS (
   -- Commands bind their opaque attempt time. Unbound read checks retain their
   -- native transaction-time semantics.
@@ -17,17 +23,17 @@ SELECT (
   t.at < i.deadline AND t.observed_at < i.deadline AND i.evidence_valid @> t.at
   AND (i.anonymous OR (
     EXISTS (
-      SELECT 1 FROM access.resource_grant g
-      WHERE g.route = i.route AND g.resource_id = i.resource_id AND g.action = i.action AND g.valid @> t.at
-        AND ((g.subject_role = '' AND g.subject_id = i.actor_id) OR EXISTS (
+      SELECT 1 FROM grants g
+      WHERE g.valid @> t.at
+        AND (g.subject_kind = 'active_accounts' OR (g.subject_role = '' AND g.subject_id = i.actor_id) OR EXISTS (
           SELECT 1 FROM roles r WHERE r.account_id = i.actor_id AND r.organization_id = g.subject_id
             AND r.role <> '' AND r.role = g.subject_role AND r.valid @> t.at
         ))
     )
     AND (i.principal_id IS NULL OR EXISTS (
-      SELECT 1 FROM access.resource_grant g
-      WHERE g.route = i.route AND g.resource_id = i.resource_id AND g.action = i.action AND g.valid @> t.at
-        AND ((g.subject_role = '' AND g.subject_id = i.principal_id) OR EXISTS (
+      SELECT 1 FROM grants g
+      WHERE g.valid @> t.at
+        AND (g.subject_kind = 'active_accounts' OR (g.subject_role = '' AND g.subject_id = i.principal_id) OR EXISTS (
           SELECT 1 FROM roles r WHERE r.account_id = i.principal_id AND r.organization_id = g.subject_id
             AND r.role <> '' AND r.role = g.subject_role AND r.valid @> t.at
         ))
