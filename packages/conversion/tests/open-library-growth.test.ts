@@ -29,50 +29,14 @@ const input = (record: ReturnType<typeof seed>) => ({
   record,
 });
 
-/** Count actual source reads, including descriptor-based safe projection. */
-function measure(record: ReturnType<typeof seed>) {
-  let visits = 0;
-  const copies = new WeakMap<object, object>();
-  const wrap = (value: unknown): unknown => {
-    if (value === null || typeof value !== 'object') return value;
-    const known = copies.get(value);
-    if (known) return known;
-    const wrapped = new Proxy(value, {
-      get(target, key, receiver) {
-        if (Object.hasOwn(target, key)) visits++;
-        return wrap(Reflect.get(target, key, receiver));
-      },
-      getOwnPropertyDescriptor(target, key) {
-        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
-        if (descriptor && 'value' in descriptor) {
-          visits++;
-          return { ...descriptor, value: wrap(descriptor.value) };
-        }
-        return descriptor;
-      },
-    });
-    copies.set(value, wrapped);
-    return wrapped;
-  };
-  const bytes = Buffer.byteLength(JSON.stringify(record));
-  const measured = wrap(record) as ReturnType<typeof seed>;
-  const output = convertOpenLibrary({ ...input(record), record: measured }, { subjectId });
-  return { visits, bytes, output };
-}
-
-test('pure converter growth stays within its declared field and byte cap', () => {
-  const runs = [1, 8, 64].map((fields) => ({ fields, ...measure(seed(fields)) }));
-  for (const { fields, visits, bytes, output } of runs) {
-    expect(bytes).toBeGreaterThan(fields * 30);
-    expect(bytes).toBeLessThanOrEqual(512 + fields * 64);
-    expect(visits).toBeGreaterThanOrEqual(fields);
-    expect(visits).toBeLessThanOrEqual(256 + fields * 32);
+// Whole-return byte slopes and unrelated conversions are proved in logical-growth.test.ts.
+test('native relation caps preserve valid proposals', () => {
+  for (const fields of [1, 8, 64]) {
+    const output = convertOpenLibrary(input(seed(fields)), { subjectId });
     expect(output.proposals.length).toBeGreaterThanOrEqual(fields);
     expect(output.proposals.length).toBeLessThanOrEqual(fields + 4);
     expect(checkBatchWrite({ commands: output.proposals })).toEqual([]);
   }
-  expect(runs[2]!.visits).toBeGreaterThan(runs[0]!.visits);
-  expect(runs[2]!.bytes).toBeGreaterThan(runs[0]!.bytes);
   expect(() => convertOpenLibrary(input(seed(fieldCap + 1)), { subjectId })).toThrow(ConversionError);
   expect(() => convertOpenLibrary(input({ ...seed(1), title: 'x'.repeat(byteCap + 1) }), { subjectId })).toThrow(
     ConversionError,

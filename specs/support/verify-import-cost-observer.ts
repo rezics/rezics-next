@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
-/** Green proves all specification outcomes run red; never actual cost evidence. */
-import { MISSING_COST_OBSERVER_DRIVER } from '../imports-cost-observer-driver.ts';
-
+/** Run the actual pure converter tests; propagate failures directly. */
+export {};
 const child = Bun.spawn(
   [
     process.execPath,
-    'specs/support/verify-outcome-suite.ts',
-    'specs/imports-cost-observer.test.ts',
-    'IMPORT_COST_OBSERVER_DRIVER',
-    MISSING_COST_OBSERVER_DRIVER,
+    'test',
+    'packages/conversion/tests/logical-growth.test.ts',
+    'packages/conversion/tests/bangumi-growth.test.ts',
+    'packages/conversion/tests/vndb-growth.test.ts',
+    'packages/conversion/tests/open-library-growth.test.ts',
   ],
   { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
 );

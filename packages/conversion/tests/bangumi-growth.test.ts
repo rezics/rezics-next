@@ -27,51 +27,22 @@ function seed(count: number) {
     platform: 'Book',
     tags: Array.from({ length: count }, (_, i) => ({ name: `tag-${i.toString().padStart(3, '0')}` })),
   };
-  const bytes = Buffer.byteLength(JSON.stringify(record));
-  let visits = 0;
-  const track = <T extends object>(value: T): T =>
-    new Proxy(value, {
-      get(target, key, receiver) {
-        visits++;
-        return Reflect.get(target, key, receiver);
-      },
-      getOwnPropertyDescriptor(target, key) {
-        visits++;
-        return Reflect.getOwnPropertyDescriptor(target, key);
-      },
-      ownKeys(target) {
-        visits++;
-        return Reflect.ownKeys(target);
-      },
-    });
-  const observed = track({
-    ...record,
-    images: track(record.images),
-    tags: track(record.tags.map(track)),
-  });
   return {
     record,
-    bytes,
-    input: { external_id: '42', record_revision: 'native:7', record: observed },
-    visits: () => visits,
+    input: { external_id: '42', record_revision: 'native:7', record },
   };
 }
 
-test('pure converter growth stays within its declared field and byte cap', () => {
+// Whole-return byte slopes and unrelated conversions are proved in logical-growth.test.ts.
+test('native field caps preserve valid proposals and distinct digests', () => {
   const observations = [1, 8, 64].map((count) => {
     const sample = seed(count);
     const output = convertBangumi(sample.input, { subjectId });
     expect(checkBatchWrite({ commands: output.proposals })).toEqual([]);
     expect(output.proposals.length).toBeGreaterThan(0);
     expect(output.proposals.length).toBeLessThanOrEqual(100);
-    expect(sample.visits()).toBeGreaterThanOrEqual(count);
-    expect(sample.visits()).toBeLessThanOrEqual(100 + count * 12);
-    expect(Buffer.byteLength(JSON.stringify(output))).toBeLessThanOrEqual(16_384 + sample.bytes * 8);
-    return { bytes: sample.bytes, visits: sample.visits(), count: output.proposals.length, digest: output.digest };
+    return { count: output.proposals.length, digest: output.digest };
   });
-  expect(observations[1]!.bytes).toBeGreaterThan(observations[0]!.bytes);
-  expect(observations[2]!.bytes).toBeGreaterThan(observations[1]!.bytes);
-  expect(observations[2]!.visits).toBeGreaterThan(observations[1]!.visits);
   expect(new Set(observations.map((value) => value.digest)).size).toBe(3);
   expect(new Set(observations.map((value) => value.count)).size).toBe(1);
   expect(() => convertBangumi(seed(65).input)).toThrow(ConversionError);

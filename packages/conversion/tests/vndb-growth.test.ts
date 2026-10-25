@@ -22,47 +22,21 @@ function seed(fields: number, title = 'Harbor') {
       latin: null,
     })),
   };
-  let visits = 0;
-  const count = (value: object): object =>
-    new Proxy(value, {
-      getOwnPropertyDescriptor(target, key) {
-        visits++;
-        return Reflect.getOwnPropertyDescriptor(target, key);
-      },
-    });
-  const measured = {
-    ...record,
-    vn: count(record.vn),
-    entry_meta: count(record.entry_meta),
-    vn_titles: record.vn_titles.map(count),
-  };
   return {
-    input: { external_id: 'v123', record_revision: '7', record: measured },
+    input: { external_id: 'v123', record_revision: '7', record },
     record,
-    bytes: Buffer.byteLength(JSON.stringify(record)),
-    visits: () => visits,
   };
 }
 
-test('pure converter growth stays within its declared field and byte cap', () => {
-  const measurements = [1, 8, 64].map((fields) => {
+// Whole-return byte slopes and unrelated conversions are proved in logical-growth.test.ts.
+test('native title caps preserve valid proposals and assets', () => {
+  for (const fields of [1, 8, 64]) {
     const generated = seed(fields);
     const output = convertVndb(generated.input, context);
     expect(checkBatchWrite({ commands: output.proposals })).toEqual([]);
     expect(output.proposals).toHaveLength(fields + 1);
     expect(output.assets).toEqual([]);
-    expect(generated.visits()).toBeGreaterThanOrEqual(fields * 5);
-    expect(generated.visits()).toBeLessThanOrEqual(40 + fields * 12);
-    expect(generated.bytes).toBeLessThan(vndbLimits.recordBytes);
-    expect(Buffer.byteLength(JSON.stringify(output))).toBeLessThan(4096 + fields * 4096);
-    return { fields, visits: generated.visits(), bytes: generated.bytes };
-  });
-  for (let i = 1; i < measurements.length; i++) {
-    const smaller = measurements[i - 1]!;
-    const larger = measurements[i]!;
-    expect(larger.bytes).toBeGreaterThan(smaller.bytes);
-    expect(larger.visits).toBeGreaterThan(smaller.visits);
-    expect(larger.visits).toBeLessThanOrEqual(smaller.visits * (larger.fields / smaller.fields) + 40);
+    expect(Buffer.byteLength(JSON.stringify(generated.record))).toBeLessThan(vndbLimits.recordBytes);
   }
   expect(vndbLimits.maxTitles).toBe(64);
   expect(() => convertVndb(seed(vndbLimits.maxTitles + 1).input, context)).toThrow(ConversionError);

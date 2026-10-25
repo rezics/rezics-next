@@ -199,27 +199,66 @@ modules do not know the server-assigned id of an earlier candidate, so they
 cannot safely retract it. The importer tracks actual returned candidate ids
 for later reconciliation and retraction.
 
-## Runtime cost and verification
+## Cost derivation and verification
 
-This documentation adds no runtime path. Converter calls perform local
-projection and hashing only: zero partitions, database rows, indexes, or network
-requests. For a single record, let `M` be its accepted projected fields and
-bytes. Hard per-source byte and field caps bound `M`; canonical key sorting
-makes source projection `O(M log M)`. The converter has no access to unrelated
-catalogue size `N` or history size `U × t`, so those populations do not change
-its work. The existing growth tests use generated allowed records at scales 1,
-8, and 64, count source-field visits or bytes, enforce declared caps, and guard
-SQL/network/filesystem operations. They are operation-count and bound checks,
-not timing measurements.
+Pure conversion performs `O(record bytes)` work for one bounded record `M`.
+Native field and collection limits bound key counts (including canonical key
+sorting); projection, validation, hashing, and command construction operate on
+that record. There is no `N` or `U × t` state for unrelated catalogue or history
+totals. This package adds no production read, write, authorization, or job path.
 
-Run an existing focused source growth test with:
+The platform record configuration contract is a 256 KiB default and a 1 MiB
+hard maximum. These are configuration bounds, not a claim that the current
+pure helpers enforce them: Open Library and the shared snapshot helper still
+have a 2 MiB projection guard. Separate tighter native guards apply, including
+Bangumi/VNDB at 64 KiB and Wikidata at 128 KiB. The logical growth fixtures stay
+within the platform hard bound and all applicable native guards.
+
+Source binding audit: [`bangumi.ts`](src/bangumi.ts) has a static type lookup;
+[`vndb.ts`](src/vndb.ts) has frozen limits and stateless helpers;
+[`open-library.ts`](src/open-library.ts) has scalar limits and calendar constants.
+[`wikidata.ts`](src/wikidata.ts) builds vocabulary mapping/type lookups once
+from the bundled release and only reads them during conversion. These are
+static vocabulary inputs, not retained records. All record projections,
+diagnostic arrays, title maps, proposal/asset arrays, and helper closures are
+created inside each call. [`support.ts`](src/support.ts) keeps scalar limits
+and a stateless hash helper at module scope; snapshot stacks, copies, and
+ancestor sets are local to a call. No converter retains per-record module or
+closure state across calls. This source audit supports the state claim;
+deterministic output alone would not detect a hidden unused cache.
+
+[`logical-growth.test.ts`](tests/logical-growth.test.ts) calls the four actual
+exports with native `ConversionInput`, context, and registered revision options.
+It serializes a fixed anchor return before and after each batch of `1`, `8`,
+and `64` times eight distinct unrelated records passed through the same
+converter, and asserts byte-identical UTF-8 JSON. One native generator per
+source also supplies three increasing record sizes. The largest is above 90%
+of its applicable byte guard: Bangumi infobox and VNDB titles approach 64 KiB,
+Wikidata terms approach 128 KiB, and Open Library description approaches its
+1 MiB prose guard while remaining within the platform hard record bound.
+
+Logical retained footprint means
+`Buffer.byteLength(JSON.stringify(entireActualReturn), 'utf8')`, including
+normalized record/hash input, diagnostics, metadata, proposals, and assets.
+The tests measure actual input JSON bytes and whole-return JSON bytes, then
+compare incremental return-byte/input-byte slopes, allowing only 1% variation
+for serialization boundaries. They do not infer cost from expected fixture
+sizes. This is a logical serialized footprint proof, not a machine heap,
+allocation, work-visit, timing, or GC measurement; the work bound above is a
+source derivation, not a timing result. Existing native mapping, rights, caps,
+digest, privacy, and I/O guards remain separate checks of behavior and purity.
+No SQL or network cost is inferred from a zero counter.
+
+Run the focused actual pure tests with:
 
 ```sh
-bun test packages/conversion/tests/bangumi-growth.test.ts
-bun test packages/conversion/tests/vndb-growth.test.ts
-bun test packages/conversion/tests/open-library-growth.test.ts
-bun test packages/conversion/tests/wikidata-growth.test.ts
+bun specs/support/verify-import-cost-observer.ts
 ```
+
+The historical command path now directly launches the logical growth test and
+the three Bangumi, VNDB, and Open Library native growth files with Bun, and
+propagates test failures. It needs no driver, factory, shared harness, or
+instrumentation API.
 
 The `*-outcomes.test.ts` wrappers also bind the real converters to narrow typed
 drivers and run the existing fixture-based source outcome suites. They cover
