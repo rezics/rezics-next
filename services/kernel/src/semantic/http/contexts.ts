@@ -21,6 +21,7 @@ import { authoritativeTimeValue } from '../../command/command.ts';
 import { activeRelease } from '../definitions.ts';
 import type { Access } from '../../request/access.ts';
 import { globalContextAnchor } from '../context.ts';
+import readCreatedContext from './contexts-read-creation.sql';
 
 const LabelsInput = t.Object(
   {
@@ -101,13 +102,11 @@ function contextRoutes(
               creation: {
                 async validate(client, resource, time) {
                   authoritativeTimeValue(time);
-                  const rows = await client.query(
-                    `SELECT 1 FROM semantic.context
-                     WHERE route = $1 AND context_id = $2 AND kind = 'community'
-                       AND recorded_transaction_id IS NOT NULL AND xmin = pg_current_xact_id()::xid`,
-                    [resource.route, resource.id],
-                  );
-                  return rows.rowCount === 1;
+                  const found = await readCreatedContext.run(client, {
+                    route: resource.route,
+                    context_id: resource.id,
+                  });
+                  return found !== null;
                 },
               },
             },
