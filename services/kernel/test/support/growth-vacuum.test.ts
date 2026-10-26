@@ -40,17 +40,15 @@ afterAll(async () => {
 });
 
 async function readStatistics(database: GrowthDatabase): Promise<Statistics> {
-  const result = await withConnection(database.pool, (client) =>
-    client.query<Statistics>(
-      `SELECT c.reltuples::integer AS reltuples,
-              c.relpages,
-              c.relallvisible,
-              s.vacuum_count::integer AS "vacuumCount",
-              s.analyze_count::integer AS "analyzeCount"
-       FROM pg_class AS c
-       JOIN pg_stat_user_tables AS s ON s.relid = c.oid
-       WHERE c.oid = '${table}'::regclass`,
-    ),
+  const result = await database.admin.query<Statistics>(
+    `SELECT c.reltuples::integer AS reltuples,
+            c.relpages,
+            c.relallvisible,
+            s.vacuum_count::integer AS "vacuumCount",
+            s.analyze_count::integer AS "analyzeCount"
+     FROM pg_class AS c
+     JOIN pg_stat_user_tables AS s ON s.relid = c.oid
+     WHERE c.oid = '${table}'::regclass`,
   );
   return result.rows[0]!;
 }
@@ -114,6 +112,9 @@ async function recordHorizonHolders(database: GrowthDatabase, observation: Obser
 }
 
 async function observe(database: GrowthDatabase, scale: number, phase: Observation['phase']): Promise<Statistics> {
+  // The measured statement: a primary-key lookup of one row, constant in the scale. The observation reads through
+  // database.admin and is not captured.
+  await withConnection(database.pool, (client) => client.query(`SELECT payload FROM ${table} WHERE id = 1`));
   const statistics = await readStatistics(database);
   observations.push({ scale, phase, ...statistics });
   if (phase === 'warmup' && statistics.relallvisible < statistics.relpages) {
