@@ -97,7 +97,7 @@ const calls: Call[] = [];
 let settlePending = false;
 async function kernel(request: Request, url: URL): Promise<Response> {
   // Unknown /v1 routes, including the anonymous home pages:read, answer 404. A bearer is required only for orders.
-  const offerRead = request.method === 'GET' && url.pathname.startsWith('/v1/offers/');
+  const offerRead = request.method === 'GET' && /^\/v1\/offers\/[^/]+$/.test(url.pathname);
   const orderStart = request.method === 'POST' && url.pathname === '/v1/orders';
   const orderRead = request.method === 'GET' && /^\/v1\/orders\/[^/]+$/.test(url.pathname);
   if (!offerRead && !orderStart && !orderRead) {
