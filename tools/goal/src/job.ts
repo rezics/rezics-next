@@ -167,6 +167,8 @@ export class WorkerJob implements GateOutcomeSink {
     try {
       await this.follow(await this.tasks.retryHeld(taskId));
     } catch (error) {
+      // Another process is starting it.
+      if (error instanceof LeaseHeldError) return;
       if (!(error instanceof HeldTaskConflictError)) throw error;
       const task = this.tasks.store.task(taskId),
         ref = { taskId, attempt: task.currentAttempt };
@@ -348,9 +350,10 @@ export class WorkerJob implements GateOutcomeSink {
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
-    // A held task released by a train that then ended, or handed off to newer code, has no driver: start it here.
+    // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
+    // it. Commands leave it to the host, so released tasks are not started from every command at once.
     const merged = (id: string) => ['integrated', 'merged'].includes(store.task(id).state);
-    for (const task of store
+    for (const task of !adoptRunning ? [] : store
       .tasks()
       .filter(
         (t) =>

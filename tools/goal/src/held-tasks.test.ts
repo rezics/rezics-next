@@ -114,3 +114,28 @@ test('the recovery sweep starts a released task that no process started', async 
     expect(h.store.task(second.id).currentAttempt).toBe(1);
   } finally { h.dispose(); }
 });
+
+test('only the host starts a released task, and a second starter leaves it to the one holding its lease', async () => {
+  const h = harness();
+  try {
+    writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]'));
+    const first = h.tasks.dispatch(h.briefFile);
+    const secondBrief = join(h.root, '.temp/goal/second.md');
+    writeFileSync(secondBrief, markdown.replace('command: [bun, test]', 'command: ["true"]')
+      .replace('waiting: []', `waiting: []\nafter: [${first.id}]`));
+    const second = h.tasks.dispatch(secondBrief);
+    h.store.updateTask({ taskId: first.id, attempt: 0 }, task => { task.state = 'integrated'; });
+    h.store.updateTask({ taskId: second.id, attempt: 0 }, task => { task.state = 'ready'; });
+
+    // A command's sweep leaves released tasks to the host.
+    const command = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await command.recoverOrphans({ adoptRunning: false }); await command.drain();
+    expect(h.store.task(second.id).currentAttempt).toBe(0);
+
+    // Two host sweeps at once start it once, without failing either.
+    const hosts = [1, 2].map(() => new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} }));
+    await Promise.all(hosts.map(job => job.recoverOrphans()));
+    await Promise.all(hosts.map(job => job.drain()));
+    expect(h.store.task(second.id).currentAttempt).toBe(1);
+  } finally { h.dispose(); }
+});
