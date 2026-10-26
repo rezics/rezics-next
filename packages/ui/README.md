@@ -50,6 +50,8 @@ The frame ratio comes from the subject's type, never from the image, so grids an
 | Character, person                                | 3:4 (portrait)             |
 | Organization, Realm, Zone, concept               | 1:1                        |
 
+`coverRatio(types)` in `@rezics/ui/cover` holds this table by type CURIE as the fallback. When the definition release carries a `coverRatio` annotation for the type, the site resolves it and passes it as the `ratio` prop, which wins over the table.
+
 The ratio is resolved from the subject's semantic type through its structural bases, the same way templates resolve; a creative work with no more specific type uses 2:3 and anything else uses 1:1. A coarse resource class, an empty type list or a summary that dropped the types never decides the ratio, so every read that feeds `Cover` carries the subject's type.
 
 A row, grid or list that mixes types uses one frame ratio for all its items (the ratio of most of its items, 2:3 when tied), so mixed shelves stay aligned; each image is then fitted by the rule below. A Zone's `cover` appearance token (`portrait`, `square`, `landscape`) chooses that shared ratio on its pages instead. A single-type list and the subject page header always use the type's own ratio.
@@ -59,6 +61,8 @@ An image whose own ratio is within 15% of the frame fills it (`object-fit: cover
 ### Typographic placeholder
 
 The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id within the type's palette. It never shows a generic icon alone. Below 64 px a set title is unreadable, so the placeholder there shows the title's initials on the same background, and every surface that uses those sizes prints the subject's name beside the cover. Text stays legible against its background in both themes. The same subject always gets the same placeholder, on every surface.
+
+A suitability-withheld cover shows its decoded ThumbHash blurred behind the label and the reveal button, and requests no image byte until the viewer reveals it. `placeholder.color` is painted first, and the ThumbHash (decoded with the `thumbhash` package) over it while the image loads; a contained image keeps the colour alone as its backdrop. The placeholder colour pair is fixed by the subject's id within a per-type palette (light text on a deep background, at least 5.5:1), so it holds in both themes and at every size. Without a byline the placeholder shows the title alone. The labels (`withheld`, `reveal`, `credit`, `via`) are English by default and the site passes translations in `labels`.
 
 ### Sizes and loading
 
@@ -70,4 +74,4 @@ Every surface builds `Cover` from the cover summary the kernel returned with the
 
 ### Credit and text alternative
 
-The `alt` text is the subject's title. Decorative repeats of a cover next to its visible title use `alt=""`. Where a cover is shown at `lg` or larger, its credit (rights holder, and the source it came through) is reachable from the cover: in a caption on the subject page, and in the sources section.
+The `alt` text is the subject's title. Decorative repeats of a cover next to its visible title use `alt=""`. Where a cover is shown at `lg` or larger, its credit (rights holder, and the source it came through) is reachable from the cover: in a caption on the subject page (`caption`), and otherwise behind a small credit control on the cover that opens the rights holder, source and licence; the sources section lists it too. A `fill` frame shows the control from 240 px wide.

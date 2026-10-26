@@ -113,5 +113,6 @@ License, Copyright (c) 2019 Material-UI SAS.
 | `react-resizable-panels`   | MIT        | `resizable`           |
 | `recharts`                 | MIT        | `chart`               |
 | `shiki`                    | MIT        | `code-block`          |
+| `thumbhash`                | MIT        | `cover`               |
 
 Each package carries its own licence text in its distribution.
