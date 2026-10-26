@@ -235,7 +235,8 @@ test('grant ranges use exact inclusive start and exclusive end at the final data
     // Replace the clock expression only; all grant/denial decisions remain the production SQL.
     const parameters = {
       route: resource.route,
-      resource_id: resource.id,
+      resource_ids: [resource.id],
+      include_global: false,
       action,
       actor_id: actorId,
       principal_id: principalId,

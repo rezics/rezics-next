@@ -3,9 +3,12 @@ import { accessCommandAttempt } from './command-admission.ts';
 import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import {
   accessCheck,
+  resourcePage,
+  type ResourcePage,
   AuthenticationError,
   type Access,
   type AccessClient,
+  type AccessDecision,
   type AccessContext,
   type AccessCheck,
   type AccountActor,
@@ -24,7 +27,7 @@ import timeRead from './permission-time.sql';
 import permissionRead from './permission-check.sql';
 import governanceReachCandidatesRead from './governance-reach-candidates.sql';
 import {
-  checkWithGovernanceReach,
+  setGovernanceReach,
   governanceReachUse,
   isGlobalReachAction,
   isPlatformResource,
@@ -111,7 +114,7 @@ async function readPermissionTime(
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt };
 }
-const bind = (actor: Actor, action: string, resource: Resource): string =>
+const bind = (actor: Actor, action: string, resource: Resource, page?: ResourcePage): string =>
   JSON.stringify([
     actor.kind,
     actor.kind === 'account'
@@ -119,7 +122,7 @@ const bind = (actor: Actor, action: string, resource: Resource): string =>
       : null,
     action,
     resource.route,
-    resource.id,
+    page ? [page.resourceType, page.ids] : resource.id,
   ]);
 
 function eligible(account: Account, actor: AccountActor): boolean {
@@ -147,30 +150,46 @@ export async function checkPermission(
   time?: AuthoritativeTime,
   clock?: () => Date,
 ): Promise<boolean> {
+  return (await checkPreparedPermission(client, actor, action, resource, evidence, time, clock)).allowed;
+}
+
+async function checkPreparedPermission(
+  client: AccessClient,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence?: unknown,
+  time?: AuthoritativeTime,
+  clock?: () => Date,
+  page?: ResourcePage,
+  includeExplicit = false,
+): Promise<AccessDecision> {
+  setGovernanceReach(evidence, []);
   try {
     const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
     if (
       !facts ||
-      facts.binding !== bind(actor, action, resource) ||
+      facts.binding !== bind(actor, action, resource, page) ||
       facts.capability !== (resource.eligibility ?? resource.anonymousEligibility) ||
       (resource.eligibility !== undefined &&
         resource.anonymousEligibility !== undefined &&
         resource.eligibility !== resource.anonymousEligibility) ||
       Date.now() >= facts.deadline
     )
-      return false;
+      return { allowed: false, explicit: false };
     // Obtain one authoritative T on this attempt's own resource client. Domain
     // verification and the permission formula must evaluate exactly this instant.
     const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock))?.at;
-    if (!at) return false;
+    if (!at) return { allowed: false, explicit: false };
     const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
     const floor = facts.admitsAnonymous && domainEligible;
     // Scope caps only the independent authenticated grant branch. Other token
     // scopes neither supply the requested scope nor poison a verified public floor.
-    if (!floor && (facts.anonymous || !facts.scope)) return false;
-    if (facts.binding !== bind(actor, action, resource) || Date.now() >= facts.deadline) return false;
+    if (!floor && (facts.anonymous || !facts.scope)) return { allowed: false, explicit: false };
+    if (facts.binding !== bind(actor, action, resource, page) || Date.now() >= facts.deadline)
+      return { allowed: false, explicit: false };
     const stillValid = () =>
-      facts.binding === bind(actor, action, resource) &&
+      facts.binding === bind(actor, action, resource, page) &&
       facts.capability === (resource.eligibility ?? resource.anonymousEligibility) &&
       !(
         resource.eligibility !== undefined &&
@@ -178,35 +197,47 @@ export async function checkPermission(
         resource.eligibility !== resource.anonymousEligibility
       ) &&
       Date.now() < facts.deadline;
-    const checkExactResource = async (target: Resource): Promise<boolean | undefined> => {
-      if (!stillValid()) return undefined;
-      const row = await permissionRead.run(client, {
-        route: target.route,
-        resource_id: target.id,
-        action,
-        actor_id: actor.kind === 'account' ? actor.accountId : '',
-        principal_id: facts.principalId ?? '',
-        anonymous: facts.anonymous,
-        floor,
-        at,
-        roles: facts.roles,
-        grant_roles: [...facts.grantRoles],
-        evidence_valid: facts.valid,
-        deadline: facts.databaseDeadline,
-      });
-      if (row?.allowed !== true && row?.allowed !== false) return undefined;
-      // A query taking longer than its evidence budget cannot produce usable authority.
-      return stillValid() ? row.allowed : undefined;
-    };
-    return await checkWithGovernanceReach(
-      evidence,
+    if (!stillValid()) return { allowed: false, explicit: false };
+    const ids = page?.ids ?? [resource.id];
+    const rows = await permissionRead.run(client, {
+      route: resource.route,
+      resource_ids: [...ids],
+      include_explicit: includeExplicit && !facts.anonymous && facts.scope,
+      include_global: isGlobalReachAction(action),
       action,
-      resource,
-      () => checkExactResource(resource),
-      () => checkExactResource(PLATFORM_RESOURCE),
-    );
+      actor_id: actor.kind === 'account' ? actor.accountId : '',
+      principal_id: facts.principalId ?? '',
+      anonymous: facts.anonymous,
+      floor,
+      at,
+      roles: facts.roles,
+      grant_roles: [...facts.grantRoles],
+      evidence_valid: facts.valid,
+      deadline: facts.databaseDeadline,
+    });
+    if (
+      !stillValid() ||
+      rows.length !== ids.length ||
+      new Set(rows.map((row) => row.resourceId)).size !== ids.length ||
+      rows.some(
+        (row) =>
+          typeof row.resourceId !== 'string' || !ids.includes(row.resourceId) || typeof row.allowed !== 'boolean',
+      )
+    )
+      return { allowed: false, explicit: false };
+    const allowed = rows.every((row) => row.allowed === true);
+    if (allowed)
+      setGovernanceReach(
+        evidence,
+        rows.flatMap((row) =>
+          row.governanceReach && typeof row.resourceId === 'string'
+            ? [{ route: resource.route, id: row.resourceId }]
+            : [],
+        ),
+      );
+    return { allowed, explicit: includeExplicit && rows.every((row) => row.explicit === true) };
   } catch {
-    return false;
+    return { allowed: false, explicit: false };
   }
 }
 
@@ -215,6 +246,233 @@ export function createAccess(config: PermissionConfig): Access {
   // Copy metadata so later mutation of the caller's map cannot expand a mounted catalogue.
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   const catalogue = resolveResourceRoles(actions, config.resourceRoles);
+  async function preparePermission(
+    actor: Actor,
+    action: string,
+    resource: Resource,
+    context: AccessContext,
+    page?: ResourcePage,
+  ) {
+    const evidence = Object.freeze({});
+    try {
+      const metadata = actions.get(action);
+      if (
+        !metadata ||
+        !Number.isInteger(resource.route) ||
+        resource.route < 0 ||
+        resource.route > 65535 ||
+        !uuidPattern.test(resource.id) ||
+        routeOf(resource.id) !== resource.route ||
+        !Number.isFinite(context.deadline) ||
+        Date.now() >= context.deadline
+      )
+        return evidence;
+      const binding = bind(actor, action, resource, page);
+      const deadline = Math.min(context.deadline, Date.now() + 1000);
+      let account: Account | null | undefined;
+      if (actor.kind === 'anonymous') {
+        if (!metadata.anonymous) return evidence;
+      } else {
+        if (
+          !uuidPattern.test(actor.accountId) ||
+          !actor.clientId ||
+          actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))
+        )
+          return evidence;
+        account = config.accountEvidence(actor, context);
+        if (!account || !eligible(account, actor)) return evidence;
+      }
+      const verifyFloor = await prepareAnonymousEligibility(
+        { actor, action, resource: Object.freeze({ ...resource }), deadline },
+        context,
+      );
+      // Every query uses the pool independently before resource checkout. None
+      // of these reads holds a connection while another partition is consulted.
+      const recorded = await readPermissionTime(context.pool, config.clock);
+      if (!recorded?.databaseAt) return evidence;
+      // Commands prepare after their executor mints T. Negative membership
+      // proofs must start at that same T, not at a later preparation clock.
+      const attempt = accessCommandAttempt(context);
+      const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
+      let principalId: string | null = null;
+      let valid = '(,)';
+      const members: { accountId: string; automated: boolean }[] = [];
+      if (actor.kind === 'account' && account) {
+        members.push({ accountId: actor.accountId, automated: account.operatorAccountId !== null });
+        if (actor.requestedBy !== null) {
+          const request = requestedByPattern.exec(actor.requestedBy);
+          if (!request) return evidence;
+          const principal = request[1]!;
+          const assignment = await assignmentRead.run(context.pool, {
+            route: routeOf(principal),
+            principal_id: principal,
+            request_id: request[2]!,
+            actor_id: actor.accountId,
+            at,
+          });
+          if (
+            !assignment ||
+            assignment.kind !== 'actor' ||
+            assignment.state !== 'active' ||
+            assignment.fenced !== false
+          )
+            return evidence;
+          principalId = principal;
+          valid = assignment.valid;
+          if (principal === actor.accountId) members[0]!.automated ||= assignment.operatorAccountId !== null;
+          else members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
+        }
+      }
+      const grantRoles = [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
+      const roles: RoleEvidence[] = [];
+      if (actor.kind === 'account') {
+        // The inverse is admission evidence only. Never derive identities from
+        // resource ACLs or treat a stale inverse row as a membership role.
+        for (const member of members) {
+          if (member.automated) continue;
+          const rows = await withConnection(context.pool, (client) =>
+            inverseRead.run(client, {
+              route: routeOf(member.accountId),
+              account_id: member.accountId,
+            }),
+          );
+          if (!rows.length || rows.some((r) => r.complete !== true)) return evidence;
+          const inverse: MembershipPrincipal[] = [];
+          for (const row of rows) {
+            if (row.kind === null && row.id === null) continue;
+            if (
+              (row.kind !== 'organization' && row.kind !== 'realm') ||
+              !row.id ||
+              row.id === member.accountId ||
+              !uuidPattern.test(row.id)
+            )
+              return evidence;
+            inverse.push({ kind: row.kind, id: row.id });
+          }
+          if (inverse.length > MEMBERSHIP_LIMIT || new Set(inverse.map((g) => g.id)).size !== inverse.length)
+            return evidence;
+          for (const group of inverse)
+            for (const role of ['owner', 'member'] as const)
+              roles.push({
+                account_id: member.accountId,
+                organization_id: group.id,
+                group_kind: group.kind,
+                role,
+                member: false,
+                valid: 'empty',
+              });
+        }
+        const candidateInput = {
+          route: resource.route,
+          resource_ids: [...(page?.ids ?? [resource.id])],
+          action,
+          grant_roles: grantRoles,
+          actor_id: actor.accountId,
+          principal_id: principalId ?? '',
+          roles,
+          at,
+        };
+        // Preparation keeps the page and Global Context reads separately anchored.
+        // The final formula still evaluates both at T in its sole statement.
+        const candidates =
+          isGlobalReachAction(action) && !isPlatformResource(resource)
+            ? (
+                await Promise.all([
+                  governanceReachCandidatesRead.run(context.pool, candidateInput),
+                  governanceReachCandidatesRead.run(context.pool, {
+                    ...candidateInput,
+                    route: PLATFORM_RESOURCE.route,
+                    resource_ids: [PLATFORM_RESOURCE.id],
+                  }),
+                ])
+              ).flat()
+            : await candidatesRead.run(context.pool, candidateInput);
+        // Only hits from these bounded probes cause an anchored role read.
+        const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
+        const groups = new Map<string, RoleEvidence[]>();
+        for (const row of roles) {
+          const key = `${row.account_id}/${row.organization_id}`;
+          const entries = groups.get(key) ?? [];
+          entries.push(row);
+          groups.set(key, entries);
+        }
+        const matched = [...groups].filter(([key]) => hits.has(key)).map(([, entries]) => entries);
+        // Independent anchor reads borrow/release their own client. Bounded
+        // batches never acquire a second client inside an anchored callback;
+        // all settle before any resource checkout, including failure paths.
+        for (let start = 0; start < matched.length; start += 4) {
+          const results = await Promise.allSettled(
+            matched.slice(start, start + 4).map(async (entries) => {
+              const group = entries[0]!;
+              const proofs = await withConnection(context.pool, async (client) => {
+                if (group.group_kind === 'realm')
+                  return (
+                    config.realmRoleReader?.(client, {
+                      realmId: group.organization_id,
+                      accountId: group.account_id,
+                      at,
+                    }) ?? null
+                  );
+                const rows = await membershipRead.run(client, {
+                  route: routeOf(group.organization_id),
+                  organization_id: group.organization_id,
+                  member_id: group.account_id,
+                  at,
+                });
+                if (
+                  rows.length !== 2 ||
+                  rows.some((r) => r.kind !== 'organization' || r.state !== 'active' || r.fenced !== false)
+                )
+                  return null;
+                return rows;
+              });
+              if (
+                !proofs ||
+                proofs.length !== 2 ||
+                new Set(proofs.map((r) => r.role)).size !== 2 ||
+                proofs.some((r) => !['owner', 'member'].includes(r.role) || typeof r.member !== 'boolean' || !r.valid)
+              )
+                return false;
+              for (const proof of proofs) {
+                if (!proof.valid) return false;
+                const row = entries.find((r) => r.role === proof.role)!;
+                row.member = proof.member;
+                row.valid = proof.valid;
+              }
+              return true;
+            }),
+          );
+          if (results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
+        }
+      }
+      // Short-lived account/assignment/membership observations never survive the
+      // request deadline. The final SQL also checks their actual validity ranges
+      // at T. The evidence deadline guards elapsed database time: databaseAt plus
+      // the remaining budget, compared only with observed_at. The wall-clock
+      // check above stays local.
+      const origin = Date.parse(recorded.databaseAt);
+      if (!Number.isFinite(origin)) return evidence;
+      const databaseDeadline = new Date(origin + Math.max(0, deadline - Date.now())).toISOString();
+      if (binding !== bind(actor, action, resource, page) || Date.now() >= deadline) return evidence;
+      prepared.set(evidence, {
+        binding,
+        deadline,
+        databaseDeadline,
+        principalId,
+        valid,
+        roles,
+        anonymous: actor.kind === 'anonymous',
+        grantRoles,
+        scope: actor.kind === 'account' && actor.scopes.includes(action),
+        admitsAnonymous: metadata.anonymous,
+        capability: resource.eligibility ?? resource.anonymousEligibility,
+        verifyFloor,
+      });
+    } catch {
+      // Missing tables, unresolved accounts and failed separately anchored reads deny.
+    }
+    return evidence;
+  }
   const access: Access = {
     replayAuthorization: (action) => actions.get(action)?.replay,
     authenticate:
@@ -222,229 +480,46 @@ export function createAccess(config: PermissionConfig): Access {
       (async () => {
         throw new AuthenticationError(401, 'Bearer error="invalid_token"');
       }),
-    async prepare(actor, action, resource, context) {
-      const evidence = Object.freeze({});
-      try {
-        const metadata = actions.get(action);
-        if (
-          !metadata ||
-          !Number.isInteger(resource.route) ||
-          resource.route < 0 ||
-          resource.route > 65535 ||
-          !uuidPattern.test(resource.id) ||
-          routeOf(resource.id) !== resource.route ||
-          !Number.isFinite(context.deadline) ||
-          Date.now() >= context.deadline
-        )
-          return evidence;
-        const binding = bind(actor, action, resource);
-        const deadline = Math.min(context.deadline, Date.now() + 1000);
-        let account: Account | null | undefined;
-        if (actor.kind === 'anonymous') {
-          if (!metadata.anonymous) return evidence;
-        } else {
-          if (
-            !uuidPattern.test(actor.accountId) ||
-            !actor.clientId ||
-            actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))
-          )
-            return evidence;
-          account = config.accountEvidence(actor, context);
-          if (!account || !eligible(account, actor)) return evidence;
-        }
-        const verifyFloor = await prepareAnonymousEligibility(
-          { actor, action, resource: Object.freeze({ ...resource }), deadline },
-          context,
-        );
-        // Every query uses the pool independently before resource checkout. None
-        // of these reads holds a connection while another partition is consulted.
-        const recorded = await readPermissionTime(context.pool, config.clock);
-        if (!recorded?.databaseAt) return evidence;
-        // Commands prepare after their executor mints T. Negative membership
-        // proofs must start at that same T, not at a later preparation clock.
-        const attempt = accessCommandAttempt(context);
-        const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
-        let principalId: string | null = null;
-        let valid = '(,)';
-        const members: { accountId: string; automated: boolean }[] = [];
-        if (actor.kind === 'account' && account) {
-          members.push({ accountId: actor.accountId, automated: account.operatorAccountId !== null });
-          if (actor.requestedBy !== null) {
-            const request = requestedByPattern.exec(actor.requestedBy);
-            if (!request) return evidence;
-            const principal = request[1]!;
-            const assignment = await assignmentRead.run(context.pool, {
-              route: routeOf(principal),
-              principal_id: principal,
-              request_id: request[2]!,
-              actor_id: actor.accountId,
-              at,
-            });
-            if (
-              !assignment ||
-              assignment.kind !== 'actor' ||
-              assignment.state !== 'active' ||
-              assignment.fenced !== false
-            )
-              return evidence;
-            principalId = principal;
-            valid = assignment.valid;
-            if (principal === actor.accountId) members[0]!.automated ||= assignment.operatorAccountId !== null;
-            else members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
-          }
-        }
-        const grantRoles = [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
-        const roles: RoleEvidence[] = [];
-        if (actor.kind === 'account') {
-          // The inverse is admission evidence only. Never derive identities from
-          // resource ACLs or treat a stale inverse row as a membership role.
-          for (const member of members) {
-            if (member.automated) continue;
-            const rows = await withConnection(context.pool, (client) =>
-              inverseRead.run(client, {
-                route: routeOf(member.accountId),
-                account_id: member.accountId,
-              }),
-            );
-            if (!rows.length || rows.some((r) => r.complete !== true)) return evidence;
-            const inverse: MembershipPrincipal[] = [];
-            for (const row of rows) {
-              if (row.kind === null && row.id === null) continue;
-              if (
-                (row.kind !== 'organization' && row.kind !== 'realm') ||
-                !row.id ||
-                row.id === member.accountId ||
-                !uuidPattern.test(row.id)
-              )
-                return evidence;
-              inverse.push({ kind: row.kind, id: row.id });
-            }
-            if (inverse.length > MEMBERSHIP_LIMIT || new Set(inverse.map((g) => g.id)).size !== inverse.length)
-              return evidence;
-            for (const group of inverse)
-              for (const role of ['owner', 'member'] as const)
-                roles.push({
-                  account_id: member.accountId,
-                  organization_id: group.id,
-                  group_kind: group.kind,
-                  role,
-                  member: false,
-                  valid: 'empty',
-                });
-          }
-          const candidates =
-            isGlobalReachAction(action) && !isPlatformResource(resource)
-              ? (
-                  await Promise.all(
-                    [resource, PLATFORM_RESOURCE].map((anchor) =>
-                      governanceReachCandidatesRead.run(context.pool, {
-                        route: anchor.route,
-                        resource_id: anchor.id,
-                        action,
-                        grant_roles: grantRoles,
-                        actor_id: actor.accountId,
-                        principal_id: principalId ?? '',
-                        roles,
-                        at,
-                      }),
-                    ),
-                  )
-                ).flat()
-              : await candidatesRead.run(context.pool, {
-                  route: resource.route,
-                  resource_id: resource.id,
-                  action,
-                  grant_roles: grantRoles,
-                  actor_id: actor.accountId,
-                  principal_id: principalId ?? '',
-                  roles,
-                  at,
-                });
-          // Only hits from the single bounded probe cause an anchored role read.
-          const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
-          const groups = new Map<string, RoleEvidence[]>();
-          for (const row of roles) {
-            const key = `${row.account_id}/${row.organization_id}`;
-            const entries = groups.get(key) ?? [];
-            entries.push(row);
-            groups.set(key, entries);
-          }
-          const matched = [...groups].filter(([key]) => hits.has(key)).map(([, entries]) => entries);
-          // Independent anchor reads borrow/release their own client. Bounded
-          // batches never acquire a second client inside an anchored callback;
-          // all settle before any resource checkout, including failure paths.
-          for (let start = 0; start < matched.length; start += 4) {
-            const results = await Promise.allSettled(
-              matched.slice(start, start + 4).map(async (entries) => {
-                const group = entries[0]!;
-                const proofs = await withConnection(context.pool, async (client) => {
-                  if (group.group_kind === 'realm')
-                    return (
-                      config.realmRoleReader?.(client, {
-                        realmId: group.organization_id,
-                        accountId: group.account_id,
-                        at,
-                      }) ?? null
-                    );
-                  const rows = await membershipRead.run(client, {
-                    route: routeOf(group.organization_id),
-                    organization_id: group.organization_id,
-                    member_id: group.account_id,
-                    at,
-                  });
-                  if (
-                    rows.length !== 2 ||
-                    rows.some((r) => r.kind !== 'organization' || r.state !== 'active' || r.fenced !== false)
-                  )
-                    return null;
-                  return rows;
-                });
-                if (
-                  !proofs ||
-                  proofs.length !== 2 ||
-                  new Set(proofs.map((r) => r.role)).size !== 2 ||
-                  proofs.some((r) => !['owner', 'member'].includes(r.role) || typeof r.member !== 'boolean' || !r.valid)
-                )
-                  return false;
-                for (const proof of proofs) {
-                  if (!proof.valid) return false;
-                  const row = entries.find((r) => r.role === proof.role)!;
-                  row.member = proof.member;
-                  row.valid = proof.valid;
-                }
-                return true;
-              }),
-            );
-            if (results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
-          }
-        }
-        // Short-lived account/assignment/membership observations never survive the
-        // request deadline. The final SQL also checks their actual validity ranges
-        // at T. The evidence deadline guards elapsed database time: databaseAt plus
-        // the remaining budget, compared only with observed_at. The wall-clock
-        // check above stays local.
-        const origin = Date.parse(recorded.databaseAt);
-        if (!Number.isFinite(origin)) return evidence;
-        const databaseDeadline = new Date(origin + Math.max(0, deadline - Date.now())).toISOString();
-        if (binding !== bind(actor, action, resource) || Date.now() >= deadline) return evidence;
-        prepared.set(evidence, {
-          binding,
-          deadline,
-          databaseDeadline,
-          principalId,
-          valid,
-          roles,
-          anonymous: actor.kind === 'anonymous',
-          grantRoles,
-          scope: actor.kind === 'account' && actor.scopes.includes(action),
-          admitsAnonymous: metadata.anonymous,
-          capability: resource.eligibility ?? resource.anonymousEligibility,
-          verifyFloor,
-        });
-      } catch {
-        // Missing tables, unresolved accounts and failed separately anchored reads deny.
-      }
-      return evidence;
+    prepare: preparePermission,
+    preparePage(actor, action, input, context) {
+      const page = resourcePage(input);
+      return preparePermission(actor, action, { route: page.route, id: page.ids[0]! }, context, page);
+    },
+    async authorizePage(client, actor, action, input, evidence, time) {
+      const page = resourcePage(input);
+      const resource = { route: page.route, id: page.ids[0]! };
+      const { allowed } = await checkPreparedPermission(
+        client,
+        actor,
+        action,
+        resource,
+        evidence,
+        time,
+        config.clock,
+        page,
+      );
+      const use = allowed ? governanceReachUse(evidence, actor, action, resource) : undefined;
+      if (use && hasLiveCommandTransaction(client) && !recordGovernanceReachUse(client, use)) return false;
+      return allowed;
+    },
+    async authorizeExplicit(client, actor, action, target, evidence, time) {
+      const page = 'ids' in target ? resourcePage(target) : undefined;
+      const resource = page ? { route: page.route, id: page.ids[0]! } : (target as Resource);
+      const decision = await checkPreparedPermission(
+        client,
+        actor,
+        action,
+        resource,
+        evidence,
+        time,
+        config.clock,
+        page,
+        true,
+      );
+      const use = decision.allowed ? governanceReachUse(evidence, actor, action, resource) : undefined;
+      if (use && hasLiveCommandTransaction(client) && !recordGovernanceReachUse(client, use))
+        return { allowed: false, explicit: false };
+      return decision;
     },
     async authorize(client, actor, action, resource, evidence, time) {
       const allowed = await checkPermission(client, actor, action, resource, evidence, time, config.clock);

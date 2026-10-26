@@ -13,7 +13,15 @@ import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import type { ResourceEligibility } from './eligibility.ts';
-import type { Access, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
+import {
+  resourcePage,
+  type ResourcePage,
+  type Access,
+  type AccessClient,
+  type AccessContext,
+  type Actor,
+  type Resource,
+} from '../request/access.ts';
 import { governanceReachUse, recordGovernanceReachUse, type GovernanceReachUse } from './governance-reach.ts';
 
 /** Trusted server binding to the authorization resource. validate checks THAT
@@ -37,6 +45,31 @@ export type ResourceAuthorizationInput = {
   anchor: AuthorizationAnchor;
   context: ResourceAuthorizationContext;
 };
+
+/** Trusted whole-page existence/domain validation, in one owning-module statement. */
+export type AuthorizationAnchorPage = ResourcePage &
+  Readonly<{
+    validate(client: AccessClient, time: AuthoritativeTime): Promise<boolean>;
+  }>;
+
+export type ResourceAuthorizationPageInput = Omit<ResourceAuthorizationInput, 'anchor'> & {
+  anchor: AuthorizationAnchorPage;
+};
+
+/** One attempt, exact immutable id set, one formula, all resources required. */
+export function resourceAuthorizationPage(input: ResourceAuthorizationPageInput): CommandAuthorization {
+  const page = resourcePage(input.anchor);
+  return authorizeResource(
+    {
+      ...input,
+      anchor: {
+        resource: { route: page.route, id: page.ids[0]! },
+        validate: input.anchor.validate.bind(input.anchor),
+      },
+    },
+    page,
+  );
+}
 
 /** Anonymous commands require exact principal attribution and opaque domain eligibility. */
 export type AnonymousResourceAuthorizationInput = Omit<ResourceAuthorizationInput, 'actor' | 'anchor'> & {
@@ -74,12 +107,31 @@ export class ResourceAuthorizationUnavailableError extends Error {
 export function resourceAuthorization(input: AnonymousResourceAuthorizationInput): CommandAuthorization;
 export function resourceAuthorization(input: ResourceAuthorizationInput): CommandAuthorization;
 export function resourceAuthorization(input: ResourceAuthorizationInput): CommandAuthorization {
+  return authorizeResource(input);
+}
+
+function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePage): CommandAuthorization {
   const { access, actor, action } = input;
   const resource = Object.freeze({ ...input.anchor.resource });
   const { pool, deadline, partition } = input.context;
   const validate = input.anchor.validate.bind(input.anchor);
-  const prepare = access.prepare?.bind(access);
-  const authorize = access.authorize.bind(access);
+  const preparePage = access.preparePage?.bind(access);
+  const authorizePage = access.authorizePage?.bind(access);
+  const prepare = page
+    ? preparePage &&
+      ((actor: Actor, action: string, _resource: Resource, context: AccessContext) =>
+        preparePage(actor, action, page, context))
+    : access.prepare?.bind(access);
+  const authorize = page
+    ? (
+        client: AccessClient,
+        actor: Actor,
+        action: string,
+        _resource: Resource,
+        evidence: unknown,
+        time: AuthoritativeTime,
+      ) => authorizePage?.(client, actor, action, page, evidence, time) ?? Promise.resolve(false)
+    : access.authorize.bind(access);
   // Keep the verified actor object: production Access binds identity by reference.
   const identity = JSON.stringify(actor);
   const anonymous = actor.kind === 'anonymous';

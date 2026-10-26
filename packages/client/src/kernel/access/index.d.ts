@@ -20,7 +20,7 @@ export { visibleOperations, type VisibleOperation } from './gates/visibility.ts'
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export { captureDurableInitiator, durableInitiatorCommitment, DurableInitiatorCaptureUnavailableError, } from './durable-initiator-capture.ts';
 export { MAX_CREATION_RESOURCES, createResourceCreationManifest, CreationManifestUnavailableError, type ResourceCreationEntry, type ResourceCreationManifest, } from './creation-manifest.ts';
-export { resourceAuthorization, ResourceAuthorizationUnavailableError, type AnonymousResourceAuthorizationInput, type AuthorizationAnchor, type ResourceAuthorizationContext, type ResourceAuthorizationInput, } from './resource-authorization.ts';
+export { resourceAuthorization, resourceAuthorizationPage, type AuthorizationAnchorPage, type ResourceAuthorizationPageInput, ResourceAuthorizationUnavailableError, type AnonymousResourceAuthorizationInput, type AuthorizationAnchor, type ResourceAuthorizationContext, type ResourceAuthorizationInput, } from './resource-authorization.ts';
 export { parentCreationAuthorization, type ParentAnchor, type ParentCreationContext, type ResourceCreationPort, } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
 export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';

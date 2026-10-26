@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from 'pg';
+import { types, type Pool, type PoolClient } from 'pg';
 
 export interface SqlExecution {
   readonly statement: string;
@@ -7,6 +7,19 @@ export interface SqlExecution {
   readonly connectionId: number;
   /** Timestamp recorded at the actual query boundary. */
   readonly executedAt: string;
+}
+
+/** Decode the native UUID-array binding without losing the single-resource contract. */
+export function permissionResourceId(execution: SqlExecution, parameters: readonly string[]): string {
+  const value = execution.parameters[parameters.indexOf('resource_ids')];
+  // pg-types' TypeId enum omits array OIDs; 2951 is PostgreSQL's UUID array.
+  const ids: unknown =
+    typeof value === 'string'
+      ? types.getTypeParser(2951 as Parameters<typeof types.getTypeParser>[0], 'text')(value)
+      : value;
+  if (!Array.isArray(ids) || ids.length !== 1 || typeof ids[0] !== 'string')
+    throw new Error('Expected one resource in the observed permission statement');
+  return ids[0];
 }
 
 export interface SqlMatch {

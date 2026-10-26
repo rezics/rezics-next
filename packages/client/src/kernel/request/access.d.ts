@@ -21,6 +21,14 @@ export type Resource = {
     /** Compatibility spelling; uses the same opaque capability and evaluator. */
     anonymousEligibility?: ResourceEligibility;
 };
+/** One trusted homogeneous resource page, copied before evidence preparation. */
+export type ResourcePage = Readonly<{
+    route: number;
+    resourceType: string;
+    ids: readonly string[];
+}>;
+/** Reject malformed pages synchronously, before any database or actor read. */
+export declare function resourcePage(page: ResourcePage): ResourcePage;
 export type ActionMetadata = {
     anonymous: boolean;
     replay?: 'self-account-read';
@@ -55,6 +63,12 @@ export type AccessContext = {
     deadline: number;
 };
 export type AccessClient = Pick<PoolClient, 'query'>;
+/** Ordinary permission plus the same formula with public floor and grant roles disabled. */
+export type AccessDecision = Readonly<{
+    allowed: boolean;
+    explicit: boolean;
+}>;
+export type AccessExplicitCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<AccessDecision>;
 export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
 export type AccessCommandAuthorization = CommandAuthorization & {
     readonly check: AccessCheck;
@@ -62,11 +76,18 @@ export type AccessCommandAuthorization = CommandAuthorization & {
 export interface Access {
     authenticate(token: string, context: AccessContext): Promise<AccountActor>;
     prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
+    preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;
+    authorizePage?(client: AccessClient, actor: Actor, action: string, page: ResourcePage, evidence?: unknown, time?: AuthoritativeTime): Promise<boolean>;
+    /** Optional explicit projection of the installed formula for a resource or homogeneous page. */
+    authorizeExplicit?(client: AccessClient, actor: Actor, action: string, resource: Resource | ResourcePage, evidence?: unknown, time?: AuthoritativeTime): Promise<AccessDecision>;
     /** Derived only from the installed action catalogue's explicit declaration. */
     replayAuthorization?(action: string): 'self-account-read' | undefined;
     authorize(client: AccessClient, actor: Actor, action: string, resource: Resource, evidence?: unknown, time?: AuthoritativeTime): Promise<boolean>;
 }
 export declare function accessCheck(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<AccessCheck>;
+/** Resolve the installed port through derived adapters; never infer explicit
+ * authority from an adapter's ordinary boolean decision. */
+export declare function accessExplicitCheck(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<AccessExplicitCheck>;
 /** Recheck command admission on every live attempt before resource checkout.
  * Each attempt prepares fresh action and self-read evidence at its own T, with
  * its own evidence budget capped by the original request deadline and JWT expiry.
