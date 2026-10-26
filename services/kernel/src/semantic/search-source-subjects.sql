@@ -1,7 +1,11 @@
-WITH requested AS MATERIALIZED (
-  SELECT input.route, input.subject_id
-  FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS input(route, subject_id)
-  WHERE input.route / 16 = :partition_no::integer
+WITH input AS NOT MATERIALIZED (
+  SELECT :partition_no::integer AS partition_no
+),
+requested AS MATERIALIZED (
+  SELECT ids.route, ids.subject_id
+  FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS ids(route, subject_id)
+  CROSS JOIN input
+  WHERE ids.route / 16 = input.partition_no
 )
 SELECT s.route,
        s.subject_id::text AS id,
@@ -10,18 +14,24 @@ SELECT s.route,
        s.security_revision::text AS "securityRevision",
        s.current_release AS "currentRelease",
        redirect.target::text AS redirect
-FROM requested input
+FROM requested
 JOIN LATERAL (
   SELECT subject.route, subject.subject_id, subject.type, subject.visibility,
          subject.security_revision, subject.current_release
   FROM semantic.subject subject
-  WHERE subject.route = input.route AND subject.subject_id = input.subject_id
+  CROSS JOIN input
+  WHERE subject.route = requested.route AND subject.subject_id = requested.subject_id
+    AND subject.route >= input.partition_no * 16
+    AND subject.route < (input.partition_no + 1) * 16
   LIMIT 1
 ) s ON true
 LEFT JOIN LATERAL (
   SELECT target
   FROM semantic.redirect
+  CROSS JOIN input
   WHERE route = s.route AND subject_id = s.subject_id
+    AND route >= input.partition_no * 16
+    AND route < (input.partition_no + 1) * 16
   ORDER BY sequence DESC
   LIMIT 1
 ) redirect ON true;

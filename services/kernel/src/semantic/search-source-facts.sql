@@ -1,26 +1,35 @@
-WITH requested AS MATERIALIZED (
-  SELECT input.route, input.subject_id
-  FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS input(route, subject_id)
+WITH input AS NOT MATERIALIZED (
+  SELECT :partition_no::integer AS partition_no
+),
+requested AS MATERIALIZED (
+  SELECT ids.route, ids.subject_id
+  FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS ids(route, subject_id)
 ), term_rows AS MATERIALIZED (
-  SELECT input.route, input.subject_id, fact.slot_id, fact.log_seq, fact.operation,
+  SELECT requested.route, requested.subject_id, fact.slot_id, fact.log_seq, fact.operation,
          fact.kind, fact.language, fact.property, fact.statement_id, fact.body, fact.release
-  FROM requested input
+  FROM requested
   CROSS JOIN LATERAL (
     SELECT f.slot_id, f.log_seq, f.operation, f.kind, f.language, f.property,
            f.statement_id, f.body, f.release
     FROM semantic.fact f
-    WHERE f.route = input.route AND f.subject_id = input.subject_id AND f.kind <> 'statement'
+    CROSS JOIN input
+    WHERE f.route = requested.route AND f.subject_id = requested.subject_id AND f.kind <> 'statement'
+      AND f.route >= input.partition_no * 16
+      AND f.route < (input.partition_no + 1) * 16
     ORDER BY f.slot_id, f.log_seq
   ) fact
 ), statement_rows AS MATERIALIZED (
-  SELECT input.route, input.subject_id, fact.slot_id, fact.log_seq, fact.operation,
+  SELECT requested.route, requested.subject_id, fact.slot_id, fact.log_seq, fact.operation,
          fact.kind, fact.language, fact.property, fact.statement_id, fact.body, fact.release
-  FROM requested input
+  FROM requested
   CROSS JOIN LATERAL (
     SELECT f.slot_id, f.log_seq, f.operation, f.kind, f.language, f.property,
            f.statement_id, f.body, f.release
     FROM semantic.fact f
-    WHERE f.route = input.route AND f.subject_id = input.subject_id AND f.kind = 'statement'
+    CROSS JOIN input
+    WHERE f.route = requested.route AND f.subject_id = requested.subject_id AND f.kind = 'statement'
+      AND f.route >= input.partition_no * 16
+      AND f.route < (input.partition_no + 1) * 16
     ORDER BY f.slot_id, f.log_seq
   ) fact
 ), slot_heads AS (

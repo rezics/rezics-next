@@ -1,4 +1,7 @@
-WITH entries AS MATERIALIZED (
+WITH input AS NOT MATERIALIZED (
+  SELECT :partition_no::integer AS partition_no
+),
+entries AS MATERIALIZED (
   SELECT *
   FROM jsonb_to_recordset(:entries::jsonb) AS entry(
     source text,
@@ -25,15 +28,21 @@ FROM entries entry
 LEFT JOIN LATERAL (
   SELECT statement, release
   FROM semantic.candidate
+  CROSS JOIN input
   WHERE entry.source = 'expanded'
     AND route = entry.route AND subject_id = entry.subject_id AND candidate_id = entry.candidate_id
+    AND route >= input.partition_no * 16
+    AND route < (input.partition_no + 1) * 16
   LIMIT 1
 ) candidate ON true
 LEFT JOIN LATERAL (
   SELECT 1
   FROM semantic.hidden_candidate hidden
+  CROSS JOIN input
   WHERE hidden.route = entry.route AND hidden.subject_id = entry.subject_id
     AND hidden.candidate_id = entry.candidate_id
+    AND hidden.route >= input.partition_no * 16
+    AND hidden.route < (input.partition_no + 1) * 16
   LIMIT 1
 ) concealed ON true
 WHERE concealed IS NULL
