@@ -208,12 +208,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
         actor(viewer) && routeOf(viewer.accountId) !== null
           ? await readAccount(client, routeOf(viewer.accountId)!, viewer.accountId)
           : null;
-      let allowed = false;
-      try {
-        allowed = await check(client);
-      } catch {
-        allowed = false;
-      }
+      const allowed = await check(client);
       if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
       return disclose(sink.row, allowed, account, viewer);
     });
