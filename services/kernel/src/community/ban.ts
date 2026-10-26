@@ -108,7 +108,7 @@ export async function banAccount(
           at: command.time,
         });
       }
-      const membership = (await readMembership.run(tx, parameters))[0];
+      const membership = await readMembership.run(tx, parameters);
       const value = {
         realmId: input.realmId,
         accountId: input.accountId,
