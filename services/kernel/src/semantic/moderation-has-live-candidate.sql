@@ -1,4 +1,4 @@
-WITH input AS (
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :candidate_id::uuid AS candidate_id
 )
 SELECT 1 FROM input

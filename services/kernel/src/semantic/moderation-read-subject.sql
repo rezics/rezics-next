@@ -1,4 +1,4 @@
-WITH input AS (
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id
 )
 SELECT s.visibility, s.security_revision::text AS "securityRevision", latest.revision, latest.release
