@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git } from './merge.ts';
-import { integrationHarness } from './test-support.ts';
+import { harness, integrationHarness } from './test-support.ts';
 
 function formatter(h: ReturnType<typeof integrationHarness>, body: string): string {
   const file = join(h.settings.stateDirectory, `formatter-${crypto.randomUUID()}.cjs`);
@@ -55,5 +55,14 @@ test('a formatter failure leaves dev unmoved and returns the task as a scope-fre
     expect(h.inbox.some(event => event.kind === 'scope-growth')).toBe(false);
     expect(h.store.task(task.id).state).not.toBe('stopped');
     expect(git(h.root, 'status', '--short')).toBe('');
+  } finally { h.dispose(); }
+});
+
+test('the default formatter does not fail a landing that changes only files it does not format', () => {
+  const h = harness();
+  try {
+    // oxfmt exits 2 on "Expected at least one target file" for a lone .sql file unless told otherwise.
+    expect(h.settings.formatCommand.at(-1)).toBe('--no-error-on-unmatched-pattern');
+    expect(h.settings.formatCommand[0]).toEndWith('/node_modules/.bin/oxfmt');
   } finally { h.dispose(); }
 });
