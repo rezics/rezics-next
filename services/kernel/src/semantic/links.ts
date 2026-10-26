@@ -16,6 +16,7 @@ import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
 import readLinkCheckpoint from './read-link-checkpoint.sql';
+import readPendingMember from './links-read-pending-member.sql';
 import readVisibility from './read-visibility.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
 
@@ -76,11 +77,8 @@ async function linksCaughtUp(pool: Pool, seen: readonly SessionComponent[], subj
         });
         if (!covers(row, component)) return false;
       }
-      const pending = await client.query(
-        "SELECT member_id FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 AND phase <> 'done' LIMIT 1",
-        [routeOf(subject), subject],
-      );
-      return pending.rowCount === 0;
+      const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
+      return pending === null;
     });
     if (covered) return true;
     if (performance.now() + FRESHNESS_POLL_MS > deadline) return false;
@@ -145,19 +143,22 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
         if (redirect) forwarded.push({ ...change, subjectId: redirect, route: routeOf(redirect)! });
         else local.push(change);
       }
-      if (local.length)
+      // One upsert per target route: the statement binds a single route parameter.
+      for (const route of [...new Set(local.map((change) => change.route))].sort((a, b) => a - b))
         await upsertInboundLinks.run(tx, {
+          route,
           transaction_id: transactionId,
-          changes: local.map((change) => ({
-            route: change.route,
-            subject_id: change.subjectId,
-            property: change.property,
-            source_subject_id: change.sourceSubjectId,
-            statement_id: change.statementId,
-            source_revision: change.sourceRevision,
-            source_security_revision: change.sourceSecurityRevision,
-            present: change.present,
-          })),
+          changes: local
+            .filter((change) => change.route === route)
+            .map((change) => ({
+              subject_id: change.subjectId,
+              property: change.property,
+              source_subject_id: change.sourceSubjectId,
+              statement_id: change.statementId,
+              source_revision: change.sourceRevision,
+              source_security_revision: change.sourceSecurityRevision,
+              present: change.present,
+            })),
         });
       return {
         value: forwarded,
