@@ -85,13 +85,7 @@ const forcedDrop = /DROP\s+DATABASE[^;`'"]*WITH\s*\(\s*FORCE\s*\)/i;
 const helper = ['support/drop-test-database.ts', 'support/drop-test-database.test.ts'];
 // Files of other owners that still hold a raw forced drop; each owner deletes its entries as it moves them, and the
 // list goes when it is empty.
-const allowlist = [
-  'commerce/governance.test.ts',
-  'commerce/payout-mark-paid.test.ts',
-  'commerce/support/outcome-driver.ts',
-  'library/support/outcome-driver.ts',
-  'semantic/governance-actions.test.ts',
-];
+const allowlist = ['semantic/governance-actions.test.ts'];
 
 const sources = new Map<string, string>();
 for (const file of new Bun.Glob('**/*.ts').scanSync({ cwd: testRoot })) {

@@ -20,6 +20,7 @@ import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
+import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import {
   capture,
   costOf,
@@ -256,7 +257,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     if (owner && !dropped) {
       for (const database of [authName, kernelName]) {
         try {
-          await owner.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
+          await dropTestDatabase(owner, database);
         } catch {
           // Preserve the original setup/test error while still attempting both drops.
         }
