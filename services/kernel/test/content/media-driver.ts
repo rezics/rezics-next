@@ -167,17 +167,13 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
     function routed(id: string, fallback = containers.thread.route): string {
       return routeOf(id) === null ? newId(fallback) : id;
     }
-    async function grant(as: Persona, resourceId: string, accountId: string, actions: string[], revoke = false) {
-      const response = await send(as, 'POST', revoke ? '/v1/grants:revoke' : '/v1/grants', crypto.randomUUID(), {
-        resource: { id: resourceId, route: routeOf(resourceId) },
-        subject: { kind: 'account', id: accountId },
-        actions,
-        valid: '(,)',
-      });
-      if (!response.ok)
-        throw new Error(
-          `Media fixture grant ${revoke ? 'revocation' : 'creation'} failed (${response.status}): ${await response.text()}`,
-        );
+    async function deny(resourceId: string, action: string) {
+      await pool.query(
+        `INSERT INTO access.resource_denial
+          (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+          VALUES ($1,$2,$3,'',$4,'resource',tstzrange($5::timestamptz,NULL,'[)'),$6)`,
+        [routeOf(resourceId), resourceId, credentials.author.actor.accountId, action, now, crypto.randomUUID()],
+      );
     }
     async function reference(as: Persona, input: ReferenceCommand): Promise<Outcome> {
       let captured = references.get(input.requestId);
@@ -465,11 +461,11 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           value,
         ]);
       },
-      async grantParent(_as, containerId) {
-        await grant('author', containerId, credentials.other.actor.accountId, ['media:create', 'post:create']);
+      async grantParent() {
+        // content.thread.standing already permits every active account to post and reserve media.
       },
       async revokeMediaCreate(containerId) {
-        await grant('author', containerId, credentials.author.actor.accountId, ['media:create'], true);
+        await deny(containerId, 'media:create');
       },
       async removeWebsiteCompletionScope() {
         credentials.worker = await system.auth.issue({
@@ -479,12 +475,9 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         });
       },
       async revokeReferenceAuthority(containerId, kind) {
-        await grant(
-          'author',
+        await deny(
           kind === 'post' ? containerId : posts.get(containerId)!.id,
-          credentials.author.actor.accountId,
-          [kind === 'post' ? 'post:create' : 'post:revise'],
-          true,
+          kind === 'post' ? 'post:create' : 'post:revise',
         );
       },
       async setParentVisibility(value) {
