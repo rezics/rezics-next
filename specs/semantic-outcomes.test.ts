@@ -31,7 +31,8 @@ const subjectPath = (id: string) => `/v1/subjects/${id}`;
 const value = (content: Json) => ({ type: 'value' as const, content });
 const statement = (property: string, content: Json, rank: 'normal' | 'preferred' = 'normal'): StatementInput =>
   ({ property: { id: property }, value: value(content), rank });
-const reference = (url = 'https://www.aozora.gr.jp/cards/000148/card773.html') => ({ parts: [statement('schema:url', url)] });
+const part = (property: string, content: Json) => ({ property: { id: property }, value: value(content) });
+const reference = (url = 'https://www.aozora.gr.jp/cards/000148/card773.html') => ({ parts: [part('schema:url', url)] });
 const time = (date: string) => ({ time: `+${date}T00:00:00Z`, precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' });
 function problem(response: HttpResponse, status: number, code: string, writeRequest = true) {
   expect(response.status).toBe(status);
@@ -218,7 +219,8 @@ test('Anonymous reads the active pointer and the complete bundled catalogue with
   expect(contains(entry(release, 'schema:url'), 'url')).toBe(true);
   const work = entry(release, 'schema:exampleOfWork');
   expect(work).toMatchObject({ multivalued: false });
-  expect(contains(work, 'wikibase-item') && contains(work, 'schema:Book')).toBe(true);
+  expect(contains(work, 'wikibase-item') && contains(work, 'schema:CreativeWork')).toBe(true);
+  expect((entry(release, 'schema:Book') as { bases: string[] }).bases).toContain('schema:CreativeWork');
   expect(contains(entry(release, 'schema:isbn'), 'external-id')).toBe(true);
   expect(contains(entry(release, 'schema:isbn'), 'wd:P212')).toBe(true);
   const pages = entry(release, 'schema:numberOfPages');
@@ -296,7 +298,7 @@ test('Editor creates a work edition and recipe in Wikibase shape and creation ke
   const { digest } = await active();
   const person = await create('schema:Person', 'Natsume Sōseki');
   const author = { ...statement('schema:author', person.id, 'preferred'),
-    qualifiers: [statement('schema:position', '1')], references: [reference()] };
+    qualifiers: [part('schema:position', '1')], references: [reference()] };
   const body = { type: 'schema:Book', labels: { en: 'Kokoro', ja: 'こころ' }, descriptions: { en: 'A novel by Natsume Sōseki' },
     aliases: { en: ['The Heart'] }, statements: { 'schema:author': [author] } };
   const token = key();
@@ -353,7 +355,7 @@ test('Invalid subject types properties values targets qualifiers and ranks fail 
     await invalid({ ...base, statements: { 'schema:recipeIngredient': [statement('schema:recipeIngredient', { language: 'en', text: 'miso' })] } }, '/statements/schema:recipeIngredient', 'unsupported');
     await invalid({ ...base, statements: { 'schema:author': [statement('schema:author', Bun.randomUUIDv7())] } }, '/statements/schema:author/0/value/content', 'out_of_range');
     await invalid({ ...base, statements: { 'schema:author': [statement('schema:author', book.id)] } }, '/statements/schema:author/0/value/content', 'out_of_range');
-    await invalid({ ...base, statements: { 'schema:author': [{ ...statement('schema:author', author.id), qualifiers: [statement('schema:isbn', '9780143106036')] }] } }, '/statements/schema:author/0/qualifiers/0/property/id', 'unsupported');
+    await invalid({ ...base, statements: { 'schema:author': [{ ...statement('schema:author', author.id), qualifiers: [part('schema:isbn', '9780143106036')] }] } }, '/statements/schema:author/0/qualifiers/0/property/id', 'unsupported');
     await invalid({ ...base, statements: { 'schema:url': [{ ...statement('schema:url', 'https://www.aozora.gr.jp/'), rank: 'deprecated' }] } }, '/statements/schema:url/0/rank', 'unsupported');
     await invalid({ type: 'bf:Instance', labels: { en: 'Invalid pages' }, statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+0', unit: '1' })] } }, '/statements/schema:numberOfPages/0/value/content/amount', 'out_of_range');
     await invalid({ type: 'bf:Instance', labels: { en: 'Invalid pages' }, statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+12.5', unit: '1' })] } }, '/statements/schema:numberOfPages/0/value/content/amount', 'invalid_format');
@@ -407,8 +409,8 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   const history = await get(`${subjectPath(book.id)}/revisions`);
   expect(history.status).toBe(200);
   expect(history.body).toEqual({ revisions: [
-    { revision: 4, kind: 'adopt', release: digest }, { revision: 3, kind: 'accept', release: digest },
-    { revision: 2, kind: 'propose', release: digest }, { revision: 1, kind: 'create', release: digest },
+    { revision: 4, kind: 'adopt', release: digest, source: null }, { revision: 3, kind: 'accept', release: digest, source: null },
+    { revision: 2, kind: 'propose', release: digest, source: null }, { revision: 1, kind: 'create', release: digest, source: null },
   ], next: null });
 });
 
@@ -640,7 +642,10 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   expect(rows[1]!.transactionId).not.toBe(rows[0]!.transactionId);
   const history = await get(`${subjectPath(redirected!.id)}/revisions`);
   expect(history.status).toBe(200);
-  expect(history.body).toEqual({ revisions: [{ revision: 2, kind: 'merge', release: digest }, { revision: 1, kind: 'create', release: digest }], next: null });
+  expect(history.body).toEqual({ revisions: [
+    { revision: 2, kind: 'merge', release: digest, source: null },
+    { revision: 1, kind: 'create', release: digest, source: null },
+  ], next: null });
   const replay = await write('acceptor', 'POST', mergePath, body, token);
   expect(replay.status).toBe(200);
   expect(replay.body).toEqual(merged.body);
