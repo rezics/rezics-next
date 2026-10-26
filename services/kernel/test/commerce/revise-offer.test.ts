@@ -54,7 +54,15 @@ beforeAll(async () => {
   signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'commerce', alg: 'ES256' };
   access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: new Map(
+      actions.map((action) => [
+        action,
+        {
+          anonymous: false,
+          ...(action === 'offer:create' ? { 'x-resource-types': ['commerce.offer'] } : {}),
+        },
+      ]),
+    ),
     auth: {
       issuer: 'https://auth.example.test',
       audience: 'https://api.rezics.test',

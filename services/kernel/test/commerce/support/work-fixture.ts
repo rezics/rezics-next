@@ -40,7 +40,15 @@ export async function workFixture() {
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'work', alg: 'ES256' };
   const actions = ['access:grant', 'offer:create', 'offer:read', 'offer:manage', 'order:create'];
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: new Map(
+      actions.map((action) => [
+        action,
+        {
+          anonymous: false,
+          ...(action === 'offer:create' ? { 'x-resource-types': ['commerce.offer'] } : {}),
+        },
+      ]),
+    ),
     auth: {
       issuer: 'https://auth.test',
       audience: 'https://kernel.test',

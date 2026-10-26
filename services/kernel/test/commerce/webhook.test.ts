@@ -9,6 +9,7 @@ import { STRIPE_EVENT_WORKFLOW, WORKFLOWS_QUEUE } from '../../src/commerce/work-
 import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
+import { declareKernelWriteRates } from '../../src/http/write-rate-routes.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -21,7 +22,19 @@ let app: ReturnType<typeof makeApp>;
 const eventId = () => `evt_${crypto.randomUUID().replaceAll('-', '')}`;
 
 function makeApp(work = createCommerceWork(client), secrets: readonly string[] = [secret]) {
-  return stripeWebhookRoutes(createApp({ pool }), { secrets, work, clock: () => now * 1000 });
+  const app = stripeWebhookRoutes(
+    createApp({
+      pool,
+      writeRate: {
+        async spend() {
+          return { allowed: true as const };
+        },
+      },
+    }),
+    { secrets, work, clock: () => now * 1000 },
+  );
+  declareKernelWriteRates(app);
+  return app;
 }
 
 beforeAll(async () => {
