@@ -91,8 +91,9 @@ export async function accessCheck(
 }
 
 /** Recheck command admission on every live attempt before resource checkout.
- * Request evidence is prepared once, so an operational retry cannot renew its
- * deadline. Self-read permits receipt lookup only, never a body.
+ * Each attempt prepares fresh action and self-read evidence at its own T, with
+ * its own evidence budget capped by the original request deadline and JWT expiry.
+ * A retry never renews those caps. Self-read permits receipt lookup only, never a body.
  */
 export async function accessCommandAuthorization(
   access: Access,
@@ -105,7 +106,6 @@ export async function accessCommandAuthorization(
   const target = Object.freeze({ ...resource });
   type Prepared = { attempt: CommandAttempt; check: AccessCheck; selfRead?: AccessCheck };
   const proofs = new WeakMap<object, Prepared>();
-  let checks: Omit<Prepared, 'attempt'> | undefined;
   let current: Prepared | undefined;
   const check: AccessCheck = async (client, time = commandTime(client)) => {
     if (!current || time !== current.attempt.time || commandTime(client) !== time) return false;
@@ -122,24 +122,21 @@ export async function accessCommandAuthorization(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(access, actor, preparation);
-        if (!checks) {
-          const check = await accessCheck(access, actor, action, target, preparation);
-          const selfRead =
-            actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read'
-              ? await accessCheck(
-                  access,
-                  actor,
-                  'account:read',
-                  {
-                    route: Number.parseInt(actor.accountId.slice(24, 28), 16),
-                    id: actor.accountId,
-                  },
-                  preparation,
-                )
-              : undefined;
-          checks = { check, ...(selfRead ? { selfRead } : {}) };
-        }
-        const prepared: Prepared = { attempt, ...checks };
+        const check = await accessCheck(access, actor, action, target, preparation);
+        const selfRead =
+          actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read'
+            ? await accessCheck(
+                access,
+                actor,
+                'account:read',
+                {
+                  route: Number.parseInt(actor.accountId.slice(24, 28), 16),
+                  id: actor.accountId,
+                },
+                preparation,
+              )
+            : undefined;
+        const prepared: Prepared = { attempt, check, ...(selfRead ? { selfRead } : {}) };
         const proof = Object.freeze({});
         proofs.set(proof, prepared);
         return proof;
