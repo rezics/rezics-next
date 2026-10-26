@@ -3,7 +3,7 @@ import { createRuntime, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
-const workerCommands = ['dispatch', 'status', 'retry', 'stop', 'cancel', 'consult', 'attempts', 'report', 'import-attempt', 'event'];
+const workerCommands = ['dispatch', 'status', 'retry', 'stop', 'cancel', 'retarget', 'consult', 'attempts', 'report', 'import-attempt', 'event'];
 const integrationCommands = ['land', 'train', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 
@@ -22,6 +22,15 @@ export async function run(argv: string[], factory: () => Runtime | IntegrationRu
     if (workerCommands.includes(command)) {
       if (!('job' in runtime)) throw new Error('Worker commands require the shared runtime');
       await recordManagerCommand(runtime);
+      if (command === 'retarget') {
+        if (!('tasks' in runtime)) throw new Error('Worker commands require the shared runtime');
+        if (process.env.GOAL_TASK_ID && process.env.GOAL_ATTEMPT)
+          runtime.store.assertCurrent({ taskId: process.env.GOAL_TASK_ID, attempt: Number(process.env.GOAL_ATTEMPT) });
+        const [taskId, target] = args;
+        if (!taskId || args.length !== 2) throw new Error('usage: retarget <task> stabilize');
+        runtime.tasks.retarget(taskId, target);
+        return 0;
+      }
       return await runWorkerCommand(command, args, { runtime });
     }
     return await runIntegration([command, ...args], runtime);
