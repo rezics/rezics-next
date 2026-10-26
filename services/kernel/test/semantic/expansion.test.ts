@@ -338,7 +338,7 @@ const growthAccount = '019a1b2c-3d4e-7f00-8a00-e0a0510a0002';
 const growthAccountRoute = routeOf(growthAccount);
 if (growthAccountRoute === null) throw new Error('Growth account must be a routed id');
 const expansionHotPartition = partitionOf(growthAccountRoute);
-const ordinalsPerScale = 500;
+const backgroundOrdinals = 2_000;
 const expansionName = 'semantic-expansion-growth';
 
 function positionOf(ordinal: number): number {
@@ -542,7 +542,7 @@ function expansionPopulation(): Population {
         'semantic.definition_activation': [
           {
             route: 0,
-            head: ordinal + 2 + Math.floor(ordinal / ordinalsPerScale) * 1_000,
+            head: ordinal + 2,
             digest: definitionDigest,
             recorded_transaction_id: newId(0),
           },
@@ -688,11 +688,14 @@ test('subject commands and reads stay within budget at 10 and at 100 vertical ma
     scales: [1, 10, 100],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
+      // Keep the background fixed while the number of vertical manifests grows.
       // Seed before activation so these heads stay behind the release the measured commands serve.
-      await seed({ pool: database.pool, admin: database.admin }, expansionRows, {
-        from: previous * ordinalsPerScale,
-        to: scale * ordinalsPerScale,
-      });
+      if (previous === 0) {
+        await seed({ pool: database.pool, admin: database.admin }, expansionRows, {
+          from: 0,
+          to: backgroundOrdinals,
+        });
+      }
       const release = await compiledRelease(scale);
       const digest = releaseDigest(release);
       const published = await handle(growthKernel, 'POST', '/v1/definitions/releases', growthToken, {

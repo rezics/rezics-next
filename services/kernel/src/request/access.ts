@@ -90,10 +90,13 @@ export async function accessCheck(
   return (client, time = commandTime(client)) => access.authorize(client, actor, action, resource, evidence, time);
 }
 
-/** Recheck command admission on every live attempt before resource checkout.
- * Each attempt prepares fresh action and self-read evidence at its own T, with
- * its own evidence budget capped by the original request deadline and JWT expiry.
- * A retry never renews those caps. Self-read permits receipt lookup only, never a body.
+/** Recheck command admission and prepare fresh evidence on every live attempt
+ * before resource checkout. The stable check wrapper always uses the current
+ * attempt's evidence, including body checks captured before execution. A retry
+ * does not renew the request: each attempt's context copies the fixed request
+ * deadline, and its evidence budget is capped by it and by JWT expiry, so no
+ * attempt's evidence outlives the request. Self-read permits receipt lookup
+ * only, never a body.
  */
 export async function accessCommandAuthorization(
   access: Access,
@@ -122,21 +125,19 @@ export async function accessCommandAuthorization(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(access, actor, preparation);
-        const check = await accessCheck(access, actor, action, target, preparation);
-        const selfRead =
-          actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read'
-            ? await accessCheck(
-                access,
-                actor,
-                'account:read',
-                {
-                  route: Number.parseInt(actor.accountId.slice(24, 28), 16),
-                  id: actor.accountId,
-                },
-                preparation,
-              )
-            : undefined;
-        const prepared: Prepared = { attempt, check, ...(selfRead ? { selfRead } : {}) };
+        const prepared: Prepared = { attempt, check: await accessCheck(access, actor, action, target, preparation) };
+        if (actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read') {
+          prepared.selfRead = await accessCheck(
+            access,
+            actor,
+            'account:read',
+            {
+              route: Number.parseInt(actor.accountId.slice(24, 28), 16),
+              id: actor.accountId,
+            },
+            preparation,
+          );
+        }
         const proof = Object.freeze({});
         proofs.set(proof, prepared);
         return proof;
