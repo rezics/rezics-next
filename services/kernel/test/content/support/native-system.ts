@@ -37,7 +37,22 @@ export class NativeContentSystemUnfinishedError extends Error {
  * All account state and permission outcomes belong to the shared native APIs.
  * The full fixture registers its genuine website client on nativeAuth later.
  */
-export async function createNativeContentSystem(options: ContentSystemOptions): Promise<NativeContentSystem> {
+export function createNativeContentSystem(options: ContentSystemOptions): Promise<NativeContentSystem> {
+  return createNativeContentSystemWithWriteRateOverrides(options, '{}');
+}
+
+/** Build a native system with a suite-specific limiter budget while preserving the public fixture options shape. */
+export function createNativeContentSystemWithWriteRateOverrides(
+  options: ContentSystemOptions,
+  writeRateOverrides: string,
+): Promise<NativeContentSystem> {
+  return createNativeContentSystemWithOptions(options, writeRateOverrides);
+}
+
+async function createNativeContentSystemWithOptions(
+  options: ContentSystemOptions,
+  writeRateOverrides: string,
+): Promise<NativeContentSystem> {
   const source = new URL(options.databaseUrl);
   const template = decodeURIComponent(source.pathname.slice(1));
   if (!template) throw new Error('A migrated application template database is required');
@@ -124,7 +139,7 @@ export async function createNativeContentSystem(options: ContentSystemOptions): 
       access: () => access,
       writeRate: createWriteRateLimiter({
         secret: crypto.randomUUID() + crypto.randomUUID(),
-        overrides: options.writeRateOverrides ?? '{}',
+        overrides: writeRateOverrides,
       }),
       ratePeer: () => '127.0.0.1',
     });

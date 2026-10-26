@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 export type ReportGrowthRow = {
   reportId: string;
@@ -97,7 +97,7 @@ export async function seedReportGrowth(
 }
 
 async function seedCommandEvents(
-  client: Awaited<ReturnType<Pool['connect']>>,
+  client: PoolClient,
   rows: readonly ReportGrowthRow[],
   actor: { principalId: string; principalKind: 'account' | 'anonymous'; clientId?: string },
 ): Promise<void> {

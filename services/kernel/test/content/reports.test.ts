@@ -22,7 +22,7 @@ import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
-import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { seedReportGrowth, type ReportGrowthRow } from './support/report-growth.ts';
 
 let system: NativeContentSystem;
@@ -70,13 +70,13 @@ async function accountActor(bearer: string) {
 }
 
 beforeAll(async () => {
-  system = await createNativeContentSystem({
-    databaseUrl,
-    writeRateOverrides: JSON.stringify({
+  system = await createNativeContentSystemWithWriteRateOverrides(
+    { databaseUrl },
+    JSON.stringify({
       'new-account': { write: { maximum: 10_000, seconds: 86_400 } },
       member: { write: { maximum: 10_000, seconds: 86_400 } },
     }),
-  });
+  );
   // Unmeasured growth setup uses public grants with a budget sized for its fixed background.
   permissionKernel = createKernel({
     pool: system.database.pool,
@@ -458,6 +458,7 @@ test('invalid exact revision leaves no partial record and later revisions do not
 test('moderator inspection resolves anchored records without joining partitions', async () => {
   const f = await fixture();
   const other = await fixture();
+  const otherActor = await accountActor(system.actors.other.bearer);
   const reports = [];
   for (const current of [f, other]) {
     const result = await createReport(deps(), current.author, current.input, context());
@@ -469,7 +470,7 @@ test('moderator inspection resolves anchored records without joining partitions'
       partition: partitionOf(routeOf(result.value.reportId)!),
       target: current.target,
     });
-    for (const actor of [{ kind: 'anonymous' } as const, current.author, system.actors.other.actor]) {
+    for (const actor of [{ kind: 'anonymous' } as const, current.author, otherActor]) {
       expect((await readReport(deps(), result.value.reportId, readContext(actor))).value).toBeNull();
       expect((await listTargetReports(deps(), current.target, readContext(actor))).entries).toEqual([]);
     }

@@ -42,7 +42,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
-import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { observeSql, permissionResourceId, type SqlObserver } from './support/sql-observer.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
@@ -577,12 +577,13 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
 async function threadOutcomeSystem(): Promise<NativeContentSystem> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  suiteSystemPromise ??= createNativeContentSystem({ databaseUrl, writeRateOverrides: suiteWriteRateOverrides }).catch(
-    (error: unknown) => {
-      suiteSystemPromise = undefined;
-      throw error;
-    },
-  );
+  suiteSystemPromise ??= createNativeContentSystemWithWriteRateOverrides(
+    { databaseUrl },
+    suiteWriteRateOverrides,
+  ).catch((error: unknown) => {
+    suiteSystemPromise = undefined;
+    throw error;
+  });
   return suiteSystemPromise;
 }
 
