@@ -450,7 +450,50 @@ async function grow(db: GrowthDatabase, axis: (typeof axes)[number], scale: numb
 test('checkGrowth captures complete native consent transactions, pending issuance, live proof and Access barriers at 1x/8x/64x500', async () => {
   const f = await fixture();
   try {
-    // Ordinary plans see a meaningful baseline in every independently grown table.
+    // The one-shot adapter schema introspection shares the max=1 auth pool.
+    // Finish it before checkGrowth so a late catalog read cannot enter one sample.
+    expect((await f.signin(f.target.accountId)).status).toBe(200);
+    expect((await f.grant(cookie(await f.signin(f.target.accountId)))).status).toBe(200);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await setImmediate();
+      const idleDeadline = Date.now() + 1_000;
+      while (Date.now() < idleDeadline) {
+        if (f.authPool.totalCount === f.authPool.idleCount && f.authPool.waitingCount === 0) break;
+        await Bun.sleep(20);
+      }
+    }
+    // Prepared session, account, fence and receipt seeks go generic after a few
+    // executions. Proof-history growth analyzes other tables, so those plans
+    // survive and a small relation is then scanned. A few thousand untouched
+    // rows keep the generic plan on the primary key.
+    await f.db.admin.query(
+      `INSERT INTO "user" (id,name,"emailVerified") SELECT 'planner-session-'||i,'',false FROM generate_series(1,2000) i`,
+    );
+    await f.db.admin.query(
+      `INSERT INTO session(id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
+      SELECT 'planner-session-'||i,'planner-token-'||i,'planner-session-'||i,'web','2099-01-01',now(),'account:read',1,1,'pwd'
+      FROM generate_series(1,2000) i`,
+    );
+    await f.db.admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+      SELECT get_byte(uuid_send(id),10)*256+get_byte(uuid_send(id),11),id,'actor','active',gen_random_uuid()
+      FROM (SELECT gen_random_uuid() AS id FROM generate_series(1,2000)) seeded`,
+    );
+    await f.db.admin.query(
+      `INSERT INTO access.lifecycle_fence_receipt(route,account_id,receipt_id,minimum_authn_epoch,kind,transaction_id)
+      SELECT get_byte(uuid_send(id),10)*256+get_byte(uuid_send(id),11),id,gen_random_uuid(),1,'fence',gen_random_uuid()
+      FROM (SELECT gen_random_uuid() AS id FROM generate_series(1,2000)) seeded`,
+    );
+    await f.db.admin.query(
+      `INSERT INTO core.receipt(partition_no,principal_id,principal_kind,command_kind,idempotency_key,request_digest,epoch,"position",transaction_id,response)
+      SELECT partition.partition_no,gen_random_uuid(),'account','planner-consent','planner-'||i,decode(repeat('00',32),'hex'),1,i,gen_random_uuid(),'{}'
+      FROM core.partition partition
+      CROSS JOIN generate_series(1,2000) i
+      ORDER BY partition.partition_no
+      LIMIT 2000`,
+    );
+    for (const table of ['session', 'access.account', 'access.lifecycle_fence_receipt', 'core.receipt'])
+      await f.db.admin.query(`ANALYZE ${table}`);
     for (const axis of axes) await grow(f.db, axis, 1, 0, f.target.accountId);
     for (const axis of axes) {
       let session = '';

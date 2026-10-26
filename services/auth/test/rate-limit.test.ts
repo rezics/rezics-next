@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { betterAuth } from 'better-auth';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { nativeAttemptRequest, pruneAuthAttempts, withAuthTransport } from '../src/rate-limit.ts';
@@ -134,12 +134,17 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
     const before = fixture.deliveries.length;
     for (let i = 0; i < 3; i++) {
       expect(
-        (await fixture.request(fixture.first, '/recovery/start', { account_id: fixture.account.accountId })).status,
+        (await fixture.request(fixture.first, '/recovery/start', { email: 'attempt@example.test' })).status,
       ).toBe(200);
+      await fixture.drain();
     }
+    expect(fixture.deliveries).toHaveLength(before + 1);
     const effects = await fixture.effects();
-    expect((await fixture.request(fixture.second, '/recovery/start', { account_id: 'unknown' })).status).toBe(429);
-    expect(fixture.deliveries).toHaveLength(before + 3);
+    expect((await fixture.request(fixture.second, '/recovery/start', { email: 'unknown@example.test' })).status).toBe(
+      429,
+    );
+    await fixture.drain();
+    expect(fixture.deliveries).toHaveLength(before + 1);
     expect(await fixture.effects()).toEqual(effects);
     for (let i = 0; i < 3; i++) {
       expect(
@@ -192,9 +197,13 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
 
   test('successful recovery below budget retains native reset and epoch semantics', async () => {
     const password = 'correct horse battery staple';
-    expect(
-      (await fixture.request(fixture.first, '/recovery/start', { account_id: fixture.account.accountId })).status,
-    ).toBe(200);
+    await fixture.pool.query('DELETE FROM auth_attempt_counter WHERE key=$1', [fixture.mailKey()]);
+    const before = fixture.deliveries.length;
+    expect((await fixture.request(fixture.first, '/recovery/start', { email: 'attempt@example.test' })).status).toBe(
+      200,
+    );
+    await fixture.drain();
+    expect(fixture.deliveries).toHaveLength(before + 1);
     const epoch = fixture.account.authnEpoch;
     expect(
       (
@@ -302,7 +311,7 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
           '/signin/key',
           { account_id: fixture.account.accountId, assertion: 'invalid', client_id: 'attempt-web', scope: ['read'] },
         ],
-        ['/recovery/start', { account_id: fixture.account.accountId }],
+        ['/recovery/start', { email: 'attempt@example.test' }],
         [
           '/recovery/complete',
           {
@@ -378,9 +387,54 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
   });
 }
 
+function trackQueries(target: Pool) {
+  let inflight = 0;
+  const query = target.query.bind(target);
+  const connect = target.connect.bind(target) as {
+    (): Promise<PoolClient>;
+    (...args: unknown[]): void;
+  };
+  const tracked = (run: () => unknown) => {
+    inflight++;
+    try {
+      return Promise.resolve(run()).finally(() => {
+        inflight--;
+      });
+    } catch (error) {
+      inflight--;
+      throw error;
+    }
+  };
+  const hasCallback = (args: unknown[]) => typeof args.at(-1) === 'function';
+  const trackClient = (client: PoolClient) => {
+    if (Object.hasOwn(client, 'trackedQuery')) return client;
+    const clientQuery = client.query.bind(client);
+    Object.defineProperty(client, 'trackedQuery', { value: true });
+    client.query = ((...args: unknown[]) =>
+      hasCallback(args)
+        ? clientQuery(...(args as [string]))
+        : tracked(() => clientQuery(...(args as [string])))) as PoolClient['query'];
+    return client;
+  };
+  target.query = ((...args: unknown[]) =>
+    hasCallback(args) ? query(...(args as [string])) : tracked(() => query(...(args as [string])))) as Pool['query'];
+  target.connect = ((...args: unknown[]) =>
+    hasCallback(args) ? connect(...args) : connect().then(trackClient)) as Pool['connect'];
+  return async function settled() {
+    for (;;) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (inflight === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (inflight === 0) return;
+      }
+    }
+  };
+}
+
 export async function attemptFixture() {
   const db = testDatabase();
   const pool = new Pool({ connectionString: db.url });
+  const drain = trackQueries(pool);
   const account: AccessAccount = {
     accountId: 'attempt-person',
     kind: 'actor',
@@ -454,6 +508,12 @@ export async function attemptFixture() {
     second,
     account,
     deliveries,
+    drain,
+    mailKey() {
+      return createHmac('sha256', options.secret)
+        .update(JSON.stringify(['auth-recovery-mail-v1', account.accountId]))
+        .digest('hex');
+    },
     request,
     get peer() {
       return peer;

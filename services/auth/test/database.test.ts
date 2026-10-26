@@ -98,6 +98,7 @@ test(
             '--schema-only',
             '--no-owner',
             '--no-privileges',
+            '--exclude-schema=auth_dbos',
             local.href,
           ]),
         );
@@ -191,6 +192,7 @@ test(
             '--schema-only',
             '--no-owner',
             '--no-privileges',
+            '--exclude-schema=auth_dbos',
             database.url,
           ],
         ]);

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
@@ -33,6 +34,17 @@ const request = (path: string, body: unknown) =>
       body: JSON.stringify(body),
     }),
   );
+const start = async () => {
+  const mailKey = createHmac('sha256', 'persistent-completion-test-secret-at-least-32-bytes')
+    .update(JSON.stringify(['auth-recovery-mail-v1', 'human']))
+    .digest('hex');
+  await database.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
+  const previous = token;
+  expect((await request('/recovery/start', { email: 'human@completion.test' })).status).toBe(200);
+  const deadline = Date.now() + 5_000;
+  while (token === previous && Date.now() < deadline) await Bun.sleep(10);
+  expect(token).not.toBe(previous);
+};
 const complete = (newPassword = replacement, value = token) =>
   request('/recovery/complete', {
     account_id: 'human',
@@ -122,7 +134,7 @@ afterAll(async () => {
 });
 
 test('missing completion is unavailable and invalid Auth never invokes the trusted callback', async () => {
-  expect((await request('/recovery/start', { account_id: 'human' })).status).toBe(200);
+  await start();
   const saved = await snapshot();
   const missingCompletion = { ...options.trustedAccess };
   delete missingCompletion.completeRecovery;
@@ -184,7 +196,7 @@ test('cross-service failure retains committed witness and exact resume never mut
 });
 
 test('original witness expiry denies completion without maintenance or a renewed source', async () => {
-  expect((await request('/recovery/start', { account_id: 'human' })).status).toBe(200);
+  await start();
   await database.query(`UPDATE auth_recovery SET expires_at=statement_timestamp()+interval '2 seconds'
     WHERE account_id='human' AND consumed_operation IS NULL`);
   expect((await complete()).status).toBe(200);

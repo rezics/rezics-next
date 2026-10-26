@@ -47,8 +47,8 @@ async function sessionId(session: string) {
   return body.sessions.find((entry: { current: boolean }) => entry.current).id as string;
 }
 beforeAll(async () => {
-  const url = process.env.AUTH_TEST_DATABASE_URL ?? (fixture = testDatabase()).url;
-  database = new Pool({ connectionString: url });
+  fixture = testDatabase();
+  database = new Pool({ connectionString: fixture.url });
   const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: prefix };
   service = await createAuthService({
     database,
@@ -84,7 +84,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await database?.end();
   fixture?.close();
-});
+}, 30_000);
 
 test('consent read returns the client display name registered scopes and current consent', async () => {
   const path = `/consent/${external}`;

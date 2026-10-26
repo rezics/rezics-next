@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
@@ -18,10 +18,54 @@ let database: Pool;
 let options: AuthServiceOptions;
 let service: Awaited<ReturnType<typeof createAuthService>>;
 let token = '';
+let drain = async () => {};
 let reference = '';
 let failure: 'before' | 'after' | 'receipt' | null = null;
 let authorizations = 0;
 
+function trackQueries(target: Pool) {
+  let inflight = 0;
+  const query = target.query.bind(target);
+  const connect = target.connect.bind(target) as {
+    (): Promise<PoolClient>;
+    (...args: unknown[]): void;
+  };
+  const tracked = (run: () => unknown) => {
+    inflight++;
+    try {
+      return Promise.resolve(run()).finally(() => {
+        inflight--;
+      });
+    } catch (error) {
+      inflight--;
+      throw error;
+    }
+  };
+  const hasCallback = (args: unknown[]) => typeof args.at(-1) === 'function';
+  const trackClient = (client: PoolClient) => {
+    if (Object.hasOwn(client, 'trackedQuery')) return client;
+    const clientQuery = client.query.bind(client);
+    Object.defineProperty(client, 'trackedQuery', { value: true });
+    client.query = ((...args: unknown[]) =>
+      hasCallback(args)
+        ? clientQuery(...(args as [string]))
+        : tracked(() => clientQuery(...(args as [string])))) as PoolClient['query'];
+    return client;
+  };
+  target.query = ((...args: unknown[]) =>
+    hasCallback(args) ? query(...(args as [string])) : tracked(() => query(...(args as [string])))) as Pool['query'];
+  target.connect = ((...args: unknown[]) =>
+    hasCallback(args) ? connect(...args) : connect().then(trackClient)) as Pool['connect'];
+  return async function settled() {
+    for (;;) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (inflight === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (inflight === 0) return;
+      }
+    }
+  };
+}
 function request(path: string, body: unknown) {
   return service.handler(
     new Request(`${issuer}${path}`, {
@@ -32,7 +76,16 @@ function request(path: string, body: unknown) {
   );
 }
 async function start(id: string) {
-  expect((await request('/recovery/start', { account_id: id })).status).toBe(200);
+  const mailKey = createHmac('sha256', 'persistent-native-recovery-secret-32-bytes')
+    .update(JSON.stringify(['auth-recovery-mail-v1', id]))
+    .digest('hex');
+  await database.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
+  const previous = token;
+  expect((await request('/recovery/start', { email: `${id}@example.test` })).status).toBe(200);
+  const deadline = Date.now() + 5_000;
+  while (token === previous && Date.now() < deadline) await Bun.sleep(10);
+  expect(token).not.toBe(previous);
+  await drain();
   return token;
 }
 function complete(id: string, value: string, newPassword = replacement) {
@@ -46,6 +99,7 @@ beforeAll(async () => {
   fixture = testDatabase();
   // Every native adapter, callback proof read, and assertion uses this one pool.
   database = new Pool({ connectionString: fixture.url, max: 1, connectionTimeoutMillis: 2000 });
+  drain = trackQueries(database);
   await database.query(`CREATE TABLE test_access (id text PRIMARY KEY,epoch integer NOT NULL,state text NOT NULL,automated boolean DEFAULT false);
     CREATE TABLE test_barrier (operation text PRIMARY KEY,account_id text NOT NULL,reference text NOT NULL,epoch integer NOT NULL);
     INSERT INTO test_access SELECT id,7,'pending',id='robot' FROM unnest(ARRAY['success','failed','stale','absent','expired','robot','rollback','unbounded','racing','deadline']) id`);
@@ -248,7 +302,11 @@ test('stale/absent/expired native proofs, invalid receipts, automated humans and
   value = await start('expired');
   await database.query("UPDATE auth_recovery SET expires_at=now()-interval '1 second' WHERE account_id='expired'");
   expect((await complete('expired', value)).status).toBe(401);
-  expect((await request('/recovery/start', { account_id: 'robot' })).status).toBe(401);
+  const beforeRobot = token;
+  expect((await request('/recovery/start', { email: 'robot@example.test' })).status).toBe(200);
+  await drain();
+  expect(token).toBe(beforeRobot);
+  expect((await database.query("SELECT 1 FROM auth_recovery WHERE account_id='robot'")).rows).toHaveLength(0);
   value = await start('stale');
   failure = 'receipt';
   expect((await complete('stale', value)).status).toBe(401);

@@ -1,12 +1,17 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { derivedId, newId, partitionOf } from '../../kernel/src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../../kernel/test/support/growth.ts';
+import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount, type EffectAuthorization } from '../src/index.ts';
 
-const url = process.env.AUTH_TEST_DATABASE_URL;
-if (!url) throw new Error('AUTH_TEST_DATABASE_URL must name the migrated Auth test database');
+// One database. Each case used to leave its growth seed behind, and the shared
+// 1g tmpfs restarted Postgres for every later case.
+const owned = testDatabase();
+afterAll(() => {
+  owned.close();
+}, 30_000);
 const issuer = 'https://growth.auth.test';
 const secret = 'growth-only-persistent-secret-with-at-least-32-bytes';
 const password = 'correct horse battery staple';
@@ -20,7 +25,7 @@ const privateJwk = await exportJWK(key.privateKey);
 type Axis = 'A' | 'S' | 'C' | 'D' | 'K' | 'P' | 'J' | 'E' | 'O' | 'H' | 'V' | 'T';
 
 async function setup(name: string, axes: readonly Axis[]) {
-  const db = await openGrowthDatabase(url);
+  const db = await openGrowthDatabase(owned.url);
   const namespace = newId(route);
   const id = (name: string, placement = route) => derivedId(namespace, name, placement);
   const human = id('human');
@@ -42,34 +47,41 @@ async function setup(name: string, axes: readonly Axis[]) {
     return account;
   };
   const close = async () => {
-    for (const [table, column] of [
-      ['auth_session_opening', 'subject_account_id'],
-      ['auth_recovery', 'account_id'],
-      ['verification', 'value'],
-      ['auth_effect_receipt', 'account_id'],
-      ['auth_provisioning_receipt', 'account_id'],
-      ['auth_consent', 'account_id'],
-      ['auth_public_key', 'account_id'],
-      ['auth_key_assertion', 'account_id'],
-      ['session', '"userId"'],
-      ['account', '"userId"'],
-    ])
-      await db.admin.query(`DELETE FROM ${table} WHERE ${column}=ANY($1::text[])`, [owners]);
-    await db.admin.query('DELETE FROM auth_client_reduction WHERE client_id=ANY($1::text[])', [clients]);
-    await db.admin.query('DELETE FROM auth_client_coverage WHERE client_id=ANY($1::text[])', [clients]);
-    // Reclaim cleared child tuples before deleting their parents.
-    await db.admin.query('VACUUM (ANALYZE)');
-    await db.admin.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [owners]);
-    await db.admin.query('DELETE FROM auth_client WHERE client_id=ANY($1::text[])', [clients]);
-    await db.admin.query(
-      'UPDATE auth_signing_generation SET current_kid=NULL,generation=generation+1 WHERE current_kid=$1',
-      [signingKid],
-    );
-    await db.admin.query('DELETE FROM auth_signing_key WHERE kid=ANY($1::text[])', [signingKids]);
-    await db.admin.query('DELETE FROM auth_signing_key_archive WHERE kid=ANY($1::text[])', [signingKids]);
     await db.close();
   };
   try {
+    // Drop the previous case's seed. DELETE leaves the tmpfs full; TRUNCATE
+    // returns those files. WAL stays until a checkpoint, so recycle it before
+    // the next case writes.
+    await db.admin.query(
+      `UPDATE auth_signing_generation
+       SET current_kid=NULL, next_kid=NULL, retiring_kid=NULL, generation=generation+1
+       WHERE current_kid IS NOT NULL OR next_kid IS NOT NULL OR retiring_kid IS NOT NULL`,
+    );
+    await db.admin.query(`TRUNCATE TABLE
+      auth_session_opening, auth_recovery_establishment, auth_recovery, verification,
+      auth_effect_receipt, auth_provisioning_receipt, auth_consent, auth_public_key,
+      auth_key_assertion, session, account, auth_barrier_proof, auth_attempt_counter,
+      auth_client_reduction, auth_client_coverage, auth_client, auth_signing_key,
+      auth_signing_key_archive, "user"
+      RESTART IDENTITY CASCADE`);
+    await db.admin.query('CHECKPOINT');
+    // Sign-in resolves the client, its coverage and its reduction by primary key.
+    // A handful of live rows makes the planner scan those relations. Thousands of
+    // untouched rows at the start keep the seeks.
+    await db.admin.query(
+      `INSERT INTO auth_client (client_id,first_party,scopes)
+      SELECT 'planner-client-'||i,false,ARRAY['read'] FROM generate_series(1,2000) i`,
+    );
+    await db.admin.query(
+      `INSERT INTO auth_client_coverage (client_id,ready,ready_after)
+      SELECT 'planner-client-'||i,true,CURRENT_TIMESTAMP FROM generate_series(1,2000) i`,
+    );
+    await db.admin.query(
+      `INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party)
+      SELECT 'planner-client-'||i,'planner-reduction-'||i,ARRAY['read'],false FROM generate_series(1,2000) i`,
+    );
+    await db.admin.query('VACUUM (ANALYZE) auth_client, auth_client_coverage, auth_client_reduction');
     const service = await createAuthService({
       database: db.pool,
       issuer,
@@ -94,6 +106,17 @@ async function setup(name: string, axes: readonly Axis[]) {
             accountId,
             minimumAuthnEpoch: ++account.authnEpoch,
           };
+        },
+        async completeRecovery(reference) {
+          const witness = await service.internal.resolveRecoveryEstablishment(reference);
+          const account = accounts.get(human);
+          if (
+            !witness ||
+            !account ||
+            witness.accountId !== account.accountId ||
+            witness.minimumAuthnEpoch !== String(account.authnEpoch)
+          )
+            throw new Error('Completion denied');
         },
         async consumeAuthorization({ authorization, subjectAccountId, purpose, human: proof }) {
           const receipt = authorizations.get(authorization);
@@ -205,7 +228,13 @@ async function setup(name: string, axes: readonly Axis[]) {
         headers: operatorHeaders,
       }),
     );
-    await request('/recovery/start', { account_id: human });
+    const mailKey = createHmac('sha256', secret)
+      .update(JSON.stringify(['auth-recovery-mail-v1', human]))
+      .digest('hex');
+    await request('/recovery/start', { email: `${human}@example.test` });
+    const deliveryDeadline = Date.now() + 5_000;
+    while (!recoveryToken && Date.now() < deliveryDeadline) await Bun.sleep(10);
+    expect(recoveryToken).not.toBe('');
     const row = async (table: string, predicate: string, value: string): Promise<Row> =>
       (await db.admin.query(`SELECT * FROM ${table} WHERE ${predicate}=$1 LIMIT 1`, [value])).rows[0];
     const user = await row('"user"', 'id', human);
@@ -372,6 +401,7 @@ async function setup(name: string, axes: readonly Axis[]) {
       restoreSession,
       robotSession,
       recoveryToken,
+      mailKey,
     };
   } catch (error) {
     await close();
@@ -391,7 +421,8 @@ async function fixture(
   }
 }
 
-test(
+// One database. Concurrent cases grow it together and Postgres restarts.
+test.serial(
   'Session verification stays within its bound as S grows',
   () =>
     fixture('Session verification stays within its bound as S grows', ['A', 'S', 'C', 'D'], async (f) => {
@@ -405,7 +436,7 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Access token issuance stays within its bound as S grows',
   () =>
     fixture('Access token issuance stays within its bound as S grows', ['A', 'S', 'K'], async (f) => {
@@ -419,23 +450,28 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Password sign-in stays within its bound as A grows',
   () =>
     fixture('Password sign-in stays within its bound as A grows', ['A', 'S'], async (f) => {
       await f.check(async () => {
+        // Each sign-in inserts a session. The capacity trigger reads that owner's
+        // neighborhood, so the measured runs keep it empty through the uncaptured
+        // admin connection. Unrelated A and S stay in place.
+        await f.db.admin.query('DELETE FROM session WHERE "userId"=$1', [f.human]);
         expect(f.cookies(await f.signin())).toContain('session_token=');
       });
     }),
   timeout,
 );
 
-test(
+test.serial(
   'Public-key sign-in stays within its bound as J grows',
   () =>
     fixture('Public-key sign-in stays within its bound as J grows', ['A', 'S', 'P', 'J'], async (f) => {
       let attempt = 0;
       await f.check(async () => {
+        await f.db.admin.query('DELETE FROM session WHERE "userId"=$1', [f.human]);
         const now = Math.floor(Date.now() / 1000);
         const assertion = await new SignJWT({ jti: f.id(`assertion-${attempt++}`) })
           .setProtectedHeader({ alg: 'ES256', kid: f.credential.kid })
@@ -455,7 +491,7 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Clients and consent stays within its bound as A grows',
   () =>
     fixture('Clients and consent stays within its bound as A grows', ['A', 'S', 'C', 'D'], async (f) => {
@@ -467,7 +503,7 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Provisioning and owner creation stays within its bound as A grows',
   () =>
     fixture('Provisioning and owner creation stays within its bound as A grows', ['A', 'T'], async (f) => {
@@ -480,7 +516,7 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Authorized account effects stays within its bound as s grows',
   () =>
     fixture('Authorized account effects stays within its bound as s grows', ['A', 'P', 'E', 'O'], async (f) => {
@@ -505,7 +541,7 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Session erasure stays within its bound as s grows',
   () =>
     fixture('Session erasure stays within its bound as s grows', ['A', 'S'], async (f) => {
@@ -521,17 +557,30 @@ test(
   timeout,
 );
 
-test(
+test.serial(
   'Recovery start stays within its bound as V grows',
   () =>
     fixture('Recovery start stays within its bound as V grows', ['A', 'H', 'V'], async (f) => {
       // Fix successful delivery; growing expired verifications must not invoke fallback cleanup.
-      await f.check(() => f.request('/recovery/start', { account_id: f.human }));
+      await f.check(async () => {
+        await f.db.admin.query('DELETE FROM auth_attempt_counter WHERE key=$1', [f.mailKey]);
+        await f.db.admin.query('DELETE FROM auth_recovery WHERE account_id=$1', [f.human]);
+        await f.db.admin.query('DELETE FROM verification WHERE value=$1', [f.human]);
+        await f.request('/recovery/start', { email: `${f.human}@example.test` });
+        const deadline = Date.now() + 5_000;
+        for (;;) {
+          const stored = (await f.db.admin.query('SELECT 1 FROM auth_recovery WHERE account_id=$1 LIMIT 1', [f.human]))
+            .rows[0];
+          if (stored) return;
+          if (Date.now() >= deadline) throw new Error('recovery delivery did not commit');
+          await Bun.sleep(10);
+        }
+      });
     }),
   timeout,
 );
 
-test(
+test.serial(
   'Recovery completion stays within its bound as V grows',
   () =>
     fixture('Recovery completion stays within its bound as V grows', ['A', 'V'], async (f) => {

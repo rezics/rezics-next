@@ -36,10 +36,24 @@ test('native account erasure preserves authorization, invalidation order and unr
     let outage = false;
     let inspectRead = false;
     const originalQuery = pool.query.bind(pool);
+    let inflight = 0;
     pool.query = ((...args: Parameters<Pool['query']>) => {
       if (args[0] === 'DELETE FROM "user" WHERE id=$1') events.push('native-delete');
-      return originalQuery(...args);
+      if (typeof args.at(-1) === 'function') return originalQuery(...args);
+      inflight++;
+      return Promise.resolve(originalQuery(...args)).finally(() => {
+        inflight--;
+      });
     }) as Pool['query'];
+    const drain = async () => {
+      for (;;) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (inflight === 0) {
+          await new Promise((resolve) => setImmediate(resolve));
+          if (inflight === 0) return;
+        }
+      }
+    };
     const key = await generateKeyPair('ES256', { extractable: true });
     const privateJwk = { ...(await exportJWK(key.privateKey)), kid: 'erase-signing', alg: 'ES256' };
     const publicJwk = { ...(await exportJWK(key.publicKey)), kid: 'erase-key', alg: 'ES256' };
@@ -96,6 +110,9 @@ test('native account erasure preserves authorization, invalidation order and unr
         },
         async authorizeRecovery() {
           throw new Error('Deleted accounts cannot authorize recovery');
+        },
+        async completeRecovery() {
+          throw new Error('Deleted accounts cannot complete recovery');
         },
         async consumeAuthorization(input): Promise<EffectAuthorization> {
           const subject = accounts.get(input.subjectAccountId)!;
@@ -176,7 +193,10 @@ test('native account erasure preserves authorization, invalidation order and unr
         })
       ).status,
     ).toBe(200);
-    expect((await request('/recovery/start', { account_id: subject.accountId })).status).toBe(200);
+    expect((await request('/recovery/start', { email: 'erase-human@example.test' })).status).toBe(200);
+    const deliveryDeadline = Date.now() + 5_000;
+    while (!delivered.has(subject.accountId) && Date.now() < deliveryDeadline) await Bun.sleep(10);
+    await drain();
     const recoveryToken = delivered.get(subject.accountId)!;
     expect(recoveryToken).toBeString();
     const opening = await service.internal.openAutomatedSession({
@@ -251,12 +271,19 @@ test('native account erasure preserves authorization, invalidation order and unr
     await service.internal.eraseAccount(subject.accountId);
     inspectRead = false;
     expect(events).toEqual(['access-invalidation-committed', 'access-read', 'native-delete']);
-    expect((await snapshot(subject.accountId)).every(({ rows }) => rows.length === 0)).toBe(true);
+    const erased = await snapshot(subject.accountId);
+    expect(erased.find(({ table }) => table === 'auth_consent')!.rows).toEqual(
+      selected.find(({ table }) => table === 'auth_consent')!.rows,
+    );
+    expect(erased.every(({ table, rows }) => table === 'auth_consent' || rows.length === 0)).toBe(true);
     const retained = baseline.map(({ table, rows }, index) => ({
       table,
-      rows: rows.filter(
-        (row) => !selected[index]!.rows.some((target) => JSON.stringify(row) === JSON.stringify(target)),
-      ),
+      rows:
+        table === 'auth_consent'
+          ? rows
+          : rows.filter(
+              (row) => !selected[index]!.rows.some((target) => JSON.stringify(row) === JSON.stringify(target)),
+            ),
     }));
     expect(await snapshot()).toEqual(retained);
     // Verification values and receipts have no owner FK: preserve the current semantics.
@@ -294,7 +321,13 @@ test('native account erasure preserves authorization, invalidation order and unr
         })
       ).status,
     ).toBe(401);
-    expect((await request('/recovery/start', { account_id: subject.accountId })).status).toBe(401);
+    const deliveredBefore = delivered.size;
+    expect((await request('/recovery/start', { email: 'erase-human@example.test' })).status).toBe(200);
+    await drain();
+    expect(delivered.size).toBe(deliveredBefore);
+    expect(
+      (await pool.query('SELECT proof_hash FROM auth_recovery WHERE account_id=$1', [subject.accountId])).rows,
+    ).toEqual([]);
     expect(
       (
         await request('/recovery/complete', {
@@ -335,11 +368,14 @@ test('native account erasure preserves authorization, invalidation order and unr
         headers: new Headers({ cookie }),
       }),
     ).rejects.toThrow('Authentication denied');
-    expect((await snapshot(automated.accountId)).every(({ rows }) => rows.length === 0)).toBe(true);
+    expect(
+      (await snapshot(automated.accountId)).every(({ table, rows }) => table === 'auth_consent' || rows.length === 0),
+    ).toBe(true);
     expect(await snapshot()).toEqual(
       retained.map(({ table, rows }, index) => ({
         table,
-        rows: rows.filter((row) => row[references[index]![1]] !== automated.accountId),
+        rows:
+          table === 'auth_consent' ? rows : rows.filter((row) => row[references[index]![1]] !== automated.accountId),
       })),
     );
   } finally {

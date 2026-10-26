@@ -13,8 +13,9 @@ const signingKey = {
 
 for (const axis of ['sessions', 'clients', 'consents'] as const) {
   test(`consent read and sessions list stay bounded as unrelated ${axis} grow`, async () => {
-    let fixture: ReturnType<typeof testDatabase> | undefined;
-    const url = process.env.AUTH_TEST_DATABASE_URL ?? (fixture = testDatabase()).url;
+    // The check database is shared by parallel files. Signing and page reads need a private server.
+    const fixture = testDatabase();
+    const url = fixture.url;
     const db = await openGrowthDatabase(url);
     try {
       const prefix = randomUUID();
@@ -85,6 +86,44 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
         SELECT $1||'-own-'||i,$1||'-token-'||i,$2,$3,now()-i*interval '1 second',now(),now()+interval '1 day','read',1,extract(epoch FROM now())::integer,'pwd'
         FROM generate_series(1,63) i`,
         [prefix, person.accountId, external],
+      );
+      // Consent and session reads are primary-key seeks. A 64-row session neighborhood
+      // is still small enough for a sequential scan, which exceeds the absolute row cap
+      // on axes that do not themselves grow sessions. Seed every relation those reads
+      // touch so the planner uses the indexes before the first sample.
+      await db.admin.query(
+        `INSERT INTO "user" (id,name,"emailVerified","createdAt","updatedAt")
+        SELECT $1||'-planner-'||i,'',false,now(),now() FROM generate_series(1,2000) i`,
+        [prefix],
+      );
+      await db.admin.query(
+        `INSERT INTO session (id,token,"userId","clientId","createdAt","updatedAt","expiresAt","grantedScope","authnEpoch","authTime","authMethods")
+        SELECT $1||'-planner-'||i,$1||'-planner-'||i,$1||'-planner-'||i,$2,now(),now(),now()+interval '1 day','read',1,extract(epoch FROM now())::integer,'pwd'
+        FROM generate_series(1,2000) i`,
+        [prefix, web],
+      );
+      await db.admin.query(
+        `INSERT INTO auth_client (client_id,first_party,scopes,display_name)
+        SELECT $1||'-planner-client-'||i,false,ARRAY['read'],'Planner' FROM generate_series(1,2000) i`,
+        [prefix],
+      );
+      await db.admin.query(
+        `INSERT INTO auth_client_coverage (client_id,ready)
+        SELECT $1||'-planner-client-'||i,true FROM generate_series(1,2000) i`,
+        [prefix],
+      );
+      await db.admin.query(
+        `INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party)
+        SELECT $1||'-planner-client-'||i,$1||'-planner-client-'||i,ARRAY['read'],false FROM generate_series(1,2000) i`,
+        [prefix],
+      );
+      await db.admin.query(
+        `INSERT INTO auth_consent (account_id,client_id,scopes)
+        SELECT $1||'-planner-'||i,$1||'-planner-client-'||i,ARRAY['read'] FROM generate_series(1,2000) i`,
+        [prefix],
+      );
+      await db.admin.query(
+        'VACUUM (ANALYZE) "user", session, auth_client, auth_client_coverage, auth_client_reduction, auth_consent',
       );
       const reports = [];
       for (const path of [`/consent/${external}`, '/sessions']) {
@@ -181,7 +220,7 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
       await Bun.write(`.temp/pages-reads-${axis}-growth.json`, JSON.stringify(reports, null, 2));
     } finally {
       await db.close();
-      fixture?.close();
+      fixture.close();
     }
   }, 120000);
 }

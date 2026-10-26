@@ -24,7 +24,8 @@ const pending = (automated = false) => ({
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
 });
 beforeAll(async () => {
-  pool = new Pool({ connectionString: process.env.AUTH_TEST_DATABASE_URL ?? (fixture = testDatabase()).url });
+  fixture = testDatabase();
+  pool = new Pool({ connectionString: fixture.url });
   const key = await generateKeyPair('ES256', { extractable: true });
   const privateKey = { ...(await exportJWK(key.privateKey)), kid: 'pending-reader-key', alg: 'ES256' };
   options = {
@@ -38,7 +39,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool?.end();
   fixture?.close();
-});
+}, 30_000);
 async function provision(ports: TrustedAccessPorts, automated: boolean) {
   const service = await createAuthService({ ...options, trustedAccess: ports });
   return automated

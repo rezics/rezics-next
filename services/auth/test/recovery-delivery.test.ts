@@ -1,18 +1,67 @@
 import { expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { recoveryDelivery } from '../src/recovery-delivery.ts';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
+const mailKey = (accountId: string) =>
+  createHmac('sha256', 'persistent-recovery-delivery-secret-32-bytes')
+    .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+    .digest('hex');
+
+function trackQueries(target: Pool) {
+  let inflight = 0;
+  const query = target.query.bind(target);
+  const connect = target.connect.bind(target) as {
+    (): Promise<PoolClient>;
+    (...args: unknown[]): void;
+  };
+  const tracked = (run: () => unknown) => {
+    inflight++;
+    try {
+      return Promise.resolve(run()).finally(() => {
+        inflight--;
+      });
+    } catch (error) {
+      inflight--;
+      throw error;
+    }
+  };
+  const hasCallback = (args: unknown[]) => typeof args.at(-1) === 'function';
+  const trackClient = (client: PoolClient) => {
+    if (Object.hasOwn(client, 'trackedQuery')) return client;
+    const clientQuery = client.query.bind(client);
+    Object.defineProperty(client, 'trackedQuery', { value: true });
+    client.query = ((...args: unknown[]) =>
+      hasCallback(args)
+        ? clientQuery(...(args as [string]))
+        : tracked(() => clientQuery(...(args as [string])))) as PoolClient['query'];
+    return client;
+  };
+  target.query = ((...args: unknown[]) =>
+    hasCallback(args) ? query(...(args as [string])) : tracked(() => query(...(args as [string])))) as Pool['query'];
+  target.connect = ((...args: unknown[]) =>
+    hasCallback(args) ? connect(...args) : connect().then(trackClient)) as Pool['connect'];
+  return async function settled() {
+    for (;;) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (inflight === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (inflight === 0) return;
+      }
+    }
+  };
+}
 
 test('native failed mail deletes only its newly committed verification and proof; earlier and concurrent recovery remain valid', async () => {
   const fixture = testDatabase();
   const database = new Pool({ connectionString: fixture.url, max: 2 });
+  const drain = trackQueries(database);
   try {
     const issuer = 'https://delivery.auth.test';
     const password = 'original sufficiently long password';
@@ -45,6 +94,7 @@ test('native failed mail deletes only its newly committed verification and proof
     });
     const delivered = new Map<string, string>();
     let authorizations = 0;
+    let recoveryReceipt: { accountId: string; receiptId: string; minimumAuthnEpoch: number } | undefined;
     const service = await createAuthService({
       database,
       issuer,
@@ -60,7 +110,23 @@ test('native failed mail deletes only its newly committed verification and proof
           const account = accounts.get(input.accountId)!;
           expect(account.authnEpoch).toBe(input.proofEpoch);
           account.authnEpoch++;
-          return { accountId: input.accountId, receiptId: input.operationKey!, minimumAuthnEpoch: account.authnEpoch };
+          recoveryReceipt = {
+            accountId: input.accountId,
+            receiptId: input.operationKey!,
+            minimumAuthnEpoch: account.authnEpoch,
+          };
+          return recoveryReceipt;
+        },
+        async completeRecovery(reference) {
+          const witness = await service.internal.resolveRecoveryEstablishment(reference);
+          if (
+            !witness ||
+            !recoveryReceipt ||
+            witness.accountId !== recoveryReceipt.accountId ||
+            witness.receiptId !== recoveryReceipt.receiptId ||
+            witness.authnEpoch !== recoveryReceipt.minimumAuthnEpoch
+          )
+            throw new Error('Invalid completion');
         },
       },
       recoveryDelivery: {
@@ -112,15 +178,19 @@ test('native failed mail deletes only its newly committed verification and proof
       });
       account.state = 'active';
     }
-    expect((await request('/recovery/start', { account_id: 'owner' })).status).toBe(200);
+    expect((await request('/recovery/start', { email: 'owner@example.test' })).status).toBe(200);
+    await drain();
     const earlier = delivered.get('owner')!;
+    expect(earlier).toBeString();
     const before = (await database.query('SELECT id,password,"updatedAt" FROM account ORDER BY id')).rows;
     fail = true;
-    const failing = request('/recovery/start', { account_id: 'owner' });
+    await database.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey('owner')]);
+    const failing = request('/recovery/start', { email: 'owner@example.test' });
     await waiting;
-    expect((await request('/recovery/start', { account_id: 'independent' })).status).toBe(200);
+    expect((await request('/recovery/start', { email: 'independent@example.test' })).status).toBe(200);
     release();
     expect((await failing).status).toBe(200);
+    await drain();
     expect((await database.query('SELECT id FROM verification WHERE id=$1', [failedId])).rows).toHaveLength(0);
     expect(
       (await database.query('SELECT proof_hash FROM auth_recovery WHERE proof_hash=$1', [hash(failedToken)])).rows,

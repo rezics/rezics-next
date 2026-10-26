@@ -99,28 +99,51 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
       const counterKey = createHmac('sha256', 'persistent-growth-delivery-secret-32-bytes')
         .update(JSON.stringify([issuer, '192.0.2.7|/request-password-reset']))
         .digest('hex');
+      const mailKey = createHmac('sha256', 'persistent-growth-delivery-secret-32-bytes')
+        .update(JSON.stringify(['auth-recovery-mail-v1', account.accountId]))
+        .digest('hex');
       const operation = async () => {
         sourceCommitted = false;
+        nativeId = '';
+        proofHash = '';
         // Fix an admitted bucket state without changing native policy or its SQL.
         await db.admin.query(
           `UPDATE auth_attempt_counter SET last_request=now()-interval '1 day', count=1 WHERE key=$1`,
           [counterKey],
         );
+        await db.admin.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
         const response = await withAuthTransport('192.0.2.7', () =>
           service.handler(
             new Request(`${issuer}/recovery/start`, {
               method: 'POST',
               headers: { origin: issuer, 'content-type': 'application/json' },
-              body: JSON.stringify({ account_id: account.accountId }),
+              body: JSON.stringify({ email: 'selected@example.test' }),
             }),
           ),
         );
         expect(response.status).toBe(200);
+        const deadline = Date.now() + 5_000;
+        for (;;) {
+          const cooled =
+            sourceCommitted &&
+            nativeId !== '' &&
+            proofHash !== '' &&
+            (await db.admin.query('SELECT id FROM verification WHERE id=$1', [nativeId])).rows.length === 0 &&
+            (await db.admin.query('SELECT proof_hash FROM auth_recovery WHERE proof_hash=$1', [proofHash])).rows
+              .length === 0 &&
+            (await db.admin.query('SELECT 1 FROM auth_attempt_counter WHERE key=$1', [mailKey])).rows.length === 0;
+          if (cooled) break;
+          if (Date.now() >= deadline) break;
+          await Bun.sleep(10);
+        }
         expect(sourceCommitted).toBe(true);
         expect((await db.admin.query('SELECT id FROM verification WHERE id=$1', [nativeId])).rows).toHaveLength(0);
         expect(
           (await db.admin.query('SELECT proof_hash FROM auth_recovery WHERE proof_hash=$1', [proofHash])).rows,
         ).toHaveLength(0);
+        expect((await db.admin.query('SELECT 1 FROM auth_attempt_counter WHERE key=$1', [mailKey])).rows).toHaveLength(
+          0,
+        );
       };
       const report = await checkGrowth(db, {
         name: 'full native recovery failed delivery',
@@ -183,12 +206,16 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
       }
       const actual = await capture(db, operation);
       const deletes = actual.capture.statements.filter((sql) => /^DELETE FROM /i.test(sql));
-      expect(deletes).toHaveLength(2);
+      expect(deletes).toHaveLength(3);
       expect(deletes.some((sql) => /DELETE FROM verification WHERE id=\$1/.test(sql))).toBe(true);
       expect(deletes.some((sql) => /DELETE FROM auth_recovery WHERE proof_hash=\$1/.test(sql))).toBe(true);
+      expect(deletes.some((sql) => /DELETE FROM auth_attempt_counter WHERE key=\$1/.test(sql))).toBe(true);
       const plans = JSON.stringify(actual.capture.plans);
-      for (const index of ['verification_pkey', 'auth_recovery_pkey', 'user_pkey'])
+      // Email start resolves the owner through user_email_key. The credential,
+      // proof and verification deletes remain primary-key seeks.
+      for (const index of ['verification_pkey', 'auth_recovery_pkey', 'user_email_key']) {
         expect(plans.includes(`"Index Name":"${index}"`)).toBe(true);
+      }
       expect(plans).toContain('"Conflict Arbiter Indexes":["auth_attempt_counter_pkey"]');
       expect(costOf(actual.capture).rows).toBeLessThanOrEqual(30);
       expect(

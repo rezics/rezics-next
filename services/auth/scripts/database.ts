@@ -97,6 +97,12 @@ export function testDatabase(): TestDatabase {
     'synchronous_commit=off',
     '-c',
     'full_page_writes=off',
+    // The data directory is a 1g tmpfs. Default max_wal_size is 1GB, so WAL from
+    // a shared growth database fills the filesystem before checkpoint_timeout.
+    '-c',
+    'max_wal_size=64MB',
+    '-c',
+    'min_wal_size=32MB',
   ]);
   let closed = false;
   const close = () => {

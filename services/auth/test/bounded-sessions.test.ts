@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, decodeJwt, SignJWT } from 'jose';
@@ -527,7 +528,18 @@ if (process.env.NODE_ENV !== 'production') {
     expect((await request('/session', undefined, fresh)).status).toBe(401);
     await login();
     for (let i = 0; i < 63; i++) await insertNative(pool, 'effects-human', true);
-    expect((await request('/recovery/start', { account_id: 'effects-human' })).status).toBe(200);
+    const startRecovery = async () => {
+      const key = createHmac('sha256', secret)
+        .update(JSON.stringify(['auth-recovery-mail-v1', 'effects-human']))
+        .digest('hex');
+      await pool.query('DELETE FROM auth_attempt_counter WHERE key=$1', [key]);
+      const before = delivered.length;
+      expect((await request('/recovery/start', { email: 'effects@bounded.test' })).status).toBe(200);
+      const deadline = Date.now() + 5_000;
+      while (delivered.length === before && Date.now() < deadline) await Bun.sleep(10);
+      expect(delivered.length).toBe(before + 1);
+    };
+    await startRecovery();
     failBarrier = true;
     expect(
       (
@@ -540,7 +552,7 @@ if (process.env.NODE_ENV !== 'production') {
     ).toBe(503);
     expect(await count('effects-human')).toBe(64);
     failBarrier = false;
-    expect((await request('/recovery/start', { account_id: 'effects-human' })).status).toBe(200);
+    await startRecovery();
     expect(
       (
         await request('/recovery/complete', {

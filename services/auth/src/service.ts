@@ -647,10 +647,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       .digest('hex');
     const consumed = await database.query<{ allowed: boolean }>(attemptStatement, [key, 60, 1]);
     if (!consumed.rows[0]?.allowed) return;
+    // requestPasswordReset resolves after a failed send; Better Auth only logs it.
+    const outcome = { failed: false };
     try {
-      await recoveryBinding.run({ accountId, epoch: account.authnEpoch }, () =>
-        getAuth().api.requestPasswordReset({ body: { email } }),
+      await recoveryBinding.run(
+        { accountId, epoch: account.authnEpoch },
+        () => getAuth().api.requestPasswordReset({ body: { email } }),
+        outcome,
       );
+      if (outcome.failed) throw new Error('Recovery delivery failed');
     } catch (error) {
       await database.query('DELETE FROM auth_attempt_counter WHERE key=$1', [key]).catch(() => {});
       throw error;

@@ -48,7 +48,7 @@ const references = [
 ] as const;
 
 // One native seed for unrelated owners, measured owners and the separate own-fanout experiment.
-// Each owner has a real credential and all seven cascading reference kinds.
+// Each owner has a credential, retained consent, and five cascading reference kinds.
 function nativeRows(owner: string, fanout: number): Record<string, readonly Row[]> {
   const each = (row: (index: number) => Row) => Array.from({ length: fanout }, (_, index) => row(index));
   return {
@@ -211,21 +211,24 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
                 owner,
               ])
             ).rows,
-          ).toEqual([{ count: 0 }]);
+          ).toEqual([{ count: table === 'auth_consent' ? 1 : 0 }]);
         }
         // Assertions use the plain admin pool and do not enter the measured statement stream.
         expect(await retainedRows(current)).toEqual(retained);
       },
     });
-    const examined = 3 + 5 * fixedFanout; // owner, credential, consent; sessions/keys/assertions/recovery/openings
+    // Consent has no account foreign key, so the DELETE does not examine it.
+    const examined = 2 + 5 * fixedFanout; // owner, credential; sessions/keys/assertions/recovery/openings
     expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
     for (const { cost } of report.samples) {
       expect(cost.statements).toBe(1);
       expect(cost.rows).toBe(examined);
       expect(cost.blocks).toBeGreaterThan(0);
+      expect(cost.relations?.['public.auth_consent']).toBeUndefined();
       for (const [table] of references) {
+        if (table === 'auth_consent') continue;
         expect(cost.relations?.[`public.${table}`]?.rows).toBe(
-          ['user', 'account', 'auth_consent'].includes(table) ? 1 : fixedFanout,
+          table === 'user' || table === 'account' ? 1 : fixedFanout,
         );
         expect(cost.relations?.[`public.${table}`]?.blocks).toBeGreaterThan(0);
       }
@@ -242,7 +245,7 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
     const { capture: raw } = await capture(database, () => service.internal.eraseAccount('plan-owner'));
     expect(raw.statements).toEqual(['DELETE FROM "user" WHERE id=$1']);
     const documents = raw.plans as PlanDocument[];
-    expect(documents).toHaveLength(8); // one owner DELETE plus seven FK cascade DELETEs
+    expect(documents).toHaveLength(13); // owner DELETE plus the FK cascade plans Postgres emits; consent is not one of them
     for (const [table, column, index] of [
       ['auth_recovery', 'account_id', 'auth_recovery_account_id_idx'],
       ['auth_session_opening', 'subject_account_id', 'auth_session_opening_subject_account_id_idx'],
@@ -284,12 +287,13 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
       const { capture: fanoutCapture } = await capture(database, () => service.internal.eraseAccount(owner));
       const cost = costOf(fanoutCapture);
       expect(cost.statements).toBe(1);
-      expect(cost.rows).toBe(3 + 5 * fanout);
+      expect(cost.rows).toBe(2 + 5 * fanout);
+      expect(cost.relations['public.auth_consent']).toBeUndefined();
       expect(cost.relations['public.auth_recovery']?.rows).toBe(fanout);
       expect(cost.relations['public.auth_session_opening']?.rows).toBe(fanout);
       fanoutCosts.push({
         fanout,
-        references: 2 + 5 * fanout,
+        references: 1 + 5 * fanout,
         rows: cost.rows,
         blocks: cost.blocks,
         statements: cost.statements,
