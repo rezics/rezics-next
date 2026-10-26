@@ -159,7 +159,14 @@ let f: Awaited<ReturnType<typeof fixture>>;
 let human: string;
 let subject: string;
 let headers: Headers;
-beforeAll(async () => {
+// A hook or test that times out leaves its promise running; afterAll stops and awaits both so no command outlives the pool.
+let seeding: Promise<unknown> = Promise.resolve();
+let running: Promise<unknown> = Promise.resolve();
+let closing = false;
+const assertOpen = () => {
+  if (closing) throw new Error('The fixture is closing');
+};
+async function seed() {
   db = await openGrowthDatabase();
   f = await fixture(db.pool, db.openPool(), db.url);
   human = await f.person();
@@ -177,7 +184,7 @@ beforeAll(async () => {
     [routeOf(human)!, ids],
   );
   // Stay beyond tiny-table planner crossovers at every measured scale.
-  for (let index = 0; index < 512; index++) {
+  for (let index = 0; index < 512 && !closing; index++) {
     const opening = await f.opening(headers, human, subject);
     await f.operators.consumeOpening(await f.context(headers), {
       operatorAccountId: human,
@@ -187,17 +194,24 @@ beforeAll(async () => {
       key: f.key(),
     });
   }
-}, 60_000);
-afterAll(async () => db?.close());
+}
+// The history is fixed work of 512 native openings; the budget covers a host under full check load.
+beforeAll(() => (seeding = seed()), 180_000);
+afterAll(async () => {
+  closing = true;
+  await Promise.allSettled([seeding, running]);
+  await db?.close();
+});
 
 test('native adapter to command to Auth session remains bounded across opening history, invalid locators and replay', async () => {
-  const report = await checkGrowth(db, {
+  const report = await (running = checkGrowth(db, {
     name: 'operator session capability',
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
     warmups: 1,
     grow: async (database, scale, previous) => {
       for (let index = previous * 4; index < scale * 4; index++) {
+        assertOpen();
         const opening = await f.opening(headers, human, subject);
         await f.operators.consumeOpening(await f.context(headers), {
           operatorAccountId: human,
@@ -231,6 +245,7 @@ test('native adapter to command to Auth session remains bounded across opening h
         await database.admin.query(`VACUUM (ANALYZE) ${table}`);
     },
     operation: async () => {
+      assertOpen();
       const opening = await f.opening(headers, human, subject);
       const absent = f.capability.createOpeningReference({
         operatorAccountId: human,
@@ -252,7 +267,7 @@ test('native adapter to command to Auth session remains bounded across opening h
       await expect(f.open(opening.reference, subject, headers)).rejects.toThrow();
       expect((await f.request('/signout', {}, robotHeaders)).status).toBe(200);
     },
-  });
+  }));
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
   for (const sample of report.samples) {
     expect(sample.cost.relations?.['access.operator_opening_receipt']?.rows).toBeGreaterThan(0);
