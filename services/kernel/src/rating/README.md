@@ -132,14 +132,18 @@ NULL cursor and limit. Leaving an `adding` Realm with no cursor deletes it immed
 starts with a NULL cursor and its former add cursor as the limit. Leaving an uncounted Realm deletes it.
 Joining during removal sets `rejoin`; leaving during removal clears it. On completion, removal deletes the row
 and promotes one waiting Realm, or, when `rejoin` is set, restarts it as `adding` with no cursor or limit.
-`finishVoterRealmRemoval` is the completion operation for the future pager to call in its final page's command.
+`finishVoterRealmRemoval` is called by the pager in its final page command.
 
 Vote writes read at most 100 non-uncounted membership rows in their own transaction. Their events list Global,
 every `counted` Realm, `adding` Realms only for keys at or before their cursor, and `removing` Realms only for
 keys in `(cursor, limit]`. Keys are ordered by `(question_id, target_id)`. A NULL add cursor means no keys have
 been applied; a NULL removal cursor or limit means no lower or upper bound respectively. These bounds preserve
-exactly the applied prefix when a member leaves during adding. This stage does not page votes: adding rows keep
-a NULL cursor and removing rows retain their range until paging applies it.
+exactly the applied prefix when a member leaves during adding. The pager reads at most 100 current votes by
+`(question_id, target_id)` keyset in the voter's partition. Each active transition has a stable transition id used
+as its DBOS workflow id; the voter Realm cursor is the page checkpoint. Adding advances from its applied prefix,
+while removing reads only its remaining range through the saved limit. Finished removals either restart as adding
+with a fresh transition id or delete the row and promote the earliest waiting Realm. `rating.population_pending` on
+the Realm's route counts active jobs, and aggregate reads report `updating` while that count is positive.
 
 All membership decisions, paging and vote changes must serialize in the voter's partition. The voter's events
 reach the aggregate effect in partition order; paging must apply its pages in that same stream so each vote
@@ -149,3 +153,13 @@ cannot resurrect a membership. Their command emits `com.rezics.rating.voter-real
 Membership changes write at most two membership rows: the affected Realm and one promotion. Capped and waiting
 partial indexes bound the membership read and promotion independently of other voters and the waiting set's
 size. Vote writes add at most 100 membership rows to their existing bounded reads.
+
+## Cost
+
+### Segment page
+
+- Touches: at most 100 vote rows by keyset in the voter's partition and one `voter_realm` row; the aggregate effect
+  groups the page into at most 100 target partitions and uses one command per partition.
+- Bound: 100 votes per page.
+- Growth check: `test/rating/growth-segment-job.test.ts`, test "segment page has constant rows and statements as voter
+  votes grow", at scales `[256, 1024, 4096]`.

@@ -17,6 +17,7 @@ import readQuestionScale from './question-scale-read.sql';
 
 const VOTE_CHANGED = 'com.rezics.rating.vote.changed.v1';
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
+const SEGMENT_PAGE = 'com.rezics.rating.segment.page.v1';
 
 export type RatingChange = {
   voterId: string;
@@ -37,6 +38,7 @@ export type RatingAggregate = {
   sum: bigint;
   histogram: bigint[];
   appliedAt: string | null;
+  updating: boolean;
 };
 
 export type PopulationVoter = {
@@ -240,9 +242,47 @@ export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCoun
 export function createRatingAggregateEffect(pool: Pool, ratingCounter: RatingCounter): Effect {
   return {
     name: 'rating_aggregate',
-    types: [VOTE_CHANGED],
-    run: (event) => applyRatingVoteEvent(pool, ratingCounter, event),
+    types: [VOTE_CHANGED, SEGMENT_PAGE],
+    async run(event) {
+      if (event.type === SEGMENT_PAGE) await applyRatingSegmentPageEvent(pool, ratingCounter, event);
+      else await applyRatingVoteEvent(pool, ratingCounter, event);
+    },
   };
+}
+
+/** Apply one voter Realm page through the same grouped component writer as ordinary vote events. */
+export async function applyRatingSegmentPageEvent(
+  pool: Pool,
+  ratingCounter: RatingCounter,
+  event: CloudEvent,
+): Promise<void> {
+  if (
+    event.type !== SEGMENT_PAGE ||
+    !Value.Check(RATING_EVENTS[SEGMENT_PAGE], event.data) ||
+    !Number.isFinite(Date.parse(event.time))
+  )
+    throw new TypeError('Invalid rating segment page event');
+  const data = event.data as {
+    voterId: string;
+    realmId: string;
+    direction: 'adding' | 'removing';
+    votes: Array<{ questionId: string; targetId: string; units: number | null; revision: number }>;
+  };
+  if (data.votes.length === 0) return;
+  const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, event.time));
+  await applyRatingChanges(
+    pool,
+    data.votes.map((vote) => ({
+      voterId: data.voterId,
+      countingKey,
+      questionId: vote.questionId,
+      populationId: data.realmId,
+      targetId: vote.targetId,
+      revision: vote.revision,
+      at: event.time,
+      ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
+    })),
+  );
 }
 
 /** Sum at most sixteen shards. A missing question returns null; a question without votes returns zero components. */
@@ -255,6 +295,7 @@ export async function readAggregate(
     throw new TypeError('Invalid rating aggregate address');
   const rows = await readAggregateSql.run(client, {
     route,
+    population_route: routeOf(input.populationId)!,
     question_id: input.questionId,
     population_id: input.populationId,
     target_id: input.targetId,
@@ -276,7 +317,7 @@ export async function readAggregate(
     if (row.appliedAt !== null && (appliedAt === null || Date.parse(row.appliedAt) > Date.parse(appliedAt)))
       appliedAt = row.appliedAt;
   }
-  return { count, sum, histogram, appliedAt };
+  return { count, sum, histogram, appliedAt, updating: first.updating };
 }
 
 /** Page population votes in (question_id, voter_id) order without exposing their counting keys. */

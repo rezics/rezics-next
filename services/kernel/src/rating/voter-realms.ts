@@ -18,21 +18,46 @@ export const VOTER_REALM_CAP = 100;
 const MEMBERSHIP = 'com.rezics.community.realm.membership.v1';
 const CHANGED = 'com.rezics.rating.voter-realm.changed.v1';
 type Address = { route: number; voterId: string; realmId: string };
+export type VoterRealmJob = {
+  voterId: string;
+  realmId: string;
+  transitionId: string;
+  direction: 'adding' | 'removing';
+};
 
 function parameters(input: Address) {
   return { route: input.route, voter_id: input.voterId, realm_id: input.realmId };
 }
 
-async function deleteAndPromote(tx: CommandTransaction, input: Address): Promise<void> {
+async function deleteAndPromote(
+  tx: CommandTransaction,
+  input: Address,
+  transitionId: string,
+): Promise<VoterRealmJob | null> {
   await deleteRealm.run(tx, parameters(input));
-  await promoteRealm.run(tx, { route: input.route, voter_id: input.voterId });
+  const promoted = await promoteRealm.run(tx, {
+    route: input.route,
+    voter_id: input.voterId,
+    transition_id: transitionId,
+  });
+  const row = promoted[0];
+  return row
+    ? { voterId: input.voterId, realmId: row.realmId, transitionId: row.transitionId, direction: 'adding' }
+    : null;
 }
 
 /** Called by the removal pager in its voter-partition command, after its final page has been applied. */
-export async function finishVoterRealmRemoval(tx: CommandTransaction, input: Address): Promise<void> {
+export async function finishVoterRealmRemoval(
+  tx: CommandTransaction,
+  input: Address & { transitionId?: string },
+): Promise<VoterRealmJob[]> {
   const row = await readRealm.run(tx, parameters(input));
   if (!row || row.state !== 'removing') throw new Error('Realm removal is not in progress');
-  if (!row.rejoin) return deleteAndPromote(tx, input);
+  const transitionId = input.transitionId ?? Bun.randomUUIDv7();
+  if (!row.rejoin) {
+    const promoted = await deleteAndPromote(tx, input, transitionId);
+    return promoted ? [promoted] : [];
+  }
   await updateRealm.run(tx, {
     ...parameters(input),
     state: 'adding',
@@ -41,7 +66,9 @@ export async function finishVoterRealmRemoval(tx: CommandTransaction, input: Add
     limit_question_id: null,
     limit_target_id: null,
     rejoin: false,
+    transition_id: transitionId,
   });
+  return [{ voterId: input.voterId, realmId: input.realmId, transitionId, direction: 'adding' }];
 }
 
 /** Membership effects and vote writes serialize on the same voter partition. */
@@ -69,14 +96,16 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
             digest: createHash('sha256').update(canonicalize(event.data)!).digest(),
           },
         },
-        async (tx) => {
+        async (tx, { transactionId }) => {
           const row = await readRealm.run(tx, parameters(address));
+          const changedRealms = new Set<string>([realmId]);
           if (!row && role === 'member') {
             const capped = await readCapped.run(tx, { route, voter_id: voterId });
             await insertRealm.run(tx, {
               ...parameters(address),
               joined_at: at,
               state: capped.length < VOTER_REALM_CAP ? 'adding' : 'uncounted',
+              transition_id: transactionId,
             });
           } else if (row) {
             if (
@@ -85,8 +114,12 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
             ) {
               // Only a capped departure frees a slot.
               if (row.state === 'uncounted') await deleteRealm.run(tx, parameters(address));
-              else await deleteAndPromote(tx, address);
+              else {
+                const promoted = await deleteAndPromote(tx, address, transactionId);
+                if (promoted) changedRealms.add(promoted.realmId);
+              }
             } else if (row.state === 'removing' || role === null) {
+              const startsRemoval = role === null && row.state !== 'removing';
               await updateRealm.run(tx, {
                 ...parameters(address),
                 state: 'removing',
@@ -97,10 +130,18 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
                 limit_target_id:
                   row.state === 'removing' ? row.limitTargetId : row.state === 'adding' ? row.cursorTargetId : null,
                 rejoin: role === 'member',
+                transition_id: startsRemoval ? transactionId : row.transitionId,
               });
             }
           }
-          return { value: null, events: [{ type: CHANGED, subject: voterId, data: { voterId, realmId } }] };
+          return {
+            value: null,
+            events: [...changedRealms].map((changedRealmId) => ({
+              type: CHANGED,
+              subject: voterId,
+              data: { voterId, realmId: changedRealmId },
+            })),
+          };
         },
       );
     },

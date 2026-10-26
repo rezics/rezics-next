@@ -64,6 +64,20 @@ CREATE TABLE rating.aggregate_component (
 
 
 --
+-- Name: population_pending; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_pending (
+    route integer NOT NULL,
+    population_id uuid NOT NULL,
+    pending_jobs integer NOT NULL,
+    CONSTRAINT population_pending_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT population_pending_pending_jobs_check CHECK ((pending_jobs >= 0)),
+    CONSTRAINT population_pending_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: population_vote; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -171,6 +185,7 @@ CREATE TABLE rating.voter_realm (
     limit_question_id uuid,
     limit_target_id uuid,
     rejoin boolean DEFAULT false NOT NULL,
+    transition_id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT voter_realm_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11)))),
     CONSTRAINT voter_realm_check1 CHECK (((cursor_question_id IS NULL) = (cursor_target_id IS NULL))),
     CONSTRAINT voter_realm_check2 CHECK (((limit_question_id IS NULL) = (limit_target_id IS NULL))),
@@ -188,6 +203,14 @@ CREATE TABLE rating.voter_realm (
 
 ALTER TABLE ONLY rating.aggregate_component
     ADD CONSTRAINT aggregate_component_pkey PRIMARY KEY (route, question_id, population_id, target_id, shard);
+
+
+--
+-- Name: population_pending population_pending_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_pending
+    ADD CONSTRAINT population_pending_pkey PRIMARY KEY (route, population_id);
 
 
 --

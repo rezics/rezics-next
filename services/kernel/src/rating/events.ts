@@ -24,6 +24,30 @@ export const RATING_EVENTS = {
     { applied: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.rating.segment.page.v1': Type.Object(
+    {
+      voterId: Type.String({ pattern: UUID }),
+      realmId: Type.String({ pattern: UUID }),
+      direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
+      votes: Type.Array(
+        Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            targetId: Type.String({ pattern: UUID }),
+            units,
+            revision: Type.Integer({ minimum: 1 }),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 100 },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  'com.rezics.rating.population.pending.v1': Type.Object(
+    { populationId: Type.String({ pattern: UUID }), pendingJobs: Type.Integer({ minimum: 0 }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.source_statistic.changed.v1': Type.Object(
     {
       subjectId: Type.String({ pattern: UUID }),
