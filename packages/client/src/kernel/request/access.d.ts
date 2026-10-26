@@ -68,8 +68,9 @@ export interface Access {
 }
 export declare function accessCheck(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<AccessCheck>;
 /** Recheck command admission on every live attempt before resource checkout.
- * Request evidence is prepared once, so an operational retry cannot renew its
- * deadline. Self-read permits receipt lookup only, never a body.
+ * Each attempt prepares fresh action and self-read evidence at its own T, with
+ * its own evidence budget capped by the original request deadline and JWT expiry.
+ * A retry never renews those caps. Self-read permits receipt lookup only, never a body.
  */
 export declare function accessCommandAuthorization(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext, denied: () => Error): Promise<AccessCommandAuthorization>;
 export declare class AuthenticationError extends Error {
