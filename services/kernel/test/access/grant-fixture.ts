@@ -6,6 +6,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
+import { dropAuthDatabase } from '../support/auth-database.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function grantFixture(extraActions: readonly string[] = []) {
@@ -171,7 +172,7 @@ export async function grantFixture(extraActions: readonly string[] = []) {
       closing ??= (async () => {
         try {
           await authPool.end();
-          await reader.query(`DROP DATABASE ${authDatabase} WITH (FORCE)`);
+          await dropAuthDatabase(reader, authDatabase);
         } finally {
           try {
             await pool.end();

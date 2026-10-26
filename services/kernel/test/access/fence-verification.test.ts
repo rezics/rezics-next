@@ -8,6 +8,7 @@ import { createAccess as permissionAccess } from '../../src/access/permission.ts
 import { createLifecycleInternals, type RecoveryEvidence } from '../../src/access/lifecycle.ts';
 import { accessCheck, AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
+import { dropAuthDatabase } from '../support/auth-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -220,7 +221,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await assignments?.close();
   await authPool?.end();
-  await pool.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  await dropAuthDatabase(pool, authDatabase);
   await pool.end();
 });
 

@@ -6,6 +6,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { AuthenticationError } from '../../src/request/access.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
+import { dropAuthDatabase } from '../support/auth-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -264,7 +265,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
       await stopServer();
       await authPool?.end();
       await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, person]);
-      await pool.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
+      await dropAuthDatabase(pool, database);
     }
   }, 60_000);
 }
