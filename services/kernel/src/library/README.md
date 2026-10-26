@@ -139,25 +139,25 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: One account admit, then a subject resolve for the session subject and, when present, the version subject. The command inserts one `progress_session` in the account partition. The event subject is the account id. The payload carries only the session id.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit, one or two subject resolves, authorization and the envelope.
-- Growth check: The statement sample does not call start. `test/library/sessions.test.ts`: `each mode starts in the account partition, records by CAS and reads its own value` starts a session and is not a scale measurement. `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` does not call start.
+- Growth check: `test/library/growth-sessions.test.ts`: `Session start has constant rows and statements as sessions grow` measures the whole command at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox, write basis and Access accounts grow to 500 x scale rows.
 
 ### Session record
 
 - Touches: One `FOR UPDATE` of the session primary key, one session read, then optional unit removal and unit addition. Each of those is one statement over an array of at most 100 ids. Addition inserts with `ON CONFLICT DO NOTHING` after confirming the session exists. The session row is compare-and-swapped. A record always appends one `progress_change` whose `change_no` is the new revision. It is not a max scan. A completed-unit count above 20000 rolls the command back. The event subject is the account id.
 - Bound: A scalar or cursor record, with no unit writes, is library body `S` 4, `R` `O(1)`, `B` `O(L(N))`. A unit record adds one removal, one addition, or both. For `u` ids, `u` at most 100, those statements are `R` `O(u)` and `B` `O(u L(N))`. History length is not bounded by 20000. Add authorization and the envelope.
-- Growth check: `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` records a scalar, a cursor and one repeated unit id. Statement counts stay equal at 1, 8 and 64. It does not grow `u` or that session's unit set. `test/library/progress-store.test.ts`: `unit add, unit page and change page touch the same rows and statements at three scales` adds one unit id at 1000, 8000 and 64000: one statement, constant rows, logarithmic blocks and no sequential scan.
+- Growth check: `test/library/growth-sessions.test.ts`: `Session record has constant rows and statements as sessions and the session's own history grow` measures a scalar record with no unit writes at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox and write basis grow, and the measured session's own history and unit set reach 500 x scale rows.
 
 ### Session complete
 
 - Touches: The same lock, primary-key read and compare-and-swap as a record. The state becomes completed and `completed_at` is set. There is no unit write and no change row.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus authorization and the envelope.
-- Growth check: The scale sample does not complete a session. `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` does not call complete. `test/library/sessions.test.ts`: `completion and abandonment are explicit CAS transitions; rereads preserve earlier completion` completes a session and is not a scale measurement.
+- Growth check: `test/library/growth-sessions.test.ts`: `Session complete has constant rows and statements as sessions grow` measures a fresh open session per run at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox, write basis and Access accounts grow to 500 x scale rows.
 
 ### Session abandon
 
 - Touches: The same lock, read and compare-and-swap. The state becomes abandoned and `completed_at` is cleared. There is no unit write and no change row.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus authorization and the envelope.
-- Growth check: `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` does not call abandon. `test/library/sessions.test.ts`: `completion and abandonment are explicit CAS transitions; rereads preserve earlier completion` abandons a session and is not a scale measurement.
+- Growth check: `test/library/growth-sessions.test.ts`: `Session abandon has constant rows and statements as sessions grow` measures a fresh open session per run at scales 1, 4 and 16 while the account's own sessions, units and changes, other accounts' sessions, receipts, outbox, write basis and Access accounts grow to 500 x scale rows.
 
 ### Session read
 
