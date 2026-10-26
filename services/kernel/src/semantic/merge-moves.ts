@@ -3,6 +3,14 @@ import { runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LINKS_MOVING, LINKS_PROJECTED } from './events.ts';
 import { redirectOf } from './merges.ts';
+import firstMember from './merge-moves-first-member.sql';
+import insertMember from './merge-moves-insert-member.sql';
+import insertRedirect from './merge-moves-insert-redirect.sql';
+import pageLinks from './merge-moves-page-links.sql';
+import pageMembers from './merge-moves-page-members.sql';
+import readLastRedirect from './merge-moves-read-last-redirect.sql';
+import readMember from './merge-moves-read-member.sql';
+import updateMember from './merge-moves-update-member.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
 
 type Move = { phase: 'links' | 'members' | 'done'; cursor: string[] };
@@ -37,27 +45,20 @@ async function register(
       async (tx) => {
         const redirect = await redirectOf(tx, survivor);
         if (redirect) {
-          const previous = (
-            await tx.query<Move>(
-              'SELECT phase, cursor FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 AND member_id = $3',
-              [route, survivor, id],
-            )
-          ).rows[0];
+          const previous = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move | null;
           return { value: { redirect, state: previous ?? initial }, events: [projected(survivor)] };
         }
-        const inserted = await tx.query(
-          'INSERT INTO semantic.merge_member (route, subject_id, member_id, phase, cursor) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING member_id',
-          [route, survivor, id, initial.phase, JSON.stringify(initial.cursor)],
-        );
-        const state = (
-          await tx.query<Move>(
-            'SELECT phase, cursor FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 AND member_id = $3',
-            [route, survivor, id],
-          )
-        ).rows[0]!;
+        const inserted = await insertMember.run(tx, {
+          route,
+          subject_id: survivor,
+          member_id: id,
+          phase: initial.phase,
+          cursor: JSON.stringify(initial.cursor),
+        });
+        const state = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
         return {
           value: { redirect: null, state },
-          events: inserted.rowCount && state.phase !== 'done' ? [moving(id, survivor, state)] : [projected(survivor)],
+          events: inserted.length && state.phase !== 'done' ? [moving(id, survivor, state)] : [projected(survivor)],
         };
       },
     );
@@ -70,17 +71,16 @@ async function register(
       pool,
       { partition: partitionOf(routeOf(id)!) },
       async (tx, { transactionId }) => {
-        const current = await tx.query<{ sequence: number; target: string }>(
-          'SELECT sequence, target::text FROM semantic.redirect WHERE route = $1 AND subject_id = $2 ORDER BY sequence DESC LIMIT 1',
-          [routeOf(id), id],
-        );
-        const last = current.rows[0];
+        const last = await readLastRedirect.run(tx, { route: routeOf(id)!, subject_id: id });
         if (last && last.target < survivor) return { value: last.target, events: [projected(survivor)] };
         if (last && last.target !== survivor) {
-          await tx.query(
-            'INSERT INTO semantic.redirect (route, subject_id, sequence, target, recorded_transaction_id) VALUES ($1, $2, $3, $4, $5)',
-            [routeOf(id), id, last.sequence + 1, survivor, transactionId],
-          );
+          await insertRedirect.run(tx, {
+            route: routeOf(id)!,
+            subject_id: id,
+            sequence: last.sequence + 1,
+            target: survivor,
+            transaction_id: transactionId,
+          });
         }
         return { value: survivor, events: [projected(survivor)] };
       },
@@ -112,32 +112,27 @@ export async function moveMergePage(
     let next: Move;
     if (state.phase === 'links') {
       links = (
-        await tx.query<Link>(
-          `SELECT property, source_subject_id::text, statement_id::text, source_revision,
-                  source_security_revision::text, present
-         FROM semantic.inbound_link WHERE route = $1 AND subject_id = $2 AND present
-         AND (property, source_subject_id, statement_id) > ($3, $4::uuid, $5::uuid)
-         ORDER BY property, source_subject_id, statement_id LIMIT 100`,
-          [sourceRoute, id, state.cursor[0] ?? '', state.cursor[1] ?? NIL, state.cursor[2] ?? NIL],
-        )
-      ).rows.map((link) => ({ ...link, source_security_revision: Number(link.source_security_revision) }));
+        await pageLinks.run(tx, {
+          route: sourceRoute,
+          subject_id: id,
+          after_property: state.cursor[0] ?? '',
+          after_source: state.cursor[1] ?? NIL,
+          after_statement: state.cursor[2] ?? NIL,
+        })
+      ).map((link) => ({ ...link, source_security_revision: Number(link.source_security_revision) }));
       const last = links.at(-1);
       if (links.length === 100 && last)
         next = { phase: 'links', cursor: [last.property, last.source_subject_id, last.statement_id] };
       else {
-        const member = await tx.query(
-          'SELECT member_id FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 ORDER BY member_id LIMIT 1',
-          [sourceRoute, id],
-        );
-        next = { phase: member.rowCount ? 'members' : 'done', cursor: [] };
+        const member = await firstMember.run(tx, { route: sourceRoute, subject_id: id });
+        next = { phase: member ? 'members' : 'done', cursor: [] };
       }
     } else {
-      members = (
-        await tx.query<{ member_id: string } & Move>(
-          'SELECT member_id::text, phase, cursor FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 AND member_id > $3::uuid ORDER BY member_id LIMIT 100',
-          [sourceRoute, id, state.cursor[0] ?? NIL],
-        )
-      ).rows;
+      members = (await pageMembers.run(tx, {
+        route: sourceRoute,
+        subject_id: id,
+        after_member: state.cursor[0] ?? NIL,
+      })) as ({ member_id: string } & Move)[];
       next =
         members.length === 100
           ? { phase: 'members', cursor: [members.at(-1)!.member_id] }
@@ -152,22 +147,21 @@ export async function moveMergePage(
   const applied = await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
     const redirect = await redirectOf(tx, survivor);
     if (redirect) return { value: redirect, events: [projected(survivor)] };
-    const current = (
-      await tx.query<Move>(
-        'SELECT phase, cursor FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 AND member_id = $3',
-        [route, survivor, id],
-      )
-    ).rows[0]!;
+    const current = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
     if (JSON.stringify(current) !== JSON.stringify(state)) return { value: null, events: [projected(survivor)] };
     if (page.value.links.length)
       await upsertInboundLinks.run(tx, {
+        route,
         transaction_id: transactionId,
-        changes: page.value.links.map((link) => ({ ...link, route, subject_id: survivor })),
+        changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
       });
-    await tx.query(
-      'UPDATE semantic.merge_member SET phase = $4, cursor = $5 WHERE route = $1 AND subject_id = $2 AND member_id = $3',
-      [route, survivor, id, page.value.next.phase, JSON.stringify(page.value.next.cursor)],
-    );
+    await updateMember.run(tx, {
+      route,
+      subject_id: survivor,
+      member_id: id,
+      phase: page.value.next.phase,
+      cursor: JSON.stringify(page.value.next.cursor),
+    });
     return {
       value: null,
       events: page.value.next.phase === 'done' ? [projected(survivor)] : [moving(id, survivor, page.value.next)],

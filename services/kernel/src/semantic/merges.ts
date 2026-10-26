@@ -12,6 +12,10 @@ import type { Release } from '@rezics/definitions';
 import readRedirect from './read-redirect.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import updateSubjectRelease from './update-subject-release.sql';
+import insertRedirect from './merges-insert-redirect.sql';
+import insertRevision from './merges-insert-revision.sql';
+import readLatestRevision from './merges-read-latest-revision.sql';
+import readVisible from './merges-read-visible.sql';
 
 export class SubjectRedirectError extends Error {
   constructor(
@@ -28,13 +32,10 @@ export async function redirectOf(client: CommandTransaction, id: string): Promis
 }
 
 async function mergeSubject(client: CommandTransaction, id: string) {
-  const result = await client.query<{ type: string }>(
-    `SELECT type FROM semantic.subject WHERE route = $1 AND subject_id = $2 AND visibility = 'visible'`,
-    [routeOf(id), id],
-  );
-  if (!result.rows[0]) throw new SubjectNotFoundError();
+  const row = await readVisible.run(client, { route: routeOf(id)!, subject_id: id });
+  if (!row) throw new SubjectNotFoundError();
   if (await redirectOf(client, id)) throw new EditorialConflictError();
-  return result.rows[0];
+  return row;
 }
 
 export async function mergeSubjects(
@@ -82,35 +83,28 @@ export async function mergeSubjects(
       if (kept instanceof Error) throw kept;
       const gone = await mergeSubject(tx, redirected);
       if (gone.type !== kept.type) throw new EditorialConflictError();
-      const latest = await tx.query<{ revision: number; security_revision: string }>(
-        `SELECT latest.revision, s.security_revision::text AS security_revision
-         FROM semantic.subject s
-         JOIN LATERAL (
-           SELECT revision FROM semantic.revision
-           WHERE route = s.route AND subject_id = s.subject_id
-           ORDER BY revision DESC LIMIT 1
-         ) latest ON true
-         WHERE s.route = $1 AND s.subject_id = $2`,
-        [route, redirected],
-      );
-      const revision = latest.rows[0]!.revision + 1;
-      const securityRevision = Number(latest.rows[0]!.security_revision);
-      await tx.query(
-        `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id)
-      VALUES ($1, $2, $3, 'merge', $4, $5)`,
-        [route, redirected, revision, options.release.digest, transactionId],
-      );
+      const latest = (await readLatestRevision.run(tx, { route, subject_id: redirected }))!;
+      const revision = latest.revision + 1;
+      const securityRevision = Number(latest.security_revision);
+      await insertRevision.run(tx, {
+        route,
+        subject_id: redirected,
+        revision,
+        release: options.release.digest,
+        transaction_id: transactionId,
+      });
       await updateSubjectRelease.run(tx, {
         route,
         subject_id: redirected,
         release: options.release.digest,
       });
       await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: -1 });
-      await tx.query(
-        `INSERT INTO semantic.redirect (route, subject_id, sequence, target, recorded_transaction_id)
-      VALUES ($1, $2, 1, $3, $4)`,
-        [route, redirected, survivor, transactionId],
-      );
+      await insertRedirect.run(tx, {
+        route,
+        subject_id: redirected,
+        target: survivor,
+        transaction_id: transactionId,
+      });
       const facts = [];
       for (const property of options.release.release.types[gone.type]?.properties ?? []) {
         facts.push(...(await slotView(tx, redirected, property)).facts);

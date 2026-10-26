@@ -2,10 +2,9 @@ INSERT INTO semantic.inbound_link (
   route, subject_id, property, source_subject_id, statement_id, source_revision, source_security_revision, present,
   recorded_transaction_id
 )
-SELECT change.route, change.subject_id, change.property, change.source_subject_id, change.statement_id,
+SELECT :route::integer, change.subject_id, change.property, change.source_subject_id, change.statement_id,
        change.source_revision, change.source_security_revision, change.present, :transaction_id::uuid
 FROM jsonb_to_recordset(:changes::jsonb) AS change(
-  route integer,
   subject_id uuid,
   property text,
   source_subject_id uuid,
