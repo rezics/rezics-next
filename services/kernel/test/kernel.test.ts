@@ -190,6 +190,10 @@ const typed = [
   'DELETE /v1/collections/:collectionId/members/:memberId',
   'POST /v1/collections/:collectionId/members/:memberId/$move',
   'GET /v1/subjects/:id/collections',
+  'GET /v1/rating-questions/:questionId',
+  'PUT /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'DELETE /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'GET /v1/subjects/:subjectId/ratings/:questionId/vote',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;

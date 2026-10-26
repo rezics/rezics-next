@@ -93,3 +93,22 @@ Realm Name"). The rules are the same on every surface:
 A review is a content item about one target. It may cite the author's vote on that target; a review never requires a
 score, and a score never requires a review. A cited vote is cited at the revision the author had when writing, so
 changing a vote later never rewrites an old review; the review shows the current vote beside it when they differ.
+
+## HTTP
+
+All rating HTTP routes require an authenticated account with the `rating:vote` action. Vote reads are private to the
+authenticated account; the target and question identify a vote but never select its owner.
+
+- `PUT /v1/subjects/{subjectId}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
+  requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
+- `DELETE` on the same path also requires an `Idempotency-Key`, writes a tombstone for a cleared vote, and returns
+  `204 No Content`.
+- `GET` on the same path returns `{ "units", "revision", "at" }` for the caller's current vote. It returns `404`
+  when no current vote exists, including after a clear.
+- `GET /v1/rating-questions/{questionId}` returns `{ "id", "revision", "label", "grain", "scale" }`, where
+  `scale` contains integer `min`, `max` and `displayStep` values in stored units. The standard question therefore has
+  a scale of `0` through `20` in steps of `1`; its display maps two stored units to one point on the `0` through `10`
+  scale.
+
+Vote request bodies reject unknown fields and non-integer values. The question scale carries the units used by vote
+requests, so vote routes do not accept or return floating-point vote values. Errors use RFC 9457 problem responses.

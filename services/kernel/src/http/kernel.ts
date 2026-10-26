@@ -16,6 +16,7 @@ import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
+import { ratingRoutes } from '../rating/routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
@@ -312,14 +313,21 @@ export function createKernel(dependencies: KernelDependencies) {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(collections), realmRoleReader }),
   });
-  declareKernelWriteRates(collections);
+  let ratings: ReturnType<typeof ratingRoutes>;
+  ratings = ratingRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(ratings), realmRoleReader }),
+  });
+  declareKernelWriteRates(ratings);
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
-  for (const route of collections.routes) {
-    const prefix: string[] = [];
-    for (const [position, segment] of route.path.split('/').entries()) {
+  for (const route of ratings.routes) {
+    const segments = route.path.split('/');
+    const shape = segments.map((segment) => (segment.startsWith(':') ? ':' : segment));
+    for (const [position, segment] of segments.entries()) {
       if (segment.startsWith(':')) {
         const name = segment.slice(1);
-        const key = JSON.stringify([prefix, position]);
+        const key = JSON.stringify([shape, position]);
         const first = parameterNames.get(key);
         if (first && first.name !== name) {
           throw new Error(
@@ -327,9 +335,6 @@ export function createKernel(dependencies: KernelDependencies) {
           );
         }
         if (!first) parameterNames.set(key, { name, method: route.method, path: route.path });
-        prefix.push(':');
-      } else {
-        prefix.push(segment);
       }
     }
     if (route.hooks.detail?.hide === true) continue;
@@ -339,8 +344,9 @@ export function createKernel(dependencies: KernelDependencies) {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  assertDeclaredResourceTypes(collections);
-  return collections as typeof collections &
+  assertDeclaredResourceTypes(ratings);
+  return ratings as typeof ratings &
+    typeof collections &
     typeof personal &
     typeof community &
     typeof exposed &

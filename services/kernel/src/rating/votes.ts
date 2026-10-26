@@ -101,7 +101,7 @@ function queryClient(client: Queryable): Queryable {
   return { query: client.query.bind(client) };
 }
 
-async function readQuestion(pool: Pool, questionId: string): Promise<RatingQuestion> {
+async function findQuestion(pool: Pool, questionId: string): Promise<RatingQuestion> {
   if (routeOf(questionId) === null) throw new RatingQuestionNotFoundError();
   const row = await withConnection(pool, (client) => questionRead.run(client, { question_id: questionId }));
   if (!row) throw new RatingQuestionNotFoundError();
@@ -155,7 +155,7 @@ export function createVoteCommands(config: Dependencies) {
       throw new VoteInvalidError('vote');
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
-    const question = await readQuestion(pool, input.questionId);
+    const question = await findQuestion(pool, input.questionId);
     validateUnits(question, input.units);
     const resolved = await resolveSubject(
       { pool, access, ...(clock === undefined ? {} : { clock }) },
@@ -240,7 +240,7 @@ export function createVoteCommands(config: Dependencies) {
   }
 
   async function readOwnVote(actor: Actor, questionId: string, targetId: string): Promise<Vote | null> {
-    const owner = account(actor);
+    const owner = voteAccount(actor);
     if (routeOf(questionId) === null || routeOf(targetId) === null) return null;
     const route = requireRoute(owner.accountId);
     return withConnection(pool, async (client) => {
@@ -256,5 +256,18 @@ export function createVoteCommands(config: Dependencies) {
     });
   }
 
-  return { putVote, readOwnVote };
+  async function readRatingQuestion(actor: Actor, questionId: string): Promise<RatingQuestion> {
+    const owner = voteAccount(actor);
+    if (routeOf(questionId) === null) throw new RatingQuestionNotFoundError();
+    const route = requireRoute(owner.accountId);
+    return withConnection(pool, async (client) => {
+      const current = await readAccount(client, route, owner.accountId);
+      assertCurrentAccount(owner, current);
+      const row = await questionRead.run(client, { question_id: questionId });
+      if (!row) throw new RatingQuestionNotFoundError();
+      return asQuestion(row);
+    });
+  }
+
+  return { putVote, readOwnVote, readRatingQuestion };
 }
