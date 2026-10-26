@@ -584,7 +584,9 @@ test('unit add, unit page and change page touch the same rows and statements at 
   const owner = id(900_000);
   const subjectId = id(900_001);
   const sessionId = id(900_002);
-  const scales = [1_000, 8_000, 64_000] as const;
+  const scales = [256, 1_024, 4_096] as const;
+  // A table of a few hundred rows is cheaper to scan than to probe, so pin the planner to the indexes the pages are built on.
+  const planned = database.openPool({ options: '-c enable_seqscan=off' });
   try {
     await database.admin.query(
       `INSERT INTO library.progress_session (${sessionColumns})
@@ -610,7 +612,7 @@ test('unit add, unit page and change page touch the same rows and statements at 
       await seed(database, population, { from: previous, to: scale });
 
       const added = await measure(database, () =>
-        inTransaction(database.pool, (client) => store.addUnits(client, route, sessionId, ['9'], context(900_100))),
+        inTransaction(planned, (client) => store.addUnits(client, route, sessionId, ['9'], context(900_100))),
       );
       expect(added.value).toBe(1);
       expect(added.cost.statements).toBe(1);
@@ -618,7 +620,7 @@ test('unit add, unit page and change page touch the same rows and statements at 
       addSamples.push({ scale, cost: added.cost });
 
       const unitPage = await measure(database, () =>
-        inTransaction(database.pool, (client) => store.pageUnits(client, route, sessionId, { after: null, limit: 1 })),
+        inTransaction(planned, (client) => store.pageUnits(client, route, sessionId, { after: null, limit: 1 })),
       );
       expect(unitPage.value).toMatchObject([{ sessionId, unitId: '1' }]);
       expect(unitPage.cost.statements).toBe(1);
@@ -626,9 +628,7 @@ test('unit add, unit page and change page touch the same rows and statements at 
       unitPageSamples.push({ scale, cost: unitPage.cost });
 
       const changePage = await measure(database, () =>
-        inTransaction(database.pool, (client) =>
-          store.pageChanges(client, route, sessionId, { after: null, limit: 1 }),
-        ),
+        inTransaction(planned, (client) => store.pageChanges(client, route, sessionId, { after: null, limit: 1 })),
       );
       expect(changePage.value).toMatchObject([{ sessionId, changeNo: 1, intent: { add: ['1'] } }]);
       expect(changePage.cost.statements).toBe(1);

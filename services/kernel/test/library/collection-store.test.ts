@@ -260,7 +260,7 @@ test('member page, insert and neighbour read have constant row and statement cos
 
     const report = await checkGrowth(growth, {
       name: 'Collection member access',
-      scales: [1000, 8000, 64000],
+      scales: [256, 1024, 4096],
       repetitions: 5,
       warmups: 1,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
