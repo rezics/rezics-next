@@ -128,32 +128,37 @@ test('the retention sweep deletes terminal workflows completed before the cutoff
 });
 
 test('the retention sweep keeps pending, enqueued, delayed and recently completed workflows', async () => {
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const cutoff = now - 30 * 24 * 60 * 60 * 1000;
   const pending = id('pending');
   const enqueued = id('enqueued');
   const delayed = id('delayed');
   const recent = id('recent');
+  const onCutoff = id('on-cutoff');
   const noCompletedAt = id('missing-completion');
 
   await enqueue(pending);
   await enqueue(enqueued);
   await enqueue(delayed, 24 * 60 * 60);
   await enqueue(recent);
+  await enqueue(onCutoff);
   await enqueue(noCompletedAt);
   await database.query("UPDATE dbos.workflow_status SET status = 'PENDING', queue_name = NULL WHERE workflow_uuid = $1", [
     pending,
   ]);
   await setTerminal(recent, 'SUCCESS', cutoff + 1000);
+  await setTerminal(onCutoff, 'SUCCESS', cutoff);
   await setTerminal(noCompletedAt, 'ERROR', null);
 
-  await runWorkflowRetentionSweep(30, client);
+  await runWorkflowRetentionSweep(30, client, new Date(now));
 
-  for (const workflowID of [pending, enqueued, delayed, recent, noCompletedAt]) {
+  for (const workflowID of [pending, enqueued, delayed, recent, onCutoff, noCompletedAt]) {
     expect(await client.getWorkflow(workflowID)).toBeDefined();
   }
   expect((await client.getWorkflow(pending))?.status).toBe('PENDING');
   expect((await client.getWorkflow(enqueued))?.status).toBe('ENQUEUED');
   expect((await client.getWorkflow(delayed))?.status).toBe('DELAYED');
   expect((await client.getWorkflow(recent))?.status).toBe('SUCCESS');
+  expect((await client.getWorkflow(onCutoff))?.completedAt).toBe(cutoff);
   expect((await client.getWorkflow(noCompletedAt))?.completedAt).toBeUndefined();
 });
