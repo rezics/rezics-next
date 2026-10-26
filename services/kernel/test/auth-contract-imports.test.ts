@@ -38,6 +38,7 @@ test('the Auth contract has only type declarations and no runtime values or depe
   expect(manifest.name).toBe('@rezics/auth-contract');
   expect(manifest.private).toBe(true);
   expect(manifest.exports).toBe('./src/index.ts');
-  for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'])
+  for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies'])
     expect(Object.keys(manifest[field] ?? {})).toEqual([]);
+  expect(manifest.devDependencies).toEqual({ '@types/bun': '1.4.4' });
 });
