@@ -8,32 +8,62 @@ import type { RunningWorker } from './launch.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
 
-/** Await the OS child notification. No model, interval, or sleep loop participates in settlement. */
-export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'attempt' | 'exited'>, landing: LandingQueue, startTrain: () => Promise<void> = async () => {}): Promise<void> {
+/** Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. */
+export async function settle(
+  tasks: WorkerTasks,
+  worker: Pick<RunningWorker, 'attempt' | 'exited'>,
+  landing: LandingQueue,
+  startTrain: () => Promise<void> = async () => {},
+): Promise<void> {
   const ref = worker.attempt;
   let code: number | null;
-  try { code = (await worker.exited).code; }
-  catch { code = -1; }
+  try {
+    code = (await worker.exited).code;
+  } catch {
+    code = -1;
+  }
   const store = tasks.store;
   store.assertCurrent(ref);
   await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
   await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
   let queued = false;
   store.write(ref, () => {
-    if (store.events(ref.taskId).some(event => event.attempt === ref.attempt && event.kind === 'landing-requested')) { queued = true; return; }
+    if (store.events(ref.taskId).some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested')) {
+      queued = true;
+      return;
+    }
     const task = store.task(ref.taskId);
-    const pool = tasks.settings.pools.find(p => p.name === ref.pool);
-    const attempt = store.updateAttempt(ref, a => {
-      a.state = 'exited'; a.endedAt = new Date().toISOString(); a.exitCode = code; a.after = pool ? tasks.reader(pool) : null;
+    const pool = tasks.settings.pools.find((p) => p.name === ref.pool);
+    const attempt = store.updateAttempt(ref, (a) => {
+      a.state = 'exited';
+      a.endedAt = new Date().toISOString();
+      a.exitCode = code;
+      a.after = pool ? tasks.reader(pool) : null;
     });
     const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
-    if (pool?.cli === 'claude') try { recordClaudeRateLimit(pool, readFileSync(attempt.logPath, 'utf8')); } catch { /* No log to read. */ }
+    if (pool?.cli === 'claude')
+      try {
+        recordClaudeRateLimit(pool, readFileSync(attempt.logPath, 'utf8'));
+      } catch {
+        /* No log to read. */
+      }
     // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
     // Preserve that launch failure on the attempt and keep it out of the landing queue.
-    if (!measurement.session && code !== null && code !== 0 && !measurement.failureKind
-      && !git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]).trim().match(/^[1-9]\d*$/)) {
+    if (
+      !measurement.session &&
+      code !== null &&
+      code !== 0 &&
+      !measurement.failureKind &&
+      !git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])
+        .trim()
+        .match(/^[1-9]\d*$/)
+    ) {
       let stderr = '';
-      try { stderr = readFileSync(`${attempt.logPath}.err`, 'utf8').trim(); } catch { /* No stderr stream was created. */ }
+      try {
+        stderr = readFileSync(`${attempt.logPath}.err`, 'utf8').trim();
+      } catch {
+        /* No stderr stream was created. */
+      }
       // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
       measurement.failureKind = POOL_EXHAUSTED.test(stderr) ? 'pool-exhausted' : 'tool';
       measurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
@@ -44,15 +74,32 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
       measurement.failureKind = 'tool';
       measurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${measurement.result.slice(-500)}`;
     }
-    store.updateAttempt(ref, a => { a.session = measurement.session; a.result = measurement.result; a.blocker = measurement.blocker; a.failureKind = measurement.failureKind; a.approaches.push(...reportedApproaches(measurement.result)); });
+    store.updateAttempt(ref, (a) => {
+      a.session = measurement.session;
+      a.result = measurement.result;
+      a.blocker = measurement.blocker;
+      a.failureKind = measurement.failureKind;
+      a.approaches.push(...reportedApproaches(measurement.result));
+    });
     store.putRecord(makeRecord(task, attempt, measurement));
     evidenceBundle(task, store.attempt(ref));
     if (measurement.failureKind) return;
     tasks.commitFinishedWork(task, ref.attempt);
     store.write(ref, () => {
-      store.updateTask(ref, t => { t.state = 'landing'; });
-      store.landing({ taskId: task.id, attempt: ref.attempt, branch: task.branch, worktree: task.worktree,
-        declaredPaths: task.brief.paths, gate: task.brief.acceptance.command }, request => landing.enqueue(request));
+      store.updateTask(ref, (t) => {
+        t.state = 'landing';
+      });
+      store.landing(
+        {
+          taskId: task.id,
+          attempt: ref.attempt,
+          branch: task.branch,
+          worktree: task.worktree,
+          declaredPaths: task.brief.paths,
+          gate: task.brief.acceptance.command,
+        },
+        (request) => landing.enqueue(request),
+      );
     });
     queued = true;
   });
