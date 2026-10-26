@@ -1,6 +1,6 @@
 import pg from 'pg';
 import type { KernelClock } from './clock.ts';
-import { ConfigError } from './server.ts';
+import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
 import { KERNEL_WORK_MODULES } from './work/modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';

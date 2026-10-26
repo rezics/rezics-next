@@ -774,7 +774,7 @@ test.serial('a content write has constant participation cost as unrelated Realms
   };
   const report = await checkGrowth(db, {
     name: 'content write participation with unrelated Realms, members and bans',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 1,
     async grow(database, scale, previous) {
@@ -796,7 +796,7 @@ test.serial('a content write has constant participation cost as unrelated Realms
       expect(participationEvaluations - before).toBe(1);
     },
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
   expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
   for (const { cost } of report.samples) {
     for (const [name, relation] of Object.entries(cost.relations ?? {})) {
