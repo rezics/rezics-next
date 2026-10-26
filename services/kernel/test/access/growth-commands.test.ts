@@ -41,6 +41,9 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const ordinalsPerScale = 500;
 const baselineOrdinals = 2_000;
 const operationsPerCheck = 18;
+// Budget the 34,000 generated ordinals at 20 ms each under concurrent gates,
+// plus up to twelve native 3 s boundaries for every warm-up/measured operation.
+const growthTimeout = (baselineOrdinals + 64 * ordinalsPerScale) * 20 + operationsPerCheck * 12 * 3000;
 const resourceSchema = 'growth_access_commands';
 const resourceTable = `${resourceSchema}.resource`;
 const actions: ActionCatalogue = new Map([
@@ -198,14 +201,15 @@ async function check(population: Population, operation: GrowthCheck['operation']
   db.pool.on('acquire', observeClient);
 
   try {
-    await seed({ pool: db.pool, admin: db.admin }, population, {
-      from: 100_000,
-      to: 100_000 + baselineOrdinals,
-    });
     const report = await checkGrowth(db, {
       name,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (growthDb, scale, previous) => {
+        if (previous === 0)
+          await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+            from: 100_000,
+            to: 100_000 + baselineOrdinals,
+          });
         await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
           from: previous * ordinalsPerScale,
           to: scale * ordinalsPerScale,
@@ -1198,7 +1202,7 @@ test.serial(
     );
     expect(report).toMatchObject({ bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } });
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1243,7 +1247,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1309,7 +1313,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1357,7 +1361,7 @@ test.serial(
     expect(context.account.accountId).toBe(actor.accountId);
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1400,7 +1404,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1468,7 +1472,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1517,7 +1521,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1564,7 +1568,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1607,7 +1611,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1654,5 +1658,5 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
