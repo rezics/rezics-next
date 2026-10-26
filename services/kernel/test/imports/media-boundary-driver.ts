@@ -345,6 +345,8 @@ async function applicationHost(): Promise<RpcHost> {
       },
     });
     const app = createKernel({
+      // Match the shared test kernel's request deadline.
+      requestDeadlineMs: 30_000,
       pool: f.database.pool,
       access,
       routeKey: f.routeKey,
@@ -516,12 +518,11 @@ async function mediaGrowth(
   for (let batch = 0; batch < 16; batch++) {
     await boundary.reset();
     await boundary.source(request.sourceUrl, 'corrupt-image');
-    const ids = await Promise.all(
-      Array.from({ length: 8 }, async (_, index) => {
-        const containerId = await createContainer();
-        return submit({ ...request, containerId }, `workflow-baseline-${batch}-${index}`);
-      }),
-    );
+    const ids: string[] = [];
+    for (let index = 0; index < 8; index++) {
+      const containerId = await createContainer();
+      ids.push(await submit({ ...request, containerId }, `workflow-baseline-${batch}-${index}`));
+    }
     await Promise.all(
       ids.map((id) => boundary.drain({ mediaIds: [id], maxJobs: 16, signal: new AbortController().signal })),
     );

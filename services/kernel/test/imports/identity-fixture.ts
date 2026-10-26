@@ -61,6 +61,65 @@ export interface ImportIdentity {
   close(): Promise<void>;
 }
 
+/** Populate the Global partition used by measured public grant commits. */
+async function seedCommandHistory(f: ImportIdentity, clientId: string): Promise<void> {
+  const count = 2_048;
+  const transactionIds = Array.from({ length: count }, () => randomUUID());
+  const value = {
+    resource: GLOBAL,
+    subject: { kind: 'account', id: f.bulk.accountId },
+    actions: [BULK_ACTION],
+    valid: '(,)',
+  };
+  const client = await f.database.admin.connect();
+  try {
+    await client.query('BEGIN');
+    const partition = (
+      await client.query<{ partition_no: number; epoch: number; position: string }>(
+        'SELECT partition_no,epoch,position::text AS position FROM core.partition WHERE partition_no=$1 FOR UPDATE',
+        [GLOBAL.route >>> 4],
+      )
+    ).rows[0];
+    if (!partition) throw new Error('Identity growth fixture partition is missing');
+    // Match fence.sql: one event, receipt and write basis per consecutive commit.
+    await client.query(
+      `INSERT INTO core.outbox (partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
+      SELECT $1,$2::bigint+ordinality,0,1,$3,gen_random_uuid(),
+        'com.rezics.access.grant.create.v1',$5,$6::jsonb
+      FROM unnest($4::uuid[]) WITH ORDINALITY AS seeded(transaction_id,ordinality)`,
+      [partition.partition_no, partition.position, partition.epoch, transactionIds, GLOBAL.id, value],
+    );
+    await client.query(
+      `INSERT INTO core.receipt (
+        partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,
+        epoch,position,transaction_id,response
+      )
+      SELECT $1,'account',$5,'access.grant.create','0:growth-command-baseline-'||ordinality,
+        decode(repeat('00',32),'hex'),$3,$2::bigint+ordinality,transaction_id,$6::jsonb
+      FROM unnest($4::uuid[]) WITH ORDINALITY AS seeded(transaction_id,ordinality)`,
+      [partition.partition_no, partition.position, partition.epoch, transactionIds, f.governance.accountId, value],
+    );
+    await client.query(
+      `INSERT INTO editorial.write_basis (
+        partition_no,transaction_id,epoch,position,principal_kind,principal_id,client_id,requested_by
+      )
+      SELECT $1,transaction_id,$3,$2::bigint+ordinality,'account',$5,$6,NULL
+      FROM unnest($4::uuid[]) WITH ORDINALITY AS seeded(transaction_id,ordinality)`,
+      [partition.partition_no, partition.position, partition.epoch, transactionIds, f.governance.accountId, clientId],
+    );
+    await client.query('UPDATE core.partition SET position=position+$2 WHERE partition_no=$1', [
+      partition.partition_no,
+      count,
+    ]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** Ownership inventory only. Entries contain handles, never authority or proof mappings. */
 const owned = new Map<string, () => Promise<boolean>>();
 export async function identityResources(): Promise<readonly string[]> {
@@ -233,6 +292,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const tokenKeys = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
     let auth: AuthService;
     const kernel = createKernel({
+      // Match the shared test kernel's request deadline.
+      requestDeadlineMs: 30_000,
       pool: database.pool,
       routeKey,
       tokens: tokenKeys,
@@ -429,6 +490,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     // Reuse this actual Access instance in the HTTP composition; it owns native
     // authenticated identities and durable approval bridges for this exact pool.
     const app = createKernel({
+      // Match the shared test kernel's request deadline.
+      requestDeadlineMs: 30_000,
       pool: database.pool,
       routeKey,
       tokens: tokenKeys,
@@ -851,6 +914,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         } finally {
           countingBaselineCalls = false;
         }
+        await seedCommandHistory(result, managementClient);
         await renewManagement();
       },
       async grow(index) {

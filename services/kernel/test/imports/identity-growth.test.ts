@@ -59,7 +59,13 @@ test('fixed public bulk grant changes and reduced-scope native Auth/Access remai
             );
             expect(Number(result.rows[0]?.rows ?? 0), `${table} live row floor`).toBeGreaterThanOrEqual(2_000);
           }
-          for (const table of ['access.account', 'access.resource_grant']) {
+          for (const table of [
+            'access.account',
+            'access.resource_grant',
+            'core.outbox',
+            'core.receipt',
+            'editorial.write_basis',
+          ]) {
             const result = await f.database.admin.query<{ rows: string }>(
               `SELECT count(*)::text AS rows FROM ${table}`,
             );
