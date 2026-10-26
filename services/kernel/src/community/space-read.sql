@@ -16,4 +16,5 @@ FROM identity s
 CROSS JOIN input i
 JOIN community.space_revision r
   ON r.route = i.route AND r.space_id = s.space_id AND r.revision_id = s.head_revision_id
-WHERE s.created_at <= s.at AND r.created_at <= s.at;
+WHERE s.created_at <= s.at AND r.created_at <= s.at
+LIMIT 1;

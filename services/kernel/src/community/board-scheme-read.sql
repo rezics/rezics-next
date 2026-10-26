@@ -16,4 +16,5 @@ FROM identity s
 CROSS JOIN input i
 JOIN community.realm_revision r
   ON r.route = i.route AND r.realm_id = s.realm_id AND r.revision_id = s.head_revision_id
-WHERE s.created_at <= s.at AND r.created_at <= s.at;
+WHERE s.created_at <= s.at AND r.created_at <= s.at
+LIMIT 1;

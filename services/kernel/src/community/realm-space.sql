@@ -8,4 +8,5 @@ WITH input AS NOT MATERIALIZED (
 )
 SELECT s.space_id, r.realm_id
 FROM host s CROSS JOIN input i
-LEFT JOIN community.realm r ON r.route = i.route AND r.space_id = s.space_id;
+LEFT JOIN community.realm r ON r.route = i.route AND r.space_id = s.space_id
+LIMIT 1;
