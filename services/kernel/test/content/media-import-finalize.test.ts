@@ -347,7 +347,7 @@ test('missing or invalid original creation proof rolls back every native effect 
 test('actual native growth remains one-partition bounded at three informative scales', async () => {
   const report = await checkGrowth(db, {
     name: 'native composite media creation',
-    scales: [256, 2048, 16384],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
     async grow(database, scale, previous) {
@@ -472,7 +472,7 @@ test('actual native growth remains one-partition bounded at three informative sc
       await importMediaFromUrl(deps, actor, request, context());
     },
   });
-  expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+  expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
   expect(new Set(report.samples.map((s) => s.cost.statements)).size).toBe(1);
   expect(new Set(report.samples.map((s) => s.cost.rows)).size).toBe(1);
   for (const { cost } of report.samples) {

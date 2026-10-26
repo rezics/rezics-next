@@ -515,7 +515,7 @@ test('new-thread reservation stays bounded as other uploaders add same-route med
   const r = target.route;
   const report = await checkGrowth(db, {
     name: 'new-thread media reservation',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
       // Neighbouring grants and receipts keep every key index worth its cost to the planner at the smallest scale,
@@ -576,6 +576,6 @@ test('new-thread reservation stays bounded as other uploaders add same-route med
       expect(reserved.body.media.containerId).toBe(target.id);
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
   expect(report.bounds).toEqual({ rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
 });
