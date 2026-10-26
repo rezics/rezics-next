@@ -115,6 +115,7 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
   let ending: Promise<void> | undefined;
   let starting: Promise<void> | undefined;
   let callStart = 0;
+  let requestStart = 0;
   const endpoint = 'https://00000000000000000000000000000000.r2.cloudflarestorage.com';
   const transport = globalThis.fetch;
   const server = Bun.serve({
@@ -125,7 +126,7 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       const incoming = new URL(request.url);
       const target = new URL(incoming.searchParams.get('url')!);
       if (incoming.pathname === '/source') {
-        if (requests.length >= 64) return new Response(null, { status: 429 });
+        if (requests.length - requestStart >= 64) return new Response(null, { status: 429 });
         const source =
           sources.get(target.href) ??
           [...sources.entries()].find(([url]) => {
@@ -273,6 +274,8 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       input.signal.throwIfAborted();
       if (input.maxJobs !== 16 || input.mediaIds.length > 16) throw new Error('Unbounded media drain');
       await boundary.start();
+      requestStart = requests.length;
+      await worker!.call('beginDrain', { maxJobs: input.maxJobs });
       const failures = putFailure;
       for (const id of input.mediaIds) {
         await syncTrace(id);
@@ -304,6 +307,7 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
     },
     async measureTransition(id) {
       await boundary.start();
+      requestStart = requests.length;
       await syncTrace(id);
       const envelope = await mediaEnvelope(
         options.content.pool,
@@ -360,6 +364,7 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       objects.clear();
       sources.clear();
       requests.length = 0;
+      requestStart = 0;
       internet.length = 0;
       peak = 0;
       failPut = false;

@@ -179,11 +179,10 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       tokens: tokenKeys,
       clock,
     });
-    const actions = new Map([
-      ...actionCatalogue(kernel),
-      ...LIFECYCLE_ACTIONS,
-      ...managementScopes.map((scope) => [scope, { anonymous: false }] as const),
-    ]);
+    const actions = new Map([...actionCatalogue(kernel), ...LIFECYCLE_ACTIONS]);
+    // Mounted actions already carry resource-type declarations. Replacing them with a
+    // bare scope drops those declarations and makes public media reservation throw.
+    for (const scope of managementScopes) if (!actions.has(scope)) actions.set(scope, { anonymous: false });
     const roles = resolveResourceRoles(actions);
     const accessConfig: AccessConfig = {
       actions,
@@ -264,11 +263,24 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const comparison = await person('ordinary');
     await options.afterStage?.('auth-registration');
     // The deployment CLI owns a fresh connection. No HTTP bootstrap or actor bypass.
-    await runIdentityBootstrap(database.url, human.accountId, true);
-    const bootstrapPosition = String(
+    const beforeBootstrap = String(
       (await database.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [GLOBAL.route >>> 4]))
         .rows[0].position,
     );
+    await runIdentityBootstrap(database.url, human.accountId, true);
+    const afterBootstrap = String(
+      (await database.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [GLOBAL.route >>> 4]))
+        .rows[0].position,
+    );
+    const bootstrapEvents = await database.admin.query<{ position: string }>(
+      `SELECT position FROM core.outbox
+       WHERE partition_no=$1 AND position>$2 AND position<=$3
+         AND type='com.rezics.access.governance.bootstrapped.v1'
+       ORDER BY position,event_seq`,
+      [GLOBAL.route >>> 4, beforeBootstrap, afterBootstrap],
+    );
+    if (bootstrapEvents.rows.length !== 1) throw new Error('Missing unique bootstrap event in committed range');
+    const bootstrapPosition = String(bootstrapEvents.rows[0]!.position);
     await options.afterStage?.('bootstrap');
     const managementHeaders = await login(human.email, managementClient, managementScopes);
     const management = await token(human.accountId, managementHeaders);
