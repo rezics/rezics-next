@@ -89,6 +89,7 @@ export async function createContext(
     authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
+    clock?: () => Date;
   },
 ) {
   const { route, id } = options.target;
@@ -122,6 +123,7 @@ export async function createContext(
           return 'execute';
         },
       },
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       await insertContext.run(tx, {

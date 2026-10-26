@@ -44,7 +44,7 @@ const unauthorized = problemSchema('authentication_required', 'invalid_credentia
 
 function contextRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array; access: () => Access },
+  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array; access: () => Access; clock: () => Date },
 ) {
   return app
     .post(
@@ -125,6 +125,7 @@ function contextRoutes(
               defaults,
               authorization,
               deadline: job.deadline,
+              clock: dependencies.clock,
             }),
           );
           session.record(result.component);

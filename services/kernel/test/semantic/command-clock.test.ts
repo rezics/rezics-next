@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import pg from 'pg';
+import { installResourceRoleCatalogue, resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -40,7 +41,11 @@ const windowAround = (instant: Date) => [
 ];
 const kernel = createKernel({
   pool,
-  access: realAccess.access,
+  access: (config) => {
+    const access = realAccess.access(config);
+    installResourceRoleCatalogue(access, resolveResourceRoles(config.actions));
+    return access;
+  },
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
   clock: () => new Date(commandAt),
@@ -144,50 +149,6 @@ function commands(subjectId: string): BatchCommand[] {
   ];
 }
 
-test("a batch command runs at the kernel's configured clock", async () => {
-  const seeded = await call('/v1/subjects', { type: 'schema:Book', labels: { en: 'Clock target' } }, 'seedWriter');
-  expect(seeded.status).toBe(201);
-  const subjectId = (seeded.body.subject as Record<string, any>).id as string;
-  const accepted = commands(subjectId);
-  const response = await call('/v1/subjects:batchWrite', { commands: accepted });
-  expect(response.status).toBe(200);
-  expect(response.body.results).toHaveLength(2);
-  expect((response.body.results as Record<string, any>[]).map(({ status }) => status)).toEqual([201, 201]);
-
-  const created = await admin.query<{ subject_id: string }>(
-    `SELECT subject_id::text FROM semantic.external_claim WHERE source = $1 AND external_id = $2`,
-    [accepted[0]!.source.source, accepted[0]!.source.external_id],
-  );
-  expect(created.rows).toHaveLength(1);
-
-  const proposed = await admin.query<{ candidate_id: string }>(
-    `SELECT candidate_id::text FROM semantic.source_candidate WHERE source = $1 AND external_id = $2`,
-    [accepted[1]!.source.source, accepted[1]!.source.external_id],
-  );
-  expect(proposed.rows).toHaveLength(1);
-
-  const refused = commands(subjectId);
-  const denial = await call('/v1/subjects:batchWrite', { commands: refused }, 'realTimeWriter');
-  expect(denial.status).toBe(403);
-
-  const receipts = await admin.query<{ idempotency_key: string }>(
-    `SELECT idempotency_key FROM core.receipt WHERE actor_account_id = $1 AND idempotency_key = ANY($2::text[])`,
-    [accounts.realTimeWriter, refused.map(({ key }) => key)],
-  );
-  expect(receipts.rows).toHaveLength(0);
-
-  const refusedCreate = await admin.query(
-    `SELECT 1 FROM semantic.external_claim WHERE source = $1 AND external_id = $2`,
-    [refused[0]!.source.source, refused[0]!.source.external_id],
-  );
-  expect(refusedCreate.rows).toHaveLength(0);
-  const refusedProposal = await admin.query(
-    `SELECT 1 FROM semantic.source_candidate WHERE source = $1 AND external_id = $2`,
-    [refused[1]!.source.source, refused[1]!.source.external_id],
-  );
-  expect(refusedProposal.rows).toHaveLength(0);
-});
-
 test("Context and definition commands run at the kernel's configured clock", async () => {
   const contextKey = randomUUID();
   const createdContext = await call(
@@ -270,7 +231,7 @@ test("Context and definition commands run at the kernel's configured clock", asy
       property: 'schema:inLanguage',
       mode: 'replace',
       selection: [{ candidate, rank: 'normal' }],
-      expected_head: 1,
+      expected_head: null,
     },
     'configuredWriter',
   );
@@ -280,7 +241,7 @@ test("Context and definition commands run at the kernel's configured clock", asy
     property: 'schema:inLanguage',
     mode: 'replace',
     selection: [{ candidate, rank: 'normal' }],
-    head: 2,
+    head: 1,
   });
 
   const release = structuredClone(bundledRelease);
@@ -297,6 +258,50 @@ test("Context and definition commands run at the kernel's configured clock", asy
   );
   expect(activated.status).toBe(200);
   expect(activated.body).toEqual({ digest, head: active!.head + 1 });
+});
+
+test("a batch command runs at the kernel's configured clock", async () => {
+  const seeded = await call('/v1/subjects', { type: 'schema:Book', labels: { en: 'Clock target' } }, 'seedWriter');
+  expect(seeded.status).toBe(201);
+  const subjectId = (seeded.body.subject as Record<string, any>).id as string;
+  const accepted = commands(subjectId);
+  const response = await call('/v1/subjects:batchWrite', { commands: accepted });
+  expect(response.status).toBe(200);
+  expect(response.body.results).toHaveLength(2);
+  expect((response.body.results as Record<string, any>[]).map(({ status }) => status)).toEqual([201, 201]);
+
+  const created = await admin.query<{ subject_id: string }>(
+    `SELECT subject_id::text FROM semantic.external_claim WHERE source = $1 AND external_id = $2`,
+    [accepted[0]!.source.source, accepted[0]!.source.external_id],
+  );
+  expect(created.rows).toHaveLength(1);
+
+  const proposed = await admin.query<{ candidate_id: string }>(
+    `SELECT candidate_id::text FROM semantic.source_candidate WHERE source = $1 AND external_id = $2`,
+    [accepted[1]!.source.source, accepted[1]!.source.external_id],
+  );
+  expect(proposed.rows).toHaveLength(1);
+
+  const refused = commands(subjectId);
+  const denial = await call('/v1/subjects:batchWrite', { commands: refused }, 'realTimeWriter');
+  expect(denial.status).toBe(403);
+
+  const receipts = await admin.query<{ idempotency_key: string }>(
+    `SELECT idempotency_key FROM core.receipt WHERE actor_account_id = $1 AND idempotency_key = ANY($2::text[])`,
+    [accounts.realTimeWriter, refused.map(({ key }) => key)],
+  );
+  expect(receipts.rows).toHaveLength(0);
+
+  const refusedCreate = await admin.query(
+    `SELECT 1 FROM semantic.external_claim WHERE source = $1 AND external_id = $2`,
+    [refused[0]!.source.source, refused[0]!.source.external_id],
+  );
+  expect(refusedCreate.rows).toHaveLength(0);
+  const refusedProposal = await admin.query(
+    `SELECT 1 FROM semantic.source_candidate WHERE source = $1 AND external_id = $2`,
+    [refused[1]!.source.source, refused[1]!.source.external_id],
+  );
+  expect(refusedProposal.rows).toHaveLength(0);
 });
 
 test("subject routes run commands at the kernel's configured clock", async () => {

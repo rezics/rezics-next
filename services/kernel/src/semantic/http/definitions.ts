@@ -51,7 +51,7 @@ function definitionProblem(error: unknown): never {
 
 export function definitionRoutes(
   app: ReturnType<typeof subjectRoutes>,
-  { pool, access }: { pool: Pool; access?: Access | AccessFactory },
+  { pool, access, clock }: { pool: Pool; access?: Access | AccessFactory; clock: () => Date },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
@@ -92,6 +92,7 @@ export function definitionRoutes(
               authorize: authorization.check,
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -208,6 +209,7 @@ export function definitionRoutes(
               authorize: authorization.check,
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);

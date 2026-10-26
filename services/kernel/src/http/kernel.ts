@@ -212,6 +212,7 @@ export function createKernel(dependencies: KernelDependencies) {
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, {
     pool: dependencies.pool,
+    clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
   const presentation = profileRoutes(app, { ...dependencies, tokens });
@@ -235,6 +236,7 @@ export function createKernel(dependencies: KernelDependencies) {
   const contextual = contextRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
+    clock,
     access: () => resolveAccess({ actions: actionCatalogue(contextual), realmRoleReader }),
   });
   const searched = searchRoutes(contextual, dependencies);

@@ -1,6 +1,7 @@
 import { releaseDigest, validateRelease, type Release, type ReleaseViolation } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { systemClock } from '../clock.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 import activate from './definitions-activate.sql';
 import pointer from './definitions-active.sql';
@@ -63,6 +64,7 @@ type WriteOptions = {
   authorize: AccessCheck;
   authorization?: CommandAuthorization;
   deadline?: number;
+  clock?: () => Date;
 };
 
 function commandOptions(options: WriteOptions, kind: string, action: string) {
@@ -91,6 +93,7 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
           return 'execute';
         },
       } satisfies CommandAuthorization),
+    clock: options.clock,
   };
 }
 
@@ -161,13 +164,13 @@ class AlreadyActive extends Error {
 }
 
 /** Trusted setup only: the first activation and its release commit together, without an actor. */
-export async function bootstrapRelease(pool: Pool, release: Release): Promise<string> {
+export async function bootstrapRelease(pool: Pool, release: Release, clock: () => Date = systemClock): Promise<string> {
   const existing = await pointer.run(pool, { route: resource.route });
   if (existing) return existing.digest;
   const body = validated(release);
   const digest = releaseDigest(body);
   try {
-    const command = await runCommand(pool, { partition: 0 }, async (tx, { transactionId }) => {
+    const command = await runCommand(pool, { partition: 0, clock }, async (tx, { transactionId }) => {
       const active = await pointer.run(tx, { route: resource.route });
       if (active) throw new AlreadyActive(active.digest);
       await publish.run(tx, { route: resource.route, digest, body, transaction_id: transactionId });
