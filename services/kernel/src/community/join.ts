@@ -5,6 +5,7 @@ import { commandAccessContext } from '../access/command-admission.ts';
 import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorRecord, DurableOperationAnchor } from '../access/durable-initiator.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -160,7 +161,8 @@ async function acceptOperation(
           commandAccessContext({ pool, deadline: context.deadline }, attempt),
           actor,
         );
-      } catch {
+      } catch (error) {
+        if (error instanceof AccessUnavailableError) throw error;
         throw new GrantDeniedError();
       }
       return proof;

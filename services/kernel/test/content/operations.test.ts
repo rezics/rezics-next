@@ -6,7 +6,10 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
+import { installCommandAdmission } from '../../src/access/command-admission.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { problemResponse } from '../../src/http/problem.ts';
 import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
 import type {
   AuthorErasureDependencies,
@@ -222,6 +225,40 @@ async function source(outcome: Awaited<ReturnType<typeof beginAuthorErasure>>) {
   if (!result) throw new Error('Requested event missing from durable log');
   return result;
 }
+
+test('Access unavailability during erasure admission reaches the caller unchanged as 503 without writes', async () => {
+  const deps = await dependencies();
+  const unavailable = new AccessUnavailableError('overloaded');
+  const failingAccess = { ...deps.access };
+  installCommandAdmission(failingAccess, async () => {
+    throw unavailable;
+  });
+  const ctx = context();
+  const before = await db.admin.query('SELECT count(*) FROM content.operation');
+  const error = await beginAuthorErasure({ ...deps, access: failingAccess }, actor, input, ctx).catch(
+    (error: unknown) => error,
+  );
+  expect(error).toBe(unavailable);
+  expect(problemResponse(error, { method: 'POST', id: ctx.requestId }).status).toBe(503);
+  expect((await db.admin.query('SELECT count(*) FROM content.operation')).rows).toEqual(before.rows);
+  expect(
+    (await db.admin.query('SELECT 1 FROM core.receipt WHERE idempotency_key=$1', [ctx.idempotencyKey])).rows,
+  ).toEqual([]);
+});
+
+test('erasure admission denials still answer as GrantDeniedError', async () => {
+  const deps = await dependencies();
+  for (const denial of [null, new GrantDeniedError(), new Error('Admission refused')]) {
+    const deniedAccess = { ...deps.access };
+    installCommandAdmission(deniedAccess, async () => {
+      if (denial) throw denial;
+      return null;
+    });
+    await expect(beginAuthorErasure({ ...deps, access: deniedAccess }, actor, input, context())).rejects.toBeInstanceOf(
+      GrantDeniedError,
+    );
+  }
+});
 
 test('initiation commits one identity and ID-only native source before any worker starts; replay is authorized first', async () => {
   const deps = await dependencies();

@@ -6,6 +6,7 @@ import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -87,7 +88,8 @@ export async function beginAuthorErasure(
       try {
         await requireCommandAdmission(deps.access, actor, preparation);
         captured = await captureDurableInitiator(preparation, actor);
-      } catch {
+      } catch (error) {
+        if (error instanceof AccessUnavailableError) throw error;
         throw new GrantDeniedError();
       }
       const rows = await withConnection(deps.pool, async (client) => {
