@@ -546,12 +546,10 @@ async function mediaGrowth(
   // These unrelated pending reservations are the same setup as population.write;
   // grants come only from native resource initialization, never SQL seeding.
   for (let batch = 0; batch < 128; batch++)
-    await Promise.all(
-      Array.from({ length: 8 }, async (_, index) => {
-        const containerId = await createContainer();
-        await submit({ ...request, containerId }, `container-baseline-${batch}-${index}`);
-      }),
-    );
+    for (let index = 0; index < 8; index++) {
+      const containerId = await createContainer();
+      await submit({ ...request, containerId }, `container-baseline-${batch}-${index}`);
+    }
   // Native workflow tables need a populated baseline too. Otherwise PostgreSQL's
   // small-table sequential plans count the benchmark's own preceding runs. Each
   // batch is at most sixteen real public reservations and registered jobs, with
