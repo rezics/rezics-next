@@ -742,6 +742,7 @@ files:
           status: existing
           term: wdt:P3831
           'on': schema:TVSeries
+          qualifies: schema:character
           wikidata: wd:P3831
           meaning: The source appearance role concept.
           sources:
@@ -774,6 +775,7 @@ files:
           status: existing
           term: wdt:P3831
           'on': schema:TVSeries
+          qualifies: schema:character
           wikidata: wd:P3831
           meaning: The source appearance role concept.
           sources:
@@ -792,6 +794,7 @@ files:
           status: existing
           term: wdt:P1932
           'on': schema:TVSeries
+          qualifies: wdt:P725
           wikidata: wd:P1932
           meaning: The credited spelling when a supporting source states it.
           sources:
@@ -806,6 +809,7 @@ files:
           status: existing
           term: wdt:P453
           'on': schema:TVSeries
+          qualifies: wdt:P725
           wikidata: wd:P453
           meaning: The character voiced by this credited performer in this work.
           sources:
@@ -1465,19 +1469,22 @@ infobox:
           wikidata: wd:P178
           meaning: The credited developer of this game.
           sources: *id062
-          qualifiers: &gameCreditQualifiers
-            creditedAs:
+          qualifiers: &developerCreditQualifiers
+            creditedAs: &gameCreditedAs
               <<: *id031
               status: existing
               'on': schema:VideoGame
-            order:
+              qualifies: wdt:P178
+            order: &gameCreditOrder
               <<: *id024
               status: existing
               'on': schema:VideoGame
-            role:
+              qualifies: wdt:P178
+            role: &gameCreditRole
               <<: *id001
               status: existing
               'on': schema:VideoGame
+              qualifies: wdt:P178
       - id: 发行
         mapping:
           status: existing
@@ -1486,7 +1493,16 @@ infobox:
           wikidata: wd:P123
           meaning: The credited publisher of this game.
           sources: *id063
-          qualifiers: *gameCreditQualifiers
+          qualifiers:
+            creditedAs:
+              <<: *gameCreditedAs
+              qualifies: schema:publisher
+            order:
+              <<: *gameCreditOrder
+              qualifies: schema:publisher
+            role:
+              <<: *gameCreditRole
+              qualifies: schema:publisher
       - id: 剧本
         mapping:
           status: existing
@@ -1495,7 +1511,16 @@ infobox:
           wikidata: wd:P50
           meaning: The credited writer of the game scenario.
           sources: *id064
-          qualifiers: *gameCreditQualifiers
+          qualifiers:
+            creditedAs:
+              <<: *gameCreditedAs
+              qualifies: schema:author
+            order:
+              <<: *gameCreditOrder
+              qualifies: schema:author
+            role:
+              <<: *gameCreditRole
+              qualifies: schema:author
       - id: 程序
         mapping:
           status: existing
@@ -1504,7 +1529,16 @@ infobox:
           wikidata: wd:P767
           meaning: The credited programmer of the game.
           sources: *id026
-          qualifiers: *gameCreditQualifiers
+          qualifiers:
+            creditedAs:
+              <<: *gameCreditedAs
+              qualifies: schema:contributor
+            order:
+              <<: *gameCreditOrder
+              qualifies: schema:contributor
+            role:
+              <<: *gameCreditRole
+              qualifies: schema:contributor
       - id: website
         mapping:
           status: existing
@@ -1624,7 +1658,7 @@ infobox:
           wikidata: wd:P178
           meaning: The credited developer of this independently published game.
           sources: *id062
-          qualifiers: *gameCreditQualifiers
+          qualifiers: *developerCreditQualifiers
       - *id061
       - *id067
       - *id068

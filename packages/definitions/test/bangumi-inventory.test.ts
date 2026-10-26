@@ -229,6 +229,7 @@ type Decision = {
   status: 'existing' | 'proposed' | 'omitted';
   term?: string;
   on?: string;
+  qualifies?: string;
   wikidata?: string;
   meaning?: string;
   reason?: string;
@@ -282,6 +283,7 @@ test('every field, infobox key and enumeration of the pinned Bangumi archive is 
 const primaryTerms: Record<string, string[]> = {
   'schema:Book': ['wd:Q47461344'],
   'schema:BookSeries': ['wd:Q277759'],
+  'schema:ComicSeries': ['wd:Q21198342'],
   'schema:CreativeWork': ['wd:Q17537576'],
   'schema:CreativeWorkSeries': ['wd:Q7725310'],
   'schema:Episode': ['wd:Q1983062'],
@@ -337,12 +339,14 @@ const primaryTerms: Record<string, string[]> = {
   'skos:ConceptScheme': ['wd:Q5962346'],
   'skos:inScheme': ['wd:P361'],
   'wd:Q7397': ['wd:Q7397'],
+  'wd:Q209163': ['wd:Q209163'],
   'wd:Q95074': ['wd:Q95074'],
   'wdt:P1433': ['wd:P1433'],
   'wdt:P155': ['wd:P155'],
   'wdt:P1552': ['wd:P1552'],
   'wdt:P156': ['wd:P156'],
   'wdt:P178': ['wd:P178'],
+  'wdt:P179': ['wd:P179'],
   'wdt:P1853': ['wd:P1853'],
   'wdt:P1932': ['wd:P1932'],
   'wdt:P2635': ['wd:P2635'],
@@ -376,7 +380,12 @@ function validate(mapping: Decision) {
   if (mapping.status === 'existing') {
     const type = bundledRelease.types[mapping.on ?? ''];
     expect(type).toBeDefined();
-    expect(mapping.term === mapping.on || type!.properties.includes(mapping.term!)).toBe(true);
+    if (mapping.qualifies) {
+      expect(type!.properties).toContain(mapping.qualifies);
+      expect(bundledRelease.properties[mapping.qualifies]?.qualifiers).toContain(mapping.term);
+    } else {
+      expect(mapping.term === mapping.on || type!.properties.includes(mapping.term!)).toBe(true);
+    }
     expect(bundledRelease.types[mapping.term!] ?? bundledRelease.properties[mapping.term!]).toBeDefined();
   } else {
     expect(mapping.term).toMatch(
