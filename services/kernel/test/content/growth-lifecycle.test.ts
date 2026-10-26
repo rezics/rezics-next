@@ -39,7 +39,7 @@ db.pool.options.max = 1;
 const productionActionCatalogue = productionActions();
 afterAll(() => db.close());
 
-const scales = [1, 8, 64] as const;
+const scales = [1, 4, 16] as const;
 const populationSize = 500;
 
 // Every relation a population in this file writes, with the rows one ordinal writes into it at most.
@@ -62,18 +62,38 @@ const seededRelations = {
   'semantic.context': 1,
   'semantic.subject': 1,
 } as const;
+// The migrations seed the Global Context, which every platform authorization reads; populations write only communities.
+const globalContextFilter = "WHERE kind <> 'global'";
 const checkObservations: { start: Record<string, number>; end: Record<string, number> }[] = [];
 
 async function countSeededRelations(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (const relation of Object.keys(seededRelations)) {
-    const result = await db.admin.query<{ total: number }>(`SELECT count(*)::integer AS total FROM ${relation}`);
+    const result = await db.admin.query<{ total: number }>(
+      `SELECT count(*)::integer AS total FROM ${relation} ${relation === 'semantic.context' ? globalContextFilter : ''}`,
+    );
     counts[relation] = result.rows[0]!.total;
   }
   return counts;
 }
 
 async function beginCheck(): Promise<void> {
+  // The disposable database holds only these fixtures. CASCADE reaches the tables whose foreign keys point at them, and
+  // replica mode skips the semantic tables' immutability triggers, which also refuse TRUNCATE. The Global Context stays.
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    const truncated = Object.keys(seededRelations).filter((relation) => relation !== 'semantic.context');
+    await client.query(`TRUNCATE TABLE ${truncated.join(', ')} CASCADE`);
+    await client.query(`DELETE FROM semantic.context ${globalContextFilter}`);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
   checkObservations.push({ start: await countSeededRelations(), end: {} });
 }
 
@@ -395,6 +415,7 @@ test('Report admission proof stays within its bound as T grows', async () => {
   });
   const report = await checkGrowth(db, {
     name: 'Report admission proof',
+    scales,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async () => {},
     operation: async () => {

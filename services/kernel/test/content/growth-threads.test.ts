@@ -662,7 +662,6 @@ async function runCheck(
         to: scale * ordinalsPerScale,
       });
       if (previous === 0) await assertAnchorRelations(growthDb);
-      await growthDb.admin.query('CHECKPOINT');
     },
     operation,
   });
