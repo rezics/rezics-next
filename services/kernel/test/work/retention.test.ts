@@ -54,6 +54,7 @@ test('the retention period defaults to 30 days and accepts only whole numbers fr
   expect(readWorkflowRetentionConfig({})).toEqual({ retentionDays: 30 });
   expect(readWorkflowRetentionConfig({ KERNEL_WORKFLOW_RETENTION_DAYS: '7' })).toEqual({ retentionDays: 7 });
   expect(readWorkflowRetentionConfig({ KERNEL_WORKFLOW_RETENTION_DAYS: '365' })).toEqual({ retentionDays: 365 });
+  expect(readWorkflowRetentionConfig({ KERNEL_WORKFLOW_RETENTION_DAYS: '030' })).toEqual({ retentionDays: 30 });
 
   for (const value of ['', '6', '366', '7.0', '1e2', ' 30', '30 ', '-1', 'NaN']) {
     expect(() => readWorkflowRetentionConfig({ KERNEL_WORKFLOW_RETENTION_DAYS: value })).toThrow(ConfigError);

@@ -29,7 +29,7 @@ export type WorkflowRetentionSdk = Pick<typeof DBOS, 'listWorkflows' | 'deleteWo
 export function readWorkflowRetentionConfig(env: Environment): WorkflowRetentionConfig {
   const raw = env.KERNEL_WORKFLOW_RETENTION_DAYS;
   if (raw === undefined) return { retentionDays: DEFAULT_WORKFLOW_RETENTION_DAYS };
-  if (!/^(0|[1-9][0-9]*)$/.test(raw)) throw new ConfigError('KERNEL_WORKFLOW_RETENTION_DAYS');
+  if (!/^\d+$/.test(raw)) throw new ConfigError('KERNEL_WORKFLOW_RETENTION_DAYS');
   const retentionDays = Number(raw);
   if (
     !Number.isSafeInteger(retentionDays) ||
