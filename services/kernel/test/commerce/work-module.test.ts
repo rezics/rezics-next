@@ -13,6 +13,11 @@ test('the configured commerce module runs a workflow using the worker environmen
   const env: Record<string, string | undefined> = {
     ...process.env,
     DATABASE_URL: databaseUrl,
+    KERNEL_ROUTE_KEY: Buffer.alloc(32, 17).toString('base64url'),
+    KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 18).toString('base64url')}`,
+    AUTH_ISSUER: 'https://auth.example.test',
+    AUTH_AUDIENCE: 'https://api.rezics.test',
+    AUTH_JWKS_URL: 'https://auth.example.test/jwks',
     STRIPE_SECRET_KEY: 'sk_test_commerce_worker',
     STRIPE_MANAGED_PAYMENTS: 'false',
     STRIPE_API_HOST: `http://127.0.0.1:${stripe.port}`,

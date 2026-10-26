@@ -39,7 +39,7 @@ let fake: ReturnType<typeof startFakeStripe> | undefined;
 let access: ReturnType<typeof createAccess>;
 let commands: ReturnType<typeof createCommerceCommands>;
 let stripe: ReturnType<typeof createStripePort>;
-let actorToken: string;
+let signing: Awaited<ReturnType<typeof generateKeyPair>>;
 let nextPositionBase: number;
 
 function seededId(name: string, ordinal: number, label: string): string {
@@ -51,7 +51,22 @@ function requestKey(family: string, repetition: number): string {
 }
 
 async function freshActor() {
-  return access.authenticate(actorToken, { pool: db!.pool, deadline: Date.now() + 5_000 });
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({
+    client_id: 'growth-test',
+    scope: actions.join(' '),
+    authn_epoch: 1,
+    auth_time: now,
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'commerce-growth', typ: 'at+jwt' })
+    .setIssuer('https://auth.example.test')
+    .setAudience('https://api.rezics.test')
+    .setSubject(growthActorId)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 240)
+    .sign(signing.privateKey);
+  return access.authenticate(token, { pool: db!.pool, deadline: Date.now() + 5_000 });
 }
 
 function offerInput() {
@@ -433,7 +448,7 @@ beforeAll(async () => {
   const entropy = Number.parseInt(Bun.randomUUIDv7().replaceAll('-', '').slice(0, 7), 16);
   nextPositionBase = 1_000_000_000_000 + entropy * 20_000_000;
 
-  const signing = await generateKeyPair('ES256', { extractable: true });
+  signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'commerce-growth', alg: 'ES256' };
   access = createAccess({
     actions: new Map(
@@ -462,21 +477,6 @@ beforeAll(async () => {
     "INSERT INTO access.resource_grant(route, resource_id, subject_id, subject_role, action, valid, transaction_id, subject_kind) VALUES (0, $1, $2, '', 'offer:create', '(,)', $2, 'identity')",
     [GLOBAL_CONTEXT, growthActorId],
   );
-
-  actorToken = await new SignJWT({
-    client_id: 'growth-test',
-    scope: actions.join(' '),
-    authn_epoch: 1,
-    auth_time: Math.floor(Date.now() / 1000),
-    amr: ['pwd'],
-  })
-    .setProtectedHeader({ alg: 'ES256', kid: 'commerce-growth', typ: 'at+jwt' })
-    .setIssuer('https://auth.example.test')
-    .setAudience('https://api.rezics.test')
-    .setSubject(growthActorId)
-    .setIssuedAt()
-    .setExpirationTime('4m')
-    .sign(signing.privateKey);
 });
 
 afterAll(async () => {

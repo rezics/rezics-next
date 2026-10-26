@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
 import { readCommerceConfig, readCommerceWorkerConfig } from '../../src/commerce/config.ts';
 import { partitionOf, newId, routeOf } from '../../src/route/route.ts';
@@ -75,7 +76,7 @@ test('without commerce variables the API starts, serves reads, and refuses order
 
     const token = await new SignJWT({
       client_id: 'web',
-      scope: 'order:create order:read entitlement:list payout_statement:list',
+      scope: 'order:create order:read entitlement:list payout_statement:list exposure:open',
       authn_epoch: 1,
       auth_time: Math.floor(Date.now() / 1000),
       amr: ['pwd'],
@@ -89,6 +90,18 @@ test('without commerce variables the API starts, serves reads, and refuses order
       .sign(signing.privateKey);
     const origin = server.url.href.replace(/\/$/, '');
     const get = (path: string) => fetch(`${origin}${path}`, { headers: { authorization: `Bearer ${token}` } });
+
+    await bootstrapGovernance(admin, buyer);
+    for (const group of ['purchases', 'selling']) {
+      const opened = await fetch(`${origin}/v1/platform/exposure/${group}:open`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+        },
+      });
+      if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
+    }
 
     expect((await fetch(`${origin}/health`)).status).toBe(200);
     expect((await get(`/v1/offers/${newId(0x2200)}`)).status).toBe(404);

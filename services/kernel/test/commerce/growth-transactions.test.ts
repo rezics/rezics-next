@@ -102,12 +102,23 @@ test('settlement and royalty read only named keys with equal statements and rows
         await run();
         const queries = captured;
         captured = undefined;
-        measured.push({ statements: queries.length, rows: queries.reduce((sum, q) => sum + q.rows, 0) });
-        const reads = queries.filter((q) => /FROM commerce.order_transaction/.test(q.sql));
+        const probes = queries.filter(
+          (q) =>
+            /SELECT\s+1\s+AS\s+present/i.test(q.sql) &&
+            /FROM commerce\.order_transaction\b/i.test(q.sql) &&
+            /LIMIT\s+257\b/i.test(q.sql),
+        );
+        expect(probes.length).toBeLessThanOrEqual(1);
+        for (const probe of probes) expect(probe.rows).toBeLessThanOrEqual(257);
+        const reads = queries.filter((q) => /FROM commerce\.order_transaction\b/i.test(q.sql) && !probes.includes(q));
         expect(reads).toHaveLength(1);
         expect(reads[0]!.sql).toMatch(/balance_transaction_id\s*=\s*ANY\s*\(/i);
         expect(reads[0]!.rows).toBeLessThanOrEqual(1);
         expect(JSON.stringify(reads[0]!.values)).toContain(next.id);
+        measured.push({
+          statements: queries.length,
+          rows: queries.filter((q) => !probes.includes(q)).reduce((sum, q) => sum + q.rows, 0),
+        });
         expect(queries.some((q) => /FROM commerce.offer\b/.test(q.sql))).toBe(false);
         const recording = queries.find((q) => /INSERT INTO commerce.royalty_line/.test(q.sql));
         if (recording) {
