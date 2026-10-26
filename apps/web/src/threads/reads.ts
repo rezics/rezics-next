@@ -3,11 +3,11 @@ import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import { cookie } from '../session/cookies';
-import { readSessionIdentity } from '../session/state';
-import type { VerificationConfig } from '../report/turnstile';
 import { kernelClient } from '../kernel/client';
+import { loadThreadPage, type ThreadPost } from './thread-page';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -15,7 +15,7 @@ type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
-export type ThreadPost = PostPage['posts'][number];
+export type { ThreadPost };
 
 type PageInput = { id: string; cursor?: string };
 const draftCookie = 'rezics_draft_key';
@@ -92,28 +92,14 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       verification: VerificationConfig;
     }> => {
       setResponseHeader('cache-control', 'private, no-store');
-      const client = kernelClient();
-      const query = data.cursor ? { query: { cursor: data.cursor } } : {};
-      const [threadResult, postsResult] = await Promise.all([
-        client.threads({ id: data.id }).get(),
-        client.threads({ id: data.id }).posts.get(query),
-      ]);
-      const thread = checkRead<Thread>(threadResult, 'thread');
-      const posts = checkRead<PostPage>(postsResult, 'thread posts');
-      if (thread.thread.id !== data.id) throw notFound();
-      const identity = await readSessionIdentity(getRequest(), env as Partial<SessionEnv>);
       const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
-      return {
-        thread: thread.thread,
-        posts,
-        idempotencyKey: carriedDraftKey(getRequest(), data.id) ?? crypto.randomUUID(),
-        ...(identity.subject ? { viewerId: identity.subject } : {}),
-        verification: {
-          sitekey: config.TURNSTILE_SITE_KEY ?? '',
-          scriptUrl:
-            (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
-            'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
-        },
-      };
+      const request = getRequest();
+      const page = await loadThreadPage(kernelClient(), request, env as Partial<SessionEnv>, data, {
+        sitekey: config.TURNSTILE_SITE_KEY ?? '',
+        scriptUrl:
+          (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+      });
+      return { ...page, idempotencyKey: carriedDraftKey(request, data.id) ?? crypto.randomUUID() };
     },
   );

@@ -1,5 +1,6 @@
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
+import type { ReactionKind } from '@rezics/ui/reactions';
 import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -7,6 +8,7 @@ import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readThreadPage, type ThreadPost } from '../../threads/reads';
+import { ThreadReactions } from '../../threads/thread-reactions';
 import {
   erasePost,
   replyToThread,
@@ -32,6 +34,7 @@ function ThreadPage() {
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
   const id = Route.useParams().id;
+  const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
 
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
 
@@ -61,7 +64,11 @@ function ThreadPage() {
                   anchorId={firstPost ? `thread-${thread.id}` : `post-${post.id}`}
                   onChange={updatePost}
                   post={post}
+                  counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
+                  returnTo={returnTo}
+                  signedIn={session === 'signed-in'}
                   target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
+                  value={(firstPost ? thread.viewerReaction : post.viewerReaction) ?? null}
                   verification={verification}
                   viewerId={viewerId}
                 />
@@ -104,7 +111,7 @@ function ThreadPage() {
           onSuccess={(post) => setPosts((current) => ({ ...current, posts: [...current.posts, post] }))}
         />
       ) : session === 'signed-out' ? (
-        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
+        <SignInPrompt returnTo={returnTo} />
       ) : null}
     </article>
   );
@@ -125,6 +132,10 @@ function PostSlot({
   onChange,
   anchorId,
   target,
+  counts,
+  value,
+  signedIn,
+  returnTo,
   verification,
 }: {
   post: ThreadPost;
@@ -132,6 +143,10 @@ function PostSlot({
   onChange: (post: ThreadPost) => void;
   anchorId: string;
   target: { kind: 'thread' | 'post'; id: string };
+  counts: Partial<Record<ReactionKind, number>>;
+  value: ReactionKind | null;
+  signedIn: boolean;
+  returnTo: string;
   verification: VerificationConfig;
 }) {
   const [editing, setEditing] = useState(false);
@@ -251,6 +266,7 @@ function PostSlot({
       ) : (
         <DocumentBody document={post.body} labels={{ revealSpoiler: m.thread_reveal_spoiler() }} />
       )}
+      <ThreadReactions counts={counts} returnTo={returnTo} signedIn={signedIn} target={target} value={value} />
     </li>
   );
 }

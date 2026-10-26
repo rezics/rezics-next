@@ -60,7 +60,7 @@ Configure these variables in the environment of `bun run dev`:
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
-  posting routes need `thread:create` and `post:create`; presentation curation needs `presentation:publish` and
+  posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
   `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`.
   Offer pages and other public reads need no scope. Sign-in requests
   `openid offline_access` followed by these scopes, each once.
@@ -110,6 +110,7 @@ const websiteScopes = registration.scopes.join(' ');
 ```
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
+`reaction:set`,
 the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
@@ -139,7 +140,7 @@ the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'h
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
 Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
 `http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation and checkout routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate order:create order:read`.
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read`.
 From `apps/web`, run:
 
 ```sh
@@ -147,7 +148,7 @@ AUTH_ISSUER=http://127.0.0.1:4200 \
 API_RESOURCE=https://api.rezics.test \
 WEBSITE_CLIENT_ID=rezics-website \
 WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate order:create order:read' \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read' \
 KERNEL_ORIGIN=http://127.0.0.1:4300 \
 bun run dev --host 127.0.0.1 --port 3000 --strictPort
 ```
@@ -351,10 +352,19 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Thread page (`/<locale>/threads/<id>`)
 
 - **Touches:** Root preferences/D and thread plus post-page K reads started together; render each page body locally with
-  `DocumentBody`
+  `DocumentBody`. Reactions add no read, because counts and the viewer's kind come with the thread and post-page reads.
+  A signed-in page read resolves the session credential once and sends it on those two reads
 - **Bound:** ≤2 K started together (thread and one page of at most s ≤ 100 posts), ≤1 D, 0 R/A; work is O(total body
   size of the page), each body capped at 2 MiB (ADR-0036)
 - **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
+- **Growth check:** `tests/reactions-cost.test.ts`: `thread page reads stay within their bound as s grows`
+
+### Reaction
+
+- **Touches:** One `PUT` or `DELETE` `/v1/{threads|posts}/<id>/reaction`/K after the session read. `PUT` sends
+  `{ kind }` and every change sends a new `Idempotency-Key`
+- **Bound:** ≤1 K, ≤1 D; constant
+- **Growth check:** `tests/reactions-cost.test.ts`: `setting or clearing a reaction stays within its bound as s grows`
 
 ### Collection page
 
