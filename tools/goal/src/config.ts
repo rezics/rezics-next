@@ -14,6 +14,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
+import { watch } from './watchdog.ts';
 import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
@@ -443,7 +444,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       refreshCodexSchedule(settings.stateDirectory);
       return (
         deliverDueReminders(settings.notes ?? [], settings.stateDirectory, deliver) +
-        alertUnspentAllowances(settings.pools, (pool) => tasks.reader(pool), settings.stateDirectory, deliver)
+        alertUnspentAllowances(settings.pools, (pool) => tasks.reader(pool), settings.stateDirectory, deliver) +
+        watch(
+          tasks.store,
+          settings.mainCheckout,
+          { stabilize: settings.stabilizeBranch, integration: settings.integrationBranch },
+          settings.stateDirectory,
+          deliver,
+        )
       );
     },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {

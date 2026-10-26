@@ -185,3 +185,66 @@ test('promotion without a stabilize branch keeps its existing failure behavior',
     h.dispose();
   }
 });
+
+function contains(h: ReturnType<typeof integrationHarness>, ancestor: string, descendant: string): boolean {
+  try {
+    git(h.root, 'merge-base', '--is-ancestor', ancestor, descendant);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Commit on main in the main checkout while the gate runs, as a control-plane hotfix does. */
+function commitOnMain(h: ReturnType<typeof integrationHarness>, path: string): string {
+  mkdirSync(dirname(join(h.root, path)), { recursive: true });
+  writeFileSync(join(h.root, path), 'export {};\n');
+  git(h.root, 'add', path);
+  git(h.root, 'commit', '-m', `Change ${path} on main`);
+  return h.head('main');
+}
+
+test('a snapshot gated while main took control-plane commits is published merged with them', async () => {
+  const h = integrationHarness();
+  try {
+    const stable = await h.seed('stable');
+    const candidate = h.head();
+    createStabilize(h, candidate);
+    let hotfix = '';
+    await h.promote(async () => {
+      hotfix ||= commitOnMain(h, 'tools/goal/src/hotfix.ts');
+      return success;
+    });
+
+    const main = h.head('main');
+    expect(contains(h, candidate, main)).toBe(true);
+    expect(contains(h, hotfix, main)).toBe(true);
+    expect(contains(h, main, h.head('stabilize'))).toBe(true);
+    expect(h.store.task(stable.id).state).toBe('merged');
+    expect(h.store.promotion()).toBeUndefined();
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a snapshot gated while main took any other commit is dropped for a fresh gate', async () => {
+  const h = integrationHarness();
+  try {
+    const stable = await h.seed('stable');
+    const candidate = h.head();
+    createStabilize(h, candidate);
+    let other = '';
+    let gates = 0;
+    await h.promote(async () => {
+      gates++;
+      other ||= commitOnMain(h, 'services/kernel/src/other.ts');
+      return success;
+    });
+
+    expect(contains(h, candidate, h.head('main'))).toBe(false);
+    expect(h.head('main')).toBe(other);
+    expect(h.store.task(stable.id).state).toBe('integrated');
+  } finally {
+    h.dispose();
+  }
+});

@@ -684,19 +684,23 @@ function publishPrefix(
 
 // Promotion regenerates derived files on stabilize alone, so dev can lack main's last commit. The merge keeps dev's
 // side of a derived-file conflict, since the next promotion regenerates those files anyway.
-function mergeMainIntoDev(options: PromotionOptions, target: string): string | undefined {
+function mergeMainIntoDev(
+  options: PromotionOptions,
+  target: string,
+  branch = options.settings.integrationBranch,
+): string | undefined {
   const settings = options.settings,
     checkout = settings.mainCheckout;
   const derived = (options.derivedFiles ?? defaultDerivedFiles).map((file) => file.path);
   for (let attempt = 0; attempt < 5; attempt++) {
-    const dev = optionalHead(checkout, settings.integrationBranch);
+    const dev = optionalHead(checkout, branch);
     if (!dev) return undefined;
     if (isAncestor(checkout, target, dev)) return dev;
     const tree = join(settings.worktreeRoot, `promotion-merge-${randomUUID()}`);
     mkdirSync(settings.worktreeRoot, { recursive: true });
     git(checkout, 'worktree', 'add', '--detach', tree, dev);
     try {
-      const merged = spawnSync('git', ['merge', '--no-ff', '--no-edit', '-m', 'Merge main into dev', target], {
+      const merged = spawnSync('git', ['merge', '--no-ff', '--no-edit', '-m', `Merge main into ${branch}`, target], {
         cwd: tree,
         encoding: 'utf8',
       });
@@ -713,7 +717,7 @@ function mergeMainIntoDev(options: PromotionOptions, target: string): string | u
       }
       const commit = git(tree, 'rev-parse', 'HEAD');
       try {
-        git(checkout, 'update-ref', ref(settings.integrationBranch), commit, dev);
+        git(checkout, 'update-ref', ref(branch), commit, dev);
         return commit;
       } catch {
         // Dev moved during the merge; merge again onto its new head.
@@ -723,6 +727,34 @@ function mergeMainIntoDev(options: PromotionOptions, target: string): string | u
     }
   }
   return undefined;
+}
+
+/** The paths main may take directly while a snapshot is gated. */
+const CONTROL_PLANE_PATHS = ['tools/goal/'];
+
+function controlPlaneOnly(checkout: string, main: string, snapshot: string): boolean {
+  const base = git(checkout, 'merge-base', main, snapshot);
+  const changed = git(checkout, 'diff', '--name-only', base, main).split('\n').filter(Boolean);
+  return changed.length > 0 && changed.every((path) => CONTROL_PLANE_PATHS.some((prefix) => path.startsWith(prefix)));
+}
+
+/** Merge a gated snapshot onto main's newer control-plane commits; undefined when they conflict. */
+function mergeIntoMain(options: PromotionOptions, main: string, snapshot: string): string | undefined {
+  const settings = options.settings,
+    checkout = settings.mainCheckout;
+  const tree = join(settings.worktreeRoot, `promotion-main-${randomUUID()}`);
+  mkdirSync(settings.worktreeRoot, { recursive: true });
+  git(checkout, 'worktree', 'add', '--detach', tree, main);
+  try {
+    const merged = spawnSync(
+      'git',
+      ['merge', '--no-ff', '--no-edit', '-m', `Merge promoted ${settings.stabilizeBranch} into ${settings.mainBranch}`, snapshot],
+      { cwd: tree, encoding: 'utf8' },
+    );
+    return merged.status === 0 ? git(tree, 'rev-parse', 'HEAD') : undefined;
+  } finally {
+    git(checkout, 'worktree', 'remove', '--force', tree);
+  }
 }
 
 function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): boolean {
@@ -752,15 +784,21 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
   const settings = options.settings,
     store = options.job.tasks.store,
     checkout = settings.mainCheckout;
-  const target = run.promoteHead!;
+  let target = run.promoteHead!;
   if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
     throw new Error(`The main checkout must have ${settings.mainBranch} checked out`);
   const taskIds = run.promoteTaskIds ?? [];
   const now = head(checkout, settings.mainBranch);
-  // Main took commits this snapshot does not contain: drop the run, and the next pass gates a fresh one.
   if (now !== target && !isAncestor(checkout, target, now) && !isAncestor(checkout, now, target)) {
-    store.clearPromotion();
-    return;
+    // Control-plane fixes land on main directly while a snapshot is gated; they do not touch what the gate checked, so
+    // the snapshot is published merged with them. Any other commit on main drops the run for a fresh gate.
+    const merged = controlPlaneOnly(checkout, now, target) ? mergeIntoMain(options, now, target) : undefined;
+    if (!merged) {
+      store.clearPromotion();
+      return false;
+    }
+    run.promoteHead = target = merged;
+    store.savePromotion(run);
   }
   store.publishPromotion(taskIds, target, () => {
     const current = head(checkout, settings.mainBranch);
@@ -773,6 +811,13 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
     }
   });
   options.job.onPromotionComplete(taskIds, run.id);
+  // A merged main is in no candidate yet; the next window must contain it, or no later snapshot could be published.
+  const stabilize = optionalHead(checkout, settings.stabilizeBranch);
+  if (stabilize !== undefined && !isAncestor(checkout, target, stabilize)) {
+    const advanced = mergeMainIntoDev(options, target, settings.stabilizeBranch);
+    if (!advanced)
+      notifySupermanager(options, `Published main at ${target}, but main does not merge into ${settings.stabilizeBranch}.`);
+  }
   const stabilized = advanceStabilizeAfterPublish(options, run);
   store.clearPromotion();
   return stabilized;
