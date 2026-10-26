@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { runCommand } from '../command/command.ts';
+import { CommandUnavailableError, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccessClient } from '../request/access.ts';
@@ -118,7 +118,8 @@ export async function runAuthorErasure(
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
         const anchor = await readPartition(client, partition);
-        if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition unavailable');
+        if (!anchor) throw new CommandUnavailableError('deadline', partition);
+        if (anchor.writeState === 'moved') throw new CommandUnavailableError('moved', partition, anchor.movedTo);
         const value = await action(client);
         await client.query('COMMIT');
         return value;

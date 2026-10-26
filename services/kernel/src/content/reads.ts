@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
+import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
@@ -93,8 +94,11 @@ async function snapshot<T>(
       const client = deadlineClient(connection, context.deadline);
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(route(id)));
-        if (!partition || partition.writeState === 'moved') throw new Error('Content partition unavailable');
+        const partitionNo = partitionOf(route(id));
+        const partition = await readPartition(client, partitionNo);
+        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
         const value = await work(client);
         await client.query('COMMIT');
         return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };

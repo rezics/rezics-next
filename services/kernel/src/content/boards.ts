@@ -1,5 +1,6 @@
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
+import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -92,8 +93,10 @@ async function pageHotBoardCandidates(
   return withConnection(pool, async (connection) => {
     try {
       await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const anchor = await readPartition(connection, partitionOf(boardRoute));
-      if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition unavailable');
+      const partitionNo = partitionOf(boardRoute);
+      const anchor = await readPartition(connection, partitionNo);
+      if (!anchor) throw new CommandUnavailableError('deadline', partitionNo);
+      if (anchor.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, anchor.movedTo);
       const parameters = {
         route: boardRoute,
         board_id: boardId,
@@ -310,8 +313,11 @@ async function matchesCurrentText(
       const client = deadlineClient(connection, context.deadline);
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(thread.route));
-        if (!partition || partition.writeState === 'moved') throw new Error('Content partition unavailable');
+        const partitionNo = partitionOf(thread.route);
+        const partition = await readPartition(client, partitionNo);
+        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
         const parameters = {
           route: thread.route,
           thread_id: thread.id,
