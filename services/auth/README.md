@@ -1279,3 +1279,68 @@ revocation, code redemption with logout, native browser confirmation and expired
 recent-session hints, including `pool.max=1`. RFC 7009 revocation of an API JWT
 uses the same native confidential proof admission, then the existing Access floor;
 the adapter reports success only after that floor commits.
+
+## Workflow history retention
+
+The Auth host refuses startup unless `AUTH_WORKFLOW_RETENTION_DAYS` is a whole
+number from 7 through 365; absence defaults to 30 days. Auth maintenance registers
+`auth.workflowRetention.every-10-minutes` (`*/10 * * * *`, UTC, no backfill) on its
+existing single-concurrency maintenance queue. It operates only on application
+`rezics-auth-accounts` in `auth_dbos`, without launching another executor.
+
+Each run fixes one cutoff and deletes at most 60 batches of 1000 terminal
+workflows (`SUCCESS`, `ERROR`, `CANCELLED`, `MAX_RECOVERY_ATTEMPTS_EXCEEDED`).
+Both `completedBefore` and `endTime` receive cutoff minus one millisecond because
+the SDK comparisons are inclusive. Running work and work completed exactly at
+or after the cutoff remain. Input/output payloads and child enumeration are
+excluded. After DBOS creates its system schema, the host installs a delete
+trigger: each deleted status removes its `auth_workflow_request` binding by
+primary key inside the same SDK transaction. A failure rolls both back; retries
+cannot strand bindings. Product migrations define the trigger function without
+requiring the DBOS schema to exist during migration.
+
+`growth-retention.test.ts` uses the shared harness at 256, 1024 and 4096 with its
+default warmup and repetitions. A full batch remains 1000 workflows as expired
+history grows beyond a batch. A short batch remains ten as recent history grows alongside a fixed deep
+population of long-lived, recently completed workflows. Request bindings grow with both populations;
+seeding occurs only in `grow`.
+
+### Workflow ID reuse audit
+
+Retention removes execution history, not native command receipts or approval
+expiry checks. Reusing an old ID does not restore an expired authorization:
+
+- `accounts.registration`: the original native handle reservation and pending
+  commands replay their receipts with their original deadline. Provisioning and
+  activation enforce that deadline. Expiry requires the matching pending account;
+  a completed active account fails that check before Auth erasure. An already
+  expired registration replays expiry/release receipts and idempotent erasure.
+- `accounts.client-reduction`, including `:page:` continuation IDs: the original
+  approval expires within 300 seconds. Native progress is keyed by operation ID,
+  records its cursor and completion, and refuses changed inputs. Owner barriers
+  and cleanup receipts also retain their original keys.
+- `accounts.operation`: automated registration, organization creation, rename,
+  membership changes, operator transfer, deletion, operator fencing, consent and
+  authorized session revocation revalidate native approvals (at most 300 seconds)
+  before effects. Native commands use the approval's stable command prefix and
+  retained receipts. Delete/revoke continuations require the exact native
+  allowlisted operation and independently expire within 300 seconds; they cannot
+  be recreated by workflow ID alone. Historical
+  callback-only unapproved revoke paths use `wf:<ID>:<phase>` native keys;
+  production bindings refuse unapproved operations.
+  Operator session opening and transfer acceptance do not start a DBOS workflow.
+- `accounts.membership`: the pure registrar reauthorizes reserve and publish;
+  native authorization expires independently of DBOS history. Reserve, publish,
+  terminalize and release use `wf:<ID>:<phase>` native receipt keys. Cleanup carries
+  the exact reservation and terminal proof, so repeating it cannot release a
+  different reservation. This registrar runs in the composing caller's executor;
+  Auth retention never visits kernel's system schema/application.
+- `auth.maintenance.tick`, `auth.workflowRetention`, and the separately composed
+  `accounts.website-protocol-expiry` schedule intentionally repeat bounded,
+  idempotent pruning primitives. Signing pruning uses its generation compare and
+  swap. Reusing a scheduled ID only performs another bounded maintenance pass.
+
+Fresh approvals for the same actor and logical operation retain the same native
+command prefix. The permanent native approval-binding receipt refuses changed
+business input or principal assignment. DBOS history retention therefore does
+not discard the effect authority or allow a second effect for that logical key.

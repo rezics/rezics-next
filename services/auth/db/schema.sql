@@ -87,6 +87,19 @@ END $$;
 
 
 --
+-- Name: auth_delete_workflow_request(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_delete_workflow_request() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DELETE FROM public.auth_workflow_request WHERE workflow_id=OLD.workflow_uuid;
+  RETURN OLD;
+END $$;
+
+
+--
 -- Name: auth_passkey_used(); Type: FUNCTION; Schema: public; Owner: -
 --
 

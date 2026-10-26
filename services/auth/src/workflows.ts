@@ -37,6 +37,7 @@ export type AccountOperation =
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { AUTH_WORKFLOW_APPLICATION, installWorkflowRequestRetention } from './retention.ts';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
 import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureMessage } from './session-revocation.ts';
@@ -1257,7 +1258,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         options.registerWorkflows?.();
       }
       DBOS.setConfig({
-        name: 'rezics-auth-accounts',
+        name: AUTH_WORKFLOW_APPLICATION,
         systemDatabaseUrl: options.systemDatabaseUrl,
         systemDatabaseSchemaName: systemSchema,
         ...(options.systemDatabasePool ? { systemDatabasePool: options.systemDatabasePool } : {}),
@@ -1267,6 +1268,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         logLevel: 'warn',
       });
       await DBOS.launch();
+      if (sameDatabase) await installWorkflowRequestRetention(database);
       started = true;
       if (options.handleSignals !== false) {
         process.once('SIGINT', interrupt);
