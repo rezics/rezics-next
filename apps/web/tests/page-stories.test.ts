@@ -235,7 +235,7 @@ test(
             const account = page.getByRole('button', { name: own.account_menu, exact: true });
             const menu = page.getByRole('group', { name: own.account_menu, exact: true });
             if ((await account.count()) && !(await menu.isVisible())) await account.click();
-            expect(await page.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
+            expect(await menu.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
           }
           if (name === 'home' || name === 'missing-subject')
             expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
