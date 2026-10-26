@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import { createCommandAdmission, installCommandAdmission } from '../../src/access/command-admission.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
@@ -31,9 +32,11 @@ import {
 import reserveImportedMedia from '../../src/content/reserve-import-media.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const db = await openGrowthDatabase();
 db.pool.options.max = 1;
+const productionActionCatalogue = productionActions();
 afterAll(() => db.close());
 
 const scales = [1, 8, 64] as const;
@@ -143,12 +146,28 @@ async function createActor(route: number, actions: readonly string[]) {
     requestedBy: null,
     authnEpoch: 1,
   };
+  const actionCatalogue = new Map(productionActionCatalogue);
+  for (const action of actions) if (!actionCatalogue.has(action)) actionCatalogue.set(action, { anonymous: false });
+  const access = createAccess({
+    actions: actionCatalogue,
+    accountEvidence: () => account,
+  });
+  installCommandAdmission(
+    access,
+    createCommandAdmission((candidate) =>
+      candidate === actor
+        ? {
+            account,
+            pool: db.pool,
+            deadline: Date.now() + 30_000,
+            expires: Date.now() + 30_000,
+          }
+        : undefined,
+    ),
+  );
   return {
     actor,
-    access: createAccess({
-      actions: new Map(actions.map((action) => [action, { anonymous: false }])),
-      accountEvidence: () => account,
-    }),
+    access,
   };
 }
 
@@ -356,7 +375,7 @@ test('Report admission proof stays within its bound as T grows', async () => {
 test('Author erasure request stays within its bound as p grows', async () => {
   const route = 0x6a41;
   const threadId = newId(route);
-  const { actor, access } = await createActor(route, ['post:erase']);
+  const { actor, access } = await createActor(route, ['post:erase', 'account:read']);
   const firstPostId = newId(route);
   const firstRevisionId = newId(route);
   const upperPostId = newId(route);
@@ -402,6 +421,7 @@ test('Author erasure request stays within its bound as p grows', async () => {
     };
   });
   await addGrant(route, firstPostId, actor.accountId, 'post:erase');
+  await addGrant(route, actor.accountId, actor.accountId, 'account:read');
   const deps: AuthorErasureDependencies = {
     pool: db.pool,
     access,
@@ -598,6 +618,7 @@ test('Author erasure binding and status stays within its bound as P grows', asyn
           actor_requested_by: null,
           actor_authn_epoch: 1,
           empty_scope: true,
+          anchor_post_id: postId,
           upper_created_at: null,
           upper_post_id: null,
           requested_at: new Date(),
