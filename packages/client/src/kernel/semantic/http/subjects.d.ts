@@ -77,8 +77,9 @@ type SubjectRouteDependencies = {
     routeKey: Uint8Array;
     tokens: KeyRing;
     access: () => Access;
+    clock: () => Date;
 };
-declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens, access }: SubjectRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens, access, clock }: SubjectRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
         error: Error;

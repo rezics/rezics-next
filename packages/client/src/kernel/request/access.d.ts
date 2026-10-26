@@ -67,9 +67,9 @@ export interface Access {
     authorize(client: AccessClient, actor: Actor, action: string, resource: Resource, evidence?: unknown, time?: AuthoritativeTime): Promise<boolean>;
 }
 export declare function accessCheck(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<AccessCheck>;
-/** Prepare evidence on every live attempt before resource checkout. The stable
- * check wrapper always uses the current attempt's evidence, including body checks
- * captured before execution. Self-read permits receipt lookup only, never a body.
+/** Recheck command admission on every live attempt before resource checkout.
+ * Request evidence is prepared once, so an operational retry cannot renew its
+ * deadline. Self-read permits receipt lookup only, never a body.
  */
 export declare function accessCommandAuthorization(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext, denied: () => Error): Promise<AccessCommandAuthorization>;
 export declare class AuthenticationError extends Error {

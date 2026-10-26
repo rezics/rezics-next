@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { newErrorLines } from './merge-train.ts';
 import { integrationHarness } from './test-support.ts';
 
@@ -205,6 +207,53 @@ test("a branch whose changes match no check's paths integrates without running a
     const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
     expect(log).not.toContain('integration check ran');
     expect(log).not.toContain('Integration check on');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a later check still runs when an earlier one fails as on dev, and its new errors refuse the branch', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.advanceDev('broken');
+    integrationChecks(h, [
+      { paths: ['**'], command: ['sh', '-c', "test ! -e broken || { echo 'src/a.ts(3,1): error TS2322: dev error'; exit 1; }"] },
+      { paths: ['**'], command: ['sh', '-c', "test ! -e worse || { echo 'error: imports an undeclared package'; exit 1; }"] },
+    ]);
+    const task = h.dispatch('worse');
+    await h.start(task);
+    const dev = h.head();
+
+    await h.train(undefined, false);
+
+    expect(h.head()).toBe(dev);
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.outcomes[0]?.firstFailure?.assertion).toContain('imports an undeclared package');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a branch whose only change is its frozen acceptance files is refused as having no work', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const task = h.dispatch('frozen.test.ts');
+    await h.start(task);
+    // The fixture worker's one file stands for the controller's frozen acceptance commit.
+    h.store.updateTask({ taskId: task.id, attempt: h.store.task(task.id).currentAttempt }, (current) => {
+      (current as typeof current & { frozenFiles?: { path: string; hash: string }[] }).frozenFiles = [
+        { path: 'frozen.test.ts', hash: createHash('sha256').update(readFileSync(join(task.worktree, 'frozen.test.ts'))).digest('hex') },
+      ];
+    });
+    const dev = h.head();
+
+    await h.train(undefined, false);
+
+    expect(h.head()).toBe(dev);
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('No committed changes beyond');
   } finally {
     h.dispose();
   }
