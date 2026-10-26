@@ -3,50 +3,37 @@ import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type Source } from '@rezics/definitions/bulk';
 import { checkSubjectInput } from '@rezics/definitions/validate';
+import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000021' };
+const actions = ['subject:create', 'subject:read', 'statement:propose'];
+const realAccess = await createRealAccess(admin, accounts, actions);
+const kernel = createKernel({
+  pool,
+  access: realAccess.access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(4),
+  writeRate: realAccess.writeRate,
+});
 beforeAll(async () => {
+  const global = { route: 0, id: GLOBAL_CONTEXT };
+  await realAccess.grant(global, 'editor', 'subject:create');
+  await realAccess.grant(global, 'editor', 'statement:propose');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
 afterAll(async () => {
   await pool.end();
-});
-
-const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
-const editor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000021',
-  clientId: 'web',
-  scopes: ['subject:create', 'subject:read', 'statement:propose'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const access: Access = {
-  async authenticate(token) {
-    if (token !== 'editor') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return editor;
-  },
-  async authorize(_client, _actor, action, resource) {
-    return action === 'subject:read' || resource.id === GLOBAL_CONTEXT;
-  },
-};
-const kernel = createKernel({
-  pool,
-  access,
-  tokens,
-  routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  await admin.end();
 });
 
 async function post(path: string, body: unknown) {
@@ -54,7 +41,7 @@ async function post(path: string, body: unknown) {
     new Request(`http://kernel.test${path}`, {
       method: 'POST',
       headers: {
-        authorization: 'Bearer editor',
+        authorization: `Bearer ${realAccess.bearer('editor')}`,
         'idempotency-key': `"${randomUUID()}"`,
         'content-type': 'application/json',
       },

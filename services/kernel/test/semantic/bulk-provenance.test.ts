@@ -2,45 +2,36 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
+import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createRealAccess } from './real-access.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-1a0000000061',
-  clientId: 'bulk-review',
-  scopes: ['subject:create', 'subject:batch_write', 'statement:propose', 'subject:read'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const grants = new Set(actor.scopes);
-const checks: string[] = [];
-const access: Access = {
-  async authenticate(token) {
-    if (token !== 'importer') throw new AuthenticationError(401, 'Bearer');
-    return actor;
-  },
-  async authorize(_tx, _actor, action, resource) {
-    checks.push(action);
-    return action === 'subject:read' || (resource.id === GLOBAL_CONTEXT && grants.has(action));
-  },
-};
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const accounts = { importer: '019a1b2c-3d4e-7f00-8a00-1a0000000061' };
+const actions = ['subject:create', 'subject:batch_write', 'statement:propose', 'subject:read'];
+const realAccess = await createRealAccess(admin, accounts, actions);
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
-beforeAll(() => bootstrapRelease(pool, bundledRelease));
-afterAll(() => pool.end());
+beforeAll(async () => {
+  const global = { route: 0, id: GLOBAL_CONTEXT };
+  for (const action of ['subject:create', 'subject:batch_write', 'statement:propose'])
+    await realAccess.grant(global, 'importer', action);
+  await bootstrapRelease(pool, bundledRelease);
+});
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
+});
 const source = (): Source => ({
   source: 'openlibrary',
   external_id: randomUUID(),
@@ -71,7 +62,7 @@ async function call(path: string, body?: unknown) {
     new Request(`http://kernel.test${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       headers: {
-        authorization: 'Bearer importer',
+        authorization: `Bearer ${realAccess.bearer('importer')}`,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -105,17 +96,18 @@ test('refresh receipts preserve their result and authorization precedes every re
   expect((await batch([resolving, refresh])).map(({ value }) => value)).toEqual([created, proposed!.value]);
   const changed = { ...resolving, subject: { type: 'schema:Book', labels: { en: 'Changed' } } };
   expect((await batch([changed]))[0]).toMatchObject({ status: 422, problem: { code: 'idempotency_conflict' } });
-  checks.length = 0;
-  grants.delete('subject:create');
-  grants.delete('statement:propose');
+  realAccess.checks.length = 0;
+  const global = { route: 0, id: GLOBAL_CONTEXT };
+  await realAccess.revoke(global, 'importer', 'subject:create');
+  await realAccess.revoke(global, 'importer', 'statement:propose');
   try {
     expect((await batch([command, proposal])).map(({ status }) => status)).toEqual([403, 403]);
-    expect(checks.filter((action) => action === 'subject:batch_write')).toHaveLength(1);
-    expect(checks).toContain('subject:create');
-    expect(checks).toContain('statement:propose');
+    expect(realAccess.checks.filter(({ action }) => action === 'subject:batch_write')).toHaveLength(1);
+    expect(realAccess.checks.map(({ action }) => action)).toContain('subject:create');
+    expect(realAccess.checks.map(({ action }) => action)).toContain('statement:propose');
   } finally {
-    grants.add('subject:create');
-    grants.add('statement:propose');
+    await realAccess.grant(global, 'importer', 'subject:create');
+    await realAccess.grant(global, 'importer', 'statement:propose');
   }
 });
 

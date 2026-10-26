@@ -3,22 +3,18 @@ import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import { fromPlainText } from '@rezics/document';
+import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { anchorRoute, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
-beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
-});
-afterAll(async () => {
-  await pool.end();
-});
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 
 const routeKey = new Uint8Array(32).fill(4);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
@@ -30,50 +26,41 @@ const ACTIONS = [
   'moderation:hide',
   'moderation:takedown',
 ];
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
-});
-const actors: Record<string, AccountActor> = {
-  importer: account('019a1b2c-3d4e-7f00-8a00-1a0000000051'),
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000052'),
-  moderator: account('019a1b2c-3d4e-7f00-8a00-0d0000000053'),
+const accounts = {
+  importer: '019a1b2c-3d4e-7f00-8a00-1a0000000051',
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000052',
+  moderator: '019a1b2c-3d4e-7f00-8a00-0d0000000053',
 };
-const grants = new Set<string>();
-const grant = (who: string, action: string) => grants.add(`${actors[who]!.accountId} ${action} ${GLOBAL_CONTEXT}`);
-for (const action of ['subject:create', 'statement:propose', 'subject:batch_write']) grant('importer', action);
-for (const action of ['subject:create', 'statement:propose']) grant('editor', action);
-grant('moderator', 'moderation:takedown');
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    if (action === 'subject:read') return true;
-    return actor.kind === 'account' && grants.has(`${actor.accountId} ${action} ${resource.id}`);
-  },
-};
+const realAccess = await createRealAccess(admin, accounts, ACTIONS);
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey,
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
+});
+
+beforeAll(async () => {
+  const global = { route: 0, id: GLOBAL_CONTEXT };
+  for (const action of ['subject:create', 'statement:propose', 'subject:batch_write'])
+    await realAccess.grant(global, 'importer', action);
+  for (const action of ['subject:create', 'statement:propose']) await realAccess.grant(global, 'editor', action);
+  await realAccess.grant(global, 'moderator', 'moderation:takedown');
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+});
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
 });
 
 async function call(method: string, path: string, options: { token?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const token = Object.hasOwn(accounts, options.token)
+      ? realAccess.bearer(options.token as keyof typeof accounts)
+      : options.token;
+    headers.authorization = `Bearer ${token}`;
+  }
   if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     if (!path.endsWith(':batchWrite')) headers['idempotency-key'] = `"${randomUUID()}"`;
