@@ -452,7 +452,7 @@ afterAll(async () => {
 function seedPaged() {
   reset();
   for (let index = 0; index < 101; index += 1) {
-    copies.push(make({ ...copies[0]!, note: `Filtered copy ${index}` }));
+    copies.push({ ...copies[0]!, id: id(1000 + index), note: `Filtered copy ${index}` });
   }
 }
 
@@ -469,13 +469,13 @@ test(
       expect(lists().at(-1)?.authorization).toBe(`Bearer ${access}`);
       expect(new URLSearchParams(lists().at(-1)?.search).get('subjectId')).toBe(edition);
       expect(lists().at(-1)?.limit).toBe(pageLimit);
-      await main.getByRole('link', { name: 'More copies' }).click();
+      await main.getByRole('link', { name: 'More', exact: true }).click();
       await page.waitForURL(/cursor=/);
       await main.getByText('Filtered copy 100', { exact: true }).waitFor();
       expect(await main.locator('article').count()).toBe(2);
       expect(new URL(page.url()).searchParams.get('subjectId')).toBe(edition);
       expect(lists().at(-1)?.cursor).toBe(`alice:${edition}:100`);
-      expect(await main.getByRole('link', { name: 'More copies' }).count()).toBe(0);
+      expect(await main.getByRole('link', { name: 'More', exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();
     }
