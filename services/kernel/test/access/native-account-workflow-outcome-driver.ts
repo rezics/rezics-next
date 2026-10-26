@@ -943,7 +943,10 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             'Unknown native operation fixture',
           );
           f = fixture;
-          const commandKeyPrefix = native().workflowPorts.approvalBinding!(resolved).commandKeyPrefix;
+          const commandKeyPrefix = required(
+            native().workflowPorts.approvalBinding!(resolved),
+            'Native approval has no command binding',
+          ).commandKeyPrefix;
           let value: unknown;
           if (work.operation.kind === 'delete') {
             const completion = executeWorkflow(fixture, referenceValue, work);
