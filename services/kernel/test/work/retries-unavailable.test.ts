@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
-import { CommandUnavailableError } from '../../src/command/command.ts';
+import { CommandUnavailableError, IdempotencyConflictError } from '../../src/command/command.ts';
 import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 
 const failures = new Map<string, Error>();
 for (const reason of ['deadline', 'contention', 'overloaded'] as const) {
   failures.set(`Access ${reason}`, new AccessUnavailableError(reason));
 }
-for (const reason of ['deadline', 'contention', 'overloaded', 'fenced', 'moved'] as const) {
+for (const reason of ['deadline', 'contention', 'overloaded', 'fenced'] as const) {
   failures.set(`Command ${reason}`, new CommandUnavailableError(reason, 0));
 }
 for (const code of ['57014', '40001', '40P01', '55P03', '53300', '08006', '53100', '57P01', '57P02', '57P03']) {
@@ -61,11 +61,13 @@ for (const name of failures.keys()) {
 }
 
 for (const [name, error] of [
+  ['moved partition', new CommandUnavailableError('moved', 0, 'node-b')],
+  ['idempotency conflict', new IdempotencyConflictError(0)],
   ['ordinary error', new Error('application failure')],
   ['unclassified SQLSTATE', Object.assign(new Error('missing relation'), { code: '42P01' })],
 ] as const) {
   failures.set(name, error);
-  test(`a durable step does not retry an ${name}`, async () => {
+  test(`a durable step does not retry ${name}`, async () => {
     const handle = await DBOS.startWorkflow(workflow)(name);
     await expect(handle.getResult()).rejects.toThrow(error.message);
     expect(attempts.get(name)).toBe(1);
