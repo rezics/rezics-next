@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fireEvent, fn, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { dismissed, registered } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -77,11 +78,14 @@ export const Default: Story = {
     await expect(within(menu).getByRole('menuitem', { name: 'Remove from shelf' })).toBeVisible();
     // Like the browser's menu, it opens to the right of and below the pointer.
     const cover = within(canvasElement).getByText('The Three-Body Problem').getBoundingClientRect();
-    const opened = menu.getBoundingClientRect();
     const pointer = { x: cover.left + cover.width / 2, y: cover.top + cover.height / 2 };
-    await expect(Math.abs(opened.left - pointer.x)).toBeLessThan(8);
-    await expect(opened.right).toBeGreaterThan(pointer.x + 100);
-    await expect(Math.abs(opened.top - pointer.y)).toBeLessThan(8);
+    // The menu is positioned on a later frame than the one that mounts it.
+    await waitFor(() => {
+      const opened = menu.getBoundingClientRect();
+      expect(Math.abs(opened.left - pointer.x)).toBeLessThan(8);
+      expect(opened.right).toBeGreaterThan(pointer.x + 100);
+      expect(Math.abs(opened.top - pointer.y)).toBeLessThan(8);
+    });
   },
 };
 
@@ -89,7 +93,9 @@ export const Select: Story = {
   render: (args) => <ShelfCover {...args} title="The Three-Body Problem" />,
   async play({ args, canvasElement }) {
     const menu = await openContextMenu(canvasElement, 'The Three-Body Problem');
-    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rate…' }));
+    const rate = within(menu).getByRole('menuitem', { name: 'Rate…' });
+    await waitFor(() => expect(rate).not.toHaveStyle({ pointerEvents: 'none' }));
+    await userEvent.click(rate);
     await expect(args.onSelect).toHaveBeenCalledWith({ value: 'rate' });
     await dismissed('menu');
   },
@@ -98,7 +104,7 @@ export const Select: Story = {
 export const CloseWithEscape: Story = {
   render: (args) => <ShelfCover {...args} title="The Three-Body Problem" />,
   async play({ canvasElement }) {
-    await openContextMenu(canvasElement, 'The Three-Body Problem');
+    await registered(await openContextMenu(canvasElement, 'The Three-Body Problem'));
     await userEvent.keyboard('{Escape}');
     await dismissed('menu');
   },

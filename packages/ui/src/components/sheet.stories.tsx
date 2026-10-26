@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Sheet, SheetBody, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from './sheet.tsx';
 
@@ -66,7 +67,7 @@ export const Right: Story = {
   async play({ canvasElement }) {
     const sheet = await openSheet(canvasElement);
     await expect(within(sheet).getByText('Rev 42 · 2 hours ago')).toBeVisible();
-    await expect(within(sheet).getAllByRole('button', { name: 'Close' })[0]).toHaveFocus();
+    await waitFor(() => expect(within(sheet).getAllByRole('button', { name: 'Close' })[0]).toHaveFocus());
   },
 };
 
@@ -96,7 +97,7 @@ export const CloseWithEscape: Story = {
     await openSheet(canvasElement);
     await userEvent.keyboard('{Escape}');
     await dismissed('dialog');
-    await expect(within(canvasElement).getByRole('button', { name: 'Revision history' })).toHaveFocus();
+    await waitFor(() => expect(within(canvasElement).getByRole('button', { name: 'Revision history' })).toHaveFocus());
   },
 };
 

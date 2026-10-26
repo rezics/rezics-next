@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { waitForFocus } from '../test/focus.ts';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Dialog,
@@ -79,7 +81,7 @@ export const Default: Story = {
     await expect(title).toBeVisible();
     await expect(title).toHaveClass('font-sans');
     await expect(within(dialog).getByLabelText('Shelf name')).toHaveValue('Hard science fiction');
-    await expect(within(dialog).getByLabelText('Shelf name')).toHaveFocus();
+    await waitFor(() => expect(within(dialog).getByLabelText('Shelf name')).toHaveFocus());
   },
 };
 
@@ -231,7 +233,7 @@ export const PreferredFocusAndTyping: Story = {
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, 'Edit shelf');
     const input = within(dialog).getByRole('textbox', { name: 'Shelf name' });
-    await expect(input).toHaveFocus();
+    await waitForFocus(input);
     await userEvent.setup({ delay: 35 }).type(input, 'Hard SF');
     await expect(input).toHaveValue('Hard SF');
     await expect(dialog).toBeVisible();

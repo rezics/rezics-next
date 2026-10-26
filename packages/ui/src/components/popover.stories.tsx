@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InfoIcon } from 'lucide-react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Popover,
@@ -76,7 +77,7 @@ export const CloseWithEscape: Story = {
     await openPopover(canvasElement, /Hard SF readers/);
     await userEvent.keyboard('{Escape}');
     await dismissed('dialog');
-    await expect(within(canvasElement).getByRole('button', { name: /Hard SF readers/ })).toHaveFocus();
+    await waitFor(() => expect(within(canvasElement).getByRole('button', { name: /Hard SF readers/ })).toHaveFocus());
   },
 };
 

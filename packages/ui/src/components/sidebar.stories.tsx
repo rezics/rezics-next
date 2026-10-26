@@ -10,7 +10,8 @@ import {
   UsersIcon,
 } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Avatar, AvatarFallback } from './avatar.tsx';
 import {
   Sidebar,

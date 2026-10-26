@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fireEvent, fn, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,7 +54,7 @@ export const RemovePost: Story = {
   async play({ args, canvasElement }) {
     const alert = await openAlert(canvasElement, 'Remove post');
     await expect(within(alert).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
-    await expect(within(alert).getByRole('button', { name: 'Keep post' })).toHaveFocus();
+    await waitFor(() => expect(within(alert).getByRole('button', { name: 'Keep post' })).toHaveFocus());
     await expect(args.onOpenChange).toHaveBeenLastCalledWith(expect.objectContaining({ open: true }));
   },
 };
@@ -75,7 +76,7 @@ export const CancelWithEscape: Story = {
     await openAlert(canvasElement, 'Remove post');
     await userEvent.keyboard('{Escape}');
     await dismissed('alertdialog');
-    await expect(within(canvasElement).getByRole('button', { name: 'Remove post' })).toHaveFocus();
+    await waitFor(() => expect(within(canvasElement).getByRole('button', { name: 'Remove post' })).toHaveFocus());
   },
 };
 
