@@ -77,6 +77,8 @@ async function readLogPage(client: KernelClient, accountId: string, authorizatio
     query: { ...libraryListQuery(cursor, LIBRARY_PAGE_LIMIT), accountId },
     headers: { authorization },
   });
+  // Keep an owner's progress page usable while published-log listing is unavailable.
+  if (statusOf(result) === 404) return { publishedLogs: [], next: null };
   return readLibraryResult(result) as { publishedLogs: RawPublishedLog[]; next: string | null };
 }
 
