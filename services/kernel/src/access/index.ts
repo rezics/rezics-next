@@ -21,6 +21,7 @@ import timeRead from './permission-time.sql';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
 import { installDurableIdentityBridge } from './durable-identity.ts';
 import { installApprovalIdentityBridge } from './approved-identity.ts';
+import { accessRoot } from './derived-access.ts';
 
 export {
   createResourcePublicEligibility,
@@ -280,7 +281,8 @@ export function authorizePlatformGate(
   at: string,
 ): Promise<boolean> {
   return (
-    platformGateChecks.get(access)?.(actor, actions, clientAction, resource, context, at) ?? Promise.resolve(false)
+    platformGateChecks.get(accessRoot(access))?.(actor, actions, clientAction, resource, context, at) ??
+    Promise.resolve(false)
   );
 }
 
