@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { ProgressSessionPage } from '../../library/progress-session';
+import { ProgressLogs } from '../../library/logs-progress';
+import { readMyPublishedLogs } from '../../library/logs-server';
 import { readProgressSession } from '../../library/progress-server';
 import { m } from '../../paraglide/messages.js';
 
@@ -7,12 +9,39 @@ export const Route = createFileRoute('/library/progress/$id')({
   validateSearch: (search: Record<string, unknown>) => ({
     ...(typeof search.changes === 'string' && search.changes ? { changes: search.changes } : {}),
     ...(typeof search.units === 'string' && search.units ? { units: search.units } : {}),
+    ...(typeof search.logs === 'string' && search.logs ? { logs: search.logs } : {}),
   }),
-  loaderDeps: ({ search }) => ({ changes: search.changes, units: search.units }),
-  loader: ({ params, deps }) => readProgressSession({ data: { id: params.id, ...deps } }),
+  loaderDeps: ({ search }) => ({ changes: search.changes, units: search.units, logs: search.logs }),
+  loader: async ({ params, deps }) => {
+    const [progress, logs] = await Promise.all([
+      readProgressSession({
+        data: {
+          id: params.id,
+          ...(deps.changes ? { changes: deps.changes } : {}),
+          ...(deps.units ? { units: deps.units } : {}),
+        },
+      }),
+      readMyPublishedLogs({ data: deps.logs ? { cursor: deps.logs } : {} }),
+    ]);
+    return {
+      progress,
+      logs,
+      search: {
+        ...(deps.changes ? { changes: deps.changes } : {}),
+        ...(deps.units ? { units: deps.units } : {}),
+        ...(deps.logs ? { logs: deps.logs } : {}),
+      },
+    };
+  },
   staleTime: 60_000,
   head: () => ({ meta: [{ title: m.library_progress_heading() }] }),
   component: function ProgressSessionRoute() {
-    return <ProgressSessionPage page={Route.useLoaderData()} />;
+    const page = Route.useLoaderData();
+    return (
+      <>
+        <ProgressSessionPage page={page.progress} />
+        <ProgressLogs progress={page.progress} logs={page.logs} search={page.search} />
+      </>
+    );
   },
 });

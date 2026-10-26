@@ -809,7 +809,9 @@ test(
           .locator('time')
           .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('datetime')));
         expect(times).toContain(stamp);
-        const read = calls.find((call) => call.method === 'GET' && call.path === `/v1/publishedLogs/${logId}`);
+        const read = calls.find(
+          (call) => call.method === 'GET' && call.path === `/v1/publishedLogs/${logId}` && call.authorization === null,
+        );
         expect(read).toMatchObject({ view: 'FULL', authorization: null });
       } finally {
         await anonymous.context().close();
@@ -889,13 +891,14 @@ test(
 
     const { page: owner } = await open(`/en/logs/${logId}`, 'alice');
     try {
+      const beforeOwnerDelete = writesTo(`/v1/publishedLogs/${logId}`).length;
       await owner.getByRole('button', { name: 'Delete log', exact: true }).click();
-      expect(writesTo(`/v1/publishedLogs/${logId}`)).toHaveLength(0);
+      expect(writesTo(`/v1/publishedLogs/${logId}`)).toHaveLength(beforeOwnerDelete);
       await owner.getByRole('button', { name: 'Confirm delete', exact: true }).click();
       await owner.getByText('This log has been deleted.', { exact: true }).waitFor();
       const deletion = writesTo(`/v1/publishedLogs/${logId}`);
-      expect(deletion).toHaveLength(1);
-      expect(deletion[0]?.key).toMatch(uuid);
+      expect(deletion).toHaveLength(beforeOwnerDelete + 1);
+      expect(deletion.at(-1)?.key).toMatch(uuid);
       expect(publishedLogs.has(logId)).toBe(false);
     } finally {
       await owner.context().close();
@@ -915,6 +918,8 @@ test(
       await list.getByText('Published log 101', { exact: true }).waitFor();
       await list.getByText('Published log 002', { exact: true }).waitFor();
       expect(await list.getByText('Published log 001', { exact: true }).count()).toBe(0);
+      const firstPageContent = await list.innerText();
+      expect(firstPageContent.indexOf('Published log 101')).toBeLessThan(firstPageContent.indexOf('Published log 002'));
       let read = logListReads().at(-1)!;
       expect(read).toMatchObject({
         view: 'FULL',
@@ -930,9 +935,7 @@ test(
       expect(read?.cursor).toBeTruthy();
       expect(read?.limit).toBe(pageLimit);
       expect(logListReads()).toHaveLength(2);
-      const content = await list.innerText();
-      expect(content.indexOf('Published log 101')).toBeLessThan(content.indexOf('Published log 002'));
-      expect(content.indexOf('Published log 002')).toBeLessThan(content.indexOf('Published log 001'));
+      expect(await list.getByText('Published log 101', { exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();
     }

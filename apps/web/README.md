@@ -409,6 +409,16 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   1 D and 1 K carrying at most 100 unit ids. No per-unit or per-change reads.
 - **Growth check:** `tests/library-progress-cost.test.ts`: `reading progress stays within its bound as its pages and unit batches grow`
 
+### Published logs
+
+- **Touches:** A public log page reads one `GET /v1/publishedLogs/<id>?view=FULL`. The owner's progress page reads one
+  `GET /v1/publishedLogs?accountId=…&view=FULL&limit=100` page. Publishing and deleting each use one idempotent kernel
+  write after the session credential read.
+- **Bound:** A public log page is 1 K, 0 D, 0 R and 0 A; an owner's view adds 1 D. The owner list is 1 D and 1 K;
+  publish and delete are each 1 D and 1 K. The list returns at most 100 logs, with no per-log reads; all operations use
+  0 R and 0 A.
+- **Growth check:** `tests/library-logs-cost.test.ts`: `published log reads and writes stay within their bound as an account log list grows`
+
 ### Start a thread
 
 - **Touches:** One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency
