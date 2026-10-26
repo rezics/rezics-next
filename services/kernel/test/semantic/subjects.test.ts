@@ -1,10 +1,10 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -18,42 +18,30 @@ afterAll(async () => {
   await admin.end();
 });
 
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
+  reader: '019a1b2c-3d4e-7f00-8a00-4eade0000002',
+};
+const realAccess = await createRealAccess(admin, accounts, ['subject:create', 'subject:read']);
+beforeAll(() => realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create'));
+
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ['subject:create', 'subject:read'],
-  requestedBy: null,
-  authnEpoch: 1,
+const kernel = createKernel({
+  pool,
+  access: realAccess.access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(4),
+  writeRate: realAccess.writeRate,
 });
-const actors: Record<string, AccountActor> = {
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000001'),
-  reader: account('019a1b2c-3d4e-7f00-8a00-4eade0000002'),
-};
-const checks: { action: string; route: number; id: string }[] = [];
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    checks.push({ action, route: resource.route, id: resource.id });
-    if (action === 'subject:read') return true;
-    return (
-      action === 'subject:create' &&
-      actor.kind === 'account' &&
-      actor.accountId === actors.editor!.accountId &&
-      resource.id === GLOBAL_CONTEXT
-    );
-  },
-};
-const kernel = createKernel({ pool, access, tokens, routeKey: new Uint8Array(32).fill(4) });
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const credential = Object.hasOwn(accounts, options.token)
+      ? realAccess.bearer(options.token as keyof typeof accounts)
+      : options.token;
+    headers.authorization = `Bearer ${credential}`;
+  }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
@@ -264,10 +252,14 @@ test('item values name existing subjects of a target type', async () => {
 
 test('a create authorizes subject:create on the Global Context and a denied one writes nothing', async () => {
   const before = await subjectCount();
-  checks.length = 0;
+  realAccess.checks.length = 0;
   expect((await create({ type: 'schema:Person', labels: { en: 'Mori Ōgai' } }, 'reader')).response.status).toBe(403);
-  expect(checks.filter(({ action }) => action === 'subject:create')).toEqual([
-    { action: 'subject:create', route: 0, id: GLOBAL_CONTEXT },
+  expect(realAccess.checks.filter(({ action }) => action === 'subject:create')).toEqual([
+    {
+      persona: 'reader',
+      action: 'subject:create',
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+    },
   ]);
   expect((await create({ type: 'schema:Person', labels: { en: 'Mori Ōgai' } }, null)).response.status).toBe(401);
   expect(await subjectCount()).toBe(before);

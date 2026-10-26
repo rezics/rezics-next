@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
@@ -6,7 +6,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -19,37 +19,37 @@ afterAll(async () => {
   await admin.end();
 });
 
-const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ['definitions:publish', 'definitions:activate', 'definitions:read'],
-  requestedBy: null,
-  authnEpoch: 1,
+const accounts = {
+  steward: '019a1b2c-3d4e-7f00-8a00-57e3a2d00001',
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000002',
+};
+const realAccess = await createRealAccess(admin, accounts, [
+  'definitions:publish',
+  'definitions:activate',
+  'definitions:read',
+]);
+beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'steward', 'definitions:publish');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'steward', 'definitions:activate');
 });
-const actors: Record<string, AccountActor> = {
-  steward: account('019a1b2c-3d4e-7f00-8a00-57e3a2d00001'),
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000002'),
-};
-const checks: { action: string; route: number; id: string }[] = [];
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    checks.push({ action, route: resource.route, id: resource.id });
-    if (action === 'definitions:read') return true;
-    return actor.kind === 'account' && actor.accountId === actors.steward!.accountId && resource.id === GLOBAL_CONTEXT;
-  },
-};
-const kernel = createKernel({ pool, access, tokens, routeKey: new Uint8Array(32).fill(6) });
+
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
+const kernel = createKernel({
+  pool,
+  access: realAccess.access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(6),
+  writeRate: realAccess.writeRate,
+});
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const credential = Object.hasOwn(accounts, options.token)
+      ? realAccess.bearer(options.token as keyof typeof accounts)
+      : options.token;
+    headers.authorization = `Bearer ${credential}`;
+  }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
@@ -161,9 +161,15 @@ test('an invalid release is refused with pointers under /release and stores noth
 test('publishing and activating need their grant on the Global Context', async () => {
   const body = { release: release('2.0.0') };
   const digest = releaseDigest(body.release);
-  checks.length = 0;
+  realAccess.checks.length = 0;
   expect((await publish(body, 'editor')).response.status).toBe(403);
-  expect(checks).toEqual([{ action: 'definitions:publish', route: 0, id: GLOBAL_CONTEXT }]);
+  expect(realAccess.checks).toEqual([
+    {
+      persona: 'editor',
+      action: 'definitions:publish',
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+    },
+  ]);
   expect((await call('POST', '/v1/definitions/releases', { key: key(), body })).response.status).toBe(401);
   expect((await call('GET', `/v1/definitions/releases/${digest}`)).response.status).toBe(404);
   expect((await publish(body)).response.status).toBe(201);

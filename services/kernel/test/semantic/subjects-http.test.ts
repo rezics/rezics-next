@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { AuthenticationError, type Access, type AccountActor, type Resource } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { newId } from '../../src/route/route.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
@@ -14,35 +15,27 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
-afterAll(() => pool.end());
-beforeAll(() => bootstrapRelease(pool, bundledRelease));
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
+});
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
 const routeKey = new Uint8Array(32).fill(13);
-const accountFor = (clientId: string): AccountActor => ({
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-5ab1ec700001',
-  clientId,
-  scopes: ['subject:create'],
-  requestedBy: null,
-  authnEpoch: 1,
-});
-
-/** `writer` may create, `reader` may only read; nobody may read a subject whose id is in `hidden`. */
-const hidden = new Set<string>();
-const checks: [string, string, Resource][] = [];
-const access: Access = {
-  async authenticate(token) {
-    if (token !== 'writer' && token !== 'reader') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return accountFor(token);
-  },
-  async authorize(_client, actor, action, resource) {
-    checks.push([actor.kind === 'account' ? actor.clientId : 'anonymous', action, resource]);
-    if (action === 'subject:create') return actor.kind === 'account' && actor.clientId === 'writer';
-    return action === 'subject:read' && !hidden.has(resource.id);
-  },
+const accounts = {
+  writer: '019a1b2c-3d4e-7f00-8a00-5ab1ec700001',
+  reader: '019a1b2c-3d4e-7f00-8a00-4eade0000002',
+  moderator: '019a1b2c-3d4e-7f00-8a00-0d0000000012',
 };
-const kernel = createKernel({ pool, access, tokens, routeKey });
+const realAccess = await createRealAccess(admin, accounts, ['subject:create', 'subject:read', 'moderation:hide']);
+const kernel = createKernel({ pool, access: realAccess.access, tokens, routeKey, writeRate: realAccess.writeRate });
+
+beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'writer', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+});
 
 async function call(
   method: string,
@@ -50,7 +43,12 @@ async function call(
   options: { token?: string; key?: string; body?: unknown; session?: string } = {},
 ) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const credential = Object.hasOwn(accounts, options.token)
+      ? realAccess.bearer(options.token as keyof typeof accounts)
+      : options.token;
+    headers.authorization = `Bearer ${credential}`;
+  }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.session) headers[SESSION_HEADER] = options.session;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
@@ -89,7 +87,7 @@ test('a create is 201 with its location and session token, and its key replays i
   expect(first.response.headers.get('location')).toBe(`/v1/subjects/${id}`);
   expect(first.response.headers.get('etag')).toBe('"1"');
   const session = first.response.headers.get(SESSION_HEADER)!;
-  expect(decodeSession(tokens, `account:${accountFor('writer').accountId}`, session)).toHaveLength(1);
+  expect(decodeSession(tokens, `account:${accounts.writer}`, session)).toHaveLength(1);
 
   const again = await create({ labels: { ja: '坊っちゃん', en: 'Botchan' } }, key);
   expect(again.response.status).toBe(201);
@@ -125,13 +123,16 @@ test('a create needs an account, a structured idempotency key, a valid item and 
   const forbidden = await create(book, key, 'reader');
   expect(forbidden.response.status).toBe(403);
   expect(forbidden.body).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
-  expect(checks.at(-1)).toEqual(['reader', 'subject:create', { route: 0, id: GLOBAL_CONTEXT }]);
+  expect(realAccess.checks.at(-1)).toEqual({
+    persona: 'reader',
+    action: 'subject:create',
+    resource: { route: 0, id: GLOBAL_CONTEXT },
+  });
 });
 
 test('a read returns the subject, its session token and the labels of its properties and readable subjects', async () => {
   const soseki = (await create({ type: 'schema:Person', labels: { en: 'Natsume Sōseki' } })).body.subject.id as string;
   const secret = (await create({ type: 'schema:Person', labels: { en: 'Unreadable' } })).body.subject.id as string;
-  hidden.add(secret);
   const source = { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/kokoro' } };
   const created = await create({
     type: 'schema:Book',
@@ -139,6 +140,12 @@ test('a read returns the subject, its session token and the labels of its proper
     statements: { 'schema:author': [{ ...author(soseki), references: [{ parts: [source] }] }, author(secret)] },
   });
   const id = created.body.subject.id as string;
+  const hidden = await call('POST', `/v1/subjects/${secret}:hide`, {
+    token: 'moderator',
+    key: `"${randomUUID()}"`,
+    body: { reason: 'Hidden for the read test.' },
+  });
+  expect(hidden.response.status).toBe(200);
 
   const read = await call('GET', `/v1/subjects/${id}`, { session: created.response.headers.get(SESSION_HEADER)! });
   expect(read.response.status).toBe(200);
@@ -150,14 +157,19 @@ test('a read returns the subject, its session token and the labels of its proper
     [soseki]: { labels: { en: 'Natsume Sōseki' } },
   });
   expect(decodeSession(tokens, 'anonymous', read.response.headers.get(SESSION_HEADER)!)).toHaveLength(1);
-  expect(checks.filter(([, action]) => action === 'subject:read').map(([, , resource]) => resource.id)).toEqual(
-    expect.arrayContaining([id, soseki, secret]),
-  );
+  expect(
+    realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
+  ).toEqual(expect.arrayContaining([id, soseki, secret]));
 });
 
 test('a malformed, missing or unreadable subject is the same 404', async () => {
   const id = (await create({ type: 'schema:Person', labels: { en: 'Sanshirō' } })).body.subject.id as string;
-  hidden.add(id);
+  const hidden = await call('POST', `/v1/subjects/${id}:hide`, {
+    token: 'moderator',
+    key: `"${randomUUID()}"`,
+    body: { reason: 'Hidden for the 404 test.' },
+  });
+  expect(hidden.response.status).toBe(200);
   const answers = await Promise.all(
     ['not-an-id', newId(0x0042), id].map((subject) => call('GET', `/v1/subjects/${subject}`, { token: 'reader' })),
   );
