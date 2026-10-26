@@ -10,6 +10,8 @@ import insertContext from './create-context.sql';
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import readContextStatement from './read-context.sql';
+import readGlobalContext from './context-read-global.sql';
+import readCommunityContext from './context-read-community.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 
 export const CREATE_CONTEXT = 'context.create';
@@ -18,11 +20,8 @@ export const globalContextAnchor: ParentAnchor = Object.freeze({
   resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
   async validate(client, time) {
     authoritativeTimeValue(time);
-    const result = await client.query(
-      "SELECT 1 FROM semantic.context WHERE route = 0 AND context_id = $1 AND kind = 'global'",
-      [GLOBAL_CONTEXT],
-    );
-    return result.rowCount === 1;
+    const found = await readGlobalContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
+    return found !== null;
   },
 });
 
@@ -38,12 +37,8 @@ export function editorialContextAnchor(id: string): ParentAnchor {
     resource: Object.freeze({ route, id }),
     async validate(client, time) {
       authoritativeTimeValue(time);
-      const result = await client.query(
-        `SELECT 1 FROM semantic.context
-         WHERE route = $1 AND context_id = $2 AND kind = 'community'`,
-        [route, id],
-      );
-      if (result.rowCount !== 1) throw new ContextNotFoundError();
+      const found = await readCommunityContext.run(client, { route, context_id: id });
+      if (found === null) throw new ContextNotFoundError();
       return true;
     },
   });

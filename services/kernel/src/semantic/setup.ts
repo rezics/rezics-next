@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { installStandingParentGrant } from '../access/index.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from './definitions.ts';
+import readGlobalContext from './setup-read-global.sql';
 
 /** Install the immutable bundled release and global catalogue grants at startup. */
 export async function setupSemantic(pool: Pool, release: Release): Promise<string> {
@@ -26,11 +27,8 @@ export async function setupSemantic(pool: Pool, release: Release): Promise<strin
   const parent = {
     resource: { route: 0, id: GLOBAL_CONTEXT },
     async validate(client: { query: Pool['query'] }) {
-      const result = await client.query(
-        "SELECT 1 FROM semantic.context WHERE route = 0 AND context_id = $1::uuid AND kind = 'global'",
-        [GLOBAL_CONTEXT],
-      );
-      return result.rowCount === 1;
+      const found = await readGlobalContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
+      return found !== null;
     },
   };
   const context = { pool, deadline: Date.now() + 30_000, actor };
