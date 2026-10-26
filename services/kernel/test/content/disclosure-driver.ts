@@ -750,7 +750,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     const column = target.kind === 'board' ? 'board_id' : target.kind === 'thread' ? 'thread_id' : 'post_id';
     const result = await pool.query(
       `UPDATE ${table}
-       SET visibility = 'protected', security_revision = security_revision + 1, recorded_transaction_id = gen_random_uuid()
+       SET visibility = 'protected', security_revision = security_revision + 1
        WHERE route = $1 AND ${column} = $2`,
       [requiredRoute(target.id), target.id],
     );
