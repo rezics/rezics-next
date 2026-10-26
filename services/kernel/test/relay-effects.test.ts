@@ -193,7 +193,6 @@ test('effects relay discovery stays within its bound as outbox history grows', a
         });
       },
       repetitions: 1,
-      warmups: 0,
     });
   } finally {
     await growth.admin.query(

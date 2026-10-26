@@ -378,14 +378,14 @@ async function growthPopulation(
 // prettier-ignore
 async function runMediaGrowth(fixture: Fixture, name: string,
   operation: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown>,
-  options: { includeSourceNeighbours?: boolean } = {}) {
+  options: { includeSourceNeighbours?: boolean; warmup?: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown> } = {}) {
   const population = await growthPopulation(fixture, options);
   return checkGrowth(db!, {
     name,
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
-    warmups: 0,
+    warmup: options.warmup ?? operation,
     grow: async (database, scale, previous) => {
       const position = await database.admin.query<{ position: string }>(
         'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [fixture.partition]);
@@ -526,7 +526,8 @@ growthTest('Media reserve stays within its bound as u grows', async () => {
 // prettier-ignore
 growthTest('Media complete stays within its bound as u grows', async () => {
   const f = await makeAnchor(), targets = await mediaAnchors(f, 'reserved', 3);
-  return runMediaGrowth(f, 'Media complete', (_db, _scale, index) => completeReservedMedia(f, targets[index]!));
+  return runMediaGrowth(f, 'Media complete', (_db, _scale, index) => completeReservedMedia(f, targets[Math.floor(index / 2)]!),
+    { warmup: async () => completeReservedMedia(f, await mediaAnchor(f)) });
 });
 // prettier-ignore
 growthTest('Media reservation and state reads stays within its bound as u grows', async () => {
@@ -539,22 +540,29 @@ growthTest('Media reservation and state reads stays within its bound as u grows'
 // prettier-ignore
 growthTest('Post media claim stays within its bound as r grows', async () => {
   const f = await makeAnchor(), media = await mediaAnchors(f, 'available', 3);
-  return runMediaGrowth(f, 'Post media claim', (_db, _scale, i) => claimPostMedia(f, media[i]!.id, f.postId, f.revisionId));
+  return runMediaGrowth(f, 'Post media claim', (_db, _scale, i) => claimPostMedia(f, media[Math.floor(i / 2)]!.id, f.postId, f.revisionId),
+    { warmup: async () => claimPostMedia(f, (await mediaAnchor(f, 'available')).id, f.postId, f.revisionId) });
 });
 // prettier-ignore
 growthTest('Cover reference read and claim stays within its bound as u grows', async () => {
   const f = await makeAnchor(), media = await mediaAnchors(f, 'imported', 3), deps = importDependencies(f);
   const job = createImageJob(db!.pool, f.storage);
   for (const item of media) { await processImportedMedia(deps, item.id); await job.process(item.id); }
-  return runMediaGrowth(f, 'Cover reference read and claim', async (_db, _scale, i) => {
-    const ref = await withConnection(db!.pool, client => checkMediaObject(client, media[i]!.id, 'cover'));
-    if (!ref) throw new Error('Fixed cover reference was not available'); await coverClaim(f, media[i]!.id); return ref;
-  });
+  const claim = async (mediaId: string) => {
+    const ref = await withConnection(db!.pool, client => checkMediaObject(client, mediaId, 'cover'));
+    if (!ref) throw new Error('Fixed cover reference was not available'); await coverClaim(f, mediaId); return ref;
+  };
+  return runMediaGrowth(f, 'Cover reference read and claim', async (_db, _scale, i) => claim(media[Math.floor(i / 2)]!.id),
+    { warmup: async () => {
+      const spare = await mediaAnchor(f, 'imported');
+      await processImportedMedia(deps, spare.id); await job.process(spare.id); return claim(spare.id);
+    } });
 });
 // prettier-ignore
 growthTest('Image publication stays within its bound as u grows', async () => {
   const f = await makeAnchor(), media = await mediaAnchors(f, 'uploaded', 3), job = createImageJob(db!.pool, f.storage);
-  return runMediaGrowth(f, 'Image publication', (_db, _scale, i) => job.process(media[i]!.id));
+  return runMediaGrowth(f, 'Image publication', (_db, _scale, i) => job.process(media[Math.floor(i / 2)]!.id),
+    { warmup: async () => job.process((await mediaAnchor(f, 'uploaded')).id) });
 });
 // prettier-ignore
 growthTest('Collection selection stays within its bound as P grows', async () => {
@@ -570,10 +578,15 @@ growthTest('Collection per object stays within its bound as u grows', async () =
   const f = await makeAnchor(), media = await mediaAnchors(f, 'available', 3);
   await ageMedia(media);
   const job = createCollectionJob(db!.pool, f.storage);
-  return runMediaGrowth(f, 'Collection per object', async () => {
+  const collect = async () => {
     const result = await job.collectPartition(f.partition, 1);
     if (result.examined !== 1 || result.collected !== 1) throw new Error('Collection did not process its fixed object'); return result;
-  });
+  };
+  return runMediaGrowth(f, 'Collection per object', collect, { warmup: async () => {
+    const spare = await mediaAnchor(f, 'available');
+    await db!.admin.query("UPDATE content.media SET created_at='2019-01-01T00:00:00.000Z' WHERE media_id=$1", [spare.id]);
+    return collect();
+  } });
 });
 // prettier-ignore
 growthTest('Imported image processing stays within its bound as u grows', async () => {
@@ -581,8 +594,8 @@ growthTest('Imported image processing stays within its bound as u grows', async 
   const sourcePartition = partitionOf(tupleRoute(routeKey, source, externalId));
   const f = await makeAnchor({ tag, partition: (sourcePartition + 1) % 4096 });
   const media = await mediaAnchors(f, 'imported', 3), deps = importDependencies(f);
-  return runMediaGrowth(f, 'Imported image processing', (_db, _scale, i) => processImportedMedia(deps, media[i]!.id),
-    { includeSourceNeighbours: true });
+  return runMediaGrowth(f, 'Imported image processing', (_db, _scale, i) => processImportedMedia(deps, media[Math.floor(i / 2)]!.id),
+    { includeSourceNeighbours: true, warmup: async () => processImportedMedia(deps, (await mediaAnchor(f, 'imported')).id) });
 });
 // prettier-ignore
 growthTest('Source fence check stays within its bound as P grows', async () => {
@@ -592,7 +605,7 @@ growthTest('Source fence check stays within its bound as P grows', async () => {
     { source, external_id: externalId, field_group: 'cover', reason: 'Growth lookup anchor' }, context());
   const population = await growthPopulation(f, { sourceOnly: true });
   return checkGrowth(db!, { name: 'Source fence check', scales,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' }, repetitions: 1, warmups: 0,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' }, repetitions: 1,
     grow: async (db, scale, previous) => seed({ pool: db.pool, admin: db.admin }, population,
       { from: previous * ordinalsPerScale, to: scale * ordinalsPerScale }),
     operation: db => withConnection(db.pool, (client: PoolClient) => readFences(client,

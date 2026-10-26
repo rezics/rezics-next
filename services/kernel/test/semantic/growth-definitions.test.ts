@@ -264,7 +264,6 @@ test('Active definition lookup stays within its bound as D grows', async () => {
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => activeRelease(d.pool),
     repetitions: 1,
-    warmups: 0,
   });
 }, 90_000);
 
