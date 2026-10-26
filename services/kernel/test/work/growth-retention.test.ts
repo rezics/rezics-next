@@ -48,8 +48,12 @@ test('one retention batch stays bounded as retained and recent workflow history 
     repetitions: 1,
     warmups: 0,
     bounds: {
-      statements: { absolute: 0, relative: 0 },
-      rows: { absolute: 1010, relative: 0 },
+      statements: 'constant',
+      rows: 'constant',
+      blocks: 'logarithmic',
+    },
+    slack: {
+      rows: { absolute: 10, relative: 0 },
       blocks: { absolute: 24, relative: 0 },
     },
     async grow(growth, scale, previous) {
@@ -61,9 +65,6 @@ test('one retention batch stays bounded as retained and recent workflow history 
   });
 
   expect(report.samples.map((sample) => sample.cost.rows)).toEqual([1000, 1000, 1000]);
-  expect(report.samples.map((sample) => sample.cost.statements)).toEqual([
-    report.samples[0]!.cost.statements,
-    report.samples[0]!.cost.statements,
-    report.samples[0]!.cost.statements,
-  ]);
+  expect(report.samples[1]!.cost.statements).toBe(report.samples[0]!.cost.statements);
+  expect(report.samples[2]!.cost.statements).toBe(report.samples[0]!.cost.statements);
 });
