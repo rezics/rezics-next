@@ -17,7 +17,7 @@ import {
   type AccessClient,
   type ActionCatalogue,
 } from '../request/access.ts';
-import { anchorRoute, derivedId, routeOf } from '../route/route.ts';
+import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import type { PermissionContext } from './permission.ts';
 import { readAccount } from './account-data.ts';
 import accountRead from './lifecycle-account.sql';
@@ -42,6 +42,7 @@ import authBarrier from './auth-barriers-advance.sql';
 import openingRead from './auth-barriers-opening-read.sql';
 import fenceRead from './lifecycle-fence-read.sql';
 import fenceClear from './lifecycle-fence-clear.sql';
+import barrierReceiptRead from './auth-barriers-receipt-read.sql';
 import handleHold from './lifecycle-handle-hold.sql';
 import handlePublish from './lifecycle-handle-publish.sql';
 import operationRead from './lifecycle-handle-operation-read.sql';
@@ -108,6 +109,17 @@ function epoch(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
 type Boundary = { pool: Pool; clock?: () => Date };
+// The principal every internal lifecycle command receipts under, and the purpose-scoped key that
+// identifies one Auth barrier in it. Both read and write sides derive the key here.
+const SERVICE_PRINCIPAL_ID = '00000000-0000-8000-8000-000000000001';
+const barrierKey = (purpose: AuthenticationBarrierCommand['purpose'], key: string) => `${purpose}:${key}`;
+export type AuthenticationBarrierReceipt = {
+  accountId: string;
+  purpose: AuthenticationBarrierCommand['purpose'];
+  operationKey: string;
+  receiptId: string;
+  minimumAuthnEpoch: number;
+};
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & { actor: AccountActor };
 export type LifecycleCommand = { accountId: string; key: string };
 export type AuthenticationBarrierCommand = LifecycleCommand & {
@@ -396,6 +408,34 @@ export function createLifecycleInternals(
     ...config,
     releaseCommandKind: 'membership-coordination-released',
   });
+  /** One anchored read: this exact fence receipt exists for the account and floor, committed by the
+   * barrier command of this purpose and operation key. A replaced or foreign receipt id is not found.
+   */
+  async function confirmBarrier(value: AuthenticationBarrierReceipt): Promise<boolean> {
+    const input = { ...value };
+    const route = accountRoute(input.accountId);
+    requireAllowed(
+      ['consent-reduction', 'recovery'].includes(input.purpose) &&
+        typeof input.operationKey === 'string' &&
+        input.operationKey.length > 0 &&
+        input.operationKey.length <= 128 &&
+        epoch(input.minimumAuthnEpoch) &&
+        input.minimumAuthnEpoch <= 2147483647 &&
+        routeOf(input.receiptId) === route,
+    );
+    const row = await withConnection(pool, (client) =>
+      barrierReceiptRead.run(client, {
+        route,
+        partition_no: partitionOf(route),
+        service_id: SERVICE_PRINCIPAL_ID,
+        receipt_key: `${route}:${barrierKey(input.purpose, input.operationKey)}`,
+        account_id: input.accountId,
+        receipt_id: input.receiptId,
+        minimum_authn_epoch: String(input.minimumAuthnEpoch),
+      }),
+    );
+    return !!row;
+  }
   return {
     /** Stable route AND identity: the coordinator's durable registration key is
      * namespaced independently from handle spelling. Keep routeKey stable. */
@@ -1114,7 +1154,7 @@ export function createLifecycleInternals(
           route,
           id: input.accountId,
           kind: 'authentication-floor-advanced',
-          key: input.key,
+          key: barrierKey(input.purpose, input.key),
           input,
           authorization: {
             action: 'authentication-floor-advance',
@@ -1187,6 +1227,7 @@ export function createLifecycleInternals(
         async (tx, transactionId) => fence(tx, await locked(tx, input.accountId), false, transactionId),
       );
     },
+    confirmBarrier,
     async readFenceReceipt(accountId: string, receiptId: string): Promise<LifecycleFenceReceipt | null> {
       return withConnection(pool, (client) =>
         fenceRead.run(client, { route: accountRoute(accountId), account_id: accountId, receipt_id: receiptId }),
@@ -1199,6 +1240,57 @@ export function createLifecycleInternals(
       return account
         ? { fenced: account.fenced, receiptId: account.receiptId, minimumAuthnEpoch: account.minimumAuthnEpoch }
         : null;
+    },
+    /** Trusted Auth composition only, after the consent reduction and its session revocation committed.
+     * Clears the fence that exact consent barrier raised; a recovery fence needs its establishment evidence.
+     */
+    async completeConsentBarrier(value: AuthenticationBarrierReceipt) {
+      const input = { ...value };
+      const route = accountRoute(input.accountId);
+      requireAllowed(input.purpose === 'consent-reduction');
+      const minimum = String(input.minimumAuthnEpoch);
+      const confirm = () => confirmBarrier(input);
+      return execute(
+        {
+          route,
+          id: input.accountId,
+          kind: 'authentication-established',
+          key: `consent-completion:${input.receiptId}`,
+          input: { accountId: input.accountId, receiptId: input.receiptId, minimumAuthnEpoch: minimum },
+          authorization: {
+            action: 'authentication-establish',
+            resource: { route, id: input.accountId },
+            prepare: confirm,
+            async authorize(tx, _attempt, verified) {
+              requireAllowed(verified === true);
+              const account = await locked(tx, input.accountId);
+              requireAllowed(
+                account.state === 'active' &&
+                  account.kind === 'actor' &&
+                  account.receiptId === input.receiptId &&
+                  account.minimumAuthnEpoch === minimum,
+              );
+              return account.fenced ? 'execute' : 'receipt-only';
+            },
+            denied: () => new LifecycleDeniedError(),
+          },
+        },
+        async (tx, transactionId) => {
+          requireAllowed(
+            affected(
+              await fenceClear.run(tx, {
+                route,
+                account_id: input.accountId,
+                receipt_id: input.receiptId,
+                minimum_authn_epoch: minimum,
+                authn_epoch: minimum,
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return { accountId: input.accountId, receiptId: input.receiptId, minimumAuthnEpoch: minimum };
+        },
+      );
     },
     async clearFence(input: LifecycleCommand & { evidence: unknown }) {
       input = { ...input };

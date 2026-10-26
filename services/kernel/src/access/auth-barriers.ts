@@ -13,16 +13,23 @@ import credentialAdvance from './auth-barriers-credential-advance.sql';
 import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
-import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
+import type { AuthenticationBarrierReceipt, createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import { openingManagement } from './operator.ts';
 
 type Lifecycle = Pick<
   ReturnType<typeof createLifecycleInternals>,
-  'advanceAuthenticationFloor' | 'readFenceReceipt' | 'readFenceState'
+  'advanceAuthenticationFloor' | 'readFenceReceipt' | 'readFenceState' | 'confirmBarrier' | 'completeConsentBarrier'
 >;
 type Proofs = Pick<BarrierProofPort, 'verify'>;
 type Capabilities = Required<Pick<AuthBindingCapabilities, 'invalidateAccount' | 'authorizeRecovery'>>;
-type Ports = Required<Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery'>>;
+/** Auth's own check of an Access barrier receipt, before it applies any effect, and the completion that clears
+ * the fence a consent reduction raised. Auth reads them as optional ports of its trusted access object.
+ */
+export type BarrierReceiptPorts = {
+  confirmBarrier(input: AuthenticationBarrierReceipt): Promise<boolean>;
+  completeBarrier(input: AuthenticationBarrierReceipt): Promise<void>;
+};
+type Ports = Required<Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery'>> & BarrierReceiptPorts;
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }
@@ -129,7 +136,7 @@ export function createAuthBarrierCapabilities({
         state &&
         state.minimumAuthnEpoch === receipt.minimumAuthnEpoch &&
         state.receiptId === receipt.receiptId &&
-        (purpose !== 'recovery' || state.fenced),
+        state.fenced,
     );
     return receipt;
   }
@@ -153,6 +160,17 @@ export function createAuthBarrierCapabilities({
   const trustedAccess: Ports = {
     invalidateAccount: async (input) => translate(await capabilities.invalidateAccount(input)),
     authorizeRecovery: async (input) => translate(await capabilities.authorizeRecovery(input)),
+    async confirmBarrier(input) {
+      try {
+        return await lifecycle.confirmBarrier({ ...input });
+      } catch {
+        return false;
+      }
+    },
+    async completeBarrier(input) {
+      allowed(input.purpose === 'consent-reduction');
+      await lifecycle.completeConsentBarrier({ ...input });
+    },
   };
   return { ...capabilities, trustedAccess };
 }

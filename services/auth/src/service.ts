@@ -19,7 +19,7 @@ import { attemptStatement, nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { clientAuthority } from './account-workflows.ts';
-import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
+import { createBarrierProofVerifier, type BarrierProof, type BarrierReceiptPorts } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
 import { recoveryDelivery } from './recovery-delivery.ts';
 import type { PoolClient } from 'pg';
@@ -40,6 +40,7 @@ import type {
   InvalidationReceipt,
   SessionAuthorizationInput,
   SessionProof,
+  TrustedAccessPorts,
 } from './index.ts';
 
 export { WEBSITE_CLIENT_ID } from './website.ts';
@@ -135,6 +136,8 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
   const { trustedAccess } = options;
+  const barrierAccess = trustedAccess as TrustedAccessPorts &
+    BarrierReceiptPorts & { readFencedAccount?(accountId: string): Promise<AccessAccount | null> };
   const authority = clientAuthority(
     options.database,
     trustedAccess,
@@ -218,14 +221,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     );
   }
 
-  async function activeActor(accountId: string): Promise<AccessAccount> {
-    const account = await trustedAccess.readAccount(accountId);
+  // A barrier fences its account, so only the steps that finish a committed barrier may read it fenced.
+  async function activeActor(accountId: string, barrier = false): Promise<AccessAccount> {
+    const account =
+      (await trustedAccess.readAccount(accountId)) ??
+      (barrier ? await barrierAccess.readFencedAccount?.(accountId) : null);
     if (
       !account ||
       account.accountId !== accountId ||
       account.kind !== 'actor' ||
       account.state !== 'active' ||
-      account.fenced === true ||
+      (account.fenced === true && !barrier) ||
       !Number.isSafeInteger(account.authnEpoch) ||
       account.authnEpoch < 0
     )
@@ -565,6 +571,18 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       receipt.minimumAuthnEpoch <= previousEpoch
     )
       throw new Denied();
+  }
+  // Nothing is applied for a receipt Access does not confirm for this account, purpose, operation and floor.
+  async function confirmReceipt(receipt: InvalidationReceipt, purpose: BarrierProof['purpose'], operationKey: string) {
+    if (!barrierAccess.confirmBarrier) return;
+    const confirmed = await barrierAccess.confirmBarrier({
+      accountId: receipt.accountId,
+      purpose,
+      operationKey,
+      receiptId: receipt.receiptId,
+      minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+    });
+    if (confirmed !== true) throw new Denied();
   }
   async function consume(
     input: { authorization: string; subjectAccountId: string; headers: Headers },
@@ -1681,6 +1699,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             operationKey,
           });
           invalidation(receipt, accountId, proof.previousEpoch);
+          await confirmReceipt(receipt, 'recovery', operationKey);
           if (
             receipt.minimumAuthnEpoch > 2147483647 ||
             (await recoveryAccount(accountId)).authnEpoch !== receipt.minimumAuthnEpoch
@@ -1963,7 +1982,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             });
             if (!native) throw new Denied();
             const session = native.session;
-            const account = await activeActor(session.userId);
+            const account = await activeActor(session.userId, true);
             // An automated account is reduced only from a session its operator's manager opened for it.
             const operated = account.automated;
             const openingReceiptId = operated ? await operatorOpening(session) : undefined;
@@ -1980,6 +1999,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   [account.accountId, clientId],
                 )
               ).rows[0];
+              // A fenced account only finishes the consent reduction whose barrier fenced it.
+              if (account.fenced && !previous?.pending_reference) throw new Denied();
               if (operated && (!previous || granted.some((scope) => !previous.scopes.includes(scope))))
                 throw new Denied();
               if (!previous?.scopes.some((scope) => !granted.includes(scope))) {
@@ -2056,6 +2077,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               ...(proof.openingReceiptId === undefined ? {} : { openingReceiptId: proof.openingReceiptId }),
             });
             invalidation(receipt, proof.accountId, proof.previousEpoch);
+            await confirmReceipt(receipt, 'consent-reduction', proof.operationKey);
             await withIssuance(clientId, () =>
               withConsent(proof.accountId, clientId, async (connection) => {
                 const client = await clientFor(clientId);
@@ -2063,7 +2085,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   client.first_party ||
                   JSON.stringify(client.scopes) !== JSON.stringify(reduction.clientScopes) ||
                   granted.some((scope) => !client.scopes.includes(scope)) ||
-                  (await activeActor(proof.accountId)).authnEpoch !== receipt.minimumAuthnEpoch ||
+                  (await activeActor(proof.accountId, true)).authnEpoch !== receipt.minimumAuthnEpoch ||
                   !(await barrierProofs.verify(proof.reference, proof))
                 )
                   throw new Denied();
@@ -2082,6 +2104,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               }),
             );
             await (await getContext()).internalAdapter.deleteUserSessions(proof.accountId);
+            await barrierAccess.completeBarrier?.({
+              accountId: proof.accountId,
+              purpose: 'consent-reduction',
+              operationKey: proof.operationKey,
+              receiptId: receipt.receiptId,
+              minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+            });
           }
           return json({ client_id: clientId, scope: granted });
         }

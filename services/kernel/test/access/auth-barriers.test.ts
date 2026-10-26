@@ -156,7 +156,7 @@ afterAll(async () => {
   await fixture?.close();
 });
 
-test('native consent commits an exact floor barrier before Auth effects without fencing new sign-in', async () => {
+test('native consent commits an exact floor barrier before Auth effects and sign-in resumes once Auth completes it', async () => {
   const cookie = await login();
   expect((await request('/consent', { client_id: 'external', scope: ['read', 'write'] }, cookie)).status).toBe(200);
   failConsent = 'after';
@@ -312,7 +312,7 @@ test('native attempt denies changed eligibility, stale proof and later floor sup
   fail = null;
 });
 
-test('consent native update preserves an already raised persistent fence', async () => {
+test('a consent barrier never overwrites an already raised persistent fence', async () => {
   const original = (await lifecycle.raiseFence({ accountId: other, key: 'consent-existing-fence' })).value;
   // Isolated fixture toggles let a real authenticated consent receipt reach the
   // command while its persistent native fence is raised, without a new floor.
@@ -328,12 +328,12 @@ test('consent native update preserves an already raised persistent fence', async
     routeOf(other),
     other,
   ]);
-  const receipt = await barriers.invalidateAccount(consent);
-  expect(receipt!.minimumAuthnEpoch).toBe(String(Number(original.minimumAuthnEpoch) + 1));
+  // The barrier would clear this fence when Auth completes it, so it never advances over one.
+  await expect(barriers.invalidateAccount(consent)).rejects.toThrow();
   expect(await lifecycle.readFenceState(other)).toMatchObject({
     fenced: true,
-    receiptId: receipt!.receiptId,
-    minimumAuthnEpoch: receipt!.minimumAuthnEpoch,
+    receiptId: original.receiptId,
+    minimumAuthnEpoch: original.minimumAuthnEpoch,
   });
   failConsent = null;
 });

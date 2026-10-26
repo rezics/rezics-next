@@ -161,9 +161,9 @@ test('native Auth barriers stay bounded with same-account receipts and unrelated
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
   for (const sample of report.samples) {
-    // Initial fence write, recovery floor write, committed receipt read and
+    // Initial fence write, recovery floor write, committed receipt read, Auth's receipt confirmation and
     // establishment-authorized fence-clear receipt validation each touch one row.
-    expect(sample.cost.relations?.['access.lifecycle_fence_receipt']?.rows).toBe(4);
+    expect(sample.cost.relations?.['access.lifecycle_fence_receipt']?.rows).toBe(5);
     expect(sample.cost.relations?.['access.account']?.rows).toBeGreaterThan(0);
   }
 }, 60_000);
