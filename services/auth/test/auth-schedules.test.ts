@@ -26,7 +26,11 @@ const access: AccountWorkflowPorts = {
   provisioningEvidence: unused,
   raiseFence: unused,
 };
-const trustedAccess: AuthServiceOptions['trustedAccess'] = { readAccount: unused, authorizeProvisioning: unused };
+const trustedAccess: AuthServiceOptions['trustedAccess'] = {
+  readAccount: unused,
+  readFencedAccount: unused,
+  authorizeProvisioning: unused,
+};
 
 // Each replica has a real independent SDK registry, pool and executor identity.
 if (process.argv.includes('--schedule-child')) {

@@ -136,6 +136,9 @@ beforeAll(async () => {
     secret: 'automated-consent-better-auth-secret-with-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         const account = accounts.get(id);
         return account ? { ...account } : null;

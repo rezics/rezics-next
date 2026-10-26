@@ -124,6 +124,9 @@ beforeAll(async () => {
       },
     },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         return accounts.get(id) ?? null;
       },

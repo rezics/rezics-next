@@ -31,6 +31,9 @@ beforeAll(async () => {
     secret: 'retention-fixture-secret-at-least-32-characters',
     signing: { activeKid: 'a', privateKeys: [keys[0]!] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return {
           accountId: 'person',

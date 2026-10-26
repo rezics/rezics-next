@@ -53,6 +53,9 @@ beforeAll(async () => {
     secret: 'native-provisioning-growth-secret-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       async authorizeProvisioning(id) {
         const result = approvals.get(id);
@@ -257,6 +260,7 @@ function erasureOptions() {
     signing: signingKeys,
     trustedAccess: {
       readAccount: async (id: string) => accounts.get(id) ?? null,
+      readFencedAccount: async (id: string) => accounts.get(id) ?? null,
       authorizeProvisioning: async (id: string) => approvals.get(id)!,
     },
   };

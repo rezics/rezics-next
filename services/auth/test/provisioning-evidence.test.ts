@@ -57,6 +57,9 @@ beforeAll(async () => {
     // This Auth-only trust fixture represents the pending Access boundary. It
     // proves native Auth commits, not the real pending receipt or lifecycle command.
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       async authorizeProvisioning(reference) {
         authorizeHook?.();

@@ -102,6 +102,9 @@ test('native failed mail deletes only its newly committed verification and proof
       secret: 'persistent-recovery-delivery-secret-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         readAccount: async (id) => accounts.get(id) ?? null,
         readRecoveryAccount: async (id) => accounts.get(id) ?? null,
         authorizeProvisioning: async (id) => ({ accountId: id }),

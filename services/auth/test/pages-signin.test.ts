@@ -75,6 +75,9 @@ beforeAll(async () => {
     secret: 'pages-signin-better-auth-secret-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(accountId) {
         return accounts.get(accountId) ?? null;
       },
@@ -155,7 +158,7 @@ test('host start registers the login client once and leaves an existing login un
       audience: 'https://api.rezics.test',
       secret: 'pages-host-better-auth-secret-at-least-32-bytes',
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: { readAccount: unused, authorizeProvisioning: unused },
+      trustedAccess: { readAccount: unused, readFencedAccount: unused, authorizeProvisioning: unused },
       access,
       stagingKey: randomBytes(32),
       maintenanceSchedule: '0 0 0 1 1 *',

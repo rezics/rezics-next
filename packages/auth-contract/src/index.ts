@@ -194,6 +194,8 @@ interface SharedAccessPorts {
     | undefined;
   /** Recovery-only authoritative read may expose a fenced active human's current floor. */
   readRecoveryAccount?(accountId: string): Promise<AccessAccount | null>;
+  /** Cleanup after a barrier reads every account the barrier fenced, of either kind, with its fence flag and floor. */
+  readFencedAccount(accountId: string): Promise<AccessAccount | null>;
   /** Reject a stale proof; commit an invalidation barrier without clearing any fence. */
   authorizeRecovery?(input: {
     accountId: string;

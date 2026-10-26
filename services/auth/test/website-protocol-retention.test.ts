@@ -30,6 +30,9 @@ beforeAll(async () => {
     audience: 'https://retention.api.test',
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return null;
       },

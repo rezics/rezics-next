@@ -192,6 +192,9 @@ beforeAll(async () => {
       privateKeys: [{ ...(await exportJWK(signing.privateKey)), kid: 'signup-turnstile-signer', alg: 'ES256' }],
     },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       authorizeProvisioning: async (id) => ({ accountId: id }),
     },

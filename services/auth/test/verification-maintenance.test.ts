@@ -70,6 +70,9 @@ beforeAll(async () => {
     secret,
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount() {
+        return null;
+      },
       async readAccount() {
         return null;
       },

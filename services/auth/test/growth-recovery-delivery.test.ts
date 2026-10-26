@@ -46,6 +46,9 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
         secret: 'persistent-growth-delivery-secret-32-bytes',
         signing: { activeKid: key.kid, privateKeys: [key] },
         trustedAccess: {
+          async readFencedAccount(id) {
+            return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+          },
           async readAccount(id) {
             const row = (await db.pool.query('SELECT epoch FROM test_access WHERE id=$1', [id])).rows[0];
             return row ? { ...account, accountId: id, authnEpoch: row.epoch } : null;

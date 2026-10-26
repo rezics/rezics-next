@@ -102,6 +102,9 @@ test('native account erasure preserves authorization, invalidation order and unr
         },
       },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         async readAccount(id) {
           if (outage) throw new Error('Access unavailable');
           if (inspectRead) {

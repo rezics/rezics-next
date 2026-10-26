@@ -52,6 +52,9 @@ beforeAll(async () => {
     },
     siteActions: new Map(scopes.filter((s) => s.includes(':')).map((s) => [s, { anonymous: false }])),
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         if (++accessReads >= accessFailureAt) throw new Error('Access unavailable: private detail');
         return accounts.get(id) ?? null;

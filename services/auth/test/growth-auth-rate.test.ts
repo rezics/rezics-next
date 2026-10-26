@@ -60,6 +60,9 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       audience: 'https://api.growth.test',
       signing: { activeKid: key.kid, privateKeys: [key] },
       trustedAccess: {
+        async readFencedAccount(id: string) {
+          return id === account.accountId ? account : null;
+        },
         async readAccount(id: string) {
           return id === account.accountId ? account : null;
         },

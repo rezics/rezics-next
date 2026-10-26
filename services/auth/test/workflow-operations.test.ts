@@ -221,6 +221,9 @@ beforeAll(async () => {
       privateKeys: [{ ...(await exportJWK(signing.privateKey)), kid: 'operations', alg: 'ES256' }],
     },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       readRecoveryAccount: async (id) => accounts.get(id) ?? null,
       authorizeProvisioning: async (accountId) => ({ accountId }),

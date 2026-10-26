@@ -23,6 +23,9 @@ beforeAll(async () => {
     secret: 'local-issuer-test-secret-with-at-least-32-bytes',
     signing: { activeKid: 'local', privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return null;
       },
@@ -113,6 +116,9 @@ test('HTTPS origins retain native secure Better Auth session cookies', async () 
   const service = await createAuthService({
     ...options,
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return {
           accountId: 'secure-person',

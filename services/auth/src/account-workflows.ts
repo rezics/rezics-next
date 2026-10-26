@@ -1,9 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
-import type { AccessAccount, AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
-
-/** Mirrors the kernel Access binding: a fenced account of either kind, with its fence flag and floor. */
-type FencedAccountPort = { readFencedAccount(accountId: string): Promise<AccessAccount | null> };
+import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
 
 type Progress = {
   operation_id: string;
@@ -276,7 +273,7 @@ export function clientAuthority(
         const row = await progress(connection, input.clientId, input.operationId);
         if (row.completed) deny();
         const receipt = input.barrier;
-        const current = await readFenced(input.accountId);
+        const current = await access.readFencedAccount(input.accountId);
         if (
           !current ||
           current.accountId !== input.accountId ||
@@ -371,15 +368,8 @@ export function clientAuthority(
       });
     },
   };
-  // A host that binds the fenced read gets one point read for an account of either kind; a host without it keeps
-  // the ordinary and recovery reads.
-  async function readFenced(accountId: string) {
-    const fenced = (access as TrustedAccessPorts & Partial<FencedAccountPort>).readFencedAccount;
-    if (fenced) return fenced.call(access, accountId);
-    return (await access.readAccount(accountId)) ?? (await access.readRecoveryAccount?.(accountId));
-  }
   async function cleanupFencedSessions(accountId: string, barrier: InvalidationReceipt) {
-    const current = await readFenced(accountId);
+    const current = await access.readFencedAccount(accountId);
     if (
       !current ||
       current.accountId !== accountId ||
