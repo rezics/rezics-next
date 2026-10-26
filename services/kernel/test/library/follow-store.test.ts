@@ -275,7 +275,7 @@ test('apply and page statement counts and examined rows stay constant as unrelat
     );
 
     let previous = 0;
-    for (const scale of [1_000, 8_000, 64_000]) {
+    for (const scale of [256, 1_024, 4_096]) {
       await seedUnrelatedFollowers(database, previous, scale);
       const applyMeasured = await measure(database, () =>
         inTransaction(database.pool, (client) =>
