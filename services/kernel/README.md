@@ -255,6 +255,12 @@ refused for numeric or boolean fields, as are numbers for string fields, with `4
 JSON pointer. The app composition compiles each route's body check once and runs it before Elysia's coercing
 validation. Query and path parameters retain type coercion because their values arrive as strings.
 
+A request's deadline is fixed at arrival from `requestDeadlineMs`. Code reached by a route takes its deadline from the
+route's `job.deadline` or `deadlineFor(budgetMs)`, never from `Date.now() + N` or the kernel clock, which is business
+time and tests move. Durable work gets `Date.now() + budgetMs` from the same `deadlineFor`. A deadline crossing the
+Auth service boundary still travels explicitly through the Auth contract. This costs one async context scope per
+request and one O(1) store read per `deadlineFor` call, with no database statements.
+
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client
 declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
 stale.

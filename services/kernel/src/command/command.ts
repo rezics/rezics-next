@@ -11,6 +11,7 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
 import { enterCommandGate } from './gate.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
@@ -399,7 +400,7 @@ export async function runCommand<T>(
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
-  const deadline = options.deadline ?? Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   let contentionAttempts = 0;
   while (Date.now() < deadline) {
     let time: AuthoritativeTime | undefined;
