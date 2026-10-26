@@ -12,6 +12,8 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
+import { deadlineClient } from '../access/authenticate.ts';
+import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
 import erase from './erase-content.sql';
@@ -52,6 +54,7 @@ type Scope = {
   id: string;
   container_id: string | null;
   collection_pending: boolean;
+  realm_id: string | null;
 };
 
 /** Shared native point boundary. Callers bind an action and kind in server code;
@@ -84,16 +87,21 @@ async function prepareAuthorizedPoint(
           principal: { kind: 'account' as const, id: actor.accountId },
           basis: { clientId: actor.clientId, requestedBy: actor.requestedBy },
         };
-  const parameters = { route, id: point.id, kind: point.kind };
-  const args = (statement: { params: readonly string[] }) =>
-    statement.params.map((name) => parameters[name as keyof typeof parameters]);
+  const parameters = { route, id: point.id, kind: point.kind, resolve_realm: false };
+  const args = (statement: { params: readonly string[] }, resolveRealm = false) =>
+    statement.params.map((name) =>
+      name === 'resolve_realm' ? resolveRealm : parameters[name as keyof typeof parameters],
+    );
   let scope: Scope | undefined;
-  const ordinaryAdmission = (verified: Extract<Actor, { kind: 'account' }>) =>
+  const ordinaryAdmission = (
+    verified: Extract<Actor, { kind: 'account' }>,
+    resource: Readonly<{ route: number; id: string }> = target,
+  ) =>
     accessCommandAuthorization(
       deps.access,
       verified,
       point.action,
-      target,
+      resource,
       { pool: deps.pool, deadline: context.deadline },
       () => new GrantDeniedError(),
     );
@@ -139,10 +147,54 @@ async function prepareAuthorizedPoint(
         };
   const authorization: CommandAuthorization = {
     ...admission,
+    async prepare(attempt) {
+      const targetProof = await admission.prepare!(attempt);
+      if (
+        actor.kind !== 'account' ||
+        point.action !== 'moderation:takedown' ||
+        (point.kind !== 'thread' && point.kind !== 'post')
+      )
+        return { targetProof };
+
+      const rows = await withConnection(deps.pool, (connection) =>
+        deadlineClient(connection, context.deadline).query<Scope>(readScope.sql, args(readScope, true)),
+      );
+      const realmId = rows.rows.length === 1 ? (rows.rows[0]?.realm_id ?? null) : null;
+      if (realmId === null) return { targetProof };
+
+      const realm = await ordinaryAdmission(actor, { route: routeOf(realmId)!, id: realmId }).catch(() => undefined);
+      if (!realm) return { targetProof };
+      const realmProof = await realm.prepare!(attempt).catch(() => undefined);
+      return { targetProof, realm, realmProof };
+    },
     async authorize(tx, attempt, evidence) {
+      const prepared = evidence as {
+        targetProof: unknown;
+        realm?: CommandAuthorization;
+        realmProof?: unknown;
+      };
       // At trusted T, before even the receipt lookup. Denied replay cannot see
       // the old response or security revision and cannot append an effect.
-      if ((await admission.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
+      let targetAllowed = false;
+      try {
+        targetAllowed = (await admission.authorize(tx, attempt, prepared.targetProof)) === 'execute';
+      } catch (error) {
+        if (!(error instanceof GrantDeniedError)) throw error;
+      }
+      if (!targetAllowed) {
+        if (!prepared.realm || prepared.realmProof === undefined) throw new GrantDeniedError();
+        const targetRows = await tx.query<Scope>(readScope.sql, args(readScope, true));
+        scope = targetRows.rows.length === 1 ? targetRows.rows[0] : undefined;
+        if (
+          !scope ||
+          scope.realm_id !== prepared.realm.resource.id ||
+          (point.action === 'media:erase' && scope.collection_pending)
+        )
+          throw new GrantDeniedError();
+        if ((await prepared.realm.authorize(tx, attempt, prepared.realmProof)) !== 'execute')
+          throw new GrantDeniedError();
+        return 'execute';
+      }
       const rows = await tx.query<Scope>(readScope.sql, args(readScope));
       scope = rows.rows.length === 1 ? rows.rows[0] : undefined;
       if (!scope || (point.action === 'media:erase' && scope.collection_pending)) throw new GrantDeniedError();

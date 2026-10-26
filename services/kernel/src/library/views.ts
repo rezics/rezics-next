@@ -267,12 +267,7 @@ export async function fullMembers(
         actor.kind === 'account' && routeOf(actor.accountId) !== null
           ? await readAccount(client, routeOf(actor.accountId)!, actor.accountId)
           : null;
-      let allowed = false;
-      try {
-        allowed = await check(client);
-      } catch {
-        allowed = false;
-      }
+      const allowed = await check(client);
       if (!sink.seen) sink.row = await collectionRead.run(client, identity);
       const collection = sink.row;
       if (!collection || collection.state !== 'active') throw new ProblemError('not_found');

@@ -2,6 +2,8 @@ export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
+import { classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
+export { CommandUnavailableError } from '../access/unavailable.ts';
 import fenceStatement from './fence.sql';
 import readReceipt from './read-receipt.sql';
 import readTime from './time.sql';
@@ -241,22 +243,6 @@ export class TooManyEventsError extends Error {
   }
 }
 
-export class CommandUnavailableError extends Error {
-  readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
-  readonly partition: number;
-  readonly movedTo: string | null;
-  constructor(reason: CommandUnavailableError['reason'], partition: number, movedTo: string | null = null) {
-    super(`Command unavailable for partition ${partition}: ${reason}${movedTo ? ` (${movedTo})` : ''}`);
-    this.name = 'CommandUnavailableError';
-    this.reason = reason;
-    this.partition = partition;
-    this.movedTo = movedTo;
-  }
-}
-
-function codeOf(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : undefined;
-}
 function remaining(deadline: number): number {
   return Math.max(1, Math.floor(deadline - Date.now()));
 }
@@ -289,7 +275,7 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
     const state = await withConnection(pool, (client) =>
       boundedRead(client, deadline, () => readPartition(client, partition)),
     ).catch((error: unknown) => {
-      if (codeOf(error) === '57014') throw new CommandUnavailableError('fenced', partition);
+      if (classifyUnavailability(error) === 'deadline') throw new CommandUnavailableError('fenced', partition);
       throw error;
     });
     if (state?.writeState === 'active') return;
@@ -554,7 +540,7 @@ export async function runCommand<T>(
             replayed: false,
           };
         } catch (error) {
-          if (codeOf(error) === '57014') {
+          if (classifyUnavailability(error) === 'deadline') {
             try {
               await client.query('ROLLBACK');
             } catch (rollbackError) {
@@ -585,8 +571,9 @@ export async function runCommand<T>(
       if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
       if (error instanceof CommandUnavailableError) throw error;
-      if (codeOf(error) === '57014') throw new CommandUnavailableError('deadline', partition);
-      if (['40001', '40P01', '55P03'].includes(codeOf(error) ?? '')) {
+      const reason = classifyUnavailability(error);
+      if (reason === 'deadline') throw new CommandUnavailableError('deadline', partition);
+      if (reason === 'contention') {
         if (Date.now() >= deadline) throw new CommandUnavailableError('contention', partition);
         const maximum = Math.min(100, 5 * 2 ** contentionAttempts++);
         await pause(Math.min(Math.random() * maximum, Math.max(0, deadline - Date.now())));
@@ -594,11 +581,7 @@ export async function runCommand<T>(
         continue;
       }
       if (Date.now() >= deadline) throw new CommandUnavailableError('deadline', partition);
-      if (
-        codeOf(error) === '53300' ||
-        (error instanceof Error && /timeout exceeded when trying to connect/i.test(error.message))
-      )
-        throw new CommandUnavailableError('overloaded', partition);
+      if (reason === 'overloaded') throw new CommandUnavailableError('overloaded', partition);
       throw error;
     } finally {
       if (time) times.delete(time);

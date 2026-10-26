@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -9,7 +9,11 @@ import { startConsentServer, type ConsentServer } from './membership-fixture.ts'
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
+import * as initiatorCapture from '../../src/access/durable-initiator-capture.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { enqueueRealmJoin } from '../../src/community/join.ts';
+import { problemResponse } from '../../src/http/problem.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -35,6 +39,7 @@ let authDatabaseName = '';
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
 let kernel: ReturnType<typeof createKernel>;
+let access: ReturnType<typeof createAccess>;
 let work: WorkClient;
 let worker: Bun.Subprocess | undefined;
 let governance: Person;
@@ -272,7 +277,7 @@ beforeAll(async () => {
     tokens,
     workClient: work,
     access: (config) =>
-      createAccess({
+      (access = createAccess({
         ...config,
         auth: {
           issuer,
@@ -280,7 +285,7 @@ beforeAll(async () => {
           jwksUrl: `${issuer}/.well-known/jwks.json`,
           fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
         },
-      }),
+      })),
     writeRate: createWriteRateLimiter({ secret: 'realm-join-private-write-rate-secret-32' }),
   });
   scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
@@ -334,6 +339,55 @@ afterAll(async () => {
   if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await pool?.end();
   await admin?.end();
+});
+
+async function captureFailure(failure: Error) {
+  const space = await createSpace('Capture failure host');
+  const realm = await createRealm(space.spaceId, 'public', 'Capture failure Realm');
+  const deadline = Date.now() + 10_000;
+  const actor = await access.authenticate(owner.bearer, { pool, deadline });
+  const idempotencyKey = crypto.randomUUID();
+  const before = await footprint();
+  const capture = spyOn(initiatorCapture, 'captureDurableInitiator').mockRejectedValueOnce(failure);
+  let error: unknown;
+  try {
+    error = await enqueueRealmJoin(
+      { pool, access, tokens, client: work },
+      { actor, ...realm, memberAccountId: actor.accountId, idempotencyKey, deadline },
+    ).catch((error: unknown) => error);
+    expect(capture).toHaveBeenCalledTimes(1);
+  } finally {
+    capture.mockRestore();
+  }
+  expect(await footprint()).toEqual(before);
+  expect(
+    (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
+  ).toEqual([]);
+  expect(
+    (
+      await admin.query("SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1", [
+        actor.accountId,
+      ])
+    ).rows,
+  ).toEqual([]);
+  return error;
+}
+
+test.serial(
+  'Access unavailability during Realm join capture reaches the caller unchanged as 503 without writes',
+  async () => {
+    for (const reason of ['deadline', 'overloaded', 'contention'] as const) {
+      const unavailable = new AccessUnavailableError(reason);
+      const error = await captureFailure(unavailable);
+      expect(error).toBe(unavailable);
+      expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
+    }
+  },
+);
+
+test.serial('every other Realm join capture error still denies', async () => {
+  for (const error of [new Error('Capture refused'), new initiatorCapture.DurableInitiatorCaptureUnavailableError()])
+    expect(await captureFailure(error)).toBeInstanceOf(GrantDeniedError);
 });
 
 test.serial(

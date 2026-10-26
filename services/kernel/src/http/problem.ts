@@ -1,9 +1,9 @@
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
-import { CommandUnavailableError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
+import { IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
 
 export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
@@ -194,8 +194,8 @@ export function problemResponse(error: unknown, context: { method: string; id: s
   } else if (error instanceof TooManyEventsError) {
     code = 'too_many_events';
     detail = error.message;
-  } else if (error instanceof CommandUnavailableError || error instanceof AccessUnavailableError) {
-    switch (error.reason) {
+  } else {
+    switch (classifyUnavailability(error)) {
       case 'overloaded':
         code = 'overloaded';
         headers.set('retry-after', '1');
