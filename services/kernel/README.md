@@ -193,6 +193,10 @@ files that import a path changed since `<rev>` (committed, staged, unstaged or u
 selector cannot place a change, and prints its selection first; named files ignore it. The full run stays the gate for
 promotion.
 
+A computed dynamic import hides what it loads from the selector. `scripts/affected-reach.ts` lists, for each such site,
+the files it can load; a site listed there depends on those files, and an unlisted computed import still runs its tests
+on every change. An entry that no longer matches the code selects the whole suite.
+
 Each check run writes every test file's wall, database create and drop, and per-test times to
 `.temp/kernel-check/timings/<UTC timestamp>.json` in the main checkout (`KERNEL_CHECK_TIMINGS` overrides the directory)
 and replaces `latest.json` there. Files run longest first by `latest.json`, files without a recorded time first;

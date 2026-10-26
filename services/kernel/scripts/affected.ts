@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { REACH, type ReachEntry } from './affected-reach.ts';
 
 export type Affected = { kind: 'tests'; tests: string[] } | { kind: 'all'; reason: string };
 
@@ -7,8 +8,13 @@ type Package = { directory: string; exports: unknown; main: string | undefined }
 type Graph = {
   dependencies: Map<string, Set<string>>;
   opaque: Set<string>;
+  /** The first reach entry that no longer matches the code, or null. */
+  stale: string | null;
 };
+type Site = { kind: 'import' | 'require'; argument: string };
 
+/** The repository the reach table describes; any other root has no table. */
+const REPOSITORY = resolve(import.meta.dir, '../../..');
 const CODE = /\.(?:[cm]?[jt]sx?)$/;
 const SQL = /\.sql$/;
 const TEST = /\.test\.[cm]?[jt]sx?$/;
@@ -20,9 +26,27 @@ const SOURCE_FOR_COMPILED: Record<string, string[]> = {
   '.cjs': ['.cts'],
 };
 const WHOLE_SUITE_NAMES = /^(?:package\.json|bun\.lock|bunfig\.toml|tsconfig[^/]*\.json|\.oxlintrc\.json)$/;
-const URL_IMPORT = /\bimport\s*\(\s*new\s+URL\(\s*(['"`])([^'"`$\\]+)\1\s*,\s*import\.meta\.url\s*\)(?:\.href)?\s*\)/g;
-const DYNAMIC_IMPORT = /\bimport\s*\(/g;
-const REQUIRE_CALL = /\brequire\s*\(/g;
+const CALL = /\b(import|require)\s*\(/g;
+const LITERAL = /^(['"`])[^'"`$\\]*\1$/;
+const URL_ARGUMENT = /^new\s+URL\(\s*(['"`])([^'"`$\\]+)\1\s*,\s*import\.meta\.url\s*\)(?:\.href)?$/;
+const OWN_PATH = /\b(?:resolve|join)\(\s*import\.meta\.(?:dir|dirname)((?:\s*,\s*(['"`])[^'"`$\\]*\2)+)\s*\)/g;
+const OWN_URL = /\bnew\s+URL\(\s*(['"`])([^'"`$\\]+)\1\s*,\s*import\.meta\.url\s*\)/g;
+const IDENTIFIER = /[\w$]/;
+const LITERAL_CALL = /\b(?:import|require)\s*\(\s*(['"`])[^'"`$\\]*\1\s*[,)]/g;
+const STRING_PART = /(['"`])([^'"`$\\]*)\1/g;
+const REGEX_AFTER_WORD = new Set([
+  'return',
+  'typeof',
+  'case',
+  'in',
+  'of',
+  'delete',
+  'void',
+  'throw',
+  'new',
+  'else',
+  'do',
+]);
 
 function moduleTests(moduleDirectory: string): string[] {
   return Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: moduleDirectory })).sort();
@@ -143,16 +167,196 @@ function loaderFor(path: string): 'ts' | 'tsx' | 'js' | 'jsx' {
   return /\.[cm]?js$/.test(path) ? 'js' : 'ts';
 }
 
-function count(pattern: RegExp, text: string): number {
-  return text.match(pattern)?.length ?? 0;
+/**
+ * The source with comments, string contents and template text blanked, positions preserved, so a pattern on it matches
+ * only code. Null when the text does not tokenize (JSX text, an unbalanced quote): the caller then keeps the raw text,
+ * which can only add sites.
+ */
+function maskCode(source: string): string | null {
+  const length = source.length;
+  const out: string[] = [];
+  let copied = 0;
+  const templates: number[] = [];
+  let braces = 0;
+  let last = '';
+  let word = '';
+  const blank = (from: number, to: number) => {
+    if (to <= from) return;
+    out.push(source.slice(copied, from), source.slice(from, to).replace(/[^\n]/g, ' '));
+    copied = to;
+  };
+  // Scan template text from `from`; returns the index after the closing backtick or `${`, or -1 when unterminated.
+  const template = (from: number): number => {
+    let at = from;
+    while (at < length) {
+      const c = source[at];
+      if (c === '\\') at += 2;
+      else if (c === '`') {
+        blank(from, at);
+        return at + 1;
+      } else if (c === '$' && source[at + 1] === '{') {
+        blank(from, at);
+        templates.push(braces);
+        braces += 1;
+        return at + 2;
+      } else at += 1;
+    }
+    return -1;
+  };
+
+  let index = 0;
+  while (index < length) {
+    const c = source[index]!;
+    const next = source[index + 1];
+    if (c === '/' && next === '/') {
+      const end = source.indexOf('\n', index);
+      const to = end < 0 ? length : end;
+      blank(index, to);
+      index = to;
+    } else if (c === '/' && next === '*') {
+      const end = source.indexOf('*/', index + 2);
+      if (end < 0) return null;
+      blank(index, end + 2);
+      index = end + 2;
+    } else if (c === "'" || c === '"') {
+      let at = index + 1;
+      while (at < length && source[at] !== c) {
+        if (source[at] === '\n') return null;
+        at += source[at] === '\\' ? 2 : 1;
+      }
+      if (at >= length) return null;
+      blank(index + 1, at);
+      index = at + 1;
+      last = c;
+      word = '';
+    } else if (c === '`') {
+      const after = template(index + 1);
+      if (after < 0) return null;
+      index = after;
+      last = '`';
+      word = '';
+    } else if (c === '{') {
+      braces += 1;
+      last = c;
+      index += 1;
+    } else if (c === '}') {
+      braces -= 1;
+      if (templates.length > 0 && templates[templates.length - 1] === braces) {
+        templates.pop();
+        const after = template(index + 1);
+        if (after < 0) return null;
+        index = after;
+        last = '`';
+      } else {
+        last = c;
+        index += 1;
+      }
+      word = '';
+    } else if (c === '/' && (last === '' || '(,=:[!&|?{;+-*%<>~^'.includes(last) || REGEX_AFTER_WORD.has(word))) {
+      let at = index + 1;
+      let inClass = false;
+      while (at < length && (source[at] !== '/' || inClass)) {
+        const e = source[at];
+        if (e === '\n') return null;
+        if (e === '\\') at += 1;
+        else if (e === '[') inClass = true;
+        else if (e === ']') inClass = false;
+        at += 1;
+      }
+      if (at >= length) return null;
+      blank(index + 1, at);
+      index = at + 1;
+      last = '/';
+      word = '';
+    } else {
+      if (c !== ' ' && c !== '\n' && c !== '\t' && c !== '\r') {
+        last = c;
+        word = IDENTIFIER.test(c) ? (IDENTIFIER.test(source[index - 1] ?? '') ? word + c : c) : '';
+      }
+      index += 1;
+    }
+  }
+  if (templates.length > 0) return null;
+  out.push(source.slice(copied));
+  return out.join('');
 }
 
-function buildGraph(root: string, tests: string[]): Graph {
+/** The first argument of the call whose opening parenthesis is at `open`, read from the masked text. */
+function firstArgument(source: string, masked: string, open: number): string {
+  let depth = 0;
+  for (let at = open + 1; at < masked.length; at += 1) {
+    const c = masked[at];
+    if (c === '(' || c === '[' || c === '{') depth += 1;
+    else if (c === ')' || c === ']' || c === '}') {
+      if (depth === 0) return source.slice(open + 1, at).trim();
+      depth -= 1;
+    } else if (c === ',' && depth === 0) return source.slice(open + 1, at).trim();
+  }
+  return source.slice(open + 1).trim();
+}
+
+/**
+ * The `import(` and `require(` calls in code position whose argument is not a plain string literal, with the source
+ * text of that argument. A literal call is the scanner's, so it is not listed.
+ */
+function computedSites(source: string): Site[] {
+  const raw = source.match(CALL)?.length ?? 0;
+  if (raw === 0 || raw === (source.match(LITERAL_CALL)?.length ?? 0)) return [];
+  const masked = maskCode(source) ?? source;
+  const sites: Site[] = [];
+  for (const match of masked.matchAll(CALL)) {
+    const argument = firstArgument(source, masked, match.index + match[0].length - 1);
+    if (!LITERAL.test(argument)) sites.push({ kind: match[1] as Site['kind'], argument });
+  }
+  return sites;
+}
+
+/** Paths a module builds from its own location and string literals. */
+function ownPaths(source: string, directory: string): string[] {
+  if (!source.includes('import.meta')) return [];
+  const matches = [...source.matchAll(OWN_PATH)];
+  const urls = [...source.matchAll(OWN_URL)];
+  if (matches.length + urls.length === 0) return [];
+  const masked = maskCode(source) ?? source;
+  const found: string[] = [];
+  for (const match of matches) {
+    if (masked[match.index] !== source[match.index]) continue;
+    const parts = [...match[1]!.matchAll(STRING_PART)].map((part) => part[2]!);
+    found.push(resolve(directory, ...parts));
+  }
+  for (const match of urls) {
+    if (masked[match.index] !== source[match.index]) continue;
+    found.push(resolve(directory, match[2]!));
+  }
+  return found;
+}
+
+function buildGraph(root: string, tests: string[], reach: ReachEntry[]): Graph {
   const packages = workspacePackages(root);
   const files = new Map<string, boolean>();
   const transpilers = new Map<string, Bun.Transpiler>();
   const dependencies = new Map<string, Set<string>>();
   const opaque = new Set<string>();
+  const entries = new Map<string, ReachEntry[]>();
+  for (const entry of reach) {
+    const key = resolve(root, entry.module);
+    const list = entries.get(key);
+    if (list) list.push(entry);
+    else entries.set(key, [entry]);
+  }
+  const expanded = new Map<ReachEntry, string[][]>();
+  const expand = (entry: ReachEntry): string[][] => {
+    let lists = expanded.get(entry);
+    if (!lists) {
+      lists = entry.globs.map((glob) =>
+        Array.from(new Bun.Glob(glob).scanSync({ cwd: root }))
+          .map((file) => resolve(root, file))
+          .sort(),
+      );
+      expanded.set(entry, lists);
+    }
+    return lists;
+  };
   const inside = (path: string) => {
     const from = relative(root, path);
     return from !== '' && from !== '..' && !from.startsWith(`..${sep}`) && !isAbsolute(from);
@@ -201,28 +405,49 @@ function buildGraph(root: string, tests: string[]): Graph {
       if (target) reaches.add(target);
     }
     // A dynamic import or require whose argument is not a literal is invisible to the scanner.
-    let urlImports = 0;
-    for (const match of source.matchAll(URL_IMPORT)) {
-      urlImports += 1;
-      const target = resolveSpecifier(file, match[2]!);
-      if (target) reaches.add(target);
+    const own = entries.get(file) ?? [];
+    for (const site of computedSites(source)) {
+      const url = URL_ARGUMENT.exec(site.argument);
+      if (url) {
+        const target = resolveSpecifier(file, url[2]!);
+        if (target) reaches.add(target);
+        continue;
+      }
+      const entry = own.find((candidate) => candidate.site === site.argument);
+      if (!entry) opaque.add(file);
+      else for (const found of expand(entry)) for (const target of found) if (inside(target)) reaches.add(target);
     }
-    if (
-      count(DYNAMIC_IMPORT, source) > literalSites(source, DYNAMIC_IMPORT) + urlImports ||
-      count(REQUIRE_CALL, source) > literalSites(source, REQUIRE_CALL)
-    ) {
-      opaque.add(file);
+    for (const target of ownPaths(source, dirname(file))) {
+      if (inside(target) && isFile(target, files)) reaches.add(target);
     }
 
     for (const target of reaches) queue.push(target);
   }
-  return { dependencies, opaque };
+
+  let stale: string | null = null;
+  for (const entry of reach) {
+    const problem = staleReason(root, entry, expand);
+    if (problem) {
+      stale = `reach entry ${entry.module} ${entry.site}: ${problem}`;
+      break;
+    }
+  }
+  return { dependencies, opaque, stale };
 }
 
-/** Count call sites whose first argument is a plain string literal. */
-function literalSites(source: string, pattern: RegExp): number {
-  const literal = new RegExp(`${pattern.source}\\s*(['"\`])[^'"\`$\\\\]*\\1\\s*[,)]`, 'g');
-  return count(literal, source);
+/** Why a reach entry no longer describes the code, or null when it still does. */
+function staleReason(root: string, entry: ReachEntry, expand: (entry: ReachEntry) => string[][]): string | null {
+  const file = resolve(root, entry.module);
+  let source: string;
+  try {
+    source = readFileSync(file, 'utf8');
+  } catch {
+    return 'the module is gone';
+  }
+  if (!computedSites(source).some((site) => site.argument === entry.site)) return 'the import site is gone';
+  const lists = expand(entry);
+  const dead = lists.findIndex((list) => list.length === 0);
+  return dead >= 0 ? `the glob ${entry.globs[dead]} matches no file` : null;
 }
 
 function reverse(dependencies: Map<string, Set<string>>): Map<string, string[]> {
@@ -243,9 +468,14 @@ function normalize(path: string): string {
 
 /**
  * Choose the kernel test files that can see a change. `root` is the repository root, `moduleDirectory` the kernel
- * module, and `changed` the changed repository-relative paths.
+ * module, `changed` the changed repository-relative paths, and `reach` what the computed imports can load.
  */
-export function affectedTests(root: string, moduleDirectory: string, changed: string[]): Affected {
+export function affectedTests(
+  root: string,
+  moduleDirectory: string,
+  changed: string[],
+  reach?: ReachEntry[],
+): Affected {
   const repository = resolve(root);
   const module = resolve(moduleDirectory);
   const modulePath = normalize(relative(repository, module));
@@ -270,19 +500,18 @@ export function affectedTests(root: string, moduleDirectory: string, changed: st
     if (/\.md$/i.test(path)) continue;
 
     const known = CODE.test(path) || SQL.test(path) || /\.json$/.test(path);
-    if (!known) {
-      if (data.some((prefix) => path.startsWith(prefix))) return { kind: 'all', reason: path };
-      continue;
-    }
+    const inData = data.some((prefix) => path.startsWith(prefix));
+    if (!known && !inData) continue;
     if (!graph) {
-      graph = buildGraph(repository, tests);
+      graph = buildGraph(repository, tests, reach ?? (repository === REPOSITORY ? REACH : []));
+      if (graph.stale) return { kind: 'all', reason: graph.stale };
       importers = reverse(graph.dependencies);
     }
 
     const absolute = resolve(repository, path);
     if (!graph.dependencies.has(absolute)) {
       if ((CODE.test(path) || SQL.test(path)) && !TEST.test(path)) return { kind: 'all', reason: path };
-      if (/\.json$/.test(path) && data.some((prefix) => path.startsWith(prefix))) return { kind: 'all', reason: path };
+      if (inData && !CODE.test(path) && !SQL.test(path)) return { kind: 'all', reason: path };
       continue;
     }
     participates = true;

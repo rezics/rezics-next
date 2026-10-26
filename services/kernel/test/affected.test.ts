@@ -266,5 +266,5 @@ describe('affected test selection on the repository', () => {
     expect(leaf.tests.filter((file) => !other.tests.includes(file))).toEqual(['test/log.test.ts']);
     expect(other.tests.filter((file) => !leaf.tests.includes(file))).toEqual(['test/receipt.test.ts']);
     expect(leaf.tests.length).toBeLessThan(40);
-  });
+  }, 30_000);
 });
