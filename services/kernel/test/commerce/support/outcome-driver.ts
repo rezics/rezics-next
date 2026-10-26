@@ -21,6 +21,7 @@ import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
+import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { capture, costOf, openGrowthDatabase, withoutCatalogStatements } from '../../support/growth.ts';
 import { startFakeStripe } from './fake-stripe.ts';
 
@@ -766,8 +767,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       await seedPool.end();
       await db.close();
       try {
-        await owner.query(`DROP DATABASE ${authName} WITH (FORCE)`);
-        await owner.query(`DROP DATABASE ${kernelName} WITH (FORCE)`);
+        await dropTestDatabase(owner, authName);
+        await dropTestDatabase(owner, kernelName);
       } finally {
         await owner.end();
       }

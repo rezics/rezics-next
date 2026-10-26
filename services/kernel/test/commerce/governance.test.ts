@@ -9,6 +9,7 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
@@ -169,7 +170,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await authPool?.end();
-  await reader.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  await dropTestDatabase(reader, authDatabase);
   await pool.end();
   await reader.end();
 });
