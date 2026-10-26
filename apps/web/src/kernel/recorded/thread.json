@@ -1,32 +1,31 @@
 {
   "thread": {
-    "id": "01a174cf-2864-753f-864d-1234e6d94275",
+    "id": "01a175c5-b3a4-7033-9771-12342c613675",
     "route": 4660,
-    "authorId": "01a174ce-d6ec-71bd-8057-0c19e645ba68",
+    "authorId": "01a175c5-248b-7577-a649-123384a6f520",
     "title": "Letters from B-612",
     "licence": "MIT",
     "subjectIds": [],
-    "boardId": "01a174cf-285e-7636-85f7-4321125c3426",
+    "boardId": "01a175c5-b39b-7053-8feb-4321ae5e1aa8",
     "visibility": "published",
     "securityRevision": "1",
     "availability": "available",
     "createdAt": "2026-10-24T00:00:00.000Z",
     "firstPost": {
-      "id": "01a174cf-2865-766c-8d36-1234546ab773",
-      "threadId": "01a174cf-2864-753f-864d-1234e6d94275",
+      "id": "01a175c5-b3a5-730e-83b8-123467afaa95",
+      "threadId": "01a175c5-b3a4-7033-9771-12342c613675",
       "route": 4660,
-      "authorId": "01a174ce-d6ec-71bd-8057-0c19e645ba68",
+      "authorId": "01a175c5-248b-7577-a649-123384a6f520",
       "parentId": null,
       "licence": "MIT",
       "subjectIds": [],
-      "boardId": "01a174cf-285e-7636-85f7-4321125c3426",
+      "boardId": "01a175c5-b39b-7053-8feb-4321ae5e1aa8",
       "visibility": "published",
       "securityRevision": "1",
       "createdAt": "2026-10-24T00:00:00.000Z",
-      "revisedAt": "2026-10-25T20:44:55.781Z",
-      "sha256": "a0daf7f4fb39a27271cc0e51b31991d84b27c9f1ca013aa15f3d08feb1b6dadb",
+      "revisedAt": "2026-10-26T01:14:13.285Z",
       "mediaIds": [],
-      "revisionId": "01a174cf-2865-766d-a056-123462d9ba50",
+      "revisionId": "01a175c5-b3a5-730f-b42d-1234fae0a89d",
       "body": {
         "doc": {
           "content": [
@@ -58,8 +57,11 @@
         "profile": "blocks",
         "version": "rezics-document-v1"
       },
+      "sha256": "a0daf7f4fb39a27271cc0e51b31991d84b27c9f1ca013aa15f3d08feb1b6dadb",
       "availability": "available"
-    }
+    },
+    "reactions": {}
   },
+  "reactionsAsOf": null,
   "status": 200
 }
