@@ -1,6 +1,7 @@
 import { createWriteRateLimiter, type WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
-import { createPool } from './database/pool.ts';
+import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
+import type { Pool } from 'pg';
 import { createKernel } from './http/kernel.ts';
 import type { KeyRing } from './tokens/seal.ts';
 import { ConfigError, readCommerceConfig, type CommerceConfig } from './commerce/config.ts';
@@ -95,6 +96,9 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
 
 export type ServerConfig = {
   databaseUrl: string;
+  poolAcquireTimeoutMillis: number;
+  /** Test override for verifying that the server pool survives its idle eviction interval. */
+  poolIdleTimeoutMillis?: number;
   hostname: string;
   port: number;
   routeKey: Uint8Array;
@@ -125,6 +129,7 @@ function decodeKey(value: string, variable: string, exactLength?: number): Uint8
 
 export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const databaseUrl = required(env, 'DATABASE_URL');
+  const poolAcquireTimeoutMillis = readPoolAcquireTimeoutMillis(env);
   const routeKey = decodeKey(required(env, 'KERNEL_ROUTE_KEY'), 'KERNEL_ROUTE_KEY', 32);
   const defaults = createKernelRuntimeDefaults({ env });
   createWriteRateStage(defaults.writeRate, defaults.rateAttribution); // Validate trusted transport configuration at startup.
@@ -139,6 +144,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const commerce = readCommerceConfig(env);
   return {
     databaseUrl,
+    poolAcquireTimeoutMillis,
     hostname,
     port,
     routeKey,
@@ -154,8 +160,23 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
 
 type RunningServer = {
   url: URL;
+  pool: Readonly<{
+    totalCount: number;
+    idleCount: number;
+    max: number;
+    idleTimeoutMillis: number;
+  }>;
   stop(): Promise<void>;
 };
+
+async function fillPool(pool: Pool): Promise<void> {
+  const results = await Promise.allSettled(Array.from({ length: pool.options.max }, () => pool.connect()));
+  for (const result of results) {
+    if (result.status === 'fulfilled') result.value.release();
+  }
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') throw failure.reason;
+}
 
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
   const defaults = createKernelRuntimeDefaults({
@@ -164,7 +185,11 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
     ...(config.auth === undefined ? {} : { auth: config.auth }),
   });
-  const pool = createPool(config.databaseUrl);
+  const pool = createPool(config.databaseUrl, {
+    connectionTimeoutMillis: config.poolAcquireTimeoutMillis,
+    min: KERNEL_POOL_MAX,
+    ...(config.poolIdleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: config.poolIdleTimeoutMillis }),
+  });
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
   const commerce = config.commerce;
@@ -190,6 +215,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   };
   const activeRequests = new Set<Promise<void>>();
   const boot = (async () => {
+    await fillPool(pool);
     await setupSemantic(pool, bundledRelease);
     await setupPresentation(pool);
     workClient = createWorkClient(config.databaseUrl);
@@ -258,6 +284,20 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   let stopping: Promise<void> | undefined;
   const running: RunningServer = {
     url: server.url,
+    pool: Object.freeze({
+      get totalCount() {
+        return pool.totalCount;
+      },
+      get idleCount() {
+        return pool.idleCount;
+      },
+      get max() {
+        return pool.options.max;
+      },
+      get idleTimeoutMillis() {
+        return pool.options.idleTimeoutMillis;
+      },
+    }),
     stop() {
       return (stopping ??= (async () => {
         try {

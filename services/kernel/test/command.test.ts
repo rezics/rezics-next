@@ -5,8 +5,10 @@ import { createPool, NestedPoolCheckoutError } from '../src/database/pool.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
-const secondPool = createPool(databaseUrl);
+const { pool, secondPool } = withoutPoolAcquireTimeout(() => ({
+  pool: createPool(databaseUrl),
+  secondPool: createPool(databaseUrl),
+}));
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const partitions = [7, 8, 9, 10, 11, 12, ...Array.from({ length: 11 }, (_, n) => 100 + n)];
 afterEach(async () => {
@@ -251,12 +253,7 @@ test('a command cannot take a second connection from its pool', async () => {
   ).rejects.toBeInstanceOf(NestedPoolCheckoutError);
   expect((await pool.query('SELECT 1 AS one')).rows).toEqual([{ one: 1 }]);
   expect([await position(8), await position(9)]).toEqual([0, 0]);
-  const defaultPool = withoutPoolAcquireTimeout(() => createPool(databaseUrl));
-  try {
-    expect(defaultPool.options).toMatchObject({ max: 10, connectionTimeoutMillis: 200, idleTimeoutMillis: 30_000 });
-  } finally {
-    await defaultPool.end();
-  }
+  expect(pool.options).toMatchObject({ max: 10, connectionTimeoutMillis: 200, idleTimeoutMillis: 30_000 });
 });
 
 test('a command that cannot get a connection in time is refused as overloaded', async () => {

@@ -123,6 +123,7 @@ export function fileEnvironment(
     DATABASE_URL: file.url.replace(/\/rezics(?=\?)/, `/${file.database}`),
     OPENSEARCH_URL: file.searchUrl,
     REYLO_CONFIG: file.reyloConfig,
+    KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '2000',
   };
 }
 

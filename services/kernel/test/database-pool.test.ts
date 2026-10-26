@@ -40,47 +40,43 @@ async function poolTimeout(value?: string, explicit?: number): Promise<number> {
 }
 
 test('pool acquisition timeout defaults to 200 ms, accepts bounded integers, and allows explicit overrides', async () => {
+  expect(readConfig(baseEnv).poolAcquireTimeoutMillis).toBe(200);
+  expect(readConfig({ ...baseEnv, KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '50' }).poolAcquireTimeoutMillis).toBe(50);
+  expect(readConfig({ ...baseEnv, KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000' }).poolAcquireTimeoutMillis).toBe(10000);
   expect(await poolTimeout()).toBe(200);
   expect(await poolTimeout('50')).toBe(50);
   expect(await poolTimeout('10000')).toBe(10000);
   expect(await poolTimeout('500', 125)).toBe(125);
 
   for (const value of ['49', '10001', '1.5', '1e2', 'not-a-number', '']) {
-    withPoolTimeout(value, () => {
-      expect(() => readConfig(baseEnv)).toThrow(ConfigError);
-      try {
-        readConfig(baseEnv);
-      } catch (error) {
-        expect((error as Error).message).toContain('KERNEL_POOL_ACQUIRE_TIMEOUT_MS');
-      }
-    });
+    const env = { ...baseEnv, KERNEL_POOL_ACQUIRE_TIMEOUT_MS: value };
+    let error: unknown;
+    try {
+      readConfig(env);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as Error).message).toContain('KERNEL_POOL_ACQUIRE_TIMEOUT_MS');
   }
 });
 
 test('a started server fills its pool before serving and retains every connection while idle', async () => {
   const config = { ...readConfig({ ...baseEnv, KERNEL_PORT: '0' }), poolIdleTimeoutMillis: 50 };
-  const startedAt = performance.now();
   const server = await startServer(config);
-  const startupMs = performance.now() - startedAt;
-  console.info(`startServer startup: ${startupMs.toFixed(1)} ms`);
 
-  // The server exposes this read-only view so startup pool behavior can be observed without issuing a request.
-  const pool = (
-    server as unknown as {
-      pool: { totalCount: number; idleCount: number; options: { max: number; idleTimeoutMillis: number } };
-    }
-  ).pool;
+  const pool = server.pool;
   const origin = server.url.href.replace(/\/$/, '');
   try {
-    expect(pool.totalCount).toBe(pool.options.max);
+    expect(pool.totalCount).toBe(pool.max);
     const totalBeforeRequest = pool.totalCount;
     const firstRequest = await fetch(`${origin}/v1/subjects/${newId(0x0042)}`);
     expect(firstRequest.status).toBe(404);
     expect(pool.totalCount).toBe(totalBeforeRequest);
 
-    await Bun.sleep(pool.options.idleTimeoutMillis + 50);
-    expect(pool.totalCount).toBe(pool.options.max);
-    expect(pool.idleCount).toBe(pool.options.max);
+    await Bun.sleep(pool.idleTimeoutMillis + 50);
+    expect(pool.totalCount).toBe(pool.max);
+    expect(pool.idleCount).toBe(pool.max);
   } finally {
     await server.stop();
   }
