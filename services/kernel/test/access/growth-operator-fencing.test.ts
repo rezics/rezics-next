@@ -117,6 +117,14 @@ for (const population of ['unrelated accounts', 'completed and pending history']
                SELECT $1,id,id,id,'operator',id FROM unnest($2::uuid[]) id`,
               [route, ids],
             );
+            // Completed unrelated slots make the subject/reservation point
+            // probes selective before the first measured late page.
+            await db.admin.query(
+              `INSERT INTO access.operator_relation_slot
+                (route,subject_account_id,reservation_id,operator_account_id,terminal,transaction_id)
+               SELECT $1,id,id,id,true,id FROM unnest($2::uuid[]) id`,
+              [route, ids],
+            );
           }
           prepared = [];
           run = 0;
