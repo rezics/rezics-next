@@ -82,8 +82,9 @@ export interface PermissionDriver {
    * Execute the real operation with session-derived identity/client/scope.
    * untrustedClaims models hostile request fields; it cannot change verified
    * claims. A denial must leave the attempted operation unapplied. Authentication
-   * or authorization rejection maps to denied; an authoritative read failure
-   * must be handled by the product as denial. Unexpected adapter errors throw.
+   * or authorization rejection maps to denied. A missing authoritative read denies;
+   * an unavailable one answers retryable unavailability with nothing applied, which
+   * the driver reports as denied. Unexpected adapter errors throw.
    * Grant operations exercise product grant administration, not fixture setup.
    */
   execute(session: Session, operation: Operation, untrustedClaims?: Partial<Login>): Promise<Outcome>;
