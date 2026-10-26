@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { choosePool, burnPerHour } from './allowance.ts';
-import { parseCodexUsage } from './usage.ts';
-import { fixturePool, reading } from './test-support.ts';
+import { markExhausted, parseCodexUsage, withObservedExhaustion } from './usage.ts';
+import { fixturePool, reading, tempDirectory } from './test-support.ts';
 const profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' } as const;
 test('quota readings normalize reset windows and pool selection respects local reserves, freshness and shared allowance', () => {
   const pool = fixturePool();
@@ -26,4 +26,15 @@ test('pacing measures only matching quota windows and never mistakes a reset for
   const limited = { ...pool, policy: { ...pool.policy, maxBurnPerHour: 5 } };
   expect(() => choosePool(profile, [limited], [after], { history: [before] })).toThrow('no allowed pool');
   after.windows[0]!.resetsAt! += 3600000; expect(burnPerHour(after, before)).toBe(0);
+});
+
+test('an observed exhaustion keeps its allowance out of routing for the pool maxAgeMs, then lapses', () => {
+  const pool = fixturePool(), state = tempDirectory(), now = Date.now();
+  const unknown = { pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString(), observedAt: null, windows: [], exhausted: false, error: null };
+  expect(withObservedExhaustion(unknown, pool, state, now)).toEqual(unknown);
+  markExhausted(state, pool.allowanceKey, now);
+  const marked = withObservedExhaustion(unknown, pool, state, now + 1000);
+  expect(marked.exhausted).toBe(true);
+  expect(() => choosePool(profile, [pool], [marked], { now: now + 1000 })).toThrow('no allowed pool');
+  expect(withObservedExhaustion(unknown, pool, state, now + pool.policy.maxAgeMs + 1).exhausted).toBe(false);
 });

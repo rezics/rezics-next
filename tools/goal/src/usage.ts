@@ -1,5 +1,5 @@
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, readSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { Pool, PoolReading } from './types.ts';
 
 export function parseCodexUsage(text: string, pool: Pool, now = Date.now()): PoolReading {
@@ -52,3 +52,21 @@ export function readPool(pool: Pool, now = Date.now()): PoolReading {
   } catch { return unknownReading(pool, now, 'quota observation unavailable'); }
 }
 export type PoolReader = (pool: Pool) => PoolReading;
+
+// A CLI that reports an exhausted balance, such as Grok's 402, has no usage reader; the control plane remembers the
+// observation so that routing skips the allowance for the pool's maxAgeMs instead of each new task failing on it once.
+function exhaustionPath(stateDirectory: string, allowanceKey: string): string {
+  return join(stateDirectory, 'exhausted', `${allowanceKey.replace(/[^\w.-]/g, '_')}.json`);
+}
+export function markExhausted(stateDirectory: string, allowanceKey: string, now = Date.now()): void {
+  const path = exhaustionPath(stateDirectory, allowanceKey);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify({ observedAt: new Date(now).toISOString() }));
+}
+export function withObservedExhaustion(reading: PoolReading, pool: Pool, stateDirectory: string, now = Date.now()): PoolReading {
+  try {
+    const { observedAt } = JSON.parse(readFileSync(exhaustionPath(stateDirectory, pool.allowanceKey), 'utf8')) as { observedAt: string };
+    if (now - Date.parse(observedAt) > pool.policy.maxAgeMs) return reading;
+    return { ...reading, observedAt, exhausted: true };
+  } catch { return reading; }
+}

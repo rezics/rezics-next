@@ -43,7 +43,7 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
       result.result = event.error?.message ?? event.message ?? result.result;
       const code = event.error?.code ?? event.code;
       result.failureKind = ['usage_limit_exceeded', 'rate_limit_exceeded', 'insufficient_quota'].includes(code)
-        || /usage limit|quota exhausted|rate limit reached/i.test(result.result) ? 'pool-exhausted' : 'tool';
+        || /usage limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i.test(result.result) ? 'pool-exhausted' : 'tool';
     }
     if (inside && event.type === 'turn.completed') result.failureKind = null;
     if (event.type === 'thread.started') result.session = event.thread_id ?? result.session;

@@ -11,8 +11,12 @@ export function git(cwd: string, ...args: string[]): string {
 
 /** A gate runs as nobody in particular: whichever process drives the train, its manager, task and session identity must
  * not reach the gate, or the gate's own tests act on that identity. */
+// Node's compile cache, which Vite's bin turns on, keys its entries by path under os.tmpdir(); every worktree adds its
+// own, and 862k of them exhausted /tmp's inodes. It cannot be shared across worktrees, so it is off.
+export const NO_COMPILE_CACHE = { NODE_DISABLE_COMPILE_CACHE: '1' } as const;
 export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(parent).filter(([name]) => !name.startsWith('GOAL_') && name !== 'CODEX_THREAD_ID'));
+  return { ...Object.fromEntries(Object.entries(parent).filter(([name]) => !name.startsWith('GOAL_') && name !== 'CODEX_THREAD_ID')),
+    ...NO_COMPILE_CACHE };
 }
 
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
