@@ -2,6 +2,7 @@ import { checkDocument, fromPlainText, type DocumentProfile, type DocumentSnapsh
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { waitForFocus } from '../test/focus.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 
 function demo(profile: DocumentProfile = 'blocks', translated = false) {
@@ -144,6 +145,8 @@ export const KeyboardReach: Story = {
     expect(toolbar.getByRole('button', { name: 'Italic' })).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}{Enter}');
     await waitFor(() => expect(checked(keyboard.latest.current)?.content?.[0]?.marks?.[0]?.type).toBe('bold'));
+    // Applying a mark returns focus to the editor on a later frame; a shortcut sent before then is lost.
+    await waitForFocus(textbox);
     await userEvent.keyboard('{Alt>}{F10}{/Alt}{End}{Enter}');
     const menu = within(await canvas.findByRole('menu', { name: 'Turn into' }));
     await waitFor(() => expect(menu.getByRole('menuitemradio', { name: 'Paragraph' })).toHaveFocus());
