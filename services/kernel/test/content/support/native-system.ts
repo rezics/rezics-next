@@ -40,7 +40,7 @@ export async function createNativeContentSystem(options: ContentSystemOptions): 
   const source = new URL(options.databaseUrl);
   const template = decodeURIComponent(source.pathname.slice(1));
   if (!template) throw new Error('A migrated application template database is required');
-  const namespace = `content_${crypto.randomUUID().replaceAll('-', '')}`;
+  const namespace = options.namespace ?? `content_${crypto.randomUUID().replaceAll('-', '')}`;
   const appName = `${namespace}_app`;
   const authName = `${namespace}_auth`;
   const connection = (name: string) => {

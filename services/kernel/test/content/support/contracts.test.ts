@@ -23,7 +23,7 @@ function same<T extends true>(..._proof: T[]): void {}
 // Checked by tsc, never invoked: factory implementations may own real resources.
 function fixtureContracts(): void {
   same<Equal<typeof createContentSystem, (options: ContentSystemOptions) => Promise<ContentSystem>>>();
-  same<Equal<ContentSystemOptions, { readonly databaseUrl: string }>>();
+  same<Equal<ContentSystemOptions, { readonly databaseUrl: string; readonly namespace?: string }>>();
   same<Equal<ContentCredential, { readonly bearer: string; readonly actor: AccountActor }>>();
   same<Equal<Actor, AccountActor | { kind: 'anonymous' }>>();
   same<

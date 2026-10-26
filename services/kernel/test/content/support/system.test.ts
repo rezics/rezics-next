@@ -127,34 +127,20 @@ test('failed full fixture construction removes only the partial isolated databas
   const admin = new Pool({ connectionString: adminConnection(databaseUrl) });
   const unrelatedAdmin = new Pool({ connectionString: adminConnection(databaseUrl) });
   const name = `content_partial_${crypto.randomUUID().replaceAll('-', '')}`;
+  const namespace = `content_${crypto.randomUUID().replaceAll('-', '')}`;
+  const appName = `${namespace}_app`;
+  const authName = `${namespace}_auth`;
   const unrelatedName = `content_unrelated_${crypto.randomUUID().replaceAll('-', '')}`;
   const source = new URL(databaseUrl);
   source.pathname = `/${name}`;
   let created = false;
   let unrelatedCreated = false;
   let unrelatedDropped = false;
-  let fixtureConstructionActive = false;
-  let unrelatedDroppedDuringConstruction = false;
-  const fixtureDatabaseNames: string[] = [];
-  let startUnrelatedDrop!: () => void;
-  const appDatabaseCreated = new Promise<void>((resolve) => {
-    startUnrelatedDrop = resolve;
-  });
-  const dropUnrelatedDatabase = (async () => {
-    await appDatabaseCreated;
-    if (unrelatedCreated && !unrelatedDropped) {
-      unrelatedDroppedDuringConstruction = fixtureConstructionActive;
-      await unrelatedAdmin.query(`DROP DATABASE "${unrelatedName}"`);
-      unrelatedDropped = true;
-    }
-  })();
   try {
     const templateName = decodeURIComponent(new URL(databaseUrl).pathname.slice(1));
     const quotedTemplate = `"${templateName.replaceAll('"', '""')}"`;
     await admin.query(`CREATE DATABASE "${name}" TEMPLATE ${quotedTemplate}`);
     created = true;
-    await unrelatedAdmin.query(`CREATE DATABASE "${unrelatedName}"`);
-    unrelatedCreated = true;
     const malformedTemplate = new Pool({ connectionString: source.href });
     try {
       // Keep the migration probe intact, then fail at the real governance
@@ -163,42 +149,30 @@ test('failed full fixture construction removes only the partial isolated databas
     } finally {
       await malformedTemplate.end();
     }
-    fixtureConstructionActive = true;
-    await expect(
-      createContentSystem({
-        databaseUrl: source.href,
-        onDatabaseCreated(databaseName) {
-          fixtureDatabaseNames.push(databaseName);
-          if (databaseName.endsWith('_app')) startUnrelatedDrop();
-        },
-      }),
-    ).rejects.toThrow('Operator governance bootstrap is unavailable');
-    fixtureConstructionActive = false;
-    startUnrelatedDrop();
-    await dropUnrelatedDatabase;
-    expect(unrelatedDroppedDuringConstruction).toBe(true);
+    await Promise.all([
+      expect(createContentSystem({ databaseUrl: source.href, namespace })).rejects.toThrow(
+        'Operator governance bootstrap is unavailable',
+      ),
+      (async () => {
+        await unrelatedAdmin.query(`CREATE DATABASE "${unrelatedName}"`);
+        unrelatedCreated = true;
+        await unrelatedAdmin.query(`DROP DATABASE "${unrelatedName}"`);
+        unrelatedDropped = true;
+      })(),
+    ]);
+    expect(unrelatedCreated).toBe(true);
+    expect(unrelatedDropped).toBe(true);
     expect((await admin.query('SELECT datname FROM pg_database WHERE datname=$1', [unrelatedName])).rows).toEqual([]);
-    expect(fixtureDatabaseNames).toHaveLength(2);
-    const fixturePrefixes = [
-      ...new Set(fixtureDatabaseNames.map((databaseName) => databaseName.replace(/_(?:app|auth)$/, ''))),
-    ];
-    expect(fixturePrefixes).toHaveLength(1);
-    const fixturePrefix = fixturePrefixes[0]!;
-    expect(fixtureDatabaseNames).toContain(`${fixturePrefix}_app`);
-    expect(fixtureDatabaseNames).toContain(`${fixturePrefix}_auth`);
     expect(
-      (await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])', [fixtureDatabaseNames])).rows,
+      (await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])', [[appName, authName]])).rows,
     ).toEqual([]);
     expect(
-      (await admin.query('SELECT datname FROM pg_database WHERE left(datname, length($1))=$1', [fixturePrefix])).rows,
+      (await admin.query('SELECT datname FROM pg_database WHERE left(datname, length($1))=$1', [namespace])).rows,
     ).toEqual([]);
     expect((await admin.query('SELECT datname FROM pg_database WHERE datname=$1', [name])).rows).toEqual([
       { datname: name },
     ]);
   } finally {
-    fixtureConstructionActive = false;
-    startUnrelatedDrop();
-    await dropUnrelatedDatabase;
     if (unrelatedCreated && !unrelatedDropped) {
       await unrelatedAdmin.query(`DROP DATABASE "${unrelatedName}"`);
       unrelatedDropped = true;

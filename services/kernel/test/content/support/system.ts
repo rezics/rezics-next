@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { WEBSITE_CLIENT_ID, type PublicJwks } from '@rezics/auth';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { Pool, type Pool as PgPool } from 'pg';
+import type { Pool } from 'pg';
 import type { Access, AccountActor, ActionCatalogue } from '../../../src/request/access.ts';
 import type { Kernel } from '../../../src/http/kernel.ts';
 import type { KeyRing } from '../../../src/tokens/seal.ts';
@@ -33,8 +33,8 @@ export interface ContentAuthClient {
 export interface ContentSystemOptions {
   /** Migrated source database used as the template for an isolated fixture database. */
   readonly databaseUrl: string;
-  /** Observe successfully created isolated database names, including partial construction. */
-  readonly onDatabaseCreated?: (name: string) => void;
+  /** Optional isolated database namespace for deterministic fixture assertions. */
+  readonly namespace?: string;
 }
 
 export interface ContentSystem {
@@ -87,43 +87,6 @@ type WebsiteTokenSet = {
 const protocolScopes = ['openid', 'offline_access'];
 const clientAssertionType = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
 
-function observeCreatedDatabases(templateUrl: string, onDatabaseCreated: (name: string) => void): () => void {
-  const templateName = decodeURIComponent(new URL(templateUrl).pathname.slice(1));
-  const prototype = Pool.prototype as unknown as { query: (this: PgPool, ...args: unknown[]) => unknown };
-  const originalQuery = prototype.query;
-  let namespace: string | undefined;
-  const wrappedQuery = function (this: PgPool, ...args: unknown[]): unknown {
-    const input = args[0];
-    const sql =
-      typeof input === 'string'
-        ? input
-        : input && typeof input === 'object' && 'text' in input && typeof input.text === 'string'
-          ? input.text
-          : undefined;
-    const create = sql?.match(
-      /^\s*CREATE\s+DATABASE\s+("[^"]+"|[a-z0-9_]+)\s+TEMPLATE\s+("(?:[^"]|"")*"|[a-z0-9_]+)\s*;?\s*$/i,
-    );
-    const databaseName = create?.[1]?.startsWith('"') ? create[1].slice(1, -1).replaceAll('""', '"') : create?.[1];
-    const sourceTemplate = create?.[2]?.startsWith('"') ? create[2].slice(1, -1).replaceAll('""', '"') : create?.[2];
-    const fixtureApp = databaseName?.match(/^(content_[a-f0-9]{32})_app$/i);
-    const fixtureAuth = databaseName?.match(/^(content_[a-f0-9]{32})_auth$/i);
-    const isAppDatabase = sourceTemplate === templateName && fixtureApp !== undefined;
-    const isAuthDatabase = namespace !== undefined && sourceTemplate === 'template0' && fixtureAuth?.[1] === namespace;
-    const createdName = isAppDatabase ? databaseName : isAuthDatabase ? databaseName : undefined;
-    const result = Reflect.apply(originalQuery, this, args);
-    if (createdName === undefined) return result;
-    return Promise.resolve(result).then((value) => {
-      if (isAppDatabase) namespace = fixtureApp![1];
-      onDatabaseCreated(createdName);
-      return value;
-    });
-  };
-  prototype.query = wrappedQuery;
-  return () => {
-    if (prototype.query === wrappedQuery) prototype.query = originalQuery;
-  };
-}
-
 function cookieHeader(response: Response): string {
   return response.headers
     .getSetCookie()
@@ -137,15 +100,7 @@ function cookieHeader(response: Response): string {
  * real `rezics-website` client against those same services.
  */
 export async function createContentSystem(options: ContentSystemOptions): Promise<ContentSystem> {
-  const restoreDatabaseObserver = options.onDatabaseCreated
-    ? observeCreatedDatabases(options.databaseUrl, options.onDatabaseCreated)
-    : undefined;
-  let native: Awaited<ReturnType<typeof createNativeContentSystem>>;
-  try {
-    native = await createNativeContentSystem(options);
-  } finally {
-    restoreDatabaseObserver?.();
-  }
+  const native = await createNativeContentSystem(options);
   try {
     const issuer = native.nativeAuth.verifier.issuer;
     const audience = native.nativeAuth.verifier.audience;
