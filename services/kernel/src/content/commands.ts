@@ -22,7 +22,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
-import { realmParticipationReadableAt, type RealmParticipationCheck } from '../community/participation.ts';
+import { prepareRealmParticipationResult, type RealmParticipationCheck } from '../community/participation.ts';
 import { readPartition } from '../partition/partition.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
@@ -30,7 +30,6 @@ import { claimMedia, InvalidMediaClaimError } from './media.ts';
 import {
   mediaParentBoard,
   mediaParentSnapshot,
-  prepareRealmParticipation,
   realmParticipationMatches,
   type RealmParticipationProof,
 } from './media-parent.ts';
@@ -240,7 +239,7 @@ async function prepareContentParticipation(
   time: AuthoritativeTime,
   deadline: number,
 ): Promise<RealmParticipationProof> {
-  const proof = await prepareRealmParticipation(
+  const proof = await prepareRealmParticipationResult(
     dependencies.pool,
     dependencies.realmParticipation,
     actor,
@@ -248,8 +247,7 @@ async function prepareContentParticipation(
     time,
     deadline,
   );
-  if (realmId !== null && realmParticipationReadableAt(time, realmId) === false)
-    throw new ContentNotFoundError();
+  if (proof.readable === false) throw new ContentNotFoundError();
   return proof;
 }
 
