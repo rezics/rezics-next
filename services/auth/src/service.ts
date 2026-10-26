@@ -1148,7 +1148,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               await connection.query(
                 `SELECT
               EXISTS(SELECT 1 FROM account WHERE "userId"=$1 AND "providerId"='credential' AND password IS NOT NULL AND $2 <> 'remove-password')
-              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1)
+              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND $2 <> 'remove-passkey' AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1)
               OR EXISTS(SELECT 1 FROM passkey WHERE "userId"=$1 AND ($2 <> 'remove-passkey' OR id<>$4) LIMIT 1) AS allowed`,
                 [
                   subject.accountId,

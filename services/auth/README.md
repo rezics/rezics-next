@@ -270,10 +270,10 @@ share the native `/signin` attempt budget. Errors use fixed codes.
 | `POST /passkeys/remove`           | Session cookie and `{ id }`; stages, approves and applies `remove-passkey`, with a committed credential floor receipt and bounded session revocation, returning `{ success: true }`.                                                                                    |
 
 The closed credential purposes are `set-password`, `remove-password`, `add-key`,
-`remove-key`, `add-passkey` and `remove-passkey`. Passkey purposes use the same
-kernel own-human and automated authorization rules as key purposes. The public
-passkey aliases operate only on the current person's credentials. Installation
-can only stage a public credential produced by successful WebAuthn verification;
+`remove-key`, `add-passkey` and `remove-passkey`. Passkeys belong only to their
+human owner; operator openings and automated-account credential management
+exclude passkeys. The public passkey aliases operate only on the current person's
+credentials. Installation can only stage a public credential produced by successful WebAuthn verification;
 public credential-effect commands cannot install arbitrary passkey material.
 The plugin's verification hooks enforce the authenticator's verified UV flag and
 hand registration to credential effects before native persistence.
@@ -284,8 +284,8 @@ person, client and scopes. A retry after a lost response resolves that stage and
 revalidates the committing approval before returning the same saved public result;
 it never installs a second passkey. Removal advances the Access floor before the
 Auth transaction deletes the selected credential and commits its receipt. Removing
-the last interactive credential is refused with 409 and `effect_status:
-"not_applied"`. A person can have at most 32 passkeys; another installation is 409.
+the last interactive credential (password or passkey) is refused with 409 and
+`effect_status: "not_applied"`. A person can have at most 32 passkeys; another installation is 409.
 
 Every own-human credential stage, approval and application requires `auth_time`
 within the last 600 seconds, read from the native session row with cookie caching
