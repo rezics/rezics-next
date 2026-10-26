@@ -95,6 +95,13 @@ export class ReportProofRequiredError extends Error {
   }
 }
 
+export class ReportProofUnavailableError extends Error {
+  constructor() {
+    super('Turnstile proof verification is unavailable');
+    this.name = 'ReportProofUnavailableError';
+  }
+}
+
 function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new TypeError('Invalid routed identity');
@@ -270,8 +277,9 @@ export async function createReport(
     try {
       proof = await dependencies.anonymousVerifier.verify(context.botToken, { deadline: context.deadline });
     } catch {
-      throw new ReportUnavailableError();
+      throw new ReportProofUnavailableError();
     }
+    if (!proof.ok && proof.reason === 'unavailable') throw new ReportProofUnavailableError();
   }
   let observed: TargetFacts | undefined;
   if (actor.kind === 'anonymous') {
