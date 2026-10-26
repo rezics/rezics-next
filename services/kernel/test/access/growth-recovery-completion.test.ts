@@ -27,6 +27,13 @@ let delivered: (() => void) | undefined;
 let serial = 0;
 const issuer = 'https://growth-recovery.auth.test';
 const password = 'native growth recovery password';
+const baselineHistory = 256;
+const historyPerScale = 4;
+const repetitions = 3;
+// Each history item runs native fencing, delivery, password replacement,
+// completion replay and another password-hashing registration. Allow five
+// seconds per item under the six-file gate, including warm-up and captures.
+const growthTimeout = (baselineHistory + 64 * historyPerScale + 3 * (1 + repetitions)) * 5_000;
 const request = (path: string, body: unknown) =>
   service.handler(
     new Request(issuer + path, {
@@ -134,19 +141,19 @@ test('native completion growth independent of receipt history', async () => {
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     // The native DBOS supervisor can overlap a capture with a bounded wake.
     slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
-    repetitions: 3,
+    repetitions,
     warmups: 1,
     async grow(_db, scale, previous) {
       // Native baseline history belongs to growth setup, before warm-up and capture.
       if (previous === 0) {
-        for (let i = 0; i < 256; i++) {
+        for (let i = 0; i < baselineHistory; i++) {
           await recover();
           await unrelated(i);
         }
       }
-      for (let i = previous * 4; i < scale * 4; i++) {
+      for (let i = previous * historyPerScale; i < scale * historyPerScale; i++) {
         await recover();
-        await unrelated(256 + i);
+        await unrelated(baselineHistory + i);
       }
       for (const table of ['access.account', 'access.lifecycle_fence_receipt', 'core.receipt'])
         await db.admin.query(`VACUUM (ANALYZE) ${table}`);
@@ -177,4 +184,4 @@ test('native completion growth independent of receipt history', async () => {
     ])
       expect(sample.cost.relations?.[table]).toBeDefined();
   }
-}, 600000);
+}, growthTimeout);
