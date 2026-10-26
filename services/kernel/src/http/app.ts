@@ -1,6 +1,8 @@
-import { Elysia } from 'elysia';
+import { Elysia, t, ValidationError } from 'elysia';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { TSchema } from 'typebox';
+import { Compile } from 'typebox/compile';
 import { deriveAccess } from '../access/derived-access.ts';
 import { createAccess } from '../access/index.ts';
 import { admitExposure, PlatformClosedError } from '../access/gates/admission.ts';
@@ -62,6 +64,8 @@ export function createApp({
   const originalRequests = new WeakMap<Request, Request>();
   const requestIds = new WeakMap<Request, string>();
   const arrivals = new WeakMap<Request, number>();
+  const jsonBodyChecks = new Map<string, ReturnType<typeof Compile>>();
+  const invalidJsonBodies = new WeakMap<Request, ValidationError>();
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
   let catalogue: MountedRouteCatalogue;
   const matchedRoutes = new WeakMap<Request, MountedRoute | undefined>();
@@ -134,12 +138,31 @@ export function createApp({
           ...(action ? { action } : {}),
         });
       }
-      return problemResponse(error, { method: request.method, id: idFor(request), ...(action ? { action } : {}) });
+      // Native validation can fail before beforeHandle; retain the original body pointers.
+      const bodyError = error instanceof ValidationError ? invalidJsonBodies.get(request) : undefined;
+      return problemResponse(bodyError ?? error, {
+        method: request.method,
+        id: idFor(request),
+        ...(action ? { action } : {}),
+      });
+    })
+    .onTransform('global', ({ body, request, route }) => {
+      const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+      if (mediaType !== 'application/json' && !mediaType?.endsWith('+json')) return;
+      const mounted = mountedFor(request, route);
+      const check = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`);
+      if (check && !check.Check(body))
+        invalidJsonBodies.set(request, new ValidationError('body', body, check.Errors(body), check.Type()));
+    })
+    .onBeforeHandle('global', ({ request }) => {
+      // Parsing transforms can report size limits first; retain errors from before coercion.
+      const error = invalidJsonBodies.get(request);
+      if (error) throw error;
     })
     .derive(async ({ request, route, set }) => {
       const job = { deadline: (arrivals.get(request) ?? Date.now()) + REQUEST_DEADLINE_MS, signal: request.signal };
       const actor =
-        request.headers.get('authorization') === null
+        request.headers.get('authorization') === null || invalidJsonBodies.has(request)
           ? { kind: 'anonymous' as const }
           : await admission.run('reserved', job, async () => {
               try {
@@ -241,6 +264,28 @@ export function createApp({
   mountedApp = app;
   socketPeer = (request) => app.server?.requestIP(request)?.address;
   app.wrap((handle) => {
+    // Elysia 2.0.0-rc.0 applies coerceBody even with normalize:false.
+    // Compile original schemas once, then check parsed JSON before its coercing validation.
+    jsonBodyChecks.clear();
+    for (const { method, path, hooks } of app.routes) {
+      const schemas: TSchema[] = [];
+      for (const declaration of [hooks, ...(hooks?.schemas ?? [])]) {
+        let schema = declaration?.body;
+        if (typeof schema === 'string') schema = app.models[schema as keyof typeof app.models];
+        if (!schema) continue;
+        if ('~standard' in schema) {
+          const input = schema['~standard'].jsonSchema?.input;
+          if (!input) continue;
+          schema = input({ target: 'draft-2020-12' }) as TSchema;
+        }
+        schemas.push(schema as TSchema);
+      }
+      if (schemas.length)
+        jsonBodyChecks.set(
+          `${method} ${path}`,
+          Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas)),
+        );
+    }
     catalogue = mountedRouteCatalogue(mountedApp);
     const verbs = new Set(
       catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
