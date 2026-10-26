@@ -455,7 +455,7 @@ CREATE TABLE access.governance_reach (
     action text NOT NULL,
     resource_id uuid NOT NULL,
     actor_account_id uuid NOT NULL,
-    CONSTRAINT governance_reach_action_check CHECK ((action = ANY (ARRAY['moderation:takedown'::text, 'post:erase'::text, 'media:erase'::text, 'access:grant'::text]))),
+    CONSTRAINT governance_reach_action_check CHECK ((action = ANY (ARRAY['moderation:takedown'::text, 'moderation:read_reports'::text, 'post:erase'::text, 'media:erase'::text, 'access:grant'::text]))),
     CONSTRAINT governance_reach_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
     CONSTRAINT governance_reach_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
