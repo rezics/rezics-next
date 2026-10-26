@@ -1,6 +1,6 @@
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
-import { makeRecord, POOL_EXHAUSTED, readMeasurement, reportedApproaches } from './records.ts';
+import { makeRecord, POOL_EXHAUSTED, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
 import { recordClaudeRateLimit } from './usage.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
@@ -37,6 +37,12 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
       // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
       measurement.failureKind = POOL_EXHAUSTED.test(stderr) ? 'pool-exhausted' : 'tool';
       measurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
+    }
+    // Only a worker's own final answer, a success report or a stated blocker, lets its branch land. A worker killed
+    // mid-work gives none, and its partial worktree must not be committed and integrated as if it had passed.
+    if (!measurement.failureKind && !measurement.blocker && !reportsSuccess(measurement.result)) {
+      measurement.failureKind = 'tool';
+      measurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${measurement.result.slice(-500)}`;
     }
     store.updateAttempt(ref, a => { a.session = measurement.session; a.result = measurement.result; a.blocker = measurement.blocker; a.failureKind = measurement.failureKind; a.approaches.push(...reportedApproaches(measurement.result)); });
     store.putRecord(makeRecord(task, attempt, measurement));
