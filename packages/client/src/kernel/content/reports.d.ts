@@ -48,6 +48,12 @@ type ReadContext = Readonly<{
 export declare class ReportUnavailableError extends Error {
     constructor();
 }
+export declare class ReportProofRequiredError extends Error {
+    constructor();
+}
+export declare class ReportProofUnavailableError extends Error {
+    constructor();
+}
 export declare function createReport(dependencies: ReportDependencies, actor: Actor, input: ReportInput, context: ReportRequestContext): Promise<CommandOutcome<Readonly<{
     reportId: ReportId;
 }>>>;

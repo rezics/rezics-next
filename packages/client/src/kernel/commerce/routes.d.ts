@@ -3234,7 +3234,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     };
     detail: {
         operationId: string;
-        'x-exposure': string;
+        'x-exposure': "gate:purchases" | "gate:selling";
         'x-action': string;
         security: {}[];
     };
@@ -3421,7 +3421,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         };
         detail: {
             operationId: string;
-            'x-exposure': string;
+            'x-exposure': "gate:purchases" | "gate:selling";
             'x-action': string;
             security: {}[];
         };
@@ -3538,7 +3538,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     };
     detail: {
         operationId: string;
-        'x-exposure': string;
+        'x-exposure': "gate:purchases" | "gate:selling";
         'x-action': string;
         security: {}[];
     };

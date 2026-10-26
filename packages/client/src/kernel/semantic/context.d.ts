@@ -37,6 +37,7 @@ export declare function createContext(pool: Pool, options: {
     authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
+    clock?: () => Date;
 }): Promise<{
     context: {
         id: string;

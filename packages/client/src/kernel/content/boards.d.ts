@@ -8,7 +8,7 @@ export type ContentBoardDependencies = ContentReadDependencies & {
 export type BoardPageInput = {
     cursor?: string;
     limit?: number;
-    sort?: BoardCursorSort | 'active';
+    sort?: BoardCursorSort;
     query?: string;
 };
 export type BoardThreadPage = Page<ThreadView> & {

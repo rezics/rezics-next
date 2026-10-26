@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Anchored, BoardId, BoardView, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
+import type { Anchored, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 /** Erased slots retain identity without disclosing bytes or a digest of erased text. */
@@ -17,8 +17,9 @@ type ContentPayload = Readonly<{
 }>;
 export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
 export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
+export type PostEntry = ItemView | ErasedPlaceholder;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{
-    firstPost: ItemView;
+    firstPost: PostEntry;
 }>;
 export type ContentReadDependencies = Readonly<{
     pool: Pool;
@@ -42,18 +43,21 @@ export type ReactionCountFreshness = Readonly<{
     position: string;
 }>;
 type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
+type Counted<T> = T extends ErasedPlaceholder & {
+    readonly revisionId?: never;
+} ? T : T & {
+    readonly reactions: ReactionCountMap;
+};
 /** One index seek per partition over the page's targets. Zero kinds are omitted.
  * The freshness is the oldest source watermark among the count rows actually read. */
 export declare function withReactionCounts<T extends {
     readonly id: string;
 }>(dependencies: ContentReadDependencies, targets: readonly T[], deadline: number): Promise<{
-    readonly items: readonly (T & {
-        readonly reactions: ReactionCountMap;
-    })[];
+    readonly items: readonly Counted<T>[];
     readonly reactionsAsOf: ReactionCountFreshness | null;
 }>;
 export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext): Promise<Anchored<ThreadView | null>>;
-export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId): Promise<Anchored<ItemView | null>>;
-export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<ItemView>>;
+export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId): Promise<Anchored<PostEntry | null>>;
+export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<PostEntry>>;
 export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<RevisionView>>;
 export declare function discloseThreads(dependencies: ContentReadDependencies, threadIds: readonly ThreadId[], context: ReadContext): Promise<readonly Anchored<ThreadView | null>[]>;

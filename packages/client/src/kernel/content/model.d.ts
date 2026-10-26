@@ -54,6 +54,16 @@ export type RevisionMetadata = Readonly<{
     sha256: string;
     mediaIds: readonly MediaId[];
 }>;
+export type ErasedPlaceholder = Readonly<{
+    id: PostId;
+    threadId: ThreadId;
+    route: Route;
+    parentId: PostId | null;
+    removed: true;
+    availability: 'erased';
+    body: null;
+    sha256: null;
+}>;
 export type ItemView = Readonly<ItemMetadata & {
     revisionId: RevisionId;
 } & ({
@@ -63,6 +73,7 @@ export type ItemView = Readonly<ItemMetadata & {
     body: null;
     availability: 'erased';
 })>;
+export type PostEntry = ItemView | ErasedPlaceholder;
 export type RevisionView = Readonly<RevisionMetadata & ({
     body: DocumentSnapshot;
     availability: 'available';
@@ -82,8 +93,12 @@ export type ThreadView = Readonly<{
     securityRevision: SecurityRevision;
     availability: Availability;
     createdAt: string;
-    firstPost: ItemView;
+    firstPost: PostEntry;
 }>;
+export declare function isErasedPlaceholder(entry: Readonly<{
+    availability: Availability;
+    revisionId?: RevisionId;
+}>): entry is ErasedPlaceholder;
 export type BoardView = Readonly<{
     id: BoardId;
     route: Route;

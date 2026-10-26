@@ -23,6 +23,7 @@ export type SubjectLinksPage = {
         position: bigint;
     };
 };
+export declare function waitForSubjectLinks(pool: Pool, seen: readonly SessionComponent[], subject: string): Promise<boolean>;
 export declare function listSubjectLinks(pool: Pool, ring: KeyRing, options: {
     subject: string;
     property: string | null;
@@ -30,4 +31,5 @@ export declare function listSubjectLinks(pool: Pool, ring: KeyRing, options: {
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
     seen: readonly SessionComponent[];
+    caughtUp?: boolean;
 }): Promise<SubjectLinksPage>;
