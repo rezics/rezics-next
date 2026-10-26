@@ -1,14 +1,15 @@
-import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { createAccess } from '../src/access/index.ts';
 import { createKernel } from '../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../src/http/request.ts';
 import { itemFacts } from '../src/semantic/item.ts';
 import { pageSubjects } from '../src/semantic/page.ts';
-import { bootstrapRelease } from '../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../src/semantic/definitions.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../src/route/route.ts';
-import { AuthenticationError, type Access, type AccessFactory, type AccountActor } from '../src/request/access.ts';
+import type { AccessFactory, AccountActor } from '../src/request/access.ts';
 import { encodeSession, type SessionComponent } from '../src/tokens/session.ts';
 import type { KeyRing } from '../src/tokens/seal.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
@@ -34,18 +35,8 @@ const actor: AccountActor = {
 const ordinalsPerScale = 500;
 const maximumSeed = 64 * ordinalsPerScale;
 const seedDigest = Buffer.alloc(32, 7);
-const stateQueue: FixtureState[] = [];
 const dispatchedActions = new Set<string>();
 
-type FixtureState = {
-  readonly subjectIds: Set<string>;
-  readonly immutableSubjectIds: Set<string>;
-  readonly accountIds: Set<string>;
-  readonly resourceIds: Set<string>;
-  readonly receiptKeys: Set<string>;
-  readonly clientIds: Set<string>;
-  readonly anchorPartitions: Set<number>;
-};
 type Anchor = { readonly id: string; readonly route: number; readonly partition: number };
 
 let db: GrowthDatabase;
@@ -53,29 +44,9 @@ let kernel: ReturnType<typeof createKernel>;
 let publicJwk: JWK;
 let privateKey: CryptoKey;
 
-function fixtureState(): FixtureState {
-  const state: FixtureState = {
-    subjectIds: new Set(),
-    immutableSubjectIds: new Set(),
-    accountIds: new Set(),
-    resourceIds: new Set(),
-    receiptKeys: new Set(),
-    clientIds: new Set(),
-    anchorPartitions: new Set(),
-  };
-  stateQueue.push(state);
-  return state;
-}
-
-function values(ids: ReadonlySet<string>): string[] {
-  return [...ids];
-}
-
-function requestPopulation(state: FixtureState, name: string, hotPartition: number): Population {
+function requestPopulation(name: string, hotPartition: number): Population {
   // This population matches create-subject, insert-facts, fence and Access account/grant SQL row shapes.
   const seedClient = `growth-seed-${name}`;
-  state.clientIds.add(seedClient);
-  state.anchorPartitions.add(hotPartition);
   return {
     name,
     hotPartition,
@@ -93,10 +64,6 @@ function requestPopulation(state: FixtureState, name: string, hotPartition: numb
         ...fact,
         recorded_transaction_id: transaction,
       }));
-      state.subjectIds.add(id);
-      state.accountIds.add(account);
-      state.resourceIds.add(resource);
-      state.receiptKeys.add(idempotencyKey);
       return {
         'core.outbox': [
           {
@@ -230,23 +197,11 @@ function keyForPartition(partition: number): string {
   }
 }
 
-async function createAnchor(state: FixtureState, label: string, partition: number): Promise<Anchor> {
+async function createAnchor(label: string, partition: number): Promise<Anchor> {
   const idempotencyKey = keyForPartition(partition);
-  const clientId = `growth-request-${randomUUID()}`;
-  state.receiptKeys.add(idempotencyKey);
-  state.clientIds.add(clientId);
-  const writer: Access = {
-    async authenticate(token) {
-      if (token !== 'growth-writer') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-      return { ...actor, clientId, scopes: ['subject:create'] };
-    },
-    async authorize() {
-      return true;
-    },
-  };
   const writerKernel = createKernel({
     pool: db.pool,
-    access: writer,
+    access: authenticatedAccess,
     routeKey,
     tokens,
     writeRate: {
@@ -259,7 +214,7 @@ async function createAnchor(state: FixtureState, label: string, partition: numbe
     new Request('http://kernel.test/v1/subjects', {
       method: 'POST',
       headers: {
-        authorization: 'Bearer growth-writer',
+        authorization: `Bearer ${await bearerToken('subject:create')}`,
         [IDEMPOTENCY_HEADER]: `"${idempotencyKey}"`,
         'content-type': 'application/json',
       },
@@ -272,13 +227,10 @@ async function createAnchor(state: FixtureState, label: string, partition: numbe
   const route = routeOf(id);
   if (route === null) throw new Error('The production subject route was not encoded in its id');
   const anchor = { id, route, partition: partitionOf(route) };
-  state.subjectIds.add(id);
-  state.immutableSubjectIds.add(id);
-  state.anchorPartitions.add(anchor.partition);
   return anchor;
 }
 
-async function seedAnchorAuthorization(state: FixtureState, anchor: Anchor): Promise<void> {
+async function seedAccount(): Promise<void> {
   // This population matches active actor rows read by account-read.sql.
   const accountPopulation: Population = {
     name: `request-anchor-account-${randomUUID()}`,
@@ -299,6 +251,10 @@ async function seedAnchorAuthorization(state: FixtureState, anchor: Anchor): Pro
       ],
     }),
   };
+  await seed({ pool: db.pool, admin: db.admin }, accountPopulation, { from: 0, to: 1 });
+}
+
+async function seedAnchorAuthorization(anchor: Anchor): Promise<void> {
   // This population matches the direct resource grant row written by grant-create.sql.
   const grantPopulation: Population = {
     name: `request-anchor-grant-${randomUUID()}`,
@@ -319,17 +275,14 @@ async function seedAnchorAuthorization(state: FixtureState, anchor: Anchor): Pro
       ],
     }),
   };
-  state.accountIds.add(accountId);
-  state.resourceIds.add(anchor.id);
-  await seed({ pool: db.pool, admin: db.admin }, accountPopulation, { from: 0, to: 1 });
   await seed({ pool: db.pool, admin: db.admin }, grantPopulation, { from: 0, to: 1 });
 }
 
-async function bearerToken(): Promise<string> {
+async function bearerToken(scope = 'subject:read'): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
     client_id: actor.clientId,
-    scope: 'subject:read',
+    scope,
     authn_epoch: actor.authnEpoch,
     auth_time: now,
     amr: ['pwd'],
@@ -358,60 +311,50 @@ function sessionInput(anchor: Anchor, count: number): string {
   return encodeSession(tokens, `account:${accountId}`, components);
 }
 
-async function cleanup(state: FixtureState): Promise<void> {
-  const subjects = values(state.subjectIds);
-  const removableSubjects = subjects.filter((id) => !state.immutableSubjectIds.has(id));
-  const accounts = values(state.accountIds);
-  const resources = values(state.resourceIds);
-  const keys = values(state.receiptKeys);
-  const clients = values(state.clientIds);
-  const partitions = [...state.anchorPartitions];
-  if (resources.length) {
-    await db.admin.query('DELETE FROM access.resource_denial WHERE resource_id = ANY($1::uuid[])', [resources]);
-    await db.admin.query('DELETE FROM access.resource_role_grant WHERE resource_id = ANY($1::uuid[])', [resources]);
-    await db.admin.query('DELETE FROM access.resource_grant WHERE resource_id = ANY($1::uuid[])', [resources]);
-  }
-  if (subjects.length) {
-    await db.admin.query('DELETE FROM semantic.fact WHERE subject_id = ANY($1::uuid[])', [subjects]);
-    await db.admin.query(
-      "DELETE FROM core.outbox WHERE type = 'com.rezics.subject.created.v1' AND subject = ANY($1::text[])",
-      [subjects],
-    );
-  }
-  if (removableSubjects.length)
-    await db.admin.query('DELETE FROM semantic.subject WHERE subject_id = ANY($1::uuid[])', [removableSubjects]);
-  if (keys.length) await db.admin.query('DELETE FROM core.receipt WHERE idempotency_key = ANY($1::text[])', [keys]);
-  if (clients.length)
-    await db.admin.query('DELETE FROM editorial.write_basis WHERE client_id = ANY($1::text[])', [clients]);
-  if (accounts.length)
-    await db.admin.query('DELETE FROM access.account WHERE account_id = ANY($1::uuid[])', [accounts]);
-  if (partitions.length)
-    await db.admin.query(
-      `UPDATE core.partition p SET position = COALESCE((
-         SELECT max(o.position) FROM core.outbox o WHERE o.partition_no = p.partition_no
-       ), 0) WHERE p.partition_no = ANY($1::integer[])`,
-      [partitions],
-    );
-}
+const templateUrl = new URL(databaseUrl);
+const adminUrl = new URL(databaseUrl);
+adminUrl.pathname = '/postgres';
+const databases = new pg.Pool({ connectionString: adminUrl.href, max: 1 });
+let fixtureDatabase: string | undefined;
+const authenticatedAccess: AccessFactory = (config) =>
+  createAccess({
+    ...config,
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: `${issuer}/.well-known/jwks.json`,
+      async fetch() {
+        return Response.json({ keys: [publicJwk] });
+      },
+    },
+  });
 
 beforeAll(async () => {
-  db = await openGrowthDatabase(databaseUrl);
-  await bootstrapRelease(db.pool, bundledRelease);
   const pair = await generateKeyPair('ES256', { extractable: true });
   privateKey = pair.privateKey;
   publicJwk = { ...(await exportJWK(pair.publicKey)), kid: 'growth-request-key', alg: 'ES256' };
+});
+
+beforeEach(async () => {
+  // Semantic facts and revisions are immutable. Isolate each population in a migrated database instead of deleting
+  // facts between tests or leaving a previous scale's population in the next check.
+  const name = `request_growth_${randomUUID().replaceAll('-', '')}`;
+  const template = decodeURIComponent(templateUrl.pathname.slice(1)).replaceAll('"', '""');
+  await databases.query(`CREATE DATABASE ${name} TEMPLATE "${template}"`);
+  fixtureDatabase = name;
+  const url = new URL(databaseUrl);
+  url.pathname = `/${name}`;
+  db = await openGrowthDatabase(url.href);
+  await bootstrapRelease(db.pool, bundledRelease);
+  await seedAccount();
+  await db.admin.query(
+    `INSERT INTO access.resource_grant
+       (route, resource_id, subject_id, subject_role, action, valid, transaction_id)
+     VALUES (0, $1, $2, '', 'subject:create', '(,)', $2)`,
+    [GLOBAL_CONTEXT, accountId],
+  );
   const access: AccessFactory = (config) => {
-    const permissions = createAccess({
-      ...config,
-      auth: {
-        issuer,
-        audience,
-        jwksUrl: `${issuer}/.well-known/jwks.json`,
-        async fetch() {
-          return Response.json({ keys: [publicJwk] });
-        },
-      },
-    });
+    const permissions = authenticatedAccess(config);
     return {
       ...permissions,
       async prepare(preparedActor, action, resource, context) {
@@ -431,18 +374,24 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  for (const state of stateQueue.splice(0)) await cleanup(state);
+  try {
+    await db?.close();
+  } finally {
+    if (fixtureDatabase) {
+      await databases.query(`DROP DATABASE ${fixtureDatabase} WITH (FORCE)`);
+      fixtureDatabase = undefined;
+    }
+  }
   dispatchedActions.clear();
 });
 
 afterAll(async () => {
-  await db?.close();
+  await databases.end();
 });
 
 test('Admission stays within its bound as N grows', async () => {
-  const state = fixtureState();
-  const population = requestPopulation(state, `request-admission-${randomUUID()}`, 4095);
-  await createAnchor(state, 'Admission growth anchor', population.hotPartition);
+  const population = requestPopulation(`request-admission-${randomUUID()}`, 4095);
+  await createAnchor('Admission growth anchor', population.hotPartition);
   const anchor = await kernel.handle(new Request('http://kernel.test/health'));
   expect(anchor.status).toBe(200);
   expect(await anchor.json()).toEqual({ status: 'ok' });
@@ -460,13 +409,12 @@ test('Admission stays within its bound as N grows', async () => {
 }, 90_000);
 
 test('Request access dispatch stays within its bound as N grows', async () => {
-  const state = fixtureState();
-  const anchor = await createAnchor(state, 'Access dispatch anchor', 40);
-  await seedAnchorAuthorization(state, anchor);
+  const anchor = await createAnchor('Access dispatch anchor', 40);
+  await seedAnchorAuthorization(anchor);
   const token = await bearerToken();
   const hotPartition = hotPartitionFor(anchor.partition, partitionOf(accountRoute));
-  const population = requestPopulation(state, `request-access-${randomUUID()}`, hotPartition);
-  await createAnchor(state, 'Request access growth anchor', hotPartition);
+  const population = requestPopulation(`request-access-${randomUUID()}`, hotPartition);
+  await createAnchor('Request access growth anchor', hotPartition);
   const report = await checkGrowth(db, {
     name: 'Request access dispatch stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -482,16 +430,14 @@ test('Request access dispatch stays within its bound as N grows', async () => {
 }, 90_000);
 
 test('Session header stays within its bound as j grows', async () => {
-  const state = fixtureState();
-  const anchor = await createAnchor(state, 'Session header anchor', 40);
-  await seedAnchorAuthorization(state, anchor);
+  const anchor = await createAnchor('Session header anchor', 40);
+  await seedAnchorAuthorization(anchor);
   const token = await bearerToken();
   const population = requestPopulation(
-    state,
     `request-session-${randomUUID()}`,
     hotPartitionFor(anchor.partition, partitionOf(accountRoute)),
   );
-  await createAnchor(state, 'Session header growth anchor', population.hotPartition);
+  await createAnchor('Session header growth anchor', population.hotPartition);
   await seed({ pool: db.pool, admin: db.admin }, population, { from: 0, to: maximumSeed });
   const report = await checkGrowth(db, {
     name: 'Session header stays within its bound as j grows',
@@ -510,7 +456,6 @@ test('Session header stays within its bound as j grows', async () => {
 }, 90_000);
 
 test('Cursors and seal stays within its bound as N grows', async () => {
-  const state = fixtureState();
   const partition = 40;
   const pagePopulation: Population = {
     name: `request-cursor-page-${randomUUID()}`,
@@ -519,7 +464,6 @@ test('Cursors and seal stays within its bound as N grows', async () => {
     rows: ({ ordinal, route }) => {
       const id = newId(route);
       const transaction = newId(route);
-      state.subjectIds.add(id);
       return {
         'semantic.subject': [{ route, subject_id: id, type: 'schema:Book', recorded_transaction_id: transaction }],
         'semantic.fact': itemFacts(id, { labels: { en: `Cursor page subject ${ordinal}` } }).map((fact) => ({
@@ -539,7 +483,6 @@ test('Cursors and seal stays within its bound as N grows', async () => {
     rows: ({ ordinal, route }) => {
       const id = newId(route);
       const transaction = newId(route);
-      state.subjectIds.add(id);
       return {
         'semantic.subject': [{ route, subject_id: id, type: 'schema:Book', recorded_transaction_id: transaction }],
         'semantic.fact': itemFacts(id, { labels: { en: `Cursor growth subject ${ordinal}` } }).map((fact) => ({
