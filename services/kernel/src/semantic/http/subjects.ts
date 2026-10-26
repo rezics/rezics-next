@@ -1383,17 +1383,31 @@ function subjectRoutes(
       '/v1/subjects/:id/links',
       {
         params: t.Object({ id: t.String() }),
-        query: t.Object({ ...pageQuery, property: t.Optional(t.String({ minLength: 1 })) }),
+        query: t.Object({
+          ...pageQuery,
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+          property: t.Optional(t.String({ minLength: 1 })),
+          filter: t.Optional(t.String({ format: 'uuid' })),
+          type: t.Optional(t.String({ minLength: 1 })),
+          language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' })),
+        }),
         response: {
           200: withHeaders(
             t.Object(
               {
                 links: t.Array(
                   t.Object(
-                    { subject: t.String(), property: t.String(), statement: t.String() },
+                    {
+                      subject: t.String(),
+                      property: t.String(),
+                      statement: t.String(),
+                      type: t.Optional(t.String()),
+                      label: t.Optional(t.String()),
+                    },
                     { additionalProperties: false },
                   ),
                 ),
+                count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() })),
                 freshness: t.Object(
                   {
                     consistency: t.Literal('eventual'),
@@ -1425,6 +1439,13 @@ function subjectRoutes(
         if (!active) throw new ProblemError('semantic_not_ready');
         if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
           throw new ProblemError('invalid_request');
+        if ((query.filter !== undefined || query.type !== undefined) && query.property === undefined)
+          throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && !active.release.properties[query.property!]?.relation?.filter)
+          throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
+        if (query.type !== undefined && !Object.hasOwn(active.release.types, query.type))
+          throw new ProblemError('invalid_request');
         const resource = { route, id: params.id };
         const seen = [...session.components];
         const caughtUp = await admission.run('normal', job, () =>
@@ -1436,7 +1457,17 @@ function subjectRoutes(
             listSubjectLinks(pool, tokens, {
               subject: params.id,
               property: query.property ?? null,
-              limit: query.limit ?? 20,
+              limit: query.limit ?? (query.property === undefined ? 20 : 25),
+              ...(query.filter === undefined ? {} : { filter: query.filter }),
+              ...(query.type === undefined ? {} : { type: query.type }),
+              ...((query.language ?? request.headers.get('accept-language')?.split(',')[0]?.split(';')[0]?.trim())
+                ? {
+                    language:
+                      query.language ?? request.headers.get('accept-language')!.split(',')[0]!.split(';')[0]!.trim(),
+                  }
+                : {}),
+              release: active.release,
+              includeLabels: query.property !== undefined,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
               seen,

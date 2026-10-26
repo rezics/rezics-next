@@ -1,3 +1,12 @@
+import { requireAccessDeadline } from '../access/unavailable.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import type { Release } from '@rezics/definitions';
+import { activeRelease } from './definitions.ts';
+import { readLabels } from './subject.ts';
+import { subjectLabel } from './link-keys.ts';
+import { matchesTarget } from './targets.ts';
+import readInboundLinkCount from './read-inbound-link-count.sql';
+import countInboundLinkTypes from './count-inbound-link-types.sql';
 import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
@@ -29,7 +38,15 @@ const FRESHNESS_POLL_MS = 100;
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-type LinkChangeRow = { property: string; statement: string; target: string; present: boolean };
+type LinkChangeRow = {
+  property: string;
+  statement: string;
+  target: string;
+  present: boolean;
+  source_type?: string;
+  order_key?: string;
+  filter_value?: string;
+};
 type LinksChanged = { subject: string; revision: number; security_revision: number; changes: LinkChangeRow[] };
 type StoredChange = {
   route: number;
@@ -41,6 +58,9 @@ type StoredChange = {
   sourceSecurityRevision: number;
   present: boolean;
   position: bigint;
+  sourceType: string;
+  orderKey: string;
+  filterValue: string;
 };
 
 function olderChange(revision: number, security: number, position: bigint, current: StoredChange): boolean {
@@ -103,7 +123,7 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
       for (const change of data.changes) {
         const route = routeOf(change.target);
         if (route === null) continue;
-        const key = `${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}`;
+        const key = `${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}\0${change.filter_value ?? NIL_UUID}`;
         const current = newest.get(key);
         if (current && olderChange(data.revision, security, envelope.position, current)) continue;
         newest.set(key, {
@@ -116,6 +136,9 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
           sourceSecurityRevision: security,
           present: change.present,
           position: envelope.position,
+          sourceType: change.source_type ?? '',
+          orderKey: change.order_key ?? '',
+          filterValue: change.filter_value ?? NIL_UUID,
         });
       }
     }
@@ -133,7 +156,13 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
 async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> {
   const newest = new Map<string, StoredChange>();
   for (const change of changes) {
-    const key = JSON.stringify([change.subjectId, change.property, change.sourceSubjectId, change.statementId]);
+    const key = JSON.stringify([
+      change.subjectId,
+      change.property,
+      change.sourceSubjectId,
+      change.statementId,
+      change.filterValue,
+    ]);
     const current = newest.get(key);
     if (!current || preferredChange(change, current)) newest.set(key, change);
   }
@@ -165,6 +194,9 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
               source_revision: change.sourceRevision,
               source_security_revision: change.sourceSecurityRevision,
               present: change.present,
+              source_type: change.sourceType,
+              order_key: change.orderKey,
+              filter_value: change.filterValue,
             })),
         });
       return {
@@ -223,9 +255,10 @@ export function linkProjection(pool: Pool): Relay {
   };
 }
 
-export type SubjectLink = { subject: string; property: string; statement: string };
+export type SubjectLink = { subject: string; property: string; statement: string; type?: string; label?: string };
 export type SubjectLinksPage = {
   links: SubjectLink[];
+  count?: { value: number; exact: boolean };
   freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
   next: string | null;
   component: { partition: number; epoch: number; position: bigint };
@@ -246,10 +279,10 @@ export function waitForSubjectLinks(
 function validAfter(after: CursorKey[], property: string | null): boolean {
   if (after.length !== 3) return false;
   const [cursorProperty, source, statement] = after;
-  if (typeof cursorProperty !== 'string' || cursorProperty.length < 1) return false;
+  if (typeof cursorProperty !== 'string' || (property === null && cursorProperty.length < 1)) return false;
   if (typeof source !== 'string' || typeof statement !== 'string') return false;
   if (!UUID.test(source) || !UUID.test(statement)) return false;
-  return property === null || cursorProperty === property;
+  return true;
 }
 
 export async function listSubjectLinks(
@@ -259,6 +292,11 @@ export async function listSubjectLinks(
     subject: string;
     property: string | null;
     limit: number;
+    filter?: string;
+    type?: string;
+    language?: string;
+    includeLabels?: boolean;
+    release?: Release;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
     seen: readonly SessionComponent[];
@@ -267,10 +305,20 @@ export async function listSubjectLinks(
 ): Promise<SubjectLinksPage> {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
+    throw new RangeError('Invalid links page limit');
   const binding = {
     operation: 'subject.links',
-    parameters: { subject: options.subject, property: options.property },
+    parameters: {
+      subject: options.subject,
+      property: options.property,
+      filter: options.filter ?? null,
+      type: options.type ?? null,
+      language: options.language ?? null,
+    },
   };
+  const release = options.type ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
   if (options.cursor !== undefined) {
     const decoded = decodeCursor(ring, binding, options.cursor);
@@ -279,7 +327,8 @@ export async function listSubjectLinks(
     cursor = decoded;
   }
   const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
-  return withReadTransaction(pool, async (client) => {
+  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const page = await withReadTransaction<SubjectLinksPage>(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
       visibility: string;
@@ -305,27 +354,78 @@ export async function listSubjectLinks(
             route,
             subject_id: options.subject,
             property: options.property,
+            filter_value: options.filter ?? NIL_UUID,
+            after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
             after_source: afterSource,
             after_statement: afterStatement,
-            page_limit: options.limit + 1,
+            page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
           });
-    const links = rows.slice(0, options.limit);
-    const last = links.at(-1);
+    const scanLimit = options.type ? 4 * options.limit : options.limit;
+    const links: Omit<SubjectLink, 'label'>[] = [];
+    let examined = 0;
+    for (const row of rows.slice(0, scanLimit)) {
+      examined++;
+      if (matches(row.type))
+        links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
+      if (links.length === options.limit) break;
+    }
+    const last = rows[examined - 1];
+    let count: { value: number; exact: boolean } | undefined;
+    if (options.property !== null) {
+      const total = await readInboundLinkCount.run(client, {
+        route,
+        subject_id: options.subject,
+        property: options.property,
+        filter_value: options.filter ?? NIL_UUID,
+      });
+      const value = Number(total?.value ?? 0);
+      if (!options.type) count = { value, exact: true };
+      else {
+        const sample = await countInboundLinkTypes.run(client, {
+          route,
+          subject_id: options.subject,
+          property: options.property,
+          filter_value: options.filter ?? NIL_UUID,
+        });
+        count = { value: sample.filter((row) => matches(row.type)).length, exact: value <= 1000 };
+      }
+    }
     return {
       links,
+      ...(count ? { count } : {}),
       freshness: {
         consistency: 'eventual',
         target_seconds: FRESHNESS_TARGET_SECONDS,
         caught_up: caughtUp,
       },
       next:
-        rows.length > options.limit && last
+        rows.length > examined && last
           ? encodeCursor(ring, binding, {
               epoch: partition.epoch,
-              after: [last.property, last.subject, last.statement],
+              after: [
+                options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
+                last.subject,
+                last.statement,
+              ],
             })
           : null,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
   });
+  const includeLabels = options.includeLabels ?? options.property !== null;
+  const labels = includeLabels
+    ? await readLabels(
+        pool,
+        page.links.map((link) => link.subject),
+      )
+    : new Map<string, Record<string, string>>();
+  requireAccessDeadline(deadline);
+  return {
+    ...page,
+    links: page.links.map((link) =>
+      includeLabels
+        ? { ...link, label: subjectLabel(labels.get(link.subject) ?? {}, options.language) }
+        : { subject: link.subject, property: link.property, statement: link.statement },
+    ),
+  };
 }

@@ -38,6 +38,8 @@ Every item property in a definition release declares how it reads in both direct
 - `labels` and `inverseLabels`: localized names for each direction ("Sequel" and "Prequel", "Adapted from" and "Adaptations"). A label never has to be inferred by reversing a sentence.
 - `group`: the display group a relation belongs to: `order` (prequel, sequel, parent story, side story), `derivation` (adaptation, based on, spin-off, translation, edition), `world` (same setting, alternative setting, alternative version), `membership` (series, part of, collection) or `association` (other Relations view entries); `credit` for staff and cast in Credits and Works, `appearance` for characters in Characters and Appearances, and `classification` for concept-valued facts such as genre, tags, platform, gender and form.
 - `targets`: the admitted value types, as for every item property.
+- `order`: `position` (the statement's `schema:position`), `date` (the holder's earliest `schema:datePublished`) or `name` (its default label). Missing values sort last; ties use holder id and statement id. Properties without an order retain holder-id order.
+- `filter`: one admitted item qualifier whose values select inverse pages, for example a credit role.
 - `acyclic: true` when the relation must form a directed acyclic graph (part of, prequel, based on). A write that would close a cycle is refused.
 
 A fact is stored once, on the side the release names as canonical. The other side is a read of the inverse, never a second statement, so the two directions cannot disagree. The inverse is served from inbound-edge rows in the target's partition, maintained from the forward statement and rebuildable from it.
@@ -61,6 +63,12 @@ The relation properties a subject can take, with their labels and admitted quali
 ### Inverse reads
 
 The value side of a relation is read through an indexed inverse read: the subjects whose statements with a given property point at a given subject, filtered by type and qualifier, ordered by a declared key (credit order, series position, date, name) and paged with an opaque continuation. Every inverse read returns an exact count or an "at least" count. Inverse reads never load the holding subjects' other facts.
+
+`GET /v1/subjects/:id/links` retains the cross-property listing and response shape when `property` is absent. A property page accepts `filter` (one subject id for its declared qualifier), `type` (a type CURIE, including its subtypes in the active release), `limit` (1–100, default 25), and an opaque `cursor`. Cursors bind the anchor, property, filter, type and reader language. Property-page links include the holder's `type` and `label`; `language` or the first `Accept-Language` tag selects a label, falling back to English and then the first language tag. Label fills use one batch per holder partition and never read holders' other facts.
+
+The projection stores a base row with the nil UUID and a row per distinct declared qualifier value. A two-role statement appears once in each role page and once unfiltered. Every row carries the holder type and its order key. Name keys use the same default-label fallback, NFKC case folding and a 256-character cap. Position keys use a fixed-width decimal encoding, preserving large integer ordinals; dates normalize signed years and date parts. The holder computes these keys with its write release. Global adoption of a publication date and identity writes through `updateSubjectIdentity` re-emit outbound links when holder keys change, bounded by the 512-fact cap. Changing a property's declared order or filter in a release requires a projection rebuild.
+
+Rows and `inbound_link_count` counters change in one partition-fenced transaction, including replay, removal and merge moves. Property and qualifier counts are exact. A type-filtered count samples the first 1,000 rows in the selected property/filter range; it is exact when that range has at most 1,000 rows and otherwise is an "at least" count. This bounded count sample is separate from the page scan. The page scan examines at most `4 × limit + 1` rows under a type filter and can return an empty or short page with a continuation. A continuation advances past examined rows, never past an unexamined match. Freshness waits, authorization and deadline failures follow the existing subject-link read.
 
 A hub (a long-running franchise, a prolific voice actor, a genre concept) has an unbounded number of relations, so every view over them is paged and no read enumerates them all. Credits that belong to one episode or one release are stated on that episode or release subject, not on the work.
 
@@ -231,4 +239,16 @@ Structural value limits bound subject payload blocks B by F for accepted inputs;
 Default authorization has separately anchored but uncapped evidence fan-out; its costs cannot be proved bounded using subject and definition counts alone.
 All writes serialize on their own `core.partition.position` counter, with definitions sharing partition 0; this is a partition-local lock/counter, not a global counter across all subject partitions.
 Fact/subject and activation/release joins and foreign keys stay on the same route, while related-label and Access evidence reads cross partitions as separate reads without a cross-partition join or transaction; the in-process release cache affects constants, not the cold lookup bound.
-The global context is inserted once by migration and has no runtime semantic read/write path; this base has no semantic update, erasure, background projection writer or definition-history listing to cost.
+The global context is inserted once by migration and has no runtime semantic read/write path.
+
+### Inverse page
+
+- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one counter probe, and one label read per holder partition on the page. Type counts add a separate sample of at most 1,000 index rows.
+- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. Label work depends only on the bounded labels of the returned holders.
+- Growth check: `growth-inverse-pages.test.ts`, in-degree 10², 10³, 10⁴ at limit 25; first and middle page rows and blocks stay flat.
+
+### Links projection write
+
+- Touches: per changed statement, `1 + filter values` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, property, filter_value, order_key, source_subject_id, statement_id)`.
+- Bound: O(changed statements × (1 + filter values)) per event; a holder key change re-emits its outbound links (≤ F). Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value.
+- Growth check: holders with 10, 100 and 500 outbound links; work per event is linear in changed links and independent of the anchor's in-degree.

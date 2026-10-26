@@ -277,11 +277,30 @@ CREATE TABLE semantic.inbound_link (
     present boolean NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     source_security_revision bigint DEFAULT 0 NOT NULL,
+    source_type text DEFAULT ''::text NOT NULL,
+    order_key text DEFAULT ''::text NOT NULL COLLATE pg_catalog."C",
+    filter_value uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     CONSTRAINT inbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT inbound_link_property_check CHECK ((char_length(property) >= 1)),
     CONSTRAINT inbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT inbound_link_source_revision_check CHECK ((source_revision >= 1)),
     CONSTRAINT inbound_link_source_security_revision_check CHECK ((source_security_revision >= 0))
+);
+
+
+--
+-- Name: inbound_link_count; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.inbound_link_count (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    property text NOT NULL,
+    filter_value uuid NOT NULL,
+    value bigint NOT NULL,
+    CONSTRAINT inbound_link_count_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT inbound_link_count_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT inbound_link_count_value_check CHECK ((value >= 0))
 );
 
 
@@ -375,7 +394,7 @@ CREATE TABLE semantic.revision (
     release text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     source jsonb,
-    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text]))),
+    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text, 'identity'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -501,11 +520,19 @@ ALTER TABLE ONLY semantic.hidden_candidate
 
 
 --
+-- Name: inbound_link_count inbound_link_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.inbound_link_count
+    ADD CONSTRAINT inbound_link_count_pkey PRIMARY KEY (route, subject_id, property, filter_value);
+
+
+--
 -- Name: inbound_link inbound_link_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.inbound_link
-    ADD CONSTRAINT inbound_link_pkey PRIMARY KEY (route, subject_id, property, source_subject_id, statement_id);
+    ADD CONSTRAINT inbound_link_pkey PRIMARY KEY (route, subject_id, property, source_subject_id, statement_id, filter_value);
 
 
 --
@@ -608,10 +635,17 @@ CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id
 
 
 --
+-- Name: inbound_link_all_present; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX inbound_link_all_present ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id) WHERE (present AND (filter_value = '00000000-0000-0000-0000-000000000000'::uuid));
+
+
+--
 -- Name: inbound_link_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id) WHERE present;
+CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, subject_id, property, filter_value, order_key, source_subject_id, statement_id) WHERE present;
 
 
 --

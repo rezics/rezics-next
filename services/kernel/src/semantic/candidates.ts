@@ -15,6 +15,7 @@ import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Statement, type Violation } from './item.ts';
+import { holderFacts } from './link-keys.ts';
 import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
 import { rejectContent } from './rules.ts';
@@ -481,7 +482,7 @@ export async function adoptCandidates(
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
       const beforeLinks =
-        options.context === GLOBAL_CONTEXT ? (await slotView(tx, options.subject, options.property)).facts : null;
+        options.context === GLOBAL_CONTEXT ? await holderFacts(tx, options.subject, options.release.release) : null;
       let oldGlobalCount = 0;
       if (options.context === GLOBAL_CONTEXT) {
         const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT);
@@ -539,11 +540,16 @@ export async function adoptCandidates(
           },
         ];
         if (beforeLinks) {
-          const afterFacts = (await slotView(tx, options.subject, options.property)).facts;
+          const afterFacts = (await holderFacts(tx, options.subject, options.release.release)).facts;
           const changes = linkChanges(
-            beforeLinks,
+            beforeLinks.facts,
             afterFacts,
-            factDataTypes(options.release.release, [...beforeLinks, ...afterFacts]),
+            factDataTypes(options.release.release, [...beforeLinks.facts, ...afterFacts]),
+            {
+              release: options.release.release,
+              type: beforeLinks.type,
+              refresh: options.property === 'schema:datePublished',
+            },
           );
           if (changes.length > 0) {
             events.push({

@@ -16,6 +16,10 @@ import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { contextSnapshot } from './context.ts';
 import { LINKS_CHANGED } from './events.ts';
+import { holderFacts } from './link-keys.ts';
+import readIdentityVisibility from './read-visibility.sql';
+import updateIdentity from './update-subject-identity.sql';
+import readIdentitySubject from './candidates-read-adoption-subject.sql';
 import { linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { matchesTarget } from './targets.ts';
@@ -159,7 +163,7 @@ export async function writeSubject(
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
   ];
-  const changes = linkChanges([], facts, dataTypes);
+  const changes = linkChanges([], facts, dataTypes, { release: options.release.release, type: String(input.type) });
   if (changes.length > 0) {
     events.push({
       type: LINKS_CHANGED,
@@ -431,4 +435,95 @@ export async function readRelated(db: Pool | PoolClient, ids: readonly string[])
   };
   if (isPool(db)) return withConnection(db, assemble);
   return assemble(db);
+}
+
+/** Identity writers share this command so every outbound projection follows label and type changes. */
+export async function updateSubjectIdentity(
+  pool: Pool,
+  options: {
+    subject: string;
+    labels?: Record<string, string>;
+    type?: string;
+    release: { digest: string; release: Release };
+    authorize: AccessCheck;
+    deadline?: number;
+  },
+) {
+  const route = routeOf(options.subject);
+  if (route === null) throw new SubjectInputError([{ pointer: '/subject', code: 'invalid_format' }]);
+  return runCommand(
+    pool,
+    {
+      partition: partitionOf(route),
+      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
+      authorization: {
+        action: 'subject:create',
+        resource: { route, id: options.subject },
+        denied: () => new SubjectAccessDeniedError(),
+        async authorize(tx, attempt) {
+          if (!(await options.authorize(tx, attempt.time))) throw new SubjectAccessDeniedError();
+          return 'execute';
+        },
+      },
+    },
+    async (tx, { transactionId }) => {
+      const visibility = await readIdentityVisibility.run(tx, { route, subject_id: options.subject });
+      if (visibility?.visibility !== 'visible') throw new SubjectAccessDeniedError();
+      const before = await holderFacts(tx, options.subject, options.release.release);
+      const type = options.type ?? before.type;
+      if (!options.release.release.types[type])
+        throw new SubjectInputError([{ pointer: '/type', code: 'unsupported' }]);
+      const facts = options.labels === undefined ? [] : itemFacts(options.subject, { labels: options.labels });
+      const latest = await readSubjectStatement.run(tx, { route, subject_id: options.subject });
+      if (latest[0]?.redirect) throw new SubjectRedirectError(options.subject, latest[0].redirect);
+      const state = await readIdentitySubject.run(tx, { route, subject_id: options.subject });
+      if (
+        !state ||
+        state.current_facts + facts.length > 512 ||
+        facts.some((fact) => latest.some((row) => row.slot_id === fact.slot_id && (row.log_seq ?? 0) >= 32))
+      )
+        throw new SubjectInputError([{ pointer: '/labels', code: 'out_of_range' }]);
+      const revision = (latest[0]!.revision ?? 0) + 1;
+      await updateIdentity.run(tx, {
+        route,
+        subject_id: options.subject,
+        type,
+        release: options.release.digest,
+        revision,
+        transaction_id: transactionId,
+        labels: facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
+      });
+      const after = await holderFacts(tx, options.subject, options.release.release);
+      const changes = linkChanges(
+        before.facts,
+        after.facts,
+        factDataTypes(options.release.release, [...before.facts, ...after.facts]),
+        { release: options.release.release, beforeType: before.type, type },
+      );
+      return {
+        value: { revision },
+        events: [
+          {
+            type: 'com.rezics.subject.revised.v1',
+            subject: options.subject,
+            data: { id: options.subject, revision, kind: 'identity' },
+          },
+          ...(changes.length
+            ? [
+                {
+                  type: LINKS_CHANGED,
+                  subject: options.subject,
+                  data: {
+                    subject: options.subject,
+                    revision,
+                    security_revision: Number(visibility.securityRevision),
+                    changes,
+                  },
+                },
+              ]
+            : []),
+        ],
+      };
+    },
+  );
 }

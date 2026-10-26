@@ -109,7 +109,10 @@ export async function mergeSubjects(
       for (const property of options.release.release.types[gone.type]?.properties ?? []) {
         facts.push(...(await slotView(tx, redirected, property)).facts);
       }
-      const changes = linkChanges(facts, [], factDataTypes(options.release.release, facts));
+      const changes = linkChanges(facts, [], factDataTypes(options.release.release, facts), {
+        release: options.release.release,
+        type: gone.type,
+      });
       const events: { type: string; subject: string; data: unknown }[] = [
         { type: SUBJECT_MERGED, subject: redirected, data: { id: redirected, survivor } },
       ];
