@@ -277,11 +277,16 @@ async function startDriver(entry: Tracked): Promise<SemanticDriver> {
     }
 
     const key = () => `"${randomUUID()}"`;
-    async function grantAccount(account: Account, actions: string[], resourceId = GLOBAL_CONTEXT) {
+    async function grantAccount(
+      account: Account,
+      actions: string[],
+      resourceId = GLOBAL_CONTEXT,
+      grantor: Account = governor,
+    ) {
       const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
       if (route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
       const response = await send(
-        governor,
+        grantor,
         'POST',
         '/v1/grants',
         {
@@ -346,7 +351,8 @@ async function startDriver(entry: Tracked): Promise<SemanticDriver> {
       },
       async grant(persona, actions, resourceId) {
         if (persona === 'anonymous') throw new Error('Anonymous is not an account grant recipient');
-        await grantAccount(accounts[persona], actions, resourceId);
+        const grantor = resourceId === GLOBAL_CONTEXT ? governor : editor;
+        await grantAccount(accounts[persona], actions, resourceId, grantor);
       },
       async projection(state) {
         if (state === 'paused') await relays!.pause();
