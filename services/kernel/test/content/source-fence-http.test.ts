@@ -212,7 +212,7 @@ test('actual generated sourceFences custom check route requires protected read g
       const parameters = Object.fromEntries(permissionRead.params.map((key, index) => [key, check.parameters[index]]));
       expect(parameters).toMatchObject({
         route: 0,
-        resource_id: GLOBAL_CONTEXT,
+        resource_ids: [GLOBAL_CONTEXT],
         action,
         floor: false,
         anonymous: false,

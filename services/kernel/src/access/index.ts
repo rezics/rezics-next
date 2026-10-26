@@ -6,11 +6,13 @@ import {
   createCommandAdmission,
   installCommandAdmission,
 } from './command-admission.ts';
+import { resourcePage, type ResourcePage } from '../request/access.ts';
 import type {
   Access,
   AccessConfig as KernelAccessConfig,
   AccountActor,
   AccessClient,
+  AccessDecision,
   AccessContext,
   Actor,
   Resource,
@@ -40,6 +42,7 @@ type Prepared = {
   action: string;
   route: number;
   id: string;
+  pageBinding?: string;
   deadline: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 };
@@ -101,74 +104,123 @@ export function createAccess(config: AccessConfig): Access {
     ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
     ...(config.clock ? { clock: config.clock } : {}),
   });
+  async function preparePermission(
+    actor: Actor,
+    action: string,
+    resource: Resource,
+    context: AccessContext,
+    page?: ResourcePage,
+  ) {
+    const gate = gateActionPattern.exec(action)?.[1];
+    if (gate !== undefined && (gate === 'any' || !reservedGateNames.has(gate)))
+      actions.set(action, { anonymous: false });
+    if (!actions.has(action)) return null;
+    try {
+      const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
+      if (actor.kind === 'account' && (!identity || identity.pool !== context.pool)) return null;
+      const attempt = accessCommandAttempt(context);
+      if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
+        return null;
+      if (attempt && actor.kind === 'account' && !(await admission(actor, context))) return null;
+      const deadline = Math.min(
+        context.deadline,
+        identity?.deadline ?? Infinity,
+        identity?.expires ?? Infinity,
+        !attempt && identity ? identity.observedAt + 180_000 : Infinity,
+      );
+      const permissionContext = {
+        pool: deadlineClient(context.pool, deadline) as typeof context.pool,
+        deadline,
+      };
+      const evidence = await within(deadline, () =>
+        page
+          ? permissions.preparePage!(
+              actor,
+              action,
+              page,
+              attempt ? commandAccessContext(permissionContext, attempt) : permissionContext,
+            )
+          : permissions.prepare!(
+              actor,
+              action,
+              resource,
+              attempt ? commandAccessContext(permissionContext, attempt) : permissionContext,
+            ),
+      );
+      if (typeof evidence !== 'object' || evidence === null) return null;
+      prepared.set(evidence, {
+        actor,
+        action,
+        route: resource.route,
+        id: resource.id,
+        ...(page ? { pageBinding: JSON.stringify(page) } : {}),
+        deadline,
+        ...(identity?.durableTime ? { durableTime: identity.durableTime } : {}),
+      });
+      return evidence;
+    } catch {
+      return null;
+    }
+  }
+  async function authorizePermission(
+    client: AccessClient,
+    actor: Actor,
+    action: string,
+    resource: Resource,
+    evidence?: unknown,
+    time?: import('../command/command.ts').AuthoritativeTime,
+    page?: ResourcePage,
+    explicit = false,
+  ): Promise<AccessDecision> {
+    if (!actions.has(action)) return { allowed: false, explicit: false };
+    const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
+    if (
+      !facts ||
+      facts.actor !== actor ||
+      facts.action !== action ||
+      facts.route !== resource.route ||
+      facts.id !== resource.id ||
+      facts.pageBinding !== (page ? JSON.stringify(page) : undefined) ||
+      (facts.durableTime !== undefined && facts.durableTime !== time)
+    )
+      return { allowed: false, explicit: false };
+    try {
+      return await within(facts.deadline, async () => {
+        const bounded = deadlineClient(client, facts.deadline);
+        if (explicit) return permissions.authorizeExplicit!(bounded, actor, action, page ?? resource, evidence, time);
+        const allowed = await (page
+          ? permissions.authorizePage!(bounded, actor, action, page, evidence, time)
+          : permissions.authorize(bounded, actor, action, resource, evidence, time));
+        return { allowed, explicit: false };
+      });
+    } catch {
+      return { allowed: false, explicit: false };
+    }
+  }
   const access: Access = {
     authenticate: authentication.authenticate,
     replayAuthorization: (action) => actions.get(action)?.replay,
-    async prepare(actor, action, resource, context) {
-      const gate = gateActionPattern.exec(action)?.[1];
-      if (gate !== undefined && (gate === 'any' || !reservedGateNames.has(gate)))
-        actions.set(action, { anonymous: false });
-      if (!actions.has(action)) return null;
-      try {
-        const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
-        if (actor.kind === 'account' && (!identity || identity.pool !== context.pool)) return null;
-        const attempt = accessCommandAttempt(context);
-        if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
-          return null;
-        if (attempt && actor.kind === 'account' && !(await admission(actor, context))) return null;
-        const deadline = Math.min(
-          context.deadline,
-          identity?.deadline ?? Infinity,
-          identity?.expires ?? Infinity,
-          !attempt && identity ? identity.observedAt + 180_000 : Infinity,
-        );
-        const permissionContext = {
-          pool: deadlineClient(context.pool, deadline) as typeof context.pool,
-          deadline,
-        };
-        const evidence = await within(deadline, () =>
-          permissions.prepare!(
-            actor,
-            action,
-            resource,
-            attempt ? commandAccessContext(permissionContext, attempt) : permissionContext,
-          ),
-        );
-        if (typeof evidence !== 'object' || evidence === null) return null;
-        prepared.set(evidence, {
-          actor,
-          action,
-          route: resource.route,
-          id: resource.id,
-          deadline,
-          ...(identity?.durableTime ? { durableTime: identity.durableTime } : {}),
-        });
-        return evidence;
-      } catch {
-        return null;
-      }
+    prepare: preparePermission,
+    async authorize(...args) {
+      return (await authorizePermission(...args)).allowed;
     },
-    async authorize(client, actor, action, resource: Resource, evidence, time) {
-      if (!actions.has(action)) return false;
-      const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
-      if (
-        !facts ||
-        facts.actor !== actor ||
-        facts.action !== action ||
-        facts.route !== resource.route ||
-        facts.id !== resource.id ||
-        (facts.durableTime !== undefined && facts.durableTime !== time)
-      )
-        return false;
-      try {
-        return await within(facts.deadline, () =>
-          permissions.authorize(deadlineClient(client, facts.deadline), actor, action, resource, evidence, time),
-        );
-      } catch {
-        return false;
-      }
+    authorizeExplicit(client, actor, action, target, evidence, time) {
+      const page = 'ids' in target ? resourcePage(target) : undefined;
+      const resource = page ? { route: page.route, id: page.ids[0]! } : (target as Resource);
+      return authorizePermission(client, actor, action, resource, evidence, time, page, true);
+    },
+    preparePage(actor, action, input, context) {
+      const page = resourcePage(input);
+      return preparePermission(actor, action, { route: page.route, id: page.ids[0]! }, context, page);
+    },
+    async authorizePage(client, actor, action, input, evidence, time) {
+      const page = resourcePage(input);
+      return (
+        await authorizePermission(client, actor, action, { route: page.route, id: page.ids[0]! }, evidence, time, page)
+      ).allowed;
     },
   };
+
   platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
     if (
       actor.kind !== 'account' ||
@@ -306,6 +358,9 @@ export {
 } from './creation-manifest.ts';
 export {
   resourceAuthorization,
+  resourceAuthorizationPage,
+  type AuthorizationAnchorPage,
+  type ResourceAuthorizationPageInput,
   ResourceAuthorizationUnavailableError,
   type AnonymousResourceAuthorizationInput,
   type AuthorizationAnchor,

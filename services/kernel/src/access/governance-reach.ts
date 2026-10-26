@@ -9,13 +9,14 @@ export const PLATFORM_RESOURCE = Object.freeze({
 } as const);
 
 const actions = new Set<string>(governance.globalReach);
-const reached = new WeakMap<object, boolean>();
+const reached = new WeakMap<object, readonly Resource[]>();
 const registered = new WeakMap<CommandTransaction, Set<string>>();
 
 export type GovernanceReachUse = Readonly<{
   actorAccountId: string;
   action: string;
   resource: Readonly<Resource>;
+  resources: readonly Readonly<Resource>[];
 }>;
 
 export function isGlobalReachAction(action: string): boolean {
@@ -26,27 +27,14 @@ export function isPlatformResource(resource: Resource): boolean {
   return resource.route === PLATFORM_RESOURCE.route && resource.id === PLATFORM_RESOURCE.id;
 }
 
-/** Run R's formula first, then the exact same action on the Global Context only
- * after an ordinary denial. A missing or failed local result cannot fall through.
- */
-export async function checkWithGovernanceReach(
-  evidence: unknown,
-  action: string,
-  resource: Resource,
-  ordinary: () => Promise<boolean | undefined>,
-  global: () => Promise<boolean | undefined>,
-): Promise<boolean> {
-  if (typeof evidence === 'object' && evidence !== null) reached.set(evidence, false);
-  const allowed = await ordinary();
-  if (allowed === true) return true;
-  if (allowed !== false || isPlatformResource(resource) || !isGlobalReachAction(action)) return false;
-  const globalAllowed = await global();
-  if (globalAllowed === true && typeof evidence === 'object' && evidence !== null) reached.set(evidence, true);
-  return globalAllowed === true;
+/** Set only after the sole formula permits every resource of the bound page. */
+export function setGovernanceReach(evidence: unknown, resources: readonly Resource[]): void {
+  if (typeof evidence === 'object' && evidence !== null)
+    reached.set(evidence, Object.freeze(resources.map((resource) => Object.freeze({ ...resource }))));
 }
 
 export function usedGovernanceReach(evidence: unknown): boolean {
-  return typeof evidence === 'object' && evidence !== null && reached.get(evidence) === true;
+  return typeof evidence === 'object' && evidence !== null && (reached.get(evidence)?.length ?? 0) > 0;
 }
 
 /** Retain the exact write attribution when an opaque permission proof used the
@@ -63,6 +51,7 @@ export function governanceReachUse(
     actorAccountId: actor.accountId,
     action,
     resource: Object.freeze({ route: resource.route, id: resource.id }),
+    resources: reached.get(evidence as object)!,
   });
 }
 
@@ -72,7 +61,12 @@ export function governanceReachUse(
  */
 export function recordGovernanceReachUse(tx: CommandTransaction, use: GovernanceReachUse): boolean {
   if (!hasLiveCommandTransaction(tx)) return false;
-  const key = JSON.stringify([use.action, use.resource.route, use.resource.id, use.actorAccountId]);
+  const key = JSON.stringify([
+    use.action,
+    use.resource.route,
+    use.resources.map((resource) => resource.id).sort(),
+    use.actorAccountId,
+  ]);
   const uses = registered.get(tx) ?? new Set<string>();
   if (uses.has(key)) return true;
   try {
@@ -81,7 +75,7 @@ export function recordGovernanceReachUse(tx: CommandTransaction, use: Governance
         route: use.resource.route,
         transaction_id: transactionId,
         action: use.action,
-        resource_id: use.resource.id,
+        resource_ids: use.resources.map((resource) => resource.id),
         actor_account_id: use.actorAccountId,
       }),
     );

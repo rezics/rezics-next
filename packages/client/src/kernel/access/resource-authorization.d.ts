@@ -1,6 +1,6 @@
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
 import type { ResourceEligibility } from './eligibility.ts';
-import type { Access, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
+import { type ResourcePage, type Access, type AccessClient, type AccessContext, type Actor, type Resource } from '../request/access.ts';
 /** Trusted server binding to the authorization resource. validate checks THAT
  * anchor's existence and domain prerequisites at command T on its supplied client;
  * it is never a request-supplied callback or an authorization formula.
@@ -20,6 +20,15 @@ export type ResourceAuthorizationInput = {
     anchor: AuthorizationAnchor;
     context: ResourceAuthorizationContext;
 };
+/** Trusted whole-page existence/domain validation, in one owning-module statement. */
+export type AuthorizationAnchorPage = ResourcePage & Readonly<{
+    validate(client: AccessClient, time: AuthoritativeTime): Promise<boolean>;
+}>;
+export type ResourceAuthorizationPageInput = Omit<ResourceAuthorizationInput, 'anchor'> & {
+    anchor: AuthorizationAnchorPage;
+};
+/** One attempt, exact immutable id set, one formula, all resources required. */
+export declare function resourceAuthorizationPage(input: ResourceAuthorizationPageInput): CommandAuthorization;
 /** Anonymous commands require exact principal attribution and opaque domain eligibility. */
 export type AnonymousResourceAuthorizationInput = Omit<ResourceAuthorizationInput, 'actor' | 'anchor'> & {
     actor: Extract<Actor, {

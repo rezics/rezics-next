@@ -277,7 +277,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         );
         if (!check || !records) throw new Error('No executed media:create permission check');
         const route = Number(parameter(check, permissionRead.params, 'route'));
-        const anchorId = String(parameter(check, permissionRead.params, 'resource_id'));
+        const anchorId = String(parameter(check, permissionRead.params, 'resource_ids'));
         const account = String(parameter(check, permissionRead.params, 'actor_id'));
         const authoritativeTime = instant(parameter(check, permissionRead.params, 'at'));
         const permissionIds = records
@@ -286,7 +286,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
               record.statement === permissionRead.sql &&
               parameter(record, permissionRead.params, 'action') === 'media:create',
           )
-          .map((record) => String(parameter(record, permissionRead.params, 'resource_id')));
+          .map((record) => String(parameter(record, permissionRead.params, 'resource_ids')));
         const reserved = (
           await pool.query<{ media_id: string }>(
             `SELECT media_id::text FROM content.media

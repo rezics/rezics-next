@@ -1,3 +1,4 @@
+import { accessRoot } from '../access/derived-access.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -9,6 +10,7 @@ import {
   type CommandAuthorization,
 } from '../command/command.ts';
 import type { ResourceEligibility } from '../access/eligibility.ts';
+import { routeOf } from '../route/route.ts';
 
 export type AccountActor = {
   kind: 'account';
@@ -29,6 +31,36 @@ export type Resource = {
   /** Compatibility spelling; uses the same opaque capability and evaluator. */
   anonymousEligibility?: ResourceEligibility;
 };
+
+/** One trusted homogeneous resource page, copied before evidence preparation. */
+export type ResourcePage = Readonly<{
+  route: number;
+  resourceType: string;
+  ids: readonly string[];
+}>;
+
+/** Reject malformed pages synchronously, before any database or actor read. */
+export function resourcePage(page: ResourcePage): ResourcePage {
+  if (
+    !page ||
+    !Number.isInteger(page.route) ||
+    page.route < 0 ||
+    page.route > 65535 ||
+    typeof page.resourceType !== 'string' ||
+    page.resourceType.length === 0 ||
+    !Array.isArray(page.ids) ||
+    page.ids.length < 1 ||
+    page.ids.length > 100 ||
+    page.ids.some((id) => typeof id !== 'string' || routeOf(id) !== page.route) ||
+    new Set(page.ids).size !== page.ids.length
+  )
+    throw new RangeError('Invalid resource page');
+  return Object.freeze({
+    route: page.route,
+    resourceType: page.resourceType,
+    ids: Object.freeze([...page.ids].sort()),
+  });
+}
 
 export type ActionMetadata = {
   anonymous: boolean;
@@ -61,12 +93,33 @@ export type AccessFactory = (config: AccessConfig) => Access;
 export type AccessContext = { pool: Pool; deadline: number };
 
 export type AccessClient = Pick<PoolClient, 'query'>;
+/** Ordinary permission plus the same formula with public floor and grant roles disabled. */
+export type AccessDecision = Readonly<{ allowed: boolean; explicit: boolean }>;
+export type AccessExplicitCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<AccessDecision>;
 export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
   authenticate(token: string, context: AccessContext): Promise<AccountActor>;
   prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
+  preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;
+  authorizePage?(
+    client: AccessClient,
+    actor: Actor,
+    action: string,
+    page: ResourcePage,
+    evidence?: unknown,
+    time?: AuthoritativeTime,
+  ): Promise<boolean>;
+  /** Optional explicit projection of the installed formula for a resource or homogeneous page. */
+  authorizeExplicit?(
+    client: AccessClient,
+    actor: Actor,
+    action: string,
+    resource: Resource | ResourcePage,
+    evidence?: unknown,
+    time?: AuthoritativeTime,
+  ): Promise<AccessDecision>;
   /** Derived only from the installed action catalogue's explicit declaration. */
   replayAuthorization?(action: string): 'self-account-read' | undefined;
   authorize(
@@ -88,6 +141,22 @@ export async function accessCheck(
 ): Promise<AccessCheck> {
   const evidence = access.prepare ? await access.prepare(actor, action, resource, context) : null;
   return (client, time = commandTime(client)) => access.authorize(client, actor, action, resource, evidence, time);
+}
+
+/** Resolve the installed port through derived adapters; never infer explicit
+ * authority from an adapter's ordinary boolean decision. */
+export async function accessExplicitCheck(
+  access: Access,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  context: AccessContext,
+): Promise<AccessExplicitCheck> {
+  const root = accessRoot(access);
+  if (!root.authorizeExplicit) return async () => ({ allowed: false, explicit: false });
+  const evidence = root.prepare ? await root.prepare(actor, action, resource, context) : null;
+  return (client, time = commandTime(client)) =>
+    root.authorizeExplicit!(client, actor, action, resource, evidence, time);
 }
 
 /** Recheck command admission on every live attempt before resource checkout.

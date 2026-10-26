@@ -1,11 +1,18 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Pool, QueryConfig } from 'pg';
+import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
+import {
+  accessExplicitCheck,
+  accessCheck,
+  type Access,
+  type AccessCheck,
+  type AccessClient,
+  type Actor,
+} from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -29,8 +36,6 @@ import { REACTION_KINDS } from './events.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
-import permissionRead from '../access/permission-check.sql';
-import erasedDecision from './read-erased-decision.sql';
 import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
 
@@ -191,32 +196,6 @@ function admissible(row: Row, context: ReadContext, tombstone: boolean): boolean
 
 type ErasedReadProof = { explicit: boolean };
 
-/** Project the same native permission formula with its public floor and role
- * aliases disabled. Explicit action grants retain all membership, delegation,
- * temporal and denial checks, without adding a statement or a second authority.
- */
-function erasedReadClient(client: AccessClient, postId: string, proof: ErasedReadProof): AccessClient {
-  const projected = Object.create(client) as AccessClient;
-  projected.query = (async (query: QueryConfig | string, values?: unknown[]) => {
-    const config = typeof query === 'string' ? { text: query, values: values ?? [] } : query;
-    const parameters = config.values ?? [];
-    if (
-      config.text !== permissionRead.sql ||
-      parameters[permissionRead.params.indexOf('resource_id')] !== postId ||
-      parameters[permissionRead.params.indexOf('action')] !== 'post:read'
-    )
-      return client.query(config);
-    const result = await client.query<{ allowed: boolean; explicit_read: boolean }>({
-      ...config,
-      text: erasedDecision.sql,
-      values: erasedDecision.params.map((name) => parameters[permissionRead.params.indexOf(name)]),
-    });
-    proof.explicit = result.rows.length === 1 && result.rows[0]?.explicit_read === true;
-    return result;
-  }) as AccessClient['query'];
-  return projected;
-}
-
 /** The shared formula alone supplies floor, grant, scope, account and denial
  * operands. Domain restrictions can disable both branches by throwing. */
 async function prepare(
@@ -230,34 +209,43 @@ async function prepare(
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
-  const check = await accessCheck(
-    dependencies.access,
-    context.actor,
-    action,
-    {
-      ...resource,
-      eligibility: createResourcePublicEligibility({
-        resource,
-        action,
-        async prepare() {
-          return evidence;
-        },
-        async verify({ client }) {
-          const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
-          if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
-            throw new ContentNotFoundError();
-          // Erased public slots still require the requested scope from account tokens.
-          if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action))
-            throw new ContentNotFoundError();
-          return (
-            current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
-          );
-        },
-      }),
-    },
-    { pool: dependencies.pool, deadline: context.deadline },
-  );
-  return erasedProof ? (client, time) => check(erasedReadClient(client, row.id, erasedProof), time) : check;
+  const resourceWithEligibility = {
+    ...resource,
+    eligibility: createResourcePublicEligibility({
+      resource,
+      action,
+      async prepare() {
+        return evidence;
+      },
+      async verify({ client }) {
+        const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
+        if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
+          throw new ContentNotFoundError();
+        // Erased public slots still require the requested scope from account tokens.
+        if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action))
+          throw new ContentNotFoundError();
+        return (
+          current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
+        );
+      },
+    }),
+  };
+  const accessContext = { pool: dependencies.pool, deadline: context.deadline };
+  if (erasedProof) {
+    const check = await accessExplicitCheck(
+      dependencies.access,
+      context.actor,
+      action,
+      resourceWithEligibility,
+      accessContext,
+    );
+    return async (client, time) => {
+      const decision = await check(client, time);
+      erasedProof.explicit = decision.explicit;
+      return decision.allowed;
+    };
+  }
+  return accessCheck(dependencies.access, context.actor, action, resourceWithEligibility, accessContext);
 }
 
 export async function readBoard(

@@ -258,9 +258,15 @@ test('protected remote board requires an actual current grant; replay, revocatio
     expect(await effects()).toEqual(after);
     nativeBoardTrace(trace.records, f.board);
     const checks = trace.records.filter((r) => r.statement === permission.sql);
-    expect(checks.some((r) => r.parameters.includes(f.board) && r.parameters.includes('board:read'))).toBe(true);
+    expect(
+      checks.some(
+        (r) =>
+          JSON.stringify(r.parameters[permission.params.indexOf('resource_ids')]) === JSON.stringify([f.board]) &&
+          r.parameters.includes('board:read'),
+      ),
+    ).toBe(true);
     const parent = checks.find((r) => r.parameters.includes('media:create'))!;
-    expect(parent.parameters).toContain(f.thread);
+    expect(parent.parameters[permission.params.indexOf('resource_ids')]).toEqual([f.thread]);
     const stored = (
       await db.admin.query(
         `SELECT m.created_at::text, m.transaction_id, i.initialized_at::text,

@@ -1048,7 +1048,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
           const route = Number(parameter(record, permissionRead.params, 'route'));
           checks.push({
             action: String(parameter(record, permissionRead.params, 'action')),
-            resourceId: String(parameter(record, permissionRead.params, 'resource_id')),
+            resourceId: String(parameter(record, permissionRead.params, 'resource_ids')),
             partition: route >>> 4,
             statement: index + 1,
             at: instant(parameter(record, permissionRead.params, 'at')),

@@ -1,10 +1,20 @@
 -- Scalar counts are bounded by exact identity/action and native valid-range
 -- keys (one grant per key, at most three denial reasons). They cannot become
 -- an alternative hashed EXISTS subplan that enumerates the resource ACL.
--- Access checks the requested scope in process only when the trusted floor is false.
+-- The optional explicit branch uses this same formula with no floor or role grants.
+-- Access checks scope in process for the authenticated grant and explicit branches.
 WITH input AS NOT MATERIALIZED (
-  SELECT :route::integer AS route, :resource_id::uuid AS resource_id, :action::text AS action,
+  SELECT :route::integer AS route, :action::text AS action,
+         :resource_ids::uuid[] AS resource_ids, :include_global::boolean AS include_global,
          NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id, :anonymous::boolean AS anonymous, COALESCE(:floor::nullable(boolean), false) AS floor, :deadline::timestamptz AS deadline
+), branches AS MATERIALIZED (
+  SELECT false AS explicit
+  UNION ALL
+  SELECT true WHERE COALESCE(:include_explicit::nullable(boolean), false)
+), targets AS MATERIALIZED (
+  SELECT i.route, id AS resource_id FROM input i CROSS JOIN unnest(i.resource_ids) id
+  UNION
+  SELECT 0, '00000000-0000-8000-8000-000000000000'::uuid FROM input i WHERE i.include_global
 ), keys AS MATERIALIZED (
   SELECT r.account_id, r.organization_id AS subject_id, 'identity'::text AS subject_kind,
          r.role AS subject_role, r.member, r.valid
@@ -20,38 +30,52 @@ WITH input AS NOT MATERIALIZED (
   SELECT COALESCE(NULLIF(:at::nullable(text), '')::timestamptz, transaction_timestamp()) AS at,
          clock_timestamp() AS observed_at
 ), probes AS MATERIALIZED (
-  SELECT k.*,
-    ((SELECT count(*) FROM access.resource_grant g CROSS JOIN input i
-      WHERE g.route = i.route AND g.resource_id = i.resource_id AND g.action = i.action
+  SELECT target.route, target.resource_id, b.explicit, k.*,
+    ((SELECT count(*) FROM access.resource_grant g
+      WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.action = i.action
         AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
         AND g.valid @> (SELECT at FROM authority)
-    ) > 0 OR (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
-      WHERE (SELECT count(*) FROM access.resource_role_grant g CROSS JOIN input i
-        WHERE g.route = i.route AND g.resource_id = i.resource_id AND g.grant_role = role.grant_role
+    ) > 0 OR (NOT b.explicit AND (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
+      WHERE (SELECT count(*) FROM access.resource_role_grant g
+        WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
           AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
           AND g.valid @> (SELECT at FROM authority)
       ) > 0
-    ) > 0) AS granted,
-    (k.subject_kind = 'identity' AND (SELECT count(*) FROM access.resource_denial d CROSS JOIN input i
-      WHERE d.route = i.route AND d.resource_id = i.resource_id AND d.action = i.action
+    ) > 0)) AS granted,
+    (k.subject_kind = 'identity' AND (SELECT count(*) FROM access.resource_denial d
+      WHERE d.route = target.route AND d.resource_id = target.resource_id AND d.action = i.action
         AND d.subject_id = k.subject_id AND d.subject_role = k.subject_role AND d.valid @> (SELECT at FROM authority)
     ) > 0) AS denied
-  FROM keys k
-)
-SELECT (
+  FROM keys k CROSS JOIN targets target CROSS JOIN input i CROSS JOIN branches b
+), decisions AS MATERIALIZED (
+SELECT target.route, target.resource_id, b.explicit, (
   t.observed_at < i.deadline
   AND :evidence_valid::tstzrange @> t.at
-  AND (i.floor OR (NOT i.anonymous AND (
-    EXISTS (SELECT 1 FROM probes p WHERE p.account_id = i.actor_id AND p.granted AND p.member AND p.valid @> t.at)
-    AND (i.principal_id IS NULL OR EXISTS (
-      SELECT 1 FROM probes p WHERE p.account_id = i.principal_id AND p.granted AND p.member AND p.valid @> t.at
-    ))
+  AND ((i.floor AND NOT b.explicit) OR (NOT i.anonymous AND (
+    COALESCE(bool_or(p.account_id = i.actor_id AND p.granted AND p.member AND p.valid @> t.at), false)
+    AND (i.principal_id IS NULL OR COALESCE(bool_or(
+      p.account_id = i.principal_id AND p.granted AND p.member AND p.valid @> t.at
+    ), false))
   )))
-  AND NOT EXISTS (
-    -- All current group hits require authoritative role/absence evidence.
-    -- A new matching denial or grant cannot reuse an unprepared group key.
-    SELECT 1 FROM probes p
-    WHERE (p.denied AND p.member) OR (p.subject_role <> '' AND (p.granted OR p.denied) AND NOT (p.valid @> t.at))
-  )
+  -- Every current group hit needs authoritative positive or negative role evidence.
+  AND NOT COALESCE(bool_or(
+    (p.denied AND p.member) OR (p.subject_role <> '' AND (p.granted OR p.denied) AND NOT (p.valid @> t.at))
+  ), false)
 ) AS allowed
-FROM input i CROSS JOIN authority t;
+FROM input i CROSS JOIN authority t CROSS JOIN targets target CROSS JOIN branches b
+LEFT JOIN probes p ON p.route = target.route AND p.resource_id = target.resource_id AND p.explicit = b.explicit
+GROUP BY target.route, target.resource_id, t.observed_at, t.at,
+         i.deadline, i.floor, i.anonymous, i.principal_id, b.explicit
+)
+SELECT local.resource_id::text AS "resourceId",
+       (local.allowed OR COALESCE(global.allowed, false)) AS allowed,
+       (NOT local.allowed AND COALESCE(global.allowed, false)) AS "governanceReach",
+       COALESCE(explicit_local.allowed OR explicit_global.allowed, false) AS explicit
+FROM decisions local CROSS JOIN input i
+LEFT JOIN decisions global ON i.include_global AND global.route = 0
+  AND global.resource_id = '00000000-0000-8000-8000-000000000000'::uuid AND NOT global.explicit
+LEFT JOIN decisions explicit_local ON explicit_local.explicit
+  AND explicit_local.route = local.route AND explicit_local.resource_id = local.resource_id
+LEFT JOIN decisions explicit_global ON i.include_global AND explicit_global.explicit AND explicit_global.route = 0
+  AND explicit_global.resource_id = '00000000-0000-8000-8000-000000000000'::uuid
+WHERE NOT local.explicit AND local.route = i.route AND local.resource_id = ANY(i.resource_ids);

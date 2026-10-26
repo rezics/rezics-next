@@ -142,7 +142,8 @@ test('transaction policy time cannot extend an elapsed real database evidence de
     // This isolates the production SQL budget guard from the additional JS guard.
     const result = await permission.run(tx, {
       route: f.resource.route,
-      resource_id: f.resource.id,
+      resource_ids: [f.resource.id],
+      include_global: false,
       action: actions[0]!,
       actor_id: f.actor,
       principal_id: '',
@@ -151,7 +152,8 @@ test('transaction policy time cannot extend an elapsed real database evidence de
       evidence_valid: '(,)',
       deadline,
     });
-    expect(result?.allowed).toBe(false);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.allowed).toBe(false);
     return { value: null, events: [event] };
   });
 });
