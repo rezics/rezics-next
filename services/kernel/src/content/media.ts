@@ -18,6 +18,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
+import readThreadTarget from './read-new-thread-target.sql';
 import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
@@ -390,11 +391,8 @@ export async function reserveMedia(
     async authorize(tx, attempt, evidence) {
       const mode = await base.authorize(tx, attempt, evidence);
       if (newThreadTarget) {
-        const rows = await tx.query<{ thread_id: string }>(
-          'SELECT thread_id FROM content.thread WHERE route=$1 AND thread_id=$2',
-          [r, containerId],
-        );
-        if (rows.rowCount !== 0) throw new NewThreadTargetExistsError();
+        const target = await readThreadTarget.run(tx, { route: r, id: containerId });
+        if (target) throw new NewThreadTargetExistsError();
       }
       return mode;
     },

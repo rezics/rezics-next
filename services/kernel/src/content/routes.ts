@@ -14,6 +14,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import readContainingThread from './read-containing-post-thread.sql';
 import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
 import { applyBoardCandidate } from './board-projection.ts';
 import { documentRoutes } from './document-routes.ts';
@@ -242,14 +243,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
   async function containingThread(postId: string, context: ReadContext): Promise<string> {
     const route = existingId(postId);
     if (Date.now() >= context.deadline) throw new ProblemError('deadline_exceeded');
-    const result = await withConnection(dependencies.pool, (client) =>
-      client.query<{ thread_id: string }>('SELECT thread_id FROM content.post WHERE route = $1 AND post_id = $2', [
-        route,
-        postId,
-      ]),
+    const row = await withConnection(dependencies.pool, (client) =>
+      readContainingThread.run(client, { route, id: postId }),
     );
-    if (!result.rows[0]) throw new ProblemError('not_found');
-    return result.rows[0].thread_id;
+    if (!row) throw new ProblemError('not_found');
+    return row.thread_id;
   }
 
   async function exactPost(

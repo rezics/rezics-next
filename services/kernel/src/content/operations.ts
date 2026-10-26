@@ -296,7 +296,7 @@ export async function readOperation(
     { pool: deps.pool, deadline: context.deadline },
   );
   const allowed = await withConnection(deps.pool, async (client) => {
-    await client.query('BEGIN READ ONLY');
+    await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
     try {
       const bounded = deadlineClient(client, context.deadline);
       const partitions = new Set([partitionOf(accountRoute), partitionOf(anchorRoute)]);

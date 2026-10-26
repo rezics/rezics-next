@@ -10,6 +10,7 @@ import { createBoardEffect } from './board-projection.ts';
 import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { createReportEffect } from './report-effect.ts';
+import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   CONTENT_QUEUES,
   CONTENT_WORKFLOWS,
@@ -53,20 +54,15 @@ function sourceIdentity(event: CloudEvent, objectId: string): Source {
  * by identity within that one bounded native envelope (the outbox PK prefix).
  * The shared effects relay alone validates envelopes and owns checkpoints. */
 async function eventIndex(client: Pick<PoolClient, 'query'>, source: Source, event: CloudEvent): Promise<number> {
-  const { rows } = await client.query<{ event_seq: number; event_count: number }>(
-    `SELECT event_seq, event_count FROM core.outbox
-     WHERE partition_no=$1 AND position=$2 AND epoch=$3 AND id=$4 AND type=$5
-       AND subject IS NOT DISTINCT FROM $6 AND data=$7::jsonb`,
-    [
-      source.partition,
-      source.position,
-      source.epoch,
-      event.id,
-      event.type,
-      event.subject ?? null,
-      JSON.stringify(event.data),
-    ],
-  );
+  const rows = await readOutboxEvent.run(client, {
+    partition_no: source.partition,
+    position: source.position,
+    epoch: source.epoch,
+    id: event.id,
+    type: event.type,
+    subject: event.subject ?? null,
+    data: event.data,
+  });
   const row = rows[0];
   if (
     rows.length !== 1 ||

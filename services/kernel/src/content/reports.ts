@@ -24,6 +24,11 @@ import type { KeyRing } from '../tokens/seal.ts';
 import insert from './insert-report.sql';
 import page from './page-target-reports.sql';
 import read from './read-report.sql';
+import readReportBoard from './read-report-board.sql';
+import readReportPost from './read-report-post.sql';
+import readReportPostThread from './read-report-post-thread.sql';
+import readReportRevision from './read-report-revision.sql';
+import readReportThread from './read-report-thread.sql';
 import { readBoard, readPost, readThread } from './reads.ts';
 import type { TurnstileVerifier } from './turnstile.ts';
 import type { Anchored, BoardId, Page, PostId, ReportId, RequestContext, RevisionId, ThreadId } from './model.ts';
@@ -158,27 +163,16 @@ async function snapshot<T>(
 async function targetFacts(client: AccessClient, target: ReportTarget): Promise<TargetFacts | null> {
   const home = route(target.id);
   if (target.kind === 'board') {
-    const { rows } = await client.query(
-      'SELECT board_id, visibility, security_revision FROM content.board WHERE route=$1 AND board_id=$2',
-      [home, target.id],
-    );
-    return rows[0] ? { fingerprint: JSON.stringify(rows[0]) } : null;
+    const board = await readReportBoard.run(client, { route: home, id: target.id });
+    return board ? { fingerprint: JSON.stringify(board) } : null;
   }
   let threadId = target.id;
   if (target.kind === 'post') {
-    const { rows } = await client.query<{ thread_id: string }>(
-      'SELECT thread_id FROM content.post WHERE route=$1 AND post_id=$2',
-      [home, target.id],
-    );
-    if (!rows[0] || route(rows[0].thread_id) !== home) return null;
-    threadId = rows[0].thread_id;
+    const located = await readReportPostThread.run(client, { route: home, id: target.id });
+    if (!located || route(located.thread_id) !== home) return null;
+    threadId = located.thread_id;
   }
-  const { rows: threads } = await client.query<{ first_post_id: string | null }>(
-    `SELECT thread_id, board_id, first_post_id, visibility, security_revision, availability
-     FROM content.thread WHERE route=$1 AND thread_id=$2`,
-    [home, threadId],
-  );
-  const thread = threads[0];
+  const thread = await readReportThread.run(client, { route: home, id: threadId });
   if (!thread?.first_post_id) return null;
   const fences: unknown[] = [thread];
   let postId: string | null = target.kind === 'post' ? target.id : thread.first_post_id;
@@ -186,14 +180,10 @@ async function targetFacts(client: AccessClient, target: ReportTarget): Promise<
   while (postId) {
     if (route(postId) !== home || seen.has(postId) || seen.size >= 33) return null;
     seen.add(postId);
-    const { rows }: { rows: { reply_to_post_id: string | null }[] } = await client.query(
-      `SELECT post_id, reply_to_post_id, head_revision_id, visibility, security_revision, availability
-       FROM content.post WHERE route=$1 AND post_id=$2 AND thread_id=$3`,
-      [home, postId, threadId],
-    );
-    if (!rows[0]) return null;
-    fences.push(rows[0]);
-    postId = rows[0].reply_to_post_id;
+    const post = await readReportPost.run(client, { route: home, id: postId, thread_id: threadId });
+    if (!post) return null;
+    fences.push(post);
+    postId = post.reply_to_post_id;
   }
   return { fingerprint: JSON.stringify(fences), threadId, firstPostId: thread.first_post_id };
 }
@@ -226,12 +216,13 @@ async function exactRevision(
   revisionId: string | null,
 ): Promise<boolean> {
   if (!revisionId) return true;
-  if (target.kind === 'board' || route(revisionId) !== route(target.id)) return false;
-  const { rows } = await client.query<{ post_id: string }>(
-    'SELECT post_id FROM content.revision WHERE route=$1 AND revision_id=$2 AND thread_id=$3',
-    [route(revisionId), revisionId, facts.threadId],
-  );
-  return !!rows[0] && (target.kind === 'thread' || rows[0].post_id === target.id);
+  if (target.kind === 'board' || !facts.threadId || route(revisionId) !== route(target.id)) return false;
+  const revision = await readReportRevision.run(client, {
+    route: route(revisionId),
+    id: revisionId,
+    thread_id: facts.threadId,
+  });
+  return !!revision && (target.kind === 'thread' || revision.post_id === target.id);
 }
 
 export async function createReport(

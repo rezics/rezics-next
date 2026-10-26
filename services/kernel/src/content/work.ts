@@ -21,6 +21,7 @@ import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
+import readOperationEnqueue from './read-operation-enqueue.sql';
 import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
@@ -329,35 +330,13 @@ export function createContentOperationClient({
           try {
             const anchor = await readPartition(tx, partitionOf(route));
             if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-            const { rows } = await tx.query<{
-              thread_id: string;
-              author_account_id: string;
-              initiator_account_id: string;
-              actor_client_id: string;
-              actor_requested_by: string | null;
-              actor_authn_epoch: string;
-              actor_scopes: string[];
-              native_workflow_id: string | null;
-              source_epoch: number;
-              source_partition: number;
-              source_position: string;
-              source_event_index: number;
-            }>(
-              `SELECT o.thread_id,o.author_account_id,o.initiator_account_id,o.actor_client_id,
-              o.actor_requested_by,o.actor_authn_epoch,o.actor_scopes,o.native_workflow_id,
-              o.source_epoch,o.source_partition,o.source_position::text,o.source_event_index
-            FROM content.operation o
-            JOIN core.receipt r ON r.partition_no=$3 AND r.principal_kind='account'
-              AND r.principal_id=o.initiator_account_id AND r.command_kind=o.creation_command_kind
-              AND r.idempotency_key=o.creation_idempotency_key AND r.transaction_id=o.recorded_transaction_id
-              AND encode(r.request_digest,'hex')=o.creation_request_digest
-              AND r.response->>'operationId'=o.operation_id::text
-              AND r.response->>'durableInitiator' ~ '^[0-9a-f]{64}$'
-            WHERE o.route=$1 AND o.operation_id=$2`,
-              [route, input.operationId, partitionOf(route)],
-            );
+            const row = await readOperationEnqueue.run(tx, {
+              route,
+              operation_id: input.operationId,
+              partition_no: partitionOf(route),
+            });
             await tx.query('COMMIT');
-            return rows[0];
+            return row;
           } catch (error) {
             await connection.query('ROLLBACK');
             throw error;
@@ -365,7 +344,12 @@ export function createContentOperationClient({
         }),
       );
       if (
-        !row?.native_workflow_id ||
+        row === null ||
+        row.native_workflow_id === null ||
+        row.source_epoch === null ||
+        row.source_partition === null ||
+        row.source_position === null ||
+        row.source_event_index === null ||
         row.thread_id !== input.threadId ||
         row.author_account_id !== input.authorId ||
         row.initiator_account_id !== input.actor.accountId ||
