@@ -139,7 +139,7 @@ test('board metadata and listing mount once with the actual read action and plur
   expect(Object.keys(detail.body.board).sort()).toEqual(
     ['id', 'route', 'title', 'visibility', 'securityRevision', 'availability', 'createdAt'].sort(),
   );
-  expect((await get(path(id))).body).toEqual({ threads: [], next: null });
+  expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
   for (const values of [{ limit: '0' }, { limit: '101' }, { limit: '1.5' }, { sort: 'popular' }])
     await invalid(path(id, values));
 });
@@ -211,7 +211,7 @@ test('every returned candidate passes current thread root and board disclosure w
   ] as const) {
     for (const visibility of ['protected', 'taken_down']) {
       await state(kind, target, visibility);
-      expect((await get(path(id))).body).toEqual({ threads: [], next: null });
+      expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
     }
     await state(kind, target, 'published');
   }
@@ -302,7 +302,11 @@ test('query matches only current authorized revision text and never erased text 
   const current = await get(path(id, { query: 'replacementtoken' }));
   expect(current.body.threads[0].firstPost.revisionId).toBe(revision);
   await db.admin.query(
-    "UPDATE content.revision SET body=NULL,search_text=NULL,availability='erased' WHERE route=$1 AND thread_id=$2",
+    "UPDATE content.post SET availability='erased',security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2 AND post_id=$3",
+    [threadRoute, f.id, f.post],
+  );
+  await db.admin.query(
+    "UPDATE content.revision SET body=NULL,body_sha256=NULL,search_text=NULL,availability='erased' WHERE route=$1 AND thread_id=$2",
     [threadRoute, f.id],
   );
   const events: CloudEvent[] = [];
@@ -320,7 +324,7 @@ test('query matches only current authorized revision text and never erased text 
   for (const query of ['erasuresentinel', 'replacementtoken']) {
     const result = await get(path(id, { query }));
     expect(result.response.status).toBe(200);
-    expect(result.body).toEqual({ threads: [], next: null });
+    expect(result.body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
     expect(JSON.stringify(result.body)).not.toContain(query);
   }
 });
@@ -340,7 +344,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   }
   const report = await checkGrowth(db, {
     name: 'board HTTP current query and disclosure with same-partition distractors',
-    scales: [32, 256, 2048],
+    scales: [2048, 8192, 32768],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
       for (let ordinal = previous; ordinal < scale; ordinal++) {
@@ -354,8 +358,26 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
           position: 1n,
         });
       }
+      const grants = Array.from({ length: scale - previous }, () => ({
+        route: threadRoute,
+        resource_id: newId(threadRoute),
+        subject_id: newId(0x6789),
+        transaction_id: newId(threadRoute),
+      }));
       await database.admin.query(
-        'VACUUM (ANALYZE) content.board,content.board_thread,content.thread,content.post,content.revision',
+        `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+         SELECT route,resource_id,subject_id,'content.thread.standing','(,)'::tstzrange,transaction_id
+         FROM jsonb_to_recordset($1::jsonb) AS row(route integer,resource_id uuid,subject_id uuid,transaction_id uuid)`,
+        [JSON.stringify(grants)],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+         SELECT route,resource_id,subject_id,'thread:read','resource','(,)'::tstzrange,transaction_id
+         FROM jsonb_to_recordset($1::jsonb) AS row(route integer,resource_id uuid,subject_id uuid,transaction_id uuid)`,
+        [JSON.stringify(grants)],
+      );
+      await database.admin.query(
+        'VACUUM (ANALYZE) content.board,content.board_thread,content.thread,content.post,content.revision,access.resource_grant,access.resource_role_grant,access.resource_denial',
       );
     },
     async operation() {
@@ -364,10 +386,10 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       expect(result.body.threads.map((r: { id: string }) => r.id)).toEqual([f.id]);
     },
   });
-  expect(report.samples.map((s) => s.scale)).toEqual([32, 256, 2048]);
+  expect(report.samples.map((s) => s.scale)).toEqual([2048, 8192, 32768]);
   for (const { cost } of report.samples) {
     expect(cost.rows).toBeGreaterThan(0);
     expect(cost.statements).toBeGreaterThan(0);
   }
   console.info(JSON.stringify(report));
-}, 120_000);
+}, 600_000);

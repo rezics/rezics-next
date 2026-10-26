@@ -165,7 +165,7 @@ if (process.argv.includes('--reaction-count-worker')) {
   async function stored(targetId: string): Promise<StoredRow[]> {
     const result = await db.admin.query<{ kind: string; count: number; source_epoch: number; source_position: string }>(
       `SELECT kind, count, source_epoch, source_position::text AS source_position
-       FROM content.reaction_count WHERE target_id = $1::uuid`,
+       FROM content.reaction_total WHERE target_id = $1::uuid`,
       [targetId],
     );
     return result.rows.map((row) => ({
@@ -411,6 +411,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     const running = workers.splice(0);
     for (const worker of running) await worker.stop();
     await host?.stop();
+    if (authPool && !authPool.ending) await authPool.end();
     if (authDatabaseName) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
     await db?.close();
   });
@@ -508,8 +509,8 @@ if (process.argv.includes('--reaction-count-worker')) {
   test.serial('counts never reveal who reacted, and an unreadable target shows nothing', async () => {
     const hidden = await insertThread('draft', 2, 'Unread counts');
     await db.admin.query(
-      `INSERT INTO content.reaction_count(route,target_id,source_partition,kind,count,source_epoch,source_position)
-       VALUES ($1,$2,1,'love',4,1,1)`,
+      `INSERT INTO content.reaction_total(route,target_id,kind,count,source_epoch,source_position)
+       VALUES ($1,$2,'love',4,1,1)`,
       [routeOf(hidden.thread), hidden.thread],
     );
     const trace = observeSql(db.pool);
@@ -524,7 +525,7 @@ if (process.argv.includes('--reaction-count-worker')) {
           expect(denied.text).not.toContain('"love"');
         }
       }
-      expect(trace.records.filter((record) => record.statement.includes('content.reaction_count'))).toHaveLength(0);
+      expect(trace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement))).toHaveLength(0);
     } finally {
       await trace.close();
     }
@@ -561,11 +562,10 @@ if (process.argv.includes('--reaction-count-worker')) {
         hotPartition: partitionOf(contentRoute),
         hotShare: 1,
         rows: ({ route }: { route: number }) => ({
-          'content.reaction_count': [
+          'content.reaction_total': [
             {
               route,
               target_id: newId(route),
-              source_partition: 1,
               kind: 'like',
               count: 1,
               source_epoch: 1,
@@ -592,7 +592,7 @@ if (process.argv.includes('--reaction-count-worker')) {
             expect(body.posts).toHaveLength(fixture.posts.length);
             expect(body.posts.every((post) => JSON.stringify(post.reactions) === '{}')).toBe(true);
             expect(body.reactionsAsOf).toBeNull();
-            const counts = trace.records.filter((record) => /\bcontent\.reaction_count\b/.test(record.statement));
+            const counts = trace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement));
             expect(counts).toHaveLength(1);
             expect(counts[0]!.statement).not.toContain('actor_account_id');
             const idSets = counts[0]!.parameters.map(parameterIds).filter((ids): ids is Set<string> => ids !== null);
@@ -606,7 +606,7 @@ if (process.argv.includes('--reaction-count-worker')) {
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
       for (const sample of report.samples) {
-        const reaction = sample.cost.relations?.['content.reaction_count'];
+        const reaction = sample.cost.relations?.['content.reaction_total'];
         expect(reaction).toBeDefined();
         expect(reaction?.sequentialScans).toBe(0);
         expect(sample.cost.statements).toBe(report.samples[0]!.cost.statements);

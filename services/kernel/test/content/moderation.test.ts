@@ -242,7 +242,7 @@ test('logical point changes no revision bytes, licence, descendant or media; edi
       id: value.itemId,
       revisionId,
       licence: original.licence,
-      sha256: original.body_sha256.toString('hex'),
+      sha256: null,
       body: null,
       availability: 'erased',
     });

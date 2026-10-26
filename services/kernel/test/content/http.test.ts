@@ -222,7 +222,10 @@ describe('content HTTP with native database adapters', () => {
   test('native thread post reply and revisions retain exact stored metadata and body-only defaults', async () => {
     const thread = await create();
     expect((await call('GET', `/v1/boards/${boardId}`, undefined, undefined, false)).body.board.id).toBe(boardId);
-    expect((await call('GET', `/v1/threads/${thread.id}`, undefined, undefined, false)).body.thread).toEqual(thread);
+    expect((await call('GET', `/v1/threads/${thread.id}`, undefined, undefined, false)).body.thread).toEqual({
+      ...thread,
+      reactions: {},
+    });
     const postInput = { body: snapshot('Post bytes'), licence: 'MIT', subjectIds: [], boardId };
     const postResult = await call('POST', `/v1/threads/${thread.id}/posts`, postInput);
     expect(postResult.response.status).toBe(201);
@@ -235,9 +238,10 @@ describe('content HTTP with native database adapters', () => {
     expect(revised.response.status).toBe(200);
     expect(revised.body.post).toMatchObject({ licence: 'MIT', subjectIds: [], boardId, body: snapshot('New bytes') });
     expect(revised.body.post.revisionId).not.toBe(post.revisionId);
+    const current = await call('GET', `/v1/posts/${post.id}`);
     const exact = await call('GET', `/v1/posts/${post.id}/revisions/${post.revisionId}`);
     expect(exact.response.status).toBe(200);
-    expect(exact.body.post).toEqual(post);
+    expect(exact.body.post).toEqual({ ...post, revisedAt: current.body.post.revisedAt });
     const history = await call('GET', `/v1/posts/${post.id}/revisions?limit=1`);
     expect(history.response.status).toBe(200);
     expect(history.body.revisions).toHaveLength(1);
@@ -262,13 +266,19 @@ describe('content HTTP with native database adapters', () => {
     const path = `/v1/posts/${thread.firstPost.id}/revisions`;
     const revised = await call('POST', path, { body: snapshot('Replay current sentinel') });
     expect(revised.response.status).toBe(200);
+    const current = await call('GET', `/v1/posts/${thread.firstPost.id}`);
     const beforeReplay = await effects();
-    expect((await call('POST', '/v1/threads', input('Replay original sentinel'), key)).body.thread.firstPost).toEqual(
-      thread.firstPost,
-    );
+    expect((await call('POST', '/v1/threads', input('Replay original sentinel'), key)).body.thread.firstPost).toEqual({
+      ...thread.firstPost,
+      revisedAt: current.body.post.revisedAt,
+    });
     expect(await effects()).toEqual(beforeReplay);
     await db.admin.query(
-      "UPDATE content.revision SET body = NULL, search_text = NULL, availability = 'erased' WHERE route = $1 AND thread_id = $2 AND post_id = $3",
+      "UPDATE content.post SET availability = 'erased', security_revision = security_revision + 1 WHERE route = $1 AND thread_id = $2 AND post_id = $3",
+      [thread.route, thread.id, thread.firstPost.id],
+    );
+    await db.admin.query(
+      "UPDATE content.revision SET body = NULL, body_sha256 = NULL, search_text = NULL, availability = 'erased' WHERE route = $1 AND thread_id = $2 AND post_id = $3",
       [thread.route, thread.id, thread.firstPost.id],
     );
     const erasedEffects = await effects();

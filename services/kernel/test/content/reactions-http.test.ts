@@ -273,7 +273,21 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  const total = authPool?.totalCount ?? 0;
+  const removed = new Promise<void>((resolve) => {
+    if (total === 0) return resolve();
+    let remaining = total;
+    const onRemove = () => {
+      remaining -= 1;
+      if (remaining !== 0) return;
+      authPool.off('remove', onRemove);
+      resolve();
+    };
+    authPool.on('remove', onRemove);
+  });
   await host?.stop();
+  if (authPool && !authPool.ending) await authPool.end();
+  await removed;
   if (authDatabaseName) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await db?.close();
 });
@@ -397,7 +411,7 @@ test.serial(
       });
       const authorPosts = authorPage.value?.posts as { id: string; viewerReaction: string | null }[];
       expect(authorPosts.map((post) => post.viewerReaction)).toEqual([null, 'insightful', null, null]);
-      expect(trace.records.filter((record) => record.statement.includes('content.reaction'))).toHaveLength(4);
+      expect(trace.records.filter((record) => /\bcontent\.reaction\b/.test(record.statement))).toHaveLength(4);
     } finally {
       await trace.close();
     }
@@ -440,7 +454,7 @@ test.serial(
       const posts = page.value?.posts as Record<string, unknown>[];
       expect(posts).toHaveLength(4);
       for (const post of posts) expect(post).not.toHaveProperty('viewerReaction');
-      expect(trace.records.filter((record) => record.statement.includes('content.reaction'))).toHaveLength(0);
+      expect(trace.records.filter((record) => /\bcontent\.reaction\b/.test(record.statement))).toHaveLength(0);
     } finally {
       await trace.close();
     }
@@ -556,7 +570,7 @@ test.serial(
           const posts = page.value?.posts as { id: string; viewerReaction: string | null }[];
           expect(posts).toHaveLength(published.posts.length);
           expect(posts.map((post) => post.viewerReaction)).toEqual(['laugh', null, null, null]);
-          expect(trace.records.filter((record) => record.statement.includes('content.reaction'))).toHaveLength(1);
+          expect(trace.records.filter((record) => /\bcontent\.reaction\b/.test(record.statement))).toHaveLength(1);
         } finally {
           await trace.close();
         }
