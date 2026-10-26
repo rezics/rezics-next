@@ -642,7 +642,9 @@ test('checkGrowth measures production initiation and status with fixed Access th
         expect(exactId).toBe(workflowId);
         const status = await client.getWorkflow(exactId);
         if (!status) return null;
-        const progress = await client.getEvent<OperationProgress>(exactId, 'progress', 0);
+        // A zero timeout reads again whenever the first read returns within the same millisecond, so the statement count
+        // varies from run to run. A deadline already past makes the read exactly once.
+        const progress = await client.getEvent<OperationProgress>(exactId, 'progress', -1);
         return { done: false, progress: progress ?? { processedPosts: 0, erasedRevisions: 0, steps: 0 } };
       },
     },
