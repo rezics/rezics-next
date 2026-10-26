@@ -97,6 +97,7 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
       },
     });
     expect(report.samples).toHaveLength(3);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
   }
 }, 60_000);
 
@@ -173,6 +174,7 @@ test('links projection work grows with changed links and stays flat in in-degree
     } else {
       const report = await checkGrowth(db, check);
       expect(report.samples).toHaveLength(3);
+      expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
     }
   }
 }, 60_000);
