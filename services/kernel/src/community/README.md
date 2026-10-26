@@ -181,6 +181,16 @@ published one cannot. Terminal rows are immutable. `readTerminal` and `readChang
 are exact point reads of committed evidence. The role reader returns the owner
 and member proofs, using the current temporal key and the next lower-bound seek.
 
+`GET /v1/me/realms?cursor=` lists only the authenticated active account's current
+Realm memberships at its current authentication floor. It keyset-pages the
+account's `access.membership_inverse` rows, 20 items per page. The inverse is a
+candidate index: each Realm is confirmed against that account's current
+`community.realm_member` row at the request's T, and the name and role come from
+the confirmed membership and current Realm head. A cursor is signed, bound to
+the viewer and the account partition epoch. Each page scans no more than 80
+inverse candidates and performs at most 80 current-membership point reads;
+stale inverse rows are skipped and cannot make a page unbounded.
+
 ### Durable initiators
 
 Accepting a join, leave, add-member or ban removal runs one native command on the Realm's
@@ -207,6 +217,7 @@ A missing Realm, or one that is not yet active at T, has no proof.
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A                                                                            | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans |
 | Read current membership | One `realm_member_open` unique index point read, filtered at T; closed history does not widen the lookup              | O(1) row and statement; O(log N) blocks, where N is the Realm's membership history including closed intervals | `growth-membership-history.test.ts`: one row and statement, zero sequential scans at 2048, 8192 and 32768 closed intervals of the same account and Realm     |
+| List own Realms         | At most 80 caller-route inverse rows by keyset, then one current `realm_member` primary-key read per candidate         | At most 80 + 80 rows and constant statements; O(log R) blocks                                                 | `own-realms.test.ts`: one caller and other accounts' memberships grow at three scales; constant rows/statements and logarithmic blocks                         |
 | Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks                                                                                    | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
 | Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks                                                                                    | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
 

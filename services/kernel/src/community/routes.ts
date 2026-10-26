@@ -48,6 +48,8 @@ import {
 } from './join.ts';
 import { banAccount, unbanAccount, listBans, RealmBanInputError } from './ban.ts';
 import { readRealmMembershipInterval } from './membership.ts';
+import { listOwnRealms } from './own-realms.ts';
+import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
 import {
   listPublications,
   publish,
@@ -366,6 +368,43 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
   const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
 
   return app
+    .get(
+      '/v1/me/realms',
+      {
+        query: strict(ownRealmsQuerySchema),
+        response: {
+          200: strict(ownRealmsResponseSchema),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          500: problemSchema('internal_error'),
+          503: problemSchema(
+            'overloaded',
+            'deadline_exceeded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'dependency_unavailable',
+          ),
+        },
+        detail: {
+          operationId: 'account.realms',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ query, actor, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        return admission.run('normal', job, () =>
+          listOwnRealms(
+            { pool: dependencies.pool, tokens: dependencies.tokens },
+            actor,
+            { deadline: job.deadline, at: observedAt() },
+            query,
+          ),
+        );
+      },
+    )
     .post(
       '/v1/spaces',
       {
