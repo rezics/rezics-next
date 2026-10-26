@@ -10,7 +10,7 @@
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
 import { randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export type Host = {
   name: string;
@@ -103,12 +103,22 @@ done
 exit ${SLOT_BUSY}`;
 }
 
-/** The wrapper directory comes first on the path, so every `docker` a workspace starts is the one that adds the slice. */
+const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), 'utf8');
+
+/**
+ * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
+ * starts is the one that adds the slice, whatever the workspace is.
+ */
 function runScript(id: string, directory: string, cwd: string, command: string[]): string {
-  return `export PATH=${directory}/scripts/check-host:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1
+  const wrapperDirectory = `${directory}/.temp/check-host`;
+  return `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
+${dockerWrapper}WRAPPER
+export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1
 cd ${directory} || exit 1
 exec systemd-run --scope --quiet --collect --slice=${SLICE} --unit=rezics-check-${id} \\
-  sh -c 'bun install --frozen-lockfile && cd "$1" && shift && exec "$@"' sh ${[cwd, ...command].map(quote).join(' ')}`;
+  sh -c 'bun install --frozen-lockfile && cd "$1" && shift && "$@"; code=$?
+    peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak" 2>/dev/null) && echo "remote-check: peak memory of the run $((peak / 1048576)) MiB" >&2
+    exit $code' sh ${[cwd, ...command].map(quote).join(' ')}`;
 }
 
 function cleanupScript(id: string, directory: string): string {

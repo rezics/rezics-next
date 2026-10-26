@@ -424,7 +424,8 @@ test('a remote run puts the docker wrapper first on the path', async () => {
   await remote(env, workspace());
   const script = events().find((event) => event.kind === 'run')!.script as string;
   const path = script.match(/export PATH=(\S+)/)![1];
-  expect(path).toMatch(/^\/srv\/rezics-check\/runs\/[a-z0-9-]+\/scripts\/check-host:/);
+  expect(path).toMatch(/^\/srv\/rezics-check\/runs\/[a-z0-9-]+\/\.temp\/check-host:/);
+  expect(script).toContain(readFileSync(join(checkHost, 'docker'), 'utf8'));
 });
 
 test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', async () => {
