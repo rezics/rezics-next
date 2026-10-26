@@ -203,3 +203,23 @@ test('a goal with integrated tasks is still in flight and completion is judged o
     expect((await check('fixture')).passed).toBe(true);
   } finally { h.dispose(); }
 });
+
+test("a landing that changes another Goal's declared file tells that Goal; a file of its own Goal tells no one", async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const owner = h.dispatch('owned.txt');
+    h.store.updateTask({ taskId: owner.id, attempt: 0 }, (task) => { task.brief.goal = 'other'; task.brief.manager = 'other'; });
+    h.dispatch('mine.txt');
+    const task = h.dispatch('feature'); await h.start(task);
+    for (const file of ['owned.txt', 'mine.txt']) writeFileSync(join(task.worktree, file), 'changed outside the declared paths');
+    git(task.worktree, 'add', 'owned.txt', 'mine.txt'); git(task.worktree, 'commit', '-qm', 'Outside changes');
+    await h.train(undefined, false);
+    expect(h.store.task(task.id).state).toBe('integrated');
+    const told = h.store.db.query("SELECT manager, json_extract(event, '$.summary') AS summary FROM manager_inbox").all() as { manager: string; summary: string }[];
+    const notices = told.filter((event) => event.summary.includes('changed files your tasks declare'));
+    expect(notices.map((event) => event.manager)).toEqual(['other']);
+    expect(notices[0]!.summary).toContain('owned.txt');
+    expect(notices[0]!.summary).not.toContain('mine.txt');
+  } finally { h.dispose(); }
+});
