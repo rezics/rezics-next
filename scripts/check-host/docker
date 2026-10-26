@@ -2,12 +2,18 @@
 # Stands in for `docker` on a check host: remote-check.ts puts this directory first on the path of every remote run.
 # Containers that `docker run` and `docker create` start are placed in the host's capped slice, so no workspace has to
 # know it is running there. Every other command goes to the real docker unchanged.
+#
+# The real docker is the first one after this directory on the path. Anything ahead of it (a test's own docker shim, for
+# one) put itself there and calls this wrapper, so looking only further along keeps a shim from being called back.
 self=$(cd "$(dirname "$0")" && pwd)
 rest=
 old_ifs=$IFS
 IFS=:
 for entry in $PATH; do
-  [ -n "$entry" ] && [ "$(cd "$entry" 2>/dev/null && pwd)" = "$self" ] && continue
+  if [ -n "$entry" ] && [ "$(cd "$entry" 2>/dev/null && pwd)" = "$self" ]; then
+    rest=
+    continue
+  fi
   rest=${rest:+$rest:}$entry
 done
 IFS=$old_ifs

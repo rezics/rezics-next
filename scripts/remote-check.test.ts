@@ -419,6 +419,25 @@ test('every container a check host run starts is in the check slice', () => {
   ]);
 });
 
+test('the docker wrapper calls the docker behind it, not a shim that called the wrapper', () => {
+  const { env, events } = scenario({ a: { available: 4e9 } });
+  const shims = join(root, 'shims');
+  mkdirSync(shims, { recursive: true });
+  const shim = join(shims, 'docker');
+  writeFileSync(shim, `#!/bin/sh\necho shim >> "$FAKE_DIR/shim.log"\nexec ${join(checkHost, 'docker')} "$@"\n`);
+  chmodSync(shim, 0o755);
+  const result = spawnSync(shim, ['run', 'image'], {
+    env: { ...env, PATH: `${shims}:${checkHost}:${env.PATH}` },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+  expect(result.status).toBe(99);
+  expect(readFileSync(join(env.FAKE_DIR, 'shim.log'), 'utf8')).toBe('shim\n');
+  expect(events().filter((event) => event.kind === 'docker')).toEqual([
+    { kind: 'docker', args: ['run', '--cgroup-parent=rezics-check.slice', 'image'] },
+  ]);
+});
+
 test('a remote run puts the docker wrapper first on the path', async () => {
   const { env, events } = scenario({ a: { available: 4e9 } });
   await remote(env, workspace());
