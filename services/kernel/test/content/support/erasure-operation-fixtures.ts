@@ -1,5 +1,5 @@
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -11,6 +11,11 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './native-system.ts';
+
+const phaseLog = fileURLToPath(new URL('../../../../../.temp/erasure-phases.log', import.meta.url));
+function mark(phase: string): void {
+  appendFileSync(phaseLog, `${Date.now()} ${phase}\n`);
+}
 
 export type DriverPersona = 'anonymous' | 'author' | 'legal' | 'unrelated' | 'suspended' | 'revoked' | 'governance';
 
@@ -68,18 +73,23 @@ export async function setupRequest<T>(
   headers: Record<string, string> = {},
 ): Promise<T> {
   const bearer = resources.bearer(persona);
-  const response = await resources.kernel.handle(
-    new Request(`https://content.test${path}`, {
-      method,
-      headers: {
-        ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
-        ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(key) }),
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...headers,
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }),
-  );
+  const send = (idempotencyKey: string) =>
+    resources.kernel.handle(
+      new Request(`https://content.test${path}`, {
+        method,
+        headers: {
+          ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
+          ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(idempotencyKey) }),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...headers,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  let response = await send(key);
+  // The problem contract marks deadline and overload as retryable. The same
+  // idempotency key replays a commit or repeats a command that did not commit.
+  if (response.status === 503 && method !== 'GET') response = await send(key);
   const wire = await response.text();
   if (response.status !== status) throw new Error(`${method} ${path}: ${response.status} ${wire}`);
   if (!wire) return undefined as T;
@@ -112,8 +122,12 @@ export async function revokeGrant(
   await setupRequest(resources, grantor, 'POST', '/v1/grants:revoke', { ...input, valid: input.valid ?? '(,)' }, 200);
 }
 
-export async function createFixtureResources(databaseUrl: string): Promise<FixtureResources> {
+export async function createFixtureResources(
+  databaseUrl: string,
+  duringSetup?: (system: NativeContentSystem) => Promise<void>,
+): Promise<FixtureResources> {
   const system = await createNativeContentSystem({ databaseUrl });
+  const overlapped = duringSetup?.(system) ?? Promise.resolve();
   try {
     const pool = system.database.pool;
     const appUrl = pool.options.connectionString;
@@ -131,13 +145,18 @@ export async function createFixtureResources(databaseUrl: string): Promise<Fixtu
     const governanceId = govRow.rows[0]?.account_id;
     if (!governanceId) throw new Error('Native governance bootstrap did not return its account');
     const commandPath = fileURLToPath(new URL('../../../../kernel/scripts/bootstrap-governance.ts', import.meta.url));
-    const result = spawnSync('bun', [commandPath, '--account', governanceId], {
+    // Asynchronous so a worker process started beside setup can keep its stdout drained.
+    const bootstrap = Bun.spawn([process.execPath, commandPath, '--account', governanceId], {
       env: { ...process.env, DATABASE_URL: appUrl },
-      encoding: 'utf8',
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
-    if (result.error) throw result.error;
-    if (result.status !== 0)
-      throw new Error(`Native governance bootstrap command failed: ${result.stdout}${result.stderr}`);
+    const [stdout, stderr, status] = await Promise.all([
+      new Response(bootstrap.stdout).text(),
+      new Response(bootstrap.stderr).text(),
+      bootstrap.exited,
+    ]);
+    if (status !== 0) throw new Error(`Native governance bootstrap command failed: ${stdout}${stderr}`);
     const governance = await system.auth.issue({
       accountId: governanceId,
       clientId: system.auth.ordinaryClient.id,
@@ -217,12 +236,16 @@ export async function createFixtureResources(databaseUrl: string): Promise<Fixtu
       subject: { kind: 'account', id: accountIds.legal },
       actions: ['post:erase', 'moderation:takedown'],
     });
+    await overlapped;
     return resources;
   } catch (error) {
+    await overlapped.catch(() => undefined);
     await system.close();
     throw error;
   }
 }
+
+export type SeededBoard = Awaited<ReturnType<typeof buildBoardAndThreads>>;
 
 export async function buildBoardAndThreads(
   resources: FixtureResources,
@@ -329,8 +352,9 @@ export async function buildBoardAndThreads(
   await grant(resources, 'governance', authorPostCreate);
 
   const targeted: { id: string; revisions: { id: string; digest: string; body: string }[] }[] = new Array(posts);
-  await runInBatches(posts, 24, async (postIndex) => {
+  await runInBatches(posts, 1, async (postIndex) => {
     const firstBody = `${marker} post-${postIndex} revision-0`;
+    if (postIndex % 50 === 0) mark(`seed-post ${postIndex}`);
     const created = await setupRequest<{
       post: { id: string; revisionId: string; sha256: string };
     }>(resources, 'author', 'POST', `/v1/threads/${threadId}/posts`, {
@@ -358,6 +382,7 @@ export async function buildBoardAndThreads(
     }
     targeted[postIndex] = { id: created.post.id, revisions: history };
   });
+  mark('seed-posts-done');
 
   // Preserve exact-history reads independently of the creator role. Give the
   // workflow initiator its own post:read grants and let Governance hold the old
@@ -368,7 +393,7 @@ export async function buildBoardAndThreads(
       [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
     )
   ).rows[0]!.account_id;
-  await runInBatches(targeted.length, 24, async (index) => {
+  await runInBatches(targeted.length, 1, async (index) => {
     const post = targeted[index]!;
     const target = { route, id: post.id };
     await grant(resources, 'governance', {

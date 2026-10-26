@@ -1,10 +1,11 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
-import { fromPlainText } from '@rezics/document';
+import { once } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
+import { appendFileSync, writeSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
-import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createContentOperationClient, createContentWork } from '../../src/content/work.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import { contentEffects } from '../../src/content/relays.ts';
@@ -13,44 +14,28 @@ import type {
   ErasureOperationDriver,
   Fixture,
   GrowthResult,
+  Inspection,
   Operation,
   Persona,
   Reply,
   Trace,
 } from '../../../../specs/erasure-operation-driver.ts';
-import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
+import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { effectsRelay } from '../../src/events/effects.ts';
 import { startRelays } from '../../src/events/relays.ts';
-import { createKernel } from '../../src/http/kernel.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createWorkClient, DBOS_SCHEMA, type WorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
-import { startWorker } from '../../src/worker.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import {
-  assertGrowth,
-  capture as captureGrowth,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  seed,
-  type Cost,
-  type GrowthDatabase,
-  type GrowthReport,
-  type GrowthSample,
-  type Population,
-} from '../support/growth.ts';
-import {
-  buildBoardAndThreads,
-  createFixtureResources,
-  grant,
-  request,
-  revokeGrant,
-  setupRequest,
-  type FixtureResources,
-} from './support/erasure-operation-fixtures.ts';
-import { observeSql, type SqlObserver } from './support/sql-observer.ts';
+import type { Cost, GrowthDatabase, GrowthReport, GrowthSample, Population } from '../support/growth.ts';
+import type { FixtureResources, SeededBoard } from './support/erasure-operation-fixtures.ts';
+import type { SqlObserver } from './support/sql-observer.ts';
+
+const phaseLog = fileURLToPath(new URL('../../../../.temp/erasure-phases.log', import.meta.url));
+function mark(phase: string): void {
+  appendFileSync(phaseLog, `${Date.now()} ${phase}\n`);
+}
 
 type NativeCheck = {
   workflowId: string;
@@ -63,7 +48,7 @@ type NativeCheck = {
   allowed: boolean;
 };
 type StepEvent = { serial: number; name: string };
-type StoredFixture = ReturnType<typeof buildBoardAndThreads> extends Promise<infer T> ? T : never;
+type StoredFixture = SeededBoard;
 type NativeWorkerCost = { serial: number; cost: Cost };
 type WorkerProcess = ReturnType<typeof Bun.spawn> & {
   stdin: Bun.FileSink;
@@ -71,8 +56,7 @@ type WorkerProcess = ReturnType<typeof Bun.spawn> & {
   stderr: ReadableStream<Uint8Array>;
 };
 
-const TEST_BARRIER_TOPIC = 'erasure-operation-test-continue';
-const BARRIER_STATE = 'erasure-operation-test-barrier-state';
+const BARRIER_TABLE = 'content.erasure_operation_test_barrier';
 
 function makeReply<T>(response: Response, value?: T): Reply<T> {
   return value === undefined ? { response } : { response, value };
@@ -200,6 +184,7 @@ function erasureGrowthPopulation(
           empty_scope: true,
           requested_at: new Date(),
           recorded_transaction_id: post,
+          anchor_post_id: post,
         })),
       };
     },
@@ -228,10 +213,30 @@ function combineCost(left: GrowthSample['cost'], right: Cost): GrowthSample['cos
   };
 }
 
+function workerLine(line: string): void {
+  writeSync(1, `${line}\n`);
+}
+
+type WorkerProcessConfig = {
+  databaseUrl: string;
+  authDatabaseUrl: string;
+  routeKey: string;
+  initialMode: 'hold' | 'run';
+  growthMode: boolean;
+};
+
 export async function runOperationWorkerProcess(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
-  const authDatabaseUrl = process.env.ERASURE_AUTH_DATABASE_URL;
-  const routeKey = Buffer.from(process.env.ERASURE_ROUTE_KEY ?? '', 'base64url');
+  workerLine('ERASURE_WORKER_PHASE process');
+  // The parent spawns this process before the cloned database exists, so the
+  // connection settings arrive after the module graph has loaded.
+  const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  const [configLine] = (await once(input, 'line')) as [string];
+  if (!configLine.startsWith('config ')) throw new Error('Native worker config is missing');
+  const config = JSON.parse(configLine.slice('config '.length)) as WorkerProcessConfig;
+  workerLine('ERASURE_WORKER_PHASE configured');
+  const databaseUrl = config.databaseUrl;
+  const authDatabaseUrl = config.authDatabaseUrl;
+  const routeKey = Buffer.from(config.routeKey, 'base64url');
   if (!databaseUrl || !authDatabaseUrl || routeKey.length !== 32)
     throw new Error('Native erasure worker configuration is incomplete');
   const authPool = new Pool({ connectionString: authDatabaseUrl, max: 4 });
@@ -260,41 +265,68 @@ export async function runOperationWorkerProcess(): Promise<void> {
     return allowed;
   };
 
-  let barrierMode: 'run' | 'hold' = process.env.ERASURE_OPERATION_INITIAL_MODE === 'hold' ? 'hold' : 'run';
+  let barrierMode: 'run' | 'hold' = config.initialMode === 'hold' ? 'hold' : 'run';
+  let measureStep: (<T>(action: () => Promise<T>) => Promise<{ value: T; cost: Cost }>) | undefined;
+  // setEvent and recv are illegal inside a DBOS step. The logical page is that step,
+  // so the barrier is a row the parent releases, not a workflow event.
+  const barrierPool = new Pool({ connectionString: databaseUrl, max: 2 });
   const originalSetConfig = DBOS.setConfig.bind(DBOS);
   DBOS.setConfig = ((configuration) =>
     originalSetConfig({ ...configuration, logLevel: 'info' })) as typeof DBOS.setConfig;
   const originalRegisterStep = DBOS.registerStep.bind(DBOS);
-  DBOS.registerStep = ((func: (...args: any[]) => any, configuration: { name?: string; [key: string]: unknown }) => {
-    if (configuration.name !== 'content.authorErase.step') return originalRegisterStep(func, configuration as never);
+  DBOS.registerStep = ((func: (...args: any[]) => any, configuration?: { name?: string; [key: string]: unknown }) => {
+    if (configuration?.name !== 'content.authorErase.step') return originalRegisterStep(func, configuration as never);
+    mark('register-author-step');
     const wrapped = async (name: string, action: () => Promise<unknown>) => {
       const match = /^wf:([^:]+):erase:/.exec(name);
       const workflowId = DBOS.workflowID;
+      const parked = Boolean(match && workflowId);
+      mark(`worker-step ${JSON.stringify(name)} wf=${workflowId ?? 'none'} park=${parked} mode=${barrierMode}`);
+      workerLine(`ERASURE_WORKER_STEP ${JSON.stringify(name)} mode=${barrierMode} park=${parked}`);
       if (!match || !workflowId) return func(name, action);
-      const previous = await DBOS.getEvent<StepEvent>(workflowId, BARRIER_STATE, 0);
-      const serial = previous?.name === name ? previous.serial : (previous?.serial ?? 0) + 1;
-      const event = { serial, name } satisfies StepEvent;
-      await DBOS.setEvent(BARRIER_STATE, event);
-      if (barrierMode === 'hold') {
-        await DBOS.setEvent(`erasure-operation-test-barrier:${serial}`, event);
-        const resumed = await DBOS.recv<{ serial: number }>(TEST_BARRIER_TOPIC, 300);
-        if (!resumed || resumed.serial !== serial)
-          throw new Error('Native erasure barrier received an invalid continuation');
-      }
-      const current = { step: name, serial, checks: [] as NativeCheck[] };
-      active.set(workflowId, current);
       try {
-        if (captureNextStep && growth) {
-          captureNextStep = false;
-          const measured = await captureGrowth(growth, () => func(name, action));
-          const cost = costOf(measured.capture);
-          process.stdout.write(`ERASURE_WORKER_COST ${JSON.stringify({ serial, cost })}\n`);
-          return measured.value;
+        const previous = await barrierPool.query<{ serial: number; name: string }>(
+          `SELECT serial, name FROM ${BARRIER_TABLE} WHERE workflow_id=$1 ORDER BY serial DESC LIMIT 1`,
+          [workflowId],
+        );
+        const prior = previous.rows[0];
+        const serial = prior?.name === name ? prior.serial : (prior?.serial ?? 0) + 1;
+        await barrierPool.query(
+          `INSERT INTO ${BARRIER_TABLE} (workflow_id, serial, name, released)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (workflow_id, serial) DO NOTHING`,
+          [workflowId, serial, name, barrierMode !== 'hold'],
+        );
+        while (barrierMode === 'hold') {
+          const gate = await barrierPool.query<{ released: boolean }>(
+            `SELECT released FROM ${BARRIER_TABLE} WHERE workflow_id=$1 AND serial=$2`,
+            [workflowId, serial],
+          );
+          if (gate.rows[0]?.released) break;
+          await new Promise((resolve) => setTimeout(resolve, 15));
         }
-        return await func(name, action);
-      } finally {
-        await DBOS.setEvent(`erasure-operation-test-checks:${serial}`, current.checks);
-        active.delete(workflowId);
+        const current = { step: name, serial, checks: [] as NativeCheck[] };
+        active.set(workflowId, current);
+        try {
+          if (captureNextStep && measureStep) {
+            captureNextStep = false;
+            const measured = await measureStep(() => func(name, action));
+            workerLine(`ERASURE_WORKER_COST ${JSON.stringify({ serial, cost: measured.cost })}`);
+            return measured.value;
+          }
+          return await func(name, action);
+        } finally {
+          await barrierPool.query(`UPDATE ${BARRIER_TABLE} SET checks=$3::jsonb WHERE workflow_id=$1 AND serial=$2`, [
+            workflowId,
+            serial,
+            JSON.stringify(current.checks),
+          ]);
+          active.delete(workflowId);
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+        workerLine(`ERASURE_WORKER_BARRIER_FAILED ${detail.replaceAll('\n', ' | ')}`);
+        throw error;
       }
     };
     return originalRegisterStep(wrapped, configuration as never);
@@ -322,7 +354,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
       context.addEffects(contentEffects(context.pool, context.client));
     },
   };
-  const growthMode = process.env.ERASURE_GROWTH_MODE === '1';
+  const growthMode = config.growthMode;
   let growth: GrowthDatabase | undefined;
   let growthSystemPool: Pool | undefined;
   let workerClient: WorkClient | undefined;
@@ -332,7 +364,13 @@ export async function runOperationWorkerProcess(): Promise<void> {
   let captureNextStep = false;
   try {
     if (growthMode) {
-      growth = await openGrowthDatabase(databaseUrl);
+      const growthApi = await import('../support/growth.ts');
+      growth = await growthApi.openGrowthDatabase(databaseUrl);
+      const growthDatabase = growth;
+      measureStep = async (action) => {
+        const measured = await growthApi.capture(growthDatabase, action);
+        return { value: measured.value, cost: growthApi.costOf(measured.capture) };
+      };
       growthSystemPool = new Pool({ connectionString: databaseUrl, max: 12 });
       workerClient = await createWorkClient(databaseUrl, growthSystemPool);
       const growthModule: WorkModule = {
@@ -371,7 +409,47 @@ export async function runOperationWorkerProcess(): Promise<void> {
         },
       };
     } else {
-      worker = await startWorker({ databaseUrl, executorId: `erasure-${randomUUID()}`, poolSize: 12 }, [module]);
+      // Same composition as the production worker, without importing every other
+      // work module. HTTP does not launch a second worker.
+      workerLine('ERASURE_WORKER_PHASE starting');
+      growthSystemPool = new Pool({ connectionString: databaseUrl, max: 12 });
+      growthSystemPool.on('error', () => {});
+      workerClient = await createWorkClient(databaseUrl, growthSystemPool);
+      work = await composeWork([module], {
+        databaseUrl,
+        executorId: `erasure-${randomUUID()}`,
+        pool: growthSystemPool,
+        client: workerClient,
+        env: process.env,
+      });
+      await work.launch();
+      relays = startRelays(growthSystemPool, [
+        effectsRelay(growthSystemPool, work.effects),
+        linkProjection(growthSystemPool),
+      ]);
+      const pool = growthSystemPool;
+      const launched = work;
+      const client = workerClient;
+      const running = relays;
+      worker = {
+        async stop() {
+          const failures: unknown[] = [];
+          for (const close of [
+            () => running.stop(),
+            () => launched.shutdown(),
+            () => client.close(),
+            () => pool.end(),
+          ]) {
+            try {
+              await close();
+            } catch (error) {
+              failures.push(error);
+            }
+          }
+          if (failures.length) throw new AggregateError(failures, 'Native erasure worker cleanup failed');
+        },
+      };
+      workerLine('ERASURE_WORKER_PHASE started');
     }
     for (const name of Object.keys(WORK_QUEUES)) {
       const queue = await DBOS.retrieveQueue(name);
@@ -382,51 +460,139 @@ export async function runOperationWorkerProcess(): Promise<void> {
     DBOS.setConfig = originalSetConfig as typeof DBOS.setConfig;
     DBOS.registerStep = originalRegisterStep as typeof DBOS.registerStep;
   }
-  process.stdout.write('ERASURE_WORKER_READY\n');
-  const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  workerLine('ERASURE_WORKER_READY');
   for await (const line of input) {
     if (line === 'hold' || line === 'run') {
       barrierMode = line;
-      process.stdout.write(`ERASURE_WORKER_CONTROL ${line}\n`);
+      if (line === 'run') await barrierPool.query(`UPDATE ${BARRIER_TABLE} SET released=true WHERE released=false`);
+      workerLine(`ERASURE_WORKER_CONTROL ${line}`);
     } else if (line === 'capture-step' && growthMode) {
       captureNextStep = true;
-      process.stdout.write('ERASURE_WORKER_CONTROL capture-step\n');
+      workerLine('ERASURE_WORKER_CONTROL capture-step');
     } else if (line === 'stop') {
       await worker!.stop();
       await authPool.end();
-      process.stdout.write('ERASURE_WORKER_STOPPED\n');
-      return;
+      await barrierPool.end();
+      workerLine('ERASURE_WORKER_STOPPED');
+      input.close();
+      process.exit(0);
     }
   }
   await worker!.stop();
   await authPool.end();
+  await barrierPool.end();
 }
 
-type NativeWorker = Awaited<ReturnType<typeof nativeWorker>>;
-async function nativeWorker(resources: FixtureResources, client: WorkClient) {
-  let child: WorkerProcess | undefined;
-  let held = false;
-  let closing: Promise<void> | undefined;
-  let output = '';
-  let stderr = '';
-  let pending = '';
-  const lines: string[] = [];
-  const waiters: { startsWith: string; resolve(value: string): void; reject(error: Error): void }[] = [];
-  let stdoutTask: Promise<void> | undefined;
-  let stderrTask: Promise<void> | undefined;
+type WorkerSource = { appUrl: string; authUrl: string; routeKey: Uint8Array };
+type WorkerWaiter = { startsWith: string; resolve(value: string): void; reject(error: Error): void };
+type WorkerLane = {
+  child: WorkerProcess;
+  output: string;
+  stderr: string;
+  pending: string;
+  lines: string[];
+  waiters: WorkerWaiter[];
+  stdoutTask: Promise<void>;
+  stderrTask: Promise<void>;
+};
 
-  function acceptLine(line: string): void {
-    output += `${line}\n`;
-    for (let index = 0; index < waiters.length; index++) {
-      const waiter = waiters[index]!;
+const workerModule = process.env.ERASURE_OPERATION_WORKER_BUNDLE ?? import.meta.url;
+const workerProgram = `import { writeSync } from 'node:fs';
+writeSync(1, 'ERASURE_WORKER_PHASE spawn\\n');
+try {
+  const module = await import(${JSON.stringify(workerModule)});
+  writeSync(1, 'ERASURE_WORKER_PHASE imported\\n');
+  await module.runOperationWorkerProcess();
+} catch (error) {
+  console.error(error);
+  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  writeSync(1, 'ERASURE_WORKER_FAILED ' + detail.replaceAll('\\n', ' | ') + '\\n');
+  process.exit(1);
+}`;
+
+function createWorkerLane(): WorkerLane {
+  const lane: WorkerLane = {
+    child: undefined as never,
+    output: '',
+    stderr: '',
+    pending: '',
+    lines: [],
+    waiters: [],
+    stdoutTask: Promise.resolve(),
+    stderrTask: Promise.resolve(),
+  };
+  const accept = (line: string) => {
+    mark(`child ${line.slice(0, 240)}`);
+    lane.output += `${line}\n`;
+    for (let index = 0; index < lane.waiters.length; index++) {
+      const waiter = lane.waiters[index]!;
       if (line.startsWith(waiter.startsWith)) {
-        waiters.splice(index, 1);
+        lane.waiters.splice(index, 1);
         waiter.resolve(line);
         return;
       }
     }
-    lines.push(line);
-  }
+    lane.lines.push(line);
+  };
+  lane.child = Bun.spawn([process.execPath, '-e', workerProgram], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: {
+      ...process.env,
+      // The cloned database does not exist yet. Its URL arrives on stdin.
+      DATABASE_URL: '',
+      ERASURE_OPERATION_WORKER: '1',
+    },
+  }) as WorkerProcess;
+  const launched = lane.child;
+  lane.stdoutTask = (async () => {
+    const reader = launched.stdout.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) break;
+      lane.pending += decoder.decode(result.value, { stream: true });
+      const split = lane.pending.split('\n');
+      lane.pending = split.pop() ?? '';
+      for (const line of split) accept(line.replace(/\r$/, ''));
+    }
+  })();
+  lane.stderrTask = (async () => {
+    const reader = launched.stderr.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) break;
+      const text = decoder.decode(result.value, { stream: true });
+      lane.stderr += text;
+      for (const line of text.split('\n')) if (line.trim()) mark(`stderr ${line.slice(0, 400)}`);
+    }
+  })();
+  return lane;
+}
+
+// The outcome wrapper starts these before this module's imports compile.
+// A direct load still creates them here.
+const prefetchedLanes: WorkerLane[] =
+  (globalThis as { __erasureWorkerLanes?: WorkerLane[] }).__erasureWorkerLanes ?? [];
+if (prefetchedLanes.length === 0 && process.env.ERASURE_OPERATION_WORKER !== '1') {
+  for (let index = 0; index < 8; index++) prefetchedLanes.push(createWorkerLane());
+}
+
+function openNativeWorker() {
+  let lane: WorkerLane | undefined;
+  let child: WorkerProcess | undefined;
+  let source: WorkerSource | undefined;
+  let client: WorkClient | undefined;
+  let held = false;
+  let configured = false;
+  let retired = false;
+  let closing: Promise<void> | undefined;
+  let lines: string[] = [];
+  let waiters: WorkerWaiter[] = [];
+  let stdoutTask: Promise<void> | undefined;
+  let stderrTask: Promise<void> | undefined;
 
   function waitForLine(startsWith: string, timeoutMs = 60_000): Promise<string> {
     const cachedIndex = lines.findIndex((line) => line.startsWith(startsWith));
@@ -438,7 +604,9 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
         const index = waiters.indexOf(waiter);
         if (index >= 0) waiters.splice(index, 1);
         reject(
-          new Error(`Timed out waiting for native worker output ${startsWith}; stdout=${output}; stderr=${stderr}`),
+          new Error(
+            `Timed out waiting for native worker output ${startsWith}; stdout=${lane?.output ?? ''}; stderr=${lane?.stderr ?? ''}`,
+          ),
         );
       }, timeoutMs);
       const originalResolve = waiter.resolve;
@@ -449,48 +617,42 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
     });
   }
 
-  async function start(growthMode = false): Promise<void> {
-    const authUrl = resources.system.database.authPool.options.connectionString;
-    if (!authUrl) throw new Error('Native Auth database has no connection URL');
-    const source = `import { runOperationWorkerProcess } from ${JSON.stringify(import.meta.url)}; await runOperationWorkerProcess();`;
-    child = Bun.spawn([process.execPath, '-e', source], {
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env: {
-        ...process.env,
-        DATABASE_URL: resources.appUrl,
-        ERASURE_AUTH_DATABASE_URL: authUrl,
-        ERASURE_ROUTE_KEY: Buffer.from(resources.system.routeKey).toString('base64url'),
-        ERASURE_OPERATION_WORKER: '1',
-        ERASURE_OPERATION_INITIAL_MODE: held ? 'hold' : 'run',
-        ERASURE_GROWTH_MODE: growthMode ? '1' : '0',
-      },
-    }) as WorkerProcess;
-    const launched = child;
-    stdoutTask = (async () => {
-      const reader = launched.stdout.getReader();
-      const decoder = new TextDecoder();
-      for (;;) {
-        const result = await reader.read();
-        if (result.done) break;
-        pending += decoder.decode(result.value, { stream: true });
-        const split = pending.split('\n');
-        pending = split.pop() ?? '';
-        for (const line of split) acceptLine(line.replace(/\r$/, ''));
-      }
-    })();
-    stderrTask = (async () => {
-      const reader = launched.stderr.getReader();
-      const decoder = new TextDecoder();
-      for (;;) {
-        const result = await reader.read();
-        if (result.done) break;
-        stderr += decoder.decode(result.value, { stream: true });
-      }
-    })();
+  function spawnProcess(): void {
+    configured = false;
+    lane = prefetchedLanes.shift() ?? createWorkerLane();
+    child = lane.child;
+    lines = lane.lines;
+    waiters = lane.waiters;
+    stdoutTask = lane.stdoutTask;
+    stderrTask = lane.stderrTask;
+  }
+
+  function writeConfig(growthMode: boolean): void {
+    if (!child || !source) throw new Error('Native worker is not running');
+    child.stdin.write(
+      `config ${JSON.stringify({
+        databaseUrl: source.appUrl,
+        authDatabaseUrl: source.authUrl,
+        routeKey: Buffer.from(source.routeKey).toString('base64url'),
+        initialMode: held ? 'hold' : 'run',
+        growthMode,
+      })}\n`,
+    );
+    child.stdin.flush();
+    configured = true;
+  }
+
+  async function ensureRunning(growthMode = false): Promise<void> {
+    if (!source || !client) throw new Error('Native worker database is not ready');
+    if (!child) spawnProcess();
+    if (configured) return;
+    writeConfig(growthMode);
     try {
-      await waitForLine('ERASURE_WORKER_READY');
+      const ready = await Promise.race([waitForLine('ERASURE_WORKER_READY'), waitForLine('ERASURE_WORKER_FAILED')]);
+      if (ready.startsWith('ERASURE_WORKER_FAILED')) {
+        await kill();
+        throw new Error(ready.slice('ERASURE_WORKER_FAILED '.length));
+      }
     } catch (error) {
       await kill();
       throw error;
@@ -500,6 +662,7 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
   async function sendControl(value: 'hold' | 'run'): Promise<void> {
     if (!child) throw new Error('Native worker is not running');
     child.stdin.write(`${value}\n`);
+    child.stdin.flush();
     await waitForLine(`ERASURE_WORKER_CONTROL ${value}`);
   }
 
@@ -507,6 +670,7 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
     const current = child;
     if (!current) return;
     child = undefined;
+    configured = false;
     try {
       current.kill('SIGKILL');
     } catch {
@@ -519,7 +683,13 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
   async function stop(): Promise<void> {
     const current = child;
     if (!current) return;
+    if (!configured) {
+      configured = false;
+      await kill();
+      return;
+    }
     current.stdin.write('stop\n');
+    current.stdin.flush();
     try {
       await waitForLine('ERASURE_WORKER_STOPPED', 5_000);
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -541,14 +711,24 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
     }
   }
 
-  await start();
-  return {
+  const api = {
+    async pause() {
+      await stop();
+    },
     async restart(growthMode = false) {
       await stop();
-      await start(growthMode);
+      if (retired) return;
+      configured = false;
+      try {
+        await ensureRunning(growthMode);
+      } finally {
+        // A timed-out seed can reach this restart after close() has retired the worker.
+        if (retired) await stop();
+      }
     },
     async close() {
       return (closing ??= (async () => {
+        retired = true;
         await stop();
       })());
     },
@@ -563,6 +743,7 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
     async captureNextStep() {
       if (!child) throw new Error('Native worker is not running');
       child.stdin.write('capture-step\n');
+      child.stdin.flush();
       await waitForLine('ERASURE_WORKER_CONTROL capture-step');
     },
     async waitCost(): Promise<NativeWorkerCost> {
@@ -574,23 +755,7 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
       return value;
     },
     diagnostics() {
-      return `${output}\n${stderr}`.slice(-4_000);
-    },
-    async send(workflowId: string, serial: number) {
-      await client.send(workflowId, { serial }, TEST_BARRIER_TOPIC, `erasure-operation-${workflowId}-${serial}`);
-    },
-    async waitBarrier(workflowId: string, serial: number) {
-      const event = await client.getEvent<StepEvent>(workflowId, `erasure-operation-test-barrier:${serial}`, 60);
-      if (!event || event.serial !== serial) throw new Error(`Native erasure step ${serial} did not reach its barrier`);
-      return event;
-    },
-    async waitChecks(workflowId: string, serial: number) {
-      const checks = await client.getEvent<NativeCheck[]>(workflowId, `erasure-operation-test-checks:${serial}`, 60);
-      if (!checks) throw new Error(`Native erasure step ${serial} did not persist actual Access checks`);
-      return checks;
-    },
-    async waitState(workflowId: string) {
-      return client.getEvent<StepEvent>(workflowId, BARRIER_STATE, 60);
+      return `${lane?.output ?? ''}\n${lane?.stderr ?? ''}`.slice(-4_000);
     },
     async waitResult(workflowId: string) {
       try {
@@ -600,7 +765,23 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
       }
     },
   };
+  return {
+    preload() {
+      if (child) return;
+      mark('worker-preload');
+      spawnProcess();
+    },
+    activate(next: WorkerSource, nextClient: WorkClient) {
+      source = next;
+      client = nextClient;
+      return ensureRunning(false).then(() => api);
+    },
+    close() {
+      return api.close();
+    },
+  };
 }
+type NativeWorker = Awaited<ReturnType<ReturnType<typeof openNativeWorker>['activate']>>;
 
 export async function createErasureOperationDriver(): Promise<ErasureOperationDriver> {
   const databaseUrl = process.env.DATABASE_URL;
@@ -608,21 +789,88 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
   let ownedResources: FixtureResources | undefined;
   let ownedGrowth: GrowthDatabase | undefined;
   let ownedReadPool: Pool | undefined;
+  let ownedWorkPool: Pool | undefined;
+  let ownedAppPool: Pool | undefined;
   let ownedWorkClient: WorkClient | undefined;
+  let ownedMeasuredClient: WorkClient | undefined;
+  let ownedControlClient: WorkClient | undefined;
   let ownedObserver: SqlObserver | undefined;
   let worker: NativeWorker | undefined;
+  let pendingWorker: ReturnType<typeof openNativeWorker> | undefined;
   try {
-    const resources = (ownedResources = await createFixtureResources(databaseUrl));
+    mark('driver-enter');
+    // Spawn before the fixture so the child compiles its graph while Auth and
+    // governance bootstrap run. Connection settings follow on stdin.
+    pendingWorker = openNativeWorker();
+    pendingWorker.preload();
+    const [
+      { createWriteRateLimiter },
+      { createKernel },
+      { fromPlainText },
+      { runCommand },
+      { observeSql },
+      { buildBoardAndThreads, createFixtureResources, grant, request, revokeGrant, setupRequest },
+      { openGrowthDatabase },
+    ] = await Promise.all([
+      import('../../src/access/write-rate.ts'),
+      import('../../src/http/kernel.ts'),
+      import('@rezics/document'),
+      import('../../src/command/command.ts'),
+      import('./support/sql-observer.ts'),
+      import('./support/erasure-operation-fixtures.ts'),
+      import('../support/growth.ts'),
+    ]);
+    const resources = (ownedResources = await createFixtureResources(databaseUrl, async (system) => {
+      const appUrl = system.database.pool.options.connectionString;
+      const authUrl = system.database.authPool.options.connectionString;
+      if (!appUrl || !authUrl) throw new Error('Native content system has no database URL');
+      await system.database.pool.query(
+        `CREATE TABLE IF NOT EXISTS ${BARRIER_TABLE} (
+           workflow_id text NOT NULL,
+           serial integer NOT NULL,
+           name text NOT NULL,
+           released boolean NOT NULL DEFAULT false,
+           checks jsonb,
+           PRIMARY KEY (workflow_id, serial)
+         )`,
+      );
+      const controlClient = (ownedControlClient = await createWorkClient(appUrl));
+      mark('worker-start');
+      worker = await pendingWorker!.activate({ appUrl, authUrl, routeKey: system.routeKey }, controlClient);
+      mark('worker-ready');
+    }));
+    mark('resources-ready');
+    const databaseName = (
+      await resources.system.database.pool.query<{ name: string }>('SELECT current_database() AS name')
+    ).rows[0]?.name;
+    if (!databaseName || !/^[a-z_][a-z0-9_]*$/.test(databaseName))
+      throw new Error('Native content database has no usable name');
+    // This database exists only for the test. Waiting for a durable WAL flush on every
+    // same-partition command dominates seeding under host IO pressure.
+    await resources.system.database.pool.query(`ALTER DATABASE ${databaseName} SET synchronous_commit = off`);
     const growth = (ownedGrowth = await openGrowthDatabase(resources.appUrl));
-    resources.pool = growth.pool;
+    // The growth pool explains every statement. Functional traffic stays on the
+    // plain application pool; only a measured checkGrowth attempt uses it.
     const readPool = (ownedReadPool = new Pool({ connectionString: resources.appUrl, max: 4 }));
-    const workClient = (ownedWorkClient = await createWorkClient(resources.appUrl, growth.pool));
+    const workPool = (ownedWorkPool = new Pool({ connectionString: resources.appUrl, max: 4 }));
+    const appPool = (ownedAppPool = new Pool({
+      connectionString: resources.appUrl,
+      max: 16,
+      connectionTimeoutMillis: 1_000,
+      idleTimeoutMillis: 30_000,
+    }));
+    resources.pool = appPool;
+    const workClient = (ownedWorkClient = await createWorkClient(resources.appUrl, workPool));
+    const controlClient = ownedControlClient!;
     const workflows = createContentOperationClient({
       pool: resources.pool,
       client: workClient,
       clock: () => new Date(),
     });
-    const observer: SqlObserver = (ownedObserver = observeSql(resources.pool));
+    // Seed issues more than a thousand commands. Recording every statement then
+    // retains their parameters for the whole test and is not used before erase.
+    let observer: SqlObserver | undefined;
+    const observeCommands = () => (observer ??= ownedObserver = observeSql(resources.pool));
     const checks: NativeCheck[] = [];
     const fixtureData = new Map<string, StoredFixture>();
     const serialByOperation = new Map<string, number>();
@@ -632,10 +880,10 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     const ownerValidity = new Map<string, string>();
     const accountReadValidity = new Map<string, string[]>();
     const receiptBaselines = new Map<number, Set<string>>();
+    const inspectionCache = new Map<string, { token: string; value: Inspection }>();
     const commandQueries: { key: string; statements: string[] }[] = [];
     const system = resources.system;
-    worker = await nativeWorker(resources, workClient);
-    const driverKernel = createKernel({
+    const kernelOptions = {
       pool: resources.pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
@@ -648,8 +896,33 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       }),
       ratePeer: () => '127.0.0.1',
       workClient,
-    });
+    };
+    const driverKernel = createKernel(kernelOptions);
+    let measuredKernel: ReturnType<typeof createKernel> | undefined;
     Object.assign(resources, { kernel: driverKernel });
+    // The explained pool is only for the captured attempts. Building it during
+    // ordinary setup leaves too little of the suite's time budget for seeding.
+    const useMeasuredKernel = async (active: boolean) => {
+      if (!active) {
+        resources.kernel = driverKernel;
+        return;
+      }
+      if (!measuredKernel) {
+        const measuredWorkClient = (ownedMeasuredClient = await createWorkClient(resources.appUrl, growth.pool));
+        const measuredWorkflows = createContentOperationClient({
+          pool: growth.pool,
+          client: measuredWorkClient,
+          clock: () => new Date(),
+        });
+        measuredKernel = createKernel({
+          ...kernelOptions,
+          pool: growth.pool,
+          content: { cursorNow: () => Date.now(), workflows: measuredWorkflows },
+          workClient: measuredWorkClient,
+        });
+      }
+      resources.kernel = measuredKernel;
+    };
 
     async function jsonReply<T>(response: Response): Promise<Reply<T>> {
       if (!response.ok) return makeReply(response);
@@ -725,10 +998,10 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
                  ORDER BY workflow_uuid,function_id`,
                 [effectWorkflowIds],
               );
-        const operationRow = await readPool.query('SELECT * FROM content.operation WHERE route=$1 AND operation_id=$2', [
-          route,
-          id,
-        ]);
+        const operationRow = await readPool.query(
+          'SELECT * FROM content.operation WHERE route=$1 AND operation_id=$2',
+          [route, id],
+        );
         const queueState = await readPool.query(`SELECT * FROM ${DBOS_SCHEMA}.queues ORDER BY name`);
         const applicationVersions = await readPool.query(
           `SELECT * FROM ${DBOS_SCHEMA}.application_versions ORDER BY version_timestamp`,
@@ -749,12 +1022,55 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       return workflowId;
     }
 
-    async function waitForOperationBarrier(name: string, serial: number): Promise<void> {
-      await worker!.waitBarrier(await workflowIdFor(name), serial);
+    async function barrierRow(workflowId: string, serial: number) {
+      const result = await readPool.query<{ name: string; serial: number; checks: NativeCheck[] | null }>(
+        `SELECT serial, name, checks FROM ${BARRIER_TABLE} WHERE workflow_id=$1 AND serial=$2`,
+        [workflowId, serial],
+      );
+      return result.rows[0];
     }
 
-    async function waitForCheckpoint(workflowId: string, serial: number): Promise<StepEvent> {
-      return worker!.waitBarrier(workflowId, serial);
+    async function waitForBarrier(workflowId: string, serial: number): Promise<StepEvent> {
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        const row = await barrierRow(workflowId, serial);
+        if (row) return { serial: row.serial, name: row.name };
+        const status = await readPool.query<{ status: string; error: string | null }>(
+          `SELECT s.status, o.error
+           FROM ${DBOS_SCHEMA}.workflow_status s
+           LEFT JOIN ${DBOS_SCHEMA}.workflow_output o ON o.workflow_uuid = s.workflow_uuid
+           WHERE s.workflow_uuid=$1`,
+          [workflowId],
+        );
+        const current = status.rows[0];
+        if (current && ['ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(current.status)) {
+          const outputs = await readPool.query(
+            `SELECT function_name, error FROM ${DBOS_SCHEMA}.operation_outputs
+             WHERE workflow_uuid=$1 AND error IS NOT NULL ORDER BY function_id`,
+            [workflowId],
+          );
+          mark(`workflow-ended ${current.status} ${current.error ?? ''} outputs=${JSON.stringify(outputs.rows)}`);
+          throw new Error(
+            `Native erasure workflow ended ${current.status}: ${current.error ?? ''} outputs=${JSON.stringify(outputs.rows)}`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      }
+      throw new Error(`Native erasure step ${serial} did not reach its barrier`);
+    }
+
+    async function waitForChecks(workflowId: string, serial: number): Promise<NativeCheck[]> {
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        const row = await barrierRow(workflowId, serial);
+        if (row?.checks) return row.checks;
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      }
+      throw new Error(`Native erasure step ${serial} did not persist actual Access checks`);
+    }
+
+    async function waitForOperationBarrier(name: string, serial: number): Promise<void> {
+      await waitForBarrier(await workflowIdFor(name), serial);
     }
 
     async function mutateAuthority(persona: Persona, axis: string, operation: 'allow' | 'revoke'): Promise<void> {
@@ -806,7 +1122,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const route = routeOf(accountId)!;
         if (operation === 'revoke') {
           for (const valid of accountReadValidity.get(accountId) ?? ['(,)'])
-            await revokeGrant(resources, 'governance', {
+            await revokeGrant(resources, 'author', {
               resource: { route, id: accountId },
               subject: { kind: 'account', id: accountId },
               actions: ['account:read'],
@@ -820,7 +1136,22 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
                VALUES ($1,$2,$2,'','account:read',tstzrange($3::timestamptz,NULL,'[)'),$4)`,
               [route, accountId, authoritativeTimeValue(command.time), command.transactionId],
             );
-            return { value: null, events: [] };
+            const valid = `[${authoritativeTimeValue(command.time)},)`;
+            return {
+              value: null,
+              events: [
+                {
+                  type: 'com.rezics.access.grant.create.v1',
+                  subject: accountId,
+                  data: {
+                    resource: { route, id: accountId },
+                    subject: { kind: 'account', id: accountId },
+                    actions: ['account:read'],
+                    valid,
+                  },
+                },
+              ],
+            };
           });
         }
         return;
@@ -829,30 +1160,34 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const f = [...fixtureData.values()].at(-1);
         if (!f) throw new Error('No native author-erasure fixture is available');
         const route = routeOf(f.thread)!;
-        for (const post of f.targeted) {
-          if (operation === 'revoke') {
-            const valid = ownerValidity.get(post.id);
-            if (!valid) throw new Error(`Missing native owner grant for ${post.id}`);
-            await setupRequest(
-              resources,
-              'governance',
-              'POST',
-              '/v1/roleGrants:revoke',
-              {
-                resource: { route, id: post.id },
-                subject: { kind: 'account', id: accountId },
-                role: 'content.post.owner',
-                valid,
-              },
-              200,
-            );
-          } else {
-            await grant(resources, 'governance', {
-              resource: { route, id: post.id },
-              subject: { kind: 'account', id: accountId },
-              actions: ['post:erase'],
-            });
-          }
+        for (let start = 0; start < f.targeted.length; start += 1) {
+          await Promise.all(
+            f.targeted.slice(start, start + 1).map(async (post) => {
+              if (operation === 'revoke') {
+                const valid = ownerValidity.get(post.id);
+                if (!valid) throw new Error(`Missing native owner grant for ${post.id}`);
+                await setupRequest(
+                  resources,
+                  'governance',
+                  'POST',
+                  '/v1/roleGrants:revoke',
+                  {
+                    resource: { route, id: post.id },
+                    subject: { kind: 'account', id: accountId },
+                    role: 'content.post.owner',
+                    valid,
+                  },
+                  200,
+                );
+              } else {
+                await grant(resources, 'governance', {
+                  resource: { route, id: post.id },
+                  subject: { kind: 'account', id: accountId },
+                  actions: ['post:erase'],
+                });
+              }
+            }),
+          );
         }
         return;
       }
@@ -865,7 +1200,15 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       marker: string,
       targetPartition?: number,
     ): Promise<Fixture> {
-      const data = await buildBoardAndThreads(resources, posts, revisions, marker, targetPartition);
+      // Board projection consumes every post on this partition. Pause it so the
+      // publish commands do not lose the request deadline waiting on that lock.
+      await worker!.pause();
+      let data: Awaited<ReturnType<typeof buildBoardAndThreads>>;
+      try {
+        data = await buildBoardAndThreads(resources, posts, revisions, marker, targetPartition);
+      } finally {
+        await worker!.restart();
+      }
       const fixture: Fixture = {
         thread: data.thread,
         partition: data.partition,
@@ -926,8 +1269,12 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const failures: unknown[] = [];
         for (const close of [
           () => worker!.close(),
-          () => observer.close(),
+          () => observer?.close() ?? Promise.resolve(),
+          () => controlClient.close(),
+          () => ownedMeasuredClient?.close() ?? Promise.resolve(),
           () => workClient.close(),
+          () => workPool.end(),
+          () => appPool.end(),
           () => readPool.end(),
           () => growth.close(),
           () => system.close(),
@@ -941,16 +1288,17 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         if (failures.length) throw new AggregateError(failures, 'Native erasure operation fixture cleanup failed');
       },
       async seed(input): Promise<Fixture> {
-        console.error('ERASURE_DRIVER seed start');
+        mark(`seed-start ${input.posts}`);
         const marker = `erasure-${randomUUID().replaceAll('-', '')}`;
         const fixture = await seedFixture(input.posts, input.revisions, marker);
-        console.error('ERASURE_DRIVER seed done');
+        mark(`seed-done ${input.posts}`);
         return fixture;
       },
       async erase(actor, thread, authorId, key) {
-        const mark = observer.records.length;
+        const records = observeCommands().records;
+        const mark = records.length;
         const response = await request(resources, actor, 'POST', `/v1/threads/${thread}:erase`, { authorId }, key);
-        commandQueries.push({ key, statements: observer.records.slice(mark).map((entry) => entry.statement) });
+        commandQueries.push({ key, statements: records.slice(mark).map((entry) => entry.statement) });
         return jsonReply<Operation>(response);
       },
       async status(actor, name) {
@@ -992,11 +1340,12 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         );
       },
       async erasePost(actor, postId, key) {
-        const mark = observer.records.length;
+        const records = observeCommands().records;
+        const mark = records.length;
         const result = await jsonReply(
           await request(resources, actor, 'POST', `/v1/posts/${postId}:erase`, { reason: 'Point erase' }, key),
         );
-        commandQueries.push({ key, statements: observer.records.slice(mark).map((entry) => entry.statement) });
+        commandQueries.push({ key, statements: records.slice(mark).map((entry) => entry.statement) });
         const data = [...fixtureData.values()].find((fixture) => fixture.targeted.some((post) => post.id === postId));
         if (result.response.ok && data) {
           await drainEffects(data.partition);
@@ -1006,11 +1355,12 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         return result;
       },
       async takedown(actor, postId, key) {
-        const mark = observer.records.length;
+        const records = observeCommands().records;
+        const mark = records.length;
         const result = await jsonReply(
           await request(resources, actor, 'POST', `/v1/posts/${postId}:takeDown`, { reason: 'Point takedown' }, key),
         );
-        commandQueries.push({ key, statements: observer.records.slice(mark).map((entry) => entry.statement) });
+        commandQueries.push({ key, statements: records.slice(mark).map((entry) => entry.statement) });
         return result;
       },
       async barrier(next) {
@@ -1018,32 +1368,33 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         await worker!.hold();
       },
       async step(name) {
-        console.error('ERASURE_DRIVER step start');
         const id = operationId(name);
         const workflowId = await workflowIdFor(name);
-        console.error('ERASURE_DRIVER workflow bound');
         const serial = (serialByOperation.get(id) ?? 0) + 1;
-        const event = await waitForCheckpoint(workflowId, serial);
-        console.error('ERASURE_DRIVER barrier reached');
-        await worker!.send(workflowId, serial);
-        await waitForCheckpoint(workflowId, serial + 1);
+        const event = await waitForBarrier(workflowId, serial);
+        await readPool.query(`UPDATE ${BARRIER_TABLE} SET released=true WHERE workflow_id=$1 AND serial=$2`, [
+          workflowId,
+          serial,
+        ]);
+        const entries = await waitForChecks(workflowId, serial);
+        await waitForBarrier(workflowId, serial + 1);
         serialByOperation.set(id, serial);
-        const entries = await worker!.waitChecks(workflowId, serial);
         checks.push(...entries);
         observedCheckEvents.add(`${workflowId}:${serial}`);
         if (entries.some((entry) => entry.step !== event.name))
           throw new Error('Native Access trace does not match the barrier step');
         const ids = [...new Set(entries.map((entry) => entry.postId))];
         if (ids.length === 0) throw new Error('Native erasure page completed without real Access checks');
+        mark(`step ${ids.length}`);
         return ids;
       },
       async finish(name) {
+        mark('finish-start');
         const id = operationId(name);
         const workflowId = await workflowIdFor(name);
         await worker!.resume();
-        const first = (serialByOperation.get(id) ?? 0) + 1;
-        for (let serial = first; serial <= first + 5; serial++) await worker!.send(workflowId, serial);
         await worker!.waitResult(workflowId);
+        mark('finish-result');
         const route = routeOf(id);
         if (route === null) throw new TypeError('Invalid operation route');
         const operationRow = await readPool.query<{ thread_id: string }>(
@@ -1052,25 +1403,37 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         );
         const f = fixtureData.get(operationRow.rows[0]?.thread_id ?? '');
         if (!f) throw new Error('Native operation has no matching content fixture');
-        const last = await worker!.waitState(workflowId);
-        for (let serial = 1; serial <= (last?.serial ?? 0); serial++) {
-          const eventKey = `${workflowId}:${serial}`;
-          if (observedCheckEvents.has(eventKey)) continue;
-          checks.push(...(await worker!.waitChecks(workflowId, serial)));
+        const stored = await readPool.query<{ serial: number; checks: NativeCheck[] | null }>(
+          `SELECT serial, checks FROM ${BARRIER_TABLE} WHERE workflow_id=$1 ORDER BY serial`,
+          [workflowId],
+        );
+        for (const row of stored.rows) {
+          const eventKey = `${workflowId}:${row.serial}`;
+          if (observedCheckEvents.has(eventKey) || !row.checks) continue;
+          checks.push(...row.checks);
           observedCheckEvents.add(eventKey);
         }
         await drainEffects(f.partition);
+        const erased = await readPool.query<{ post_id: string }>(
+          `SELECT post_id::text FROM content.post
+           WHERE route=$1 AND thread_id=$2 AND availability='erased' AND post_id = ANY($3::uuid[])`,
+          [routeOf(f.thread), f.thread, f.targeted.map((post) => post.id)],
+        );
+        // Denial stops later targets. Their rows stay available and emit no cleanup.
         await waitPostCleanup(
           f,
-          f.targeted.map((post) => post.id),
+          erased.rows.map((row) => row.post_id),
         );
         await waitBodiesNull(f);
+        mark('finish-done');
       },
       async restart() {
         await worker!.restart();
       },
       async authority(actor, axis, operation) {
+        mark(`authority-start ${axis} ${operation}`);
         await mutateAuthority(actor, axis, operation);
+        mark(`authority-done ${axis} ${operation}`);
       },
       async authorityTime() {
         const result = await readPool.query<{ at: string }>('SELECT clock_timestamp()::text AS at');
@@ -1079,8 +1442,18 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       async inspect(fixture) {
         const data = fixtureData.get(fixture.thread);
         if (!data) throw new Error('Inspection fixture identity is unknown');
-        const mainRoute = data.route;
         const sentinelRoute = routeOf(data.sentinelPost)!;
+        const partitions = [...new Set([data.partition, partitionOf(sentinelRoute)])];
+        const tokenResult = await readPool.query<{ partition_no: number; epoch: string; position: string }>(
+          `SELECT partition_no, epoch::text, position::text
+           FROM core.partition WHERE partition_no = ANY($1::int[]) ORDER BY partition_no`,
+          [partitions],
+        );
+        const token = tokenResult.rows.map((row) => `${row.partition_no}:${row.epoch}:${row.position}`).join('|');
+        const cached = inspectionCache.get(fixture.thread);
+        if (cached?.token === token) return cached.value;
+        mark('inspect-load');
+        const mainRoute = data.route;
         const postRows = await readPool.query<{
           post_id: string;
           availability: string;
@@ -1124,7 +1497,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
           [data.partition],
         );
         const targetIds = new Set(postIds);
-        return {
+        const value: Inspection = {
           posts: postRows.rows.map((row) => ({
             id: row.post_id,
             erased: row.availability === 'erased',
@@ -1147,12 +1520,14 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
           receipts: receipts.rows.map((row) => row.response),
           outbox: outbox.rows.map((row) => ({ type: row.type, subject: row.subject, data: row.data })),
         };
+        inspectionCache.set(fixture.thread, { token, value });
+        return value;
       },
       async trace(): Promise<Trace> {
         const rows = await readPool.query<{ command_kind: string; partition_no: number; idempotency_key: string }>(
           `SELECT command_kind,partition_no,idempotency_key FROM core.receipt
          WHERE command_kind IN ('content.author-erasure','content.author-erasure.page','content.author-erasure.cleanup',
-           'content.post.erase','content.post.takedown') ORDER BY partition_no,idempotency_key`,
+           'content.post:erase','content.moderation:takedown') ORDER BY partition_no,idempotency_key`,
         );
         const commands = rows.rows
           .filter((row) => !receiptBaselines.get(row.partition_no)?.has(row.idempotency_key))
@@ -1215,6 +1590,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
             return data;
           },
           actor: system.actors.author.actor,
+          useMeasuredKernel,
           waitForOperationBarrier,
           input,
         });
@@ -1286,8 +1662,13 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
   } catch (error) {
     const cleanup: Promise<unknown>[] = [];
     if (worker) cleanup.push(worker.close());
+    else if (pendingWorker) cleanup.push(pendingWorker.close());
     if (ownedObserver) cleanup.push(ownedObserver.close());
+    if (ownedControlClient) cleanup.push(ownedControlClient.close());
+    if (ownedMeasuredClient) cleanup.push(ownedMeasuredClient.close());
     if (ownedWorkClient) cleanup.push(ownedWorkClient.close());
+    if (ownedWorkPool) cleanup.push(ownedWorkPool.end());
+    if (ownedAppPool) cleanup.push(ownedAppPool.end());
     if (ownedReadPool) cleanup.push(ownedReadPool.end());
     if (ownedGrowth) cleanup.push(ownedGrowth.close());
     if (ownedResources) cleanup.push(ownedResources.system.close());
@@ -1310,6 +1691,7 @@ async function checkGrowthActual(
     seedFixture(posts: number, revisions: number, marker: string, targetPartition?: number): Promise<Fixture>;
     getStoredFixture(fixture: Fixture): StoredFixture;
     actor: FixtureResources['system']['actors']['author']['actor'];
+    useMeasuredKernel(active: boolean): Promise<void>;
     waitForOperationBarrier(name: string, serial: number): Promise<void>;
     input: {
       seed: number;
@@ -1318,6 +1700,7 @@ async function checkGrowthActual(
     };
   },
 ): Promise<GrowthResult[]> {
+  const { assertGrowth, checkGrowth, seed } = await import('../support/growth.ts');
   const { growth, worker, input } = dependencies;
   const fixtures = new Map<number, Fixture>();
   const operations = new Map<number, Operation>();
@@ -1359,32 +1742,37 @@ async function checkGrowthActual(
         seedCalls++;
       },
       async operation(_database, scale) {
-        const fixture = fixtures.get(scale);
-        if (!fixture) throw new Error(`Missing fixed native growth fixture at scale ${scale}`);
-        if (measurement === 'initiation') {
-          const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
-          if (reply.response.status !== 202 || !reply.value)
-            throw new Error(`Native erasure initiation returned ${reply.response.status}`);
-          operations.set(scale, reply.value);
-          await dependencies.waitForOperationBarrier(reply.value.name, 1);
-          return;
+        await dependencies.useMeasuredKernel(true);
+        try {
+          const fixture = fixtures.get(scale);
+          if (!fixture) throw new Error(`Missing fixed native growth fixture at scale ${scale}`);
+          if (measurement === 'initiation') {
+            const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
+            if (reply.response.status !== 202 || !reply.value)
+              throw new Error(`Native erasure initiation returned ${reply.response.status}`);
+            operations.set(scale, reply.value);
+            await dependencies.waitForOperationBarrier(reply.value.name, 1);
+            return;
+          }
+          const operation = operations.get(scale);
+          if (!operation) throw new Error(`Native growth operation at scale ${scale} was not initiated`);
+          if (measurement === 'status') {
+            const reply = await driver.status('author', operation.name);
+            if (reply.response.status !== 200 || !reply.value)
+              throw new Error(`Native erasure status returned ${reply.response.status}`);
+            return;
+          }
+          await worker.captureNextStep();
+          const postIds = await driver.step(operation.name);
+          if (postIds.length !== 100)
+            throw new Error(`Native growth step changed ${postIds.length} posts instead of 100`);
+          const measured = await worker.waitCost();
+          if (measured.serial !== 1)
+            throw new Error('Native growth step did not capture the first persisted logical batch');
+          workerCosts.push(measured.cost);
+        } finally {
+          await dependencies.useMeasuredKernel(false);
         }
-        const operation = operations.get(scale);
-        if (!operation) throw new Error(`Native growth operation at scale ${scale} was not initiated`);
-        if (measurement === 'status') {
-          const reply = await driver.status('author', operation.name);
-          if (reply.response.status !== 200 || !reply.value)
-            throw new Error(`Native erasure status returned ${reply.response.status}`);
-          return;
-        }
-        await worker.captureNextStep();
-        const postIds = await driver.step(operation.name);
-        if (postIds.length !== 100)
-          throw new Error(`Native growth step changed ${postIds.length} posts instead of 100`);
-        const measured = await worker.waitCost();
-        if (measured.serial !== 1)
-          throw new Error('Native growth step did not capture the first persisted logical batch');
-        workerCosts.push(measured.cost);
       },
     });
     reports.set(measurement, report);
@@ -1433,5 +1821,12 @@ async function checkGrowthActual(
 }
 
 if (import.meta.main && process.env.ERASURE_OPERATION_WORKER === '1') {
-  await runOperationWorkerProcess();
+  try {
+    await runOperationWorkerProcess();
+  } catch (error) {
+    console.error(error);
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stdout.write(`ERASURE_WORKER_FAILED ${detail.replaceAll('\n', ' | ')}\n`);
+    process.exitCode = 1;
+  }
 }
