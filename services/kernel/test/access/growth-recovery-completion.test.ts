@@ -34,7 +34,7 @@ const request = (path: string, body: unknown) =>
   );
 async function recover() {
   await bindings.internalLifecycle.raiseFence({ accountId, key: `growth-fence-${serial++}` });
-  expect((await request('/recovery/start', { account_id: accountId })).status).toBe(200);
+  expect((await request('/recovery/start', { email: 'human@growth.test' })).status).toBe(200);
   const body = { account_id: accountId, token, new_password: password };
   expect((await request('/recovery/complete', body)).status).toBe(200);
   // Exact success replay includes real Auth/current-credential resolution and

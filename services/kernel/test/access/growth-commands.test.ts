@@ -969,6 +969,16 @@ function membershipPopulation(name: string, hotPartition: number): Population {
           { route, account_id: organizationId, kind: 'organization', state: 'active', transaction_id: transactionId },
           { route, account_id: memberId, kind: 'actor', state: 'active', transaction_id: transactionId },
         ],
+        'access.membership_inverse': [
+          {
+            route,
+            account_id: newId(route),
+            kind: 'organization',
+            group_id: newId(route),
+            reservation_id: newId(route),
+            transaction_id: transactionId,
+          },
+        ],
         'access.lifecycle_coordination': [
           {
             route,

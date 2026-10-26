@@ -81,6 +81,7 @@ async function call(
   key = Bun.randomUUIDv7(),
   extra: Record<string, string> = {},
 ) {
+  now = Date.now();
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method: 'POST',
@@ -102,6 +103,7 @@ const inputFor = (accountId: string, actions = ['context:create']) => ({
   valid: '(,)',
 });
 const context = async (bearer: string) => {
+  now = Date.now();
   const boundary = { pool: db.pool, deadline: Date.now() + 10000 };
   return { ...boundary, actor: await access.authenticate(bearer, boundary) };
 };

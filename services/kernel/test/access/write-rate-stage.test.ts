@@ -25,11 +25,13 @@ function detail(action: string, family?: 'write' | 'report', units: 1 | 'command
   return {
     operationId: 'rate.probe',
     'x-action': action,
+    'x-exposure': 'public',
     ...(family ? { 'x-rate-limit': defineRateLimit({ family, units }) } : {}),
   };
 }
 function fixture(maximum = 205, source = pool) {
   const app = createApp({ pool: source, writeRate: limiter(maximum), ratePeer: () => '2001:db8::1' });
+  const unknownDetail = { operationId: 'rate.unknown', 'x-exposure': 'public' };
   return app
     .post('/write', { detail: detail('subject:create', 'write') }, () => ++effects)
     .post(
@@ -45,7 +47,7 @@ function fixture(maximum = 205, source = pool) {
     )
     .post('/report', { detail: detail('report:create', 'report') }, () => ++effects)
     .post('/read', { detail: detail('subject:read') }, () => 'read')
-    .post('/unknown', {}, () => ++effects);
+    .post('/unknown', { detail: unknownDetail }, () => ++effects);
 }
 const request = (path: string, count?: number, headers: Record<string, string> = {}) =>
   new Request(`http://localhost${path}`, {

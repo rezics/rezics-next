@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -16,6 +16,9 @@ let childLogs = '';
 const password = `durable-password-${randomBytes(16).toString('hex')}`;
 const email = 'process-loss-handles@example.test';
 const issuer = 'https://durable-handles.auth.test';
+beforeEach(() => {
+  instant = Date.now();
+});
 async function post(path: string, body: unknown, cookie?: string) {
   return fixture.auth.handler(
     new Request(`${issuer}${path}`, {
@@ -30,7 +33,7 @@ async function token(accountId: string) {
     account_id: accountId,
     password,
     client_id: 'durable-web',
-    scope: ['account:update'],
+    scope: ['account:update', 'organization:create'],
   });
   expect(signin.status).toBe(200);
   const issued = await post('/token', {}, signin.headers.get('set-cookie')!.split(';')[0]!);

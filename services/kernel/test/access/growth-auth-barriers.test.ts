@@ -58,10 +58,12 @@ beforeAll(async () => {
     trustedAccess: access,
   };
   await account(accountId);
+  const provisioningAccess = { ...access };
+  delete provisioningAccess.readProvisioningAccount;
   const provision = await createAuthService({
     ...options,
     trustedAccess: {
-      ...access,
+      ...provisioningAccess,
       readAccount: async () => ({ accountId, kind: 'actor', state: 'pending', authnEpoch: 1, automated: false }),
       authorizeProvisioning: async () => ({ accountId }),
     },
@@ -109,7 +111,7 @@ test('native Auth barriers stay bounded with same-account receipts and unrelated
         await db.admin.query(`VACUUM (ANALYZE) ${table}`);
     },
     async operation() {
-      expect((await request('/recovery/start', { account_id: accountId })).status).toBe(200);
+      expect((await request('/recovery/start', { email: `${accountId}@example.test` })).status).toBe(200);
       expect(
         (await request('/recovery/complete', { account_id: accountId, token: delivery, new_password: password }))
           .status,

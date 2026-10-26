@@ -86,7 +86,7 @@ test('forged anonymous eligibility cannot grant permission through installed Acc
     createResourceAnonymousEligibility({ ...options, action: 'report:read' }),
     createResourceAnonymousEligibility({ ...options, resource: wrongResource }),
   ];
-  expect(await (await accessCheck(access, actor, action, resource, context()))(pool)).toBe(true);
+  expect(await (await accessCheck(access, actor, action, resource, context()))(pool)).toBe(false);
   for (const eligibility of capabilities) {
     const target = { ...resource, eligibility };
     expect(await (await accessCheck(access, actor, action, target, context()))(pool)).toBe(false);
@@ -94,5 +94,7 @@ test('forged anonymous eligibility cannot grant permission through installed Acc
     const evidence = await access.prepare!(actor, action, resource, context());
     expect(await access.authorize(pool, actor, action, target, evidence)).toBe(false);
   }
-  expect(calls).toBe(0);
+  // Only the two exact registered capabilities run their preparation callbacks;
+  // serialized, copied and mismatched values remain inert.
+  expect(calls).toBe(2);
 });

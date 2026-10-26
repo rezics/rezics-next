@@ -22,6 +22,7 @@ const actor = {
 const detail = (action: unknown, family?: WriteRateFamily) => ({
   operationId: 'probe.inspect',
   'x-action': action,
+  'x-exposure': 'public',
   security: [{ bearerAuth: [] }],
   ...(family ? { 'x-rate-limit': defineRateLimit({ family, units: 1 }) } : {}),
 });
@@ -124,7 +125,8 @@ test('missing, malformed and unknown mutation metadata fail closed despite spoof
   for (const [index, action] of invalid.entries()) {
     app.all(`/invalid/${index}/:id`, { detail: detail(action) }, () => ++effects);
   }
-  app.post('/missing/:id', {}, () => ++effects);
+  const missingDetail = { operationId: 'probe.missing', 'x-exposure': 'public' };
+  app.post('/missing/:id', { detail: missingDetail }, () => ++effects);
   for (const index of invalid.keys()) {
     for (const method of ['GET', 'POST']) {
       const response = await app.handle(

@@ -93,7 +93,7 @@ test('wrong locator, digest, account, transaction, response and expiry deny', as
   const original = receipt.rows[0]!;
   for (const [column, value] of [
     ['command_kind', 'access.handle-reserved'],
-    ['actor_account_id', second.input.accountId],
+    ['principal_id', second.input.accountId],
     ['request_digest', randomBytes(32)],
     ['transaction_id', newId(0)],
     ['response', { ...outcome.value, registrationId: second.input.reservationId }],
@@ -140,7 +140,10 @@ test('uncommitted rolled back wrong kind or reservation only evidence denies', a
   const writer = await pool.connect();
   const insert = () =>
     writer.query(`INSERT INTO core.receipt SELECT * FROM jsonb_populate_record(NULL::core.receipt,$1::jsonb)`, [
-      JSON.stringify({ ...saved, request_digest: `\\x${Buffer.from(saved.request_digest).toString('hex')}` }),
+      JSON.stringify({
+        ...Object.fromEntries(Object.entries(saved).filter(([column]) => column !== 'actor_account_id')),
+        request_digest: `\\x${Buffer.from(saved.request_digest).toString('hex')}`,
+      }),
     ]);
   try {
     await writer.query('BEGIN');

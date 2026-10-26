@@ -84,6 +84,7 @@ async function person(name: string) {
   return { accountId: result.accountId, bearer: await issue(`${name}@suspension-coordination.test`) };
 }
 async function call(bearer: string, accountId: string, key = Bun.randomUUIDv7()) {
+  now = Date.now();
   const response = await kernel.handle(
     new Request(`http://kernel.test/v1/accounts/${accountId}:suspend`, {
       method: 'POST',
@@ -98,6 +99,7 @@ async function call(bearer: string, accountId: string, key = Bun.randomUUIDv7())
   return { response, value: await response.json() };
 }
 const context = async (bearer: string) => {
+  now = Date.now();
   const boundary = { pool: db.pool, deadline: Date.now() + 10000 };
   return { ...boundary, actor: await access.authenticate(bearer, boundary) };
 };

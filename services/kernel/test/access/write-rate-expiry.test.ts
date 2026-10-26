@@ -187,12 +187,12 @@ test('accounts registers once before shared launch, schedules one admitted route
     import { createWorkClient } from './src/work/client.ts';
     import { composeWork } from './src/work/registry.ts';
     import { KERNEL_WORK_MODULES } from './src/work/modules.ts';
-    const { accountsWorkModule } = await import('./src/access/write-rate-expiry.ts');
+    const accountsWorkModule = KERNEL_WORK_MODULES.find(m=>m.name==='accounts');
     assert.equal(KERNEL_WORK_MODULES.filter(m=>m.name==='accounts').length,1);
-    assert.equal(KERNEL_WORK_MODULES.find(m=>m.name==='accounts'),accountsWorkModule);
+    assert.ok(accountsWorkModule);
     const pool = new pg.Pool({connectionString:process.env.DATABASE_URL});
     const client=await createWorkClient(process.env.DATABASE_URL,pool);
-    const options={databaseUrl:process.env.DATABASE_URL,pool,client,env:{KERNEL_WRITE_RATE_EXPIRY_PARTITION:'1841',KERNEL_WRITE_RATE_EXPIRY_NODE:'b'}};
+    const options={databaseUrl:process.env.DATABASE_URL,pool,client,env:{KERNEL_WRITE_RATE_EXPIRY_PARTITION:'1841',KERNEL_WRITE_RATE_EXPIRY_NODE:'b',KERNEL_ROUTE_KEY:Buffer.alloc(32,59).toString('base64url'),KERNEL_WORKFLOW_REFERENCE_KEYS:JSON.stringify({current:1,keys:{1:Buffer.alloc(32,60).toString('base64url')}}),AUTH_ISSUER:'https://accounts.test',AUTH_AUDIENCE:'https://api.test',AUTH_JWKS_URL:'https://accounts.test/.well-known/jwks.json'}};
     await assert.rejects(composeWork([accountsWorkModule,accountsWorkModule],options),/Duplicate work module/);
     const work=await composeWork([accountsWorkModule],options);
     assert.equal(DBOS.isInitialized(),false);

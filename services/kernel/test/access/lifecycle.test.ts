@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, test } from 'bun:test';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { CommandUnavailableError, IdempotencyConflictError } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -23,7 +23,11 @@ afterAll(async () => {
   await reader.end();
 });
 let instant = Date.now();
-const clock = () => new Date(instant);
+let fixedClock = false;
+const clock = () => new Date(fixedClock ? instant : Date.now());
+afterEach(() => {
+  fixedClock = false;
+});
 const provisions = new Map<
   object,
   { accountId: string; registrationId: string; authIdentityId: string; authnEpoch: number }
@@ -116,6 +120,8 @@ async function counts(id: string) {
 }
 
 test('handle claim and pending account are separate anchored commands with deterministic replay and digest conflicts', async () => {
+  instant = Date.now();
+  fixedClock = true;
   const registrationKey = key();
   const accountId = internal.registrationTarget(registrationKey);
   expect(internal.registrationTarget(registrationKey)).toBe(accountId);
@@ -146,6 +152,8 @@ test('handle claim and pending account are separate anchored commands with deter
 });
 
 test('activation requires verified provisioning bound to this registration and rejects expiry; successful retries retain identity', async () => {
+  instant = Date.now();
+  fixedClock = true;
   const p = await pending('activation');
   const input = { accountId: p.accountId, key: key(), evidence: {} };
   await expect(internal.activate(input)).rejects.toBeInstanceOf(LifecycleDeniedError);
@@ -171,6 +179,8 @@ test('activation requires verified provisioning bound to this registration and r
 });
 
 test('handle namespace protects active claims and redirects; expiry releases only expired pending or reserved claims', async () => {
+  instant = Date.now();
+  fixedClock = true;
   const id = await person('namespace');
   const other = internal.registrationTarget(key());
   await expect(internal.reserveHandle({ handle: 'NAMESPACE', accountId: other, key: key() })).rejects.toBeInstanceOf(

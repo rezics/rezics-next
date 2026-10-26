@@ -376,7 +376,7 @@ test('native approval proof, reference purpose, integrity key and all original r
   ])
     await denied(approvals.resolve(reference, f.operation, context()));
   await admin.query(
-    `DELETE FROM core.receipt WHERE partition_no=$1 AND actor_account_id=$2 AND command_kind='access.workflow-approval.create' AND idempotency_key=$3`,
+    `DELETE FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.workflow-approval.create' AND idempotency_key=$3`,
     [locator.route >>> 4, f.actor, `${locator.route}:${locator.id}`],
   );
   await denied(build().resolve(a.reference, f.operation, context()));

@@ -24,6 +24,7 @@ const post = (path: string, body: unknown = {}) =>
 const detail = (action: string, family: WriteRateFamily = 'write') => ({
   operationId: action.replace(':', '.'),
   'x-action': action,
+  'x-exposure': 'public',
   security: [{}],
   'x-rate-limit': defineRateLimit({ family, units: 1 }),
 });
@@ -32,7 +33,7 @@ test('native parameterized custom methods resolve the actual mounted rate declar
   const spends: unknown[] = [];
   const actions: string[] = [];
   let effects = 0;
-  const readDetail = { operationId: 'item.read', 'x-action': 'item:read', security: [{}] };
+  const readDetail = { operationId: 'item.read', 'x-action': 'item:read', 'x-exposure': 'public', security: [{}] };
   const app = createApp({
     pool,
     access: {
@@ -145,10 +146,12 @@ test('no missing route or metadata write bypass and invalid whole body spends ze
   const malformed = {
     operationId: 'item.create',
     'x-action': 'item:create',
+    'x-exposure': 'public',
     'x-rate-limit': { family: 'invented', units: 1 },
   };
   let effects = 0;
   const spends: unknown[] = [];
+  const missingDetail = { operationId: 'item.missing', 'x-exposure': 'public' };
   const app = createKernel({
     pool,
     routeKey: new Uint8Array(32),
@@ -159,13 +162,18 @@ test('no missing route or metadata write bypass and invalid whole body spends ze
       },
     },
   })
-    .post('/missing', {}, () => ++effects)
+    .post('/missing', { detail: missingDetail }, () => ++effects)
     .post('/malformed', { detail: malformed }, () => ++effects)
     .post(
       '/provider',
       {
         body: t.Object({ event: t.String() }),
-        detail: { 'x-rate-limit': defineRateLimit({ family: 'provider', units: 1 }) },
+        detail: {
+          operationId: 'item.provider',
+          'x-action': 'item:create',
+          'x-exposure': 'public',
+          'x-rate-limit': defineRateLimit({ family: 'provider', units: 1 }),
+        },
       },
       () => ++effects,
     );

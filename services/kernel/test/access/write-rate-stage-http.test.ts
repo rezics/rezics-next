@@ -17,6 +17,7 @@ test('real socket attribution survives dynamic custom-method rewriting and ignor
   const detail = {
     operationId: 'item.update',
     'x-action': 'item:update',
+    'x-exposure': 'public',
     'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
   };
   const app = createApp({
@@ -55,7 +56,7 @@ test('real socket attribution survives dynamic custom-method rewriting and ignor
 });
 
 test('dynamic read-only POST validation uses action-aware problems and spends no capacity', async () => {
-  const detail = { operationId: 'item.read', 'x-action': 'item:read' };
+  const detail = { operationId: 'item.read', 'x-action': 'item:read', 'x-exposure': 'public' };
   const app = createApp({ pool }).post('/items/:id', { detail }, () => {
     throw new Error('offline');
   });
@@ -68,7 +69,7 @@ test('dynamic read-only POST validation uses action-aware problems and spends no
 });
 
 test('ALL-mounted read actions retain the common problem effect status', async () => {
-  const detail = { operationId: 'item.read', 'x-action': 'item:read' };
+  const detail = { operationId: 'item.read', 'x-action': 'item:read', 'x-exposure': 'public' };
   const app = createApp({ pool }).all('/read', { detail }, () => {
     throw new Error('offline');
   });

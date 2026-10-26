@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { Pool } from 'pg';
 import {
   createAuthHost,
@@ -96,6 +96,7 @@ let grantor: typeof root;
 let recipient: typeof root;
 let scopes: string[];
 let now = Date.now();
+let fixedKernelTime = false;
 let spends = 0;
 
 async function issue(email: string, scope = scopes) {
@@ -132,6 +133,7 @@ async function call(
   key = Bun.randomUUIDv7(),
   extra: Record<string, string> = {},
 ) {
+  if (!fixedKernelTime) now = Date.now();
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method: 'POST',
@@ -153,6 +155,7 @@ const inputFor = (accountId: string, actions = ['context:create']) => ({
   valid: '(,)',
 });
 const context = async (bearer: string) => {
+  if (!fixedKernelTime) now = Date.now();
   const boundary = { pool: db.pool, deadline: Date.now() + 10000 };
   return { ...boundary, actor: await access.authenticate(bearer, boundary) };
 };
@@ -269,6 +272,9 @@ afterAll(async () => {
   await host?.stop();
   authDatabase?.close();
   await db?.close();
+});
+afterEach(() => {
+  fixedKernelTime = false;
 });
 
 test('real operator bootstrap then native binding grant enables HTTP delegation and a real protected action', async () => {
@@ -472,6 +478,8 @@ test('direct and role change/revoke routes retain native identities and legacy r
 test('the sole trusted clock controls command time and expired or revoked replay cannot disclose a receipt', async () => {
   const timed = await person('grant_timed');
   const target = await person('grant_clock_target');
+  now = Date.now();
+  fixedKernelTime = true;
   const at = now;
   const valid = `[${new Date(at - 1000).toISOString()},${new Date(at + 1000).toISOString()})`;
   const rights = { ...inputFor(timed.accountId, ['access:grant', 'context:create']), valid };

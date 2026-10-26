@@ -27,7 +27,7 @@ async function token(accountId: string) {
     account_id: accountId,
     password,
     client_id: 'durable-web',
-    scope: ['account:update', 'account:delete', 'organization:membership'],
+    scope: ['account:update', 'account:delete', 'organization:create', 'organization:membership'],
   });
   expect(signin.status).toBe(200);
   const response = await post(

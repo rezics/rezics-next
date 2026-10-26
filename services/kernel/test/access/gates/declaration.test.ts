@@ -81,10 +81,16 @@ test('createKernel refuses to build with a visible route that has no valid x-exp
 test('every route of the production kernel declares a valid x-exposure', () => {
   const routes = createKernel(dependencies).routes;
   expect(routes.length).toBeGreaterThan(0);
+  const exposures = new Set<string>();
   for (const route of routes) {
     if (route.hooks.detail?.hide === true) continue;
-    expect(parseExposure(route.hooks.detail)).toEqual({ kind: 'public' });
+    const exposure = parseExposure(route.hooks.detail);
+    exposures.add(exposure.kind === 'public' ? 'public' : exposure.group);
   }
+  expect(exposures).toContain('public');
+  expect(exposures).toContain('personal_library');
+  expect(exposures).toContain('reading_progress');
+  expect(exposures).toContain('collections');
 });
 
 test('the generated OpenAPI contract carries x-exposure on every operation', async () => {
@@ -93,5 +99,13 @@ test('the generated OpenAPI contract carries x-exposure on every operation', asy
   const document = JSON.parse(generated) as { paths: Record<string, Record<string, Record<string, unknown>>> };
   const operations = Object.values(document.paths).flatMap((path) => Object.values(path));
   expect(operations.length).toBeGreaterThan(0);
-  for (const operation of operations) expect(parseExposure(operation)).toEqual({ kind: 'public' });
+  const exposures = new Set<string>();
+  for (const operation of operations) {
+    const exposure = parseExposure(operation);
+    exposures.add(exposure.kind === 'public' ? 'public' : exposure.group);
+  }
+  expect(exposures).toContain('public');
+  expect(exposures).toContain('personal_library');
+  expect(exposures).toContain('reading_progress');
+  expect(exposures).toContain('collections');
 });

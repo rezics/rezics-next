@@ -120,10 +120,11 @@ const cookieOf = (r: Response) =>
     .map((c) => c.split(';')[0])
     .join('; ');
 async function person(name: string) {
+  const email = `${name}@recovery.test`;
   const { accountId } = await host.workflows.register({
     key: name,
     handle: name,
-    email: `${name}@recovery.test`,
+    email,
     password,
   });
   const signed = await signin(name, password);
@@ -131,7 +132,7 @@ async function person(name: string) {
   const cookie = cookieOf(signed);
   const token = await request('/token', {}, cookie);
   expect(token.status).toBe(200);
-  return { accountId, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
+  return { accountId, email, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
 }
 async function snapshot(accountId: string) {
   return {
@@ -172,7 +173,7 @@ if (crashProcess) {
     const human = await person('native_recovery');
     const other = await person('unrelated_recovery');
     await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-    expect((await request('/recovery/start', { account_id: human.accountId })).status).toBe(200);
+    expect((await request('/recovery/start', { email: human.email })).status).toBe(200);
     const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
     expect((await request('/recovery/complete', { ...body, token: 'wrong' })).status).toBe(401);
     expect((await request('/recovery/complete', { ...body, account_id: other.accountId })).status).toBe(401);
@@ -208,7 +209,7 @@ if (crashProcess) {
       const name = `resume_${phase}`;
       const human = await person(name);
       await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-      expect((await request('/recovery/start', { account_id: human.accountId })).status).toBe(200);
+      expect((await request('/recovery/start', { email: human.email })).status).toBe(200);
       const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
       await host.stop();
       const child = Bun.spawn([process.execPath, 'test', 'test/access/recovery-completion.test.ts'], {
@@ -283,7 +284,7 @@ if (crashProcess) {
   test('failed or superseded Auth success cannot clear later floor or changed current authority', async () => {
     const human = await person('failed_native_recovery');
     await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-    expect((await request('/recovery/start', { account_id: human.accountId })).status).toBe(200);
+    expect((await request('/recovery/start', { email: human.email })).status).toBe(200);
     const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
     const before = await snapshot(human.accountId);
     await authPool.query(`ALTER TABLE auth_recovery_establishment ADD CONSTRAINT test_fail_establishment
@@ -321,7 +322,7 @@ if (crashProcess) {
     for (const change of ['suspended', 'operator'] as const) {
       const id = (await person(`authority_${change}`)).accountId;
       await bindings.internalLifecycle.raiseFence({ accountId: id, key: `${id}:initial` });
-      expect((await request('/recovery/start', { account_id: id })).status).toBe(200);
+      expect((await request('/recovery/start', { email: `authority_${change}@recovery.test` })).status).toBe(200);
       fault = 'before';
       expect(
         (await request('/recovery/complete', { account_id: id, token: delivery, new_password: nextPassword })).status,

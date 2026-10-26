@@ -81,6 +81,7 @@ async function call(
   key = Bun.randomUUIDv7(),
   extra: Record<string, string> = {},
 ) {
+  now = Date.now();
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method: 'POST',

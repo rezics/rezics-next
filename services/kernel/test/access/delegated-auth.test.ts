@@ -259,7 +259,7 @@ test('real principal sessions create immutable assignment provenance and a nativ
     revoked_at: null,
   });
   const receipts = await reader.query(
-    `SELECT r.actor_account_id, r.command_kind, octet_length(r.request_digest) AS digest_length,
+    `SELECT r.principal_id, r.command_kind, octet_length(r.request_digest) AS digest_length,
     b.client_id, b.requested_by
     FROM core.receipt r JOIN editorial.write_basis b
       ON b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
@@ -268,7 +268,7 @@ test('real principal sessions create immutable assignment provenance and a nativ
   );
   expect(receipts.rows).toEqual([
     {
-      actor_account_id: principalId,
+      principal_id: principalId,
       command_kind: 'access.assignment.create',
       digest_length: 32,
       client_id: 'web',

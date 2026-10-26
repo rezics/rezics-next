@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import type { Access } from '../../src/request/access.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -13,32 +12,10 @@ beforeAll(async () => {
 beforeEach(() => f.reset());
 afterAll(() => f?.close());
 
-/** Synchronize after both real transactions have read an absent receipt. Every
- * authorization still runs production Access, with its real prepared evidence.
- */
-function simultaneousAccess(action: string): Access {
-  let arrivals = 0;
-  let release!: () => void;
-  const both = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return {
-    ...f.access,
-    async authorize(client, actor, requested, resource, evidence) {
-      const allowed = await f.access.authorize(client, actor, requested, resource, evidence);
-      if (requested === action && arrivals < 2) {
-        if (++arrivals === 2) release();
-        await both;
-      }
-      return allowed;
-    },
-  };
-}
-
 test('simultaneous grant inserts on two connections settle one effect and replay the same receipt', async () => {
   const commands = createGrantCommands({
     pool: f.pool,
-    access: simultaneousAccess('access:grant'),
+    access: f.access,
     managementAction: 'access:grant',
   });
   const context = await f.context();
@@ -67,7 +44,7 @@ test('simultaneous grant inserts on two connections settle one effect and replay
 test('simultaneous principal assignment inserts preserve one immutable request and receipt', async () => {
   const commands = createDelegationCommands({
     pool: f.pool,
-    access: simultaneousAccess('account:delegate'),
+    access: f.access,
     action: 'account:delegate',
   });
   const context = await f.context(f.principal);

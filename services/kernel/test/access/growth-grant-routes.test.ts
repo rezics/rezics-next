@@ -50,7 +50,7 @@ beforeAll(async () => {
     aud: audience,
     sub: actorId,
     client_id: 'growth',
-    scope: [...actionCatalogue(app).keys()].join(' '),
+    scope: [...actionCatalogue(app).keys(), 'gate:any'].join(' '),
     authn_epoch: 1,
     iat: at,
     exp: at + 300,

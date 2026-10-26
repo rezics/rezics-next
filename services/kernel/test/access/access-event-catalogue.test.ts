@@ -17,6 +17,7 @@ const { createMembershipInverseCommands } = await import('../../src/access/membe
 const { createSuspensionCommands } = await import('../../src/access/suspension.ts');
 const { installResourceRoleCatalogue, resolveResourceRoles } = await import('../../src/access/resource-roles.ts');
 const { installStandingParentGrant } = await import('../../src/access/standing-parent.ts');
+const { createExposureCommands } = await import('../../src/access/gates/catalogue.ts');
 const { sweepWorkflowApprovals } = await import('../../src/access/workflow-approvals.ts');
 const { createAccess } = await import('../../src/access/index.ts');
 const { createAccess: createPermissionAccess } = await import('../../src/access/permission.ts');
@@ -25,7 +26,16 @@ const { cookies, issuer, nativeFixture, password, scopes } = await import('./nat
 
 const url = process.env.DATABASE_URL!;
 const pool = createPool(url);
-const catalogueScopes = [...scopes, 'account:update', 'account:delete', 'organization:membership', 'account:suspend'];
+const catalogueScopes = [
+  ...scopes,
+  'account:update',
+  'account:delete',
+  'organization:create',
+  'organization:membership',
+  'account:suspend',
+  'exposure:open',
+  'exposure:close',
+];
 let f: Awaited<ReturnType<typeof nativeFixture>>;
 let bearer = '';
 let headers = new Headers();
@@ -202,7 +212,10 @@ test('real access commands cover every registered event and the log reader accep
   );
 
   await step('bootstrap', () => bootstrapGovernance(pool, governor.accountId));
-  const mounted = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+  const mounted = new Map([
+    ...LIFECYCLE_ACTIONS,
+    ...catalogueScopes.map((scope) => [scope, { anonymous: false }] as const),
+  ]);
   installResourceRoleCatalogue(
     f.access,
     resolveResourceRoles(mounted, {
@@ -214,6 +227,25 @@ test('real access commands cover every registered event and the log reader accep
     const live = await governorRequest();
     return { actor: live.actor, pool, deadline: live.deadline };
   };
+  const exposures = createExposureCommands({ pool, clock: () => new Date() });
+  for (const operation of ['open', 'close'] as const) {
+    await step(`exposure ${operation}`, async () => {
+      const live = await governorRequest();
+      const action = `exposure:${operation}`;
+      const authorization = await accessCommandAuthorization(
+        f.access,
+        live.actor,
+        action,
+        PLATFORM_RESOURCE,
+        { pool, deadline: live.deadline },
+        () => new Error(`${action} denied`),
+      );
+      return exposures[operation](
+        { actor: live.actor, pool, deadline: live.deadline },
+        { group: 'catalogue_event', key: key(), authorization },
+      );
+    });
+  }
   const resource = PLATFORM_RESOURCE;
   const subject = { kind: 'account' as const, id: governor.accountId };
   await step('grant create', async () =>
@@ -286,7 +318,7 @@ test('real access commands cover every registered event and the log reader accep
   await step('assignment revoke', async () =>
     delegations.revoke(await grantContext(), { principalId: governor.accountId, requestId, key: key() }),
   );
-  await step('standing parent', async () => {
+  const standingParent = await step('standing parent replay', async () => {
     const live = await governorRequest();
     const authority = await accessCommandAuthorization(
       f.access,
@@ -301,9 +333,10 @@ test('real access commands cover every registered event and the log reader accep
       parent: { resource: PLATFORM_RESOURCE, validate: async () => true },
       authority,
       context: { actor: live.actor, pool, deadline: live.deadline },
-      actions: ['subject:create'],
+      actions: ['organization:create'],
     });
   });
+  expect(standingParent.replayed).toBe(true);
 
   const organizationId = newId(routeOf(governor.accountId)!);
   const ownerHold = await step('owner hold', () =>

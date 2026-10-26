@@ -136,7 +136,8 @@ test('real durable joins and leaves have fixed command/history work under one 1x
           ],
           'core.receipt': [routeOf(member)! >>> 4, routeOf(group)! >>> 4].map((partition) => ({
             partition_no: partition,
-            actor_account_id: actor,
+            principal_kind: 'account',
+            principal_id: actor,
             command_kind: 'access.membership-inverse-reserved',
             idempotency_key: `seed:${ordinal}`,
             request_digest: new Uint8Array(32),

@@ -171,8 +171,9 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
     });
     assertGrowth(children, report.bounds);
     for (const sample of report.samples) {
-      expect(sample.cost.statements).toBe(mode === 'first' ? 5 : 3);
-      expect(sample.cost.relations?.['access.account']?.rows).toBe(1);
+      // Bootstrap now installs the organization:create standing grant as a separate command.
+      expect(sample.cost.statements).toBe(mode === 'first' ? 12 : mode === 'refusal' ? 3 : 10);
+      expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }
     for (const sample of children) {
       // Cold Reylo transports additionally validate the fixed relation schemas:

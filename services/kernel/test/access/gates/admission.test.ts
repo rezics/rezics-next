@@ -83,6 +83,7 @@ async function person(name: string, scopes: readonly string[]): Promise<Person> 
 }
 
 async function get(path: string, bearer?: string): Promise<{ response: Response; body: Record<string, unknown> }> {
+  clockTime = new Date();
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       ...(bearer ? { headers: { authorization: `Bearer ${bearer}` } } : {}),
@@ -97,6 +98,7 @@ async function post(
   bearer: string,
   body?: unknown,
 ): Promise<{ response: Response; body: Record<string, unknown> }> {
+  clockTime = new Date();
   const headers: Record<string, string> = {
     authorization: `Bearer ${bearer}`,
     'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
@@ -324,6 +326,7 @@ test('a gate grant admits the account but still requires operation authorization
 
 test('opening is public from T, close restores denial, and gate:any admits platform staff', async () => {
   const open = await post(`/v1/platform/exposure/${group}:open`, staff.bearer);
+  const openedAt = clockTime.getTime();
   expect(open.response.status).toBe(200);
   expect(open.body).toMatchObject({ exposure: { group, open: true, changed: true } });
   const openNoop = await post(`/v1/platform/exposure/${group}:open`, staff.bearer);
@@ -338,8 +341,8 @@ test('opening is public from T, close restores denial, and gate:any admits platf
   expect(staffRead.response.status).toBe(200);
   expect(staffRead.body).toEqual({ value: 'gated' });
 
-  clockTime = new Date(clockTime.getTime() + 1);
   const close = await post(`/v1/platform/exposure/${group}:close`, staff.bearer);
+  expect(clockTime.getTime()).toBeGreaterThan(openedAt);
   expect(close.response.status).toBe(200);
   expect(close.body).toMatchObject({ exposure: { group, open: false, changed: true } });
   const closedAgain = await get('/v1/gated-fixture');
