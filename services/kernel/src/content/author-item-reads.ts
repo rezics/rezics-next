@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import type { Actor } from '../request/access.ts';
+import { readPublicViews } from '../access/public-views.ts';
+import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -121,6 +122,7 @@ async function candidates(
   limit: number,
   scope: CursorBinding,
   now: number,
+  presentationCheck: AccessCheck | null,
 ): Promise<{ candidates: readonly Candidate[]; anchor: AnchoredPosition }> {
   const route = routeOf(accountId);
   if (route === null) throw new ContentNotFoundError();
@@ -139,6 +141,16 @@ async function candidates(
           throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
         const after =
           input.cursor === undefined ? null : decodeKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
+        const views = (await readPublicViews(client, [accountId])).get(accountId);
+        const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
+        const self = context.actor.kind === 'account' && context.actor.accountId === accountId;
+        if (!enabled && !self) {
+          const actingFor = presentationCheck ? await presentationCheck(client) : false;
+          if (!actingFor) {
+            await client.query('COMMIT');
+            return { candidates: [], anchor: { partition, epoch: partition.epoch, position: partition.position } };
+          }
+        }
         const parameters = {
           route,
           author_account_id: accountId,
@@ -191,7 +203,32 @@ async function listAuthorItems(
   const now = (dependencies.cursorNow ?? Date.now)();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const scope = binding(accountId, list, kind, context.actor);
-  const page = await candidates(dependencies, accountId, context, input, list, kind, limit * SCAN_FACTOR, scope, now);
+  const accountRoute = routeOf(accountId);
+  const self = context.actor.kind === 'account' && context.actor.accountId === accountId;
+  // Account presentation uses account:update for authorized editors, including
+  // an organization's acting owners. Reuse that rule for its private lists.
+  const presentationCheck =
+    accountRoute !== null && context.actor.kind === 'account' && !self
+      ? await accessCheck(
+          dependencies.access,
+          context.actor,
+          'account:update',
+          { route: accountRoute, id: accountId },
+          { pool: dependencies.pool, deadline: context.deadline },
+        )
+      : null;
+  const page = await candidates(
+    dependencies,
+    accountId,
+    context,
+    input,
+    list,
+    kind,
+    limit * SCAN_FACTOR,
+    scope,
+    now,
+    presentationCheck,
+  );
   const entries: (ThreadView | AuthorPostEntry)[] = [];
   const anchors = [page.anchor];
   let scanned = 0;

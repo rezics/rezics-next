@@ -68,6 +68,14 @@ afterAll(async () => {
 });
 
 const body = Buffer.from(JSON.stringify(fromPlainText('Profile reply')));
+async function ensureAuthor(author: string) {
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,membership_inverse_complete,transaction_id)
+    VALUES ($1,$2,'actor','active',true,$2) ON CONFLICT (route,account_id) DO NOTHING`,
+    [routeOf(author), author],
+  );
+}
+
 function rows(
   author: string,
   at: string,
@@ -162,6 +170,7 @@ async function fixture(
   reply = false,
   realmId: string | null = null,
 ) {
+  await ensureAuthor(author);
   const value = rows(author, at, kind, reply, realmId);
   await seed(
     db,
@@ -364,6 +373,7 @@ test('author pages conceal protected Realms, drafts, takedowns and erasure with 
 for (const reply of [false, true])
   test(reply ? 'author post page' : 'author thread page', async () => {
     const author = newId(authorRoute);
+    await ensureAuthor(author);
     const population: Population = {
       name: crypto.randomUUID(),
       hotPartition: contentRoute >>> 4,

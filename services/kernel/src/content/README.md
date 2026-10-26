@@ -61,11 +61,18 @@ creation time descending, then item id ascending. `GET /v1/accounts/{accountId}/
 `{ posts, next }`: reply entries include `thread: { id, title }`, with a null title when thread disclosure hides it.
 Opening posts belong only to the thread list. Both limits are 1–20, default 20.
 
+Each page reads the account's public views once in its own partition before scanning candidates. The `posts` view
+controls discussion threads and replies; the `reviews` view controls review threads. A private view returns an empty
+page with `next: null`, except to the account itself or a viewer authorized by the existing `account:update`
+presentation rule, including an organization's acting owners. The view read shares the candidate page's repeatable-read
+snapshot, which commits before thread and post disclosure probes. Hiding a list does not change any item's own
+visibility. Deleted, fenced and unknown accounts have private flags and empty pages.
+
 Takedown, visibility and Realm changes are not mirrored. Index rows are candidates only: reads apply the current
 thread, opening post, board, Realm and Access disclosure checks, and posts also pass their own disclosure checks.
 Drafts, taken-down and erased items are omitted, including when exact reads would disclose an erased slot. An erased
-opening post may still supply a reply's null thread title. Unknown or erased account ids have empty pages through
-these candidate checks; there is no account lookup. No membership or item count is returned.
+opening post may still supply a reply's null thread title. Unknown, deleted and fenced accounts have empty pages from
+the public-view check before any candidate scan. No membership or item count is returned.
 
 Each page reads at most four times its limit in candidates and returns a continuation when more may remain, even
 if filtering leaves the page empty. The signed keyset cursor binds account, list, thread kind, viewer and author
@@ -352,18 +359,24 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 ### Author thread page
 
-- **Touches:** At most 4L index rows in the author's partition; per candidate, the subject thread read's disclosure
-  probes in its thread's and board's partitions, each released before the next.
-- **Bound:** O(L) candidates and statements for L <= 20, independent of the account's item count.
+- **Touches:** One `readPublicViews` point read for the account in its partition, at most 4L index rows in the author's
+  partition, and per candidate the subject thread read's disclosure probes in its thread's and board's partitions,
+  each released before the next. For an authenticated viewer other than the account, the existing `account:update`
+  Access check is prepared once and evaluated before scanning when the relevant view is private.
+- **Bound:** The view check adds one bounded read per page. The existing Access check keeps its own bound; candidate
+  rows and statements remain O(L) for L <= 20, independent of the account's item count.
 - **Growth check:** `test/content/author-item-reads.test.ts`, `author thread page`, at 64, 512 and 4096 threads by
-  the account. Rows and statements per page stay constant.
+  the account. Rows and statements per page stay constant with the view check included.
 
 ### Author post page
 
-- **Touches:** At most 4L index rows; per candidate, the post and thread disclosure probes.
-- **Bound:** O(L) for L <= 20, independent of the account's item count.
+- **Touches:** One `readPublicViews` point read for the account in its partition, at most 4L index rows, and per
+  candidate the post and thread disclosure probes. For an authenticated viewer other than the account, the existing
+  `account:update` Access check is prepared once and evaluated before scanning when the relevant view is private.
+- **Bound:** The view check adds one bounded read per page. The existing Access check keeps its own bound; candidate
+  rows and statements remain O(L) for L <= 20, independent of the account's item count.
 - **Growth check:** `test/content/author-item-reads.test.ts`, `author post page`, at 64, 512 and 4096 replies by
-  the account. Rows and statements per page stay constant.
+  the account. Rows and statements per page stay constant with the view check included.
 
 ### Author erasure
 
