@@ -15,7 +15,7 @@ test('a release analysis serves every .sql statement with no database connection
   const directory = temporaryDirectory();
   try {
     const statements = await analyseStatements(process.env.DATABASE_URL!, directory);
-    expect(statements).toBe(new Bun.Glob('src/**/*.sql').scanSync({ cwd: KERNEL_ROOT }).toArray().length);
+    expect(statements).toBe(Array.from(new Bun.Glob('src/**/*.sql').scanSync({ cwd: KERNEL_ROOT })).length);
     expect(readdirSync(resolve(directory, '.reylo/queries')).length).toBeGreaterThan(0);
     await releaseCheck(directory);
   } finally {

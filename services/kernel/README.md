@@ -263,6 +263,18 @@ Internal `/$` paths return `404 not_found`. OpenAPI uses the public AIP paths. E
 `client.media({ id }).$complete.post(body)` or `client.subjects.$merge.post(body)` and the client fetcher sends
 them to their public AIP paths.
 
+## Deployment
+
+The build runs `bun run analyse`. It starts a disposable PostgreSQL, applies the migrations, has Reylo analyse every
+`.sql` statement under `src` against it, and writes the result to `dist/reylo` (or to the directory given as its
+argument). It then imports every `.sql` file with no database connection and fails naming each file that has no entry.
+The release carries `dist/reylo` and the same lockfile as the build, because an entry is keyed by Reylo's engine
+version.
+
+Every production server and worker process sets `REYLO_CONFIG` to `dist/reylo/.reylo.yaml`. Boot then reads every
+analysis from the release, never describes a statement against the production database, and writes nothing under the
+package root. A missing entry is a build defect that `analyse` reports; production does not repair it.
+
 ## Database changes
 
 Kernel-owned migrations live in `db/migrations/` and their dump lives in `db/schema.sql`. Each module has its code and
