@@ -31,6 +31,21 @@ type Fixture = Awaited<ReturnType<typeof standingFixture>>;
 type Anchor = { threadId: string; postId: string; revisionId: string; route: number };
 type GrowthMode = 'threads' | 'posts' | 'revisions';
 
+const seededRelations = [
+  'content.board',
+  'content.thread',
+  'content.post',
+  'content.revision',
+  'access.resource_grant',
+  'access.resource_denial',
+  'access.resource_initialization',
+  'access.resource_role_grant',
+  'core.receipt',
+  'core.outbox',
+  'editorial.write_basis',
+] as const;
+const checkObservations: { name: string; requestedCheckpoints: number; vacuums: Record<string, number> }[] = [];
+
 let db: GrowthDatabase;
 let fixture: Fixture;
 let actor: AccountActor;
@@ -607,6 +622,21 @@ async function assertAnchorRelations(growthDb: GrowthDatabase): Promise<void> {
   }
 }
 
+async function observeMaintenance(): Promise<{ requestedCheckpoints: number; vacuums: Record<string, number> }> {
+  const checkpoints = await db.admin.query<{ requested: number }>(
+    'SELECT num_requested::integer AS requested FROM pg_stat_checkpointer',
+  );
+  const vacuums = await db.admin.query<{ relation: string; vacuums: number }>(
+    `SELECT schemaname || '.' || relname AS relation, vacuum_count::integer AS vacuums
+     FROM pg_stat_user_tables WHERE schemaname || '.' || relname = ANY ($1)`,
+    [[...seededRelations]],
+  );
+  return {
+    requestedCheckpoints: checkpoints.rows[0]!.requested,
+    vacuums: Object.fromEntries(vacuums.rows.map(({ relation, vacuums }) => [relation, vacuums])),
+  };
+}
+
 async function runCheck(
   name: string,
   mode: GrowthMode,
@@ -619,6 +649,7 @@ async function runCheck(
   );
   const positionBase = Number(BigInt(nextPosition.rows[0]!.position) + 1_000_000n);
   const population = growthPopulation(`growth-content-${name}-${randomUUID()}`, mode, anchor, positionBase);
+  const before = await observeMaintenance();
   const report = await checkGrowth(db, {
     name,
     bounds,
@@ -634,6 +665,14 @@ async function runCheck(
       await growthDb.admin.query('CHECKPOINT');
     },
     operation,
+  });
+  const after = await observeMaintenance();
+  checkObservations.push({
+    name,
+    requestedCheckpoints: after.requestedCheckpoints - before.requestedCheckpoints,
+    vacuums: Object.fromEntries(
+      seededRelations.map((relation) => [relation, (after.vacuums[relation] ?? 0) - (before.vacuums[relation] ?? 0)]),
+    ),
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   for (const sample of report.samples) {
@@ -802,3 +841,12 @@ test('Public board read stays within its bound as T grows', async () => {
     return result;
   });
 }, 90_000);
+
+test('growth-threads grows request no checkpoint and leave one vacuum per scale to the harness', () => {
+  expect(checkObservations).toHaveLength(9);
+  for (const { name, requestedCheckpoints, vacuums } of checkObservations) {
+    expect(requestedCheckpoints, `${name} requested checkpoints`).toBe(0);
+    for (const relation of seededRelations)
+      expect(vacuums[relation], `${name} vacuums of ${relation}`).toBe(scales.length);
+  }
+});
