@@ -10,6 +10,7 @@ import {
   type CommandAuthorization,
 } from '../../src/command/command.ts';
 import { resourceAuthorization, type ResourceAuthorizationInput } from '../../src/access/resource-authorization.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import { parentCreationAuthorization, creationCapability } from '../../src/access/parent-creation.ts';
 import { initializeResourceGrants } from '../../src/access/resource-initialization.ts';
 import type { ResourceCreationManifest } from '../../src/access/creation-manifest.ts';
@@ -332,7 +333,7 @@ test('every formula operand independently denies on the general path', async () 
         ...(operand === 'deadline' ? { authorization: resourceAuthorization(changed) } : {}),
         basis: { actorAccountId: f.actorId, clientId: f.delegated.clientId, requestedBy: f.delegated.requestedBy },
       }),
-    ).rejects.toBeInstanceOf(GrantDeniedError);
+    ).rejects.toBeInstanceOf(operand === 'deadline' ? AccessUnavailableError : GrantDeniedError);
   }
 });
 
@@ -349,7 +350,9 @@ test('proofs cannot be borrowed, replaced by booleans, rebound or retained into 
     'expired',
   ] as const) {
     const { input, basis } = await fixture();
-    const base = resourceAuthorization(input);
+    const base = resourceAuthorization(
+      attack === 'expired' ? { ...input, context: { ...input.context, deadline: Date.now() + 1000 } } : input,
+    );
     let oldProof: unknown;
     let attempts = 0;
     const authorization: CommandAuthorization = {
@@ -382,7 +385,7 @@ test('proofs cannot be borrowed, replaced by booleans, rebound or retained into 
           throw Object.assign(new Error('retry'), { code: '40001' });
         },
       }),
-    ).rejects.toBeInstanceOf(GrantDeniedError);
+    ).rejects.toBeInstanceOf(attack === 'expired' ? AccessUnavailableError : GrantDeniedError);
     if (attack === 'retry') expect(attempts).toBe(2);
   }
 });

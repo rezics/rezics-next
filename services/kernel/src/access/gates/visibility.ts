@@ -1,5 +1,6 @@
+import { requireAccessDeadline } from '../unavailable.ts';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../authenticate.ts';
+import { deadlineClient, within } from '../authenticate.ts';
 import { resourceRoleCatalogue } from '../resource-roles.ts';
 import { withConnection } from '../../database/pool.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
@@ -93,46 +94,49 @@ export async function visibleOperations(input: {
   if (!(at instanceof Date) || !Number.isFinite(at.getTime())) throw new TypeError('Invalid command clock');
   const open = new Set<string>();
   const held = new Set<string>();
-  if (groups.length > 0 && Date.now() < input.deadline) {
+  requireAccessDeadline(input.deadline);
+  if (groups.length > 0) {
     const instant = at.toISOString();
     const actions = [...groups.map((group) => `gate:${group}`), 'gate:any'];
     const account = input.viewer.kind === 'account' ? input.viewer : undefined;
     const principal = principalId(input.viewer);
-    await withConnection(input.pool, async (client) => {
-      const bounded = deadlineClient(client, input.deadline);
-      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        await bounded.query('SET LOCAL enable_seqscan = off');
-        for (const row of await openGroups.run(bounded, { groups, at: instant })) {
-          if (typeof row.group !== 'string') throw new Error('Open group read failed');
-          open.add(row.group);
-        }
-        // An unparsable requested-by URN cannot hold a principal operand, so the grant read is skipped.
-        if (account && (account.requestedBy === null || principal !== null)) {
-          for (const row of await heldGates.run(bounded, {
-            at: instant,
-            actor_id: account.accountId,
-            principal_id: principal ?? '',
-            resource_id: GLOBAL_CONTEXT.id,
-            actions: actions.map((action) => ({
-              action,
-              grant_roles: grantRoles(input.access, action),
-            })),
-          })) {
-            if (typeof row.action !== 'string') throw new Error('Held gate read failed');
-            held.add(row.action);
-          }
-        }
-        await bounded.query('COMMIT');
-      } catch (error) {
+    await within(input.deadline, () =>
+      withConnection(input.pool, async (client) => {
+        const bounded = deadlineClient(client, input.deadline);
+        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original discovery failure.
+          await bounded.query('SET LOCAL enable_seqscan = off');
+          for (const row of await openGroups.run(bounded, { groups, at: instant })) {
+            if (typeof row.group !== 'string') throw new Error('Open group read failed');
+            open.add(row.group);
+          }
+          // An unparsable requested-by URN cannot hold a principal operand, so the grant read is skipped.
+          if (account && (account.requestedBy === null || principal !== null)) {
+            for (const row of await heldGates.run(bounded, {
+              at: instant,
+              actor_id: account.accountId,
+              principal_id: principal ?? '',
+              resource_id: GLOBAL_CONTEXT.id,
+              actions: actions.map((action) => ({
+                action,
+                grant_roles: grantRoles(input.access, action),
+              })),
+            })) {
+              if (typeof row.action !== 'string') throw new Error('Held gate read failed');
+              held.add(row.action);
+            }
+          }
+          await bounded.query('COMMIT');
+        } catch (error) {
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            // Preserve the original discovery failure.
+          }
+          throw error;
         }
-        throw error;
-      }
-    });
+      }),
+    );
   }
   return operations
     .filter((operation) => admits(operation, open, held, input.viewer))

@@ -1,3 +1,4 @@
+import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
 import { deadlineClient } from './authenticate.ts';
@@ -65,7 +66,8 @@ export function createWriteRateLimiter(config: WriteRateConfig = {}): WriteRateL
           units,
           budget: budgets[identity.rateClass][family],
         });
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         throw new WriteRateUnavailableError();
       }
     },

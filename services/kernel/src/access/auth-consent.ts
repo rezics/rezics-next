@@ -1,3 +1,4 @@
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 export type CurrentConsent = Readonly<{
   actorAccountId: string;
   clientId: string;
@@ -95,21 +96,18 @@ export function createAuthConsentReader(config: {
       !Object.hasOwn(input, 'deadline') ||
       !id(input.actorAccountId) ||
       !id(input.clientId) ||
-      !Number.isFinite(input.deadline) ||
-      input.deadline <= Date.now()
+      !Number.isFinite(input.deadline)
     )
       return null;
     const { actorAccountId, clientId, deadline } = input;
+    requireAccessDeadline(deadline);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const expired = new Promise<null>((resolve) => {
-      timer = setTimeout(
-        () => {
-          controller.abort();
-          resolve(null);
-        },
-        Math.min(3000, deadline - Date.now()),
-      );
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new AccessUnavailableError('deadline'));
+        controller.abort();
+      }, deadline - Date.now());
     });
     const operation = async (): Promise<CurrentConsent | null> => {
       let response: Response | undefined;
@@ -138,14 +136,8 @@ export function createAuthConsentReader(config: {
         )
           return null;
         const value: unknown = await boundedJson(response, controller.signal);
-        if (
-          !value ||
-          typeof value !== 'object' ||
-          Array.isArray(value) ||
-          controller.signal.aborted ||
-          Date.now() >= deadline
-        )
-          return null;
+        requireAccessDeadline(deadline);
+        if (!value || typeof value !== 'object' || Array.isArray(value) || controller.signal.aborted) return null;
         const record = value as Record<string, unknown>;
         if (
           Object.keys(record).length !== 3 ||
@@ -155,7 +147,8 @@ export function createAuthConsentReader(config: {
         )
           return null;
         return { actorAccountId, clientId, scopes: [...new Set(record.scopes)].sort() };
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, deadline);
         return null;
       } finally {
         controller.signal.removeEventListener('abort', abort);
@@ -163,7 +156,9 @@ export function createAuthConsentReader(config: {
       }
     };
     try {
-      return await Promise.race([operation(), expired]);
+      const result = await Promise.race([operation(), expired]);
+      requireAccessDeadline(deadline);
+      return result;
     } finally {
       clearTimeout(timer);
       controller.abort();

@@ -1,3 +1,4 @@
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { Access, AccessContext, AccountActor, Actor } from '../request/access.ts';
@@ -36,12 +37,13 @@ const admitted = new WeakMap<
 
 /** Internal capture port: consumes only a successful observation of this actor at this live T. */
 export function admittedCommandAccount(context: AccessContext, actor: AccountActor): CapturedAccount | null {
+  requireAccessDeadline(context.deadline);
   const attempt = accessCommandAttempt(context);
   const observation = attempt && admitted.get(attempt.time)?.get(actor);
+  if (observation) requireAccessDeadline(observation.deadline);
   return observation &&
     observation.pool === context.pool &&
     Number.isFinite(context.deadline) &&
-    Date.now() < Math.min(context.deadline, observation.deadline) &&
     attempt?.basis?.actorAccountId === actor.accountId &&
     attempt.basis.clientId === actor.clientId &&
     attempt.basis.requestedBy === actor.requestedBy
@@ -97,17 +99,18 @@ export function createCommandAdmission(
     WeakMap<AccountActor, { deadline: number; account: Promise<Account | null> }>
   >();
   return async (actor, context) => {
+    requireAccessDeadline(context.deadline);
     const attempt = accessCommandAttempt(context);
     if (!attempt || actor.kind !== 'account') return null;
     admitted.get(attempt.time)?.delete(actor);
     const snapshot = identity(actor);
+    if (snapshot) requireAccessDeadline(snapshot.deadline);
     const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity);
     if (
       !snapshot ||
       clock().getTime() >= snapshot.expires ||
       snapshot.pool !== context.pool ||
       (snapshot.durableTime !== undefined && snapshot.durableTime !== attempt.time) ||
-      Date.now() >= deadline ||
       !Number.isFinite(deadline) ||
       attempt.basis?.actorAccountId !== actor.accountId ||
       attempt.basis.clientId !== actor.clientId ||
@@ -118,7 +121,8 @@ export function createCommandAdmission(
     // same live step T, comparing the immutable creation floor/operator snapshot.
     const remember = (account: Account | null): Account | null => {
       authoritativeTimeValue(attempt.time);
-      if (!account || Date.now() >= deadline) return null;
+      requireAccessDeadline(deadline);
+      if (!account) return null;
       let actors = admitted.get(attempt.time);
       if (!actors) {
         actors = new WeakMap();
@@ -155,12 +159,16 @@ export function createCommandAdmission(
           current.operatorAccountId === original.operatorAccountId
           ? original
           : null;
-      }).catch(() => null);
+      }).catch((error: unknown) => {
+        throwAccessUnavailable(error, deadline);
+        return null;
+      });
       observation = { deadline, account };
       actors.set(actor, observation);
     }
     const account = await observation.account;
     authoritativeTimeValue(attempt.time);
-    return remember(Date.now() < observation.deadline ? account : null);
+    requireAccessDeadline(observation.deadline);
+    return remember(account);
   };
 }

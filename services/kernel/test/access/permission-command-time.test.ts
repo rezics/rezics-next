@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { accessCheck, accessCommandAuthorization } from '../../src/request/access.ts';
@@ -33,7 +34,7 @@ async function checkInCommand(
     context.actor,
     action,
     f.resource,
-    context,
+    delayAfterPrepare ? { ...context, deadline: Date.now() + 1000 } : context,
     () => new Error('Permission denied'),
   );
   const authorization = delayAfterPrepare
@@ -79,18 +80,18 @@ test('a command clock ahead of PostgreSQL uses the same timeline for its evidenc
   await expect(checkInCommand(await f.context(), () => ahead)).rejects.toThrow('Permission denied');
 });
 
-test('a command behind PostgreSQL remains denied after its evidence deadline expires', async () => {
+test('a command behind PostgreSQL is unavailable after its evidence deadline expires', async () => {
   const context = await f.context();
   const behind = new Date((await databaseNow()) - 500);
 
-  await expect(checkInCommand(context, () => behind, 1_150)).rejects.toThrow('Permission denied');
+  await expect(checkInCommand(context, () => behind, 1_150)).rejects.toBeInstanceOf(AccessUnavailableError);
 });
 
-test('a command ahead of PostgreSQL is refused after its evidence deadline expires', async () => {
+test('a command ahead of PostgreSQL is unavailable after its evidence deadline expires', async () => {
   const context = await f.context();
   const ahead = new Date((await databaseNow()) + 30_000);
 
-  await expect(checkInCommand(context, () => ahead, 1_150)).rejects.toThrow('Permission denied');
+  await expect(checkInCommand(context, () => ahead, 1_150)).rejects.toBeInstanceOf(AccessUnavailableError);
 });
 
 function monthsBefore(base: number, months: number): Date {
@@ -153,7 +154,7 @@ test('a read months behind PostgreSQL is permitted by its grant within its budge
   expect(await readAt()).toBe(false);
 });
 
-test('a read whose request budget has run out is refused whichever way its clock differs', async () => {
+test('a read whose request budget has run out is unavailable whichever way its clock differs', async () => {
   const databaseAt = await databaseNow();
   for (const instant of [monthsBefore(databaseAt, 4), new Date(databaseAt + 30_000)]) {
     const context = await f.context();
@@ -164,9 +165,12 @@ test('a read whose request budget has run out is refused whichever way its clock
       accountEvidence: () => account,
       clock: () => instant,
     });
-    const check = await accessCheck(access, context.actor, action, f.resource, context);
+    const check = await accessCheck(access, context.actor, action, f.resource, {
+      ...context,
+      deadline: Date.now() + 1000,
+    });
     await new Promise<void>((resolve) => setTimeout(resolve, 1_150));
-    expect(await check(f.pool)).toBe(false);
+    await expect(check(f.pool)).rejects.toBeInstanceOf(AccessUnavailableError);
   }
 });
 

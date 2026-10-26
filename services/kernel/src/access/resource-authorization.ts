@@ -1,3 +1,4 @@
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { commandAccessContext } from './command-admission.ts';
 import {
   ANONYMOUS_PRINCIPAL_ID,
@@ -174,8 +175,7 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
       partition >= 0 &&
       partition < 4096 &&
       attempt.partition === partition &&
-      Number.isFinite(deadline) &&
-      Date.now() < deadline
+      Number.isFinite(deadline)
     );
   }
   return Object.freeze<CommandAuthorization>({
@@ -183,13 +183,15 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
     resource,
     denied,
     async prepare(attempt) {
+      requireAccessDeadline(deadline);
       if (!bound(attempt) || !prepare) throw denied();
       try {
         const evidence = await within(deadline, () =>
           prepare(actor, action, resource, commandAccessContext({ pool, deadline }, attempt)),
         );
         const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-        if (Date.now() >= proofDeadline) throw denied();
+        if (permissionEvidenceDeadline(evidence) === undefined) throw denied();
+        requireAccessDeadline(proofDeadline);
         let governanceReach: GovernanceReachUse | undefined;
         await within(proofDeadline, () =>
           withConnection(pool, async (client) => {
@@ -199,11 +201,13 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
             governanceReach = governanceReachUse(evidence, actor, action, resource);
           }),
         );
-        if (!bound(attempt) || Date.now() >= proofDeadline) throw denied();
+        requireAccessDeadline(proofDeadline);
+        if (!bound(attempt)) throw denied();
         const proof = Object.freeze({});
         proofs.set(proof, { attempt, deadline: proofDeadline, governanceReach });
         return proof;
       } catch (error) {
+        throwAccessUnavailable(error, deadline);
         // Domain unavailability must not expose a receipt or reach target checkout.
         if (anonymous) throw denied();
         throw error;
@@ -212,6 +216,8 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
     async authorize(tx, attempt, proof) {
       const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
       if (prepared) proofs.delete(proof as object);
+      requireAccessDeadline(deadline);
+      if (prepared) requireAccessDeadline(prepared.deadline);
       if (
         !bound(attempt) ||
         !prepared ||
@@ -219,8 +225,7 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
         commandTime(tx) !== attempt.time ||
         prepared.attempt.time !== attempt.time ||
         prepared.attempt.basis !== attempt.basis ||
-        prepared.attempt.partition !== attempt.partition ||
-        Date.now() >= prepared.deadline
+        prepared.attempt.partition !== attempt.partition
       )
         throw denied();
       if (prepared.governanceReach && !recordGovernanceReachUse(tx, prepared.governanceReach)) throw denied();

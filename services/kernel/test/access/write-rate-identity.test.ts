@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool, type QueryConfig } from 'pg';
-import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
 import { readPublicAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter, WriteRateUnavailableError } from '../../src/access/write-rate.ts';
 import { canonicalRateAddress, rateIdentity } from '../../src/access/write-rate-identity.ts';
@@ -117,7 +117,9 @@ test('forged, copied, cross-pool and expired actor evidence cannot spend', async
     { ...received, actor, pool: Object.create(pool) as Pool },
     { ...received, actor, deadline: Date.now() - 1 },
   ])
-    await expect(limiter.spend(attempt, 'write')).rejects.toBeInstanceOf(WriteRateUnavailableError);
+    await expect(limiter.spend(attempt, 'write')).rejects.toBeInstanceOf(
+      attempt.deadline < Date.now() ? AccessUnavailableError : WriteRateUnavailableError,
+    );
   expect((await pool.query('SELECT * FROM access.write_rate_counter')).rows).toHaveLength(0);
   for (const update of ["state='suspended'", 'authn_fenced=true', 'minimum_authn_epoch=2']) {
     await account();

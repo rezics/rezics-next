@@ -1,3 +1,4 @@
+export declare const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
 export type CommandEvent = {

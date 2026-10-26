@@ -297,16 +297,17 @@ export async function erasePostLogicalPageAsInitiator(
   const postIds = [...input.postIds];
   if (postIds.length < 1 || postIds.length > 100 || new Set(postIds).size !== postIds.length)
     throw new RangeError('Invalid erasure page');
-  const points = await Promise.all(
-    postIds.map((id) =>
-      prepareAuthorizedPoint(
+  const points: Awaited<ReturnType<typeof prepareAuthorizedPoint>>[] = [];
+  for (const id of postIds) {
+    points.push(
+      await prepareAuthorizedPoint(
         deps,
         initiator,
         { action: 'post:erase', kind: 'post', id, reason: input.reason },
         context,
       ),
-    ),
-  );
+    );
+  }
   const first = points[0]!;
   if (points.some((point) => point.route !== first.route)) throw new GrantDeniedError();
   const authorization: CommandAuthorization = {
@@ -318,12 +319,8 @@ export async function erasePostLogicalPageAsInitiator(
       // source, consent and delegation evidence is shared at T; every actual post
       // still gets its own ordinary Access admission/check and scope validation.
       const verified = await first.restore(attempt);
-      const prepared = await Promise.allSettled(points.map((point) => point.prepareRestored(attempt, verified)));
       const proofs: unknown[] = [];
-      for (const result of prepared) {
-        if (result.status === 'rejected') throw result.reason;
-        proofs.push(result.value);
-      }
+      for (const point of points) proofs.push(await point.prepareRestored(attempt, verified));
       return proofs;
     },
     async authorize(tx, attempt, evidence) {

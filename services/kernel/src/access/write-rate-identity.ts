@@ -1,4 +1,5 @@
 import { systemClock, type KernelClock } from '../clock.ts';
+import { requireAccessDeadline } from './unavailable.ts';
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { Actor, AccountActor } from '../request/access.ts';
@@ -100,13 +101,10 @@ export function bindAnonymousRateIdentity(
 
 /** No serializable actor fields, client identifier or request JSON can mint this evidence. */
 export function rateIdentity(context: WriteRateContext, secret: string) {
+  requireAccessDeadline(context.deadline);
   const identity = identities.get(context.actor);
-  if (
-    !identity ||
-    identity.pool !== context.pool ||
-    identity.clock().getTime() >= identity.expires ||
-    Date.now() >= Math.min(identity.deadline, context.deadline)
-  )
+  if (identity) requireAccessDeadline(identity.deadline);
+  if (!identity || identity.pool !== context.pool || identity.clock().getTime() >= identity.expires)
     throw new Error('Verified rate identity unavailable');
   const identityDigest = createHmac('sha256', secret).update(identity.name).digest('hex');
   return {

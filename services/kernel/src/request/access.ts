@@ -1,4 +1,5 @@
 import { accessRoot } from '../access/derived-access.ts';
+import { throwAccessUnavailable } from '../access/unavailable.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -210,7 +211,8 @@ export async function accessCommandAuthorization(
         const proof = Object.freeze({});
         proofs.set(proof, prepared);
         return proof;
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         throw denied();
       }
     },

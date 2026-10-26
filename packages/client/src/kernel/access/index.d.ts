@@ -1,3 +1,4 @@
+export { AccessUnavailableError } from './unavailable.ts';
 import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';

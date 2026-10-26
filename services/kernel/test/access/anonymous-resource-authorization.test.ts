@@ -8,6 +8,7 @@ import { createResourceAnonymousEligibility, type ResourceEligibility } from '..
 import { resourceAuthorization, type ResourceAuthorizationInput } from '../../src/access/resource-authorization.ts';
 import { creationCapability } from '../../src/access/parent-creation.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import {
   ANONYMOUS_PRINCIPAL_ID,
   authoritativeTimeValue,
@@ -400,7 +401,9 @@ test('opaque single-use attempt proofs reject borrowing, serialization, replay a
     'retry',
   ] as const) {
     const f = await fixture();
-    const base = resourceAuthorization(f.input);
+    const base = resourceAuthorization(
+      attack === 'expired' ? { ...f.input, context: { ...f.input.context, deadline: Date.now() + 1000 } } : f.input,
+    );
     let saved: unknown;
     let attempts = 0;
     const authorization: CommandAuthorization = {
@@ -448,7 +451,7 @@ test('opaque single-use attempt proofs reject borrowing, serialization, replay a
             }
           : {}),
       }),
-    ).rejects.toBeInstanceOf(GrantDeniedError);
+    ).rejects.toBeInstanceOf(attack === 'expired' ? AccessUnavailableError : GrantDeniedError);
     if (attack === 'retry') expect(attempts).toBe(2);
   }
 });

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
 import { createAuthService, type AuthService, type AuthServiceOptions } from '@rezics/auth';
-import { createAccess, createResourcePublicEligibility } from '../../src/access/index.ts';
+import { AccessUnavailableError, createAccess, createResourcePublicEligibility } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
@@ -431,13 +431,17 @@ test('delegated signed claims require an actual principal-created matching assig
 
 test('request deadlines and token expiry bound authentication and prepared authority', async () => {
   const { access } = verifier();
-  await invalid(access.authenticate(personToken, context(pool, Date.now() - 1)));
+  await expect(access.authenticate(personToken, context(pool, Date.now() - 1))).rejects.toBeInstanceOf(
+    AccessUnavailableError,
+  );
   const delayed = Object.create(pool) as Pool;
   delayed.query = (async (query: Parameters<Pool['query']>[0]) => {
     await Bun.sleep(120);
     return pool.query(query);
   }) as Pool['query'];
-  await invalid(access.authenticate(personToken, context(delayed, Date.now() + 30)));
+  await expect(access.authenticate(personToken, context(delayed, Date.now() + 30))).rejects.toBeInstanceOf(
+    AccessUnavailableError,
+  );
   const stalled = createAccess({
     actions,
     auth: {
@@ -451,14 +455,16 @@ test('request deadlines and token expiry bound authentication and prepared autho
     },
   });
   const start = Date.now();
-  await invalid(stalled.authenticate(personToken, context(pool, Date.now() + 30)));
+  await expect(stalled.authenticate(personToken, context(pool, Date.now() + 30))).rejects.toBeInstanceOf(
+    AccessUnavailableError,
+  );
   expect(Date.now() - start).toBeLessThan(100);
   const ctx = context(pool, Date.now() + 80);
   const actor = await access.authenticate(personToken, ctx);
   const check = await accessCheck(access, actor, action, resource, ctx);
   expect(await check(pool)).toBe(true);
   await Bun.sleep(100);
-  expect(await check(pool)).toBe(false);
+  await expect(check(pool)).rejects.toBeInstanceOf(AccessUnavailableError);
   const exp = Math.floor(Date.now() / 1000) + 1;
   const expiring = await access.authenticate(await signed({ exp }), context());
   const expires = await accessCheck(access, expiring, action, resource, context());

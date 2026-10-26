@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 
 const url = 'https://auth.private.test/internal/v1/consents:read';
 const config = { url, serviceTokenId: 'worker.access', serviceTokenSecret: 'private-secret' };
@@ -55,12 +56,14 @@ test('missing/forged/malformed/oversized/error responses fail closed', async () 
   ).toBeNull();
 });
 test('deadline bounds fetch and body, including transports which ignore abort', async () => {
-  for (const fetch of [
-    async () => new Promise<Response>(() => {}),
-    async () => new Response(new ReadableStream({ start() {} })),
-  ]) {
+  for (const [fetch, timesOut] of [
+    [async () => new Promise<Response>(() => {}), true],
+    [async () => new Response(new ReadableStream({ start() {} })), false],
+  ] as const) {
     const read = createAuthConsentReader({ ...config, fetch });
-    expect(await read({ ...input, deadline: Date.now() + 20 })).toBeNull();
+    const result = read({ ...input, deadline: Date.now() + 20 });
+    if (timesOut) await expect(result).rejects.toBeInstanceOf(AccessUnavailableError);
+    else expect(await result).toBeNull();
   }
   let calls = 0;
   const read = createAuthConsentReader({
@@ -71,13 +74,13 @@ test('deadline bounds fetch and body, including transports which ignore abort', 
     },
   });
   for (const invalid of [
-    { ...input, deadline: 0 },
     { ...input, deadline: NaN },
     { ...input, clientId: '' },
     { ...input, actorAccountId: 'x'.repeat(1025) },
     { ...input, firstParty: true },
   ])
     expect(await read(invalid)).toBeNull();
+  await expect(read({ ...input, deadline: 0 })).rejects.toBeInstanceOf(AccessUnavailableError);
   expect(calls).toBe(0);
 });
 test('configuration rejects insecure/noncanonical URLs and missing secrets', () => {
@@ -121,8 +124,8 @@ test('streamed oversized bodies and stalled JSON streams cancel within the deadl
     }),
     { headers },
   );
-  expect(
-    await createAuthConsentReader({ ...config, fetch: async () => stalled })({ ...input, deadline: Date.now() + 20 }),
-  ).toBeNull();
+  await expect(
+    createAuthConsentReader({ ...config, fetch: async () => stalled })({ ...input, deadline: Date.now() + 20 }),
+  ).rejects.toBeInstanceOf(AccessUnavailableError);
   expect(cancellations).toBe(2);
 });

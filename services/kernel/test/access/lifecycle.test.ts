@@ -4,6 +4,7 @@ import { CommandUnavailableError, IdempotencyConflictError } from '../../src/com
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount, readPublicAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import {
   createLifecycleInternals,
@@ -644,7 +645,7 @@ test('prepared evidence is gathered once and expires before a delayed command at
       ...access,
       async prepare(actor, action, resource, ctx) {
         prepares++;
-        const evidence = await access.prepare!(actor, action, resource, ctx);
+        const evidence = await access.prepare!(actor, action, resource, { ...ctx, deadline: Date.now() + 1000 });
         await Bun.sleep(1050);
         return evidence;
       },
@@ -653,7 +654,7 @@ test('prepared evidence is gathered once and expires before a delayed command at
   const before = await counts(id);
   await expect(
     delayed.updateAccount(await context(id), { accountId: id, key: key(), patch: { displayName: 'expired' } }),
-  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  ).rejects.toBeInstanceOf(AccessUnavailableError);
   expect(prepares).toBe(1);
   expect(await counts(id)).toEqual(before);
 });

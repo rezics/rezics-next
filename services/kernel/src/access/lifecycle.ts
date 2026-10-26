@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { throwAccessUnavailable } from './unavailable.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
@@ -1633,7 +1634,8 @@ function snapshotRequest(context: LifecycleRequest): LifecycleRequest {
 async function resolveEvidence<T>(resolve: (value: unknown) => Promise<T | null>, value: unknown): Promise<T | null> {
   try {
     return structuredClone(await resolve(value));
-  } catch {
+  } catch (error) {
+    throwAccessUnavailable(error);
     return null;
   }
 }

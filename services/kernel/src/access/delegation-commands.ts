@@ -1,4 +1,5 @@
 import { systemClock, type KernelClock } from '../clock.ts';
+import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand } from '../command/command.ts';
 import type { Access, AccessClient } from '../request/access.ts';
@@ -51,7 +52,8 @@ export async function readAssignment(
     });
     if (!row) return { kind: 'unresolved' };
     return { kind: 'resolved', principalId: match[1]!, assignedActorId, requestId: match[2]!, valid: row.valid };
-  } catch {
+  } catch (error) {
+    throwAccessUnavailable(error);
     return { kind: 'unresolved' };
   }
 }

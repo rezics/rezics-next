@@ -110,6 +110,7 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   return createApp({
+    requestDeadlineMs: 30_000,
     pool: options.pool,
     tokens: defaults.tokens,
     writeRate: defaults.writeRate,
@@ -155,6 +156,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   const kernel = createKernel({
+    requestDeadlineMs: 30_000,
     pool: options.pool,
     routeKey: testRouteKey(),
     tokens: defaults.tokens,

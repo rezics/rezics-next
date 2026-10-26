@@ -502,3 +502,26 @@ now, and it is the only way a person's sessions are revoked.
 - Growth check: `test/access/growth-operator-reinstatement.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated
   accounts and the operator's earlier fence and reinstatement history with the page fixed; constant statements and
   rows, logarithmic buffers. Seed in `grow` and use the default warm-up.
+
+Access failures caused by time or capacity are unavailability, never a denial.
+`AccessUnavailableError` carries `deadline`, `overloaded`, or `contention` through
+request preparation, authentication, and authorization. The shared classifier
+recognizes an elapsed request deadline, pool connection timeouts, SQLSTATE classes
+08 and 53, query cancellation (57014), server shutdown/unavailability (57P01–57P03),
+and exhausted serialization/deadlock attempts (40001 and 40P01). Classification
+inspects only the failure and deadline, takes O(1), and reads no rows.
+
+HTTP maps these reasons to retryable 503 `deadline_exceeded`, `overloaded`, and
+`transaction_retry_exhausted`; the latter two include `Retry-After: 1`. Commands
+report `effect_status: not_applied`. Missing tables, missing rows, unresolved
+accounts, and other unclassified failures retain their existing denial behavior.
+The kernel's configurable request deadline defaults to 2000 ms, shared with the
+standalone command default. Test kernels use 30000 ms.
+
+Prepared permission and durable identity evidence lasts until the caller's deadline;
+Access does not shorten it with a fixed preparation window. Binding checks verify
+identity and provenance. Elapsed time is checked separately and raises unavailability,
+including when preparation has already taken more than one second. The final SQL
+continues to check evidence validity at the authoritative command time. The database
+deadline uses the remaining budget when its clock was observed, so later preparation
+does not subtract elapsed time twice.

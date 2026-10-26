@@ -1,3 +1,4 @@
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { isIP } from 'node:net';
 import type { WriteRateContext, WriteRateLimiter } from './write-rate.ts';
 import { bindAnonymousRateIdentity } from './write-rate-identity.ts';
@@ -32,6 +33,7 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
     peer?: string | undefined;
   }): Promise<void> => {
     const { request, context } = input;
+    requireAccessDeadline(context.deadline);
     const unavailable = () =>
       new ProblemError('rate_limit_unavailable', { headers: { 'retry-after': '1', 'cache-control': 'no-store' } });
     const mounted =
@@ -47,7 +49,8 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
         try {
           // Require a nonempty suffix and the absolute end, including for line terminators.
           if (/:(?:read|list)(?:_[a-z][a-z_]*)?(?![\s\S])/.test(actionLabelOfMountedRoute(mounted))) return;
-        } catch {
+        } catch (error) {
+          throwAccessUnavailable(error, context.deadline);
           throw unavailable();
         }
       }
@@ -57,7 +60,8 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
     let units: number;
     try {
       units = rateLimitUnits(declaration, input.body);
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error, context.deadline);
       throw unavailable();
     }
     const key = `${mounted?.method} ${mounted?.path} ${declaration.family}:${units}`;
@@ -67,8 +71,7 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
         previous.declaration !== key ||
         previous.context.actor !== context.actor ||
         previous.context.pool !== context.pool ||
-        previous.context.deadline !== context.deadline ||
-        Date.now() >= context.deadline
+        previous.context.deadline !== context.deadline
       )
         throw unavailable();
       return previous.spend;
@@ -79,7 +82,8 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
       let decision;
       try {
         decision = await limiter.spend(context, declaration.family, units);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         throw unavailable();
       }
       if (!decision.allowed) {

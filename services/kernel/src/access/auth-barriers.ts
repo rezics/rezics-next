@@ -1,6 +1,7 @@
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
@@ -73,7 +74,8 @@ export function createAuthBarrierCapabilities({
     const resolve = async () => {
       try {
         return await proofs.verify(reference, expected);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     };
@@ -229,11 +231,8 @@ export function createCredentialFloorHook(config: {
             return true;
           },
           async authorize(tx, attempt, proof) {
-            allowed(
-              proof === true &&
-                Date.parse(opening.expiresAt) > Date.parse(authoritativeTimeValue(attempt.time)) &&
-                Date.now() < deadline,
-            );
+            requireAccessDeadline(deadline);
+            allowed(proof === true && Date.parse(opening.expiresAt) > Date.parse(authoritativeTimeValue(attempt.time)));
             const account = await readAccount(tx, route!, stage.subjectAccountId);
             allowed(account && account.state === 'active' && account.kind === 'actor' && !account.fenced);
             allowed(

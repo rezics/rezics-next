@@ -1,6 +1,7 @@
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
+import { throwAccessUnavailable } from './unavailable.ts';
 import type {
   AccessAccount,
   ProvisioningReceiptMetadata,
@@ -138,14 +139,16 @@ export function createAuthBindings(
     if (route === null) return null;
     try {
       return await readAccount(pool, route, id);
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error);
       return null;
     }
   }
   async function read(id: string, mode: ReadMode = 'open'): Promise<AccessAccount | null> {
     try {
       return translate(await account(id), mode);
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error);
       return null;
     }
   }
@@ -311,14 +314,16 @@ export function createAuthBindings(
     readErasureAccount: async (id) => {
       try {
         return await erasure(id);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     },
     async readProvisioningAccount(id, reference) {
       try {
         return await provisioning(id, reference);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     },

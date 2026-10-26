@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { createSuspensionCommands } from './suspension.ts';
 import { createSessionRevocationCommands } from './session-revocation.ts';
 import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';
@@ -347,7 +348,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     config as WorkflowApprovalConfig & { creationBinding?: NativeWorkflowProofPorts['creationBinding'] }
   ).creationBinding;
   function boundary(context: AccessContext): AccessContext {
-    requireAllowed(context.pool === config.pool && Number.isFinite(context.deadline) && Date.now() < context.deadline);
+    requireAccessDeadline(context.deadline);
+    requireAllowed(context.pool === config.pool && Number.isFinite(context.deadline));
     return { pool: config.pool, deadline: context.deadline };
   }
   function authorization(
@@ -356,6 +358,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     context: AccessContext,
     observeDeadline?: (deadline: number) => void,
   ): CommandAuthorization {
+    requireAccessDeadline(context.deadline);
     requireAllowed(config.actions.has(descriptor.action));
     const authority = resourceAuthorization({
       access: observeDeadline
@@ -442,7 +445,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     context: AccessContext,
     deadline: number,
   ): Promise<void> {
-    requireAllowed(config.actions.has(descriptor.action) && config.access.prepare && Date.now() < deadline);
+    requireAccessDeadline(deadline);
+    requireAllowed(config.actions.has(descriptor.action) && config.access.prepare);
     const evidence = await config.access.prepare(actor, descriptor.action, resourceOf(descriptor), {
       pool: config.pool,
       deadline,
@@ -470,7 +474,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         );
       }),
     );
-    requireAllowed(allowed && Date.now() < deadline);
+    requireAccessDeadline(deadline);
+    requireAllowed(allowed);
   }
   async function validateTransferRecord(
     operation: Extract<AccountOperation, { kind: 'transfer' }>,
@@ -525,7 +530,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     );
     // The relation command terminalizes the old slot atomically with publication.
     requireAllowed(oldSlot?.terminal === true && oldSlot.operatorAccountId === operation.previous.operatorAccountId);
-    requireAllowed(Date.now() < deadline);
+    requireAccessDeadline(deadline);
   }
   async function resolveSingle(
     reference: string,
@@ -667,8 +672,10 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     input: { operationKey: string; operation: NativeOperation },
     context: AccessContext,
   ): Promise<WorkflowApproval> {
+    let requestDeadline: number | undefined;
     try {
       const bounded = boundary(context);
+      requestDeadline = bounded.deadline;
       requireAllowed(input && text(input.operationKey));
       const operationKey = input.operationKey;
       const { operation, descriptor: native } = operationSnapshot(input.operation);
@@ -793,6 +800,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       );
       return result.value;
     } catch (error) {
+      throwAccessUnavailable(error, requestDeadline);
       if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
         throw error;
       throw denied();
@@ -936,9 +944,13 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     approve: (token: string, input: WorkflowApprovalRequest, context: AccessContext) => approve(token, input, context),
     /** Trusted server workflow port, never an unauthenticated HTTP endpoint. */
     async resolve(reference: string, operation: AccountOperation, context: AccessContext): Promise<LifecycleRequest> {
+      let requestDeadline: number | undefined;
       try {
-        return await resolve(reference, operation, context);
+        const bounded = boundary(context);
+        requestDeadline = bounded.deadline;
+        return await resolve(reference, operation, bounded);
       } catch (error) {
+        throwAccessUnavailable(error, requestDeadline);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
         throw denied();
@@ -950,11 +962,14 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       operation: AccountOperation,
       context: AccessContext,
     ): Promise<LifecycleRequest> {
+      let requestDeadline: number | undefined;
       try {
         const bounded = boundary(context);
+        requestDeadline = bounded.deadline;
         const caller = await config.access.authenticate(token, bounded);
         return await resolve(reference, operation, bounded, caller);
       } catch (error) {
+        throwAccessUnavailable(error, requestDeadline);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
         throw denied();

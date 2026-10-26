@@ -1,3 +1,4 @@
+import { throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { authoritativeTimeValue } from '../command/command.ts';
@@ -52,7 +53,8 @@ export async function captureDurableInitiator(
     }
     if (!admittedCommandAccount(context, actor)) throw new DurableInitiatorCaptureUnavailableError();
     return Object.freeze({ originalAccount: Object.freeze({ ...account }), originalDelegation });
-  } catch {
+  } catch (error) {
+    throwAccessUnavailable(error, context.deadline);
     throw new DurableInitiatorCaptureUnavailableError();
   }
 }
