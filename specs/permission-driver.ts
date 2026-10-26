@@ -19,7 +19,10 @@ export interface Account {
 }
 
 /** Test intervals are [start, end): start is included, end is excluded. */
-export interface Validity { start: string; end: string }
+export interface Validity {
+  start: string;
+  end: string;
+}
 export interface Grant {
   id: string;
   subject: { accountId: string } | { organizationId: string; role: 'owner' | 'member' };
@@ -48,13 +51,20 @@ export interface Login {
 }
 
 /** Opaque to the suite; the adapter retains actual authenticated credentials. */
-export interface Session { readonly handle: unknown }
+export interface Session {
+  readonly handle: unknown;
+}
 export type Authentication = { outcome: 'authenticated'; session: Session } | { outcome: 'denied' };
 export type Outcome = 'permitted' | 'denied';
-export type Operation =
-  | { kind: 'resource'; resourceId: string; action: string }
-  | { kind: 'grant'; grant: Grant };
-export type Evidence = 'accounts' | 'resources' | 'clients' | 'grants' | 'consents' | 'delegatedRequests' | 'memberships';
+export type Operation = { kind: 'resource'; resourceId: string; action: string } | { kind: 'grant'; grant: Grant };
+export type Evidence =
+  | 'accounts'
+  | 'resources'
+  | 'clients'
+  | 'grants'
+  | 'consents'
+  | 'delegatedRequests'
+  | 'memberships';
 
 export interface PermissionDriver {
   /**
