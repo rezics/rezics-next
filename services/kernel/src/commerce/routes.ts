@@ -1,3 +1,5 @@
+import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
+import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -41,6 +43,7 @@ const offerSchema = t.Object(
   {
     id,
     targetSubjectId: id,
+    summary: t.Union([SubjectSummarySchema, t.Null()]),
     title: t.String(),
     currency: t.String(),
     unitAmountMinor: t.Integer(),
@@ -66,6 +69,7 @@ const entitlementSchema = t.Object(
     offerId: id,
     orderId: id,
     targetSubjectId: id,
+    summary: t.Union([SubjectSummarySchema, t.Null()]),
     grantedAt: t.String(),
     revokedAt: nullableId,
     revokeReason: t.Union([t.Literal('refund'), t.Literal('dispute'), t.Null()]),
@@ -89,13 +93,23 @@ const bearer = [{ bearerAuth: [] }];
 function detail(operationId: string, action: string, exposure: 'gate:purchases' | 'gate:selling', anonymous = false) {
   return { operationId, 'x-exposure': exposure, 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
 }
-function offerView(offer: Offer) {
+function offerView(offer: Offer, summary: SubjectSummary | null) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
-  return { id, targetSubjectId, title, currency, unitAmountMinor, state };
+  return { id, targetSubjectId, title, currency, unitAmountMinor, state, summary };
 }
-function entitlementView(entitlement: Entitlement) {
+function entitlementView(entitlement: Entitlement, summary: SubjectSummary | null) {
   const { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason } = entitlement;
-  return { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason, active: revokedAt === null };
+  return {
+    id,
+    offerId,
+    orderId,
+    targetSubjectId,
+    grantedAt,
+    revokedAt,
+    revokeReason,
+    active: revokedAt === null,
+    summary,
+  };
 }
 async function orderView(pool: Pool, order: Order) {
   const entitlement = await store.readOrderEntitlement(pool, routeOf(order.id)!, order.id);
@@ -149,12 +163,21 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         response: { 200: offerResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
         detail: detail('offer.get', 'offer:read', 'gate:purchases', true),
       },
-      async ({ params, admission, job }) => {
+      async ({ params, actor, admission, job }) => {
         const route = routeOf(params.offerId);
         if (route === null) throw new ProblemError('not_found');
         const offer = await admission.run('normal', job, () => store.readOffer(pool, route, params.offerId));
         if (!offer) throw new ProblemError('not_found');
-        return { offer: offerView(offer) };
+        return {
+          offer: offerView(
+            offer,
+            (
+              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
+                offer.targetSubjectId,
+              ])
+            ).get(offer.targetSubjectId) ?? null,
+          ),
+        };
       },
     )
     .post(
@@ -193,7 +216,16 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
-        return { offer: offerView(result.value) };
+        return {
+          offer: offerView(
+            result.value,
+            (
+              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
+                result.value.targetSubjectId,
+              ])
+            ).get(result.value.targetSubjectId) ?? null,
+          ),
+        };
       },
     )
     .post(
@@ -222,7 +254,16 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           ),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { offer: offerView(result.value) };
+        return {
+          offer: offerView(
+            result.value,
+            (
+              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
+                result.value.targetSubjectId,
+              ])
+            ).get(result.value.targetSubjectId) ?? null,
+          ),
+        };
       },
     )
     .post(
@@ -335,8 +376,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           epoch = cursor.epoch;
         }
         const size = query.limit ?? 20;
-        return admission.run('normal', job, () =>
-          withConnection(pool, async (client) => {
+        return admission.run('normal', job, async () => {
+          const page = await withConnection(pool, async (client) => {
             await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
             try {
               const partition = await readPartition(client, partitionOf(route));
@@ -359,7 +400,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               const shown = entitlements.slice(0, size);
               const last = shown.at(-1);
               return {
-                entitlements: shown.map(entitlementView),
+                entitlements: shown,
                 next:
                   entitlements.length > size && last && partition
                     ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })
@@ -369,8 +410,18 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               await client.query('ROLLBACK');
               throw error;
             }
-          }),
-        );
+          });
+          const summaries = await readSubjectSummaries(
+            { pool, access: deps.access(), actor, deadline: job.deadline },
+            page.entitlements.map((row) => row.targetSubjectId),
+          );
+          return {
+            ...page,
+            entitlements: page.entitlements.map((row) =>
+              entitlementView(row, summaries.get(row.targetSubjectId) ?? null),
+            ),
+          };
+        });
       },
     )
     .get(
@@ -393,7 +444,16 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           store.readEntitlement(pool, route, params.entitlementId),
         );
         if (!entitlement || entitlement.accountId !== actor.accountId) throw new ProblemError('not_found');
-        return { entitlement: entitlementView(entitlement) };
+        return {
+          entitlement: entitlementView(
+            entitlement,
+            (
+              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
+                entitlement.targetSubjectId,
+              ])
+            ).get(entitlement.targetSubjectId) ?? null,
+          ),
+        };
       },
     );
   return routes as typeof routes & typeof webhook;

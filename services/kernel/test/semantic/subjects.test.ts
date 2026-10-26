@@ -156,8 +156,18 @@ test('a work, its edition and a recipe are subjects of release types with no cod
     'schema:numberOfPages': { labels: bundledRelease.properties['schema:numberOfPages']!.labels },
     'schema:publisher': { labels: bundledRelease.properties['schema:publisher']!.labels },
     'schema:url': { labels: bundledRelease.properties['schema:url']!.labels },
-    [work]: { labels: { en: 'Kokoro', ja: 'こゝろ' } },
-    [shinchosha]: { labels: { ja: '新潮社' } },
+    [work]: {
+      labels: { en: 'Kokoro', ja: 'こゝろ' },
+      type: 'schema:Book',
+      types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+      cover: null,
+    },
+    [shinchosha]: {
+      labels: { ja: '新潮社' },
+      type: 'schema:Organization',
+      types: ['schema:Organization', 'schema:Thing'],
+      cover: null,
+    },
   });
   const { rows } = await admin.query(
     'SELECT type FROM semantic.subject WHERE subject_id = ANY($1::uuid[]) ORDER BY type',

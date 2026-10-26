@@ -209,6 +209,7 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
     'currency',
     'id',
     'state',
+    'summary',
     'targetSubjectId',
     'title',
     'unitAmountMinor',
@@ -327,6 +328,7 @@ test('single reads hide unknown, malformed UUID, other-account and anonymous IDs
     'orderId',
     'revokeReason',
     'revokedAt',
+    'summary',
     'targetSubjectId',
   ]);
   expect(read.active).toBe(true);

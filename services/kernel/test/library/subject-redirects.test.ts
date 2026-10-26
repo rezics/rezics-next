@@ -304,7 +304,14 @@ test('Collection pages and every library read keep serving rows held under a mer
   await request('PUT', `/v1/follows/${redirected}`);
   await mergeOnly([survivor, redirected]);
 
-  const expected = { id: survivor, type: 'schema:Book', label: expect.any(String) };
+  const expected = {
+    id: survivor,
+    type: 'schema:Book',
+    types: ['schema:Book', ...bundledRelease.types['schema:Book']!.bases],
+    label: { value: expect.any(String), language: 'en' },
+    creativeWork: true,
+    cover: null,
+  };
   const membersBasic = await json<{ members: { id: string; subjectId: string }[] }>(
     await request('GET', `/v1/collections/${shelf.id}/members`),
   );

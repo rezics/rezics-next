@@ -1,3 +1,5 @@
+import { readSubjectSummaries } from '../summaries.ts';
+import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
 import { mergeSubjects, SubjectRedirectError } from '../merges.ts';
 import { withHeaders } from '@elysia/openapi';
@@ -119,7 +121,13 @@ const listingErrors = {
   503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
 };
 const LabelsSchema = t.Object(
-  { labels: t.Record(t.String(), t.String()), redirect: t.Optional(t.String({ format: 'uuid' })) },
+  {
+    labels: t.Record(t.String(), t.String()),
+    redirect: t.Optional(t.String({ format: 'uuid' })),
+    type: t.Optional(t.String()),
+    types: t.Optional(t.Array(t.String())),
+    cover: t.Optional(CoverSummarySchema),
+  },
   { additionalProperties: false },
 );
 const redirectResponse = t.Object(
@@ -133,7 +141,11 @@ const redirectResponse = t.Object(
 );
 const itemResponse = t.Object({ subject: ItemSchema }, { additionalProperties: false });
 const readResponse = t.Object(
-  { subject: ItemSchema, related: t.Record(t.String(), LabelsSchema) },
+  {
+    subject: ItemSchema,
+    summary: t.Union([SubjectSummarySchema, t.Null()]),
+    related: t.Record(t.String(), LabelsSchema),
+  },
   { additionalProperties: false },
 );
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
@@ -468,7 +480,7 @@ function subjectRoutes(
       '/v1/subjects/:id',
       {
         params: t.Object({ id: t.String() }),
-        query: t.Object({ context: t.Optional(EditorialBodyContext) }),
+        query: t.Object({ context: t.Optional(EditorialBodyContext), language: t.Optional(t.String()) }),
         response: {
           200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
           308: withHeaders(redirectResponse, { location: t.String() }),
@@ -488,8 +500,30 @@ function subjectRoutes(
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const languages = (query.language ?? request.headers.get('accept-language') ?? '')
+          .split(',')
+          .map((tag) => tag.split(';')[0]!.trim())
+          .filter(Boolean);
+        const checksById = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
+        const authorizeSummary: import('../summaries.ts').SummaryDependencies['authorize'] = async (
+          client,
+          id,
+          batch,
+        ) => {
+          const route = routeOf(id);
+          if (route === null) return false;
+          let pending = checksById.get(id);
+          if (!pending) {
+            pending = authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+            checksById.set(id, pending);
+          }
+          return (await pending)(client);
+        };
         const result = await admission.run('normal', job, () =>
-          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey).catch((error: unknown) => {
+          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
+            languages,
+            authorize: authorizeSummary,
+          }).catch((error: unknown) => {
             if (error instanceof SubjectRedirectError) return error;
             throw error;
           }),
@@ -504,7 +538,16 @@ function subjectRoutes(
         const release = await readRelease(pool, result.subject.release);
         if (!release) throw new Error('Subject revision release is missing');
         const { propertyIds, subjectIds } = relatedIds(result.subject);
-        const related: Record<string, { labels: Record<string, string>; redirect?: string }> = {};
+        const related: Record<
+          string,
+          {
+            labels: Record<string, string>;
+            redirect?: string;
+            type?: string;
+            types?: string[];
+            cover?: import('../summaries.ts').CoverSummary | null;
+          }
+        > = {};
         for (const property of propertyIds) {
           const definition = release.properties[property];
           if (definition) related[property] = { labels: definition.labels };
@@ -534,12 +577,23 @@ function subjectRoutes(
             return readRelated(client, allowed);
           }),
         );
-        Object.assign(related, references);
+        const active = await activeRelease(pool);
+        const summaries = active
+          ? await readSubjectSummaries(
+              { client: { query: pool.query.bind(pool) }, release: active.release, authorize: authorizeSummary },
+              Object.entries(references).map(([id, value]) => value.redirect ?? id),
+              { languages },
+            )
+          : new Map();
+        for (const [id, reference] of Object.entries(references)) {
+          const summary = summaries.get(reference.redirect ?? id);
+          if (summary) related[id] = { ...reference, type: summary.type, types: summary.types, cover: summary.cover };
+        }
 
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
         set.headers['cache-control'] = 'no-cache';
-        return { subject: result.subject, related };
+        return { subject: result.subject, summary: result.summary, related };
       },
     )
     .post(
@@ -1403,6 +1457,7 @@ function subjectRoutes(
                       statement: t.String(),
                       type: t.Optional(t.String()),
                       label: t.Optional(t.String()),
+                      summary: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
                     },
                     { additionalProperties: false },
                   ),
@@ -1468,6 +1523,12 @@ function subjectRoutes(
                 : {}),
               release: active.release,
               includeLabels: query.property !== undefined,
+              async authorizeSummary(client, id, batch) {
+                const route = routeOf(id);
+                if (route === null) return false;
+                const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                return check(client);
+              },
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
               seen,

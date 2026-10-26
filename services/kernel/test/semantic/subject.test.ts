@@ -137,7 +137,18 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
   const statements = Object.values(subject.statements).flat();
   expect(statements).toHaveLength(5);
   for (const entry of statements) expect(routeOf(entry.id)).toBe(route);
-  expect(await readSubject(pool, subject.id, allow)).toEqual({ subject, component: created.component });
+  expect(await readSubject(pool, subject.id, allow)).toEqual({
+    subject,
+    summary: {
+      id: subject.id,
+      type: 'bf:Instance',
+      types: ['bf:Instance', ...bundledRelease.types['bf:Instance']!.bases],
+      label: { value: 'Kokoro', language: 'en' },
+      creativeWork: true,
+      cover: null,
+    },
+    component: created.component,
+  });
 });
 
 test('each value is one compact fact row in its slot log, written under the command write basis', async () => {

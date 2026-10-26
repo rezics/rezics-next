@@ -13,6 +13,7 @@ export type CoverReference = Readonly<{
   containerId: string;
   rights: Rights;
   source: ImportedSource;
+  credit?: MediaImportRequest['credit'];
   width?: number;
   height?: number;
   placeholder?: Readonly<{ thumbhash: string; color: string }>;
@@ -172,6 +173,7 @@ function coverReferenceWithMetadata(
   const focalPoint = row.focalX === null || row.focalY === null ? null : { x: row.focalX, y: row.focalY };
   return {
     ...source,
+    credit: row.credit as MediaImportRequest['credit'],
     width: row.width,
     height: row.height,
     placeholder: { thumbhash: row.thumbhash, color: row.color },

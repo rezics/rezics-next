@@ -327,7 +327,12 @@ test('a vertical added as files only is served end to end with no change to the 
   const statement = served.shown.subject.statements[profile.cast][0];
   expect(statement.value.content).toBe(person.id);
   expect(statement.rank).toBe('normal');
-  expect(served.shown.related[person.id]).toEqual({ labels: { en: 'Ada Lovelace' } });
+  expect(served.shown.related[person.id]).toEqual({
+    labels: { en: 'Ada Lovelace' },
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(served.shown.related[profile.cast].labels.en).toBe(`en ${profile.cast}`);
   expect(served.listed.candidates).toEqual(
     expect.arrayContaining([expect.objectContaining({ id: served.candidate, decision: 'accepted', rank: 'normal' })]),

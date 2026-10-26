@@ -103,7 +103,7 @@ test('search and suggest pass the caller, the body and the query to the service,
   const anonymous = await call(kernel, 'POST', '/v1/subjects:search', { body });
   expect(anonymous.response.status).toBe(200);
   expect(anonymous.body).toEqual({
-    subjects: [result],
+    subjects: [{ ...result, summary: null }],
     total: { value: 1, relation: 'exact' },
     next: null,
     as_of: asOf,
@@ -113,7 +113,7 @@ test('search and suggest pass the caller, the body and the query to the service,
   ).toBe(200);
   const suggested = await call(kernel, 'GET', '/v1/subjects:suggest?q=Koko&limit=3');
   expect(suggested.response.status).toBe(200);
-  expect(suggested.body).toEqual({ subjects: [result], as_of: asOf });
+  expect(suggested.body).toEqual({ subjects: [{ ...result, summary: null }], as_of: asOf });
   expect((await call(kernel, 'GET', '/v1/subjects:suggest?q=%E5%BF%83', { token: 'reader' })).response.status).toBe(
     200,
   );

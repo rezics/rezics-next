@@ -111,7 +111,14 @@ async function fixture() {
   return { subjectId, versionSubjectId, collection, member, entry, copy, session, log };
 }
 const account = { id: accounts.owner, handle: 'full-owner', displayName: 'Full Owner' };
-const summary = (id: string, label = 'Embedded book') => ({ id, type: 'schema:Book', label });
+const summary = (id: string, label = 'Embedded book') => ({
+  id,
+  type: 'schema:Book',
+  types: ['schema:Book', ...bundledRelease.types['schema:Book']!.bases],
+  label: { value: label, language: 'en' },
+  creativeWork: true,
+  cover: null,
+});
 
 beforeAll(async () => {
   db = await openGrowthDatabase();

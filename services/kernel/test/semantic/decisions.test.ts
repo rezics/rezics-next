@@ -209,7 +209,12 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
     [original.id, 'preferred', 1],
     [candidate, 'normal', 2],
   ]);
-  expect(shown.related[collective.id]).toEqual({ labels: collective.labels });
+  expect(shown.related[collective.id]).toEqual({
+    labels: collective.labels,
+    type: 'schema:Organization',
+    types: ['schema:Organization', 'schema:Thing'],
+    cover: null,
+  });
   const listing = await listed(book.id, 'schema:author');
   expect(listing.adoption).toEqual({ mode: 'replace', head: 2 });
   expect(listing.candidates.map((x: any) => [x.id, x.decision, x.head, x.rank])).toEqual([

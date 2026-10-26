@@ -97,7 +97,22 @@ const linkOf = (source: Record<string, any>, property: string, includeLabels = f
   subject: source.id as string,
   property,
   statement: source.statements[property][0].id as string,
-  ...(includeLabels ? { type: source.type as string, label: source.labels.en as string } : {}),
+  ...(includeLabels
+    ? {
+        type: source.type as string,
+        label: source.labels.en as string,
+        summary: {
+          id: source.id,
+          type: source.type,
+          types: [source.type, ...bundledRelease.types[source.type]!.bases],
+          label: { value: source.labels.en, language: 'en' },
+          creativeWork:
+            bundledRelease.types[source.type]!.bases.includes('schema:CreativeWork') ||
+            source.type === 'schema:CreativeWork',
+          cover: null,
+        },
+      }
+    : {}),
 });
 const fresh = (caught_up: boolean) => ({ consistency: 'eventual', target_seconds: 10, caught_up });
 async function links(id: string, persona?: string, query = '') {

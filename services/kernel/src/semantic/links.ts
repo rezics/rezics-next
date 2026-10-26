@@ -2,8 +2,7 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
 import { activeRelease } from './definitions.ts';
-import { readLabels } from './subject.ts';
-import { subjectLabel } from './link-keys.ts';
+import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { matchesTarget } from './targets.ts';
 import readInboundLinkCount from './read-inbound-link-count.sql';
 import countInboundLinkTypes from './count-inbound-link-types.sql';
@@ -255,7 +254,14 @@ export function linkProjection(pool: Pool): Relay {
   };
 }
 
-export type SubjectLink = { subject: string; property: string; statement: string; type?: string; label?: string };
+export type SubjectLink = {
+  subject: string;
+  property: string;
+  statement: string;
+  type?: string;
+  label?: string;
+  summary?: SubjectSummary | null;
+};
 export type SubjectLinksPage = {
   links: SubjectLink[];
   count?: { value: number; exact: boolean };
@@ -296,6 +302,7 @@ export async function listSubjectLinks(
     type?: string;
     language?: string;
     includeLabels?: boolean;
+    authorizeSummary?: SummaryDependencies['authorize'];
     release?: Release;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
@@ -413,18 +420,28 @@ export async function listSubjectLinks(
     };
   });
   const includeLabels = options.includeLabels ?? options.property !== null;
-  const labels = includeLabels
-    ? await readLabels(
-        pool,
+  const summaryRelease = includeLabels ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const summaries = summaryRelease
+    ? await readSubjectSummaries(
+        {
+          client: { query: pool.query.bind(pool) },
+          release: summaryRelease,
+          authorize: options.authorizeSummary ?? (async () => false),
+        },
         page.links.map((link) => link.subject),
+        { languages: options.language ? [options.language] : [] },
       )
-    : new Map<string, Record<string, string>>();
+    : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deadline);
   return {
     ...page,
     links: page.links.map((link) =>
       includeLabels
-        ? { ...link, label: subjectLabel(labels.get(link.subject) ?? {}, options.language) }
+        ? {
+            ...link,
+            label: summaries.get(link.subject)?.label?.value ?? '',
+            summary: summaries.get(link.subject) ?? null,
+          }
         : { subject: link.subject, property: link.property, statement: link.statement },
     ),
   };

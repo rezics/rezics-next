@@ -1,3 +1,9 @@
+import { readSubjectSummaries, type SubjectSummary } from '../../semantic/summaries.ts';
+import { SubjectSummarySchema } from '../../semantic/http/summaries.ts';
+import { activeRelease } from '../../semantic/definitions.ts';
+import { relatedReadEligibility } from '../../semantic/eligibility.ts';
+import { routeOf } from '../../route/route.ts';
+import type { Resource, AccessCheck } from '../../request/access.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
@@ -13,7 +19,12 @@ export type SearchService = ReturnType<typeof createSearchService>;
 
 const object = { additionalProperties: false } as const;
 const result = t.Object(
-  { id: t.String({ format: 'uuid' }), type: t.String(), labels: t.Record(t.String(), t.String()) },
+  {
+    id: t.String({ format: 'uuid' }),
+    type: t.String(),
+    labels: t.Record(t.String(), t.String()),
+    summary: t.Union([SubjectSummarySchema, t.Null()]),
+  },
   object,
 );
 const fact = t.Union([
@@ -30,6 +41,7 @@ const searchHit = t.Object(
     id: t.String({ format: 'uuid' }),
     type: t.String(),
     labels: t.Record(t.String(), t.String()),
+    summary: t.Union([SubjectSummarySchema, t.Null()]),
     descriptions: t.Optional(t.Record(t.String(), t.String())),
     facts: t.Optional(t.Record(t.String(), t.Array(fact))),
   },
@@ -81,6 +93,33 @@ export function searchRoutes<App>(
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
+  async function fill<T extends { subjects: { id: string; type: string; labels: Record<string, string> }[] }>(
+    page: T,
+    authorize: (resource: Resource) => Promise<AccessCheck>,
+    languages: readonly string[] = [],
+  ): Promise<Omit<T, 'subjects'> & { subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[] }> {
+    const active = await activeRelease(pool);
+    const summaries = active
+      ? await readSubjectSummaries(
+          {
+            client: { query: pool.query.bind(pool) },
+            release: active.release,
+            async authorize(connection, id, batch) {
+              const route = routeOf(id);
+              if (route === null) return false;
+              const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+              return check(connection);
+            },
+          },
+          page.subjects.map((subject) => subject.id),
+          { languages },
+        )
+      : new Map();
+    return {
+      ...page,
+      subjects: page.subjects.map((subject) => ({ ...subject, summary: summaries.get(subject.id) ?? null })),
+    };
+  }
   const routed = (app as ReturnType<typeof createApp>)
     .post(
       customMethod('/v1/subjects', 'search'),
@@ -124,7 +163,11 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          return search.search(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous', body);
+          return fill(
+            await search.search(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous', body),
+            authorize,
+            body.languages,
+          );
         });
       },
     )
@@ -203,7 +246,7 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          return search.suggest(query.q, query.limit);
+          return fill(await search.suggest(query.q, query.limit), authorize);
         });
       },
     );

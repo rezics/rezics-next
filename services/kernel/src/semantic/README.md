@@ -227,13 +227,13 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 - Touches: One `readFences` statement per source-tuple partition (at most 100 tuples) before the receipt and before deduplication; one anchored media reference probe per cover; each command then pays its single-request cost plus one document insert or one media claim by key. Same-partition fence reads run inside the command. Grow N; fix the command count at the batch cap.
 - Bound: O(commands × log N). At most 100 commands. No path scans a partition or table, or grows with N, U×t or M beyond index depth.
-- Growth check: `test/semantic/imported-fields.test.ts`
+- Growth check: `test/semantic/imported-fields.test.ts`: `a cover proposal claims an available cover media object in its own transaction` and `an unchanged summary refresh appends no document` (fixed fixtures, no scale sweep).
 
 ### Source-fence disclosure
 
 - Touches: Subject views, candidate listings, and the search source read each issue one `readFences` statement per tuple partition among the candidates that read would show. The search source read adds the same per read.
 - Bound: T probes, `ceil(T / 100)` statements in a partition, independent of N and of the subject's history.
-- Growth check: `test/semantic/imported-fields.test.ts`
+- Growth check: `test/semantic/imported-fields.test.ts`: `a fenced source tuple refuses new contributions and hides existing ones at read` (fixed fixture, no scale sweep).
 
 Structural value limits bound subject payload blocks B by F for accepted inputs; shared-block growth checks keep payload size fixed.
 Default authorization has separately anchored but uncapped evidence fan-out; its costs cannot be proved bounded using subject and definition counts alone.
@@ -243,12 +243,22 @@ The global context is inserted once by migration and has no runtime semantic rea
 
 ### Inverse page
 
-- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one counter probe, and one label read per holder partition on the page. Type counts add a separate sample of at most 1,000 index rows.
-- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. Label work depends only on the bounded labels of the returned holders.
-- Growth check: `growth-inverse-pages.test.ts`, in-degree 10², 10³, 10⁴ at limit 25; first and middle page rows and blocks stay flat.
+- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.
+- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. Summary work depends only on the bounded returned holders and their selected covers, as described below.
+- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `an inverse page examines the same rows whatever the anchor's in-degree`, scales `[64, 512, 4096]` at limit 25; first and middle page rows and blocks stay flat.
 
 ### Links projection write
 
 - Touches: per changed statement, `1 + filter values` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, property, filter_value, order_key, source_subject_id, statement_id)`.
 - Bound: O(changed statements × (1 + filter values)) per event; a holder key change re-emits its outbound links (≤ F). Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value.
-- Growth check: holders with 10, 100 and 500 outbound links; work per event is linear in changed links and independent of the anchor's in-degree.
+- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, a measured loop over 10, 100 and 500 changed links and an in-degree check at `[64, 512, 4096]`.
+
+### Subject summaries
+
+- Touches: per subject partition, one batched read of the subjects, their default labels, and their preferred image or representative-edition statement. Per edition partition, one batched read of the editions' preferred images. Per media partition, one content cover reference read.
+- Bound: rows O(i) for i ≤ 256 ids; statements O(subject partitions + edition partitions + media partitions) ≤ O(3i); independent of how many editions a work has. Access preparation and authorization retain their separately documented evidence costs.
+- Growth check: `test/semantic/subject-summaries.test.ts`: `subject summaries for a page of subjects cost one statement per partition, not one per subject`, scales `[4, 32, 256]` ids; `test/semantic/subject-summaries.test.ts`: `a representative cover read stays flat as the work gains editions`, scales `[16, 128, 1024]` editions. Statements and rows per id stay flat.
+
+`readSubjectSummaries` is the shared display projection. Callers provide the active release and a current reader authorization check; representative editions pass that same check. Labels follow requested languages (including their primary tags), English, then the first language tag. The selected label's actual language selects the representative edition, falling back to an unqualified representative and then the first statement. Preferred images win over normal images; deprecated, hidden and retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen image yields null rather than switching editions. Suitability policies may withhold a cover through `maySeeCover`, producing null without hiding the subject.
+
+Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.

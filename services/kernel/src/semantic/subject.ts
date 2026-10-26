@@ -1,3 +1,5 @@
+import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
+import { activeRelease } from './definitions.ts';
 import { withReadTransaction } from './read.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { SubjectRedirectError } from './merges.ts';
@@ -256,12 +258,14 @@ export async function readSubject(
   authorize: (client: PoolClient) => Promise<boolean>,
   context = GLOBAL_CONTEXT,
   routeKey?: Uint8Array,
-): Promise<{ subject: Item; component: SubjectComponent } | null> {
+  summaries: { languages?: readonly string[]; authorize?: SummaryDependencies['authorize'] } = {},
+): Promise<{ subject: Item; summary: SubjectSummary | null; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) return null;
   const defaults = contextRecord?.defaults ?? {};
+  const active = await activeRelease(pool);
   const snapshot = await withReadTransaction(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition) {
@@ -298,6 +302,19 @@ export async function readSubject(
   const { rows, component, release, statementFacts, resolution } = snapshot;
   const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
   return {
+    summary: active
+      ? ((
+          await readSubjectSummaries(
+            {
+              client: { query: pool.query.bind(pool) },
+              release: active.release,
+              authorize: summaries.authorize ?? (async (_connection, subject) => subject === id),
+            },
+            [id],
+            { languages: summaries.languages ?? [] },
+          )
+        ).get(id) ?? null)
+      : null,
     subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
       revision: rows[0]!.revision,
       release: rows[0]!.release,

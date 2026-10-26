@@ -160,7 +160,13 @@ test('a merge redirects the larger id to the smallest with one revision in the r
   expect([plain.response.status, plain.response.headers.get('location')]).toEqual([308, `/v1/subjects/${survivor.id}`]);
   const read = await call('GET', `/v1/subjects/${book.id}`);
   expect(read.body.subject.statements).toEqual(book.statements);
-  expect(read.body.related[redirected.id]).toEqual({ redirect: survivor.id, labels: survivor.labels });
+  expect(read.body.related[redirected.id]).toEqual({
+    redirect: survivor.id,
+    labels: survivor.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(await revisions(survivor.id)).toEqual(survivorBefore);
   expect((await revisions(redirected.id)).map((row) => [row.revision, row.kind, row.route])).toEqual([
     [1, 'create', routeOf(redirected.id)],
@@ -284,6 +290,9 @@ test('the survivor gathers the links of the redirected subject, whose own links 
   expect((await call('GET', `/v1/subjects/${later.id}`)).body.related[gone.id]).toEqual({
     redirect: kept.id,
     labels: kept.labels,
+    type: 'schema:Book',
+    types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+    cover: null,
   });
 });
 
@@ -322,6 +331,9 @@ test('merging a survivor again repoints every redirect to the final survivor', a
   expect((await call('GET', `/v1/subjects/${book.id}`)).body.related[largest.id]).toEqual({
     redirect: smallest.id,
     labels: smallest.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
   });
   expect((await revisions(largest.id)).map((row) => row.kind)).toEqual(['create', 'merge']);
   const refused = await merge({ subjects: [largest.id, smallest.id] });

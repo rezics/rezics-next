@@ -202,6 +202,7 @@ test('a cover reference returns crop display dimensions and all metadata with it
         attribution: '(c) Image Artist; via [Example Catalogue](https://catalogue.example.test/record/42)',
       },
       source: provenance,
+      credit,
       width: 300,
       height: 500,
       placeholder: { thumbhash: 'AQID', color: '#5a4632' },

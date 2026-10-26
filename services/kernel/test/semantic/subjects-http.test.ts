@@ -154,7 +154,12 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(read.body.related).toEqual({
     'schema:author': { labels: bundledRelease.properties['schema:author']!.labels },
     'schema:url': { labels: bundledRelease.properties['schema:url']!.labels },
-    [soseki]: { labels: { en: 'Natsume Sōseki' } },
+    [soseki]: {
+      labels: { en: 'Natsume Sōseki' },
+      type: 'schema:Person',
+      types: ['schema:Person', ...bundledRelease.types['schema:Person']!.bases],
+      cover: null,
+    },
   });
   expect(decodeSession(tokens, 'anonymous', read.response.headers.get(SESSION_HEADER)!)).toHaveLength(1);
   expect(

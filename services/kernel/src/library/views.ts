@@ -10,9 +10,12 @@ import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import { SubjectRedirectError } from '../semantic/merges.ts';
+import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import type { SubjectSummary } from '../semantic/summaries.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { readSubject } from '../semantic/subject.ts';
+import { relatedReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
@@ -24,6 +27,7 @@ import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
 const nullableText = t.Union([t.String(), t.Null()]);
 const summarySchema = t.Union([
+  SubjectSummarySchema,
   t.Object({ id: t.String(), type: t.String(), label: t.String() }, { additionalProperties: false }),
   t.Null(),
 ]);
@@ -44,7 +48,7 @@ export function basicQuery<Q extends { view?: string }>({ view: _view, ...query 
 }
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
-type Summary = { id: string; label: string; type: string };
+type Summary = SubjectSummary | { id: string; label: string; type: string };
 type AccountSummary = { id: string; handle: string | null; displayName: string | null };
 type Embedding<T> = T extends readonly (infer R)[]
   ? Embedding<R>[]
@@ -93,7 +97,20 @@ class ViewReader {
         },
         { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
       );
-      return readSubject(pool, anchorId, (client) => check(client));
+      return readSubject(pool, anchorId, (client) => check(client), GLOBAL_CONTEXT, undefined, {
+        async authorize(client, id, batch) {
+          const route = routeOf(id);
+          if (route === null) return false;
+          const check = await accessCheck(
+            access,
+            actor,
+            'subject:read',
+            { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
+            { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+          );
+          return check(client);
+        },
+      });
     }
 
     let result: Awaited<ReturnType<typeof readSubject>>;
@@ -110,11 +127,7 @@ class ViewReader {
       }
     }
     if (!result) return null;
-    const { subject } = result;
-    // Until semantic provides a summary read, this also resolves every statement slot.
-    const label =
-      subject.labels.en ?? Object.entries(subject.labels).sort(([a], [b]) => a.localeCompare(b))[0]?.[1] ?? '';
-    return { id: subject.id, type: subject.type, label };
+    return result.summary;
   }
 
   async account(id: string): Promise<AccountSummary | null> {
