@@ -4,6 +4,8 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { createKernel } from '../../src/http/kernel.ts';
 import { IdempotencyConflictError, principalCommandIdentity } from '../../src/command/command.ts';
 import { createThread } from '../../src/content/commands.ts';
 import { revisePost } from '../../src/content/commands.ts';
@@ -23,6 +25,7 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
 let system: NativeContentSystem;
+let permissionKernel: ReturnType<typeof createKernel>;
 let governanceBearer: string;
 let schemeId: string;
 let conceptId: string;
@@ -67,6 +70,17 @@ async function accountActor(bearer: string) {
 
 beforeEach(async () => {
   system = await createNativeContentSystem({ databaseUrl });
+  // Unmeasured growth setup uses public grants with a budget sized for its fixed background.
+  permissionKernel = createKernel({
+    pool: system.database.pool,
+    routeKey: system.routeKey,
+    tokens: system.tokenKeys,
+    access: () => system.access,
+    writeRate: createWriteRateLimiter({
+      secret: randomUUID() + randomUUID(),
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 10_000, seconds: 60 } } }),
+    }),
+  });
   await bootstrapRelease(system.database.pool, bundledRelease);
   const { rows } = await system.database.pool.query(
     'SELECT account_id FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1',
@@ -100,7 +114,7 @@ afterEach(async () => {
 });
 
 async function permission(path: string, body: unknown, bearer = governanceBearer) {
-  const { response } = await system.transport.capture(
+  const response = await permissionKernel.handle(
     new Request(`https://content.test${path}`, {
       method: 'POST',
       headers: {
@@ -201,6 +215,12 @@ async function fixture() {
     context(),
   );
   const target: ReportTarget = { kind: 'post', id: created.value.itemId };
+  await grant(target, author.accountId, 'access:grant');
+  const authorGrantor = await system.auth.issue({
+    accountId: author.accountId,
+    clientId: author.clientId,
+    scopes: ['access:grant', 'reaction:set', 'report:create'],
+  });
   const standing = await system.database.pool.query<{ valid: string }>(
     `SELECT valid::text AS valid FROM access.resource_role_grant
      WHERE route=$1 AND resource_id=$2 AND grant_role='content.post.standing' AND upper_inf(valid)`,
@@ -215,7 +235,16 @@ async function fixture() {
   };
   const moderator = await accountActor(system.actors.moderator.bearer);
   await grant(target, moderator.accountId, 'moderation:read_reports');
-  return { board, author, moderator, target, input, created, standingValid: standing.rows[0]!.valid };
+  return {
+    board,
+    author,
+    authorGrantor: authorGrantor.bearer,
+    moderator,
+    target,
+    input,
+    created,
+    standingValid: standing.rows[0]!.valid,
+  };
 }
 
 async function nativeReport(id: string, pool = system.database.pool) {
@@ -363,12 +392,16 @@ test('missing proof and malformed anonymous possession keys deny; authenticated 
     scopes: [],
   });
   await expect(createReport(deps(), credential.actor, f.input, context())).rejects.toThrow();
-  await permission('/v1/roleGrants:revoke', {
-    resource: resource(f.target),
-    subject: { kind: 'active_accounts' },
-    role: 'content.post.standing',
-    valid: f.standingValid,
-  });
+  await permission(
+    '/v1/roleGrants:revoke',
+    {
+      resource: resource(f.target),
+      subject: { kind: 'active_accounts' },
+      role: 'content.post.standing',
+      valid: f.standingValid,
+    },
+    f.authorGrantor,
+  );
   await expect(createReport(deps(), f.author, f.input, context())).rejects.toThrow();
 });
 
@@ -437,14 +470,21 @@ test('moderator inspection resolves anchored records without joining partitions'
   expect((await readReport(deps(), newId(0x9810), readContext(f.moderator))).value).toBeNull();
 });
 
+// Public grant commands and native report projection run outside the measured growth bound.
 test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
   const f = await fixture();
   const db = await openGrowthDatabase(system.database.pool.options.connectionString);
+  const governance = await accountActor(governanceBearer);
+  const renew = (actor: typeof f.author) =>
+    system.auth.issue({ accountId: actor.accountId, clientId: actor.clientId, scopes: [...actor.scopes] });
+  let authorBearer: string;
+  let moderatorBearer: string;
   const grow = async (_db: { admin: Pool }, scale: number, previous: number) => {
     if (previous === 0) {
       // Fixed background at the smallest scale gives the native planner realistic
       // grant statistics. These unrelated resources grant nothing on the target.
       for (let index = 0; index < 4096; index++) {
+        if (index % 256 === 0) governanceBearer = (await renew(governance)).bearer;
         await grant(
           { kind: 'post', id: newId(routeOf(f.target.id)!) },
           f.moderator.accountId,
@@ -454,11 +494,15 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       await _db.admin.query('ANALYZE access.resource_grant');
     }
     // Setup is outside capture. Same-target distractors exercise the hot reverse-index prefix.
+    let author = f.author;
     for (let index = previous; index < scale; index++) {
-      const author = await accountActor(system.actors.author.bearer);
+      if ((index - previous) % 256 === 0) author = await accountActor((await renew(f.author)).bearer);
       const distractor = await createReport(deps(), author, { ...f.input, evidence: `Distractor ${index}` }, context());
       await reportEvent(distractor.value.reportId);
     }
+    // Native tokens expire after five minutes; renew outside every measured scale.
+    authorBearer = (await renew(f.author)).bearer;
+    moderatorBearer = (await renew(f.moderator)).bearer;
   };
   try {
     const report = await checkGrowth(db, {
@@ -467,11 +511,11 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow,
       operation: async (observed, _scale, repetition) => {
-        const author = await system.access.authenticate(system.actors.author.bearer, {
+        const author = await system.access.authenticate(authorBearer, {
           pool: observed.pool,
           deadline: Date.now() + 30_000,
         });
-        const moderator = await system.access.authenticate(system.actors.moderator.bearer, {
+        const moderator = await system.access.authenticate(moderatorBearer, {
           pool: observed.pool,
           deadline: Date.now() + 30_000,
         });
@@ -487,4 +531,4 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   } finally {
     await db.close();
   }
-}, 120_000);
+}, 600_000);
