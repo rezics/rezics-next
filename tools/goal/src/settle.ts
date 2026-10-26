@@ -96,6 +96,7 @@ export async function settle(
           branch: task.branch,
           worktree: task.worktree,
           declaredPaths: task.brief.paths,
+          protectedPaths: tasks.protectedPaths(task.brief),
           gate: task.brief.acceptance.command,
         },
         (request) => landing.enqueue(request),

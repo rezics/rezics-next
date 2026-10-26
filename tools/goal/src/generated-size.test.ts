@@ -51,6 +51,7 @@ describe('generated file size accounting', () => {
       writeFileSync(join(request.worktree, 'generated.txt'), 'generated\n');
       git(request.worktree, 'add', '.'); git(request.worktree, 'commit', '-m', 'Add undeclared generated output');
       request.declaredPaths = ['source.txt'];
+      (request as typeof request & { protectedPaths?: string[] }).protectedPaths = ['generated.txt'];
       s.queue.enqueue(request);
       await new MergeTrain({ ...s.options, runGate: async () => ({ passed: true, output: '', timedOut: false }) }).run();
       expect(s.outcomes[0]?.stage).toBe('scope');

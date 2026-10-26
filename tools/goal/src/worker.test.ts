@@ -29,7 +29,9 @@ test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then i
     expect(git(task.worktree, ['branch', '--show-current'])).toBe(task.branch);
     expect(git(task.worktree, ['status', '--porcelain'])).toBe('');
     expect(task.briefPath.startsWith(h.settings.stateDirectory)).toBe(true);
-    expect(landings).toEqual([{ taskId: task.id, attempt: 1, worktree: task.worktree, branch: task.branch, declaredPaths: ['result.txt'], gate: ['bun', 'test'] }]);
+    expect(landings).toEqual([{ taskId: task.id, attempt: 1, worktree: task.worktree, branch: task.branch, declaredPaths: ['result.txt'],
+      protectedPaths: h.tasks.protectedPaths(task.brief), gate: ['bun', 'test'] }]);
+    expect(landings[0]!.protectedPaths).toContain('**/auth/**');
     const ref = { taskId: task.id, attempt: 1 }, record = h.store.record(ref)!;
     expect(record.tokens).toEqual({ input: 120, cached: 80, output: 20 });
     expect(record.stepClasses.commit).toBe(1); expect(record.before?.pool).toBe('fixture'); expect(record.after?.pool).toBe('fixture');
