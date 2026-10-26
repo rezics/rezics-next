@@ -28,11 +28,11 @@ Semantic writes use the route action and authority below. When the authority and
 
 ## Agents
 
-An account has one Global subject, stored in `semantic.account_agent`. `ensureAccountAgent` inserts the mapping and creates a `schema:Person` or `schema:Organization` with the ordinary subject writer in the caller's command transaction. The caller must be the account being initialized. Repeated calls return the mapped subject without creating another one. The initial display name is a label in the requested language and its revision records the agent as its source.
+Each account has one graph agent. `accountAgentId(account)` derives a stable v8 subject id from the account id and puts it in the account's route. `ensureAccountAgent(pool, ...)` runs in that partition as platform work, creates a person, organization or software application, and synchronizes the single display-name label. Missing language is stored as `und`. Once verification redirects the derived id, ensure returns the linked catalogue subject without editing it.
 
-`setAgentName` appends a label revision for one language, with the agent as the revision source. It preserves labels in other languages and uses the caller's transaction. It is restricted to the account's own command; sourced facts such as credits and affiliations remain under ordinary statement editing and review.
+The account-route `semantic.account_agent` row retains the derived node id and current subject. A `semantic.account_agent_subject` back link follows the visible subject and maps it to its account. Subject reads expose `account: { id } | null`. A label edit through the ordinary identity writer is refused for an unverified account node. Statement creation and proposal resolve target types and account-agent ownership in the same batched read; only the owning account or platform work can state facts about or pointing to an unverified node. Account-authored statements use the account agent as their source.
 
-`accountAgents` accepts 1–256 routed account IDs and returns an entry for each input account, with a subject ID or `null`. It groups the IDs by account partition and makes one indexed query per touched partition. Account IDs and their agent subjects share the same route, so the mapping never puts an agent in a Realm or Zone.
+`verifyAccountAgent(pool, { account, catalogue, receipt })` is platform work. It requires a visible unlinked person or organization, keeps that catalogue id as the survivor, records the receipt on the merge revision, moves the back link, and emits `agent.linked`. Each subsequently projected inbound statement is recorded in `semantic.account_agent_moved_link` for exact future reversal paging. Ordinary merges refuse account nodes and linked catalogue subjects. `accountAgents` remains a bounded account-index read for existing callers.
 
 ## Relations
 
@@ -131,8 +131,9 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 ### Account agents
 
-- Touches: `ensureAccountAgent` first inserts the account mapping by `account_agent_pkey`; the winning caller then creates one Global subject and its label facts in the same command transaction. Repeated and concurrent calls read the existing mapping and do not create another subject. `setAgentName` appends one label fact and one identity revision by the subject and revision keys. `accountAgents` probes each requested account by primary key in one statement per nonempty account partition. Grow total subjects and accounts; fix the requested batch size and label languages.
-- Bound: Agent creation is O(1) rows plus the initial label fact and uses the ordinary subject creation path. Name changes are O(1) rows. A lookup returns at most 256 rows, uses O(i log N) index work and exactly one semantic statement per touched partition.
+- Touches: Ensure derives the id without an account-index lookup, then reads the node at that id. It creates or updates at most one subject, its label facts and its back link. Verification is the existing merge on the account node's partition. Inbound link moves append one reversal row per moved statement. The write rule adds account ownership to the same batched item-type read. Grow total subjects and links; fix the account, label count, merge page and authorization evidence.
+- Bound: Ensure reads and writes O(1) rows and statements. The write-rule probe adds no statement per target. Verification uses the existing merge page cost plus O(L) ledger rows for L moved statements. `accountAgents` returns at most 256 rows and uses one statement per touched account partition.
+- Growth check: `test/semantic/account-agent-cost.test.ts`: `account agent ensure uses constant statements as account agents grow` at scales `[1, 8, 64]`; `account agent ownership probe uses constant statements at 1, 8 and 64 targets` at scales `[1, 8, 64]`.
 
 ### Anchored subject read
 

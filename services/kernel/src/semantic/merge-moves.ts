@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LINKS_MOVING, LINKS_PROJECTED } from './events.ts';
@@ -12,6 +12,7 @@ import readLastRedirect from './merge-moves-read-last-redirect.sql';
 import readMember from './merge-moves-read-member.sql';
 import updateMember from './merge-moves-update-member.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
+import recordMovedAgentLinks from './account-agent-record-moved-links.sql';
 
 type Move = { phase: 'links' | 'members' | 'done'; cursor: string[] };
 type Link = {
@@ -24,6 +25,8 @@ type Link = {
   source_type: string;
   order_key: string;
   filter_value: string;
+  receipt_id: string | null;
+  account_id: string | null;
 };
 const projected = (id: string) => ({ type: LINKS_PROJECTED, data: { subjects: [id] } });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -162,6 +165,22 @@ export async function moveMergePage(
         transaction_id: transactionId,
         changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
       });
+    const verification = page.value.links.filter((link) => link.receipt_id && link.account_id);
+    if (verification.length) {
+      const first = verification[0]!;
+      await recordMovedAgentLinks.run(tx as PoolClient, {
+        route,
+        receipt_id: first.receipt_id,
+        account_id: first.account_id,
+        survivor,
+        moved_from: id,
+        links: verification.map((link) => ({
+          receipt_id: link.receipt_id,
+          account_id: link.account_id,
+          statement_id: link.statement_id,
+        })),
+      });
+    }
     await updateMember.run(tx, {
       route,
       subject_id: survivor,

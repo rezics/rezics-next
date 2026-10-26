@@ -1,5 +1,16 @@
-SELECT property, source_subject_id::text, statement_id::text, source_revision,
-       source_security_revision::text, present, source_type, order_key, filter_value::text
-FROM semantic.inbound_link WHERE route = :route::integer AND subject_id = :subject_id::uuid AND present
-AND (property, source_subject_id, statement_id, filter_value) > (:after_property::text, :after_source::uuid, :after_statement::uuid, :after_filter::uuid)
-ORDER BY property, source_subject_id, statement_id, filter_value LIMIT 100;
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :subject_id::uuid AS subject_id,
+         :after_property::text AS after_property, :after_source::uuid AS after_source,
+         :after_statement::uuid AS after_statement, :after_filter::uuid AS after_filter
+)
+SELECT link.property, link.source_subject_id::text, link.statement_id::text, link.source_revision,
+       link.source_security_revision::text, link.present, link.source_type, link.order_key,
+       link.filter_value::text, agent.receipt_id, agent.account_id::text AS account_id
+FROM input
+JOIN semantic.inbound_link AS link ON link.route = input.route AND link.subject_id = input.subject_id
+LEFT JOIN semantic.account_agent AS agent
+  ON agent.route = input.route AND agent.agent_id = input.subject_id AND agent.verified
+WHERE link.present
+AND (link.property, link.source_subject_id, link.statement_id, link.filter_value) >
+    (input.after_property, input.after_source, input.after_statement, input.after_filter)
+ORDER BY link.property, link.source_subject_id, link.statement_id, link.filter_value LIMIT 100;

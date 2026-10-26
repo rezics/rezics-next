@@ -33,7 +33,7 @@ import {
   type Adoption,
   type Candidate,
 } from './slots.ts';
-import { readItemTypes } from './subject.ts';
+import { accountSource, assertAgentStatementAccess, readItemDetails, type AgentSelfSource } from './subject.ts';
 import { contextSnapshot } from './context.ts';
 import { matchesTarget } from './targets.ts';
 import changeCurrentFacts from './change-current-facts.sql';
@@ -172,7 +172,7 @@ export async function writeProposal(
   tx: CommandTransaction,
   transactionId: string,
   options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & {
-    source?: Source;
+    source?: Source | AgentSelfSource;
     /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
     allowContent?: boolean;
     /** Runs after the candidate id and revision are allocated and before the candidate row is inserted. */
@@ -192,12 +192,10 @@ export async function writeProposal(
     options.allowContent === true,
     options.source === undefined,
   );
-  const types = await readItemTypes(
-    tx,
-    input.items.map((item) => item.id),
-  );
+  const details = await readItemDetails(tx, [options.subject, ...input.items.map((item) => item.id)]);
+  assertAgentStatementAccess(tx, [options.subject, ...input.items.map((item) => item.id)], details);
   const errors = input.items.flatMap((item) =>
-    matchesTarget(options.release.release, types.get(item.id) ?? '', item.targets)
+    matchesTarget(options.release.release, details.get(item.id)?.type ?? '', item.targets)
       ? []
       : [{ pointer: item.pointer, code: 'out_of_range' as const }],
   );
@@ -236,7 +234,9 @@ export async function writeProposal(
       revision,
       release: options.release.digest,
       transaction_id: transactionId,
-      source: options.source ?? null,
+      source:
+        options.source ??
+        accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
     });
     await updateSubjectRelease.run(tx, {
       route,

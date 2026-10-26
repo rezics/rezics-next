@@ -140,6 +140,7 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
   for (const entry of statements) expect(routeOf(entry.id)).toBe(route);
   expect(await readSubject(pool, subject.id, allow)).toEqual({
     subject,
+    account: null,
     summary: {
       id: subject.id,
       type: 'bf:Instance',

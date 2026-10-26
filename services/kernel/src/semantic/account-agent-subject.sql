@@ -1,7 +1,7 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id
 )
-SELECT agent.subject_id::text AS id,
+SELECT subject.subject_id::text AS id,
        subject.type,
        latest.revision,
        subject.current_facts,
@@ -9,10 +9,9 @@ SELECT agent.subject_id::text AS id,
        COALESCE(labels.label_values, '{}'::jsonb) AS labels,
        COALESCE(labels.sequences, '{}'::jsonb) AS label_sequences,
        redirect.target::text AS redirect
-FROM semantic.account_agent AS agent
-CROSS JOIN input
+FROM input
 JOIN semantic.subject AS subject
-  ON subject.route = input.route AND subject.subject_id = agent.subject_id
+  ON subject.route = input.route AND subject.subject_id = input.subject_id
 JOIN LATERAL (
   SELECT revision
   FROM semantic.revision
@@ -37,6 +36,4 @@ LEFT JOIN LATERAL (
   ORDER BY sequence DESC
   LIMIT 1
 ) AS redirect ON true
-WHERE agent.account_id = :account_id::uuid
-  AND agent.route = input.route
-  AND subject.visibility = 'visible';
+WHERE subject.visibility = 'visible';

@@ -16,6 +16,7 @@ import insertRedirect from './merges-insert-redirect.sql';
 import insertRevision from './merges-insert-revision.sql';
 import readLatestRevision from './merges-read-latest-revision.sql';
 import readVisible from './merges-read-visible.sql';
+import { AccountAgentVerificationError, accountAgentsForSubjects } from './agents.ts';
 
 export class SubjectRedirectError extends Error {
   constructor(
@@ -42,6 +43,7 @@ export async function mergeSubjects(
   pool: Pool,
   options: {
     subjects: string[];
+    survivor?: string;
     actor: AccountActor;
     idempotencyKey: string;
     digest: Uint8Array;
@@ -51,7 +53,12 @@ export async function mergeSubjects(
     clock?: () => Date;
   },
 ) {
-  const [survivor, redirected] = [...options.subjects].sort() as [string, string];
+  const requestedSurvivor = options.survivor;
+  if (requestedSurvivor !== undefined && !options.subjects.includes(requestedSurvivor))
+    throw new EditorialConflictError();
+  const [defaultSurvivor, defaultRedirected] = [...options.subjects].sort() as [string, string];
+  const survivor = requestedSurvivor ?? defaultSurvivor;
+  const redirected = options.subjects.find((subject) => subject !== survivor) ?? defaultRedirected;
   if (survivor === redirected) throw new EditorialConflictError();
   // Preserve the preflight result until after receipt lookup so a later merge cannot invalidate a replay.
   const kept = await withConnection(pool, (client) => mergeSubject(client, survivor)).catch((error: unknown) => {
@@ -81,52 +88,85 @@ export async function mergeSubjects(
     },
     async (tx, { transactionId }) => {
       if (kept instanceof Error) throw kept;
-      const gone = await mergeSubject(tx, redirected);
-      if (gone.type !== kept.type) throw new EditorialConflictError();
-      const latest = (await readLatestRevision.run(tx, { route, subject_id: redirected }))!;
-      const revision = latest.revision + 1;
-      const securityRevision = Number(latest.security_revision);
-      await insertRevision.run(tx, {
-        route,
-        subject_id: redirected,
-        revision,
-        release: options.release.digest,
-        transaction_id: transactionId,
+      return mergeSubjectsInCommand(tx, transactionId, {
+        survivor,
+        redirected,
+        release: options.release,
       });
-      await updateSubjectRelease.run(tx, {
-        route,
-        subject_id: redirected,
-        release: options.release.digest,
-      });
-      await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: -1 });
-      await insertRedirect.run(tx, {
-        route,
-        subject_id: redirected,
-        target: survivor,
-        transaction_id: transactionId,
-      });
-      const facts = [];
-      for (const property of options.release.release.types[gone.type]?.properties ?? []) {
-        facts.push(...(await slotView(tx, redirected, property)).facts);
-      }
-      const changes = linkChanges(facts, [], factDataTypes(options.release.release, facts), {
-        release: options.release.release,
-        type: gone.type,
-      });
-      const events: { type: string; subject: string; data: unknown }[] = [
-        { type: SUBJECT_MERGED, subject: redirected, data: { id: redirected, survivor } },
-      ];
-      if (changes.length)
-        events.push({
-          type: LINKS_CHANGED,
-          subject: redirected,
-          data: { subject: redirected, revision, security_revision: securityRevision, changes },
-        });
-      return { value: { survivor, redirected, revision }, events };
     },
   );
   return {
     ...command.value,
     component: { partition: command.partition, epoch: command.epoch, position: command.position },
   };
+}
+
+/** The redirect and revision work shared by ordinary and verified account-agent merges. */
+export async function mergeSubjectsInCommand(
+  tx: CommandTransaction,
+  transactionId: string,
+  options: {
+    survivor: string;
+    redirected: string;
+    release: { digest: string; release: Release };
+    verificationReceiptId?: string;
+    allowAccountAgent?: boolean;
+  },
+) {
+  if (options.survivor === options.redirected) throw new EditorialConflictError();
+  const kept = await mergeSubject(tx, options.survivor);
+  const gone = await mergeSubject(tx, options.redirected);
+  const linked = await accountAgentsForSubjects(tx, [options.survivor, options.redirected]);
+  if (options.allowAccountAgent) {
+    if (kept.type !== 'schema:Person' && kept.type !== 'schema:Organization')
+      throw new AccountAgentVerificationError('The catalogue subject must be a person or organization');
+    if (linked.has(options.survivor))
+      throw new AccountAgentVerificationError('The catalogue subject is already an account agent');
+  } else {
+    if (linked.has(options.survivor) || linked.has(options.redirected)) throw new EditorialConflictError();
+    if (gone.type !== kept.type) throw new EditorialConflictError();
+  }
+  const route = routeOf(options.redirected);
+  if (route === null) throw new SubjectNotFoundError();
+  const latest = (await readLatestRevision.run(tx, { route, subject_id: options.redirected }))!;
+  const revision = latest.revision + 1;
+  const securityRevision = Number(latest.security_revision);
+  await insertRevision.run(tx, {
+    route,
+    subject_id: options.redirected,
+    revision,
+    release: options.release.digest,
+    transaction_id: transactionId,
+    verification_receipt_id: options.verificationReceiptId ?? null,
+  });
+  await updateSubjectRelease.run(tx, {
+    route,
+    subject_id: options.redirected,
+    release: options.release.digest,
+  });
+  await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: -1 });
+  await insertRedirect.run(tx, {
+    route,
+    subject_id: options.redirected,
+    target: options.survivor,
+    transaction_id: transactionId,
+  });
+  const facts = [];
+  for (const property of options.release.release.types[gone.type]?.properties ?? []) {
+    facts.push(...(await slotView(tx, options.redirected, property)).facts);
+  }
+  const changes = linkChanges(facts, [], factDataTypes(options.release.release, facts), {
+    release: options.release.release,
+    type: gone.type,
+  });
+  const events: { type: string; subject: string; data: unknown }[] = [
+    { type: SUBJECT_MERGED, subject: options.redirected, data: { id: options.redirected, survivor: options.survivor } },
+  ];
+  if (changes.length)
+    events.push({
+      type: LINKS_CHANGED,
+      subject: options.redirected,
+      data: { subject: options.redirected, revision, security_revision: securityRevision, changes },
+    });
+  return { value: { survivor: options.survivor, redirected: options.redirected, revision }, events };
 }

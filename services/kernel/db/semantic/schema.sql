@@ -109,7 +109,44 @@ CREATE TABLE semantic.account_agent (
     account_id uuid NOT NULL,
     route integer NOT NULL,
     subject_id uuid NOT NULL,
-    CONSTRAINT account_agent_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    agent_id uuid NOT NULL,
+    verified boolean DEFAULT false NOT NULL,
+    receipt_id text,
+    CONSTRAINT account_agent_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_agent_agent_route_check CHECK ((route = ((get_byte(uuid_send(agent_id), 10) * 256) + get_byte(uuid_send(agent_id), 11)))),
+    CONSTRAINT account_agent_verification_receipt_check CHECK (((verified AND (receipt_id IS NOT NULL) AND ((length(receipt_id) >= 1) AND (length(receipt_id) <= 255))) OR ((NOT verified) AND (receipt_id IS NULL))))
+);
+
+
+--
+-- Name: account_agent_moved_link; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.account_agent_moved_link (
+    route integer NOT NULL,
+    receipt_id text NOT NULL,
+    account_id uuid NOT NULL,
+    survivor uuid NOT NULL,
+    moved_from uuid NOT NULL,
+    statement_id uuid NOT NULL,
+    CONSTRAINT account_agent_moved_link_receipt_check CHECK (((length(receipt_id) >= 1) AND (length(receipt_id) <= 255)))
+);
+
+
+--
+-- Name: account_agent_subject; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.account_agent_subject (
+    route integer NOT NULL,
+    account_route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    verified boolean DEFAULT false NOT NULL,
+    receipt_id text,
+    CONSTRAINT account_agent_subject_account_route_check CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_agent_subject_receipt_check CHECK (((verified AND (receipt_id IS NOT NULL) AND ((length(receipt_id) >= 1) AND (length(receipt_id) <= 255))) OR ((NOT verified) AND (receipt_id IS NULL)))),
     CONSTRAINT account_agent_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
 );
 
@@ -327,7 +364,6 @@ CREATE TABLE semantic.merge_member (
     member_id uuid NOT NULL,
     phase text DEFAULT 'links'::text NOT NULL,
     cursor jsonb DEFAULT '[]'::jsonb NOT NULL,
-    CONSTRAINT merge_member_check CHECK ((subject_id < member_id)),
     CONSTRAINT merge_member_phase_check CHECK ((phase = ANY (ARRAY['links'::text, 'members'::text, 'done'::text])))
 );
 
@@ -376,8 +412,7 @@ CREATE TABLE semantic.redirect (
     subject_id uuid NOT NULL,
     sequence integer NOT NULL,
     target uuid NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    CONSTRAINT redirect_check CHECK ((target < subject_id))
+    recorded_transaction_id uuid NOT NULL
 );
 
 
@@ -407,6 +442,7 @@ CREATE TABLE semantic.revision (
     release text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     source jsonb,
+    verification_receipt_id text,
     CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text, 'identity'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
@@ -469,19 +505,43 @@ ALTER TABLE ONLY semantic.acceptance
 
 
 --
+-- Name: account_agent account_agent_agent_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.account_agent
+    ADD CONSTRAINT account_agent_agent_id_key UNIQUE (route, agent_id);
+
+
+--
+-- Name: account_agent_moved_link account_agent_moved_link_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.account_agent_moved_link
+    ADD CONSTRAINT account_agent_moved_link_pkey PRIMARY KEY (route, receipt_id, moved_from, statement_id);
+
+
+--
 -- Name: account_agent account_agent_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.account_agent
-    ADD CONSTRAINT account_agent_pkey PRIMARY KEY (account_id);
+    ADD CONSTRAINT account_agent_pkey PRIMARY KEY (route, account_id);
 
 
 --
--- Name: account_agent account_agent_route_subject_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+-- Name: account_agent_subject account_agent_subject_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
-ALTER TABLE ONLY semantic.account_agent
-    ADD CONSTRAINT account_agent_route_subject_id_key UNIQUE (route, subject_id);
+ALTER TABLE ONLY semantic.account_agent_subject
+    ADD CONSTRAINT account_agent_subject_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: account_agent_subject account_agent_subject_route_account_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.account_agent_subject
+    ADD CONSTRAINT account_agent_subject_route_account_id_key UNIQUE (route, account_id);
 
 
 --

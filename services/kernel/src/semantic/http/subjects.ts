@@ -46,8 +46,14 @@ import type { CommandAuthorization } from '../../command/command.ts';
 import { REACTION_KINDS } from '../../content/events.ts';
 import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
 import readVisibility from '../read-visibility.sql';
+import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../agents.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
+const AgentSelfSourceSchema = t.Object(
+  { kind: t.Literal('agent'), subject: t.String({ format: 'uuid' }) },
+  { additionalProperties: false },
+);
+const SemanticSourceSchema = t.Union([SourceSchema, AgentSelfSourceSchema]);
 const ValueSchema = t.Union([
   t.Object({ type: t.Literal('value'), content: t.Any() }, { additionalProperties: false }),
   t.Object({ type: t.Literal('somevalue') }, { additionalProperties: false }),
@@ -115,6 +121,15 @@ function candidateError(error: unknown): never {
   if (error instanceof PageCursorError) throw new ProblemError('invalid_request');
   if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
     throw new ProblemError('forbidden');
+  if (error instanceof AccountAgentLabelEditError)
+    throw new ProblemError('forbidden', {
+      detail: 'Account agent labels are controlled by the account display name.',
+      errors: [{ pointer: '/labels', code: 'unsupported' }],
+    });
+  if (error instanceof AccountAgentWriteDeniedError)
+    throw new ProblemError('forbidden', {
+      detail: `Only the account may state facts about this unverified account agent (${error.subject}).`,
+    });
   throw error;
 }
 const listingErrors = {
@@ -146,6 +161,7 @@ const itemResponse = t.Object({ subject: ItemSchema }, { additionalProperties: f
 const readResponse = t.Object(
   {
     subject: ItemSchema,
+    account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     related: t.Record(t.String(), LabelsSchema),
   },
@@ -412,6 +428,15 @@ function subjectRoutes(
           if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
           if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
             throw new ProblemError('forbidden');
+          if (error instanceof AccountAgentLabelEditError)
+            throw new ProblemError('forbidden', {
+              detail: 'Account agent labels are controlled by the account display name.',
+              errors: [{ pointer: '/labels', code: 'unsupported' }],
+            });
+          if (error instanceof AccountAgentWriteDeniedError)
+            throw new ProblemError('forbidden', {
+              detail: `Only the account may state facts about this unverified account agent (${error.subject}).`,
+            });
           throw error;
         }
       },
@@ -612,7 +637,7 @@ function subjectRoutes(
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
         set.headers['cache-control'] = 'no-cache';
-        return { subject: result.subject, summary: result.summary, related };
+        return { subject: result.subject, account: result.account, summary: result.summary, related };
       },
     )
     .post(
@@ -1342,10 +1367,10 @@ function subjectRoutes(
               candidates: t.Array(
                 t.Object({
                   id: t.String({ format: 'uuid' }),
-                  source: t.Union([SourceSchema, t.Null()]),
+                  source: t.Union([SemanticSourceSchema, t.Null()]),
                   retracted: t.Union([t.Integer(), t.Null()]),
                   retraction: t.Union([
-                    t.Object({ source: SourceSchema, references: t.Array(BatchReferenceSchema) }),
+                    t.Object({ source: SemanticSourceSchema, references: t.Array(BatchReferenceSchema) }),
                     t.Null(),
                   ]),
                   statement: StatementSchema,
@@ -1414,7 +1439,7 @@ function subjectRoutes(
                   revision: t.Integer(),
                   kind: t.String(),
                   release: t.String(),
-                  source: t.Union([SourceSchema, t.Null()]),
+                  source: t.Union([SemanticSourceSchema, t.Null()]),
                 }),
               ),
               next: t.Union([t.String(), t.Null()]),

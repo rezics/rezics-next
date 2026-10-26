@@ -6,7 +6,7 @@ import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
@@ -36,6 +36,12 @@ import readTypesStatement from './read-item-types.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import { readRelease as getRelease } from './definitions.ts';
 import { writeFacts } from './write-facts.ts';
+import {
+  AccountAgentLabelEditError,
+  AccountAgentWriteDeniedError,
+  accountAgentId,
+  accountAgentsForSubjects,
+} from './agents.ts';
 
 export { writeFacts } from './write-facts.ts';
 
@@ -144,12 +150,11 @@ export async function writeSubject(
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
   const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
   const dataTypes = factDataTypes(options.release.release, facts);
-  const itemTypes = await readItemTypes(
-    tx,
-    checked.targets.map((item) => item.id),
-  );
+  const statementSubjects = [subjectId, ...checked.targets.map((item) => item.id)];
+  const itemDetails = await readItemDetails(tx, statementSubjects);
+  assertAgentStatementAccess(tx, statementSubjects, itemDetails);
   const targetErrors = checked.targets.flatMap((item) => {
-    const targetType = itemTypes.get(item.id);
+    const targetType = itemDetails.get(item.id)?.type;
     return targetType && matchesTarget(options.release.release, targetType, item.targets)
       ? []
       : [{ pointer: item.pointer, code: 'out_of_range' as const }];
@@ -168,7 +173,7 @@ export async function writeSubject(
     subject_id: subjectId,
     release: options.release.digest,
     transaction_id: transactionId,
-    source: options.source ?? null,
+    source: options.source ?? accountSource(tx, statementSubjects),
   });
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
@@ -216,6 +221,7 @@ export async function writeSubject(
 
 type SubjectReadRow = {
   id: string;
+  account: string | null;
   redirect: string | null;
   type: string;
   revision: number;
@@ -231,6 +237,11 @@ type SubjectReadRow = {
   statement_id: string | null;
   body: unknown;
 };
+
+function listed<T>(result: T[] | T | null): T[] {
+  if (result == null) return [];
+  return Array.isArray(result) ? result : [result];
+}
 
 function asFacts(rows: readonly SubjectReadRow[]): FactRow[] {
   return rows.flatMap((row) =>
@@ -264,11 +275,13 @@ async function withoutFencedFacts(
     ...new Set(facts.flatMap((fact) => (fact.statement_id && fact.fact_revision ? [fact.fact_revision] : []))),
   ];
   // Always probe, including an empty list, so hiding the last shown statement does not drop a statement.
-  const rows = (await readHiddenStatement.run(client, {
-    route,
-    subject_id: subjectId,
-    revisions,
-  })) as { revision: number; source: Source | null }[];
+  const rows = listed(
+    (await readHiddenStatement.run(client, {
+      route,
+      subject_id: subjectId,
+      revisions,
+    })) as { revision: number; source: Source | null }[] | { revision: number; source: Source | null } | null,
+  );
   if (!revisions.length) return facts;
   const sources = new Map(rows.map((row) => [row.revision, row.source]));
   const gone = await fencedIds(
@@ -290,7 +303,12 @@ export async function readSubject(
   context = GLOBAL_CONTEXT,
   routeKey?: Uint8Array,
   summaries: { languages?: readonly string[]; authorize?: SummaryDependencies['authorize'] } = {},
-): Promise<{ subject: Item; summary: SubjectSummary | null; component: SubjectComponent } | null> {
+): Promise<{
+  subject: Item;
+  account: { id: string } | null;
+  summary: SubjectSummary | null;
+  component: SubjectComponent;
+} | null> {
   const route = routeOf(id);
   if (route === null) return null;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
@@ -302,7 +320,9 @@ export async function readSubject(
     if (!partition) {
       return null;
     }
-    const rows = (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[];
+    const rows = listed(
+      (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[] | SubjectReadRow | null,
+    );
     if (!rows.length) {
       return null;
     }
@@ -333,6 +353,7 @@ export async function readSubject(
   const { rows, component, release, statementFacts, resolution } = snapshot;
   const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
   return {
+    account: rows[0]!.account === null ? null : { id: rows[0]!.account },
     summary: active
       ? ((
           await readSubjectSummaries(
@@ -358,6 +379,33 @@ export async function readSubject(
 
 type Queryable = Pick<PoolClient, 'query'>;
 
+export type ItemTypeDetails = {
+  type: string;
+  agentAccountId: string | null;
+  agentVerified: boolean;
+};
+
+export function accountSource(tx: CommandTransaction, statementSubjects: readonly string[]): AgentSelfSource | null {
+  const basis = currentCommand(tx).basis;
+  if (!basis || basis.actorAccountId === null) return null;
+  const subject = accountAgentId(basis.actorAccountId);
+  return statementSubjects.includes(subject) ? { kind: 'agent', subject } : null;
+}
+
+export function assertAgentStatementAccess(
+  tx: CommandTransaction,
+  ids: readonly string[],
+  details: ReadonlyMap<string, ItemTypeDetails>,
+): void {
+  const basis = currentCommand(tx).basis;
+  if (!basis) return;
+  for (const id of new Set(ids)) {
+    const agent = details.get(id);
+    if (agent?.agentAccountId && !agent.agentVerified && agent.agentAccountId !== basis.actorAccountId)
+      throw new AccountAgentWriteDeniedError(id);
+  }
+}
+
 function assertBatch(ids: readonly string[], message: string): void {
   if (ids.length > BATCH_LIMIT) throw new TypeError(message);
 }
@@ -379,18 +427,36 @@ function groupsOf(ids: readonly string[]): Map<number, string[]> {
 }
 
 /** Item targets of one write, one primary-key probe per id and one statement per partition. */
-export async function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>> {
-  assertBatch(ids, 'An item type check accepts at most 256 ids');
-  const types = new Map<string, string>();
+export async function readItemDetails(
+  client: Queryable,
+  ids: readonly string[],
+): Promise<Map<string, ItemTypeDetails>> {
+  if (ids.length > BATCH_LIMIT + 1) throw new TypeError('An item type and account agent check accepts at most 257 ids');
+  const details = new Map<string, ItemTypeDetails>();
   for (const [partition, subjectIds] of groupsOf(ids)) {
-    const rows = (await readTypesStatement.run(client, {
+    const result = (await readTypesStatement.run(client, {
       partition_no: partition,
       routes: subjectIds.map((id) => routeOf(id)!),
       subject_ids: subjectIds,
-    })) as { id: string; type: string }[];
-    for (const row of rows) types.set(row.id, row.type);
+    })) as
+      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }[]
+      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }
+      | null;
+    const rows = result == null ? [] : Array.isArray(result) ? result : [result];
+    for (const row of rows)
+      details.set(row.id, {
+        type: row.type,
+        agentAccountId: row.agent_account_id,
+        agentVerified: row.agent_verified,
+      });
   }
-  return types;
+  return details;
+}
+
+export async function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>> {
+  assertBatch(ids, 'An item type check accepts at most 256 ids');
+  const details = await readItemDetails(client, ids);
+  return new Map([...details].map(([id, detail]) => [id, detail.type]));
 }
 
 export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Map<string, Item['labels']>> {
@@ -398,11 +464,13 @@ export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Ma
   const labels = new Map<string, Item['labels']>();
   await Promise.all(
     [...groupsOf(ids)].map(async ([partition, subjectIds]) => {
-      const rows = (await readLabelsStatement.run(pool, {
-        partition_no: partition,
-        routes: subjectIds.map((id) => routeOf(id)!),
-        subject_ids: subjectIds,
-      })) as { id: string; labels: Record<string, string> }[];
+      const rows = listed(
+        (await readLabelsStatement.run(pool, {
+          partition_no: partition,
+          routes: subjectIds.map((id) => routeOf(id)!),
+          subject_ids: subjectIds,
+        })) as { id: string; labels: Record<string, string> }[] | { id: string; labels: Record<string, string> } | null,
+      );
       for (const row of rows) labels.set(row.id, row.labels ?? {});
     }),
   );
@@ -423,11 +491,13 @@ const relatedLoads = new WeakMap<object, RelatedCache>();
 async function queryRelated(client: Queryable, ids: readonly string[]): Promise<Map<string, RelatedState>> {
   const states = new Map<string, RelatedState>();
   for (const [partition, subjectIds] of groupsOf(ids)) {
-    const rows = (await readRelatedStatement.run(client, {
-      partition_no: partition,
-      routes: subjectIds.map((id) => routeOf(id)!),
-      subject_ids: subjectIds,
-    })) as RelatedState[];
+    const rows = listed(
+      (await readRelatedStatement.run(client, {
+        partition_no: partition,
+        routes: subjectIds.map((id) => routeOf(id)!),
+        subject_ids: subjectIds,
+      })) as RelatedState[] | RelatedState | null,
+    );
     for (const row of rows) states.set(row.id, { ...row, labels: row.labels ?? {} });
   }
   return states;
@@ -517,12 +587,22 @@ export async function updateSubjectIdentity(
     async (tx, { transactionId }) => {
       const visibility = await readIdentityVisibility.run(tx, { route, subject_id: options.subject });
       if (visibility?.visibility !== 'visible') throw new SubjectAccessDeniedError();
+      if (options.labels !== undefined) {
+        const agents = await accountAgentsForSubjects(tx, [options.subject]);
+        const agent = agents.get(options.subject);
+        if (agent && agent.agent_id === options.subject && !agent.verified) throw new AccountAgentLabelEditError();
+      }
       const before = await holderFacts(tx, options.subject, options.release.release);
       const type = options.type ?? before.type;
       if (!options.release.release.types[type])
         throw new SubjectInputError([{ pointer: '/type', code: 'unsupported' }]);
       const facts = options.labels === undefined ? [] : itemFacts(options.subject, { labels: options.labels });
-      const latest = await readSubjectStatement.run(tx, { route, subject_id: options.subject });
+      const latest = listed(
+        (await readSubjectStatement.run(tx, { route, subject_id: options.subject })) as
+          | SubjectReadRow[]
+          | SubjectReadRow
+          | null,
+      );
       if (latest[0]?.redirect) throw new SubjectRedirectError(options.subject, latest[0].redirect);
       const state = await readIdentitySubject.run(tx, { route, subject_id: options.subject });
       if (
