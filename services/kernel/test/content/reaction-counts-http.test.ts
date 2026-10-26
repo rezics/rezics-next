@@ -46,6 +46,7 @@ if (process.argv.includes('--reaction-count-worker')) {
 
   let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
   let authPool: InstanceType<typeof Pool>;
+  const authClientsClosed: Promise<void>[] = [];
   let authDatabaseName = '';
   let host: Awaited<ReturnType<typeof createAuthHost>>;
   let service: Awaited<ReturnType<typeof createAuthHost>>['service'];
@@ -332,6 +333,19 @@ if (process.argv.includes('--reaction-count-worker')) {
     authUrl.pathname = `/${authDatabaseName}`;
     migrateAuth(authUrl.href);
     authPool = new Pool({ connectionString: authUrl.href });
+    // pool.end() resolves once the pool forgets its clients, before their sockets close; 'remove' fires on close.
+    authPool.on('connect', (client) => {
+      authClientsClosed.push(
+        new Promise<void>((closed) => {
+          const onRemove = (removed: unknown) => {
+            if (removed !== client) return;
+            authPool.off('remove', onRemove);
+            closed();
+          };
+          authPool.on('remove', onRemove);
+        }),
+      );
+    });
     const signingKey = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
       kid: 'reaction-counts-http',
@@ -391,6 +405,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     for (const worker of running) await worker.stop();
     await host?.stop();
     if (authPool && !authPool.ending) await authPool.end();
+    await Promise.all(authClientsClosed);
     if (authDatabaseName) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
     await db?.close();
   });
