@@ -33,6 +33,7 @@ import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
 import clientManagementAnchor from './workflow-approvals-client-anchor.sql';
+import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
 import operatorAccount from './operator-account.sql';
 import operatorSlot from './operator-slot.sql';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -384,7 +385,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     };
   }
   /** An automated account is deleted by the managers of its current operator; only the
-   * account itself holds its own delete action. The relation is one anchored point read.
+   * account itself holds its own delete action. The active relation is one anchored point
+   * read; a post-commit resolution matches the tombstone receipt to this operation's effect.
    * A person's sessions are revoked by the person under its own account management or by
    * platform governance, and by nobody else: no read decides it. */
   async function operationDescriptor(
@@ -392,6 +394,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     operation: NativeOperation,
     descriptor: Descriptor,
     deadline: number,
+    approval?: ApprovalRow,
   ): Promise<Descriptor> {
     if (operation.kind === 'revoke')
       return actor.accountId === operation.accountId
@@ -403,9 +406,26 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         readAccount(deadlineClient(client, deadline), routeOf(operation.accountId)!, operation.accountId),
       ),
     );
-    if (subject?.kind !== 'actor' || subject.state !== 'active' || subject.operatorAccountId === null)
-      return descriptor;
-    return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
+    if (subject?.kind === 'actor' && subject.state === 'active' && subject.operatorAccountId !== null)
+      return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
+    if (subject?.kind !== 'actor' || subject.state !== 'deleted' || !approval) return descriptor;
+    const subjectRoute = routeOf(operation.accountId)!;
+    const priorOperator = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        tombstoneOperator.run(deadlineClient(client, deadline), {
+          route: subjectRoute,
+          account_id: operation.accountId,
+          approval_route: approval.route,
+          approval_id: approval.approvalId,
+          partition_no: partitionOf(subjectRoute),
+          actor_id: actor.accountId,
+          idempotency_key: `${subjectRoute}:wf:${hash([actor.accountId, approval.operationKey])}:tombstone`,
+        }),
+      ),
+    );
+    return priorOperator?.priorOperatorAccountId
+      ? { action: 'account:manage', target: priorOperator.priorOperatorAccountId, targetKind: 'either' }
+      : descriptor;
   }
   /** A person is an actor without an operator. It may act for a principal through a
    * principal assignment: the approval stores that reference (`requestedBy`), and
@@ -517,7 +537,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     const { row, actor } = await within(bounded.deadline, () =>
       readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
     );
-    const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline);
+    const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline, row);
     requireAllowed(
       !caller ||
         (caller.accountId === actor.accountId &&

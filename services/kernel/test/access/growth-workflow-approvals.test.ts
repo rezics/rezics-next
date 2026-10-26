@@ -71,6 +71,56 @@ async function fixture() {
   return { actor, target, token, native, approvals, operation, input, approval };
 }
 
+async function postDeletionFixture() {
+  const f = await fixture();
+  const operator = newId(targetRoute);
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+    VALUES ($1,$2,'actor','active',$2,true)`,
+    [targetRoute, operator],
+  );
+  await db.admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    targetRoute,
+    f.target,
+    operator,
+  ]);
+  await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [targetRoute, f.target]);
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [targetRoute, operator, f.actor],
+  );
+  const deletion: AccountOperation = { kind: 'delete', accountId: f.target, authorization: 'input' };
+  const now = Math.floor(Date.now() / 1000);
+  const bearer = await new SignJWT({
+    sub: f.actor,
+    client_id: 'web',
+    scope: 'account:delete account:manage',
+    authn_epoch: 1,
+    iat: now,
+    exp: now + 300,
+    auth_time: now,
+    amr: ['pwd'],
+  })
+    .setIssuer(issuer)
+    .setAudience(audience)
+    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
+    .sign(signing.privateKey);
+  const approved = await f.approvals.approve(
+    bearer,
+    { operationKey: 'post-deletion-growth', operation: deletion },
+    context(),
+  );
+  const request = await f.approvals.resolve(approved.reference, deletion, context());
+  const binding = workflowApprovalBinding(request)!;
+  const commands = createLifecycleCommands({ pool: db.pool, access: f.native });
+  await commands.tombstone(request, {
+    accountId: f.target,
+    key: `${binding.commandKeyPrefix}:tombstone`,
+  });
+  return { ...f, operator, deletion, approved };
+}
+
 for (const population of ['same-actor history', 'unrelated accounts and resources'] as const) {
   for (const mode of ['approve', 'resolve', 'denied replay', 'expiry sweep'] as const) {
     test(`${mode} stays bounded as ${population} grows with K fixed`, async () => {
@@ -160,3 +210,60 @@ for (const population of ['same-actor history', 'unrelated accounts and resource
     }, 60_000);
   }
 }
+
+test('post-deletion delete approval resolution stays bounded as accounts and receipts grow', async () => {
+  await resetGrowthTables(db.admin, [
+    'access.workflow_approval',
+    'access.lifecycle_fence_receipt',
+    'access.resource_grant',
+    'access.resource_denial',
+    'access.account',
+    'core.receipt',
+  ]);
+  const f = await postDeletionFixture();
+  const report = await checkGrowth(db, {
+    name: 'post-deletion delete approval resolution',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    repetitions: 3,
+    async grow(database, scale, previous) {
+      const ids = Array.from({ length: scale - previous }, () => newId(targetRoute));
+      await database.admin.query(
+        `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+        SELECT $1,id,'actor','active',id,true FROM unnest($2::uuid[]) id`,
+        [targetRoute, ids],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+        SELECT $1,id,$2,'account:manage','(,)',id FROM unnest($3::uuid[]) id`,
+        [targetRoute, f.actor, ids],
+      );
+      const repeatedAccounts = ids.flatMap((id) => [id, id, id, id]);
+      const receiptIds = Array.from({ length: repeatedAccounts.length }, () => newId(targetRoute));
+      const transactionIds = Array.from({ length: repeatedAccounts.length }, () => newId(targetRoute));
+      await database.admin.query(
+        `INSERT INTO access.lifecycle_fence_receipt
+        (route,account_id,receipt_id,minimum_authn_epoch,kind,prior_operator_account_id,transaction_id)
+        SELECT $1,account_id,receipt_id,1,'fence',NULL,transaction_id
+        FROM unnest($2::uuid[],$3::uuid[],$4::uuid[]) rows(account_id,receipt_id,transaction_id)`,
+        [targetRoute, repeatedAccounts, receiptIds, transactionIds],
+      );
+      await database.admin.query(
+        `INSERT INTO core.receipt
+        (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+        SELECT $1,'account',id,'growth.unrelated','seed:'||id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+        FROM unnest($2::uuid[]) id`,
+        [partitionOf(targetRoute), ids],
+      );
+    },
+    async operation() {
+      return f.approvals.resolve(f.approved.reference, f.deletion, context());
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
+  for (const sample of report.samples) {
+    expect(sample.cost.relations?.['access.lifecycle_fence_receipt']?.sequentialScans).toBe(0);
+    expect(sample.cost.relations?.['core.receipt']?.sequentialScans).toBe(0);
+    expect(sample.cost.relations?.['access.lifecycle_fence_receipt']?.rows).toBeLessThanOrEqual(6);
+  }
+});

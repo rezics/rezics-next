@@ -78,6 +78,49 @@ async function fixture() {
   };
   return { actor, target, operation, bearer: await token(actor), operationKey: `logical-${actor}` };
 }
+async function managedDeleteApproval(options: { directDelete?: boolean } = {}) {
+  const f = await fixture();
+  const operator = newId(0x2468);
+  await admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+    VALUES ($1,$2,'actor','active',$2,true)`,
+    [routeOf(operator), operator],
+  );
+  await admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.target),
+    f.target,
+    operator,
+  ]);
+  if (!options.directDelete)
+    await admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
+      routeOf(f.target),
+      f.target,
+      'account:delete',
+    ]);
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [routeOf(operator), operator, f.actor],
+  );
+  const native = access();
+  const approvals = build(native);
+  const deletion: AccountOperation = { kind: 'delete', accountId: f.target, authorization: 'input' };
+  const bearer = await token(f.actor, { scope: 'account:delete account:manage' });
+  const approved = await approvals.approve(
+    bearer,
+    { operationKey: `managed-delete-${f.actor}`, operation: deletion },
+    context(),
+  );
+  return { ...f, operator, native, approvals, deletion, approved, bearer };
+}
+async function tombstoneThroughApproval(value: Awaited<ReturnType<typeof managedDeleteApproval>>) {
+  const request = await value.approvals.resolve(value.approved.reference, value.deletion, context());
+  const binding = workflowApprovalBinding(request)!;
+  await createLifecycleCommands({ pool, access: value.native }).tombstone(request, {
+    accountId: value.target,
+    key: `${binding.commandKeyPrefix}:tombstone`,
+  });
+}
 beforeAll(async () => {
   await admin.query('SELECT 1 FROM access.account LIMIT 1');
 });
@@ -388,6 +431,48 @@ test('a delete approval for an automated account follows its current operator', 
   ]);
   await denied(approvals.resolve(approved.reference, deletion, context()));
   await denied(approvals.approve(bearer, { operationKey: 'moved-delete', operation: deletion }, context()));
+});
+
+test('a delete approval keeps its own tombstone operator basis after deletion commits', async () => {
+  const f = await managedDeleteApproval();
+  await tombstoneThroughApproval(f);
+  expect(
+    await admin.query('SELECT state,operator_account_id FROM access.account WHERE route=$1 AND account_id=$2', [
+      routeOf(f.target),
+      f.target,
+    ]),
+  ).toMatchObject({ rows: [{ state: 'deleted', operator_account_id: null }] });
+  expect(await f.approvals.resolve(f.approved.reference, f.deletion, context())).toHaveProperty(
+    'actor.accountId',
+    f.actor,
+  );
+});
+
+test('a delete approval rechecks management of its tombstone operator at resolution time', async () => {
+  const f = await managedDeleteApproval();
+  await tombstoneThroughApproval(f);
+  await admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+    routeOf(f.operator),
+    f.operator,
+    f.actor,
+  ]);
+  await denied(f.approvals.resolve(f.approved.reference, f.deletion, context()));
+});
+
+test('a tombstone from another transaction keeps the delete approval fallback', async () => {
+  const f = await managedDeleteApproval({ directDelete: true });
+  const native = access();
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:delete','(,)',$3)`,
+    [routeOf(f.target), f.target, f.target],
+  );
+  const subject = await native.authenticate(await token(f.target, { scope: 'account:delete' }), context());
+  await createLifecycleCommands({ pool, access: native }).tombstone(
+    { actor: subject, deadline: Date.now() + 5000 },
+    { accountId: f.target, key: `external-delete-${f.target}` },
+  );
+  await denied(f.approvals.resolve(f.approved.reference, f.deletion, context()));
 });
 
 test('expiry sweep is bounded and cannot revive an expired approval', async () => {
