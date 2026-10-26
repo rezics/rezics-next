@@ -66,10 +66,16 @@ export class ProblemError extends Error {
   readonly detail: string | undefined;
   readonly errors: readonly FieldError[] | undefined;
   readonly headers: Record<string, string> | undefined;
+  readonly effectStatus: 'not_applicable' | 'not_applied' | undefined;
 
   constructor(
     code: ProblemCode,
-    options: { detail?: string; errors?: readonly FieldError[]; headers?: Record<string, string> } = {},
+    options: {
+      detail?: string;
+      errors?: readonly FieldError[];
+      headers?: Record<string, string>;
+      effectStatus?: 'not_applicable' | 'not_applied';
+    } = {},
   ) {
     super(options.detail ?? PROBLEMS[code].title);
     this.name = 'ProblemError';
@@ -77,6 +83,7 @@ export class ProblemError extends Error {
     this.detail = options.detail === undefined ? undefined : truncateDetail(options.detail);
     this.errors = options.errors;
     this.headers = options.headers;
+    this.effectStatus = options.effectStatus;
   }
 }
 
@@ -246,7 +253,10 @@ export function problemResponse(error: unknown, context: { method: string; id: s
     status: definition.status,
     code,
     retryable: definition.retryable,
-    effect_status: effectStatus(context.method, context.action),
+    effect_status:
+      error instanceof ProblemError && error.effectStatus
+        ? error.effectStatus
+        : effectStatus(context.method, context.action),
     request_id: context.id,
     ...(detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),

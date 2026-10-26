@@ -46,7 +46,7 @@ const PARTITION_WORKFLOW = 'content.collect.partition';
 const BOARD_RANK_WORKFLOW = 'content.board-rank.refresh';
 const BATCH_SIZE = 100;
 const PARTITION_CONCURRENCY = 8;
-const RETRY = { retriesAllowed: true, intervalSeconds: 1, backoffRate: 1, maxAttempts: 100 } as const;
+const STEP_RETRY_DELAY_SECONDS = 1;
 
 type ContentWorkOptions = Readonly<{
   storage: MediaStorage;
@@ -56,6 +56,8 @@ type ContentWorkOptions = Readonly<{
   fetchConfig: MediaImportFetchConfig;
   /** Trusted operational fixture only. Production always enumerates all fixed partition numbers. */
   collectionPartitions?: readonly number[];
+  /** Delay between attempts of a failed durable step. Production keeps one second; a test may pass a shorter one. */
+  stepRetryDelaySeconds?: number;
 }>;
 
 function validateInput(input: ContentWorkInput): void {
@@ -89,6 +91,9 @@ export function createContentWork(options: ContentWorkOptions): WorkModule {
     partitions.some((partition) => !Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
   )
     throw new RangeError('Invalid content collection partitions');
+  const retryDelay = options.stepRetryDelaySeconds ?? STEP_RETRY_DELAY_SECONDS;
+  if (!Number.isFinite(retryDelay) || retryDelay <= 0 || retryDelay > STEP_RETRY_DELAY_SECONDS)
+    throw new RangeError('Invalid content step retry delay');
   return { name: 'content', register: (context) => registerWork(context, options, partitions) };
 }
 
@@ -98,6 +103,12 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
+  const retry = {
+    retriesAllowed: true,
+    intervalSeconds: options.stepRetryDelaySeconds ?? STEP_RETRY_DELAY_SECONDS,
+    backoffRate: 1,
+    maxAttempts: 100,
+  } as const;
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
@@ -106,7 +117,7 @@ async function registerWork(
       validateInput(input);
       return createErasureJob(context.pool, storage).purgeObject(input.mediaId);
     },
-    { name: 'content.purge.step', ...RETRY },
+    { name: 'content.purge.step', ...retry },
   );
   DBOS.registerWorkflow(async (input: ContentWorkInput) => purge(input), { name: CONTENT_WORKFLOWS.purge });
 
@@ -139,7 +150,7 @@ async function registerWork(
       const imageStorage = rejectionStorage(input);
       return createImageJob(context.pool, imageStorage).process(input.mediaId);
     },
-    { name: 'content.image.step', ...RETRY },
+    { name: 'content.image.step', ...retry },
   );
   DBOS.registerWorkflow(async (input: ContentWorkInput) => image(input), { name: CONTENT_WORKFLOWS.image });
 
@@ -158,7 +169,7 @@ async function registerWork(
         input.mediaId,
       );
     },
-    { name: 'content.import.step', ...RETRY },
+    { name: 'content.import.step', ...retry },
   );
   DBOS.registerWorkflow(async (input: ContentWorkInput) => imported(input), { name: CONTENT_WORKFLOWS.importFromUrl });
 
@@ -166,7 +177,7 @@ async function registerWork(
   // deterministic bounded actions; DBOS records each invocation in native order.
   const authorStep = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {
     name: 'content.authorErase.step',
-    ...RETRY,
+    ...retry,
     shouldRetry: (error) => !(error instanceof Error && error.name === 'ErasurePermissionDenied'),
   });
   const durableStep: NativeDurableStep = <T>(name: string, action: () => Promise<T>) =>
@@ -183,7 +194,9 @@ async function registerWork(
           durableStep,
           erasureJob: createErasureJob(context.pool, storage),
           checkpoint: {
-            read: () => DBOS.getEvent<OperationProgress>(DBOS.workflowID!, CONTENT_OPERATION_PROGRESS, 0),
+            // A zero timeout reads again whenever the first read returns within the same millisecond, so the statement
+            // count varies from run to run. A deadline already past makes the read exactly once.
+            read: () => DBOS.getEvent<OperationProgress>(DBOS.workflowID!, CONTENT_OPERATION_PROGRESS, -1),
             write: (_id, progress) => DBOS.setEvent(CONTENT_OPERATION_PROGRESS, progress),
           },
         },
@@ -203,7 +216,7 @@ async function registerWork(
       if (!outcome.complete && outcome.examined === 0) throw new Error('Content collection has pending work');
       return outcome;
     },
-    { name: 'content.collect.step', ...RETRY },
+    { name: 'content.collect.step', ...retry },
   );
   const drain = DBOS.registerWorkflow(
     async (partition: number) => {
@@ -242,7 +255,7 @@ async function registerWork(
     },
     {
       name: 'content.board-rank.refresh.step',
-      ...RETRY,
+      ...retry,
     },
   );
   DBOS.registerWorkflow(
@@ -280,7 +293,7 @@ async function registerWork(
   const erasedPostEvent = 'com.rezics.content.post.erased.v1' as const;
   const clearErasedPost = DBOS.registerStep(
     async (postId: string) => clearErasedPostRevisions(context.pool, { postId }, Date.now() + 120_000),
-    { name: 'content.erasePostRevisions.step', ...RETRY },
+    { name: 'content.erasePostRevisions.step', ...retry },
   );
   DBOS.registerWorkflow(async (postId: string) => clearErasedPost(postId), { name: 'content.erasePostRevisions' });
   context.addEffects([
@@ -413,7 +426,9 @@ export function createContentOperationClient({
       return within(context.deadline, async () => {
         const workflow = await client.getWorkflow(workflowID);
         if (!workflow || workflow.workflowName !== CONTENT_WORKFLOWS.authorErase) return null;
-        const event = await client.getEvent<OperationProgress>(workflowID, CONTENT_OPERATION_PROGRESS, 0);
+        // A zero timeout reads again whenever the first read returns within the same millisecond, so the statement
+        // count varies from run to run. A deadline already past makes the read exactly once.
+        const event = await client.getEvent<OperationProgress>(workflowID, CONTENT_OPERATION_PROGRESS, -1);
         const progress = event === null ? { processedPosts: 0, erasedRevisions: 0, steps: 0 } : counters(event, true);
         if (workflow.status === 'SUCCESS') {
           const { processedPosts, erasedRevisions } = counters(workflow.output, false);

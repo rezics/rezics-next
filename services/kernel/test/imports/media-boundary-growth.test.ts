@@ -23,10 +23,11 @@ test('native public media and registered jobs stay bounded as hot media and unre
       application: GrowthSample[];
       worker: GrowthSample[];
       auth: GrowthSample[];
+      floors: Record<string, number>;
       raw: { worker: Capture; auth: Capture }[];
       sourceBytes: number;
       capture: { executedJobs: number; sourceRequests: { bytes: number }[]; calls: unknown[] };
-    }>('growth', request);
+    }>('growth', { request, minimumRows: 2_000 });
     for (const owner of [report.application, report.worker, report.auth])
       expect(owner.map((s) => s.scale)).toEqual([1, 8, 64]);
     for (const sample of report.application) {
@@ -42,6 +43,17 @@ test('native public media and registered jobs stay bounded as hot media and unre
       ])
         expect(sample.cost.relations?.[relation]?.sequentialScans).toBe(0);
     }
+    for (const relation of [
+      'content.media',
+      'core.outbox',
+      'core.receipt',
+      'semantic.subject',
+      'access.resource_role_grant',
+    ])
+      expect(
+        report.floors[relation],
+        `${relation} live row floor after scale 1 VACUUM (ANALYZE)`,
+      ).toBeGreaterThanOrEqual(2_000);
     for (const sample of report.worker) {
       expect(sample.cost.relations?.['content.media']).toBeDefined();
       expect(sample.cost.relations?.['dbos.workflow_status']).toBeDefined();

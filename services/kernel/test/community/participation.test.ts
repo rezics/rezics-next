@@ -26,7 +26,9 @@ import {
   principalCommandIdentity,
   runCommand,
 } from '../../src/command/command.ts';
-import { accessCommandAuthorization, type AccessClient } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type Access, type AccessClient } from '../../src/request/access.ts';
+import { withRequestDeadline } from '../../src/request/deadline.ts';
+import { within } from '../../src/access/authenticate.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
@@ -368,6 +370,48 @@ afterAll(async () => {
   await authPool?.end();
   if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await db?.close();
+});
+
+test('Realm participation preparation uses the enclosing request deadline', async () => {
+  const budgetMs = 70;
+  const delayMs = 250;
+  let observedDeadline: number | undefined;
+  const access: Access = {
+    async authenticate() {
+      throw new Error('not used');
+    },
+    async prepare(_actor, _action, _resource, context) {
+      observedDeadline = context.deadline;
+      await within(
+        context.deadline,
+        () =>
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, delayMs);
+          }),
+      );
+      return null;
+    },
+    async authorize() {
+      return false;
+    },
+  };
+  const check = createRealmParticipationCheck({ pool: {} as Pool, access });
+  const requestDeadline = Date.now() + budgetMs;
+  const started = performance.now();
+  await expect(
+    withRequestDeadline(requestDeadline, () =>
+      check(
+        { query: async () => ({ rows: [] }) } as unknown as AccessClient,
+        {
+          realmId: newId(0x3180),
+          actor: { kind: 'anonymous' },
+        },
+        {} as never,
+      ),
+    ),
+  ).rejects.toMatchObject({ reason: 'deadline' });
+  expect(observedDeadline).toBe(requestDeadline);
+  expect(performance.now() - started).toBeLessThan(delayMs - budgetMs);
 });
 
 test.serial(

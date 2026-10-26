@@ -287,11 +287,19 @@ test('post:erase receipts require current self account read across all command r
 
     const revoked = await roleGrant(scenario, 'revoke');
     expect(revoked.status).toBe(200);
-    const receiptOnly = await call(scenario, command.method, command.path, command.body, 'actor', key);
-    expect(receiptOnly.status).toBe(first.status);
-    expect(await receiptOnly.text()).toBe(firstWire);
-
     const committed = await effects(scenario);
+    const receiptOnly = await call(scenario, command.method, command.path, command.body, 'actor', key);
+    if (kind === 'thread') {
+      // Author erasure initiation replays only while both the anchor post:erase and the self account read hold.
+      expect(receiptOnly.status).toBe(403);
+      expect(JSON.parse(await receiptOnly.text()).code).toBe('forbidden');
+      expect(receiptOnly.headers.get(SESSION_HEADER)).toBeNull();
+      expect(await effects(scenario)).toEqual(committed);
+    } else {
+      expect(receiptOnly.status).toBe(first.status);
+      expect(await receiptOnly.text()).toBe(firstWire);
+    }
+
     await accountRead(scenario, false);
     const denied = await call(scenario, command.method, command.path, command.body, 'actor', key);
     expect(denied.status).toBe(403);

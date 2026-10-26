@@ -7,5 +7,8 @@ export const COMMAND_STEP_RETRIES = Object.freeze({
   intervalSeconds: 1,
   backoffRate: 2,
   maxAttempts: 8,
-  shouldRetry: (error: unknown) => classifyUnavailability(error) !== undefined,
+  shouldRetry: (error: unknown) => {
+    const reason = classifyUnavailability(error);
+    return reason === 'deadline' || reason === 'contention' || reason === 'overloaded' || reason === 'fenced';
+  },
 } satisfies StepConfig & { shouldRetry: (error: unknown) => boolean });

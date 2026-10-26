@@ -24,7 +24,6 @@ import type {
   Visibility,
   WriteOptions,
 } from '../../../../specs/content-thread-driver.ts';
-import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import permissionRead from '../../src/access/permission-check.sql';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -40,19 +39,24 @@ import { threadTarget } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
 import type { AccountActor } from '../../src/request/access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
-import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { observeSql, permissionResourceId, type SqlObserver } from './support/sql-observer.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const AUDIENCE = 'https://content.test';
 const MEASURED_KEYS = 24;
 const suiteDrivers = new Set<ContentThreadDriver>();
+let suiteSystemPromise: Promise<NativeContentSystem> | undefined;
+const suiteWriteRateOverrides = JSON.stringify({
+  'new-account': { write: { maximum: 10_000, seconds: 86_400 } },
+  member: { write: { maximum: 10_000, seconds: 86_400 } },
+});
 
-/** The frozen suite's beforeEach owns the process-wide Auth workflow host.
- * Measured growth starts its own host on the observed pool, so that suite host
- * must be stopped first. Closing it twice is safe. */
+/** Case-owned SQL observers stop before measured growth starts a host on its observed pool. */
 async function releaseSuiteDrivers(): Promise<void> {
   const drivers = [...suiteDrivers];
   await Promise.all(drivers.map((driver) => driver.close()));
@@ -298,7 +302,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
   operation(db: { pool: PgPool }, scale: number, repetition: number): Promise<number>;
   close(): Promise<void>;
 }> {
-  await releaseSuiteDrivers();
+  await closeContentThreadSystem();
   const authName = databaseName('contentauth');
   const maintainer = new Pool({ connectionString: maintenanceUrl(database.url) });
   const authPool = new Pool({ connectionString: namedUrl(database.url, authName) });
@@ -321,15 +325,14 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
       };
       if (host) await release(() => host!.stop());
       await release(() => authPool.end());
-      if (authCreated) await release(() => maintainer.query(`DROP DATABASE ${authName}`));
+      if (authCreated) await release(() => dropTestDatabase(maintainer, authName));
       await release(() => maintainer.end());
       if (errors.length) throw new AggregateError(errors, 'Measured content cleanup failed');
     })());
 
   try {
-    await maintainer.query(`CREATE DATABASE ${authName} TEMPLATE template0`);
+    await createAuthDatabase(database.url, authName);
     authCreated = true;
-    migrateAuth(namedUrl(database.url, authName));
 
     const namespace = authName;
     const issuer = `https://${namespace}.auth.test`;
@@ -457,16 +460,21 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
     const board = await provisionBoard(kernel, author, governance, 'published', 'Measured');
 
     const keys: string[] = [];
-    let hotRoute = -1;
-    // threadTarget spreads keys across the full route space. Keep searching until
-    // one route has enough fresh keys for every measured repetition.
+    const keyRoutes: number[] = [];
+    let hotPartition = -1;
+    // Precompute fresh idempotency keys that share a write partition. Rows are
+    // distributed across the exact routes that those keys produce.
     for (let attempt = 0; keys.length < MEASURED_KEYS && attempt < 8_000_000; attempt++) {
       const key = `growth-${attempt}`;
       const route = threadTarget(routeKey, author.actor.accountId, key).route;
-      if (hotRoute < 0) hotRoute = route;
-      if (route === hotRoute) keys.push(key);
+      const partition = partitionOf(route);
+      if (hotPartition < 0) hotPartition = partition;
+      if (partition === hotPartition) {
+        keys.push(key);
+        keyRoutes.push(route);
+      }
     }
-    if (keys.length < MEASURED_KEYS || hotRoute < 0) throw new Error('Could not anchor measured thread keys');
+    if (keys.length < MEASURED_KEYS || hotPartition < 0) throw new Error('Could not anchor measured thread keys');
     const seedBody = Buffer.from('unrelated measured neighbour');
     const seedDigest = createHash('sha256').update(seedBody).digest();
     const body = fromPlainText('Measured thread body');
@@ -476,14 +484,15 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
         const count = scale - previous;
         if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Growth seed count is not valid');
         if (count === 0) return;
+        const routes = Array.from({ length: count }, (_, index) => keyRoutes[index % keyRoutes.length]!);
         const threadIds: string[] = [];
         const postIds: string[] = [];
         const revisionIds: string[] = [];
         const transactionIds: string[] = [];
         for (let index = 0; index < count; index++) {
-          threadIds.push(newId(hotRoute));
-          postIds.push(newId(hotRoute));
-          revisionIds.push(newId(hotRoute));
+          threadIds.push(newId(routes[index]!));
+          postIds.push(newId(routes[index]!));
+          revisionIds.push(newId(routes[index]!));
           transactionIds.push(crypto.randomUUID());
         }
         const client = await db.admin.connect();
@@ -493,28 +502,29 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
             `INSERT INTO content.thread
                (route, thread_id, author_account_id, board_id, title, visibility, security_revision,
                 recorded_transaction_id, first_post_id, availability)
-             SELECT $1, thread_id, $2, $3, 'Unrelated thread', 'published', 1, transaction_id, post_id, 'available'
-             FROM unnest($4::uuid[], $5::uuid[], $6::uuid[]) AS row(thread_id, post_id, transaction_id)`,
-            [hotRoute, author.actor.accountId, board.id, threadIds, postIds, transactionIds],
+             SELECT route, thread_id, $2, $3, 'Unrelated thread', 'published', 1, transaction_id, post_id, 'available'
+             FROM unnest($1::integer[], $4::uuid[], $5::uuid[], $6::uuid[])
+               AS row(route, thread_id, post_id, transaction_id)`,
+            [routes, author.actor.accountId, board.id, threadIds, postIds, transactionIds],
           );
           await client.query(
             `INSERT INTO content.post
                (route, thread_id, post_id, reply_to_post_id, author_account_id, head_revision_id, visibility,
                 security_revision, recorded_transaction_id, availability)
-             SELECT $1, thread_id, post_id, NULL, $2, revision_id, 'published', 1, transaction_id, 'available'
-             FROM unnest($3::uuid[], $4::uuid[], $5::uuid[], $6::uuid[])
-               AS row(thread_id, post_id, revision_id, transaction_id)`,
-            [hotRoute, author.actor.accountId, threadIds, postIds, revisionIds, transactionIds],
+             SELECT route, thread_id, post_id, NULL, $2, revision_id, 'published', 1, transaction_id, 'available'
+             FROM unnest($1::integer[], $3::uuid[], $4::uuid[], $5::uuid[], $6::uuid[])
+               AS row(route, thread_id, post_id, revision_id, transaction_id)`,
+            [routes, author.actor.accountId, threadIds, postIds, revisionIds, transactionIds],
           );
           await client.query(
             `INSERT INTO content.revision
                (route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence, subject_ids,
                 board_id, availability, recorded_transaction_id, media_ids)
-             SELECT $1, thread_id, post_id, revision_id, $2, $3, 'unrelated', 'MIT', '{}'::uuid[], $4, 'available',
+             SELECT route, thread_id, post_id, revision_id, $2, $3, 'unrelated', 'MIT', '{}'::uuid[], $4, 'available',
                     transaction_id, '{}'::uuid[]
-             FROM unnest($5::uuid[], $6::uuid[], $7::uuid[], $8::uuid[])
-               AS row(thread_id, post_id, revision_id, transaction_id)`,
-            [hotRoute, seedBody, seedDigest, board.id, threadIds, postIds, revisionIds, transactionIds],
+             FROM unnest($1::integer[], $5::uuid[], $6::uuid[], $7::uuid[], $8::uuid[])
+               AS row(route, thread_id, post_id, revision_id, transaction_id)`,
+            [routes, seedBody, seedDigest, board.id, threadIds, postIds, revisionIds, transactionIds],
           );
           await client.query('COMMIT');
         } catch (error) {
@@ -564,15 +574,38 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
   }
 }
 
-export async function createContentThreadDriver(): Promise<ContentThreadDriver> {
+async function threadOutcomeSystem(): Promise<NativeContentSystem> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const system = await createNativeContentSystem({ databaseUrl });
+  suiteSystemPromise ??= createNativeContentSystemWithWriteRateOverrides(
+    { databaseUrl },
+    suiteWriteRateOverrides,
+  ).catch((error: unknown) => {
+    suiteSystemPromise = undefined;
+    throw error;
+  });
+  return suiteSystemPromise;
+}
+
+/** Build the suite's shared native system from its file-level beforeAll hook. */
+export async function initializeContentThreadSystem(): Promise<void> {
+  await threadOutcomeSystem();
+}
+
+/** Close shared suite resources after the per-case SQL observers have stopped. */
+export async function closeContentThreadSystem(): Promise<void> {
+  await releaseSuiteDrivers();
+  const system = await suiteSystemPromise?.catch(() => undefined);
+  suiteSystemPromise = undefined;
+  await system?.close();
+}
+
+export async function createContentThreadDriver(): Promise<ContentThreadDriver> {
+  const system = await threadOutcomeSystem();
   let driver: ContentThreadDriver;
   try {
     driver = bindDriver(system);
   } catch (error) {
-    await system.close();
     throw error;
   }
   let closing: Promise<void> | undefined;
@@ -588,15 +621,49 @@ export async function createContentThreadDriver(): Promise<ContentThreadDriver> 
 function bindDriver(system: NativeContentSystem): ContentThreadDriver {
   const observer: SqlObserver = observeSql(system.database.pool);
   const pool = system.database.pool;
+  const writeNamespace = crypto.randomUUID();
   let mark = 0;
   let fixtureSemanticIds = new Set<string>();
-  const owner = personaOf(system.actors.author);
-  const other = personaOf(system.actors.other);
-  const moderator = personaOf(system.actors.moderator);
+  let authorCredential = system.actors.author;
+  let otherCredential = system.actors.other;
+  let moderatorCredential = system.actors.moderator;
+  let owner = personaOf(authorCredential);
+  let other = personaOf(otherCredential);
+  let moderator = personaOf(moderatorCredential);
+  let suspendedActorId: string | undefined;
   const scopes = [...system.actions.keys()].filter((action) => action !== 'media:complete').sort();
+
+  async function refreshCaseCredentials(): Promise<void> {
+    const issue = (credential: typeof system.actors.author) =>
+      system.auth.issue({
+        accountId: credential.actor.accountId,
+        clientId: credential.actor.clientId,
+        scopes: credential.actor.scopes,
+      });
+    [authorCredential, otherCredential, moderatorCredential] = await Promise.all([
+      issue(authorCredential),
+      issue(otherCredential),
+      issue(moderatorCredential),
+    ]);
+    owner = personaOf(authorCredential);
+    other = personaOf(otherCredential);
+    moderator = personaOf(moderatorCredential);
+  }
 
   function beginTrace(): void {
     mark = observer.records.length;
+  }
+
+  function scopedWriteCall(options: WriteOptions, body: Record<string, unknown>) {
+    try {
+      const key = JSON.parse(options.key);
+      if (typeof key === 'string') {
+        return writeCall({ ...options, key: JSON.stringify(`${writeNamespace}:${key}`) }, body);
+      }
+    } catch {
+      // Preserve malformed caller keys so the request still exercises validation.
+    }
+    return writeCall(options, body);
   }
 
   async function send(
@@ -638,13 +705,36 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
 
   const driver: ContentThreadDriver = {
     async close() {
+      if (suspendedActorId) {
+        const governance = await pool.query<{ account_id: string }>(
+          `SELECT account_id::text AS account_id FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1`,
+          [PLATFORM_RESOURCE.id],
+        );
+        const accountId = governance.rows[0]?.account_id;
+        if (!accountId) throw new Error('Governance bootstrap account is missing');
+        const credential = await system.auth.issue({
+          accountId,
+          clientId: system.auth.ordinaryClient.id,
+          scopes,
+        });
+        const response = await send(
+          'POST',
+          `/v1/accounts/${routedId(suspendedActorId)}:reinstate`,
+          personaOf(credential),
+          { key: JSON.stringify(crypto.randomUUID()), body: { reason: 'Restore shared thread fixture' } },
+        );
+        if (response.status !== 200) {
+          throw new Error(`Account reinstatement failed (${response.status}): ${await response.text()}`);
+        }
+        suspendedActorId = undefined;
+      }
       await observer.close();
-      await system.close();
     },
     async provision() {
+      await refreshCaseCredentials();
       await bootstrapRelease(pool, bundledRelease);
-      const board = await createBoard(system.actors.author, 'published');
-      const privateBoard = await createBoard(system.actors.author, 'protected');
+      const board = await createBoard(authorCredential, 'published');
+      const privateBoard = await createBoard(authorCredential, 'protected');
       const semantic = await pool.query<{ id: string }>('SELECT subject_id::text AS id FROM semantic.subject');
       fixtureSemanticIds = new Set(semantic.rows.map((row) => row.id));
       const subjectIds = [newId(9), newId(10), newId(11)];
@@ -691,7 +781,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
         'POST',
         '/v1/threads',
         options.actor,
-        writeCall(
+        scopedWriteCall(
           options,
           requestFields({
             title: input.title,
@@ -711,7 +801,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
         'POST',
         `/v1/threads/${routedId(input.threadId)}/posts`,
         options.actor,
-        writeCall(
+        scopedWriteCall(
           options,
           requestFields({
             body: input.body,
@@ -729,7 +819,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
         'POST',
         `/v1/threads/${routedId(input.threadId)}/posts`,
         options.actor,
-        writeCall(
+        scopedWriteCall(
           options,
           requestFields({
             body: input.body,
@@ -748,7 +838,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
         'POST',
         `/v1/posts/${routedId(input.itemId)}/revisions`,
         options.actor,
-        writeCall(
+        scopedWriteCall(
           options,
           requestFields({
             body: input.body,
@@ -925,6 +1015,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
         if (response.status !== 200) {
           throw new Error(`Account suspend failed (${response.status}): ${await response.text()}`);
         }
+        suspendedActorId = actorId;
       },
       async visibility(id, state: Visibility) {
         const route = routeOf(routedId(id));

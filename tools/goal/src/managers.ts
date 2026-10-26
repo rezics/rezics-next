@@ -166,9 +166,19 @@ export class ManagerSessions {
   // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
   // events; the next event resumes it in its window.
   private reviveClaude(state: ManagerState): void {
-    if (!state.threadId || !this.inbox.pending(state.id).length || this.services.windows.alive?.(state.id) !== false) return;
-    this.services.windows.respawn?.(state.id, this.claudeArgv(state, ['--resume', state.threadId],
-      'Your session exited and the control plane resumed it. Read and acknowledge your inbox, then continue.'), state.cwd);
+    if (!state.threadId || !this.inbox.pending(state.id).length) return;
+    const alive = this.services.windows.alive?.(state.id);
+    if (alive === false) {
+      this.services.windows.respawn?.(state.id, this.claudeArgv(state, ['--resume', state.threadId],
+        'Your session exited and the control plane resumed it. Read and acknowledge your inbox, then continue.'), state.cwd);
+      return;
+    }
+    // A live session that ended its turn without a watcher never wakes on its own (web sat 2 h on 13 unread events on
+    // 2026-10-26): type the wake into it, once per event.
+    const waking = this.inbox.notifications(state.id);
+    if (!waking.length || !this.services.windows.prompt) return;
+    this.services.windows.prompt(state.id, `You have ${waking.length} new inbox event(s). Read them with bun tools/goal/src/cli.ts inbox read ${state.id}, act on them and acknowledge them; keep bun tools/goal/src/cli.ts inbox wait ${state.id} running in the background before you end a turn.`);
+    for (const event of waking) this.inbox.notified(event.id);
   }
   private registerCodexViewer(state: ManagerState, client: AppServer): void {
     const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];

@@ -7,6 +7,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument, isProblemSchema } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { type Access, type AccountActor } from '../../src/request/access.ts';
+import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { decideDownload } from '../../src/content/media.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
@@ -251,6 +252,25 @@ test('strict media schemas, exact actions, problems and AIP custom methods are p
   expect(actionCatalogue(app).get('media:read')?.anonymous).toBe(true);
   expect(actionCatalogue(app).get('media:read_reservation')?.anonymous).toBe(false);
   expect(Object.keys(document.paths).some((path) => path.includes('/$'))).toBe(false);
+});
+
+test('the default media download budget is capped by the enclosing request deadline', async () => {
+  const delayMs = 250;
+  const budgetMs = 70;
+  const pool = {
+    connect: () =>
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('simulated delayed pool checkout')), delayMs);
+      }),
+  } as never;
+  const requestDeadline = Date.now() + budgetMs;
+  const started = performance.now();
+  await expect(
+    withRequestDeadline(requestDeadline, () =>
+      decideDownload({ pool, access }, newId(route), { kind: 'anonymous' }, 'webp-320'),
+    ),
+  ).rejects.toMatchObject({ reason: 'deadline' });
+  expect(performance.now() - started).toBeLessThan(delayMs - budgetMs);
 });
 
 test('uploader reservation preflight and BFF completion use verified subject and exclusive website scope', async () => {

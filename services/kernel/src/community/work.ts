@@ -8,15 +8,13 @@ import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createFollowCommands } from '../library/follows.ts';
 import { REALM_JOIN_WORKFLOW, REALM_LEAVE_WORKFLOW, type RealmMembershipWorkInput } from './join.ts';
 
-/** Accounts accepts `^[A-Za-z0-9][A-Za-z0-9:_/-]{0,199}$`. Kind, Realm id and member account id fit; no dot. */
+/** Accounts accepts `^[A-Za-z0-9][A-Za-z0-9:_/-]{0,199}$`; hash the parent and step into a valid child id. */
 export function realmMembershipWorkflowId(
-  operation: 'join' | 'leave',
-  input: Pick<RealmMembershipWorkInput, 'realmId' | 'memberAccountId'>,
+  parentWorkflowId: string,
+  step: 'join.membership' | 'leave.membership',
 ): string {
-  const id = `realm:${operation}:${input.realmId}:${input.memberAccountId}`;
-  if (id.length <= 200 && /^[A-Za-z0-9][A-Za-z0-9:_/-]{0,199}$/.test(id)) return id;
-  const digest = createHash('sha256').update(`${operation}\0${input.realmId}\0${input.memberAccountId}`).digest('hex');
-  return `realm:${operation}:${digest}`;
+  const digest = createHash('sha256').update(`${parentWorkflowId}\0${step}`).digest('hex');
+  return `realm:membership:${digest}`;
 }
 
 function membershipInput(input: RealmMembershipWorkInput): MembershipWorkInput {
@@ -62,7 +60,7 @@ export function registerCommunityWork({ pool, client, clock }: WorkContext): voi
   );
   DBOS.registerWorkflow(
     async (input: RealmMembershipWorkInput) => {
-      const childId = realmMembershipWorkflowId('join', input);
+      const childId = realmMembershipWorkflowId(DBOS.workflowID!, 'join.membership');
       await enqueueJoin(input, childId);
       const result = await DBOS.retrieveWorkflow<MembershipWorkResult>(childId).getResult();
       if (result?.status !== 'completed') throw new Error('Realm membership did not complete');
@@ -72,7 +70,7 @@ export function registerCommunityWork({ pool, client, clock }: WorkContext): voi
   );
   DBOS.registerWorkflow(
     async (input: RealmMembershipWorkInput) => {
-      const childId = realmMembershipWorkflowId('leave', input);
+      const childId = realmMembershipWorkflowId(DBOS.workflowID!, 'leave.membership');
       await enqueueLeave(input, childId);
       const result = await DBOS.retrieveWorkflow<MembershipWorkResult>(childId).getResult();
       if (result?.status !== 'completed') throw new Error('Realm membership did not complete');

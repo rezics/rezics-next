@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepares a Debian development host to run kernel checks for scripts/remote-check.ts. Idempotent: it installs only what
+# Prepares a Debian development host to run checks for scripts/remote-check.ts. Idempotent: it installs only what
 # is missing and rewrites the slice only when its limits change. It adds a directory, a slice and a few packages; it
 # touches no service that already runs there.
 #
@@ -23,14 +23,18 @@ bun_version=1.4.3
 # The kernel check runs npm-packaged tools (dbmate) whose launcher scripts start with `env node`, and tooling that
 # needs node:sqlite; Debian's own Node is too old for it.
 node_version=26.8.2
+# The browser workspaces (apps/auth, apps/web, packages/ui) drive Chromium through Playwright; the version matches the
+# one in their package.json files, and the browser and its system libraries are installed once per version.
+playwright_version=1.64.1
 
 ssh -i "$identity" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "$address" \
-  bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" <<'REMOTE'
+  bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" <<'REMOTE'
 set -euo pipefail
 bun_version=$1
 node_version=$2
 memory=$3
 cpu=$4
+playwright_version=$5
 export DEBIAN_FRONTEND=noninteractive
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -67,7 +71,14 @@ if [ "$(/usr/local/bin/node --version 2>/dev/null || true)" != "v$node_version" 
   ln -sfn "/usr/local/lib/nodejs/node-v${node_version}-linux-${build}/bin/node" /usr/local/bin/node
 fi
 
-mkdir -p /srv/rezics-check/slots /srv/rezics-check/runs /srv/rezics-check/bun-cache
+mkdir -p /srv/rezics-check/slots /srv/rezics-check/runs /srv/rezics-check/bun-cache /srv/rezics-check/browsers
+
+browsers=/srv/rezics-check/browsers
+if [ ! -e "$browsers/.chromium-$playwright_version" ]; then
+  PATH=/usr/local/bin:$PATH PLAYWRIGHT_BROWSERS_PATH=$browsers \
+    bun x "playwright@$playwright_version" install --with-deps chromium
+  touch "$browsers/.chromium-$playwright_version"
+fi
 
 slice=/etc/systemd/system/rezics-check.slice
 wanted=$(printf '[Unit]\nDescription=REZICS development checks\n\n[Slice]\nMemoryMax=%sG\nCPUQuota=%s%%\n' "$memory" "$cpu")
@@ -77,6 +88,6 @@ if [ "$(cat "$slice" 2>/dev/null || true)" != "$wanted" ]; then
 fi
 systemctl start rezics-check.slice
 
-echo "git $(git --version | cut -d" " -f3), rsync $(rsync --version | head -1 | cut -d" " -f4), node $(/usr/local/bin/node --version), bun $(/usr/local/bin/bun --version)"
+echo "chromium for playwright $playwright_version, git $(git --version | cut -d" " -f3), rsync $(rsync --version | head -1 | cut -d" " -f4), node $(/usr/local/bin/node --version), bun $(/usr/local/bin/bun --version)"
 systemctl show rezics-check.slice -p MemoryMax -p CPUQuotaPerSecUSec
 REMOTE

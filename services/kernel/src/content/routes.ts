@@ -24,6 +24,7 @@ import { mediaModerationRoutes } from './media-moderation-routes.ts';
 import {
   ContentForbiddenError,
   ContentNotFoundError as CommandNotFoundError,
+  ContentUndisclosedError,
   createPost,
   createThread,
   ReviewConflictError,
@@ -189,6 +190,8 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
+    if (error instanceof ContentUndisclosedError)
+      throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
     if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
     if (error instanceof InvalidDocumentError) throw new ProblemError('invalid_request');
     if (error instanceof InvalidMediaClaimError) throw new ProblemError('idempotency_conflict');

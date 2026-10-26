@@ -5,6 +5,7 @@ import { requireResourceCommand, ResourceAccessWriteDeniedError } from '../acces
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { commandTime, mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import read from './realm-read.sql';
 
@@ -59,7 +60,7 @@ export function createRealmParticipationCheck(input: {
     const route = routeOf(realmId);
     if (route === null) return false;
     const resource: Resource = { route, id: realmId };
-    const context = { pool: input.pool, deadline: Date.now() + 1500 };
+    const context = { pool: input.pool, deadline: deadlineFor(1500) };
     let visibility: 'public' | 'protected' | null = null;
     const eligibility = createResourcePublicEligibility({
       resource,

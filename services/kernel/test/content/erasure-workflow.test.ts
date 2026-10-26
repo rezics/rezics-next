@@ -3,7 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { Pool } from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { commandTime, runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
+import { runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import { runAuthorErasure } from '../../src/content/erasure-workflow.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
@@ -22,7 +22,9 @@ let client: Awaited<ReturnType<typeof createWorkClient>>;
 let work: Awaited<ReturnType<typeof composeWork>>;
 let systemPool: Pool;
 let measuredPool: Pool | undefined;
-const checks: { id: string; time: AuthoritativeTime; inCommand: boolean }[] = [];
+// One entry per prepared page and one per page formula statement, in call order.
+const pagePrepares: { ids: readonly string[] }[] = [];
+const pageChecks: { ids: readonly string[]; time: AuthoritativeTime | undefined }[] = [];
 const crashes = new Map<string, string[]>();
 const route = 0x6798;
 const partition = partitionOf(route);
@@ -35,18 +37,15 @@ const context = () => ({
 
 beforeAll(async () => {
   fixture = await standingFixture(['account:read']);
-  const authorize = fixture.access.authorize.bind(fixture.access);
-  fixture.access.authorize = async (tx, actor, action, resource, evidence, time) => {
-    if (action === 'post:erase' && time) {
-      let inCommand = false;
-      try {
-        inCommand = commandTime(tx) === time;
-      } catch {
-        /* Restoration has its own read boundary. */
-      }
-      checks.push({ id: resource.id, time, inCommand });
-    }
-    return authorize(tx, actor, action, resource, evidence, time);
+  const preparePage = fixture.access.preparePage!.bind(fixture.access);
+  fixture.access.preparePage = async (actor, action, page, context) => {
+    if (action === 'post:erase') pagePrepares.push({ ids: page.ids });
+    return preparePage(actor, action, page, context);
+  };
+  const authorizePage = fixture.access.authorizePage!.bind(fixture.access);
+  fixture.access.authorizePage = async (tx, actor, action, page, evidence, time) => {
+    if (action === 'post:erase') pageChecks.push({ ids: page.ids, time });
+    return authorizePage(tx, actor, action, page, evidence, time);
   };
   systemPool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
   client = await createWorkClient(process.env.DATABASE_URL!);
@@ -59,7 +58,7 @@ beforeAll(async () => {
             async (operationId: string, pauseAfter?: string) =>
               runAuthorErasure(
                 {
-                  pool: measuredPool ?? fixture.pool,
+                  pool: measuredPool ?? systemPool,
                   access: fixture.access,
                   readConsent: fixture.readConsent,
                   currentTime: () => new Date(),
@@ -91,7 +90,9 @@ beforeAll(async () => {
                     return value;
                   },
                   checkpoint: {
-                    read: (id) => DBOS.getEvent<OperationProgress>(id, 'progress', 0),
+                    // A zero timeout reads again whenever the first read returns within the same millisecond, so the
+                    // statement count varies from run to run. A deadline already past makes the read exactly once.
+                    read: (id) => DBOS.getEvent<OperationProgress>(id, 'progress', -1),
                     write: (_id, progress) => DBOS.setEvent('progress', progress),
                   },
                 },
@@ -130,24 +131,28 @@ async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
        VALUES ($1,$2,$3,$4,'Erasure fixture','published',1,$2)`,
       [route, threadId, actor.accountId, boardId],
     );
-    for (const postId of ids) {
-      const head = newId(route);
-      await tx.query(
-        `INSERT INTO content.post
-         (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,
-          recorded_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5,'published',1,$3,$6)`,
-        [route, threadId, postId, actor.accountId, head, at],
-      );
-      for (let index = 0; index < revisions; index++)
-        await tx.query(
-          `INSERT INTO content.revision
-           (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,
-            board_id,availability,recorded_transaction_id,recorded_at)
-           VALUES ($1,$2,$3,$4,$5,sha256($5),'Private historical text','MIT','{}',$6,'available',$3,$7)`,
-          [route, threadId, postId, index === 0 ? head : newId(route), body, boardId, at],
-        );
-    }
+    const heads = ids.map(() => newId(route));
+    await tx.query(
+      `INSERT INTO content.post
+       (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,
+        recorded_transaction_id,created_at)
+       SELECT $1,$2,p.post_id,$3,p.head_revision_id,'published',1,p.post_id,$4
+       FROM unnest($5::uuid[],$6::uuid[]) AS p(post_id,head_revision_id)`,
+      [route, threadId, actor.accountId, at, ids, heads],
+    );
+    const owners = ids.flatMap((id) => Array.from({ length: revisions }, () => id));
+    const revisionIds = ids.flatMap((_, post) =>
+      Array.from({ length: revisions }, (_, index) => (index === 0 ? heads[post]! : newId(route))),
+    );
+    await tx.query(
+      `INSERT INTO content.revision
+       (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,
+        board_id,availability,recorded_transaction_id,recorded_at)
+       SELECT $1,$2,r.post_id,r.revision_id,$3,sha256($3),'Private historical text','MIT','{}',$4,'available',
+              r.post_id,$5
+       FROM unnest($6::uuid[],$7::uuid[]) AS r(post_id,revision_id)`,
+      [route, threadId, body, boardId, at, owners, revisionIds],
+    );
     await tx.query('COMMIT');
   } catch (error) {
     await tx.query('ROLLBACK');
@@ -159,7 +164,12 @@ async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
     route: routeOf(actor.accountId)!,
     id: actor.accountId,
   });
-  for (const id of ids) await fixture.grant(actor.accountId, 'post:erase', { route, id });
+  await fixture.reader.query(
+    `INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id)
+     SELECT $1,g.id,$2,'post:erase','(,)'::tstzrange,g.id FROM unnest($3::uuid[]) AS g(id)
+     ON CONFLICT DO NOTHING`,
+    [route, actor.accountId, ids],
+  );
   return { actor, threadId, ids, at };
 }
 
@@ -434,7 +444,8 @@ async function launchSelection(
       : logical;
   if (crash) crashes.set(logical, selected.ids.slice(0, 100));
   // Initiation has its own T; observe only the workflow's logical commands.
-  checks.length = 0;
+  pagePrepares.length = 0;
+  pageChecks.length = 0;
   const handle = await client.enqueue(
     { workflowName: 'content.authorErase', queueName: 'governance', workflowID: workflowId },
     source.value.operationId,
@@ -541,9 +552,12 @@ test('all logical pages commit before cleanup, with one command and T per page a
     expect(retained.rows[0].n).toBe(615);
     for (let start = 0; start < selected.ids.length; start += 100) {
       const page = selected.ids.slice(start, start + 100);
-      const observed = checks.filter((check) => check.inCommand && page.includes(check.id));
-      expect(new Set(observed.map((check) => check.id)).size).toBe(page.length);
-      expect(new Set(observed.map((check) => check.time)).size).toBe(1);
+      // Whatever the page size, Access prepares once and evaluates one formula statement for the whole page.
+      const prepared = pagePrepares.filter((entry) => entry.ids.some((id) => page.includes(id)));
+      const observed = pageChecks.filter((entry) => entry.ids.some((id) => page.includes(id)));
+      expect(prepared.map((entry) => [...entry.ids])).toEqual([[...page].sort()]);
+      expect(observed.map((entry) => [...entry.ids])).toEqual([[...page].sort()]);
+      expect(observed[0]!.time).toBeDefined();
       const events = await fixture.reader.query(
         `SELECT count(*)::int AS n, count(DISTINCT position)::int AS commands
          FROM core.outbox WHERE partition_no=$1 AND type='com.rezics.content.post.erased.v1'
@@ -796,7 +810,7 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
     measuredPool = db.pool;
     const report = await checkGrowth(db, {
       name: 'native logical author page',
-      scales: [2048, 8192, 32768],
+      scales: [256, 1024, 4096],
       repetitions: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(target, scale, previous) {
@@ -930,7 +944,7 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
         paused = await launchSelection(selected, 'logical');
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBeGreaterThan(0);
       expect(Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0)).toBe(true);

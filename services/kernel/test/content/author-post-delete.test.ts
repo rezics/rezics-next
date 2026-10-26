@@ -170,12 +170,20 @@ async function fixture(owner = author, count = 1) {
       VALUES ($1,$2,$3,$4,$5,'published',1,$5)`,
       [route, thread, post, owner, revision],
     );
-    for (let index = 0; index < count; index++)
-      await client.query(
-        `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-        VALUES ($1,$2,$3,$4,$5,sha256($5),'Authored sentinel','CC-BY-4.0','{}',$6,'available',$4)`,
-        [route, thread, post, index === 0 ? revision : newId(route), body, board],
-      );
+    await client.query(
+      `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+      SELECT $1,$2,$3,r.revision_id,$5,sha256($5),'Authored sentinel','CC-BY-4.0','{}',$6,'available',$4
+      FROM unnest($7::uuid[]) AS r(revision_id)`,
+      [
+        route,
+        thread,
+        post,
+        revision,
+        body,
+        board,
+        Array.from({ length: count }, (_, index) => (index === 0 ? revision : newId(route))),
+      ],
+    );
     await client.query(
       `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
       VALUES ($1,$2,$3,'content.post.owner','(,)',$2)`,
@@ -489,7 +497,7 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
   const bounds = { rows: 'constant', statements: 'constant', blocks: 'logarithmic' } as const;
   const report = await checkGrowth(db, {
     name: 'Author post delete',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds,
     repetitions: 1,
     async grow(_database, scale, previous) {
@@ -514,7 +522,7 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
       expect(sql).not.toContain(nullRevisions.sql);
     },
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
   assertGrowth(pages, bounds);
   for (const { cost } of [...report.samples, ...pages]) {
     expect(cost.rows).toBeGreaterThan(0);

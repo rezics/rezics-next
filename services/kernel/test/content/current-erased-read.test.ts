@@ -351,7 +351,7 @@ test('checkGrowth keeps the actual authenticated erased read bounded at three in
   };
   const report = await checkGrowth(database, {
     name: 'current erased native disclosure',
-    scales: [256, 2048, 16384],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(db, scale, previous) {
       // Two rows per scale unit put every probed storage relation above 500 at the first scale.
@@ -487,7 +487,7 @@ test('checkGrowth keeps the actual authenticated erased read bounded at three in
     },
     operation: read,
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 2048, 16384]);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
   for (const sample of report.samples) {
     for (const relation of ['content.board', 'content.thread', 'content.post', 'content.revision']) {
       expect(sample.cost.relations?.[relation]?.rows).toBeGreaterThan(0);
