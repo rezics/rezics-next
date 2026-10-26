@@ -15,6 +15,15 @@ const apiOrigin = 'https://api.importer.test';
 const authOrigin = 'https://auth.importer.test';
 const tokenLifetimeSeconds = 300;
 const refreshBeforeExpirySeconds = 60;
+const renewalIntervalMs = (tokenLifetimeSeconds - refreshBeforeExpirySeconds) * 1000;
+const importerScopes = [
+  'subject:create',
+  'subject:batch_write',
+  'statement:propose',
+  'source_fence:read',
+  'media:import_from_url',
+  'media:read_reservation',
+] as const;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const encoder = new TextEncoder();
 
@@ -176,8 +185,7 @@ async function assertAuthFlow(h: Harness, execution: ImportCliCredentialsExecuti
   expect(signinRequests.length).toBeGreaterThan(0);
   expect(execution.auth.requests.length).toBe(signinRequests.length + tokenRequests.length);
   expect(tokenRequests.length).toBe(signinRequests.length);
-  expect(execution.auth.registeredScopes).toHaveLength(6);
-  expect(new Set(execution.auth.registeredScopes).size).toBe(6);
+  expect([...execution.auth.registeredScopes].sort()).toEqual([...importerScopes].sort());
 
   const publicKey = createPublicKey({ key: h.key.publicJwk, format: 'jwk' });
   const jtis: string[] = [];
@@ -203,11 +211,7 @@ async function assertAuthFlow(h: Harness, execution: ImportCliCredentialsExecuti
     expect(signinBody.client_id).toBe(h.clientId);
     expect(Array.isArray(signinBody.scope)).toBe(true);
     const requestedScopes = signinBody.scope as string[];
-    expect(requestedScopes.length).toBe(6);
-    expect(new Set(requestedScopes).size).toBe(6);
-    expect([...requestedScopes].sort().join('\0') === [...execution.auth.registeredScopes].sort().join('\0')).toBe(
-      true,
-    );
+    expect([...requestedScopes].sort()).toEqual([...importerScopes].sort());
     expect(typeof signinBody.assertion).toBe('string');
 
     const assertion = signinBody.assertion as string;
@@ -350,7 +354,7 @@ test('a long import renews before expiry within the sign-in bound and every batc
     let writeNumber = 0;
     h.driver.api.afterResponse = async (request, _response, clock) => {
       if (new URL(request.url).pathname !== '/v1/subjects:batchWrite') return;
-      const advances = [239_000, 1_000, 240_000, 240_000, 240_000, 0];
+      const advances = [renewalIntervalMs - 1000, 1000, renewalIntervalMs, renewalIntervalMs, renewalIntervalMs, 0];
       clock.advance(advances[writeNumber] ?? 0);
       writeNumber++;
     };
@@ -365,10 +369,10 @@ test('a long import renews before expiry within the sign-in bound and every batc
     const duration = execution.finishedAtMs - execution.startedAtMs;
     expect(duration).toBeGreaterThanOrEqual(3 * tokenLifetimeSeconds * 1000);
     const signinCount = execution.auth.requests.filter((request) => authPath(request) === '/signin/key').length;
-    expect(signinCount).toBeLessThanOrEqual(Math.ceil(duration / 240_000) + 1);
-    expect(apiWrites[1]!.atMs - apiWrites[0]!.atMs).toBe(239_000);
+    expect(signinCount).toBeLessThanOrEqual(Math.ceil(duration / renewalIntervalMs) + 1);
+    expect(apiWrites[1]!.atMs - apiWrites[0]!.atMs).toBe(renewalIntervalMs - 1000);
     expect(apiWrites[0]!.authorization === apiWrites[1]!.authorization).toBe(true);
-    expect(apiWrites[2]!.atMs - apiWrites[0]!.atMs).toBe(240_000);
+    expect(apiWrites[2]!.atMs - apiWrites[0]!.atMs).toBe(renewalIntervalMs);
     expect(apiWrites[1]!.authorization !== apiWrites[2]!.authorization).toBe(true);
     expect(execution.key.fileReadCount).toBe(1);
     expect(execution.key.regularFile).toBe(true);
