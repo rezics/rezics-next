@@ -133,9 +133,9 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
     expect((await fixture.signin(fixture.second)).status).toBe(429);
     const before = fixture.deliveries.length;
     for (let i = 0; i < 3; i++) {
-      expect(
-        (await fixture.request(fixture.first, '/recovery/start', { email: 'attempt@example.test' })).status,
-      ).toBe(200);
+      expect((await fixture.request(fixture.first, '/recovery/start', { email: 'attempt@example.test' })).status).toBe(
+        200,
+      );
       await fixture.drain();
     }
     expect(fixture.deliveries).toHaveLength(before + 1);
