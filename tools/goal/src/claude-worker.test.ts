@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { launchCommand, workerEnvironment } from './launch.ts';
 import { measureLog } from './records.ts';
 import { readRouting } from './routing.ts';
-import { parseClaudeUsage } from './usage.ts';
+import { parseClaudeUsage, readPool, recordClaudeRateLimit } from './usage.ts';
 import type { Pool, Profile } from './types.ts';
 
 const pool: Pool = {
@@ -21,6 +21,8 @@ test('a Claude worker runs headless with full access, without the managers hooks
   expect(env.CLAUDECODE).toBeUndefined();
   expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();
   expect(env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
+  const home = require('node:os').homedir();
+  expect(workerEnvironment({ ...pool, configDirectory: `${home}/.claude` } as Pool, {}, { CLAUDE_CONFIG_DIR: 'x' }).CLAUDE_CONFIG_DIR).toBeUndefined();
 });
 
 const stream = (...events: object[]) => events.map((event) => JSON.stringify(event)).join('\n');
@@ -75,4 +77,22 @@ test('the routing table accepts a Claude profile', () => {
   table.classes.implementation.first = profile;
   require('node:fs').writeFileSync(file, JSON.stringify(table));
   expect(readRouting(file).classes.implementation.first).toEqual(profile);
+});
+
+test('a finished Claude log refreshes the shared reading, which outlives a refused refresh for twenty minutes', () => {
+  const directory = require('node:fs').mkdtempSync(`${require('node:os').tmpdir()}/claude-config-`);
+  const local = { ...pool, configDirectory: directory } as Pool;
+  const at = Date.parse('2026-10-26T05:47:00Z');
+  const log = stream(
+    { type: 'system', subtype: 'init', session_id: 's' },
+    { type: 'rate_limit_event', rate_limit_info: { status: 'allowed', unifiedWindows: {
+      five_hour: { utilization: 0.1, resetsAt: Date.parse('2026-10-26T09:00:00Z') / 1000 },
+      seven_day: { utilization: 0.46, resetsAt: Date.parse('2026-10-26T15:00:00Z') / 1000 },
+    } } },
+  );
+  recordClaudeRateLimit(local, log, at);
+  // No credentials in the fixture directory, so every refresh is refused.
+  expect(readPool(local, at + 60_000).windows.map((w) => w.usedPercent)).toEqual([10, 46]);
+  expect(readPool(local, at + 19 * 60_000).windows.map((w) => w.usedPercent)).toEqual([10, 46]);
+  expect(readPool(local, at + 21 * 60_000).windows).toEqual([]);
 });
