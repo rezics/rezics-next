@@ -391,9 +391,12 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       return descriptor;
     return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
   }
+  /** A person is an actor without an operator. It may act for a principal through a
+   * principal assignment: the approval stores that reference (`requestedBy`), and
+   * every step's formula rechecks the assignment and the principal's grant at its T. */
   async function requireHuman(actor: AccountActor) {
     const account = await readAccount(config.pool, routeOf(actor.accountId)!, actor.accountId);
-    requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null && actor.requestedBy === null);
+    requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null);
   }
 
   async function authorizeActor(

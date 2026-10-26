@@ -1110,7 +1110,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const context = 'authorization' in input ? await approved(input) : undefined;
     if (!context) await access.authorizeUnprotectedOperation?.(input);
     const id = workflowId(`operation:${key}`);
-    const digest = hash(businessOperation(input));
+    // The stored result is private to the caller whose approval started it. The
+    // approval's binding names the actor and the logical operation, and the
+    // approval itself carries the principal assignment, so another caller's
+    // approval of the same operation under the same key is a different request.
+    const digest = hash([
+      businessOperation(input),
+      context ? (access.approvalBinding?.(context)?.commandKeyPrefix ?? null) : null,
+    ]);
     const row = (
       await database.query<{ digest: Buffer }>(
         'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
