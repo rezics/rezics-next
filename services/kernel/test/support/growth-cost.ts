@@ -20,14 +20,11 @@ export type Cost = {
 };
 
 type PlanNode = Record<string, unknown>;
-type NodeTotals = {
-  readonly rows: number;
-  readonly hit: number;
-  readonly read: number;
-  readonly inclusiveHit: number;
-  readonly inclusiveRead: number;
-};
+type NodeTotals = { readonly rows: number; readonly inclusiveHit: number; readonly inclusiveRead: number };
 type MutableRelationCost = { rows: number; blocks: number; nodes: number; sequentialScans: number };
+type Blocks = { hit: number; read: number };
+/** Per CTE name: the producer's inclusive blocks, and the exclusive blocks of the `CTE Scan` nodes that read it. */
+type CteBlocks = { readonly producers: Map<string, Blocks>; readonly scans: Map<string, Blocks> };
 
 const rowScans = new Set([
   'Seq Scan',
@@ -148,7 +145,19 @@ export function withoutCatalogTexts(capture: Capture, catalogTexts: ReadonlySet<
   };
 }
 
-function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableRelationCost>): NodeTotals {
+function addBlocks(blocks: Map<string, Blocks>, name: string, hit: number, read: number): void {
+  const total = blocks.get(name) ?? { hit: 0, read: 0 };
+  total.hit += hit;
+  total.read += read;
+  blocks.set(name, total);
+}
+
+function costNode(
+  node: PlanNode,
+  root: boolean,
+  relations: Map<string, MutableRelationCost>,
+  ctes: CteBlocks,
+): NodeTotals {
   const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
   const actualRows = requiredNumber(node, 'Actual Rows');
   const loops = optionalNumber(node, 'Actual Loops', 1);
@@ -162,13 +171,17 @@ function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableR
   const children =
     (childNodes as unknown[] | undefined)?.map((child) => {
       if (!isRecord(child)) throw new TypeError('Plan child must be an object');
-      return costNode(child, false, relations);
+      return costNode(child, false, relations, ctes);
     }) ?? [];
 
   const childHit = children.reduce((sum, child) => sum + child.inclusiveHit, 0);
   const childRead = children.reduce((sum, child) => sum + child.inclusiveRead, 0);
   const exclusiveHit = Math.max(0, hit - childHit);
   const exclusiveRead = Math.max(0, read - childRead);
+  const producer = typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name']) : null;
+  if (producer) addBlocks(ctes.producers, producer[1]!, hit, read);
+  if (nodeType === 'CTE Scan' && typeof node['CTE Name'] === 'string')
+    addBlocks(ctes.scans, node['CTE Name'], exclusiveHit, exclusiveRead);
   const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
   const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
   const examined = rowScans.has(nodeType) ? (actualRows + removedByFilter + removedByRecheck) * loops : 0;
@@ -193,8 +206,6 @@ function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableR
 
   return {
     rows: examined + children.reduce((sum, child) => sum + child.rows, 0),
-    hit: exclusiveHit + children.reduce((sum, child) => sum + child.hit, 0),
-    read: exclusiveRead + children.reduce((sum, child) => sum + child.read, 0),
     inclusiveHit: hit,
     inclusiveRead: read,
   };
@@ -227,10 +238,18 @@ export function costOf(capture: Capture): Cost {
     for (const { queryText, plan } of documentEntries(document)) {
       if (queryText !== undefined && catalog.catalogTexts.has(queryText)) continue;
       plans++;
-      const totals = costNode(plan, true, relations);
+      const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
+      const totals = costNode(plan, true, relations, ctes);
       rows += totals.rows;
-      sharedHit += totals.hit;
-      sharedRead += totals.read;
+      sharedHit += totals.inclusiveHit;
+      sharedRead += totals.inclusiveRead;
+      // A producer runs lazily inside the scans that read it, so those buffers are already in the root. What no scan
+      // pulled (a data-modifying CTE that runs at the end of the statement) is not.
+      for (const [name, producer] of ctes.producers) {
+        const scans = ctes.scans.get(name);
+        sharedHit += Math.max(0, producer.hit - (scans?.hit ?? 0));
+        sharedRead += Math.max(0, producer.read - (scans?.read ?? 0));
+      }
     }
   }
 
