@@ -27,6 +27,10 @@ let purchasesObserved!: () => void;
 const purchasesClosed = new Promise<void>((resolve) => {
   purchasesObserved = resolve;
 });
+let sellingObserved!: () => void;
+const sellingClosed = new Promise<void>((resolve) => {
+  sellingObserved = resolve;
+});
 
 function accountId(as: Persona) {
   if (as === 'governor') return governor;
@@ -149,6 +153,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   purchasesObserved();
+  sellingObserved();
   fake?.stop();
   await db?.close();
 });
@@ -171,6 +176,66 @@ test('every buyer route declares gate purchases and offer creation and delisting
   expect(webhook[0]?.hooks.detail?.['x-exposure']).toBe('public');
   const published = document.paths['/v1/webhooks/stripe']?.post?.['x-exposure'];
   if (published !== undefined) expect(published).toBe('public');
+});
+
+test('every payout statement route declares gate selling', () => {
+  const document = openApiDocument(app);
+  const routes = {
+    '/v1/payoutStatements': ['get'],
+    '/v1/payoutStatements/{statementId}': ['get'],
+    '/v1/payoutStatements/{statementId}/lines': ['get'],
+    '/v1/payoutStatements/{statementId}:markPaid': ['post'],
+  };
+  for (const [path, methods] of Object.entries(routes))
+    for (const method of methods) expect(document.paths[path]?.[method]?.['x-exposure']).toBe('gate:selling');
+});
+
+test('a closed selling group answers 403 platform_closed identically to anonymous callers and ordinary accounts on payout routes and marks nothing paid', async () => {
+  const statementId = newId(0x2200);
+  await db.admin.query(
+    "INSERT INTO commerce.payout_statement(route,statement_id,creator_account_id,period,currency) VALUES ($1,$2,$3,'2025-12','usd')",
+    [routeOf(statementId), statementId, seller],
+  );
+  const before = (
+    await db.admin.query('SELECT state, revision FROM commerce.payout_statement WHERE route=$1 AND statement_id=$2', [
+      routeOf(statementId),
+      statementId,
+    ])
+  ).rows[0];
+  const calls = [
+    { method: 'GET' as const, path: '/v1/payoutStatements' },
+    { method: 'GET' as const, path: `/v1/payoutStatements/${statementId}` },
+    { method: 'GET' as const, path: `/v1/payoutStatements/${statementId}/lines` },
+    {
+      method: 'POST' as const,
+      path: `/v1/payoutStatements/${statementId}:markPaid`,
+      body: { paidReference: 'bank:must-not-be-applied' },
+    },
+  ];
+  try {
+    for (const call of calls) {
+      const anonymous = await closedProblem(await request(call.method, call.path, 'anonymous', call.body));
+      const ordinary = await closedProblem(await request(call.method, call.path, 'seller', call.body));
+      expect(anonymous).toEqual(ordinary);
+      expect(anonymous).toEqual({
+        type: 'https://rezics.com/problems/platform_closed',
+        title: 'Platform Closed',
+        status: 403,
+        code: 'platform_closed',
+        retryable: false,
+        effect_status: call.method === 'POST' ? 'not_applied' : 'not_applicable',
+      });
+    }
+    const after = (
+      await db.admin.query('SELECT state, revision FROM commerce.payout_statement WHERE route=$1 AND statement_id=$2', [
+        routeOf(statementId),
+        statementId,
+      ])
+    ).rows[0];
+    expect(after).toEqual(before);
+  } finally {
+    sellingObserved();
+  }
 });
 
 test('a closed purchases group answers 403 platform_closed identically to anonymous callers and ordinary accounts and changes nothing', async () => {
@@ -203,7 +268,7 @@ test('a closed purchases group answers 403 platform_closed identically to anonym
 });
 
 test('after the purchases and selling groups are opened by data the offer and checkout flow works as before', async () => {
-  await purchasesClosed;
+  await Promise.all([purchasesClosed, sellingClosed]);
   await bootstrapGovernance(db.pool, governor);
   for (const group of ['purchases', 'selling']) {
     const opened = await request('POST', `/v1/platform/exposure/${group}:open`, 'governor');

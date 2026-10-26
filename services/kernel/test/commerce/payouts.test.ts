@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { PoolClient, QueryConfig } from 'pg';
 import { Value } from 'typebox/value';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import { createPayouts } from '../../src/commerce/payouts.ts';
@@ -15,6 +16,7 @@ import { EVENT_TYPES } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import type { ActionMetadata } from '../../src/request/access.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 
@@ -56,10 +58,10 @@ const stripe: StripePort = {
     throw new Error('Unexpected Stripe call from royalty effect');
   },
 };
-async function token(id: string) {
+async function token(id: string, scopes = actions) {
   return new SignJWT({
     client_id: 'web',
-    scope: actions.join(' '),
+    scope: scopes.join(' '),
     authn_epoch: 1,
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
@@ -92,8 +94,18 @@ async function request(path: string, id: string | null = creator, body?: unknown
 beforeAll(async () => {
   signing = await generateKeyPair('ES256');
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'payout', alg: 'ES256' };
+  const actionCatalogue = new Map<string, ActionMetadata>(
+    actions.map((action) => [
+      action,
+      {
+        anonymous: false,
+        ...(action === 'offer:create' ? { 'x-resource-types': ['commerce.offer'] } : {}),
+      },
+    ]),
+  );
+  actionCatalogue.set('exposure:open', { anonymous: false });
   access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: actionCatalogue,
     auth: {
       issuer: 'https://auth.test',
       audience: 'https://kernel.test',
@@ -101,7 +113,16 @@ beforeAll(async () => {
       fetch: async () => Response.json({ keys: [jwk] }),
     },
   });
-  app = createKernel({ pool, routeKey: new Uint8Array(32), access });
+  app = createKernel({
+    pool,
+    routeKey: new Uint8Array(32),
+    access,
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
+  });
   for (const id of [creator, otherCreator, buyer, operator])
     await pool.query(
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
@@ -119,6 +140,17 @@ beforeAll(async () => {
     { pool, client, databaseUrl, executorId: 'payout-test' },
   );
   await worker.launch();
+  await bootstrapGovernance(pool, operator);
+  const opened = await app.handle(
+    new Request('https://kernel.test/v1/platform/exposure/selling:open', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await token(operator, ['exposure:open'])}`,
+        'idempotency-key': JSON.stringify(key()),
+      },
+    }),
+  );
+  if (opened.status !== 200) throw new Error(`Opening selling failed: ${opened.status} ${await opened.text()}`);
 }, 30_000);
 beforeEach(async () => {
   now = new Date('2026-01-20T12:00:00Z');

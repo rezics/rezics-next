@@ -21,6 +21,7 @@ const issuer = 'https://auth.example.test';
 const audience = 'https://api.rezics.test';
 const password = 'correct horse battery staple';
 const actions = ['payout_statement:mark_paid'];
+const scopes = [...actions, 'exposure:open'];
 const operator = newId(0x7101);
 const creator = newId(0x7102);
 const other = newId(0x7103);
@@ -41,7 +42,7 @@ async function authenticate(id: string) {
     new Request(`${issuer}/signin`, {
       method: 'POST',
       headers: { origin: issuer, 'content-type': 'application/json' },
-      body: JSON.stringify({ email: `${id}@example.test`, password, client_id: 'commerce-test', scope: actions }),
+      body: JSON.stringify({ email: `${id}@example.test`, password, client_id: 'commerce-test', scope: scopes }),
     }),
   );
   expect(signedIn.status).toBe(200);
@@ -123,7 +124,7 @@ beforeAll(async () => {
       },
     },
   });
-  await auth.internal.registerClient({ clientId: 'commerce-test', firstParty: true, scopes: actions });
+  await auth.internal.registerClient({ clientId: 'commerce-test', firstParty: true, scopes });
   for (const id of accounts) {
     await reader.query(
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
@@ -169,6 +170,16 @@ beforeAll(async () => {
         },
       }),
   });
+  const opened = await app.handle(
+    new Request('https://kernel.test/v1/platform/exposure/selling:open', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${tokens.get(operator)!}`,
+        'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+      },
+    }),
+  );
+  if (opened.status !== 200) throw new Error(`Opening selling failed: ${opened.status} ${await opened.text()}`);
 }, 60_000);
 
 afterAll(async () => {

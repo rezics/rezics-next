@@ -122,7 +122,7 @@ export function payoutRoutes(
         },
         detail: {
           operationId: 'payout_statement.list',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:selling',
           'x-action': 'payout_statement:list',
           security,
         },
@@ -141,7 +141,7 @@ export function payoutRoutes(
         response: { 200: t.Object({ statement }), ...errors },
         detail: {
           operationId: 'payout_statement.get',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:selling',
           'x-action': 'payout_statement:read',
           security,
         },
@@ -168,7 +168,7 @@ export function payoutRoutes(
         },
         detail: {
           operationId: 'payout_statement.lines',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:selling',
           'x-action': 'payout_statement:read',
           security,
         },
@@ -197,7 +197,7 @@ export function payoutRoutes(
         },
         detail: {
           operationId: 'payout_statement.mark_paid',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:selling',
           'x-action': 'payout_statement:mark_paid',
           security: [{ bearerAuth: [] }],
         },
