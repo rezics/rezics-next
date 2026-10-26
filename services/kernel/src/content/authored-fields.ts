@@ -163,7 +163,9 @@ export async function eraseAuthoredField(
         receipt: {
           kind: commandKind,
           key: context.idempotencyKey,
-          digest: createHash('sha256').update(canonicalize([identity.principal, commandKind, body])!).digest(),
+          digest: createHash('sha256')
+            .update(canonicalize([identity.principal, commandKind, body])!)
+            .digest(),
         },
       },
       async (tx) => {
