@@ -84,7 +84,8 @@ const population: Population = {
       'core.receipt': [
         {
           partition_no: actorRoute >>> 4,
-          actor_account_id: accountId,
+          principal_kind: 'account',
+          principal_id: accountId,
           command_kind: 'access.membership-inverse-bootstrapped',
           idempotency_key: `unrelated:${ordinal}`,
           request_digest: new Uint8Array(32),

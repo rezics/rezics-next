@@ -61,6 +61,11 @@ beforeAll(async () => {
      VALUES ($1,$2,$3,'organization:membership','(,)',$3)`,
     [route, organizationId, owner],
   );
+  await db.admin.query(
+    `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+     VALUES ($1,$2,'organization',$3,$4,$4)`,
+    [routeOf(owner), owner, organizationId, owner],
+  );
 });
 afterAll(async () => {
   if (db) await db.close();

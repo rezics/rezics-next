@@ -57,7 +57,7 @@ export async function handleFixture(
         .update(JSON.stringify(`registration:${row.request_key}`))
         .digest('hex')}`;
     const receipt = await kernel.query<{ response: { accountId: string; registrationId: string } }>(
-      "SELECT response FROM core.receipt WHERE partition_no=$1 AND actor_account_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
+      "SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
       [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:wf:${workflow}:pending-account`],
     );
     if (
@@ -139,13 +139,17 @@ export async function handleFixture(
   await auth.internal.registerClient({
     clientId: 'durable-web',
     firstParty: true,
-    scopes: ['account:update', 'account:delete', 'organization:membership', 'account:manage'],
+    scopes: ['account:update', 'account:delete', 'organization:create', 'organization:membership', 'account:manage'],
   });
   const verifier = createAuthenticator({
     ...auth.verifier,
     fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
   });
-  const actions = new Map([...LIFECYCLE_ACTIONS, ['account:manage', { anonymous: false }] as const]);
+  const actions = new Map([
+    ...LIFECYCLE_ACTIONS,
+    ['account:manage', { anonymous: false }],
+    ['organization:create', { anonymous: false }],
+  ] as const);
   const access = createAccess({
     actions,
     accountEvidence: (actor) => verifier.identity(actor)?.account,
@@ -153,6 +157,7 @@ export async function handleFixture(
   const commands = createLifecycleCommands({ pool: kernel, access });
   operators = createOperatorCommands({ pool: kernel, access, actions, managementAction: 'account:manage' });
   const approvals = new Map<string, { token: string; operation?: AccountOperation }>();
+  const commandKeyPrefixes = new WeakMap<object, string>();
   let fault: string | undefined;
   let beforeRevoke: ((accountId: string) => Promise<void>) | undefined;
   const effects: { phase: string; transactionId: string; replayed: boolean }[] = [];
@@ -225,9 +230,21 @@ export async function handleFixture(
         if (!(await withConnection(kernel, (client) => check(client))))
           throw new Error('Current operation authorization denied');
       }
-      return { ...context, actor, account: await read(actor.accountId) };
+      const approved = { ...context, actor, account: await read(actor.accountId) };
+      commandKeyPrefixes.set(
+        approved,
+        `wf:${createHash('sha256')
+          .update(JSON.stringify([actor.accountId, reference, operation]))
+          .digest('hex')}`,
+      );
+      return approved;
     },
     actorAccountId: (context) => context.actor.accountId,
+    stableCommandKey(context, phase) {
+      const prefix = commandKeyPrefixes.get(context);
+      if (!prefix) throw new Error('Workflow command key requires an approved operation');
+      return `${prefix}:${phase}`;
+    },
   };
   const native = {
     reserveHandle: internal.reserveHandle,

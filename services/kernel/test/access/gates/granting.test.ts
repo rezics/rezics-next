@@ -255,18 +255,18 @@ afterAll(async () => {
 }, 60_000);
 
 test('platform gates are granted and revoked through the ordinary grant routes', async () => {
-  // access:grant from the bootstrap role is not enough to grant a gate or gate:any.
-  await expectDenied(staff.bearer, recipient.accountId, [group]);
-  await expectDenied(staff.bearer, carrier.accountId, ['gate:any']);
-
-  // The covering action has no prior grantor. This one direct row is that holding.
-  // Every later grant and revoke goes through the mounted routes.
+  // A direct access:grant holding alone cannot grant either gate action.
   await pool.query(
     `INSERT INTO access.resource_grant
        (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
-     VALUES ($1, $2, 'identity', $3, '', 'gate:any', '(,)', $4)`,
-    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, staff.accountId, Bun.randomUUIDv7()],
+     VALUES ($1, $2, 'identity', $3, '', 'access:grant', '(,)', $4)`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, plain.accountId, Bun.randomUUIDv7()],
   );
+  await expectDenied(plain.bearer, recipient.accountId, [group]);
+  await expectDenied(plain.bearer, carrier.accountId, ['gate:any']);
+
+  // Bootstrap governance carries gate:any. It covers group grant administration,
+  // while permission evaluation still treats the covering action as exact.
   expect(await formula(staff.bearer, 'gate:any')).toMatchObject({ allowed: true });
   // The formula does not treat gate:any as the group, even when the token names that group.
   const staffGroup = await issue(staff.email, ['access:grant', 'gate:any', group]);

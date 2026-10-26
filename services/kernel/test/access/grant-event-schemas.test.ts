@@ -54,6 +54,8 @@ test('all eight concrete helper events have registered schemas for every return 
   }
   expect(Object.keys(ACCESS_EVENTS).sort()).toEqual(
     [
+      'com.rezics.access.exposure.closed.v1',
+      'com.rezics.access.exposure.opened.v1',
       'com.rezics.access.account.suspended.v1',
       'com.rezics.access.grant.create.v1',
       'com.rezics.access.grant.change.v1',

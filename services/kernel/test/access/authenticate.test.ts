@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
 import { createAuthService, type AuthService, type AuthServiceOptions } from '@rezics/auth';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, createResourcePublicEligibility } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
@@ -490,16 +490,32 @@ test('construction is lazy, catalogue ownership is local, and known anonymous ro
     },
   } as unknown as Pool;
   const anonymous = { kind: 'anonymous' as const };
+  const eligibleResource = {
+    ...resource,
+    eligibility: createResourcePublicEligibility({
+      resource,
+      action: 'subject:public',
+      async prepare() {
+        return true;
+      },
+      async verify() {
+        return true;
+      },
+    }),
+  };
   expect(await access.authorize(noQueries, anonymous, 'arbitrary:read', resource)).toBe(false);
   expect(await (await accessCheck(access, anonymous, 'arbitrary:read', resource, context(noQueries)))(noQueries)).toBe(
     false,
   );
-  const check = await accessCheck(access, anonymous, 'subject:public', resource, context());
+  const check = await accessCheck(access, anonymous, 'subject:public', eligibleResource, context());
   expect(await check(pool)).toBe(true);
   await pool.query(
     `INSERT INTO access.resource_denial
     (route,resource_id,subject_id,action,reason,valid,transaction_id) VALUES ($1,$2,$3,'subject:public','resource','(,)',$3)`,
     [resource.route, resource.id, person],
   );
-  expect(await check(pool)).toBe(false);
+  expect(await check(pool)).toBe(true);
+  const identified = await access.authenticate(await signed({ scope: 'subject:public' }), context());
+  const denied = await accessCheck(access, identified, 'subject:public', eligibleResource, context());
+  expect(await denied(pool)).toBe(false);
 });

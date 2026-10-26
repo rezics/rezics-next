@@ -120,6 +120,21 @@ async function grant(id: string, role = '') {
     [resource.route, resource.id, id, role, action],
   );
 }
+async function membership(accountId: string, organizationId: string) {
+  const transactionId = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO access.membership_inverse
+      (route,account_id,kind,group_id,reservation_id,transaction_id)
+     VALUES ($1,$2,'organization',$3,$4,$4)`,
+    [routeOf(accountId), accountId, organizationId, transactionId],
+  );
+  await pool.query(
+    `INSERT INTO access.organization_member
+      (route,organization_id,member_account_id,role,valid,transaction_id)
+     VALUES ($1,$2,$3,'owner','(,)',$4)`,
+    [routeOf(organizationId), organizationId, accountId, transactionId],
+  );
+}
 async function delegatedToken() {
   // Preserve the actor claims while exercising verification of the command-created assignment.
   const claims = decodeJwt(token);
@@ -166,7 +181,14 @@ beforeAll(async () => {
 }, timeout);
 
 beforeEach(async () => {
-  for (const table of ['resource_grant', 'resource_denial', 'principal_assignment', 'organization_member', 'account'])
+  for (const table of [
+    'resource_grant',
+    'resource_denial',
+    'principal_assignment',
+    'organization_member',
+    'membership_inverse',
+    'account',
+  ])
     await pool.query(`DELETE FROM access.${table}`);
   for (const id of [person, principal, organization]) await account(id);
   await assignments.create({ principalId: principal, requestId, assignedActorId: person, valid: '(,)' });
@@ -283,11 +305,7 @@ test('fenced or missing principal cannot establish requested_by in authenticatio
 test('fenced or missing organization cannot supply a role grant while actor and principal facts remain intact', async () => {
   await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND subject_id=$2', [resource.route, principal]);
   await grant(organization, 'owner');
-  await pool.query(
-    `INSERT INTO access.organization_member
-    (route,organization_id,member_account_id,role,valid,transaction_id) VALUES ($1,$2,$3,'owner','(,)',$3)`,
-    [routeOf(organization), organization, principal],
-  );
+  await membership(principal, organization);
   const access = verifier();
   const jwt = await delegatedToken();
   expect(await run(access, jwt)).toBe(true);
@@ -306,6 +324,7 @@ test('fenced or missing organization cannot supply a role grant while actor and 
 
 test('one actor anchor reads state floor and fence; separate evidence precedes checkout and public projections stay private', async () => {
   await grant(organization, 'owner');
+  await membership(principal, organization);
   const access = verifier();
   const ctx = context();
   const actor = await access.authenticate(await delegatedToken(), ctx);

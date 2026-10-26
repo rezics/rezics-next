@@ -53,6 +53,7 @@ test('mounted declarations and one native counter statement stay bounded as rout
             operationId: 'item.create',
             security: [{}],
             'x-action': 'item:create',
+            'x-exposure': 'public',
             'x-rate-limit': defineRateLimit({ family: 'report', units: 1 }),
           };
           for (let index = 0; index < 8 * scale; index++)
@@ -71,6 +72,7 @@ test('mounted declarations and one native counter statement stay bounded as rout
                 operationId: 'item.update',
                 security: [{}],
                 'x-action': 'item:update',
+                'x-exposure': 'public',
                 'x-rate-limit': defineRateLimit({ family: 'write', units: units === 1 ? 1 : 'commands' }),
               },
             },

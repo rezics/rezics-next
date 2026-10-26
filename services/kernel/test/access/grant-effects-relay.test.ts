@@ -146,7 +146,7 @@ test('real Global grants pass the production relay, advance its checkpoint and r
   };
   const created = await commands.create(context, input);
   const position = await committed(created.transactionId);
-  expect(position).toBe(2n); // The only predecessor is the approved bootstrap helper.
+  expect(position).toBe(3n); // Bootstrap and its organization:create standing grant precede this command.
   expect(await commands.create(context, input)).toEqual({ ...created, replayed: true });
   const changed = await commands.change(context, {
     ...input,
@@ -165,7 +165,7 @@ test('real Global grants pass the production relay, advance its checkpoint and r
     },
   });
   expect(envelopes.map((envelope) => envelope.events[0]!.data)).toEqual([created.value, changed.value]);
-  expect(await relayEffects(f.pool, effects, 0)).toEqual({ status: 'read', envelopes: 3, position: next });
+  expect(await relayEffects(f.pool, effects, 0)).toEqual({ status: 'read', envelopes: 4, position: next });
   expect(await checkpoint(0)).toBe(next);
   await finishEffects(envelopes);
   expect(recorded.map((event) => event.data)).toEqual([created.value, changed.value]);

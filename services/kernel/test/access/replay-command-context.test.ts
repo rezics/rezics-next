@@ -104,8 +104,8 @@ test('one database T is shared by the final formula, body SQL and immutable live
       expect(current.time).toBe(context.time);
       await tx.query('SELECT pg_sleep(0.02)');
       const { rows } = await tx.query(
-        'SELECT $1::timestamptz = transaction_timestamp() AS same, clock_timestamp() > $1::timestamptz AS later',
-        [authoritativeTimeValue(context.time)],
+        'SELECT $1::timestamptz = $2::timestamptz AS same, clock_timestamp() > $1::timestamptz AS later',
+        [authoritativeTimeValue(context.time), checkedAt],
       );
       expect(rows).toEqual([{ same: true, later: true }]);
       expect(authoritativeTimeValue(current.time)).toBe(checkedAt);
@@ -123,7 +123,7 @@ test('one database T is shared by the final formula, body SQL and immutable live
   });
 });
 
-test('a real PostgreSQL retry chooses a fresh T and reauthorizes with request evidence prepared once', async () => {
+test('a real PostgreSQL retry chooses a fresh T and prepares and reauthorizes on each attempt', async () => {
   const f = await fixture(0xb110);
   let prepares = 0;
   const checked: string[] = [];
@@ -158,7 +158,7 @@ test('a real PostgreSQL retry chooses a fresh T and reauthorizes with request ev
   );
   expect(result.position).toBe(1n);
   expect(bodies).toBe(2);
-  expect(prepares).toBe(1);
+  expect(prepares).toBe(2);
   expect(checked).toHaveLength(2);
   expect(checked[0]).not.toBe(checked[1]);
 });

@@ -3,7 +3,6 @@ import type { Pool } from 'pg';
 import {
   MAX_CREATION_RESOURCES,
   createResourceCreationManifest,
-  CreationManifestUnavailableError,
   parentCreationAuthorization,
   type ParentCreationContext,
   type ResourceCreationEntry,
@@ -167,7 +166,7 @@ test('manifest cannot be forged or mutated and exposes no serialized capability'
   expect(calls).toEqual([]);
 });
 
-test('unavailable multi resource implementation fails closed without new grants', () => {
+test('multi resource manifest construction ignores legacy resource and creation getters', () => {
   const { input, calls } = fixture();
   for (const count of [1, 2, 16]) {
     const manifest = createResourceCreationManifest(
@@ -196,7 +195,12 @@ test('unavailable multi resource implementation fails closed without new grants'
       },
     });
     for (const actor of [input.actor, { kind: 'anonymous' } as const]) {
-      expect(() => parentCreationAuthorization({ ...input, actor, context })).toThrow(CreationManifestUnavailableError);
+      const authorization = parentCreationAuthorization({ ...input, actor, context });
+      expect(authorization.action).toBe(input.action);
+      expect(authorization.resource).toEqual(input.parent.resource);
+      expect(Object.isFrozen(authorization.resource)).toBe(true);
+      expect(authorization.prepare).toBeFunction();
+      expect(authorization.authorize).toBeFunction();
     }
   }
   expect(calls).toEqual([]);

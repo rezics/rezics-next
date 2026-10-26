@@ -37,7 +37,15 @@ const env = {
   AUTH_AUDIENCE: 'https://api.membership.test',
   AUTH_JWKS_URL: `${issuer}/jwks`,
 };
-const context = { pool, client, queues: WORK_QUEUES, env, clock: systemClock, addEffects() {}, addService() {} };
+const context = {
+  pool,
+  client,
+  queues: WORK_QUEUES,
+  env,
+  clock: systemClock,
+  addEffects() {},
+  addService() {},
+};
 const boundary = () => ({ pool, deadline: Date.now() + 10000 });
 const caller = createAccess({
   actions: LIFECYCLE_ACTIONS,

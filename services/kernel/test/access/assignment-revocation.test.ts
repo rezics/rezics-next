@@ -68,7 +68,7 @@ for (const injected of [true, false]) {
   for (const validity of ['unbounded', 'active', 'future'] as const) {
     test(`${injected ? 'injected clock' : 'database time'} revokes ${validity} assignment at T and preserves immutability`, async () => {
       const now = Date.now();
-      const configured = new Date(now - 60_000);
+      const configured = new Date(now + 60_000);
       let clockReads = 0;
       const config = {
         pool,
@@ -128,7 +128,7 @@ for (const injected of [true, false]) {
       expect(clockReads).toBe(injected ? 1 : 0);
       if (injected) {
         expect(new Date(at).toISOString()).toBe(configured.toISOString());
-        expect(new Date(transactionAt).getTime()).toBeGreaterThan(configured.getTime());
+        expect(new Date(transactionAt).getTime()).toBeLessThan(configured.getTime());
       } else {
         expect(Date.parse(at)).toBeGreaterThanOrEqual(earliest);
         expect(Date.parse(at)).toBeLessThanOrEqual(Date.now());

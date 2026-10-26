@@ -7,7 +7,7 @@ import { createInternalConsentHandler } from '../../../auth/src/internal-consent
 import { migrate } from '../../../auth/scripts/database.ts';
 import { createAccess, captureDurableInitiator, durableInitiatorCommitment } from '../../src/access/index.ts';
 import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
-import { verifiedBearerExpiry } from '../../src/access/approved-identity.ts';
+import { ApprovalIdentityDeniedError, verifiedBearerExpiry } from '../../src/access/approved-identity.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
 import { commandAccessContext } from '../../src/access/command-admission.ts';
@@ -475,7 +475,7 @@ if (Bun.main === import.meta.path) {
         expect(actor).toEqual(f.creator);
         expect(actor).not.toBe(f.creator);
         const ctx = commandAccessContext(h.context(), attempt);
-        expect(() => verifiedBearerExpiry(access, actor, ctx)).toThrow('Native bearer evidence unavailable');
+        expect(() => verifiedBearerExpiry(access, actor, ctx)).toThrow(ApprovalIdentityDeniedError);
         const copy = await accessCheck(access, { ...actor }, action, f.target, ctx);
         expect(await copy(h.db.pool, attempt.time)).toBe(false);
       },

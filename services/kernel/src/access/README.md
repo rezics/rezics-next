@@ -256,6 +256,17 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
   organizations and other subjects' Global grants with the creator fixed; constant rows and statements, logarithmic
   buffers.
 
+### Governance bootstrap
+
+- Touches: one native Global command to install the governance role and its receipt/outbox, followed by a separately
+  authorized standing-parent command for `organization:create`. Replays recheck the role installation marker and the
+  standing-parent marker; a conflicting operator is refused before the second command.
+- Bound: constant rows and statements at fixed actor and Global anchors, with logarithmic buffers as unrelated
+  accounts and Global grants grow. The integrated check observes four account rows on first install/replay and one on
+  refusal; refusal performs only the initial command attempt.
+- Growth check: `growth-bootstrap-governance.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts,
+  Global grants and receipts with the bootstrapped actor fixed.
+
 ### Workflow approvals
 
 `client:manage` authorizes Auth client scope reductions on the Global Context through the ordinary Access formula; the approval binds the exact client, first-party flag and scopes.
