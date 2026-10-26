@@ -16,6 +16,12 @@ function select(...changed: string[]) {
   return affectedTests(root, join(root, kernel), changed);
 }
 
+type Reach = { module: string; site: string; globs: string[] }[];
+
+function selectWith(reach: Reach, ...changed: string[]) {
+  return affectedTests(root, join(root, kernel), changed, reach);
+}
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'affected-'));
   write('package.json', JSON.stringify({ name: 'fixture', workspaces: ['packages/*', 'services/*'] }));
@@ -128,6 +134,119 @@ describe('affected test selection', () => {
   });
 });
 
+describe('affected test selection with computed imports', () => {
+  const loader = {
+    module: 'services/kernel/src/load.ts',
+    site: '`./queries/${name}.sql`',
+    globs: ['services/kernel/src/queries/*.sql'],
+  };
+
+  function loaderFixture() {
+    write('services/kernel/src/load.ts', 'export const load = (name: string) => import(`./queries/${name}.sql`);\n');
+    write('services/kernel/src/queries/one.sql', 'select 1');
+    write('services/kernel/src/queries/two.sql', 'select 2');
+    write('services/kernel/test/load.test.ts', "import { load } from '../src/load.ts';\nvoid load;\n");
+  }
+
+  test('a computed import listed in the reach table depends on the files it lists and stops making its importers run for every change', () => {
+    loaderFixture();
+    expect(select('services/kernel/src/b.ts')).toEqual({
+      kind: 'tests',
+      tests: ['test/a.test.ts', 'test/load.test.ts'],
+    });
+    expect(selectWith([loader], 'services/kernel/src/b.ts')).toEqual({ kind: 'tests', tests: ['test/a.test.ts'] });
+    expect(selectWith([loader], 'services/kernel/src/queries/two.sql')).toEqual({
+      kind: 'tests',
+      tests: ['test/load.test.ts'],
+    });
+    expect(selectWith([loader], 'services/kernel/src/load.ts')).toEqual({
+      kind: 'tests',
+      tests: ['test/load.test.ts'],
+    });
+
+    // An importer that names the target needs no globs.
+    write(
+      'services/kernel/test/wrapped.test.ts',
+      "const url = new URL('file:///x');\nprocess.env.DRIVER = resolve(import.meta.dir, 'drivers/one.ts');\nawait import(url.href);\n",
+    );
+    write('services/kernel/test/drivers/one.ts', "import { a } from '../../src/a.ts';\nexport const driver = a;\n");
+    const wrapped = { module: 'services/kernel/test/wrapped.test.ts', site: 'url.href', globs: [] };
+    expect(selectWith([loader, wrapped], 'services/kernel/src/b.ts')).toEqual({
+      kind: 'tests',
+      tests: ['test/a.test.ts', 'test/wrapped.test.ts'],
+    });
+    expect(selectWith([loader, wrapped], 'services/kernel/src/c.ts')).toEqual({
+      kind: 'tests',
+      tests: ['test/nested/b.test.ts'],
+    });
+    expect(selectWith([loader, wrapped], 'services/kernel/test/drivers/one.ts')).toEqual({
+      kind: 'tests',
+      tests: ['test/wrapped.test.ts'],
+    });
+  });
+
+  test('a reach entry whose import site or files no longer exist selects the whole suite', () => {
+    loaderFixture();
+    const gone = { ...loader, module: 'services/kernel/src/removed.ts' };
+    const moved = { ...loader, site: '`./sql/${name}.sql`' };
+    const empty = { ...loader, globs: ['services/kernel/src/queries/*.txt'] };
+    for (const entry of [gone, moved, empty]) {
+      const selection = selectWith([loader, entry], 'services/kernel/src/b.ts');
+      expect(selection.kind).toBe('all');
+      if (selection.kind === 'all') expect(selection.reason).toContain(entry.module);
+    }
+    // An entry that is still true selects as before, and a table that is stale for one entry widens every selection.
+    expect(selectWith([loader], 'services/kernel/src/b.ts').kind).toBe('tests');
+    expect(selectWith([empty], 'services/kernel/src/b.ts').kind).toBe('all');
+  });
+
+  test("a path built from the module's own directory and a literal is a dependency", () => {
+    write(
+      'services/kernel/test/paths.test.ts',
+      [
+        "import { join, resolve } from 'node:path';",
+        "export const first = resolve(import.meta.dir, 'fixtures/first.txt');",
+        "export const second = join(import.meta.dir, 'fixtures', 'second.txt');",
+        "export const third = new URL('fixtures/third.txt', import.meta.url);",
+        "export const missing = resolve(import.meta.dir, 'fixtures/missing.txt');",
+        "export const outside = resolve(import.meta.dir, '../../../../escape.txt');",
+        '',
+      ].join('\n'),
+    );
+    for (const name of ['first', 'second', 'third']) write(`services/kernel/test/fixtures/${name}.txt`, name);
+    for (const name of ['first', 'second', 'third']) {
+      expect(select(`services/kernel/test/fixtures/${name}.txt`)).toEqual({
+        kind: 'tests',
+        tests: ['test/paths.test.ts'],
+      });
+    }
+    expect(select('services/kernel/test/fixtures/missing.txt')).toEqual({
+      kind: 'all',
+      reason: 'services/kernel/test/fixtures/missing.txt',
+    });
+  });
+
+  test('an import or require call inside a string, template text or comment is not an import site', () => {
+    write(
+      'services/kernel/test/texts.test.ts',
+      [
+        "const a = 'await import(process.env.TARGET)';",
+        'const b = `require(${a}) and import(x)`;',
+        '// await import(process.env.TARGET);',
+        '/* require(name) */',
+        "const c = `${'import(y)'}`;",
+        '',
+      ].join('\n'),
+    );
+    expect(select('services/kernel/src/b.ts')).toEqual({ kind: 'tests', tests: ['test/a.test.ts'] });
+    write('services/kernel/test/real.test.ts', "const a = '';\nawait import(`${a}`);\n");
+    expect(select('services/kernel/src/b.ts')).toEqual({
+      kind: 'tests',
+      tests: ['test/a.test.ts', 'test/real.test.ts'],
+    });
+  });
+});
+
 describe('affected test selection on the repository', () => {
   const repository = resolve(import.meta.dir, '../../..');
   const module = resolve(import.meta.dir, '..');
@@ -143,8 +262,7 @@ describe('affected test selection on the repository', () => {
     console.log(`affected: one repository selection took ${Math.round(elapsed)} ms`);
     if (leaf.kind !== 'tests' || other.kind !== 'tests') throw new Error('expected test selections');
 
-    // Tests with a computed import are selected beside any change, so compare two leaves to see what each adds.
-    expect(leaf.tests).toContain('test/log.test.ts');
+    expect(leaf).toEqual({ kind: 'tests', tests: ['test/log.test.ts'] });
     expect(leaf.tests.filter((file) => !other.tests.includes(file))).toEqual(['test/log.test.ts']);
     expect(other.tests.filter((file) => !leaf.tests.includes(file))).toEqual(['test/receipt.test.ts']);
     expect(leaf.tests.length).toBeLessThan(40);
