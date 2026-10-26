@@ -1,7 +1,4 @@
-import {
-  createAuthHost,
-  type AuthService,
-} from '@rezics/auth';
+import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
