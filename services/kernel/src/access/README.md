@@ -427,6 +427,39 @@ The account/public projection is a point read and tombstoning scrubs its account
 Access SQL keeps assignment/account and inverse/hold/account joins on their principal/member anchor, releases independent group/authority reads before target checkout, and has no cross-partition join or global lock/counter.
 The shared executor serializes writes through one `core.partition.position` counter per partition, so contention can grow within that partition without requiring all partitions on one machine.
 
+### Session revocation
+
+`revoke` is the native adapter behind Auth's `revokeSessions`: it ends every session and token a person holds before
+now, and it is the only way a person's sessions are revoked.
+
+- Authority: the subject itself, authenticated with its own credential (an operator-opened session is not the
+  person's own), under `account:manage` on that account; and platform governance, under `account:suspend` on the
+  Global Context, the action suspension uses. Nobody else holds either, including an organization's owners and the
+  managers of another account. The subject is an active person (an actor with no operator). An automated account's
+  sessions end with its operator's fence or its own deletion.
+- Order, Access first: one Access transaction advances the subject's `minimum_authn_epoch`, raises its authentication
+  fence, inserts the fence receipt (`kind = 'fence'`) and the command receipt, and commits the continuation whose
+  only entry is Auth's `revoke-auth-sessions`. Only then does Auth delete the sessions, authorized by that continuation
+  and not by the caller, whose standing the fence has just ended. From the commit every earlier session and token is
+  refused, and no new one is issued while the fence stands, whether or not Auth has deleted anything.
+- Failure: if Auth fails, the workflow answers `revocation-failed` (`RevocationFailedError`, `code: 'revocation-failed'`)
+  and leaves the fence. `resumeOperation(key)` completes the deletion under the continuation; it is recorded once.
+  A continuation expires after five minutes and governance renews it.
+- Recovery: the person stays `active`. A recovery clears exactly the fence of its own proof, and its proof names the
+  floor it was issued at. A proof issued before this fence no longer matches the account, so it cannot complete,
+  cannot lower the floor and cannot clear the fence. A recovery started afterwards restores the person at a higher
+  floor. Revoking an already fenced person advances the floor again and supersedes a recovery in flight.
+- Replay: the command receipt is keyed by the approval's operation key, so a replay by governance answers the stored
+  receipt, advances nothing and asks Auth nothing more. The subject's own replay is refused like any request signed
+  by a floor it has since passed.
+- Touches: one actor admission seek, the native formula, one account lock and update, one fence receipt insert, one
+  command receipt and one continuation insert, all in the subject's partition. Auth's deletion is bounded by the
+  subject's sessions, k.
+- Bound: O(log R + k), R = N + U*t + M, plus the formula `O((1 + K) log G)`, K <= 1000. No statement reads more than
+  the subject's rows, so there is no growth check beyond the existing ones for the shared account and receipt paths.
+- Behaviour: `test/access/session-revocation.test.ts` runs the workflow through the native bindings with real Auth
+  sessions, tokens and recovery.
+
 ### Operator fencing
 
 - Touches: the suspension's existing rows plus one responsibility probe and one continuation insert. The committed

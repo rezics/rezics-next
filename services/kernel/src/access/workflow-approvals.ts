@@ -1,5 +1,6 @@
 import { accessClock } from './access-clock.ts';
 import { createSuspensionCommands } from './suspension.ts';
+import { createSessionRevocationCommands } from './session-revocation.ts';
 import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
@@ -47,6 +48,8 @@ export type CredentialOperation = Pick<
   'subjectAccountId' | 'purpose' | 'operationKey' | 'effectReference' | 'effectDigest'
 > & { kind: 'credential'; subjectEpoch: number; authorization: string };
 type TransferOperation = Extract<ContractAccountOperation, { kind: 'transfer' }> & { acceptance?: string };
+/** The contract's revoke carries no approval reference; this adapter binds one and denies a request without. */
+type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
 type TransferAcceptanceOperation = {
   kind: 'transfer-acceptance';
   previous: WorkflowResponsibility;
@@ -56,7 +59,8 @@ type TransferAcceptanceOperation = {
   authorization: string;
 };
 type AccountOperation =
-  | Exclude<ContractAccountOperation, { kind: 'transfer' }>
+  | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
+  | RevokeOperation
   | TransferOperation
   | TransferAcceptanceOperation;
 type NativeOperation = AccountOperation | CredentialOperation;
@@ -101,6 +105,7 @@ const text = (value: unknown, max = 255): value is string =>
 
 type NativeKind =
   | 'fence-operator'
+  | 'revoke'
   | 'rename'
   | 'delete'
   | 'membership'
@@ -114,7 +119,6 @@ type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organ
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
-  revoke: 'Auth session revocation',
   consent: 'Auth consent reduction',
 } as const satisfies Record<Exclude<AccountOperation['kind'], NativeKind>, string>;
 
@@ -130,6 +134,12 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
     case 'fence-operator':
       requireAllowed(id(operation.accountId));
       fields = ['kind', 'accountId', 'authorization'];
+      descriptor = { action: 'account:suspend', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
+      break;
+    case 'revoke':
+      requireAllowed(id(operation.accountId));
+      fields = ['kind', 'accountId', 'authorization'];
+      // Platform governance; the subject itself is chosen by operationDescriptor.
       descriptor = { action: 'account:suspend', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
       break;
     case 'client-reduction':
@@ -374,13 +384,19 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     };
   }
   /** An automated account is deleted by the managers of its current operator; only the
-   * account itself holds its own delete action. The relation is one anchored point read. */
-  async function deletionDescriptor(
+   * account itself holds its own delete action. The relation is one anchored point read.
+   * A person's sessions are revoked by the person under its own account management or by
+   * platform governance, and by nobody else: no read decides it. */
+  async function operationDescriptor(
     actor: AccountActor,
     operation: NativeOperation,
     descriptor: Descriptor,
     deadline: number,
   ): Promise<Descriptor> {
+    if (operation.kind === 'revoke')
+      return actor.accountId === operation.accountId
+        ? { action: 'account:manage', target: operation.accountId, targetKind: 'actor' }
+        : descriptor;
     if (operation.kind !== 'delete' || actor.accountId === operation.accountId) return descriptor;
     const subject = await within(deadline, () =>
       withConnection(config.pool, (client) =>
@@ -501,7 +517,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     const { row, actor } = await within(bounded.deadline, () =>
       readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
     );
-    const descriptor = await deletionDescriptor(actor, operation, native, bounded.deadline);
+    const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline);
     requireAllowed(
       !caller ||
         (caller.accountId === actor.accountId &&
@@ -510,6 +526,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           canonicalize([...caller.scopes].sort()) === canonicalize([...actor.scopes].sort())),
     );
     if (operation.kind === 'organization') await requireHuman(actor);
+    requireAllowed(
+      operation.kind !== 'revoke' || actor.accountId !== operation.accountId || actor.requestedBy === null,
+    );
     let approvedOperation = operation;
     if (operation.kind === 'automated' && operation.registrationId !== '') {
       if (!creationBinding) throw new WorkflowApprovalUnavailableError();
@@ -546,6 +565,29 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                   {
                     accountId: operation.accountId,
                     key: `wf:${hash([actor.accountId, row.operationKey])}:fence`,
+                    continuation: {
+                      operationKey: row.operationKey,
+                      operationDigest: row.digest,
+                      commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
+                    },
+                  },
+                )
+              ).value,
+          }
+        : {}),
+      ...(operation.kind === 'revoke'
+        ? {
+            revokeSessions: async () =>
+              (
+                await createSessionRevocationCommands({
+                  pool: config.pool,
+                  access: config.access,
+                  clock: accessClock(config.access),
+                }).revoke(
+                  { actor, pool: config.pool, deadline },
+                  {
+                    accountId: operation.accountId,
+                    key: `wf:${hash([actor.accountId, row.operationKey])}:revoke`,
                     continuation: {
                       operationKey: row.operationKey,
                       operationDigest: row.digest,
@@ -616,9 +658,11 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       const actor = typeof token === 'string' ? await config.access.authenticate(token, bounded) : token;
       if (operation.kind === 'credential')
         requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
+      if (operation.kind === 'revoke')
+        requireAllowed(actor.accountId !== operation.accountId || actor.requestedBy === null);
       const expires = verifiedBearerExpiry(config.access, actor, bounded);
       const deadline = bounded.deadline;
-      const descriptor = await deletionDescriptor(actor, operation, native, deadline);
+      const descriptor = await operationDescriptor(actor, operation, native, deadline);
       const route = routeOf(actor.accountId)!;
       const digest = hash([operationKey, businessOperation(operation)]);
       // A fresh credential approval observes a new floor without changing Auth's

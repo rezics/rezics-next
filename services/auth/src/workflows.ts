@@ -27,8 +27,11 @@ export type TransferAcceptanceOperation = {
   sourceOperationKey: string;
   authorization: string;
 };
+/** Native hosts bind a session revocation to an approval; a callback-only historical host runs it without one. */
+export type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
 export type AccountOperation =
-  | Exclude<ContractAccountOperation, { kind: 'transfer' }>
+  | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
+  | RevokeOperation
   | TransferOperation
   | TransferAcceptanceOperation;
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
@@ -36,6 +39,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, ran
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
+import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureMessage } from './session-revocation.ts';
 import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from './turnstile.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
@@ -291,7 +295,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         try {
           return await fn(...args);
         } catch (error) {
-          const failure = new Error(`Account workflow step failed: ${name}`);
+          const failure = new Error(stepFailureMessage(name));
           // Persist only the native refusal status, never the command's secret
           // input, permission context or original error in a durable step.
           if (isRefusal(error)) throw Object.assign(failure, { status: 403 });
@@ -528,7 +532,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
 
     const fence = step(
       'fence',
-      async (accountId: string, request?: Extract<AccountOperation, { kind: 'fence-operator' }>) => {
+      async (accountId: string, request?: Extract<AccountOperation, { kind: 'fence-operator' | 'revoke' }>) => {
+        if (request?.kind === 'revoke') {
+          // One native command: the person's floor, fence and receipt commit together, with the continuation
+          // that later lets Auth revoke. The actor is resolved here, once, before the fence it is about to raise.
+          const revokeSessions = sessionRevocation(await approved(request));
+          if (!revokeSessions) denied();
+          return revokeSessions();
+        }
         if (request) {
           const context = await approved(request);
           if (
@@ -545,7 +556,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       },
     );
     const revoke = step(
-      'revoke-auth-sessions',
+      REVOKE_SESSIONS_STEP,
       async (accountId: string, request?: AccountOperation, operationKey?: string) => {
         if (operationKey) {
           const root = required(await required(access.readContinuation)(operationKey, accountId));
@@ -1025,8 +1036,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           denied();
         }
         if (input.kind === 'revoke') {
-          await fence(input.accountId);
-          await revoke(input.accountId);
+          if (!('authorization' in input)) {
+            await fence(input.accountId);
+            await revoke(input.accountId);
+            return { accountId: input.accountId };
+          }
+          // Access first: the fence, its receipt and the continuation commit before Auth deletes anything.
+          const barrier = await fence(input.accountId, input);
+          const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
+          if (typeof operationKey !== 'string') denied();
+          await revoke(input.accountId, undefined, operationKey);
           return { accountId: input.accountId };
         }
         if (input.kind === 'rename' || input.kind === 'organization') {
@@ -1125,7 +1144,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       )
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
-    const result = await (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
+    const result = await answerOperation(input, async () =>
+      (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult(),
+    );
     // The approval above was resolved once, before any effect. An operation that
     // removes the actor's own standing answers with the workflow's outcome: the
     // actor is not re-authorized against state the operation itself changed.
@@ -1133,18 +1154,22 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     if (!(context && removesOwnStanding(input, context))) await discloseUnderCurrentAuthority(input);
     return result;
   }
+  /** Auth's failure to delete the sessions of a committed revocation is its own answer. */
+  const answerOperation = <T>(input: AccountOperation, work: () => Promise<T>) =>
+    input.kind === 'revoke' ? answerRevocation(work) : work();
   async function discloseUnderCurrentAuthority(input: AccountOperation) {
     if ('authorization' in input) await approved(input);
     else await access.authorizeUnprotectedOperation?.(input);
   }
   /** Operations that end the standing their own approval relied on: the account's
-   * own deletion, own consent reduction and own leaving of an organization. */
+   * own deletion, own consent reduction, own session revocation and own leaving of an organization. */
   function removesOwnStanding(input: AccountOperation, context: Context): boolean {
     const actor = access.actorAccountId?.(context);
     if (!actor) return false;
     switch (input.kind) {
       case 'delete':
       case 'consent':
+      case 'revoke':
         return input.accountId === actor;
       case 'membership':
         return input.role === null && input.memberAccountId === actor;
@@ -1188,17 +1213,23 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     }
     if (input.kind === 'client-reduction') return waitClientReduction(id);
     const status = await DBOS.getWorkflowStatus(id);
+    // A committed revocation's cleanup runs under its continuation. Its answer repeats the request's own account,
+    // so the person whose sessions it just deleted receives it without standing.
+    const disclose = () =>
+      skipInitial && input.kind === 'revoke' ? Promise.resolve() : discloseUnderCurrentAuthority(input);
     if (status?.status === 'ERROR') {
       const steps = required(await DBOS.listWorkflowSteps(id));
       const failed = required(steps.find((step) => step.error !== null));
       // Official SDK rewind preserves successful Access barriers and reruns
       // only the failed effect under the exact same workflow/command keys.
-      const result = await (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
-      await discloseUnderCurrentAuthority(input);
+      const result = await answerOperation(input, async () =>
+        (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult(),
+      );
+      await disclose();
       return result;
     }
-    const result = await (await DBOS.resumeWorkflow(id)).getResult();
-    await discloseUnderCurrentAuthority(input);
+    const result = await answerOperation(input, async () => (await DBOS.resumeWorkflow(id)).getResult());
+    await disclose();
     return result;
   }
   const close = async () => {
@@ -1300,7 +1331,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         after = rows.at(-1)!.registration_id;
       }
     },
-    revokeSessions: (input: Command) => runOperation(input.key, { kind: 'revoke', accountId: input.accountId }),
+    revokeSessions: (input: Command & { authorization?: string }) =>
+      runOperation(input.key, {
+        kind: 'revoke',
+        accountId: input.accountId,
+        ...(input.authorization === undefined ? {} : { authorization: input.authorization }),
+      }),
     renameHandle: (input: {
       key: string;
       authorization: string;
@@ -1461,7 +1497,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             [id],
           )
         ).rows[0]?.request;
-        if (stored?.kind === 'delete' && (await access.readContinuation(operationKey, stored.accountId)))
+        // A protected revocation commits a continuation; a callback-only host's unprotected one does not.
+        const continuing = stored?.kind === 'delete' || (stored?.kind === 'revoke' && 'authorization' in stored);
+        if (continuing && (await access.readContinuation(operationKey, stored.accountId)))
           return resumeRequest(id, true);
       }
       return resumeRequest(id);

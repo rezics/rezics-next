@@ -84,6 +84,20 @@ const ports: AccountWorkflowPorts = {
   async authorizeOperation(_reference, operation) {
     return {
       actor: { accountId: 'boundary-approved-human' },
+      async revokeSessions() {
+        if (operation.kind !== 'revoke') throw new Error('Not a session revocation');
+        const account = accounts.get(operation.accountId)!;
+        const outcome = await result('revoke-fence', 'revocation-fence', {
+          accountId: operation.accountId,
+          receiptId: 'revocation-fence-receipt',
+          minimumAuthnEpoch: String(account.authnEpoch + 1),
+          kind: 'fence' as const,
+          priorOperatorAccountId: null,
+          continuationOperationKey: 'revocation',
+        });
+        Object.assign(account, { fenced: true, authnEpoch: Number(outcome.value.minimumAuthnEpoch) });
+        return outcome.value;
+      },
       async suspendOperator() {
         if (operation.kind !== 'fence-operator') throw new Error('Not an operator suspension');
         const outcome = await result('suspend-operator', 'fanout-suspension', {
@@ -100,12 +114,22 @@ const ports: AccountWorkflowPorts = {
   },
   async readContinuation(operationKey, accountId) {
     calls.push('continuation-read');
-    const committed = await database.query(
-      `SELECT key FROM test_operation_command WHERE key='fanout-suspension'
+    const committed = await database.query<{ key: string }>(
+      `SELECT key FROM test_operation_command WHERE key IN ('fanout-suspension','revocation-fence')
        AND value->>'continuationOperationKey'=$1 AND value->>'accountId'=$2`,
       [operationKey, accountId],
     );
     if (!committed.rowCount) return null;
+    if (committed.rows[0]!.key === 'revocation-fence')
+      return {
+        reference: 'revocation-continuation-reference',
+        operationKey,
+        operationDigest: 'revocation-operation-digest',
+        commandKeyPrefix: 'revocation-command',
+        barrierReceiptId: 'revocation-fence-receipt',
+        expiresAt: new Date(Date.now() + 1800000).toISOString(),
+        allowlist: [{ step: 'revoke-auth-sessions', target: accountId, key: 'revocation-revoke', digest: 'digest' }],
+      };
     return {
       reference: 'fanout-continuation-reference',
       operationKey,
@@ -120,6 +144,7 @@ const ports: AccountWorkflowPorts = {
   },
   async authorizeContinuation(reference, entry) {
     calls.push('continuation-authorize');
+    if (reference === 'revocation-continuation-reference') return { receiptId: 'revocation-continuation-receipt' };
     expect(reference).toBe('fanout-continuation-reference');
     expect(entry).toEqual({
       step: 'revoke-auth-sessions',
@@ -429,6 +454,30 @@ test('operator suspension stays fenced until Auth revocation resumes through the
   const completedCalls = [...calls];
   expect(await workflows.resumeOperation('fanout')).toEqual(expected);
   expect(calls).toEqual(completedCalls);
+}, 30000);
+
+test('a session revocation commits the Access fence before Auth is asked, answers revocation-failed and resumes under its continuation', async () => {
+  await owner('revoked-person');
+  await database.query(
+    `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
+     VALUES ('revoked-person','revoked-person','revoked-person','operation-web',now()+interval '1 day',now(),'read',1,1,'pwd')`,
+  );
+  calls.length = 0;
+  failRevoke = 'revoked-person';
+  await expect(
+    workflows.revokeSessions({ key: 'revocation', accountId: 'revoked-person', authorization: 'approved-person' }),
+  ).rejects.toMatchObject({ code: 'revocation-failed' });
+  // The failure leaves the committed fence, and Auth kept the session.
+  expect(accounts.get('revoked-person')).toMatchObject({ fenced: true, authnEpoch: 2 });
+  expect(calls).toEqual(['revoke-fence', 'continuation-read', 'continuation-authorize', 'auth-revoke']);
+  expect((await database.query(`SELECT id FROM session WHERE "userId"='revoked-person'`)).rowCount).toBe(1);
+  failRevoke = undefined;
+  await restart();
+  expect(await workflows.resumeOperation('revocation')).toEqual({ accountId: 'revoked-person' });
+  expect(calls.filter((call) => call === 'revoke-fence')).toHaveLength(1);
+  expect(calls.filter((call) => call === 'auth-revoke')).toHaveLength(2);
+  expect((await database.query(`SELECT id FROM session WHERE "userId"='revoked-person'`)).rowCount).toBe(0);
+  expect(accounts.get('revoked-person')).toMatchObject({ fenced: true, authnEpoch: 2 });
 }, 30000);
 
 test('consent reduction commits native fence before actual Auth mutation and keeps old authority invalid', async () => {
