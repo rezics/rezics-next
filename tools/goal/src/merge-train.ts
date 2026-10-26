@@ -210,21 +210,35 @@ function rebaseWithDerivedFiles(
   }
 }
 
+/**
+ * The commit the branch's own work starts from. A recorded base the branch has already moved past, or one it does not
+ * descend from, would replay or squash other work: a squash from such a base once reverted hundreds of files.
+ */
+export function rebaseUpstream(cwd: string, base: string, originalBase: string): string {
+  const fork = git(cwd, 'merge-base', 'HEAD', base);
+  const ancestor = (older: string, newer: string) =>
+    spawnSync('git', ['merge-base', '--is-ancestor', older, newer], { cwd }).status === 0;
+  return ancestor(originalBase, 'HEAD') && ancestor(fork, originalBase) ? originalBase : fork;
+}
+
 export function rebaseOnto(
   cwd: string,
   base: string,
   originalBase: string,
   logPath: string,
   files: readonly DerivedFile[] = defaultDerivedFiles,
+  allowedPaths?: readonly string[],
 ): void {
-  const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${originalBase}..HEAD`)
+  const upstream = rebaseUpstream(cwd, base, originalBase);
+  const head = git(cwd, 'rev-parse', 'HEAD');
+  const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`)
     .split('\n')
     .filter(Boolean);
-  const initialConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, files);
+  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
   if (initialConflict === undefined) return;
 
   git(cwd, 'rebase', '--abort');
-  git(cwd, 'reset', '--soft', originalBase);
+  git(cwd, 'reset', '--soft', upstream);
   const message = [
     'Squash worker branch changes',
     '',
@@ -232,8 +246,16 @@ export function rebaseOnto(
     ...originalSubjects.map((subject) => `- ${subject}`),
   ].join('\n');
   git(cwd, 'commit', '--allow-empty', '-m', message);
+  if (allowedPaths) {
+    const changed = git(cwd, 'diff', '--name-only', upstream, 'HEAD').split('\n').filter(Boolean);
+    const outside = outsideScope(changed.filter((path) => !derivedForPath(path, files).length), allowedPaths);
+    if (outside.length) {
+      git(cwd, 'reset', '--hard', head);
+      throw new Error(`A squash would change files outside the brief: ${outside.slice(0, 20).join(', ')}`);
+    }
+  }
 
-  const squashedConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, files);
+  const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
   if (squashedConflict !== undefined) throw squashedConflict;
 }
 
@@ -423,7 +445,7 @@ export class MergeTrain {
             .some((path) => path && !frozenPaths.has(path));
         if (!worked)
           throw new Error('No committed changes beyond the base and the frozen acceptance files: commit the work before finishing');
-        rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles);
+        rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
         if (changedFrozen.length) {
