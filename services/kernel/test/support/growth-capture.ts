@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import type { Capture } from './growth-cost.ts';
@@ -16,7 +16,15 @@ export type GrowthDatabase = {
 
 export type SeedingCount = { statements: number; rowsWritten: number };
 
-type ActiveCapture = { statements: string[]; plans: unknown[]; error?: Error };
+type ActiveCapture = {
+  statements: string[];
+  plans: unknown[];
+  backgroundStatements: string[];
+  backgroundPlans: unknown[];
+  pending: Set<Promise<void>>;
+  error?: Error;
+};
+type Attribution = { readonly capture: ActiveCapture; readonly background: boolean };
 type CaptureState = {
   active: ActiveCapture | undefined;
   seeding: SeedingCount | undefined;
@@ -25,7 +33,12 @@ type CaptureState = {
 };
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
-const growing = new AsyncLocalStorage<pg.Pool>();
+const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
+const clientAttribution = new WeakMap<PoolClient, Attribution>();
+
+function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
+  return typeof value === 'object' && value !== null && 'capture' in value && 'background' in value;
+}
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
 // A connection starts with explaining off; it is switched on for the statements of a capture.
@@ -76,6 +89,8 @@ function countWrites(counter: SeedingCount | undefined, result: unknown): void {
  */
 function intercept(client: PoolClient, state: CaptureState, explain: boolean): void {
   const query = client.query.bind(client) as PoolClient['query'];
+  const pending: Attribution[] = [];
+  let inFlight: Attribution | undefined;
   // Whether auto_explain is on for this connection; undefined when a rollback or a failure may have undone it.
   let explaining: boolean | undefined = false;
 
@@ -94,7 +109,17 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
 
   client.query = ((...args: Parameters<PoolClient['query']>) => {
     const text = statementText(args[0]);
-    if (explain && text !== undefined) state.active?.statements.push(text);
+    let attribution = growing.getStore();
+    if (!isAttribution(attribution) || attribution.capture !== state.active) attribution = undefined;
+    if (!attribution && state.active) attribution = { capture: state.active, background: true };
+    if (explain && text !== undefined && attribution) {
+      (attribution.background ? attribution.capture.backgroundStatements : attribution.capture.statements).push(text);
+    }
+    if (attribution) {
+      pending.push(attribution);
+      inFlight ??= attribution;
+      clientAttribution.set(client, inFlight);
+    }
     if (state.seeding) state.seeding.statements++;
     if (explain) {
       if (text === undefined || !ENDS_TRANSACTION.test(text)) {
@@ -107,36 +132,61 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
     const done = (failed: boolean, result?: unknown): void => {
       if (!failed) countWrites(state.seeding, result);
       else if (explain) explaining = undefined;
+      if (attribution) {
+        pending.shift();
+        inFlight = pending[0];
+        if (inFlight) clientAttribution.set(client, inFlight);
+        else clientAttribution.delete(client);
+      }
     };
     const callback = args.at(-1);
     if (typeof callback === 'function') {
+      let finishBackground: (() => void) | undefined;
+      if (attribution?.background) {
+        const task = new Promise<void>((resolve) => (finishBackground = resolve));
+        attribution.capture.pending.add(task);
+        void task.then(() => attribution!.capture.pending.delete(task));
+      }
       const wrapped = (error: unknown, result?: unknown, ...rest: unknown[]): unknown => {
         done(Boolean(error), result);
+        finishBackground?.();
         return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
       };
       return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
     }
     const outcome = (query as (...values: unknown[]) => unknown)(...args);
-    if (outcome instanceof Promise)
+    if (outcome instanceof Promise) {
+      if (attribution?.background) {
+        const task = Promise.resolve(outcome).then(
+          () => {},
+          () => {},
+        );
+        attribution.capture.pending.add(task);
+        void task.then(() => attribution!.capture.pending.delete(task));
+      }
       outcome.then(
         (result) => done(false, result),
         () => done(true),
       );
+    }
     return outcome;
   }) as PoolClient['query'];
 }
 
 function instrument(client: PoolClient, state: CaptureState): void {
   client.on('notice', (notice) => {
-    const active = state.active;
+    const attribution = clientAttribution.get(client);
     const message = notice.message;
     const marker = 'plan:\n';
-    if (!active || typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker)) return;
+    if (!attribution || typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker))
+      return;
 
     try {
-      active.plans.push(JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown);
+      (attribution.background ? attribution.capture.backgroundPlans : attribution.capture.plans).push(
+        JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown,
+      );
     } catch (error) {
-      active.error ??= asError(error);
+      attribution.capture.error ??= asError(error);
     }
   });
 
@@ -154,6 +204,39 @@ function instrument(client: PoolClient, state: CaptureState): void {
 
 function instrumentPool(pool: Pool, state: CaptureState): void {
   pool.on('connect', (client) => instrument(client, state));
+  const query = pool.query.bind(pool) as Pool['query'];
+  (pool as Pool & { query: Pool['query'] }).query = ((...args: Parameters<Pool['query']>) => {
+    const current = growing.getStore();
+    const attribution = isAttribution(current)
+      ? current
+      : state.active
+        ? { capture: state.active, background: true }
+        : undefined;
+    return attribution ? growing.run(attribution, () => query(...args)) : query(...args);
+  }) as Pool['query'];
+
+  const connect = pool.connect.bind(pool) as Pool['connect'];
+  (pool as Pool & { connect: Pool['connect'] }).connect = ((callback?: Parameters<Pool['connect']>[0]) => {
+    const current = growing.getStore();
+    const attribution = isAttribution(current)
+      ? current
+      : state.active
+        ? { capture: state.active, background: true }
+        : undefined;
+    const bind = <T extends (...args: never[]) => unknown>(fn: T): T => {
+      const resource = new AsyncResource('growth-pool-checkout');
+      return resource.bind((...args: Parameters<T>) =>
+        attribution ? growing.run(attribution, () => fn(...args)) : fn(...args),
+      ) as T;
+    };
+    if (callback) return connect(bind(callback));
+    return new Promise((resolve, reject) => {
+      connect((error, client) => {
+        if (error) reject(error);
+        else resolve(client);
+      });
+    }) as unknown as ReturnType<Pool['connect']>;
+  }) as unknown as Pool['connect'];
 }
 
 export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promise<GrowthDatabase> {
@@ -204,14 +287,30 @@ export async function capture<T>(
   if (state.active) throw new Error('A growth capture is already active for this database');
   if (state.setupError) throw state.setupError;
 
-  const active: ActiveCapture = { statements: [], plans: [] };
+  const active: ActiveCapture = {
+    statements: [],
+    plans: [],
+    backgroundStatements: [],
+    backgroundPlans: [],
+    pending: new Set(),
+  };
   state.active = active;
   try {
-    const value = await operation();
+    const value = await growing.run({ capture: active, background: false }, operation);
+    state.active = undefined;
+    await Promise.all([...active.pending]);
     await Promise.all([...state.setupTasks]);
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
-    return { value, capture: { statements: active.statements, plans: active.plans } };
+    return {
+      value,
+      capture: {
+        statements: active.statements,
+        plans: active.plans,
+        backgroundStatements: active.backgroundStatements,
+        backgroundPlans: active.backgroundPlans,
+      },
+    };
   } finally {
     state.active = undefined;
   }

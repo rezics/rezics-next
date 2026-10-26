@@ -1,4 +1,9 @@
-export type Capture = { readonly statements: readonly string[]; readonly plans: readonly unknown[] };
+export type Capture = {
+  readonly statements: readonly string[];
+  readonly plans: readonly unknown[];
+  readonly backgroundStatements?: readonly string[];
+  readonly backgroundPlans?: readonly unknown[];
+};
 
 export type RelationCost = {
   readonly rows: number;
@@ -17,6 +22,10 @@ export type Cost = {
   readonly sharedHit: number;
   readonly sharedRead: number;
   readonly relations: Readonly<Record<string, RelationCost>>;
+  readonly backgroundStatements?: number;
+  readonly backgroundRows?: number;
+  readonly backgroundBlocks?: number;
+  readonly backgroundCosts?: Readonly<Record<string, { readonly rows: number; readonly blocks: number }>>;
 };
 
 type PlanNode = Record<string, unknown>;
@@ -253,7 +262,27 @@ export function costOf(capture: Capture): Cost {
     }
   }
 
-  return {
+  const backgroundCosts = new Map<string, { rows: number; blocks: number }>();
+  let backgroundRows = 0;
+  let backgroundBlocks = 0;
+  for (const document of capture.backgroundPlans ?? []) {
+    for (const entry of documentEntries(document)) {
+      const key = entry.queryText ?? '<unknown background statement>';
+      const planCost = costOf({
+        statements: [],
+        plans: [{ Plan: entry.plan, 'Query Text': entry.queryText }],
+      });
+      backgroundRows += planCost.rows;
+      backgroundBlocks += planCost.blocks;
+      const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0 };
+      backgroundCosts.set(key, {
+        rows: Math.max(prior.rows, planCost.rows),
+        blocks: Math.max(prior.blocks, planCost.blocks),
+      });
+    }
+  }
+
+  const cost = {
     statements: capture.statements.filter(
       (statement) => !isControlStatement(statement) && !catalog.catalogTexts.has(statement),
     ).length,
@@ -266,6 +295,17 @@ export function costOf(capture: Capture): Cost {
     sharedRead,
     relations: Object.fromEntries(relations),
   };
+  return {
+    ...cost,
+    ...(capture.backgroundStatements !== undefined || capture.backgroundPlans !== undefined
+      ? {
+          backgroundStatements: (capture.backgroundStatements ?? []).length,
+          backgroundRows,
+          backgroundBlocks,
+          backgroundCosts: Object.fromEntries(backgroundCosts),
+        }
+      : {}),
+  };
 }
 
 function lowerMedian(values: readonly number[]): number {
@@ -277,7 +317,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));
   const representative = costs.find((cost) => cost.blocks === blocks)!;
 
-  return {
+  const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
     controlStatements: lowerMedian(costs.map((cost) => cost.controlStatements)),
     catalogStatements: lowerMedian(costs.map((cost) => cost.catalogStatements)),
@@ -287,5 +327,24 @@ export function medianCost(costs: readonly Cost[]): Cost {
     sharedHit: lowerMedian(costs.map((cost) => cost.sharedHit)),
     sharedRead: lowerMedian(costs.map((cost) => cost.sharedRead)),
     relations: representative.relations,
+  };
+  return {
+    ...median,
+    ...(costs.some((cost) => cost.backgroundStatements !== undefined)
+      ? {
+          backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements ?? 0)),
+          backgroundRows: lowerMedian(costs.map((cost) => cost.backgroundRows ?? 0)),
+          backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)),
+          backgroundCosts: Object.fromEntries(
+            [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => [
+              statement,
+              {
+                rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
+                blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
+              },
+            ]),
+          ),
+        }
+      : {}),
   };
 }

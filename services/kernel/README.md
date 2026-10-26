@@ -230,6 +230,11 @@ API from `test/support/growth.ts`.
 Catalog-only statements are counted apart, with at most one allowed per distinct query text in a measured run; a
 statement that also reads data counts in full.
 
+Statements are attributed by async context: work the operation starts or awaits counts toward its cost, while statements
+from loops started outside it are reported separately as background work. Background statement counts follow the
+measured wall time; rows and blocks per background statement must stay within the default constant-cost slack as the
+data grows, and a scale with no background statement is skipped for that bound.
+
 Plans are collected only inside a capture: an instrumented connection runs auto_explain just for the statements of a
 measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
 `grow` (every pool, `admin` included) with the time of `grow` and of the vacuum after it; when `GROWTH_PROFILE` names a
