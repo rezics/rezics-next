@@ -75,13 +75,26 @@ CREATE FUNCTION public.auth_credential_stage_immutable() RETURNS trigger
 BEGIN
   IF (OLD.operation_key IS NULL AND NEW.operation_key IS NOT NULL) OR
     (OLD.operation_key IS NOT NULL AND (
-    (to_jsonb(NEW) - ARRAY['opening_receipt_id','committed_result','committed_at','minimum_authn_epoch'])
+    (to_jsonb(NEW) - ARRAY['opening_receipt_id','opening_reference','committed_result','committed_at','minimum_authn_epoch'])
       IS DISTINCT FROM
-    (to_jsonb(OLD) - ARRAY['opening_receipt_id','committed_result','committed_at','minimum_authn_epoch'])
+    (to_jsonb(OLD) - ARRAY['opening_receipt_id','opening_reference','committed_result','committed_at','minimum_authn_epoch'])
     OR OLD.committed_at IS NOT NULL
   )) THEN
     RAISE EXCEPTION 'Credential stage is immutable' USING ERRCODE='55000';
   END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_passkey_used(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_passkey_used() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.last_used_at := statement_timestamp();
   RETURN NEW;
 END $$;
 
@@ -399,7 +412,8 @@ CREATE TABLE public.auth_effect_receipt (
     opening_receipt_id text,
     committed_result jsonb,
     committed_at timestamp with time zone,
-    CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
+    opening_reference text,
+    CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text, 'add-passkey'::text, 'remove-passkey'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
     CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
 );
 
@@ -709,6 +723,26 @@ CREATE TABLE public."oauthResource" (
 
 
 --
+-- Name: passkey; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.passkey (
+    id text NOT NULL,
+    name text,
+    "publicKey" text NOT NULL,
+    "userId" text NOT NULL,
+    "credentialID" text NOT NULL,
+    counter bigint NOT NULL,
+    "deviceType" text NOT NULL,
+    "backedUp" boolean NOT NULL,
+    transports text,
+    "createdAt" timestamp with time zone NOT NULL,
+    aaguid text,
+    last_used_at timestamp with time zone
+);
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -735,7 +769,7 @@ CREATE TABLE public.session (
     "authnEpoch" integer NOT NULL,
     "authTime" integer NOT NULL,
     "authMethods" text NOT NULL,
-    CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = ANY (ARRAY['pwd'::text, 'private_key_jwt'::text, 'operator'::text]))))
+    CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = ANY (ARRAY['pwd'::text, 'pop'::text, 'private_key_jwt'::text, 'operator'::text]))))
 );
 
 
@@ -1115,6 +1149,14 @@ ALTER TABLE ONLY public."oauthResource"
 
 
 --
+-- Name: passkey passkey_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.passkey
+    ADD CONSTRAINT passkey_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1366,6 +1408,20 @@ CREATE INDEX oauth_refresh_expiry ON public."oauthRefreshToken" USING btree ("ex
 
 
 --
+-- Name: passkey_credentialid_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX passkey_credentialid_idx ON public.passkey USING btree ("credentialID");
+
+
+--
+-- Name: passkey_userid_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX passkey_userid_idx ON public.passkey USING btree ("userId", id);
+
+
+--
 -- Name: session_expiry; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1433,6 +1489,13 @@ CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EA
 --
 
 CREATE TRIGGER auth_credential_stage_immutable BEFORE UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_credential_stage_immutable();
+
+
+--
+-- Name: passkey auth_passkey_used; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_passkey_used BEFORE UPDATE OF counter ON public.passkey FOR EACH ROW EXECUTE FUNCTION public.auth_passkey_used();
 
 
 --
@@ -1637,6 +1700,14 @@ ALTER TABLE ONLY public."oauthRefreshToken"
 
 ALTER TABLE ONLY public."oauthRefreshToken"
     ADD CONSTRAINT "oauthRefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: passkey passkey_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.passkey
+    ADD CONSTRAINT "passkey_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
 
 
 --

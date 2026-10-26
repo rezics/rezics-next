@@ -44,6 +44,7 @@ type Row = {
   scopes: string[];
   stage_ciphertext: Buffer;
   opening_receipt_id: string | null;
+  opening_reference: string | null;
   committed_at: Date | null;
   committed_result: { receiptId: string; replayed: false } | null;
 };
@@ -113,6 +114,15 @@ export function credentialEffects(database: Pool, secret: string) {
         purpose: value.password === null ? 'remove-password' : 'set-password',
       };
     }
+    if (value.kind === 'passkey') {
+      text(value.id);
+      if (value.remove === true) {
+        if (fields.some((f) => !['kind', 'id', 'remove'].includes(f))) deny(400);
+        return { credential: { kind: 'passkey', id: value.id, remove: true }, purpose: 'remove-passkey' };
+      }
+      // Only the private verified ceremony path can stage an installation.
+      return { credential: value, purpose: 'add-passkey' };
+    }
     if (value.kind !== 'key') return deny(400);
     text(value.kid);
     if (value.remove === true) {
@@ -136,22 +146,29 @@ export function credentialEffects(database: Pool, secret: string) {
   }
   async function selected(query: Query, subject: string, credential: CredentialEffect) {
     const row =
-      credential.kind === 'password'
+      credential.kind === 'passkey'
         ? (
-            await query.query(
-              'SELECT id,password,xmin::text AS version FROM account WHERE "userId"=$1 AND "providerId"=\'credential\'',
-              [subject],
-            )
-          ).rows[0]
-        : (
-            await query.query('SELECT xmin::text AS version FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
+            await query.query('SELECT id,xmin::text AS version FROM passkey WHERE "userId"=$1 AND id=$2', [
               subject,
-              credential.kid,
+              credential.id,
             ])
-          ).rows[0];
+          ).rows[0]
+        : credential.kind === 'password'
+          ? (
+              await query.query(
+                'SELECT id,password,xmin::text AS version FROM account WHERE "userId"=$1 AND "providerId"=\'credential\'',
+                [subject],
+              )
+            ).rows[0]
+          : (
+              await query.query('SELECT xmin::text AS version FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
+                subject,
+                credential.kid,
+              ])
+            ).rows[0];
     return row && (credential.kind !== 'password' || row.password !== null)
       ? {
-          id: credential.kind === 'password' ? (row.id as string) : JSON.stringify([subject, credential.kid]),
+          id: credential.kind === 'key' ? JSON.stringify([subject, credential.kid]) : (row.id as string),
           version: row.version as string,
         }
       : { id: null, version: null };
@@ -307,6 +324,38 @@ export function credentialEffects(database: Pool, secret: string) {
           [b.subjectAccountId, passwordHash, b.credentialRowId, b.credentialRowVersion],
         )
       ).rowCount;
+    } else if (value.kind === 'passkey') {
+      if (value.remove) {
+        count = (
+          await connection.query('DELETE FROM passkey WHERE "userId"=$1 AND id=$2 AND xmin::text=$3', [
+            b.subjectAccountId,
+            value.id,
+            b.credentialRowVersion,
+          ])
+        ).rowCount;
+      } else {
+        const size = await connection.query('SELECT id FROM passkey WHERE "userId"=$1 LIMIT 32', [b.subjectAccountId]);
+        if (size.rows.length >= 32) deny(409);
+        count = (
+          await connection.query(
+            `INSERT INTO passkey(id,"userId",name,"publicKey","credentialID",counter,"deviceType","backedUp",transports,"createdAt",aaguid)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
+            [
+              value.id,
+              b.subjectAccountId,
+              value.name,
+              value.publicKey,
+              value.credentialID,
+              value.counter,
+              value.deviceType,
+              value.backedUp,
+              value.transports,
+              value.createdAt,
+              value.aaguid,
+            ],
+          )
+        ).rowCount;
+      }
     } else if (value.remove) {
       count = (
         await connection.query('DELETE FROM auth_public_key WHERE account_id=$1 AND kid=$2 AND xmin::text=$3', [

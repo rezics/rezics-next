@@ -148,7 +148,9 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
           text(operation.operationKey) &&
           text(operation.effectReference, 4096) &&
           /^[a-f0-9]{64}$/.test(operation.effectDigest) &&
-          ['set-password', 'remove-password', 'add-key', 'remove-key'].includes(operation.purpose) &&
+          ['set-password', 'remove-password', 'add-key', 'remove-key', 'add-passkey', 'remove-passkey'].includes(
+            operation.purpose,
+          ) &&
           Number.isSafeInteger(operation.subjectEpoch) &&
           operation.subjectEpoch > 0,
       );

@@ -73,7 +73,23 @@ export type {
 export type CredentialEffect =
   | { kind: 'password'; password: string | null }
   | { kind: 'key'; kid: string; publicJwk: JWK; remove?: false }
-  | { kind: 'key'; kid: string; remove: true };
+  | { kind: 'key'; kid: string; remove: true }
+  | { kind: 'passkey'; id: string; remove: true }
+  | {
+      kind: 'passkey';
+      id: string;
+      remove?: false;
+      name: string | null;
+      createdAt: string;
+      publicKey: string;
+      credentialID: string;
+      counter: number;
+      deviceType: string;
+      backedUp: boolean;
+      transports: string;
+      aaguid: string;
+      registrationDigest: string;
+    };
 
 export interface AuthServiceOptions {
   database: Pool;
@@ -199,7 +215,8 @@ export interface AuthService {
         | { kind: 'password'; password: string }
         | { kind: 'password'; password: null }
         | { kind: 'key'; kid: string; publicJwk: JWK; remove?: undefined }
-        | { kind: 'key'; kid: string; remove: true; publicJwk?: undefined };
+        | { kind: 'key'; kid: string; remove: true; publicJwk?: undefined }
+        | { kind: 'passkey'; id: string; remove: true };
     }): Promise<{ effectRef: string; key: string; subjectId: string; purpose: CredentialPurpose; digest: string }>;
     /** Resolve Auth's stage; enter the live proof callback and request an exact
      * native approval for this purpose/key/commitment. Authenticate anew; never

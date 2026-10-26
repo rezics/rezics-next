@@ -156,6 +156,7 @@ export function createCredentialFloorHook(config: {
         input.purpose === stage.purpose &&
         (stage.purpose === 'remove-password' ||
           stage.purpose === 'remove-key' ||
+          stage.purpose === 'remove-passkey' ||
           (stage.purpose === 'set-password' && stage.credentialRowId !== null)),
     );
     const parameters = { route, account_id: stage.subjectAccountId, opening_receipt_id: opening.receiptId };

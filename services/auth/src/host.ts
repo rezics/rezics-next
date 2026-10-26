@@ -250,6 +250,8 @@ export function credentialEffectTransport(
         await service.internal.applyCredentialEffect({ ...input, effectRef, authorization: string(body.reference) }),
       );
     } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
+        return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
       return denied(typeof status === 'number' && [400, 401, 403, 409, 413, 415, 503].includes(status) ? status : 503);
     }

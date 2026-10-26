@@ -164,7 +164,7 @@ export function websiteRoutes(input: {
       session.expiresAt <= new Date() ||
       !Number.isSafeInteger(session.authTime) ||
       session.authTime > Math.floor(Date.now() / 1000) ||
-      session.authMethods !== 'pwd'
+      !['pwd', 'pop'].includes(session.authMethods)
     )
       deny('invalid_grant');
     const registered = await client();

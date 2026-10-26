@@ -191,7 +191,7 @@ never to request booleans or a second permission engine in Auth.
   credentials the operator is null and the person manages their own account.
   For an automated actor Access decides the operator approval. Session receipts
   and the exact credential purposes (`set-password`, `remove-password`,
-  `add-key`, `remove-key`) cannot be interchanged. Auth also journals receipt IDs
+  `add-key`, `remove-key`, `add-passkey`, `remove-passkey`) cannot be interchanged. Auth also journals receipt IDs
   durably to prevent duplicate local issuance across instances.
 - `invalidateAccount({ accountId, previousEpoch, reason, proofReference, operationKey })` atomically checks the
   old floor and commits an increased account floor before returning an
@@ -250,6 +250,60 @@ key replacement. JTI rows are retained with the account. An assertion proves a
 credential; it does not create another session store or a long-term bearer
 credential. Key signin still passes all native session hooks, consent and epoch
 checks. Credential keys never join Auth's public signing JWKS.
+
+## Passkeys and credential freshness
+
+Better Auth's `@better-auth/passkey` plugin is pinned to `1.8.0-beta.2`, matching
+`better-auth`. It uses RP ID `rezics.com`, RP name `REZICS`, the configured issuer
+as its expected origin, and requires a resident credential and user verification.
+The native `/api/auth/passkey/*` routes remain private. Auth aliases require the
+issuer `Origin`, reject queries and unknown JSON fields, return `no-store`, and
+share the native `/signin` attempt budget. Errors use fixed codes.
+
+| Route                             | Contract                                                                                                                                                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /signin/passkey/options`    | `{}`; returns discoverable `PublicKeyCredentialRequestOptionsJSON`, including `userVerification: "required"` and no credential allow list, plus a ceremony cookie.                                                                                                      |
+| `POST /signin/passkey`            | `{ response, client_id, scope }` and ceremony cookie; verifies an assertion and returns the same session proof and cookie as `/signin`, with `amr: ["pop"]`. Access, epochs, consent, session binding and replacement of the presented session follow password sign-in. |
+| `POST /passkeys/register/options` | Session cookie and `{}`; returns `PublicKeyCredentialCreationOptionsJSON` plus a ceremony cookie.                                                                                                                                                                       |
+| `POST /passkeys/register`         | Session and ceremony cookies and `{ response, name? }`; verifies, stages, approves and applies `add-passkey`, returning 201 `{ id, name, created_at }`. Names contain 1–128 characters after trimming; absent names are null.                                           |
+| `GET /passkeys`                   | Session cookie; returns `{ passkeys: [{ id, name, created_at, last_used_at }] }` for this person only, limited to 32. `last_used_at` is null before the first sign-in.                                                                                                  |
+| `POST /passkeys/remove`           | Session cookie and `{ id }`; stages, approves and applies `remove-passkey`, with a committed credential floor receipt and bounded session revocation, returning `{ success: true }`.                                                                                    |
+
+The closed credential purposes are `set-password`, `remove-password`, `add-key`,
+`remove-key`, `add-passkey` and `remove-passkey`. Passkey purposes use the same
+kernel own-human and automated authorization rules as key purposes. The public
+passkey aliases operate only on the current person's credentials. Installation
+can only stage a public credential produced by successful WebAuthn verification;
+public credential-effect commands cannot install arbitrary passkey material.
+The plugin's verification hooks enforce the authenticator's verified UV flag and
+hand registration to credential effects before native persistence.
+
+The registration operation key derives from the ceremony challenge. Its encrypted
+stage binds the verified public credential, exact ceremony response and name,
+person, client and scopes. A retry after a lost response resolves that stage and
+revalidates the committing approval before returning the same saved public result;
+it never installs a second passkey. Removal advances the Access floor before the
+Auth transaction deletes the selected credential and commits its receipt. Removing
+the last interactive credential is refused with 409 and `effect_status:
+"not_applied"`. A person can have at most 32 passkeys; another installation is 409.
+
+Every own-human credential stage, approval and application requires `auth_time`
+within the last 600 seconds, read from the native session row with cookie caching
+and refresh disabled. This includes `/credential-effects/approve`, password
+changes and the passkey aliases. An older session receives 401
+`{ error: "step_up_required", effect_status: "not_applied" }` before any credential
+or approval change. Client input cannot supply authentication time. Operator and
+automated paths retain their existing rules; passkey listing and sign-in do not
+require fresh authentication.
+
+Sign-in selects a credential through its unique credential-ID index and uses the
+existing bounded native session establishment. List uses the `(userId,id)` range
+with `LIMIT 32`. Registration and removal add one bounded insert/delete to the
+credential-effect path; no operation scans effect history. Freshness uses the
+already-loaded session. `passkeys.test.ts` and `credential-freshness.test.ts` exercise
+software P-256 authenticators through real handlers, PostgreSQL and kernel credential
+capabilities. `growth-passkeys.test.ts` checks constant rows/statements and logarithmic
+buffers at 1x/8x/64x as unrelated passkeys and the person's consumed effects grow.
 
 ## Guarded human recovery
 
@@ -426,7 +480,7 @@ sockets for all three approved hosts.
 
 `SessionProof` contains only `account_id`, `client_id`, `scope: string[]`,
 `authn_epoch`, `auth_time` and `amr`. Successful password verification installs
-the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Own-key
+the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Passkey verification installs `amr: ["pop"]`; website authorization, ID tokens and refresh accept it. Own-key
 verification installs `amr: ["private_key_jwt"]`. Operator establishment uses
 `amr: ["operator"]` and the opening human's original authentication time, with
 private attribution to that human and operator. Reading a newer Access floor

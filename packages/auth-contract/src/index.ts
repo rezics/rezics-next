@@ -13,7 +13,14 @@ export interface InvalidationReceipt {
   minimumAuthnEpoch: number;
 }
 
-export type EffectPurpose = 'session' | 'set-password' | 'remove-password' | 'add-key' | 'remove-key';
+export type EffectPurpose =
+  | 'session'
+  | 'set-password'
+  | 'remove-password'
+  | 'add-key'
+  | 'remove-key'
+  | 'add-passkey'
+  | 'remove-passkey';
 export type CredentialPurpose = Exclude<EffectPurpose, 'session'>;
 
 /** Auth-owned nonsecret commitment, never credential material or permission context.

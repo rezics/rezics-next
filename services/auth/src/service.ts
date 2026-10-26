@@ -9,6 +9,7 @@ import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
 import { verifyKeyAssertion } from './key-credentials.ts';
+import { passkeyPlugin, passkeyCeremonies, registrationInput, type PasskeyAssertion } from './passkeys.ts';
 import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
@@ -43,6 +44,11 @@ import type {
 
 export { WEBSITE_CLIENT_ID } from './website.ts';
 
+class StepUpRequired extends Error {
+  readonly status = 401;
+  readonly code = 'step_up_required';
+}
+
 class Denied extends Error {
   constructor(readonly status = 401) {
     super('Authentication denied');
@@ -51,7 +57,7 @@ class Denied extends Error {
 interface Binding {
   clientId: string;
   scopes: string[];
-  method?: 'pwd' | 'private_key_jwt' | 'operator';
+  method?: 'pwd' | 'pop' | 'private_key_jwt' | 'operator';
   subjectId?: string;
   epoch?: number;
   opening?: EffectAuthorization;
@@ -303,6 +309,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       plugins: [
         credentialOwnerSchema,
+        passkeyPlugin(options.issuer),
         nativeVerificationPlugin,
         nativeSessionLimits(database),
         jwt({
@@ -420,7 +427,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       session.authnEpoch < account.authnEpoch ||
       !Number.isSafeInteger(session.authTime) ||
       session.authTime > Math.floor(Date.now() / 1000) ||
-      !['pwd', 'private_key_jwt', 'operator'].includes(session.authMethods)
+      !['pwd', 'pop', 'private_key_jwt', 'operator'].includes(session.authMethods)
     )
       throw new Denied();
     const granted = session.grantedScope ? scopes(session.grantedScope.split(' ')) : [];
@@ -487,6 +494,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const human = await sessionProof(headers);
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
+  }
+  function freshCredentialProof(human: SessionProof, subjectId: string) {
+    if (human.account_id === subjectId && Math.floor(Date.now() / 1000) - human.auth_time > 600)
+      throw new StepUpRequired();
   }
   async function withCredentialProof<T>(human: SessionProof, callback: () => Promise<T>): Promise<T> {
     const scope = { proof: human, live: true };
@@ -992,7 +1003,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       async stageCredentialEffect(input) {
         const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
         await activeActor(text(input.subjectAccountId));
+        if (input.credential?.kind === 'passkey' && input.credential.remove !== true) throw new Denied(400);
         const { credential } = await credentials.normalize(input.credential);
         if (credential.kind === 'password' && credential.password !== null) {
           const config = (await getContext()).password.config;
@@ -1015,6 +1028,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       async approveCredentialEffect(input) {
         if (!trustedAccess.approveCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
         await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
         if (!stage.row.committed_at) await credentials.current(database, stage);
@@ -1042,6 +1056,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       async applyCredentialEffect(input) {
         if (!trustedAccess.consumeAuthorization || !trustedAccess.revalidateCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
         const subject = await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
         const authorization = text(input.authorization);
@@ -1106,6 +1121,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const destructive =
           b.purpose === 'remove-password' ||
           b.purpose === 'remove-key' ||
+          b.purpose === 'remove-passkey' ||
           (b.purpose === 'set-password' && b.credentialRowId !== null);
         let hash: string | null = null;
         if (stage.credential.kind === 'password' && stage.credential.password !== null)
@@ -1124,13 +1140,22 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             return { receiptId: locked.row.receipt_id, replayed: true };
           }
           await credentials.current(connection, locked);
-          if (!subject.automated && (b.purpose === 'remove-password' || b.purpose === 'remove-key')) {
+          if (
+            !subject.automated &&
+            (b.purpose === 'remove-password' || b.purpose === 'remove-key' || b.purpose === 'remove-passkey')
+          ) {
             const remaining = (
               await connection.query(
                 `SELECT
               EXISTS(SELECT 1 FROM account WHERE "userId"=$1 AND "providerId"='credential' AND password IS NOT NULL AND $2 <> 'remove-password')
-              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1) AS allowed`,
-                [subject.accountId, b.purpose, stage.credential.kind === 'key' ? stage.credential.kid : ''],
+              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1)
+              OR EXISTS(SELECT 1 FROM passkey WHERE "userId"=$1 AND ($2 <> 'remove-passkey' OR id<>$4) LIMIT 1) AS allowed`,
+                [
+                  subject.accountId,
+                  b.purpose,
+                  stage.credential.kind === 'key' ? stage.credential.kid : '',
+                  stage.credential.kind === 'passkey' ? stage.credential.id : '',
+                ],
               )
             ).rows[0];
             if (!remaining.allowed) throw new Denied(409);
@@ -1187,9 +1212,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             });
           const result = { receiptId: locked.row.receipt_id, replayed: false };
           const committed = await connection.query(
-            `UPDATE auth_effect_receipt SET opening_receipt_id=$2,minimum_authn_epoch=$3,committed_result=$4,committed_at=statement_timestamp()
+            `UPDATE auth_effect_receipt SET opening_receipt_id=$2,minimum_authn_epoch=$3,committed_result=$4,opening_reference=$5,committed_at=statement_timestamp()
             WHERE receipt_id=$1 AND committed_at IS NULL`,
-            [locked.row.receipt_id, consumed.receiptId, current.authnEpoch, result],
+            [locked.row.receipt_id, consumed.receiptId, current.authnEpoch, result, authorization],
           );
           if (committed.rowCount !== 1) throw new Denied();
           await connection.query('COMMIT');
@@ -1317,6 +1342,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (url.origin !== options.issuer || url.search) throw new Denied(400);
         if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());
         if (url.pathname === '/session' && request.method === 'GET') return json(await sessionProof(request.headers));
+        if (url.pathname === '/passkeys' && request.method === 'GET') {
+          if (request.headers.get('origin') !== options.issuer) throw new Denied(403);
+          const human = await humanProof(request.headers);
+          const result = await database.query(
+            'SELECT id,name,"createdAt" AS created_at,last_used_at FROM passkey WHERE "userId"=$1 ORDER BY id LIMIT 32',
+            [human.account_id],
+          );
+          return json({ passkeys: result.rows });
+        }
         if (request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname)) {
           const human = await humanProof(request.headers);
           let clientId: string;
@@ -1363,6 +1397,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           ![
             '/signin',
             '/signin/key',
+            '/signin/passkey/options',
+            '/signin/passkey',
+            '/passkeys/register/options',
+            '/passkeys/register',
+            '/passkeys/remove',
             '/recovery/start',
             '/recovery/complete',
             '/token',
@@ -1382,6 +1421,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const attemptPath = {
           '/signin': '/sign-in/email',
           '/signin/key': '/sign-in/email',
+          '/signin/passkey/options': '/sign-in/email',
+          '/signin/passkey': '/sign-in/email',
+          '/passkeys/register/options': '/sign-in/email',
+          '/passkeys/register': '/sign-in/email',
+          '/passkeys/remove': '/sign-in/email',
           '/recovery/start': '/request-password-reset',
           '/recovery/complete': '/reset-password',
         }[url.pathname];
@@ -1604,6 +1648,114 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             mutation.release();
           }
           await trustedAccess.completeRecovery(proof.reference);
+          return json({ success: true });
+        }
+        if (url.pathname === '/signin/passkey/options' || url.pathname === '/passkeys/register/options') {
+          fields(body, []);
+          const registering = url.pathname === '/passkeys/register/options';
+          if (registering) {
+            const human = await humanProof(request.headers);
+            freshCredentialProof(human, human.account_id);
+          }
+          const response = registering
+            ? await getAuth().api.generatePasskeyRegistrationOptions({ headers: request.headers, asResponse: true })
+            : await getAuth().api.generatePasskeyAuthenticationOptions({
+                headers: new Headers({ origin: options.issuer }),
+                asResponse: true,
+              });
+          if (!response.ok) throw new Denied();
+          const result = await response.json();
+          if (!registering) result.userVerification = 'required';
+          return json(result, 200, response.headers.getSetCookie());
+        }
+        if (url.pathname === '/signin/passkey') {
+          fields(body, ['response', 'client_id', 'scope']);
+          if (!body.response || typeof body.response !== 'object' || Array.isArray(body.response))
+            throw new Denied(400);
+          const previous = await presentedSession(request.headers);
+          const selected: Binding = { clientId: text(body.client_id), scopes: scopes(body.scope), method: 'pop' };
+          await clientFor(selected.clientId);
+          const response = await withIssuance(selected.clientId, () =>
+            binding.run(selected, async () =>
+              established(
+                await getAuth().api.verifyPasskeyAuthentication({
+                  headers: request.headers,
+                  body: { response: body.response as PasskeyAssertion },
+                  asResponse: true,
+                }),
+              ),
+            ),
+          );
+          return await replacePreviousSession(previous, response);
+        }
+        if (url.pathname === '/passkeys/register' || url.pathname === '/passkeys/remove') {
+          const registering = url.pathname === '/passkeys/register';
+          fields(body, registering ? ['response', 'name'] : ['id']);
+          const human = await humanProof(request.headers);
+          freshCredentialProof(human, human.account_id);
+          let stage;
+          if (registering) {
+            const input = registrationInput(body.response, body.name);
+            const existing = (
+              await database.query(
+                'SELECT effect_reference FROM auth_effect_receipt WHERE account_id=$1 AND operation_key=$2',
+                [human.account_id, input.key],
+              )
+            ).rows[0];
+            if (existing) {
+              stage = await credentials.read(existing.effect_reference);
+              if (
+                stage.credential.kind !== 'passkey' ||
+                stage.credential.remove ||
+                stage.credential.registrationDigest !== input.digest ||
+                stage.binding.actingHumanId !== human.account_id ||
+                stage.binding.clientId !== human.client_id ||
+                JSON.stringify(stage.binding.scopes) !== JSON.stringify(human.scope)
+              )
+                throw new Denied(409);
+            } else {
+              const ceremony: Parameters<typeof passkeyCeremonies.run>[0] = {};
+              await passkeyCeremonies.run(ceremony, () =>
+                getAuth().api.verifyPasskeyRegistration({
+                  headers: request.headers,
+                  body: { response: body.response, ...(input.name === null ? {} : { name: input.name }) },
+                  asResponse: true,
+                }),
+              );
+              if (!ceremony.credential) throw new Denied();
+              const binding = await credentials.stage({
+                key: input.key,
+                subjectAccountId: human.account_id,
+                credential: ceremony.credential,
+                human,
+              });
+              stage = await credentials.read(binding.effectReference);
+            }
+          } else {
+            const staged = await service.internal.stageCredentialEffect({
+              key: `passkey-remove:${randomUUID()}`,
+              subjectAccountId: human.account_id,
+              headers: request.headers,
+              credential: { kind: 'passkey', id: text(body.id), remove: true },
+            });
+            stage = await credentials.read(staged.effectRef);
+          }
+          const input = {
+            key: stage.binding.operationKey,
+            effectRef: stage.binding.effectReference,
+            subjectAccountId: human.account_id,
+            headers: request.headers,
+          };
+          const reference = stage.row.committed_at
+            ? stage.row.opening_reference
+            : (await service.internal.approveCredentialEffect(input)).reference;
+          if (!reference) throw new Denied();
+          await service.internal.applyCredentialEffect({ ...input, authorization: reference });
+          if (registering && stage.credential.kind === 'passkey' && !stage.credential.remove)
+            return json(
+              { id: stage.credential.id, name: stage.credential.name, created_at: stage.credential.createdAt },
+              201,
+            );
           return json({ success: true });
         }
         if (url.pathname === '/signin/key') {
@@ -1843,7 +1995,21 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         return json({ success: response.ok }, response.status, response.headers.getSetCookie());
       } catch (error) {
-        return json({ error: 'authentication_denied' }, error instanceof Denied ? error.status : 503);
+        if (error instanceof StepUpRequired)
+          return json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
+        const status =
+          error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
+            ? error.status
+            : error instanceof APIError
+              ? error.statusCode
+              : 503;
+        const credentialRoute = new URL(request.url).pathname.startsWith('/passkeys/');
+        return json(
+          credentialRoute
+            ? { error: 'credential_effect_denied', effect_status: 'not_applied' }
+            : { error: 'authentication_denied' },
+          status,
+        );
       }
     },
   };

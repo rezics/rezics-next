@@ -234,7 +234,15 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
         throw new AuthBindingUnavailableError('consumeAuthAuthorization');
       if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');
       allowed(
-        ['session', 'set-password', 'remove-password', 'add-key', 'remove-key'].includes(input.purpose) &&
+        [
+          'session',
+          'set-password',
+          'remove-password',
+          'add-key',
+          'remove-key',
+          'add-passkey',
+          'remove-passkey',
+        ].includes(input.purpose) &&
           typeof input.authorization === 'string' &&
           input.authorization.length > 0 &&
           epoch(input.human.authn_epoch),

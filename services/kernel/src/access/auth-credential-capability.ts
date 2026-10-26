@@ -428,6 +428,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           !input.replay &&
             (input.stage.purpose === 'remove-password' ||
               input.stage.purpose === 'remove-key' ||
+              input.stage.purpose === 'remove-passkey' ||
               (input.stage.purpose === 'set-password' && input.stage.credentialRowId !== null)),
         );
         const committed = await credentialFloorRead.run(pool, {
@@ -574,7 +575,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
 }
 
 const SCOPE = 'access.credential-opening.v1';
-const purposes = ['set-password', 'remove-password', 'add-key', 'remove-key'];
+const purposes = ['set-password', 'remove-password', 'add-key', 'remove-key', 'add-passkey', 'remove-passkey'];
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }
