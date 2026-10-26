@@ -2,7 +2,7 @@ import { afterAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
@@ -192,13 +192,14 @@ test('request and evidence deadlines stay on real and database time while T is i
   const opening = (await f.open()).value;
   expect((await f.resolve(approval.reference)).deadline).toBeLessThan(f.at);
   const expired = { pool, deadline: Date.now() - 1 };
-  await expect(f.resolve(approval.reference, expired)).rejects.toHaveProperty('status', 403);
-  await expect(f.consume(opening.receiptId, expired)).rejects.toThrow();
+  await expect(f.resolve(approval.reference, expired)).rejects.toBeInstanceOf(AccessUnavailableError);
+  await expect(f.consume(opening.receiptId, expired)).rejects.toBeInstanceOf(AccessUnavailableError);
+  const evidenceContext = context();
   const evidence = await f.access.prepare!(
     f.actor,
     'account:update',
     { route: routeOf(f.human)!, id: f.human },
-    context(),
+    evidenceContext,
   );
   expect(
     await f.access.authorize(pool, f.actor, 'account:update', { route: routeOf(f.human)!, id: f.human }, evidence),
@@ -206,7 +207,15 @@ test('request and evidence deadlines stay on real and database time while T is i
   await Bun.sleep(1100);
   expect(
     await f.access.authorize(pool, f.actor, 'account:update', { route: routeOf(f.human)!, id: f.human }, evidence),
-  ).toBe(false);
+  ).toBe(true);
+  const processClock = spyOn(Date, 'now').mockReturnValue(evidenceContext.deadline + 1);
+  try {
+    await expect(
+      f.access.authorize(pool, f.actor, 'account:update', { route: routeOf(f.human)!, id: f.human }, evidence),
+    ).rejects.toBeInstanceOf(AccessUnavailableError);
+  } finally {
+    processClock.mockRestore();
+  }
 
   // SQL evidence guards must use database time even when T is far in the past.
   const at = iso(Date.now() - 3_600_000);

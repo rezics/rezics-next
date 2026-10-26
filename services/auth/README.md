@@ -540,7 +540,8 @@ The returned host exports:
   `transferOperator`, `deleteAccount`, `fenceOperator`, `reduceConsent`,
   `revokeSessions` and `resumeOperation`;
 - `reduceClientScopes` and `resumeClientReduction` for bounded client reductions;
-- `openOperatorSession` for immediate native Access approval and Auth issuance;
+- `authorizeOperatorOpening` for a replayable native Access opening receipt;
+- `openOperatorSession` for immediate composition of that workflow and Auth issuance;
 - `handler(Request): Promise<Response>`, which adds strict `POST /signup` with
   `{ key, handle, email, password, turnstile_token }`. It verifies each token with
   Cloudflare Siteverify before registration work and delegates other routes to the
@@ -708,13 +709,16 @@ is a separate DBOS step. It returns only after all pages finish. Failures preser
 committed fences and successful step history. The host exposes no fence-clearing
 compensation. Fresh recovery remains bound to the resulting floor and receipt.
 
-`openOperatorSession` obtains `authorizeOpening` using the authenticated context
-and calls the existing `internal.openAutomatedSession`. Auth's trusted
+`authorizeOperatorOpening` obtains `authorizeOpening` using the authenticated
+context and returns its opening receipt without consuming it. A current caller
+replaying the same key, with the same or a fresh approval, gets the stored receipt
+without repeating effects. `openOperatorSession` composes that workflow with the
+existing `internal.openAutomatedSession`. Auth's trusted
 `consumeAuthorization` binding must call actual `consumeOpening`; an adapter
 cannot manufacture a consumed receipt. Cookies, headers and Auth's response are
 never workflow arguments or results. The one-use native opening deliberately
-fails closed if an issuance acknowledgement is lost; the caller requests a fresh
-opening rather than replaying a session cookie.
+fails closed at issuance if its acknowledgement is lost. Replaying the opening
+workflow still returns its original receipt; a second issuance is denied.
 
 Consent reduction commits the native account fence before Auth's
 `internal.reduceConsent` transaction records its barrier and shrinks consent.

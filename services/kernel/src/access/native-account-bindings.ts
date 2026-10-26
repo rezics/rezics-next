@@ -35,11 +35,16 @@ import {
   ContinuationDeniedError,
   COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
 } from './committed-continuations.ts';
-import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
+import {
+  createWorkflowApprovals,
+  workflowApprovalBinding,
+  WorkflowApprovalUnavailableError,
+} from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
+import { IdempotencyConflictError } from '../command/command.ts';
 
 /** Auth-host-owned receipt/staging point-read closures, never request fields or
  * fixture maps. Persist the real createPending command reference under the exact
@@ -143,7 +148,8 @@ function translateNativeRefusal(error: unknown): never {
     error instanceof DelegationDeniedError ||
     error instanceof ResourceAccessWriteDeniedError ||
     error instanceof OperatorDeniedError ||
-    error instanceof ContinuationDeniedError
+    error instanceof ContinuationDeniedError ||
+    error instanceof IdempotencyConflictError
   )
     throw new AuthBindingDeniedError();
   throw error;
@@ -348,8 +354,9 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     },
     provisioningEvidence: (input) => workflow.provisioningEvidence(input),
     authorizeOperation: (reference, operation) => approvals.resolve(reference, operation, boundary()),
-    authorizeUnprotectedOperation: async (operation) => {
-      await approvals.resolve('', operation, boundary());
+    authorizeUnprotectedOperation: async () => {
+      // Native workflows provide no authority capability for unapproved operations.
+      throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,

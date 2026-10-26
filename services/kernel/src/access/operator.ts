@@ -174,7 +174,11 @@ function executor(pool: Pool, clock: () => Date) {
           events: [{ type: `com.rezics.access.operator.${options.kind}.v1`, subject: options.anchor, data: value }],
         };
       },
-    );
+    ).catch((error: unknown) => {
+      // Preserve Access unavailability across the command executor boundary.
+      throwAccessUnavailable(error);
+      throw error;
+    });
     return {
       ...outcome,
       get value() {
@@ -723,6 +727,9 @@ export function createOperatorCommands(config: OperatorConfig) {
         };
       });
     },
+    /** Authorization replay returns the original receipt after checking current
+     * authority. Only session issuance or the bound credential effect consumes it.
+     */
     async authorizeOpening(
       context: LifecycleRequest,
       input: {
@@ -826,9 +833,8 @@ export function createOperatorCommands(config: OperatorConfig) {
           return openingValue(context, input, facts, input.receiptId, consumed[0].expiresAt);
         },
       );
-      // A retry can observe the durable executor result but cannot mint a second
-      // Auth issuance authorization. Lost acknowledgements fail closed. A later
-      // Auth coordinator must bind its own issuance idempotency to this receipt.
+      // Consumption replay cannot authorize another Auth issuance. Lost issuance
+      // acknowledgements fail closed; opening authorization remains replayable.
       requireAllowed(!outcome.replayed);
       return outcome;
     },
