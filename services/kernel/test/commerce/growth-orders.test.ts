@@ -450,6 +450,7 @@ async function check(
 ) {
   const report = await checkGrowth(database, {
     name,
+    scales: [1, 4, 16],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (growthDb, scale, previous) => grow(growthDb, population, scale, previous),
     operation,
