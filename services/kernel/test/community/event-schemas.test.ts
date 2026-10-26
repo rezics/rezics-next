@@ -9,6 +9,7 @@ import { Value } from 'typebox/value';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 // The focused acceptance command also runs from the repository root.
 await import('reylo/register');
@@ -96,7 +97,7 @@ type Fixture = {
 async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Promise<Fixture> {
   const url = new URL(process.env.DATABASE_URL!);
   const database = `event_schema_auth_${process.pid}`;
-  await admin.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
+  await dropTestDatabase(admin, database);
   await admin.query(`CREATE DATABASE ${database}`);
   url.pathname = `/${database}`;
   migrateAuth(url.href);
@@ -195,7 +196,7 @@ async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Prom
     grant,
     async close() {
       await authPool.end();
-      await admin.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
+      await dropTestDatabase(admin, database);
     },
   };
 }

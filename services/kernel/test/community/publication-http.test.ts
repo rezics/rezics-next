@@ -15,6 +15,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://publication-http.auth.test';
 const audience = 'https://publication-http.api.test';
@@ -294,7 +295,7 @@ afterAll(async () => {
     if ('code' in error && error.code === '57P01') return;
     throw error;
   });
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await pool?.end();
   await admin?.end();
 });

@@ -14,6 +14,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-votes-http.auth.test';
 const audience = 'https://realm-votes-http.api.test';
@@ -24,7 +25,6 @@ const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(97)]]) }
 let admin: Pool;
 let pool: Pool;
 let authPool: Pool;
-const authConnectionsClosed: Promise<void>[] = [];
 let authDatabaseName = '';
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -188,9 +188,6 @@ beforeAll(async () => {
   authUrl.pathname = `/${authDatabaseName}`;
   migrateAuth(authUrl.href);
   authPool = new Pool({ connectionString: authUrl.href });
-  authPool.on('connect', (client) => {
-    authConnectionsClosed.push(new Promise<void>((resolve) => client.connection.stream.once('close', () => resolve())));
-  });
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'realm-votes-http',
@@ -267,10 +264,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await host?.stop();
   if (!host) await authPool?.end();
-  // pg.Pool.end resolves before idle sockets finish closing, and the Auth host releases its notification
-  // client without awaiting it. Wait for every Auth socket to close so the forced drop cannot reach one.
-  await Promise.all(authConnectionsClosed);
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await pool?.end();
   await admin?.end();
 });

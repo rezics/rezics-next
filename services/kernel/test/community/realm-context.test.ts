@@ -15,6 +15,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 type Person = { accountId: string; bearer: string };
 type Subject = {
@@ -215,7 +216,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (host) await host.stop();
   else await authPool?.end();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await pool?.end();
   await admin?.end();
 });

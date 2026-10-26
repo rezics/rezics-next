@@ -32,6 +32,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-participation.auth.test';
 const audience = 'https://realm-participation.api.test';
@@ -368,7 +369,7 @@ afterAll(async () => {
   await workRuntime?.shutdown();
   await workClient?.close();
   await authPool?.end();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await db?.close();
 });
 

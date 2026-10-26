@@ -18,6 +18,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const action = 'moderation:takedown';
 const eventType = 'com.rezics.content.media.taken-down.v1';
@@ -162,7 +163,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await observer?.close();
   await authPool?.end();
-  if (authDatabase) await db.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  if (authDatabase) await dropTestDatabase(db.admin, authDatabase);
   await db?.close();
 });
 function mediaRow(mediaId = newId(route)) {

@@ -22,6 +22,7 @@ import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-participation-content.auth.test';
 const audience = 'https://realm-participation-content.api.test';
@@ -435,7 +436,7 @@ afterAll(async () => {
   await work?.close();
   await host?.stop();
   if (!host) await authPool?.end();
-  if (authDatabaseName) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(db!.admin, authDatabaseName);
   await db?.close();
 });
 

@@ -13,6 +13,7 @@ import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
@@ -117,7 +118,7 @@ async function fixture(pool: Pool, admin: Pool) {
     grant,
     async close() {
       await authPool.end();
-      await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
+      await dropTestDatabase(admin, database);
     },
   };
 }

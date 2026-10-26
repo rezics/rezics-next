@@ -15,6 +15,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-boards.auth.test';
 const audience = 'https://realm-boards.api.test';
@@ -302,7 +303,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await authPool?.end();
-  if (authDatabaseName) await db?.admin.query('DROP DATABASE IF EXISTS ' + authDatabaseName + ' WITH (FORCE)');
+  if (authDatabaseName) await dropTestDatabase(db!.admin, authDatabaseName);
   await db?.close();
 });
 

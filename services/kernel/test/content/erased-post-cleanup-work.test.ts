@@ -1,5 +1,6 @@
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -146,7 +147,7 @@ if (process.argv.includes('--erased-post-worker')) {
     await pool.end();
     const maintenance = new Pool({ connectionString: new URL('/postgres', databaseUrl).href });
     try {
-      await maintenance.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+      await dropTestDatabase(maintenance, authDatabase);
     } finally {
       await maintenance.end();
     }

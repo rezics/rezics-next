@@ -16,6 +16,7 @@ import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(47);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(48)]]) };
@@ -235,7 +236,7 @@ describe('real migrated report HTTP and shared admission', () => {
   afterAll(async () => {
     await authPool?.end();
     if (db) {
-      await db.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+      await dropTestDatabase(db.admin, authDatabase);
       await db.close();
     }
   });

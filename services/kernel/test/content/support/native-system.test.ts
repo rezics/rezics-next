@@ -7,6 +7,7 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { createNativeContentSystem } from './native-system.ts';
+import { dropTestDatabase } from '../../support/drop-test-database.ts';
 
 const databaseUrl = process.env.DATABASE_URL!;
 if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated application template');
@@ -179,7 +180,7 @@ test('partial native construction cleans up when the caller template lacks appli
       { datname: name },
     ]);
   } finally {
-    if (created) await admin.query(`DROP DATABASE ${name} WITH (FORCE)`);
+    if (created) await dropTestDatabase(admin, name);
     await admin.end();
   }
 });

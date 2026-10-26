@@ -14,6 +14,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId } from '../../src/route/route.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://space-http.auth.test';
 const audience = 'https://space-http.api.test';
@@ -198,7 +199,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host?.stop();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await pool?.end();
   await admin?.end();
 });

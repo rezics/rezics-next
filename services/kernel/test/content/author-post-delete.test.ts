@@ -28,6 +28,7 @@ import {
 } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const route = 0x6b21;
 const routeKey = new Uint8Array(32).fill(7);
@@ -140,7 +141,7 @@ afterAll(async () => {
   await observer?.close();
   await authPool?.end();
   if (db) {
-    await db.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+    await dropTestDatabase(db.admin, authDatabase);
     await db.close();
   }
 });
