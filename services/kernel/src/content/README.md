@@ -12,6 +12,51 @@ Published erased posts remain in thread pages as `removed: true` with `body: nul
 
 `clearErasedPostRevisions(pool, { postId }, deadline)` clears retained revision bodies, their SHA-256 digests and search text using the committed tombstone as authority. Each digest is cleared in the same statement as its body, since retaining a hash would let a reader confirm guesses about erased text. It runs `null-erased-revisions.sql` in atomic pages of 100, releases each connection between pages and can safely run again. It changes no revision of an available post. This module exports the cleanup for direct invocation; worker registration and consumption of the post-erased event belong to the content work integration.
 
+## Covers
+
+A cover is a media object with purpose `cover`, named by a `schema:image` statement on its subject. One subject can have several images; the preferred-rank statement is its cover. An edition's cover belongs to the edition. A work without its own cover shows the cover of its representative edition, which the work names with one statement, so choosing a cover is one indexed read and never a scan of the work's editions. A work may name one representative edition per language; the cover then follows the same language choice as the title, so a reader never sees a title in one language over a cover chosen for another.
+
+### Variants and metadata
+
+Image publication decodes the original once and writes AVIF and WebP variants at fixed widths (320, 640, 960, 1280, 1920 and 2560 pixels, never enlarged; an image narrower than 320 pixels keeps its own width). The original is kept for reprocessing and never served to the public. Publication also records, on the media row:
+
+- the original width and height, so a client knows the image's ratio before loading it;
+- a placeholder: a ThumbHash of at most 32 bytes and the average colour, so the frame is painted while the image loads;
+- an optional authored crop, a Media Fragments `xywh=` rectangle chosen by an editor (to remove a scan border, a store badge or a letterbox); variants are cut from the crop, and the original stays untouched;
+- an optional focal point inside the crop, used when a client fits the image to a frame of another ratio.
+
+Metadata is stripped from every variant. Variants are deterministic, so a reprocess with the same settings produces the same keys. Every image within the upload limits (20 MiB, 40 million pixels) gets variants; no valid cover is replaced by a placeholder because it is large, and no original is ever served in place of a variant.
+
+An importer that fetches a source cover stores it through this same path, with the source's cover role mapped to `cover` (not to a gallery or screenshot role); a source record whose cover is missing or rejected leaves the subject without one, and the import report says why.
+
+### The cover summary
+
+Every read that returns a subject for display (subject read, search hits, collection members, library entries, inverse relation pages, thread attachments) returns a cover summary with it, in the same response:
+
+```json
+{
+  "media": "0192…",
+  "width": 1200,
+  "height": 1800,
+  "placeholder": { "thumbhash": "…", "color": "#5a4632" },
+  "variants": [
+    { "format": "avif", "width": 320 },
+    { "format": "webp", "width": 320 }
+  ],
+  "credit": { "rightsHolder": "…", "via": { "name": "…", "url": "https://…" }, "license": "…" }
+}
+```
+
+or `null` when the subject has no cover the reader may see. A missing, rejected, erased, taken-down or withheld cover is `null` (or carries a `withheld` reason for suitability), never an error, so a page never fails or waits because of an image. The summary is read with the subject in the same batched read; it never costs one request per item.
+
+### Serving
+
+Cover variants are served by the website's media route like every other media object: each request, conditional ones included, asks content for a decision, published bytes are sent `private, no-cache` with the SHA-256 as `ETag`, and a takedown or erasure takes effect on the next request. A page with k covers therefore costs k download decisions, so a page requests only the covers it shows: previews cap their items, and covers below the first viewport load lazily. Cover summaries are resolved from the media's current state at read time, so a takedown, erasure or rights change removes the cover from every summary at once and no page links to a removed image.
+
+### Rights
+
+Every imported cover carries its rights holder, the source it came through and its licence, and is credited where it is shown. A cover comes down on a valid complaint through the media takedown path, and its subject then shows its placeholder. The takedown also fences the source record's cover field, so a later import refresh cannot bring the same cover back.
+
 ## Cost
 
 These are derivations from the implemented adapters and SQL here, checked against `db/content/migrations/` and `db/content/schema.sql`, not measurements or promises about a particular query plan.
