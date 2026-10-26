@@ -5,6 +5,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';
 import receiptRead from '../command/read-receipt.sql';
 import approvalRead from './workflow-approvals-read.sql';
+import { accessRoot } from './derived-access.ts';
 
 export class ApprovalIdentityDeniedError extends Error {
   readonly status = 403;
@@ -39,8 +40,10 @@ const bridges = new WeakMap<Access, Bridge>();
 
 /** Factory composition only; no actor JSON registration or public bearer port. */
 export function installApprovalIdentityBridge(access: Access, bridge: Bridge): void {
-  if (bridges.has(access)) throw new Error('Approval identity bridge already installed');
-  bridges.set(access, Object.freeze(bridge));
+  const root = accessRoot(access);
+  if (root !== access) throw new Error('Cannot install approval identity bridge on derived Access');
+  if (bridges.has(root)) throw new Error('Approval identity bridge already installed');
+  bridges.set(root, Object.freeze(bridge));
 }
 export function approvedIdentityClaims(
   proof: ApprovedIdentity,
@@ -51,7 +54,7 @@ export function approvedIdentityClaims(
   return facts?.scope === scope && facts.pool === pool ? facts : undefined;
 }
 export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
-  const bridge = bridges.get(access);
+  const bridge = bridges.get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   const expires = bridge.expiry(actor, context);
   if (expires === undefined || Date.now() >= expires) throw new ApprovalIdentityDeniedError();
@@ -72,7 +75,7 @@ export async function readApprovedIdentity(
   reference: string,
   context: AccessContext,
 ): Promise<{ row: ApprovalRow; actor: AccountActor }> {
-  const bridge = bridges.get(access);
+  const bridge = bridges.get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   if (typeof reference !== 'string' || reference.length > 4096) throw new ApprovalIdentityDeniedError();
   const locator = unseal(keys, APPROVAL_REFERENCE_PURPOSE, reference) as

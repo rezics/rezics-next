@@ -2,6 +2,7 @@ import { authoritativeTimeValue, type CommandAttempt } from '../command/command.
 import type { Access, AccessContext, AccountActor, Actor } from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
+import { accessRoot } from './derived-access.ts';
 
 /** A marker is held only in this registry and always carries a live executor time.
  * Request JSON, copied contexts and booleans cannot mark a read as a command.
@@ -50,8 +51,10 @@ export function admittedCommandAccount(context: AccessContext, actor: AccountAct
 type Admission = (actor: Actor, context: AccessContext) => Promise<Account | null>;
 const admissions = new WeakMap<Access, Admission>();
 export function installCommandAdmission(access: Access, admission: Admission): void {
-  if (admissions.has(access)) throw new Error('Command admission already installed');
-  admissions.set(access, admission);
+  const root = accessRoot(access);
+  if (root !== access) throw new Error('Cannot install command admission on derived Access');
+  if (admissions.has(root)) throw new Error('Command admission already installed');
+  admissions.set(root, admission);
 }
 
 /** Operator's additional domain prerequisites consume this same observation.
@@ -64,7 +67,7 @@ export async function actingCommandAccount(
   context: AccessContext,
 ): Promise<Account | null> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
-  const admission = admissions.get(access);
+  const admission = admissions.get(accessRoot(access));
   return admission
     ? admission(actor, context)
     : readAccount(
@@ -75,7 +78,7 @@ export async function actingCommandAccount(
 }
 export async function requireCommandAdmission(access: Access, actor: Actor, context: AccessContext): Promise<void> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
-  const admission = admissions.get(access);
+  const admission = admissions.get(accessRoot(access));
   if (admission && actor.kind === 'account' && !(await admission(actor, context)))
     throw new Error('Command admission denied');
 }

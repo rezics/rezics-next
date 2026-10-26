@@ -9,6 +9,7 @@ import receiptRead from '../command/read-receipt.sql';
 import { deadlineClient, within } from './authenticate.ts';
 import { readAccount, type Account } from './account-data.ts';
 import type { DurableInitiatorRecord, InitiatorRestoreInput, InitiatorRestorerConfig } from './durable-initiator.ts';
+import { accessRoot } from './derived-access.ts';
 
 // This bridge is deliberately separate from the expiring workflow approval
 // bridge. Neither serializable rows nor an exported captureActor port mint it.
@@ -33,8 +34,10 @@ type Bridge = {
 const proofs = new WeakMap<DurableIdentity, Facts>();
 const bridges = new WeakMap<Access, Bridge>();
 export function installDurableIdentityBridge(access: Access, bridge: Bridge): void {
-  if (bridges.has(access)) throw new Error('Durable identity bridge already installed');
-  bridges.set(access, bridge);
+  const root = accessRoot(access);
+  if (root !== access) throw new Error('Cannot install durable identity bridge on derived Access');
+  if (bridges.has(root)) throw new Error('Durable identity bridge already installed');
+  bridges.set(root, bridge);
 }
 /** Consumed once, only by the installed authenticator for this exact call. */
 export function consumeDurableIdentity(
@@ -58,7 +61,7 @@ export function consumeDurableIdentity(
   return facts;
 }
 export function discardDurableIdentity(access: Access, actor: AccountActor): void {
-  bridges.get(access)?.discard(actor);
+  bridges.get(accessRoot(access))?.discard(actor);
 }
 const hex = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 const text = (value: unknown, max: number): value is string =>
@@ -81,7 +84,7 @@ export async function restoreOperationIdentity(
   time: AuthoritativeTime,
 ): Promise<AccountActor> {
   const { access, pool, readOperation, readConsent } = config;
-  const bridge = bridges.get(access);
+  const bridge = bridges.get(accessRoot(access));
   const { context, operation } = input;
   authoritativeTimeValue(time);
   if (

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createAccess } from '../access/index.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import {
   assertDeclaredResourceTypes,
   installResourceRoleCatalogue,
@@ -82,9 +83,7 @@ function realmAwareContentAccess(access: Access): Access {
   const existing = realmAwareAccesses.get(access);
   if (existing) return existing;
   const proofs = new WeakMap<object, ContentReadProof>();
-  const wrapped: Access = {
-    authenticate: access.authenticate.bind(access),
-    ...(access.replayAuthorization ? { replayAuthorization: access.replayAuthorization.bind(access) } : {}),
+  const wrapped = deriveAccess(access, {
     async prepare(actor, action, resource, context) {
       const primary = access.prepare ? await access.prepare(actor, action, resource, context) : undefined;
       if (action !== 'thread:read' && action !== 'post:read') return primary;
@@ -155,7 +154,7 @@ function realmAwareContentAccess(access: Access): Access {
       if (!proof.realmResource) return false;
       return access.authorize(client, actor, 'realm:read', proof.realmResource, proof.realmEvidence, time);
     },
-  };
+  });
   const catalogue = resourceRoleCatalogue(access);
   if (catalogue) installResourceRoleCatalogue(wrapped, catalogue);
   realmAwareAccesses.set(access, wrapped);
