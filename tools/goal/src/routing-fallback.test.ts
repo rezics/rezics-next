@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { choosePoolWithFallback } from './allowance.ts';
+import { retryFallbacks, type RoutingTable } from './routing.ts';
 import type { Pool, PoolReading, Profile } from './types.ts';
 
 const luna: Profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' };
@@ -25,4 +26,15 @@ test('a routed CLI below its reserve falls back to the next profile on another C
 
 test('with no fallback that has quota the original refusal stands', () => {
   expect(() => choosePoolWithFallback(luna, [], pools, [reading('codex', 85)], { now })).toThrow('no allowed pool');
+});
+
+test('a retry whose engine is spent reroutes through the current route, starting at its first profile', () => {
+  const sonnet: Profile = { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'high', poolClass: 'claude' };
+  const table = { version: 'test', experiments: [], consultation: luna, classes: { implementation: { first: sonnet, fallbacks: [luna], maxSteps: 1, maxMs: 1 } } } as unknown as RoutingTable;
+  const withClaude = [...pools, { name: 'claude-worker', cli: 'claude', classes: ['claude'], command: 'claude', configDirectory: '/z', allowanceKey: 'claude', policy }] as unknown as Pool[];
+  const fallbacks = retryFallbacks(table, 'implementation');
+  expect(fallbacks).toEqual([sonnet, luna]);
+  const chosen = choosePoolWithFallback(cursorLuna, fallbacks, withClaude, [reading('cursor', 100), reading('claude', 10)], { now });
+  expect(chosen.profile).toBe(sonnet); expect(chosen.pool.name).toBe('claude-worker');
+  expect(retryFallbacks(table, 'mechanical')).toEqual([]);
 });

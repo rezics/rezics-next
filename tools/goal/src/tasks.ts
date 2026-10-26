@@ -13,7 +13,7 @@ import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
-import { classifyTask, readRouting, routeTask } from './routing.ts';
+import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
 import { choosePoolWithFallback } from './allowance.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { launch, workerPrompt, type RunningWorker } from './launch.ts';
@@ -310,10 +310,7 @@ export class WorkerTasks {
         .attempts()
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
-      const fallbacks =
-        options.profile || nextTaskClass === 'mechanical'
-          ? []
-          : (readRouting(this.settings.routingFile).classes[nextTaskClass]?.fallbacks ?? []);
+      const fallbacks = options.profile ? [] : retryFallbacks(readRouting(this.settings.routingFile), nextTaskClass);
       const { profile, pool } = choosePoolWithFallback(
         options.profile ?? route.profile,
         fallbacks,
