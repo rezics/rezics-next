@@ -219,6 +219,13 @@ export class WorkerJob implements GateOutcomeSink {
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
+    // A held task released by a train that then ended, or handed off to newer code, has no driver: start it here.
+    const merged = (id: string) => ['integrated', 'merged'].includes(store.task(id).state);
+    for (const task of store.tasks().filter(t => t.state === 'ready' && t.brief.after.length && t.brief.after.every(merged)))
+      this.track(this.startReleased(task.id).catch(error => {
+        if (store.task(task.id).state === 'ready') throw error;
+        // Another process started it first.
+      }));
     const stateDirectory = resolve(this.tasks.settings.stateDirectory);
     const ownsRunLog = (logPath: string) => {
       const path = relative(stateDirectory, resolve(logPath));
