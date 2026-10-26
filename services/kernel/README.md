@@ -482,3 +482,7 @@ persistent `content.collection.hourly` DBOS schedule in UTC. Each sweep visits t
 partition numbers with at most eight partition workflows in flight and batches of at most 100.
 Collection jobs obtain authoritative command time; the schedule timestamp cannot change the
 24-hour retention cutoff. The shared worker owns draining work and closing resources on shutdown.
+
+`CONTENT_TEST_COLLECTION_PARTITIONS` optionally restricts collection to a comma-separated list of distinct
+partition numbers from 0 through 4095 for worker fixtures. Leave it unset in deployment so collection visits
+all partitions.
