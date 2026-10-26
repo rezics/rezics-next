@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { loadRoutePage, type RoutePageLoad } from '../features/pages/route';
+import type { RoutePageLoad } from '../features/pages/route';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { readEntryPage } from './entries-read';
@@ -36,7 +36,8 @@ export async function loadHome(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
+  readPage: () => Promise<RoutePageLoad>,
 ): Promise<{ page: RoutePageLoad; continue: ContinueEntry[] }> {
-  const [page, resume] = await Promise.all([loadRoutePage(client, '/'), loadContinue(client, request, sessionEnv)]);
+  const [page, resume] = await Promise.all([readPage(), loadContinue(client, request, sessionEnv)]);
   return { page, continue: resume };
 }

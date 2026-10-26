@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { loadRoutePage } from '../src/features/pages/route.tsx';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { loadHome } from '../src/library/continue-read.ts';
@@ -118,6 +119,7 @@ test('the home page reads the library once per view whatever the size of the lib
         headers: { cookie: `__Host-rezics_session=${sessionId}` },
       }),
       env,
+      () => loadRoutePage(client, '/'),
     );
     expect(signedIn.page.kind).toBe('page');
     expect(signedIn.continue).toHaveLength(Math.min(scale, 6));
@@ -129,7 +131,9 @@ test('the home page reads the library once per view whatever the size of the lib
     expect(counts).toEqual(signedInBound);
 
     reset();
-    const signedOut = await loadHome(client, new Request('https://site.example.test/en'), env);
+    const signedOut = await loadHome(client, new Request('https://site.example.test/en'), env, () =>
+      loadRoutePage(client, '/'),
+    );
     expect(signedOut.page.kind).toBe('page');
     expect(signedOut.continue).toEqual([]);
     expect(reads).toHaveLength(0);

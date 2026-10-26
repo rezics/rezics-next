@@ -5,15 +5,16 @@ import { env } from 'cloudflare:workers';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { kernelClient } from '../kernel/client';
-import { RoutePage, routePageJsonLd } from '../features/pages/route';
+import { loadRoutePage, RoutePage, routePageJsonLd } from '../features/pages/route';
 import { ContinueRow } from '../library/continue';
 import { loadHome } from '../library/continue-read';
 import type { SessionEnv } from '../session/client';
 import { PageHeading } from '../shell/page-heading';
 
-const readHome = createServerFn({ method: 'GET' }).handler(async () =>
-  loadHome(kernelClient(), getRequest(), env as Partial<SessionEnv>),
-);
+const readHome = createServerFn({ method: 'GET' }).handler(async () => {
+  const client = kernelClient();
+  return loadHome(client, getRequest(), env as Partial<SessionEnv>, () => loadRoutePage(client, '/'));
+});
 
 export const Route = createFileRoute('/')({
   loader: () => readHome(),
