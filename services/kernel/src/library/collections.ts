@@ -21,6 +21,7 @@ import {
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccessClient, AccountActor, Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   Collection,
@@ -43,7 +44,7 @@ import {
   updateCollection as updateCollectionRow,
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
-import { createLibraryCommandRunner } from './command-support.ts';
+import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { resolveSubject } from './subject-anchor.ts';
 
 const MEMBER_LIMIT = 5_000;
@@ -293,7 +294,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
           },
           context: {
             pool,
-            deadline: Date.now() + 5_000,
+            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
             resource,
             creation: {
               async validate(inner, target, time) {
@@ -355,14 +356,14 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
         resource: { route, id: collectionId },
         validate: (client, time) => visibleCollection(client, owner, route, collectionId, time),
       },
-      context: { pool, deadline: Date.now() + 5_000, partition: partitionOf(route) },
+      context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
     });
     return runCommand(
       pool,
       {
         ...identity,
         partition: partitionOf(route),
-        deadline: Date.now() + 5_000,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
         ...(clock ? { clock } : {}),
         receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
         authorization,

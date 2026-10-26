@@ -2,12 +2,13 @@ import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { TObject, TProperties } from 'typebox';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
-import { systemClock, type KernelClock } from '../clock.ts';
+import type { KernelClock } from '../clock.ts';
 import { readSpace } from '../community/space.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
@@ -18,6 +19,7 @@ import { createCollectionReads } from './collection-reads.ts';
 import collectionRead from './collection-reads-collection.sql';
 import memberPage from './collection-reads-members.sql';
 import { isOrdinalKey } from './ordinal.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
 const nullableText = t.Union([t.String(), t.Null()]);
@@ -75,7 +77,7 @@ class ViewReader {
   ) {}
 
   async subject(id: string): Promise<Summary | null> {
-    const { pool, access, clock = systemClock } = this.deps;
+    const { pool, access } = this.deps;
     const actor = this.actor;
     async function readAnchor(anchorId: string) {
       const route = routeOf(anchorId);
@@ -89,7 +91,7 @@ class ViewReader {
           id: anchorId,
           eligibility: subjectReadEligibility({ route, id: anchorId }),
         },
-        { pool, deadline: clock().getTime() + 5000 },
+        { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
       );
       return readSubject(pool, anchorId, (client) => check(client));
     }
@@ -126,7 +128,7 @@ class ViewReader {
 
   async target(id: string, type: string): Promise<Summary | null> {
     if (type === 'subject') return this.subjects.get(id) ?? null;
-    const { pool, access, clock = systemClock } = this.deps;
+    const { pool, access } = this.deps;
     if (type === 'collection') {
       try {
         const value = await createCollectionReads(this.deps).readCollection(this.actor, id);
@@ -159,7 +161,7 @@ class ViewReader {
         ...identity,
         eligibility,
       },
-      { pool, deadline: clock().getTime() + 5000 },
+      { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
     );
     return withConnection(pool, async (client) => {
       if (!(await check(client))) return null;
@@ -256,7 +258,7 @@ export async function fullMembers(
         },
       }),
     },
-    { pool: deps.pool, deadline: (deps.clock ?? systemClock)().getTime() + 5000 },
+    { pool: deps.pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
   );
   const binding = { operation: 'library.collection.members', parameters: { collectionId } };
   const limit = options.limit ?? 20;
