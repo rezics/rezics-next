@@ -75,6 +75,11 @@ function declaredResourceTypes(actions: ActionCatalogue): ReadonlyMap<string, re
 
 /** Shared drop rules for resolution and the composition explanation. */
 function compileResourceRoles(actions: ActionCatalogue, extension?: ResourceRoleCatalogue): CompiledResourceRoles {
+  if (
+    !Array.isArray(governance.globalReach) ||
+    governance.globalReach.some((action) => !governance.actions.includes(action))
+  )
+    throw new TypeError('Global governance reach must be held by the platform.governance role');
   const definitions: Record<string, readonly string[]> = {
     ...defaults.roles,
     // Only this reserved built-in role is composed from mounted platform gates.

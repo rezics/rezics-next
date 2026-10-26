@@ -10,6 +10,7 @@ import { enterCommandGate } from './gate.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
+export type CommandCallback = (transactionId: string) => void | Promise<void>;
 type CommandResult<T> = { value: T; events: CommandEvent[] };
 export const MAX_COMMAND_EVENTS = 1000;
 
@@ -177,6 +178,28 @@ export function currentCommand(tx: CommandTransaction): CurrentCommand {
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined {
   return attempts.get(tx)?.time;
+}
+
+const transactionCallbacks = Symbol('command callbacks');
+type CallbackState = { active: boolean; callbacks: CommandCallback[] };
+type CallbackTransaction = CommandTransaction & { [transactionCallbacks]?: CallbackState };
+
+/** Register work for the current command after its body and finalizer succeed.
+ * The callback receives the executor-minted transaction id and runs before the
+ * receipt and outbox are written. Registration is scoped to one live attempt.
+ */
+export function registerCommandCallback(tx: CommandTransaction, callback: CommandCallback): void {
+  const state = (tx as CallbackTransaction)[transactionCallbacks];
+  if (!state?.active) throw new TypeError('No live command transaction');
+  if (typeof callback !== 'function') throw new TypeError('Command callback must be a function');
+  state.callbacks.push(callback);
+}
+
+/** True for the transaction and deadline-bound wrappers around it while the
+ * executor attempt is live. The symbol capability is private to this module.
+ */
+export function hasLiveCommandTransaction(tx: CommandTransaction): boolean {
+  return (tx as CallbackTransaction)[transactionCallbacks]?.active === true;
 }
 
 async function mintTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime> {
@@ -403,6 +426,8 @@ export async function runCommand<T>(
       const result = await withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
+        const callbackState: CallbackState = { active: true, callbacks: [] };
+        Object.defineProperty(tx, transactionCallbacks, { value: callbackState });
         try {
           await client.query("SET LOCAL lock_timeout = '200ms'");
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
@@ -466,6 +491,8 @@ export async function runCommand<T>(
             return { type, subject, data, id: Bun.randomUUIDv7() };
           });
           await authorization?.finalize?.(tx, attempt, evidence);
+          for (let index = 0; index < callbackState.callbacks.length; index++)
+            await callbackState.callbacks[index]!(transactionId);
           let receipt: Record<string, unknown> | null = null;
           let value = response.value;
           if (options.receipt && receiptDigest) {
@@ -536,6 +563,8 @@ export async function runCommand<T>(
           }
           throw error;
         } finally {
+          callbackState.active = false;
+          callbackState.callbacks.length = 0;
           attempts.delete(tx);
           commands.delete(tx);
           if (time) times.delete(time);

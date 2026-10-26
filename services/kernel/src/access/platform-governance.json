@@ -25,9 +25,12 @@
     "subject:merge",
     "moderation:hide",
     "moderation:takedown",
+    "post:erase",
+    "media:erase",
     "offer:create",
     "payout_statement:mark_paid",
     "space:create",
     "realm:create"
-  ]
+  ],
+  "globalReach": ["moderation:takedown", "post:erase", "media:erase", "access:grant"]
 }

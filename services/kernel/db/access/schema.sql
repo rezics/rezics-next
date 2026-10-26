@@ -446,6 +446,22 @@ CREATE TABLE access.governance_bootstrap (
 
 
 --
+-- Name: governance_reach; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.governance_reach (
+    route integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    action text NOT NULL,
+    resource_id uuid NOT NULL,
+    actor_account_id uuid NOT NULL,
+    CONSTRAINT governance_reach_action_check CHECK ((action = ANY (ARRAY['moderation:takedown'::text, 'post:erase'::text, 'media:erase'::text, 'access:grant'::text]))),
+    CONSTRAINT governance_reach_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT governance_reach_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: handle_claim; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -919,6 +935,14 @@ ALTER TABLE ONLY access.exposure_opening
 
 ALTER TABLE ONLY access.governance_bootstrap
     ADD CONSTRAINT governance_bootstrap_pkey PRIMARY KEY (route, resource_id);
+
+
+--
+-- Name: governance_reach governance_reach_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.governance_reach
+    ADD CONSTRAINT governance_reach_pkey PRIMARY KEY (route, transaction_id, action, resource_id);
 
 
 --

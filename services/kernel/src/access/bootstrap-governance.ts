@@ -1,5 +1,4 @@
 import type { Pool } from 'pg';
-import type { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
@@ -10,13 +9,11 @@ import { readAccount } from './account-data.ts';
 import { createAccess } from './permission.ts';
 import { installStandingParentGrant } from './standing-parent.ts';
 import type { AccountActor } from '../request/access.ts';
+import { PLATFORM_RESOURCE } from './governance-reach.ts';
+
+export { PLATFORM_RESOURCE } from './governance-reach.ts';
 
 export const PLATFORM_GOVERNANCE_ROLE = 'platform.governance';
-// Bind the existing Global identity without loading Semantic's runtime command dependencies.
-export const PLATFORM_RESOURCE = Object.freeze({
-  route: 0,
-  id: '00000000-0000-8000-8000-000000000000' satisfies typeof GLOBAL_CONTEXT,
-} as const);
 
 export class BootstrapGovernanceUnavailableError extends Error {
   constructor() {

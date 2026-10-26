@@ -5,8 +5,11 @@ import {
   runCommand,
   currentCommand,
   authoritativeTimeValue,
+  registerCommandCallback,
   type CommandAuthorization,
   type CommandAttempt,
+  type CommandAuthorizationMode,
+  type CommandTransaction,
 } from '../src/command/command.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
@@ -119,4 +122,86 @@ test('retry uses fresh proof and time and finalizes only the successful body', a
   expect(f.order).toEqual(['prepare', 'authorize', 'prepare', 'authorize', 'finalize']);
   expect(f.proofs[0]).not.toBe(f.proofs[1]);
   expect(f.attempts[0]!.time).not.toBe(f.attempts[1]!.time);
+});
+
+function callbackFixture(mode: CommandAuthorizationMode = 'execute') {
+  const order: string[] = [];
+  const callbackIds: string[] = [];
+  const authorization: CommandAuthorization = {
+    action: 'fixture:create',
+    resource: { route: 0, id: actor },
+    authorize(tx) {
+      order.push('authorize');
+      registerCommandCallback(tx, (transactionId) => {
+        order.push('callback:first');
+        callbackIds.push(transactionId);
+      });
+      registerCommandCallback(tx, (transactionId) => {
+        order.push('callback:second');
+        callbackIds.push(transactionId);
+      });
+      return Promise.resolve(mode);
+    },
+    async finalize() {
+      order.push('finalize');
+    },
+    denied() {
+      return new Error('receipt only');
+    },
+  };
+  const options = {
+    partition: 213,
+    basis: { actorAccountId: actor, clientId: 'web', requestedBy: null },
+    authorization,
+    receipt: { actorAccountId: actor, kind: 'fixture.callback', key: Bun.randomUUIDv7(), digest: Buffer.alloc(32) },
+  };
+  return { order, callbackIds, options };
+}
+
+test('registered callbacks run after finalization once, and never on receipt replay or denial', async () => {
+  const successful = callbackFixture();
+  const body = async () => {
+    successful.order.push('body');
+    return { value: true, events: [{ type: 'com.rezics.fixture.finalize.v1', data: {} }] };
+  };
+  const first = await runCommand(pool, successful.options, body);
+  expect(successful.order).toEqual(['authorize', 'body', 'finalize', 'callback:first', 'callback:second']);
+  expect(successful.callbackIds).toEqual([first.transactionId, first.transactionId]);
+  expect((await runCommand(pool, successful.options, body)).replayed).toBe(true);
+  expect(successful.callbackIds).toEqual([first.transactionId, first.transactionId]);
+
+  const denied = callbackFixture('receipt-only');
+  await expect(
+    runCommand(pool, denied.options, async () => {
+      throw new Error('receipt-only command ran its body');
+    }),
+  ).rejects.toThrow('receipt only');
+  expect(denied.callbackIds).toEqual([]);
+});
+
+test('registered callbacks are discarded after a failed body and a retried attempt', async () => {
+  const failed = callbackFixture();
+  await expect(
+    runCommand(pool, failed.options, async () => {
+      throw new Error('body failure');
+    }),
+  ).rejects.toThrow('body failure');
+  expect(failed.callbackIds).toEqual([]);
+
+  const retried = callbackFixture();
+  let bodies = 0;
+  let successfulTransaction = '';
+  const result = await runCommand(pool, retried.options, async (_tx, context) => {
+    if (++bodies === 1) throw Object.assign(new Error('serialize'), { code: '40001' });
+    successfulTransaction = context.transactionId;
+    return { value: true, events: [{ type: 'com.rezics.fixture.finalize.v1', data: {} }] };
+  });
+  expect(result.transactionId).toBe(successfulTransaction);
+  expect(retried.callbackIds).toEqual([successfulTransaction, successfulTransaction]);
+  expect(retried.order.filter((item) => item === 'callback:first')).toHaveLength(1);
+  expect(retried.order.filter((item) => item === 'callback:second')).toHaveLength(1);
+});
+
+test('registering a callback outside a live command transaction throws', () => {
+  expect(() => registerCommandCallback({} as CommandTransaction, () => {})).toThrow('No live command transaction');
 });

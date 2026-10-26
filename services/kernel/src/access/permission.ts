@@ -1,6 +1,11 @@
 import type { Account } from './account-data.ts';
 import { accessCommandAttempt } from './command-admission.ts';
-import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  hasLiveCommandTransaction,
+  registerCommandCallback,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import {
   accessCheck,
   AuthenticationError,
@@ -22,6 +27,15 @@ import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
 import timeRead from './permission-time.sql';
 import permissionRead from './permission-check.sql';
+import governanceReachCandidatesRead from './governance-reach-candidates.sql';
+import recordGovernanceReach from './governance-reach-record.sql';
+import {
+  checkWithGovernanceReach,
+  isGlobalReachAction,
+  isPlatformResource,
+  PLATFORM_RESOURCE,
+  usedGovernanceReach,
+} from './governance-reach.ts';
 import { prepareAnonymousEligibility } from './eligibility.ts';
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
@@ -160,23 +174,7 @@ export async function checkPermission(
     // scopes neither supply the requested scope nor poison a verified public floor.
     if (!floor && (facts.anonymous || !facts.scope)) return false;
     if (facts.binding !== bind(actor, action, resource) || Date.now() >= facts.deadline) return false;
-    const row = await permissionRead.run(client, {
-      route: resource.route,
-      resource_id: resource.id,
-      action,
-      actor_id: actor.kind === 'account' ? actor.accountId : '',
-      principal_id: facts.principalId ?? '',
-      anonymous: facts.anonymous,
-      floor,
-      at,
-      roles: facts.roles,
-      grant_roles: [...facts.grantRoles],
-      evidence_valid: facts.valid,
-      deadline: facts.databaseDeadline,
-    });
-    // A query taking longer than its evidence budget cannot produce usable authority.
-    return (
-      row?.allowed === true &&
+    const stillValid = () =>
       facts.binding === bind(actor, action, resource) &&
       facts.capability === (resource.eligibility ?? resource.anonymousEligibility) &&
       !(
@@ -184,7 +182,33 @@ export async function checkPermission(
         resource.anonymousEligibility !== undefined &&
         resource.eligibility !== resource.anonymousEligibility
       ) &&
-      Date.now() < facts.deadline
+      Date.now() < facts.deadline;
+    const checkExactResource = async (target: Resource): Promise<boolean | undefined> => {
+      if (!stillValid()) return undefined;
+      const row = await permissionRead.run(client, {
+        route: target.route,
+        resource_id: target.id,
+        action,
+        actor_id: actor.kind === 'account' ? actor.accountId : '',
+        principal_id: facts.principalId ?? '',
+        anonymous: facts.anonymous,
+        floor,
+        at,
+        roles: facts.roles,
+        grant_roles: [...facts.grantRoles],
+        evidence_valid: facts.valid,
+        deadline: facts.databaseDeadline,
+      });
+      if (row?.allowed !== true && row?.allowed !== false) return undefined;
+      // A query taking longer than its evidence budget cannot produce usable authority.
+      return stillValid() ? row.allowed : undefined;
+    };
+    return await checkWithGovernanceReach(
+      evidence,
+      action,
+      resource,
+      () => checkExactResource(resource),
+      () => checkExactResource(PLATFORM_RESOURCE),
     );
   } catch {
     return false;
@@ -313,16 +337,29 @@ export function createAccess(config: PermissionConfig): Access {
                   valid: 'empty',
                 });
           }
-          const candidates = await candidatesRead.run(context.pool, {
-            route: resource.route,
-            resource_id: resource.id,
-            action,
-            grant_roles: grantRoles,
-            actor_id: actor.accountId,
-            principal_id: principalId ?? '',
-            roles,
-            at,
-          });
+          const candidates =
+            isGlobalReachAction(action) && !isPlatformResource(resource)
+              ? await governanceReachCandidatesRead.run(context.pool, {
+                  route: resource.route,
+                  resource_id: resource.id,
+                  action,
+                  grant_roles: grantRoles,
+                  actor_id: actor.accountId,
+                  principal_id: principalId ?? '',
+                  roles,
+                  at,
+                  include_global: true,
+                })
+              : await candidatesRead.run(context.pool, {
+                  route: resource.route,
+                  resource_id: resource.id,
+                  action,
+                  grant_roles: grantRoles,
+                  actor_id: actor.accountId,
+                  principal_id: principalId ?? '',
+                  roles,
+                  at,
+                });
           // Only hits from the single bounded probe cause an anchored role read.
           const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
           const groups = new Map<string, RoleEvidence[]>();
@@ -409,8 +446,22 @@ export function createAccess(config: PermissionConfig): Access {
       }
       return evidence;
     },
-    authorize: (client, actor, action, resource, evidence, time) =>
-      checkPermission(client, actor, action, resource, evidence, time, config.clock),
+    async authorize(client, actor, action, resource, evidence, time) {
+      const allowed = await checkPermission(client, actor, action, resource, evidence, time, config.clock);
+      if (allowed && actor.kind === 'account' && usedGovernanceReach(evidence) && hasLiveCommandTransaction(client)) {
+        const target = Object.freeze({ route: resource.route, id: resource.id });
+        registerCommandCallback(client, (transactionId) =>
+          recordGovernanceReach.run(client, {
+            route: target.route,
+            transaction_id: transactionId,
+            action,
+            resource_id: target.id,
+            actor_account_id: actor.accountId,
+          }),
+        );
+      }
+      return allowed;
+    },
   };
   installResourceRoleCatalogue(access, catalogue);
   return access;

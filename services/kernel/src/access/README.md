@@ -10,6 +10,12 @@ A grantor needs `access:grant` and never grants an action they do not hold. Gran
 
 `gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). `<group>` matches `^[a-z][a-z_]{0,62}$`. On that resource, holding `gate:any` counts as holding every `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
 
+### Platform governance reach
+
+For `moderation:takedown`, `post:erase`, `media:erase` and `access:grant`, Access first evaluates the ordinary formula on the requested resource. If it denies, Access checks that exact action on the Global Context with the same actor, client scopes, principal and authoritative time. The Global check uses the normal account and assignment floors and current suspension/fence checks; denials on the requested resource do not affect it. A Global action never covers another action. The actions in `globalReach` must also be held by the built-in `platform.governance` role. Grant commands still require the grantor to hold each listed action on the Global Context when granting it there.
+
+A command authorized by this Global check writes one row to `access.governance_reach` in the same transaction. The row records the command transaction id, action, requested resource and actor account. Repeated authorization for the same action and resource in one command keeps one row. Replays, denials and checks outside a command write nothing.
+
 ## Accounts
 
 Managing an automated account requires an `account:manage` grant on its operator's account resource.
@@ -129,6 +135,12 @@ The evidence deadline guards elapsed time on the database clock only. That time 
 That read is still one statement per non-command check and returns one more column. Its bound is unchanged; `test/access/growth-permission.test.ts` covers the formula's cost.
 
 ## Cost
+
+### Platform governance reach
+
+- Touches: when the requested resource denies a listed action, one exact check of that action on the Global Context. A command authorized through Global adds one Access record row.
+- Bound: `O((1 + K) log G)` added, the same shape as `gate:any`, independent of the requested resource, other resources and other grants.
+- Growth check: `test/access/growth-governance-reach.test.ts` at [1, 8, 64], growing unrelated resources, their grants and Global grants to other accounts; default warm-up; constant rows and statements, logarithmic buffers.
 
 ### Operator transfer
 

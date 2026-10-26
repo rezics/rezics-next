@@ -7,17 +7,11 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import {
-  accessCheck,
-  type Access,
-  type AccessContext,
-  type AccessCheck,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
+import { type Access, type AccessContext, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { commandAccessContext, requireCommandAdmission } from './command-admission.ts';
+import { prepareGovernanceCheck } from './governance-reach.ts';
 
 /** Only kernel-authenticated actor objects belong in this context; request JSON
  * supplies the command input, never this context or an authorization decision.
@@ -78,7 +72,10 @@ export async function grantCommand<T>(
   )
     throw options.denied();
   const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-  const proofs = new WeakMap<object, { attempt: CommandAttempt; checks: AccessCheck[] }>();
+  const proofs = new WeakMap<
+    object,
+    { attempt: CommandAttempt; checks: { action: string; evidence: unknown; check: AccessCheck }[] }
+  >();
   const authorization: CommandAuthorization = {
     action: options.actions[0]!,
     resource: Object.freeze({ ...options.resource }),
@@ -89,9 +86,12 @@ export async function grantCommand<T>(
         await requireCommandAdmission(config.access, actor, preparation);
         if (options.consentedActions?.some((action) => !actor.scopes.includes(action))) throw options.denied();
         const actions = [...new Set(options.actions)];
-        const checks: AccessCheck[] = [];
+        const checks: { action: string; evidence: unknown; check: AccessCheck }[] = [];
         for (const action of actions)
-          checks.push(await accessCheck(config.access, actor, action, options.resource, preparation));
+          checks.push({
+            action,
+            ...(await prepareGovernanceCheck(config.access, actor, action, options.resource, preparation)),
+          });
         // Holding gate:any covers every gate:<group> on the Global Context. One
         // extra exact check, reused across those actions, is the whole exception.
         // gate:any itself stays exact. No other action gains a wildcard.
@@ -100,13 +100,13 @@ export async function grantCommand<T>(
           const gateAnyIndex = actions.indexOf('gate:any');
           const gateAny =
             gateAnyIndex >= 0
-              ? checks[gateAnyIndex]!
-              : await accessCheck(config.access, actor, 'gate:any', PLATFORM_RESOURCE, preparation);
+              ? checks[gateAnyIndex]!.check
+              : (await prepareGovernanceCheck(config.access, actor, 'gate:any', PLATFORM_RESOURCE, preparation)).check;
           let covered: Promise<boolean> | undefined;
           for (const action of groups) {
             const index = actions.indexOf(action);
-            const held = checks[index]!;
-            checks[index] = async (client, time) => {
+            const held = checks[index]!.check;
+            checks[index]!.check = async (client, time) => {
               if (await held(client, time)) return true;
               covered ??= gateAny(client, time);
               return covered;
@@ -130,7 +130,7 @@ export async function grantCommand<T>(
         attempt.basis.requestedBy !== basis.requestedBy
       )
         throw options.denied();
-      for (const check of prepared.checks) if (!(await check(tx, attempt.time))) throw options.denied();
+      for (const check of prepared.checks) if (!(await check.check(tx, attempt.time))) throw options.denied();
       if (Date.now() >= context.deadline) throw options.denied();
       return 'execute';
     },
