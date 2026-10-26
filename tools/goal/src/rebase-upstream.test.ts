@@ -1,0 +1,61 @@
+import { expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { git } from './merge.ts';
+import { rebaseOnto, rebaseUpstream } from './merge-train.ts';
+
+function repository() {
+  const root = mkdtempSync(join(tmpdir(), 'rebase-upstream-'));
+  git(root, 'init', '-q', '-b', 'main');
+  git(root, 'config', 'user.email', 'fixture@example.com');
+  git(root, 'config', 'user.name', 'Fixture');
+  const commit = (files: Record<string, string>, message: string) => {
+    for (const [path, content] of Object.entries(files)) writeFileSync(join(root, path), content);
+    git(root, 'add', '-A');
+    git(root, 'commit', '-qm', message);
+    return git(root, 'rev-parse', 'HEAD');
+  };
+  return { root, commit, dispose: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('the upstream is the recorded base normally, and the fork point once the branch has moved past it', () => {
+  const r = repository();
+  try {
+    const recorded = r.commit({ 'a.txt': 'a0\n', 'w.txt': 'w0\n' }, 'base');
+    const target1 = r.commit({ 'a.txt': 'a1\n' }, 'target one');
+    git(r.root, 'checkout', '-qb', 'work');
+    r.commit({ 'w.txt': 'worker\n' }, 'work');
+    git(r.root, 'checkout', '-q', 'main');
+    const target2 = r.commit({ 'b.txt': 'b\n' }, 'target two');
+    git(r.root, 'checkout', '-q', 'work');
+    // The branch already holds target one, past its recorded base: replaying from there would replay other work.
+    expect(rebaseUpstream(r.root, target2, recorded)).toBe(target1);
+    // A recorded base the branch does not descend from is never used.
+    git(r.root, 'checkout', '-q', '--orphan', 'elsewhere');
+    git(r.root, 'rm', '-rqf', '.');
+    const unrelated = r.commit({ 'z.txt': 'z\n' }, 'unrelated');
+    git(r.root, 'checkout', '-q', 'work');
+    expect(rebaseUpstream(r.root, target2, unrelated)).toBe(target1);
+    // The normal case keeps the recorded base.
+    expect(rebaseUpstream(r.root, target2, target1)).toBe(target1);
+  } finally { r.dispose(); }
+});
+
+test('a squash that would change files outside the brief is refused and the branch is left as it was', () => {
+  const r = repository();
+  try {
+    const base = r.commit({ 'w.txt': 'w0\n', 'other.txt': 'o0\n' }, 'base');
+    git(r.root, 'checkout', '-qb', 'work');
+    r.commit({ 'w.txt': 'worker\n' }, 'work');
+    r.commit({ 'other.txt': 'stray\n' }, 'stray edit outside the brief');
+    const head = git(r.root, 'rev-parse', 'HEAD');
+    git(r.root, 'checkout', '-q', 'main');
+    const target = r.commit({ 'w.txt': 'target\n' }, 'target conflicts with the work');
+    git(r.root, 'checkout', '-q', 'work');
+    expect(() => rebaseOnto(r.root, target, base, join(r.root, '.git', 'rebase.log'), [], ['w.txt']))
+      .toThrow('outside the brief: other.txt');
+    expect(git(r.root, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(r.root, 'status', '--porcelain')).toBe('');
+  } finally { r.dispose(); }
+});
