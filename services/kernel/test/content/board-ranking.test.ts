@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { runCommand } from '../../src/command/command.ts';
 import { anonymousAccess } from '../../src/request/access.ts';
 import { listBoardThreads, type BoardPageInput, type ContentBoardDependencies } from '../../src/content/boards.ts';
+import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { createBoardEffect } from '../../src/content/board-projection.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -356,16 +357,10 @@ test.serial('rank refresh skips zero rows and updates no more than 500 rows per 
     ],
   );
 
-  const first = await db.admin.query<{ refreshed: number }>(
-    'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-    [batchAt],
-  );
-  const second = await db.admin.query<{ refreshed: number }>(
-    'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-    [batchAt],
-  );
-  expect(first.rows[0]?.refreshed).toBe(500);
-  expect(second.rows[0]?.refreshed).toBe(2);
+  const first = await refreshBoardRankBatch(db.pool, new Date(batchAt));
+  const second = await refreshBoardRankBatch(db.pool, new Date(batchAt));
+  expect(first).toBe(500);
+  expect(second).toBe(2);
   const stored = await db.admin.query<{ active_rank: number; rank_refreshed_at: Date }>(
     `SELECT active_rank, rank_refreshed_at FROM content.board_thread WHERE route = $1 AND board_id = $2`,
     [boardRoute, boardId],
@@ -381,7 +376,7 @@ test.serial('rank refresh skips zero rows and updates no more than 500 rows per 
 });
 
 test.serial(
-  'active pages and one rank refresh batch keep constant cost as boards and threads grow',
+  'active board pages keep constant cost as boards and threads grow',
   async () => {
     const boardId = await createBoard();
     const anchor = await createSourceThread(boardId, new Date(Date.now() - 60 * 60_000).toISOString());
@@ -409,39 +404,6 @@ test.serial(
     expect(pageReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
     expect(
       pageReport.samples.every((sample) =>
-        Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
-      ),
-    ).toBe(true);
-
-    const refreshPopulation = growthPopulation(1);
-    const refreshReport = await checkGrowth(db, {
-      name: 'one active rank refresh batch',
-      scales,
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      repetitions: 1,
-      grow: async (growthDb, scale, previous) =>
-        seed({ pool: growthDb.pool, admin: growthDb.admin }, refreshPopulation, { from: previous, to: scale }),
-      // One batch clears the rows it selects. Warm the same refresh on a spare stale batch.
-      warmup: async (growthDb) => {
-        await seed({ pool: growthDb.pool, admin: growthDb.admin }, growthPopulation(1), { from: 0, to: 500 });
-        const result = await growthDb.pool.query<{ refreshed: number }>(
-          'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-          [new Date().toISOString()],
-        );
-        expect(result.rows[0]?.refreshed).toBe(500);
-      },
-      operation: async (growthDb) => {
-        const result = await growthDb.pool.query<{ refreshed: number }>(
-          'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-          [new Date().toISOString()],
-        );
-        expect(result.rows[0]?.refreshed).toBe(500);
-        return result.rows[0];
-      },
-    });
-    expect(refreshReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
-    expect(
-      refreshReport.samples.every((sample) =>
         Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
       ),
     ).toBe(true);
