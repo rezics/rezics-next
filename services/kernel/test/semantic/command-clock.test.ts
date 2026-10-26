@@ -182,12 +182,23 @@ test("a batch command runs at the kernel's configured clock", async () => {
 });
 
 test("subject routes run commands at the kernel's configured clock", async () => {
-  const created = async (label: string) => {
-    const response = await call('/v1/subjects', { type: 'schema:Book', labels: { en: label } });
+  const created = async (label: string, statements?: Record<string, unknown[]>) => {
+    const response = await call('/v1/subjects', {
+      type: 'schema:Book',
+      labels: { en: label },
+      ...(statements === undefined ? {} : { statements }),
+    });
     expect(response.status).toBe(201);
     return (response.body.subject as Record<string, any>).id as string;
   };
-  const subject = await created('Subject clock');
+  const subject = await created('Subject clock', {
+    'schema:inLanguage': [
+      {
+        property: { id: 'schema:inLanguage' },
+        value: { type: 'value', content: 'ja' },
+      },
+    ],
+  });
   const other = await created('Merge clock one');
   const third = await created('Merge clock two');
   const hidden = await created('Hide clock');
@@ -195,11 +206,21 @@ test("subject routes run commands at the kernel's configured clock", async () =>
   const proposed = await call(`/v1/subjects/${subject}/candidates`, {
     statement: {
       property: { id: 'schema:inLanguage' },
-      value: { type: 'value', content: 'ja' },
+      value: { type: 'value', content: 'fr' },
+      references: [
+        {
+          parts: [
+            {
+              property: { id: 'schema:url' },
+              value: { type: 'value', content: 'https://example.com/clock' },
+            },
+          ],
+        },
+      ],
     },
   });
   expect(proposed.status).toBe(201);
-  const candidate = (proposed.body.candidate as string);
+  const candidate = proposed.body.candidate as string;
 
   const accepted = await call(`/v1/subjects/${subject}/candidates/${candidate}:accept`, {
     context: GLOBAL_CONTEXT,
@@ -267,20 +288,29 @@ test("subject routes run commands at the kernel's configured clock", async () =>
       statement: {
         property: { id: 'schema:inLanguage' },
         value: { type: 'value', content: 'fr' },
+        references: [
+          {
+            parts: [
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: 'https://example.com/clock-refused' },
+              },
+            ],
+          },
+        ],
       },
     },
     'realTimeWriter',
     refusalKey,
   );
   expect(refused.status).toBe(403);
-  const afterRefusal = await admin.query(
-    'SELECT count(*)::int AS count FROM semantic.revision WHERE subject_id = $1',
-    [subject],
-  );
+  const afterRefusal = await admin.query('SELECT count(*)::int AS count FROM semantic.revision WHERE subject_id = $1', [
+    subject,
+  ]);
   expect(afterRefusal.rows[0]?.count).toBe(beforeRefusal.rows[0]?.count);
-  const receipt = await admin.query(
-    'SELECT 1 FROM core.receipt WHERE actor_account_id = $1 AND idempotency_key = $2',
-    [accounts.realTimeWriter, refusalKey],
-  );
+  const receipt = await admin.query('SELECT 1 FROM core.receipt WHERE actor_account_id = $1 AND idempotency_key = $2', [
+    accounts.realTimeWriter,
+    refusalKey,
+  ]);
   expect(receipt.rows).toHaveLength(0);
 });

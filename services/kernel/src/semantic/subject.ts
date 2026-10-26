@@ -63,6 +63,7 @@ export async function createSubject(
     authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
+    clock?: () => Date;
   },
 ): Promise<CreateSubjectResult> {
   const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
@@ -95,6 +96,7 @@ export async function createSubject(
           return 'execute';
         },
       },
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       return writeSubject(tx, transactionId, options);

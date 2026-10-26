@@ -236,7 +236,13 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
-type SubjectRouteDependencies = { pool: Pool; routeKey: Uint8Array; tokens: KeyRing; access: () => Access };
+type SubjectRouteDependencies = {
+  pool: Pool;
+  routeKey: Uint8Array;
+  tokens: KeyRing;
+  access: () => Access;
+  clock: () => Date;
+};
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
 }
@@ -304,7 +310,7 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
 
 function subjectRoutes(
   app: ReturnType<typeof createApp>,
-  { pool, routeKey, tokens, access }: SubjectRouteDependencies,
+  { pool, routeKey, tokens, access, clock }: SubjectRouteDependencies,
 ) {
   return app
     .post(
@@ -363,6 +369,7 @@ function subjectRoutes(
               release: { digest: active.digest, release: active.release },
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -447,6 +454,7 @@ function subjectRoutes(
               release: active,
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(component);
@@ -586,6 +594,7 @@ function subjectRoutes(
               digest: requestDigest('subject.hide', actor, { subject: params.id, body }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -651,6 +660,7 @@ function subjectRoutes(
               digest: requestDigest('subject.take_down', actor, { subject: params.id, body }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -715,6 +725,7 @@ function subjectRoutes(
               digest: requestDigest('subject.restore', actor, { subject: params.id, body }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -787,6 +798,7 @@ function subjectRoutes(
               release: active,
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -862,6 +874,7 @@ function subjectRoutes(
               }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(component);
@@ -936,6 +949,7 @@ function subjectRoutes(
               }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(component);
@@ -1004,6 +1018,7 @@ function subjectRoutes(
               }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -1077,6 +1092,7 @@ function subjectRoutes(
               }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -1150,6 +1166,7 @@ function subjectRoutes(
               }),
               authorization,
               deadline: job.deadline,
+              clock,
             }),
           );
           session.record(result.component);
@@ -1227,6 +1244,7 @@ function subjectRoutes(
               authorization,
               deadline: job.deadline,
               release: active,
+              clock,
             }),
           );
           session.record(component);

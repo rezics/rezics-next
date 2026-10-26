@@ -80,6 +80,7 @@ export async function proposeStatement(
     release: { digest: string; release: Release };
     authorization: CommandAuthorization;
     deadline: number;
+    clock?: () => Date;
   },
 ) {
   const route = routeOf(options.subject);
@@ -101,6 +102,7 @@ export async function proposeStatement(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       return writeProposal(tx, transactionId, options);
@@ -214,6 +216,7 @@ type EditorialWriteOptions = {
   digest: Uint8Array;
   authorization: CommandAuthorization;
   deadline: number;
+  clock?: () => Date;
 };
 
 async function appendEditorialRevision(
@@ -276,6 +279,7 @@ export async function decideCandidate(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       type CandidateRow = {
@@ -424,6 +428,7 @@ export async function adoptCandidates(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       const subject = await tx.query<{

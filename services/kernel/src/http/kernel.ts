@@ -200,6 +200,7 @@ export function createKernel(dependencies: KernelDependencies) {
     }),
     {
       ...dependencies,
+      clock,
       tokens,
       access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
     },

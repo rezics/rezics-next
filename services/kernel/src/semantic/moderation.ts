@@ -202,6 +202,7 @@ export async function moderateSubject(
     digest: Uint8Array;
     authorization: CommandAuthorization;
     deadline: number;
+    clock?: () => Date;
   },
 ) {
   const route = routeOf(options.subject);
@@ -223,6 +224,7 @@ export async function moderateSubject(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       const current = await readModeratedSubject(tx, route, options.subject);
@@ -330,6 +332,7 @@ export async function moderateStatement(
     digest: Uint8Array;
     authorization: CommandAuthorization;
     deadline: number;
+    clock?: () => Date;
   },
 ) {
   const route = routeOf(options.subject);
@@ -352,6 +355,7 @@ export async function moderateStatement(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       const current = await readModeratedSubject(tx, route, options.subject);

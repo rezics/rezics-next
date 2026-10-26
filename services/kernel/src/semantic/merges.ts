@@ -47,6 +47,7 @@ export async function mergeSubjects(
     release: { digest: string; release: Release };
     authorization: CommandAuthorization;
     deadline: number;
+    clock?: () => Date;
   },
 ) {
   const [survivor, redirected] = [...options.subjects].sort() as [string, string];
@@ -75,6 +76,7 @@ export async function mergeSubjects(
         requestedBy: options.actor.requestedBy,
       },
       authorization: options.authorization,
+      clock: options.clock,
     },
     async (tx, { transactionId }) => {
       if (kept instanceof Error) throw kept;
