@@ -7,6 +7,8 @@ import defaults from '../defaults.json';
 import { matchesPath } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
+import { openDb } from './db.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
@@ -101,6 +103,38 @@ function frozenFilesForTask(stateDirectory: string, taskId: string): { path: str
   } finally {
     db.close();
   }
+}
+
+function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; supermanager?: string } {
+  const file = process.env.GOAL_LOCAL_CONFIG
+    ? resolve(process.env.GOAL_LOCAL_CONFIG)
+    : join(mainCheckout, '.temp/goal/local.json');
+  if (!existsSync(file)) return {};
+  try {
+    const local = JSON.parse(readFileSync(file, 'utf8')) as {
+      stabilizeBranch?: unknown;
+      integration?: { supermanager?: unknown };
+    };
+    const stabilizeBranch = typeof local.stabilizeBranch === 'string' ? local.stabilizeBranch.trim() : '';
+    const supermanager = typeof local.integration?.supermanager === 'string' ? local.integration.supermanager.trim() : '';
+    return {
+      ...(stabilizeBranch ? { stabilizeBranch } : {}),
+      ...(supermanager ? { supermanager } : {}),
+    };
+  } catch { return {}; }
+}
+
+function taskIntegrationTarget(stateDirectory: string, taskId: string): { target?: string; manager?: string } {
+  const path = join(stateDirectory, 'goal.sqlite');
+  if (!existsSync(path)) return {};
+  const db = new Database(path, { readonly: true, strict: true });
+  db.exec('PRAGMA busy_timeout = 30000');
+  try {
+    const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
+    if (!row) return {};
+    const brief = (JSON.parse(row.body) as { brief?: { target?: string; manager?: string } }).brief;
+    return { target: brief?.target, manager: brief?.manager };
+  } finally { db.close(); }
 }
 
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
@@ -208,6 +242,10 @@ export type TrainOptions = {
   gateIdentity?: string;
   mainBranch?: string;
   integrationBranch?: string;
+  /** Branch that receives `target: stabilize` tasks. Defaults to `stabilize`. */
+  stabilizeBranch?: string;
+  supermanager?: string;
+  inboxDirectory?: string;
   codeIsCurrent?: () => boolean;
   handOff?: () => void | Promise<void>;
   /** Runs after the landing lease is released, in the same process that drained the queue. */
@@ -299,8 +337,13 @@ export class MergeTrain {
     const o = this.options;
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
-    const targetBranch = o.integrationBranch ?? mainBranch;
-    const integratesIntoDev = o.integrationBranch !== undefined;
+    const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
+    const stabilize = recorded.target === 'stabilize';
+    const targetBranch = stabilize
+      ? (o.stabilizeBranch ?? localBranchSettings(o.mainCheckout).stabilizeBranch ?? 'stabilize')
+      : (o.integrationBranch ?? mainBranch);
+    // A stabilize task uses the same rebase, check and compare-and-swap path, aimed at the stabilize branch.
+    const integratesIntoDev = stabilize || o.integrationBranch !== undefined;
     const targetRef = `refs/heads/${targetBranch}`;
     const started = Date.now();
     const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
@@ -336,6 +379,12 @@ export class MergeTrain {
         result.passed = true;
         result.stage = 'merge';
         result.mergedCommit = entry.candidate;
+        if (stabilize) {
+          mkdirSync(resolve(o.worktreeRoot), { recursive: true });
+          git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
+          added = true;
+          this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+        }
         return result;
       }
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
@@ -518,6 +567,7 @@ export class MergeTrain {
         result.passed = true;
         result.stage = 'merge';
         result.mergedCommit = candidate;
+        if (stabilize) this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
         return result;
       }
     } catch (error) {
@@ -531,11 +581,84 @@ export class MergeTrain {
     } finally {
       result.hostMs = Date.now() - started;
       if (added) {
-        try {
-          git(trainTree, 'rebase', '--abort');
-        } catch {}
+        try { git(trainTree, 'rebase', '--abort'); } catch {}
+        try { git(trainTree, 'merge', '--abort'); } catch {}
         git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
       }
     }
+  }
+
+  /** Merge the new stabilize commit into dev. A conflict leaves stabilize advanced and wakes both managers. */
+  private mergeStabilizedCommitIntoDev(candidate: string, trainTree: string, taskId: string, managerId: string | undefined, logPath: string): void {
+    const devBranch = this.options.integrationBranch ?? 'dev';
+    const devRef = `refs/heads/${devBranch}`;
+    try {
+      if (this.commitIsAncestor(candidate, devBranch)) return;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const expected = this.ensureBranch(devBranch);
+        try { git(trainTree, 'merge', '--abort'); } catch { /* The worktree is not merging. */ }
+        git(trainTree, 'reset', '--hard', expected);
+        git(trainTree, 'clean', '-fdx');
+        try {
+          git(trainTree, 'merge', '--no-ff', '--no-edit', candidate);
+        } catch (error) {
+          const files = unmergedFiles(trainTree);
+          try { git(trainTree, 'merge', '--abort'); } catch { /* Already cleared. */ }
+          appendFileSync(logPath, `Stabilize ${candidate} did not merge into ${devBranch}: ${files.join(', ') || error}\n`);
+          this.notifyStabilizeConflict(taskId, managerId, candidate, files);
+          return;
+        }
+        const merged = git(trainTree, 'rev-parse', 'HEAD');
+        if (merged === expected) return;
+        try {
+          git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
+          return;
+        } catch (error) {
+          if (git(this.options.mainCheckout, 'rev-parse', devRef) === expected) throw error;
+          if (attempt === 4) throw new Error(`dev moved while merging stabilize ${candidate}`);
+        }
+      }
+    } catch (error) {
+      appendFileSync(logPath, `${error}\n`);
+      this.notifyStabilizeConflict(taskId, managerId, candidate, []);
+    }
+  }
+
+  private commitIsAncestor(commit: string, branch: string): boolean {
+    try {
+      git(this.options.mainCheckout, 'merge-base', '--is-ancestor', commit, branch);
+      return true;
+    } catch { return false; }
+  }
+
+  private ensureBranch(branch: string): string {
+    const reference = `refs/heads/${branch}`;
+    try { return git(this.options.mainCheckout, 'rev-parse', '--verify', reference); }
+    catch {
+      const main = git(this.options.mainCheckout, 'rev-parse', '--verify', `refs/heads/${this.options.mainBranch ?? 'main'}`);
+      try { git(this.options.mainCheckout, 'branch', '--', branch, main); }
+      catch (error) {
+        try { return git(this.options.mainCheckout, 'rev-parse', '--verify', reference); }
+        catch { throw error; }
+      }
+      return main;
+    }
+  }
+
+  private notifyStabilizeConflict(taskId: string, managerId: string | undefined, commit: string, files: readonly string[]): void {
+    const summary = `Task ${taskId} stabilize ${commit} conflicts with dev: ${files.join(', ')}`.replace(/[\r\n]+/g, ' ');
+    const supermanager = this.options.supermanager
+      ?? localBranchSettings(this.options.mainCheckout).supermanager
+      ?? defaults.integration.supermanager;
+    const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
+    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
+    const path = join(this.options.stateDirectory, 'goal.sqlite');
+    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const db = shared ?? owned;
+    if (!db) return;
+    try {
+      const inbox = new SqliteManagerInbox(db, this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'));
+      for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
+    } finally { owned?.close(); }
   }
 }

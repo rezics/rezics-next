@@ -158,11 +158,26 @@ New tasks and retries branch from the integration branch. If it does not exist, 
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 
+A `stabilize` branch (`stabilizeBranch`, default `stabilize`) is a frozen candidate cut from the integration branch. A
+brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused while the branch does
+not exist. The train rebases such a task onto the branch, runs the same integration checks, and compare-and-swap advances
+the branch. It then merges that new head into the integration branch with `git merge --no-ff` in a train worktree,
+retrying up to five times if the integration branch moves. A conflict aborts only that merge: the stabilize branch and
+the task stay integrated at the stabilize commit, and the task's manager and the supermanager receive an inbox notice
+naming the task, the commit and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is
+not integrated, merged or cancelled when its recorded base is an ancestor of the stabilize head. A running attempt is
+left in place; only later integration uses the branch. Briefs without `target` integrate into the integration branch as
+before.
+
 The train promotes the `dev` head to `main` under a separate lease after the root gate and every task acceptance command
 pass. If a gate fails, the promoter compares its first failure with `main`, then checks task prefixes concurrently up to
 `promotionParallelism`. A failure shared with `main` is reported as an environment failure. Otherwise the promoter
 reverts the culprit and its `after:` dependents in the batch in one forward commit on `dev`, sends the culprit through
 the normal fix-round handling, holds those dependents, and promotes the remaining tasks.
+
+While the stabilize branch exists, promotion gates its head and does not bisect, because only fixes reach it. A passing
+gate publishes `main` from that head and moves the branch to the dev head, starting the next window. Deleting the branch
+returns promotion to gating dev.
 
 When a rebase conflicts only in derived files, the train restores their upstream versions, regenerates them with the commands in `defaults.json`, stages them and continues; any other conflict fails at the rebase stage.
 

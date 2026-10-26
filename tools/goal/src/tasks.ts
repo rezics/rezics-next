@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
-import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
+import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
 import { choosePoolWithFallback } from './allowance.ts';
@@ -87,18 +88,28 @@ export class TaskHeldForDependenciesError extends Error {
 export class WorkerTasks {
   constructor(readonly settings: Settings, readonly store: WorkerStore, readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch) {}
-  private integrationHead(): string {
-    const reference = `refs/heads/${this.settings.integrationBranch}`;
+  private branchHead(branch: string, createFromMain: boolean): string {
+    const reference = `refs/heads/${branch}`;
     try { return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]); }
     catch {
+      if (!createFromMain) throw new Error(`stabilize branch ${branch} does not exist`);
       const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
-      try { git(this.settings.mainCheckout, ['branch', '--', this.settings.integrationBranch, main]); }
+      try { git(this.settings.mainCheckout, ['branch', '--', branch, main]); }
       catch (error) {
         try { return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]); }
         catch { throw error; }
       }
       return main;
     }
+  }
+  private integrationHead(): string {
+    return this.branchHead(this.settings.integrationBranch, true);
+  }
+  /** A stabilize brief bases on that branch; every other brief bases on the integration branch. */
+  private taskBaseHead(brief: { target?: 'stabilize' }): string {
+    return brief.target === 'stabilize'
+      ? this.branchHead(this.settings.stabilizeBranch, false)
+      : this.integrationHead();
   }
   private commitRetryLeftovers(task: Task, attempt: number): void {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
@@ -130,7 +141,7 @@ export class WorkerTasks {
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'));
     try {
-      const base = this.integrationHead();
+      const base = this.taskBaseHead(brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
@@ -154,13 +165,14 @@ export class WorkerTasks {
     let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
     this.commitRetryLeftovers(task, task.currentAttempt);
-    const integration = this.integrationHead();
+    const integration = this.taskBaseHead(task.brief);
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
     const branch = git(task.worktree, ['branch', '--show-current']);
     if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
       const common = git(task.worktree, ['merge-base', task.base, integration]);
-      if (common !== task.base) throw new HeldTaskConflictError('held task base is not an ancestor of the current integration branch');
+      const branchName = task.brief.target === 'stabilize' ? 'stabilize branch' : 'integration branch';
+      if (common !== task.base) throw new HeldTaskConflictError(`held task base is not an ancestor of the current ${branchName}`);
       const currentAttempt = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const logPath = currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
       mkdirSync(dirname(logPath), { recursive: true });
@@ -260,8 +272,8 @@ export class WorkerTasks {
         task = this.store.updateTask(next, current => {
           (current as FrozenTask).frozenFiles = frozenBlocks.map(({ path, hash }) => ({ path, hash }));
         });
-        setupStep = 'rebasing onto current dev';
-        const integration = this.integrationHead();
+        setupStep = `rebasing onto current ${task.brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.settings.integrationBranch}`;
+        const integration = this.taskBaseHead(task.brief);
         const tip = git(task.worktree, ['rev-parse', 'HEAD']);
         const rebaseLog = `${next.logPath}.rebase`;
         mkdirSync(dirname(rebaseLog), { recursive: true });
@@ -332,6 +344,29 @@ export class WorkerTasks {
     } finally { lease.release(); }
   }
   async cancel(taskId: string): Promise<void> { return this.stop(taskId, true); }
+  /** Later integration follows the stabilize branch. A running attempt is left alone. */
+  retarget(taskId: string, target: string): Task {
+    if (target !== 'stabilize') throw new Error('retarget only accepts stabilize');
+    const task = this.store.task(taskId);
+    if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled')
+      throw new Error(`cannot retarget ${task.state} task`);
+    const head = this.branchHead(this.settings.stabilizeBranch, false);
+    if (!task.base) throw new Error('task has no recorded base commit');
+    try { git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head]); }
+    catch { throw new Error('recorded base commit is not an ancestor of the stabilize head'); }
+    const markdown = withStabilizeTarget(task.brief.markdown);
+    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
+    const ref = { taskId, attempt: task.currentAttempt };
+    const apply = (current: Task) => {
+      writeFileSync(current.briefPath, markdown);
+      current.brief = brief;
+    };
+    try { return this.store.updateTask(ref, apply); }
+    catch (error) {
+      if (error instanceof StaleAttemptError) return this.store.updateHeldRetryTask(ref, apply);
+      throw error;
+    }
+  }
   completionScope(goal: string): string[] {
     return this.store.tasks().filter(task => task.brief.goal === goal && task.state !== 'cancelled').map(task => task.id);
   }
