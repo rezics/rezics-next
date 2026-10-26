@@ -249,7 +249,12 @@ test('source references survive edits and erasure and old creation replay cannot
     .find((event) => event.type === revised && event.subject === fixture.threadId)!;
   await effect.run(revisionEvent);
   await db.admin.query(
-    `UPDATE content.revision SET body = NULL, search_text = NULL, availability = 'erased'
+    `UPDATE content.post SET availability = 'erased', security_revision = security_revision + 1
+     WHERE route = $1 AND thread_id = $2 AND post_id = $3`,
+    [sourceRoute, fixture.threadId, fixture.itemId],
+  );
+  await db.admin.query(
+    `UPDATE content.revision SET body = NULL, body_sha256 = NULL, search_text = NULL, availability = 'erased'
      WHERE route = $1 AND thread_id = $2 AND revision_id = ANY($3::uuid[])`,
     [sourceRoute, fixture.threadId, [fixture.revisionId, revisionId]],
   );
@@ -259,10 +264,10 @@ test('source references survive edits and erasure and old creation replay cannot
   expect(candidate.createdAt).toBe(original.createdAt);
   expect(candidate.position).toBeGreaterThan(original.position);
   const sourceRows = await db.admin.query(
-    'SELECT availability, body, search_text FROM content.revision WHERE route = $1 AND thread_id = $2 AND revision_id = $3',
+    'SELECT availability, body, body_sha256, search_text FROM content.revision WHERE route = $1 AND thread_id = $2 AND revision_id = $3',
     [sourceRoute, candidate.id, revisionId],
   );
-  expect(sourceRows.rows).toEqual([{ availability: 'erased', body: null, search_text: null }]);
+  expect(sourceRows.rows).toEqual([{ availability: 'erased', body: null, body_sha256: null, search_text: null }]);
   const projection = await db.admin.query(
     'SELECT to_jsonb(c) AS value FROM content.board_thread c WHERE route = $1 AND board_id = $2',
     [boardRoute, targetBoard],

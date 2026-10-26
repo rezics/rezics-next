@@ -217,7 +217,7 @@ test('content containment and revisions preserve thread route', async () => {
   });
 });
 
-test('revisions are immutable except explicit erasure retaining the original hash and identity', async () => {
+test('revisions are immutable except explicit erasure retaining identity and clearing the digest', async () => {
   await fixture(async (client) => {
     const thread_id = await thread(client);
     const ids = await post(client, thread_id);
@@ -240,12 +240,22 @@ test('revisions are immutable except explicit erasure retaining the original has
       );
     }
     await rejected(client, () => client.query(`DELETE FROM content.revision ${where}`, key));
+    const erase = `UPDATE content.revision SET body = NULL, body_sha256 = NULL, search_text = NULL, availability = 'erased' ${where}`;
+    await rejected(client, () => client.query(erase, key));
     await client.query(
-      `UPDATE content.revision SET body = NULL, search_text = NULL, availability = 'erased' ${where}`,
-      key,
+      `UPDATE content.post SET availability = 'erased', security_revision = security_revision + 1
+       WHERE route = $1 AND thread_id = $2 AND post_id = $3`,
+      [route, thread_id, ids.post_id],
     );
+    await rejected(client, () =>
+      client.query(
+        `UPDATE content.revision SET body = NULL, search_text = NULL, availability = 'erased' ${where}`,
+        key,
+      ),
+    );
+    await client.query(erase, key);
     expect(await read(client, thread_id, ids.post_id, ids.revision_id)).toMatchObject([
-      { ...ids, body: null, search_text: null, availability: 'erased', body_sha256: digest(bytes('First edition')) },
+      { ...ids, body: null, search_text: null, availability: 'erased', body_sha256: null },
     ]);
     await rejected(client, () =>
       client.query(`UPDATE content.revision SET body_sha256 = $3 ${where}`, [...key, digest(bytes('Replacement'))]),

@@ -701,7 +701,11 @@ test('reply media rechecks ancestor revision availability and the independently 
     );
   }
   await db.admin.query(
-    "UPDATE content.revision SET availability='erased',body=NULL,search_text=NULL WHERE route=$1 AND post_id=$2",
+    "UPDATE content.post SET availability='erased',security_revision=security_revision+1 WHERE route=$1 AND post_id=$2",
+    [route, parent],
+  );
+  await db.admin.query(
+    "UPDATE content.revision SET availability='erased',body=NULL,body_sha256=NULL,search_text=NULL WHERE route=$1 AND post_id=$2",
     [route, parent],
   );
   expect((await download(media.id, 'webp-320', 'owner', conditional)).status).toBe(404);

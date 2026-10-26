@@ -363,7 +363,12 @@ test('private reply, post and thread ancestors need read authority in addition t
     await visibility(kind, id, 'protected');
   }
   await db.admin.query(
-    `UPDATE content.revision SET availability='erased', body=NULL, search_text=NULL
+    `UPDATE content.post SET availability='erased', security_revision=security_revision+1
+    WHERE route=$1 AND post_id=$2`,
+    [containerRoute, root],
+  );
+  await db.admin.query(
+    `UPDATE content.revision SET availability='erased', body=NULL, body_sha256=NULL, search_text=NULL
     WHERE route=$1 AND post_id=$2`,
     [containerRoute, root],
   );
