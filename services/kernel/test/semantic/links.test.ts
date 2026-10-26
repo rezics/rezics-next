@@ -47,7 +47,11 @@ const kernel = createKernel({
 });
 
 const sessions: Record<string, string> = {};
-async function call(method: string, path: string, options: { as?: string; key?: string; body?: unknown } = {}) {
+async function call(
+  method: string,
+  path: string,
+  options: { as?: string; key?: string; body?: unknown; kernel?: typeof kernel } = {},
+) {
   const headers: Record<string, string> = {};
   if (options.as) {
     const credential = Object.hasOwn(accounts, options.as)
@@ -59,7 +63,7 @@ async function call(method: string, path: string, options: { as?: string; key?: 
   }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
-  const response = await kernel.handle(
+  const response = await (options.kernel ?? kernel).handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers,
@@ -76,8 +80,8 @@ const statement = (property: string, content: unknown) => ({
   value: { type: 'value', content },
 });
 const reference = { parts: [statement('schema:url', 'https://www.aozora.gr.jp/cards/000148/card773.html')] };
-async function created(body: unknown): Promise<Record<string, any>> {
-  const answer = await call('POST', '/v1/subjects', { as: 'editor', key: key(), body });
+async function created(body: unknown, target = kernel): Promise<Record<string, any>> {
+  const answer = await call('POST', '/v1/subjects', { as: 'editor', key: key(), body, kernel: target });
   expect(answer.response.status).toBe(201);
   return answer.body.subject;
 }
@@ -133,6 +137,40 @@ test('an item-valued statement becomes an incoming link in the target partition 
       },
     ]);
     expect(await inbound(penguin.id)).toEqual([]);
+  } finally {
+    relays.resume();
+  }
+});
+
+test('a stale links read leaves at least half of the request deadline to authorization and the read', async () => {
+  const boundedKernel = createKernel({
+    pool,
+    access: realAccess.access,
+    tokens,
+    routeKey: new Uint8Array(32).fill(4),
+    writeRate: realAccess.writeRate,
+    requestDeadlineMs: 2_000,
+  });
+  await relays.pause();
+  try {
+    const kokoro = await created({ type: 'schema:Book', labels: { en: 'Kokoro' } }, boundedKernel);
+    await created(
+      {
+        type: 'bf:Instance',
+        labels: { en: 'Kokoro, Penguin Classics' },
+        statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', kokoro.id)] },
+      },
+      boundedKernel,
+    );
+    const started = performance.now();
+    const stale = await call('GET', `/v1/subjects/${kokoro.id}/links`, {
+      as: 'editor',
+      kernel: boundedKernel,
+    });
+    const elapsed = performance.now() - started;
+    expect(stale.response.status).toBe(200);
+    expect(stale.body).toEqual({ links: [], freshness: fresh(false), next: null });
+    expect(elapsed).toBeLessThan(1_500);
   } finally {
     relays.resume();
   }
