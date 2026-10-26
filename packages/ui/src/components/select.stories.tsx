@@ -165,7 +165,7 @@ export const Default: Story = {
     const trigger = canvas.getByRole('combobox', { name: 'Shelf' });
     await userEvent.click(trigger);
     const listbox = await page.findByRole('listbox');
-    await waitFor(() => expect(listbox).toBeVisible(), { timeout: 3000 });
+    await waitFor(() => expect(listbox).toBeVisible());
     await userEvent.click(page.getByRole('option', { name: 'Currently reading' }));
     await waitFor(() => expect(page.queryByRole('listbox')).not.toBeInTheDocument());
     await expect(trigger).toHaveTextContent('Currently reading');
@@ -180,7 +180,7 @@ export const Keyboard: Story = {
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     const listbox = await page.findByRole('listbox');
-    await waitFor(() => expect(listbox).toBeVisible(), { timeout: 3000 });
+    await waitFor(() => expect(listbox).toBeVisible());
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
     await waitFor(() => expect(trigger).toHaveTextContent('Read'));
   },

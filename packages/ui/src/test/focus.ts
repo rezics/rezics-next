@@ -1,11 +1,14 @@
+import { getConfig } from 'storybook/test';
+
 /**
  * Wait on the intended control before typing or sending keyboard navigation.
  * An overlay may also accept its associated input (comboboxes keep focus there).
  * The same active element must hold focus for two frames, rejecting transient autofocus.
+ * Unless a story says otherwise, the wait lasts as long as the other waits in stories (`.storybook/preview.tsx`).
  */
 export function waitForFocus(
   target: HTMLElement | readonly HTMLElement[],
-  timeoutMs = 1000,
+  timeoutMs = getConfig().asyncUtilTimeout,
   refocus?: () => void,
 ): Promise<void> {
   const targets: readonly HTMLElement[] = Array.isArray(target) ? target : [target as HTMLElement];
@@ -41,7 +44,7 @@ export function waitForFocus(
 }
 
 /** Select a typing control and keep that choice through an overlay's scheduled focus move. */
-export function focusForTyping(target: HTMLElement, timeoutMs = 1000): Promise<void> {
+export function focusForTyping(target: HTMLElement, timeoutMs = getConfig().asyncUtilTimeout): Promise<void> {
   target.focus();
   return waitForFocus(target, timeoutMs, () => target.focus());
 }

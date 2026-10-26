@@ -67,22 +67,16 @@ export const Horizontal: Story = {
     const canvas = within(canvasElement);
     const divider = canvas.getByRole('separator', { name: 'Resize contents and reader' });
     await expect(divider).toHaveAttribute('aria-valuenow', '30');
-    await waitFor(
-      async () => {
-        divider.focus();
-        await userEvent.keyboard('{ArrowRight}');
-        await expect(Number(divider.getAttribute('aria-valuenow'))).toBeGreaterThan(30);
-      },
-      { timeout: 3000 },
-    );
-    await waitFor(
-      async () => {
-        divider.focus();
-        await userEvent.keyboard('{Home}');
-        await expect(divider).toHaveAttribute('aria-valuenow', '20');
-      },
-      { timeout: 3000 },
-    );
+    await waitFor(async () => {
+      divider.focus();
+      await userEvent.keyboard('{ArrowRight}');
+      await expect(Number(divider.getAttribute('aria-valuenow'))).toBeGreaterThan(30);
+    });
+    await waitFor(async () => {
+      divider.focus();
+      await userEvent.keyboard('{Home}');
+      await expect(divider).toHaveAttribute('aria-valuenow', '20');
+    });
   },
 };
 

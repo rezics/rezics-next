@@ -72,6 +72,8 @@ export const InsertLink: Story = {
       expect(checked(insert.latest.current)?.marks?.[0]?.attrs?.href).toBe('https://example.com/resource'),
     );
     expect(checked(insert.latest.current)?.text).toBe('A useful resource');
+    // The editor returns focus on the next animation frame and restores its own selection then, so collapse after that.
+    await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveFocus());
     // An empty selection accepts an address as linked text.
     window.getSelection()?.collapseToEnd();
     document.dispatchEvent(new Event('selectionchange'));
