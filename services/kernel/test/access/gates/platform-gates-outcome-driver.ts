@@ -433,7 +433,9 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     try {
       await bootstrapGovernance(bootstrapPool, accountId);
     } catch (error) {
-      throw new Error(`Platform governance bootstrap failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Platform governance bootstrap failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       await bootstrapPool.end();
     }
