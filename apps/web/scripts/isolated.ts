@@ -1,3 +1,5 @@
+import { withStackSlot } from '../../../scripts/stack-lease.ts';
+
 const command = process.argv.slice(2);
 const linux = process.platform === 'linux';
 let isolated = false;
@@ -29,21 +31,25 @@ if (command.length === 0) {
     );
   }
 
-  const child = Bun.spawn(invocation, {
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-
-  let exited = false;
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.on(signal, () => {
-      if (!exited) child.kill(signal);
+  process.exitCode = await withStackSlot('web isolated', async (env) => {
+    const child = Bun.spawn(invocation, {
+      env: { ...process.env, ...env },
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
     });
-  }
 
-  process.exitCode = await child.exited;
-  exited = true;
+    let exited = false;
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+      process.on(signal, () => {
+        if (!exited) child.kill(signal);
+      });
+    }
+
+    const code = await child.exited;
+    exited = true;
+    return code;
+  });
 }
 
 export {};
