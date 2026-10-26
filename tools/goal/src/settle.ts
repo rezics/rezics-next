@@ -1,6 +1,6 @@
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
-import { makeRecord, readMeasurement, reportedApproaches } from './records.ts';
+import { makeRecord, POOL_EXHAUSTED, readMeasurement, reportedApproaches } from './records.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
 import type { RunningWorker } from './launch.ts';
@@ -32,7 +32,8 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
       && !git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]).trim().match(/^[1-9]\d*$/)) {
       let stderr = '';
       try { stderr = readFileSync(`${attempt.logPath}.err`, 'utf8').trim(); } catch { /* No stderr stream was created. */ }
-      measurement.failureKind = 'tool';
+      // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
+      measurement.failureKind = POOL_EXHAUSTED.test(stderr) ? 'pool-exhausted' : 'tool';
       measurement.result = stderr || `Worker CLI exited with code ${code} before starting a session`;
     }
     store.updateAttempt(ref, a => { a.session = measurement.session; a.result = measurement.result; a.blocker = measurement.blocker; a.failureKind = measurement.failureKind; a.approaches.push(...reportedApproaches(measurement.result)); });

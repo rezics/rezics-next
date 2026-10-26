@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { GateOutcome, LandingRequest, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
@@ -50,5 +52,25 @@ test('the same environment failure twice in a row goes to the manager instead of
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.record({ taskId: task.id, attempt: 2 })!.escalation).toBe('stalled');
     expect(inbox.map(event => event.kind)).toEqual(['stalled']);
+  } finally { h.dispose(); }
+});
+
+// Cursor refuses an exhausted model before it opens a session, with the reason on stderr only.
+const exhaustedCli = `#!/usr/bin/env bun
+console.error("ActionRequiredError: You've hit your usage limit Switch to a different model or set a Spend Limit to continue with this model. Your usage limits will reset when your monthly cycle ends on 11/16/2026.");
+process.exit(1);
+`;
+
+test('a launch refused for an exhausted allowance marks the pool exhausted instead of stalling', async () => {
+  const h = harness(exhaustedCli), inbox: ManagerEvent[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    // The harness has one pool, so the rerun that excludes it finds none and rejects.
+    await job.start(task.id).catch(() => {}); await job.drain().catch(() => {});
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBe('pool-exhausted');
+    const key = h.tasks.settings.pools[0]!.allowanceKey;
+    expect(existsSync(join(h.tasks.settings.stateDirectory, 'exhausted', `${key}.json`))).toBe(true);
+    expect(inbox.map(event => event.kind)).not.toContain('stalled');
   } finally { h.dispose(); }
 });
