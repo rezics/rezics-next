@@ -23,7 +23,9 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const ordinalsPerScale = 250;
+// 500 rows per relation at scale 1: below that the planner scans small relations.
+const ordinalsPerScale = 500;
+const scales = [1, 4, 16] as const;
 let db: GrowthDatabase;
 const routeKey = new Uint8Array(32).fill(51);
 const actor: AccountActor = {
@@ -130,6 +132,8 @@ async function createAnchor() {
     release: { digest: bundledDigest, release: bundledRelease },
     authorize: async () => true,
   });
+  // Earlier checks' anchors are gone with their subjects; their grants would only add rows to the authorization read.
+  await db.admin.query(`DELETE FROM access.resource_grant WHERE subject_id = $1`, [actor.accountId]);
   await db.admin.query(
     `INSERT INTO access.resource_grant
        (route, resource_id, subject_id, subject_role, action, valid, transaction_id)
@@ -185,7 +189,22 @@ async function rowCounts(): Promise<RowCounts> {
   return counts;
 }
 
-async function resetGrowthData() {}
+async function resetGrowthData() {
+  // CASCADE also empties the tables that reference semantic.subject, such as the revisions createSubject writes.
+  // Revisions refuse truncation outside replica mode, so the disposable database's admin role truncates in it.
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    await client.query(`TRUNCATE ${seededRelations.join(', ')} CASCADE`);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 /** Runs one growth check from a fresh anchor; `populations` counts how many times it seeds its scale range. */
 function growthTest(title: string, populations: number, run: () => Promise<void>) {
@@ -209,6 +228,7 @@ function growthTest(title: string, populations: number, run: () => Promise<void>
 growthTest('Subject creation stays within its bound as N grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Subject creation stays within its bound as N grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-create-growth'),
     operation: async (database, _scale, repetition) => {
@@ -231,6 +251,7 @@ growthTest('Subject creation stays within its bound as N grows', 1, async () => 
 growthTest('Command and receipt stays within its bound as N grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Command and receipt stays within its bound as N grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
       await grow(database, scale, previous, 'semantic-command-growth');
@@ -277,6 +298,7 @@ growthTest('Command and receipt stays within its bound as N grows', 1, async () 
 growthTest('Anchored subject read stays within its bound as N grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Anchored subject read stays within its bound as N grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-read-growth'),
     operation: (database) => readSubject(database.pool, anchor, async () => true),
@@ -288,6 +310,7 @@ growthTest('Anchored subject read stays within its bound as N grows', 1, async (
 growthTest('Partition keyset page stays within its bound as d grows', 2, async () => {
   const report = await checkGrowth(db, {
     name: 'Partition keyset page stays within its bound as d grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
       await grow(database, scale, previous, 'semantic-page-growth');
@@ -318,6 +341,7 @@ growthTest('Partition keyset page stays within its bound as d grows', 2, async (
 growthTest('Item projection and related labels stays within its bound as P grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Item projection and related labels stays within its bound as P grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-related-growth'),
     operation: async (database) => {
@@ -332,6 +356,7 @@ growthTest('Item projection and related labels stays within its bound as P grows
 growthTest('Batch label fill stays within its bound as P grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Batch label fill stays within its bound as P grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-batch-label-growth'),
     operation: async (database) => readLabels(database.pool, [anchor]),
@@ -346,6 +371,7 @@ growthTest('Request authorization stays within its bound as N grows', 1, async (
   });
   const report = await checkGrowth(db, {
     name: 'Request authorization stays within its bound as N grows',
+    scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-authorization-growth'),
     operation: async (database) => {
