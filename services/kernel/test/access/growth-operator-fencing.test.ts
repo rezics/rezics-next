@@ -159,6 +159,30 @@ for (const population of ['unrelated accounts', 'completed and pending history']
             const first = late ? await continuation(fixturePool).continueCommittedPage(view.reference) : undefined;
             prepared.push({ reference: view.reference, next: first?.next, pageKey: first?.pageKey });
           }
+          if (previous === 0) {
+            // Cardinality-only committed history, never used as a capability.
+            // Keep page and continuation point probes beyond tiny-table scans.
+            const ids = Array.from({ length: 1024 }, () => newId(route));
+            await db.admin.query(
+              `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+               SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+              [route, ids],
+            );
+            await db.admin.query(
+              `INSERT INTO access.committed_continuation
+               SELECT (jsonb_populate_record(NULL::access.committed_continuation,
+                 to_jsonb(template) || jsonb_build_object('continuation_id',id,'account_id',id,
+                   'operation_key','unrelated:'||id::text))).*
+               FROM (SELECT * FROM access.committed_continuation WHERE route=$1 LIMIT 1) template
+               CROSS JOIN unnest($2::uuid[]) id`,
+              [route, ids],
+            );
+            await db.admin.query(
+              `INSERT INTO access.operator_fence_page(route,continuation_id,page_key,allowlist)
+               SELECT $1,id,repeat('0',64),'[]'::jsonb FROM unnest($2::uuid[]) id`,
+              [route, ids],
+            );
+          }
         },
         async operation() {
           const page = prepared[run++]!;
