@@ -49,12 +49,28 @@ export type RevisionMetadata = Readonly<{
   mediaIds: readonly MediaId[];
 }>;
 
-export type ItemView = Readonly<
-  ItemMetadata & { revisionId: RevisionId } & (
-      | { body: DocumentSnapshot; availability: 'available' }
-      | { body: null; availability: 'erased' }
-    )
->;
+export type ErasedPlaceholder = Readonly<{
+  id: PostId;
+  threadId: ThreadId;
+  route: Route;
+  parentId: PostId | null;
+  removed: true;
+  availability: 'erased';
+  body: null;
+  sha256: null;
+}>;
+export type ItemView =
+  | Readonly<ItemMetadata & { revisionId: RevisionId; body: DocumentSnapshot; availability: 'available' }>
+  | Readonly<
+      Omit<ItemMetadata, 'sha256'> & {
+        revisionId: RevisionId;
+        removed: true;
+        body: null;
+        sha256: null;
+        availability: 'erased';
+      }
+    >
+  | ErasedPlaceholder;
 export type RevisionView = Readonly<
   RevisionMetadata & ({ body: DocumentSnapshot; availability: 'available' } | { body: null; availability: 'erased' })
 >;

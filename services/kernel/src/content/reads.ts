@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, QueryConfig } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { CommandUnavailableError } from '../command/command.ts';
@@ -12,6 +12,7 @@ import type {
   Anchored,
   BoardId,
   BoardView,
+  ErasedPlaceholder,
   ItemView as StoredItemView,
   Page,
   PostId,
@@ -26,6 +27,7 @@ import { REACTION_KINDS } from './events.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
+import permissionRead from '../access/permission-check.sql';
 import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
 
@@ -36,7 +38,7 @@ export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ContentPayload =
   | Readonly<{ availability: 'available'; body: NonNullable<StoredItemView['body']>; sha256: string }>
   | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>;
-export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
+export type ItemView = StoredItemView;
 export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: ItemView }>;
 
@@ -175,6 +177,45 @@ function admissible(row: Row, context: ReadContext, tombstone: boolean): boolean
   return ['published', 'protected', 'draft'].includes(row.visibility);
 }
 
+type ErasedReadProof = { explicit: boolean };
+
+/** Project the same native permission formula with its public floor and role
+ * aliases disabled. Explicit action grants retain all membership, delegation,
+ * temporal and denial checks, without adding a statement or a second authority.
+ */
+const permissionSql = permissionRead.sql.replace(/;\s*$/, '');
+const explicitPermissionSql = (['floor', 'grant_roles'] as const).reduce(
+  (sql, name) =>
+    sql.replace(
+      new RegExp(`\\$${permissionRead.params.indexOf(name) + 1}\\b`, 'g'),
+      name === 'floor' ? 'false' : "'{}'",
+    ),
+  permissionSql,
+);
+const erasedPermissionSql = `SELECT ordinary.allowed, explicit.allowed AS explicit_read
+  FROM (${permissionSql}) ordinary CROSS JOIN (${explicitPermissionSql}) explicit`;
+
+function erasedReadClient(client: AccessClient, postId: string, proof: ErasedReadProof): AccessClient {
+  const projected = Object.create(client) as AccessClient;
+  projected.query = (async (query: QueryConfig | string, values?: unknown[]) => {
+    const config = typeof query === 'string' ? { text: query, values: values ?? [] } : query;
+    const parameters = config.values;
+    if (
+      config.text !== permissionRead.sql ||
+      parameters?.[permissionRead.params.indexOf('resource_id')] !== postId ||
+      parameters?.[permissionRead.params.indexOf('action')] !== 'post:read'
+    )
+      return client.query(config);
+    const result = await client.query<{ allowed: boolean; explicit_read: boolean }>({
+      ...config,
+      text: erasedPermissionSql,
+    });
+    proof.explicit = result.rows.length === 1 && result.rows[0]?.explicit_read === true;
+    return result;
+  }) as AccessClient['query'];
+  return projected;
+}
+
 /** The shared formula alone supplies floor, grant, scope, account and denial
  * operands. Domain restrictions can disable both branches by throwing. */
 async function prepare(
@@ -183,10 +224,12 @@ async function prepare(
   context: ReadContext,
   evidence: object,
   tombstone = false,
+  placeholder = false,
+  erasedProof?: ErasedReadProof,
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
-  return accessCheck(
+  const check = await accessCheck(
     dependencies.access,
     context.actor,
     action,
@@ -202,12 +245,18 @@ async function prepare(
           const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
           if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
             throw new ContentNotFoundError();
-          return !tombstone && current.visibility === 'published' && current.availability === 'available';
+          // Erased public slots still require the requested scope from account tokens.
+          if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action))
+            throw new ContentNotFoundError();
+          return (
+            current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
+          );
         },
       }),
     },
     { pool: dependencies.pool, deadline: context.deadline },
   );
+  return erasedProof ? (client, time) => check(erasedReadClient(client, row.id, erasedProof), time) : check;
 }
 
 export async function readBoard(
@@ -262,11 +311,24 @@ async function disclose(
     !!initial && (initial.posts[0]?.availability === 'erased' || initial.revision?.availability === 'erased');
   const rows = initial ? [initial.thread, ...initial.posts] : [];
   const checks: AccessCheck[] = [];
+  const erasedProof = erased ? { explicit: false } : undefined;
   if (board?.value) {
     for (const row of rows) {
       const erasureRead =
         row.availability === 'erased' || (erased && (row === initial?.posts[0] || row.visibility === 'taken_down'));
-      checks.push(await prepare(dependencies, row, context, { observed, board }, erasureRead));
+      const placeholder =
+        row.kind === 'post' && row.availability === 'erased' && !(revisionId && row === initial?.posts[0]);
+      checks.push(
+        await prepare(
+          dependencies,
+          row,
+          context,
+          { observed, board },
+          erasureRead,
+          placeholder,
+          row === initial?.posts[0] ? erasedProof : undefined,
+        ),
+      );
     }
   }
   return snapshot(dependencies, threadId, context, async (client) => {
@@ -281,11 +343,20 @@ async function disclose(
         return null;
     }
     if (!current.revision || !current.posts[0]) return null;
+    if (
+      erasedProof &&
+      !erasedProof.explicit &&
+      (revisionId || [current.thread, ...current.posts].some((row) => row.visibility === 'taken_down'))
+    )
+      return null;
     // Logical erasure suppresses retained bytes for both head and exact reads.
     // Available bytes are loaded only after every container and Access check passes.
-    const revision = await point(client, 'revision', current.revision.id, threadId, !erased);
+    const revision = erased ? current.revision : await point(client, 'revision', current.revision.id, threadId, true);
     if (!revision || revision.parent_id !== current.posts[0].id) return null;
-    const item = itemView(current.posts[0], revision, erased);
+    const item =
+      erasedProof && !erasedProof.explicit
+        ? erasedPlaceholder(current.posts[0])
+        : itemView(current.posts[0], revision, erased);
     if (!item) return null;
     if (!threadDetail) return item;
     const thread = current.thread;
@@ -294,8 +365,8 @@ async function disclose(
       route: route(thread.id),
       authorId: thread.author_id!,
       title: erased ? null : thread.title,
-      licence: item.licence,
-      subjectIds: item.subjectIds,
+      licence: revision.licence,
+      subjectIds: revision.subject_ids,
       boardId: thread.board_id!,
       visibility: thread.visibility,
       securityRevision: thread.security_revision,
@@ -304,6 +375,19 @@ async function disclose(
       firstPost: item,
     };
   });
+}
+
+function erasedPlaceholder(post: Row): ErasedPlaceholder {
+  return {
+    id: post.id,
+    threadId: post.thread_id!,
+    route: route(post.id),
+    parentId: post.parent_id,
+    removed: true,
+    availability: 'erased',
+    body: null,
+    sha256: null,
+  };
 }
 
 function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
@@ -334,6 +418,12 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
   };
 }
 
+function isPlaceholder(target: { readonly id: string }): boolean {
+  return (
+    'availability' in target && target.availability === 'erased' && 'parentId' in target && !('revisionId' in target)
+  );
+}
+
 /** One partition seek for the account viewer's slots. Anonymous responses omit the field. */
 export async function withViewerReactions<T extends { readonly id: string }>(
   dependencies: ContentReadDependencies,
@@ -345,10 +435,11 @@ export async function withViewerReactions<T extends { readonly id: string }>(
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const target of targets) {
-    if (seen.has(target.id)) continue;
+    if (isPlaceholder(target) || seen.has(target.id)) continue;
     seen.add(target.id);
     ids.push(target.id);
   }
+  if (ids.length === 0) return targets;
   if (ids.length > 100) throw new RangeError('At most 100 viewer reaction targets');
   const home = routeOf(actor.accountId);
   if (home === null) throw new TypeError('Invalid content identity');
@@ -371,11 +462,16 @@ export async function withViewerReactions<T extends { readonly id: string }>(
       throw new TypeError('Invalid reaction kind');
     kinds.set(targetId, kind as ViewerReactionKind);
   }
-  return targets.map((target) => ({ ...target, viewerReaction: kinds.get(target.id) ?? null }));
+  return targets.map((target) =>
+    isPlaceholder(target) ? target : { ...target, viewerReaction: kinds.get(target.id) ?? null },
+  );
 }
 
 export type ReactionCountFreshness = Readonly<{ epoch: number; position: string }>;
 type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
+type Counted<T> = T extends ErasedPlaceholder & { readonly revisionId?: never }
+  ? T
+  : T & { readonly reactions: ReactionCountMap };
 
 /** One index seek per partition over the page's targets. Zero kinds are omitted.
  * The freshness is the oldest source watermark among the count rows actually read. */
@@ -384,13 +480,13 @@ export async function withReactionCounts<T extends { readonly id: string }>(
   targets: readonly T[],
   deadline: number,
 ): Promise<{
-  readonly items: readonly (T & { readonly reactions: ReactionCountMap })[];
+  readonly items: readonly Counted<T>[];
   readonly reactionsAsOf: ReactionCountFreshness | null;
 }> {
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const target of targets) {
-    if (seen.has(target.id)) continue;
+    if (isPlaceholder(target) || seen.has(target.id)) continue;
     seen.add(target.id);
     ids.push(target.id);
   }
@@ -439,6 +535,7 @@ export async function withReactionCounts<T extends { readonly id: string }>(
   }
   return {
     items: targets.map((target) => {
+      if (isPlaceholder(target)) return target;
       const counted = sums.get(target.id);
       const reactions: ReactionCountMap = {};
       for (const kind of REACTION_KINDS) {
@@ -446,7 +543,7 @@ export async function withReactionCounts<T extends { readonly id: string }>(
         if (count > 0) reactions[kind] = count;
       }
       return { ...target, reactions };
-    }),
+    }) as Counted<T>[],
     reactionsAsOf: oldest === null ? null : { epoch: oldest.epoch, position: oldest.position.toString() },
   };
 }
@@ -485,7 +582,7 @@ async function list(
     ? await readPost(dependencies, threadId, postId, context)
     : await readThread(dependencies, threadId, context);
   if (!root.value) throw new ContentNotFoundError();
-  if (postId && root.value.availability === 'erased') return { entries: [], anchor: root.anchor, nextCursor: null };
+  if (postId && !('revisionId' in root.value)) return { entries: [], anchor: root.anchor, nextCursor: null };
   const binding: CursorBinding = {
     operation: postId ? 'content.revisions' : 'content.posts',
     parameters: {
@@ -524,6 +621,7 @@ async function list(
       const result = await readPost(dependencies, threadId, postId ?? key.id, context, postId ? key.id : undefined);
       if (!result.value) continue;
       if (postId) {
+        if (!('revisionId' in result.value)) continue;
         const {
           revisionId,
           id,
@@ -542,7 +640,7 @@ async function list(
     ? await readPost(dependencies, threadId, postId, context)
     : await readThread(dependencies, threadId, context);
   if (!final.value) throw new ContentNotFoundError();
-  if (postId && final.value.availability === 'erased') return { entries: [], anchor: final.anchor, nextCursor: null };
+  if (postId && !('revisionId' in final.value)) return { entries: [], anchor: final.anchor, nextCursor: null };
   return {
     entries,
     anchor: final.anchor,

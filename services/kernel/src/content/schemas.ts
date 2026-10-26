@@ -171,6 +171,19 @@ export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot & ReactionC
   t.Union([
     t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
     t.Object(
+      {
+        id: ContentIdSchema,
+        threadId: ContentIdSchema,
+        route: metadata.route,
+        parentId: nullableId,
+        removed: t.Literal(true),
+        availability: t.Literal('erased'),
+        body: t.Null(),
+        sha256: t.Null(),
+      },
+      closed,
+    ),
+    t.Object(
       { ...item, availability: t.Literal('erased'), removed: t.Literal(true), body: t.Null(), sha256: t.Null() },
       closed,
     ),

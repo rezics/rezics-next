@@ -189,7 +189,7 @@ test('authorized current and exact erased reads preserve selected immutable iden
     body: null,
     availability: 'erased',
   });
-  expect(current).toEqual<Omit<NonNullable<typeof exact>, 'sha256'> & { sha256: null }>({
+  expect(current).toEqual<Omit<NonNullable<typeof exact>, 'sha256'> & { revisionId: string; sha256: null }>({
     ...exact!,
     revisionId: head,
     sha256: null,
@@ -215,15 +215,30 @@ test('erasure and taken-down chain facts require authenticated grants and scopes
   const noScope = await authenticate(reader, ['board:read', 'thread:read']);
   const read = (selected: Actor, exact = false) =>
     readPost(deps(), f.thread, child, ctx(selected), exact ? revision : undefined);
+  const placeholder = {
+    id: child,
+    threadId: f.thread,
+    route: contentRoute,
+    parentId: f.post,
+    removed: true,
+    availability: 'erased',
+    body: null,
+    sha256: null,
+  } as const;
   for (const selected of [{ kind: 'anonymous' } as const, actor, authorActor])
-    expect((await read(selected)).value).toBeNull();
+    expect((await read(selected)).value).toEqual(placeholder);
   await grant(child, 'post:read');
   for (const exact of [false, true]) {
     expect((await read(actor, exact)).value?.body).toBeNull();
     expect((await read(actor, exact)).value?.availability).toBe('erased');
     expect((await read(noScope, exact)).value).toBeNull();
-    expect((await read({ kind: 'anonymous' }, exact)).value).toBeNull();
-    expect((await read(authorActor, exact)).value).toBeNull();
+    if (exact) {
+      expect((await read({ kind: 'anonymous' }, exact)).value).toBeNull();
+      expect((await read(authorActor, exact)).value).toBeNull();
+    } else {
+      expect((await read({ kind: 'anonymous' }, exact)).value).toEqual(placeholder);
+      expect((await read(authorActor, exact)).value).toEqual(placeholder);
+    }
   }
   await state('thread', f.thread, 'taken_down');
   await state('post', f.post, 'taken_down');
@@ -262,7 +277,18 @@ test('erased first-post thread suppresses retained title while unrelated ordinar
   const result = (await readThread(deps(), f.thread, ctx(actor))).value;
   expect(result).toMatchObject({ id: f.thread, title: null, firstPost: { body: null, availability: 'erased' } });
   expect(decodedBodies).toBe(before);
-  expect((await readThread(deps(), f.thread, ctx())).value).toBeNull();
+  const anonymous = (await readThread(deps(), f.thread, ctx())).value;
+  expect(anonymous).toMatchObject({ id: f.thread, title: null });
+  expect(anonymous?.firstPost).toEqual({
+    id: f.post,
+    threadId: f.thread,
+    route: contentRoute,
+    parentId: null,
+    removed: true,
+    availability: 'erased',
+    body: null,
+    sha256: null,
+  });
   expect((await readPost(deps(), f.thread, other, ctx())).value).toEqual(ordinary);
   expect((await readBoard(deps(), f.board, ctx())).value?.title).toBe('Board');
   await state('post', other, 'taken_down');
