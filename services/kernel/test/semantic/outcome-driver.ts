@@ -78,9 +78,26 @@ function phaseTimer() {
   };
 }
 
+export type SemanticOutcomeDriver = SemanticDriver & {
+  readonly fixtures: {
+    pool: Pool;
+    person(name: string): Promise<Account>;
+    grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
+    send(
+      account: Account | null,
+      method: 'GET' | 'POST' | 'PUT',
+      path: string,
+      body?: unknown,
+      headers?: Record<string, string>,
+    ): Promise<HttpResponse>;
+  };
+};
+
 /** A caller can abandon a pending call (a hook that timed out), so the next call first lets that setup finish,
  * then closes it. Otherwise its host and database outlive the caller and the next setup collides with them. */
-export function createSemanticDriver(): Promise<SemanticDriver> {
+export function createSemanticDriver(
+  compose: typeof createKernel = createKernel,
+): Promise<SemanticOutcomeDriver> {
   const earlier = [...tracked];
   const entry: Tracked = { settled: Promise.resolve(), close: async () => {} };
   const starting = (async () => {
@@ -89,7 +106,7 @@ export function createSemanticDriver(): Promise<SemanticDriver> {
       await previous.close();
       tracked.delete(previous);
     }
-    return startDriver(entry);
+    return startDriver(entry, compose);
   })();
   entry.settled = starting.then(
     () => {},
@@ -99,7 +116,7 @@ export function createSemanticDriver(): Promise<SemanticDriver> {
   return starting;
 }
 
-async function startDriver(entry: Tracked): Promise<SemanticDriver> {
+async function startDriver(entry: Tracked, compose: typeof createKernel): Promise<SemanticOutcomeDriver> {
   const timer = phaseTimer();
   const number = ++started;
   const source = new URL(required(process.env.DATABASE_URL, 'DATABASE_URL must name the migrated test database'));
@@ -152,7 +169,7 @@ async function startDriver(entry: Tracked): Promise<SemanticDriver> {
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
     let access!: ReturnType<typeof createAccess>;
-    const app = createKernel({
+    const app = compose({
       pool,
       routeKey,
       tokens: sessionKeys,
@@ -389,7 +406,15 @@ async function startDriver(entry: Tracked): Promise<SemanticDriver> {
     };
     timer.mark('rest');
     timer.report(number);
-    return driver;
+    return {
+      ...driver,
+      fixtures: {
+        pool: pool!,
+        person,
+        grantAccount: (account, actions, resourceId) => grantAccount(account, actions, resourceId),
+        send: (account, method, path, body, headers) => send(account, method, path, body, headers),
+      },
+    };
   } catch (error) {
     await close();
     throw error;
