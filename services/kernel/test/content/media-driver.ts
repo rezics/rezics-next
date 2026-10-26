@@ -295,17 +295,17 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           newObjectGrant: !!reserved && permissionIds.includes(reserved.media_id),
         };
       },
-      async complete(as, input, untrusted) {
+      async complete(as, input) {
         const container = routed(input.containerId);
         const target =
           completionTargets.get(`${input.containerId}:${input.reservationRequestId}`) ?? newId(routeOf(container)!);
+        // The HTTP schema takes uploader identity and completion scope only from the bearer token.
         return outcome(
           await send(as, 'POST', `/v1/media/${target}:complete`, input.requestId, {
             containerId: container,
             reservationRequestId: input.reservationRequestId,
             byteCount: input.byteCount,
             sha256: input.sha256,
-            ...untrusted,
           }),
         );
       },

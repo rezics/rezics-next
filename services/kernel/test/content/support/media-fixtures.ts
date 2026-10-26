@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import sharp, { type Metadata } from 'sharp';
 import type { ImageFixture, Source, Container } from '../../../../../specs/content-media-driver.ts';
-import { initializeResourceGrants, parentCreationAuthorization } from '../../../src/access/index.ts';
-import { platformRootAnchor } from '../../../src/commerce/catalogue.ts';
-import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../../src/command/command.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
-import { newId, partitionOf } from '../../../src/route/route.ts';
+import { partitionOf } from '../../../src/route/route.ts';
 import type { ContentSystem } from './system.ts';
 
 export const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -63,64 +62,54 @@ export async function imageSource(kind: ImageFixture): Promise<Source> {
   };
 }
 
-/** Fixture board provisioning uses the same creation capability and catalogue initialization as prior bindings. */
+/** Provision the real Realm board and its catalogue grants through Kernel HTTP. */
 export async function provisionMediaContainers(system: ContentSystem): Promise<{
   containers: { thread: Container; sibling: Container; remote: Container };
   posts: Map<string, { id: string; revisionId: string }>;
 }> {
-  const pool = system.database.pool;
   const author = system.actors.author;
-  const board = { route: 32, id: newId(32) };
-  const inserted = new WeakMap<CommandTransaction, string>();
-  const deadline = Date.now() + 20_000;
-  await runCommand(
-    pool,
-    {
-      ...principalCommandIdentity(author.actor),
-      partition: partitionOf(board.route),
-      deadline,
-      authorization: parentCreationAuthorization({
-        access: system.access,
-        actor: author.actor,
-        action: 'subject:create',
-        parent: platformRootAnchor,
-        context: {
-          pool,
-          deadline,
-          resource: board,
-          creation: {
-            async validate(tx, target) {
-              const result = await tx.query<{ inserted_here: boolean; transaction_id: string }>(
-                `SELECT xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here,
-                    recorded_transaction_id::text AS transaction_id FROM content.board WHERE route=$1 AND board_id=$2`,
-                [target.route, target.id],
-              );
-              return result.rows[0]?.inserted_here === true && result.rows[0].transaction_id === inserted.get(tx);
-            },
-          },
+  await bootstrapRelease(system.database.pool, bundledRelease);
+  async function command(path: string, body: Record<string, unknown>, method = 'POST', match?: string) {
+    const { response } = await system.transport.capture(
+      new Request(`https://content.test${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${author.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+          ...(match ? { 'if-match': JSON.stringify(match) } : {}),
         },
+        body: JSON.stringify(body),
       }),
-      receipt: {
-        kind: 'content.board.provision',
-        key: crypto.randomUUID(),
-        digest: createHash('sha256').update(board.id).digest(),
-      },
+    );
+    if (!response.ok)
+      throw new Error(`Media fixture ${method} ${path} failed (${response.status}): ${await response.text()}`);
+    return response.json();
+  }
+  const { space } = await command('/v1/spaces', { title: 'Media fixture space' });
+  const { realm } = await command('/v1/realms', {
+    spaceId: space.spaceId,
+    title: 'Media fixture realm',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
+  });
+  const { subject: scheme } = await command('/v1/subjects', {
+    type: 'skos:ConceptScheme',
+    labels: { en: 'Media fixture scheme' },
+  });
+  const { subject: concept } = await command('/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: 'Media fixture concept' },
+    statements: {
+      'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.id } }],
     },
-    async (tx, command) => {
-      inserted.set(tx, command.transactionId);
-      await tx.query(
-        `INSERT INTO content.board
-      (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-      VALUES ($1,$2,$3,'Media fixture board','published',1,$4)`,
-        [board.route, board.id, newId(board.route), command.transactionId],
-      );
-      await initializeResourceGrants(tx, { resource: board, type: 'content.board', creator: author.actor.accountId });
-      return {
-        value: { boardId: board.id },
-        events: [{ type: 'com.rezics.fixture.resource-created.v1', data: { boardId: board.id } }],
-      };
-    },
-  );
+  });
+  await command(`/v1/realms/${realm.realmId}/boardScheme`, { schemeId: scheme.id }, 'PUT', realm.headRevisionId);
+  const { board } = await command(`/v1/realms/${realm.realmId}/boards`, {
+    conceptId: concept.id,
+    title: 'Media fixture board',
+    visibility: 'published',
+  });
   const posts = new Map<string, { id: string; revisionId: string }>();
   async function create(key: string): Promise<Container> {
     const { response } = await system.transport.capture(
