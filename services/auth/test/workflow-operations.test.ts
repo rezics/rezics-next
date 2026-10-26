@@ -22,7 +22,6 @@ const password = randomBytes(24).toString('base64url');
 let failRelease = false;
 let failErase = false;
 let failRevoke: string | undefined;
-let pages: { operators: { reservationId: string; subjectAccountId: string }[]; next: string | null }[] = [];
 async function result<T>(kind: string, key: string, value: T) {
   calls.push(kind);
   const row = (
@@ -82,7 +81,54 @@ const ports: AccountWorkflowPorts = {
     account.authnEpoch = Number(outcome.value.minimumAuthnEpoch);
     return outcome;
   },
-  authorizeOperation: async () => ({ actor: { accountId: 'boundary-approved-human' } }),
+  async authorizeOperation(_reference, operation) {
+    return {
+      actor: { accountId: 'boundary-approved-human' },
+      async suspendOperator() {
+        if (operation.kind !== 'fence-operator') throw new Error('Not an operator suspension');
+        const outcome = await result('suspend-operator', 'fanout-suspension', {
+          accountId: operation.accountId,
+          state: 'suspended' as const,
+          receiptId: 'fanout-suspension-receipt',
+          minimumAuthnEpoch: '2',
+          continuationOperationKey: 'fanout-continuation',
+        });
+        Object.assign(accounts.get(operation.accountId)!, { state: 'suspended', fenced: true, authnEpoch: 2 });
+        return outcome.value;
+      },
+    };
+  },
+  async readContinuation(operationKey, accountId) {
+    calls.push('continuation-read');
+    const committed = await database.query(
+      `SELECT key FROM test_operation_command WHERE key='fanout-suspension'
+       AND value->>'continuationOperationKey'=$1 AND value->>'accountId'=$2`,
+      [operationKey, accountId],
+    );
+    if (!committed.rowCount) return null;
+    return {
+      reference: 'fanout-continuation-reference',
+      operationKey,
+      operationDigest: 'fanout-operation-digest',
+      commandKeyPrefix: 'fanout-command',
+      barrierReceiptId: 'fanout-suspension-receipt',
+      expiresAt: new Date(Date.now() + 1800000).toISOString(),
+      allowlist: [
+        { step: 'revoke-auth-sessions', target: accountId, key: 'fanout-revoke', digest: 'fanout-revoke-digest' },
+      ],
+    };
+  },
+  async authorizeContinuation(reference, entry) {
+    calls.push('continuation-authorize');
+    expect(reference).toBe('fanout-continuation-reference');
+    expect(entry).toEqual({
+      step: 'revoke-auth-sessions',
+      target: 'fanout-operator',
+      key: 'fanout-revoke',
+      digest: 'fanout-revoke-digest',
+    });
+    return { receiptId: 'fanout-continuation-receipt' };
+  },
   readAccount: async (id) => {
     const account = accounts.get(id);
     return account ? { ...account, fenced: !!account.fenced } : null;
@@ -133,7 +179,7 @@ const ports: AccountWorkflowPorts = {
   redirectHandle: async (input) => result('redirect-deleted', input.key, input),
   responsibilityPage: async () => {
     calls.push('operator-page');
-    return pages.shift()!;
+    throw new Error('The kernel continuation owns operated-account pages');
   },
 };
 async function restart() {
@@ -326,33 +372,60 @@ test('deletion leaves Access tombstone fenced through Auth outage and releases r
   expect((await database.query('SELECT id FROM "user" WHERE id=$1', [account.accountId])).rows).toEqual([]);
 }, 30000);
 
-test('bounded operator fanout stays incomplete and fenced until failed Auth work resumes through every page', async () => {
+test('operator suspension stays fenced until Auth revocation resumes through the committed continuation', async () => {
   await owner('fanout-operator');
   const items = Array.from({ length: 65 }, (_, i) => ({
     subjectAccountId: `fanout-${String(i).padStart(3, '0')}`,
     reservationId: `reservation-${i}`,
   }));
   for (const item of items) await owner(item.subjectAccountId);
-  pages = [
-    { operators: items.slice(0, 64), next: 'reservation-63' },
-    { operators: items.slice(64), next: null },
-  ];
-  failRevoke = items[1]!.subjectAccountId;
+  const sessionOwners = ['fanout-operator', items[0]!.subjectAccountId, items[64]!.subjectAccountId];
+  await database.query(
+    `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
+     SELECT id,id,id,'operation-web',now()+interval '1 day',now(),'read',1,1,'pwd' FROM unnest($1::text[]) id`,
+    [sessionOwners],
+  );
+  calls.length = 0;
+  failRevoke = 'fanout-operator';
   await expect(
     workflows.fenceOperator({ key: 'fanout', authorization: 'approved-admin', accountId: 'fanout-operator' }),
   ).rejects.toThrow();
-  expect(accounts.get('fanout-operator')!.fenced).toBe(true);
-  expect(accounts.get(items[1]!.subjectAccountId)!.fenced).toBe(true);
-  expect(accounts.get(items[64]!.subjectAccountId)!.fenced).not.toBe(true);
+  expect(accounts.get('fanout-operator')).toMatchObject({ state: 'suspended', fenced: true, authnEpoch: 2 });
+  expect(items.every((item) => accounts.get(item.subjectAccountId)!.fenced !== true)).toBe(true);
+  expect(calls).toEqual(['suspend-operator', 'continuation-read', 'continuation-authorize', 'auth-revoke']);
+  expect(
+    (await database.query('SELECT id FROM session WHERE "userId"=ANY($1::text[])', [sessionOwners])).rowCount,
+  ).toBe(3);
   expect(
     (await system.query("SELECT status FROM dbos.workflow_status WHERE name='accounts.operation' AND status='ERROR'"))
       .rows.length,
   ).toBeGreaterThan(0);
   failRevoke = undefined;
   await restart();
-  await workflows.resumeOperation('fanout');
-  expect(items.every((item) => accounts.get(item.subjectAccountId)!.fenced)).toBe(true);
-  expect(pages).toEqual([]);
+  const expected = {
+    accountId: 'fanout-operator',
+    state: 'suspended',
+    receiptId: 'fanout-suspension-receipt',
+    minimumAuthnEpoch: '2',
+  };
+  expect(await workflows.resumeOperation('fanout')).toEqual(expected);
+  expect(accounts.get('fanout-operator')).toMatchObject({ state: 'suspended', fenced: true, authnEpoch: 2 });
+  expect(items.every((item) => accounts.get(item.subjectAccountId)!.fenced !== true)).toBe(true);
+  expect(calls).toEqual([
+    'suspend-operator',
+    'continuation-read',
+    'continuation-authorize',
+    'auth-revoke',
+    'continuation-read',
+    'continuation-authorize',
+    'auth-revoke',
+  ]);
+  expect(
+    (await database.query('SELECT id FROM session WHERE "userId"=ANY($1::text[]) ORDER BY id', [sessionOwners])).rows,
+  ).toEqual([{ id: items[0]!.subjectAccountId }, { id: items[64]!.subjectAccountId }]);
+  const completedCalls = [...calls];
+  expect(await workflows.resumeOperation('fanout')).toEqual(expected);
+  expect(calls).toEqual(completedCalls);
 }, 30000);
 
 test('consent reduction commits native fence before actual Auth mutation and keeps old authority invalid', async () => {
