@@ -346,7 +346,6 @@ test('Realm moderator ban removes membership denies join participation and repla
   const path = `${realmPath(c.realm)}/bans/${fixture.member.id}`;
   await problem(await send('PUT', path, { reason: 'Community outcome ban' }, fixture.outsider), 403);
   await success(await send('PUT', path, { reason: 'Community outcome ban' }, fixture.moderator));
-  expect(await json(await get(`${realmPath(c.realm)}/members/me`, fixture.member))).toMatchObject({ state: 'none' });
   await problem(await send('POST', `${realmPath(c.realm)}/membership`, undefined, fixture.member), 403);
   await problem(await get(`${realmPath(c.realm)}/participation`, fixture.member), 403, 'not_applicable');
   await problem(await post(c.thread), 403);
@@ -357,6 +356,8 @@ test('Realm moderator ban removes membership denies join participation and repla
   expect(after.posts).toEqual(before.posts);
   expect(after.receipts).toEqual(before.receipts);
   expect(after.lastAttempt).toEqual({ authorized: false, receiptRead: false, storedResponseReturned: false });
+  await driver.settle();
+  expect(await json(await get(`${realmPath(c.realm)}/members/me`, fixture.member))).toMatchObject({ state: 'none' });
   expect((await get(realmPath(c.realm), fixture.member)).status).toBe(200);
   expect((await get(`/v1/boards/${c.board.id}`, fixture.member)).status).toBe(200);
   expect((await get(`/v1/threads/${c.thread.id}`, fixture.member)).status).toBe(200);
