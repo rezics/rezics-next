@@ -58,8 +58,19 @@ export class WorkerJob implements GateOutcomeSink {
       if (!(error instanceof StaleAttemptError)) throw error;
     });
     this.pending.add(handled);
-    // Observe errors immediately while retaining them for drain().
-    void handled.catch(() => {});
+    // Observe errors immediately while retaining them for drain(). Background work has no caller, and a dropped
+    // retry error once left tasks without a worker for hours: the supermanager is told.
+    void handled.catch((error) => {
+      try {
+        this.inbox.deliver({
+          managerId: this.tasks.settings.integration.supermanager,
+          kind: 'environment',
+          summary: `Control-plane background work failed: ${String(error)}`.replace(/[\r\n]+/g, ' ').slice(0, 1000),
+        });
+      } catch {
+        // The error stays with drain() when the inbox is unavailable.
+      }
+    });
   }
   async drain(): Promise<void> {
     while (this.pending.size) {
