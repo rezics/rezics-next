@@ -94,3 +94,23 @@ test('a stopped task held by a reshape starts when a later reshape drops the unm
     expect(h.store.task(task.id).brief.after).toEqual([]);
   } finally { h.dispose(); }
 });
+
+test('the recovery sweep starts a released task that no process started', async () => {
+  const h = harness();
+  try {
+    writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]'));
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const first = h.tasks.dispatch(h.briefFile);
+    const secondBrief = join(h.root, '.temp/goal/second.md');
+    writeFileSync(secondBrief, markdown.replace('command: [bun, test]', 'command: ["true"]')
+      .replace('waiting: []', `waiting: []\nafter: [${first.id}]`));
+    const second = h.tasks.dispatch(secondBrief);
+    // The release happened, but the process that should have started the task ended first.
+    h.store.updateTask({ taskId: first.id, attempt: 0 }, task => { task.state = 'integrated'; });
+    h.store.updateTask({ taskId: second.id, attempt: 0 }, task => { task.state = 'ready'; });
+
+    await job.recoverOrphans(); await job.drain();
+
+    expect(h.store.task(second.id).currentAttempt).toBe(1);
+  } finally { h.dispose(); }
+});
