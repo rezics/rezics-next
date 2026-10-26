@@ -211,7 +211,12 @@ shared blocks and statements, never time. Use `checkGrowth` from `test/support/g
 add rows between scales. Grow both the total data and hot partition, while keeping the operation's own neighbourhood
 fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
 `linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
-API from `test/support/growth.ts`.
+API from `test/support/growth.ts`. Each measured session in the instrumented `pool` and `openPool` connections pins
+`max_parallel_workers_per_gather = 0` and `jit = off`, then sets `work_mem = 4MB`, `random_page_cost = 4`,
+`effective_cache_size = 4GB`, `effective_io_concurrency = 16` and `default_statistics_target = 100` explicitly. The
+fixed defaults keep container configuration from changing a query plan; disabling per-query parallel workers also
+keeps shared worker availability from changing the work counted by a capture. `admin` connections are for setup and
+assertions and are not measured. A test can still use `SET LOCAL` for a planner option inside its transaction.
 
 Catalog-only statements are counted apart, with at most one allowed per distinct query text in a measured run; a
 statement that also reads data counts in full.
@@ -233,7 +238,9 @@ Every scale is measured warm. Keep the default `warmups`. When the operation use
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
 backend's first. `warmups: 0` measures a cold first sample: a false failure under `logarithmic` and `linear` bounds,
 and a hidden growth under `constant` ones. `checkGrowth` runs `VACUUM (ANALYZE)` on the test database after each scale's
-`grow`, so planner statistics never depend on autovacuum; seed in `grow`, not `operation`, since the vacuum runs after
+`grow` to refresh planner statistics. It also vacuums `dbos.workflow_status` before each measured repetition: DBOS's
+idempotent enqueue updates an existing status row, and pruning that tuple chain between repetitions keeps its buffer
+cost from depending on maintenance timing. Seed in `grow`, not `operation`, since the database vacuum runs after
 `grow`; do not analyze or vacuum the checked database by hand in `grow`.
 
 ## HTTP contract

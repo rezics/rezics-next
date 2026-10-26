@@ -60,6 +60,34 @@ test('captures each application statement and its executed plan from the product
     });
 });
 
+test('a measuring session pins the planner settings a capture depends on', async () => {
+  const database = db!;
+  const libraryPool = database.openPool({ max: 1 });
+  const expected = {
+    max_parallel_workers_per_gather: '0',
+    jit: 'off',
+    work_mem: '4MB',
+    random_page_cost: '4',
+    effective_cache_size: '4GB',
+    effective_io_concurrency: '16',
+    default_statistics_target: '100',
+  };
+  const query = `SELECT current_setting('max_parallel_workers_per_gather') AS max_parallel_workers_per_gather,
+                        current_setting('jit') AS jit,
+                        current_setting('work_mem') AS work_mem,
+                        current_setting('random_page_cost') AS random_page_cost,
+                        current_setting('effective_cache_size') AS effective_cache_size,
+                        current_setting('effective_io_concurrency') AS effective_io_concurrency,
+                        current_setting('default_statistics_target') AS default_statistics_target`;
+
+  for (const pool of [database.pool, libraryPool]) {
+    const result = await capture(database, async () => (await pool.query(query)).rows[0]);
+    expect(result.value).toEqual(expected);
+    expect(result.capture.statements).toEqual([query]);
+    expect(result.capture.plans).toHaveLength(1);
+  }
+});
+
 test('captures nested statements run by a trigger function', async () => {
   const database = db!;
   const result = await capture(database, () =>

@@ -45,6 +45,13 @@ function currentAttribution(state: CaptureState): Attribution | undefined {
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
 const setupStatements = [
+  'SET max_parallel_workers_per_gather = 0',
+  'SET jit = off',
+  "SET work_mem = '4MB'",
+  'SET random_page_cost = 4',
+  "SET effective_cache_size = '4GB'",
+  'SET effective_io_concurrency = 16',
+  'SET default_statistics_target = 100',
   "LOAD 'auto_explain'",
   'SET auto_explain.log_min_duration = 0',
   'SET auto_explain.log_analyze = on',

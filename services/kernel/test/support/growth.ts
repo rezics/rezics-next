@@ -151,6 +151,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
 
     const costs: Cost[] = [];
     for (let run = 0; run < repetitions; run++) {
+      // DBOS return-existing enqueues use a no-op UPDATE on workflow_status; prune its tuple chain between samples.
+      await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
       const measured = await capture(db, () => check.operation(db, scale, repetition));
       const cost = costOf(measured.capture);
       assertCatalogBound(check.name, scale, measured.capture, samples);
