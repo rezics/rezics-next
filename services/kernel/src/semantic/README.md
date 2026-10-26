@@ -250,13 +250,13 @@ in `test/semantic/authored-documents.test.ts`.
 - Proposal install hooks return replacement values and never mutate command input.
 - Touches: One `readFences` statement per source-tuple partition (at most 100 tuples) before the receipt and before deduplication; one anchored media reference probe per cover; each command then pays its single-request cost plus one document insert or one media claim by key. Same-partition fence reads run inside the command. Grow N; fix the command count at the batch cap.
 - Bound: O(commands × log N). At most 100 commands. No path scans a partition or table, or grows with N, U×t or M beyond index depth.
-- Growth check: `test/semantic/imported-fields.test.ts`: `a cover proposal claims an available cover media object in its own transaction` and `an unchanged summary refresh appends no document` (fixed fixtures, no scale sweep).
+- Growth check: `test/semantic/growth-sourced-writes.test.ts`: `a sourced bulk write at a fixed batch has constant rows and statements as subjects, documents and fences grow`, scales `[1, 4, 16]`; fixed-fixture checks in `test/semantic/imported-fields.test.ts`: `a cover proposal claims an available cover media object in its own transaction` and `an unchanged summary refresh appends no document`.
 
 ### Source-fence disclosure
 
 - Touches: Subject views, candidate listings, and the search source read each issue one `readFences` statement per tuple partition among the candidates that read would show. The search source read adds the same per read.
 - Bound: T probes, `ceil(T / 100)` statements in a partition, independent of N and of the subject's history.
-- Growth check: `test/semantic/imported-fields.test.ts`: `a fenced source tuple refuses new contributions and hides existing ones at read` (fixed fixture, no scale sweep).
+- Growth check: `test/semantic/growth-sourced-writes.test.ts`: `source-fence disclosure on a subject view has constant rows and statements as subjects, fences and the subject's history grow`, scales `[1, 4, 16]`; fixed-fixture check in `test/semantic/imported-fields.test.ts`: `a fenced source tuple refuses new contributions and hides existing ones at read`.
 
 Structural value limits bound subject payload blocks B by F for accepted inputs; shared-block growth checks keep payload size fixed.
 Default authorization has separately anchored but uncapped evidence fan-out; its costs cannot be proved bounded using subject and definition counts alone.
