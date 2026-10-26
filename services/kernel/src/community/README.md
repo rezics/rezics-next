@@ -237,19 +237,19 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 - Touches: One acceptance command (admission, one Realm point read, one operation insert, the creation receipt), then the membership workflow's own bounded reserve and publish steps, each adding one initiator restoration, then one follow point upsert on the member's account partition.
 - Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
-- Growth check: `join.test.ts` is a fixed probe of one public join. It does not populate 2048, 8192 or 32768 members.
+- Growth check: `test/community/growth-join.test.ts`, "Join a Realm has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
 
 ### Leave a Realm
 
 - Touches: One acceptance command as for join, then the membership workflow's own bounded reserve, publish and release steps. Leave writes no follow and never unfollows.
 - Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
-- Growth check: `join.test.ts` is a fixed probe of one leave. It does not populate 2048, 8192 or 32768 members.
+- Growth check: `test/community/growth-join.test.ts`, "Leave a Realm has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
 
 ### Add a Realm member
 
 - Touches: The same acceptance command and membership workflow as join, one idempotent member-group grant when the Realm is protected, and one follow point upsert.
 - Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
-- Growth check: `join.test.ts` is a fixed probe of one added member. It does not populate 2048, 8192 or 32768 members.
+- Growth check: `test/community/growth-join.test.ts`, "Add a Realm member has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
 
 ### Read own Realm membership
 
