@@ -12,6 +12,7 @@ import {
 } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -271,7 +272,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host?.stop();
-  if (authDatabaseName) await admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (!host && authPool) await authPool.end();
+  if (authDatabaseName) await dropTestDatabase(admin, authDatabaseName);
   await pool.end();
   await admin.end();
 });
