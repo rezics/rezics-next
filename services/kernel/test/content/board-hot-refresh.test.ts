@@ -495,7 +495,7 @@ test.serial(
 );
 
 test.serial(
-  'a refresh after Realm vote weight change rescores hot ranks immediately',
+  'the first refresh at least one interval later uses current Realm vote weights for hot rank',
   async () => {
     const realm = await createTestRealm();
     const boardId = await createBoard(realm.realmId);
@@ -517,7 +517,7 @@ test.serial(
 
     await realm.updateVotes({ upvote: -1, downvote: 1 });
     const observedWeights = await withConnection(db.pool, (client) => readRealmVotes(client, [realm.realmId]));
-    const refreshAt = new Date(initialAt.getTime() + 60_000);
+    const refreshAt = new Date(initialAt.getTime() + 10 * 60_000);
     const refreshed = await refreshBoardRankBatch(db.pool, refreshAt, [partition]);
     const rows = await rankRows([boardId], [upvoted.threadId, downvoted.threadId]);
     const refreshedOrder = [upvoted.threadId, downvoted.threadId].sort(

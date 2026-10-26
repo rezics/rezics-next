@@ -91,9 +91,9 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 ### Rank refresh batch
 
-`refreshBoardRankBatch` locks at most 500 active candidates whose last refresh precedes the batch time, with `SKIP LOCKED`. A candidate is eligible when it has reached the ten-minute refresh interval or its Realm's current head revision postdates its last refresh. The eligibility check point-reads that candidate's board and, when present, its Realm head revision. The batch reads per-thread reaction totals and each current Realm's vote weights once, then writes score, active rank and hot rank together. Hot rank uses thread creation time; active rank uses last activity time. New candidates begin at score 0 with both ranks computed from that score.
+`refreshBoardRankBatch` locks at most 500 due candidates with `SKIP LOCKED`, reads per-thread reaction totals and Realm vote weights, then writes score, active rank and hot rank together. Hot rank uses thread creation time; active rank uses last activity time. New candidates begin at score 0 with both ranks computed from that score.
 
-- **Touches:** One rank-refresh index range of at most 500 active candidates, one board point read and (for Realm boards) one Realm-head point read per candidate, one totals statement per thread partition in the batch, one Realm-votes statement per board partition in the batch, and one batch update.
+- **Touches:** One rank-refresh index range of at most 500 candidates, one totals statement per thread partition in the batch, one Realm-votes statement per board partition in the batch, and one batch update.
 - **Bound:** O(B log R) rows with at most 2B + 2 statements for B <= 500; independent of reactions per thread.
 - **Growth check:** `test/content/board-hot-refresh.test.ts`, `one hot rank refresh batch`: one batch stays constant in rows and statements at 2048, 8192 and 32768 candidates, with reaction totals on the batch's threads.
 

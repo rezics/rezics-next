@@ -159,6 +159,8 @@ type SharedCommunity = {
   provisioned: { fixture: Fixture; governance: Account } | undefined;
   /** `contextId:accountId` pairs already granted the Context moderator role. */
   contextModerators: Set<string>;
+  /** Latest scheduled rank refresh time shared by every driver in this file. */
+  previousRankRefreshAt: Date | undefined;
   /** Suspensions end the fixture's accounts for good, so the next test builds a new base. */
   retired: boolean;
   closing: Promise<void> | undefined;
@@ -208,6 +210,7 @@ async function buildShared(): Promise<SharedCommunity> {
       observer,
       provisioned: undefined,
       contextModerators: new Set(),
+      previousRankRefreshAt: undefined,
       retired: false,
       closing: undefined,
     };
@@ -533,7 +536,12 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
     async refreshRanks() {
       await settle();
       const now = await system.database.pool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-      const at = new Date(now.rows[0]!.now.getTime() + 10 * 60_000 + ++serial);
+      const at = new Date(
+        Math.max(now.rows[0]!.now.getTime(), base.previousRankRefreshAt?.getTime() ?? Number.NEGATIVE_INFINITY) +
+          10 * 60_000 +
+          ++serial,
+      );
+      base.previousRankRefreshAt = at;
       while ((await refreshBoardRankBatch(system.database.pool, at)) > 0) {}
     },
     async commandEvidence(actor, commandKey) {
