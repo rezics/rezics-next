@@ -1,5 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
+import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import { once } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, writeSync } from 'node:fs';
@@ -241,6 +242,10 @@ export async function runOperationWorkerProcess(): Promise<void> {
     throw new Error('Native erasure worker configuration is incomplete');
   const authPool = new Pool({ connectionString: authDatabaseUrl, max: 4 });
   const { readCurrentConsent } = createCurrentConsentReader({ database: authPool });
+  // Auth's reader rejects any key beyond the account and client. The product
+  // also passes its deadline, which would otherwise erase current consent.
+  const readConsent: CurrentConsentReader = (input) =>
+    readCurrentConsent({ actorAccountId: input.actorAccountId, clientId: input.clientId });
   const access = createContentWorkAccess(() => new Date());
   const originalAuthorize = access.authorize.bind(access);
   const active = new Map<string, { step: string; serial: number; checks: NativeCheck[] }>();
@@ -343,7 +348,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
   const content = createContentWork({
     storage,
     access,
-    readConsent: readCurrentConsent,
+    readConsent,
     routeKey,
     fetchConfig: { allowedHosts: [] },
   });
@@ -469,6 +474,12 @@ export async function runOperationWorkerProcess(): Promise<void> {
     } else if (line === 'capture-step' && growthMode) {
       captureNextStep = true;
       workerLine('ERASURE_WORKER_CONTROL capture-step');
+    } else if (line === 'pause-relays') {
+      await relays!.pause();
+      workerLine('ERASURE_WORKER_CONTROL pause-relays');
+    } else if (line === 'resume-relays') {
+      relays!.resume();
+      workerLine('ERASURE_WORKER_CONTROL resume-relays');
     } else if (line === 'stop') {
       await worker!.stop();
       await authPool.end();
@@ -576,9 +587,18 @@ function createWorkerLane(): WorkerLane {
 // A direct load still creates them here.
 const prefetchedLanes: WorkerLane[] =
   (globalThis as { __erasureWorkerLanes?: WorkerLane[] }).__erasureWorkerLanes ?? [];
-if (prefetchedLanes.length === 0 && process.env.ERASURE_OPERATION_WORKER !== '1') {
-  for (let index = 0; index < 8; index++) prefetchedLanes.push(createWorkerLane());
+function warmWorkerLane(): void {
+  if (process.env.ERASURE_OPERATION_WORKER === '1') return;
+  if (prefetchedLanes.length === 0) prefetchedLanes.push(createWorkerLane());
 }
+function takeWorkerLane(): WorkerLane {
+  warmWorkerLane();
+  const lane = prefetchedLanes.shift();
+  if (!lane) throw new Error('Native worker lane was not prepared');
+  warmWorkerLane();
+  return lane;
+}
+warmWorkerLane();
 
 function openNativeWorker() {
   let lane: WorkerLane | undefined;
@@ -619,7 +639,7 @@ function openNativeWorker() {
 
   function spawnProcess(): void {
     configured = false;
-    lane = prefetchedLanes.shift() ?? createWorkerLane();
+    lane = takeWorkerLane();
     child = lane.child;
     lines = lane.lines;
     waiters = lane.waiters;
@@ -715,6 +735,18 @@ function openNativeWorker() {
     async pause() {
       await stop();
     },
+    async pauseRelays() {
+      if (!child) throw new Error('Native worker is not running');
+      child.stdin.write('pause-relays\n');
+      child.stdin.flush();
+      await waitForLine('ERASURE_WORKER_CONTROL pause-relays');
+    },
+    async resumeRelays() {
+      if (!child) throw new Error('Native worker is not running');
+      child.stdin.write('resume-relays\n');
+      child.stdin.flush();
+      await waitForLine('ERASURE_WORKER_CONTROL resume-relays');
+    },
     async restart(growthMode = false) {
       await stop();
       if (retired) return;
@@ -758,6 +790,7 @@ function openNativeWorker() {
       return `${lane?.output ?? ''}\n${lane?.stderr ?? ''}`.slice(-4_000);
     },
     async waitResult(workflowId: string) {
+      if (!client) throw new Error('Native worker is not running');
       try {
         await client.retrieveWorkflow(workflowId).getResult();
       } catch {
@@ -809,7 +842,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       { fromPlainText },
       { runCommand },
       { observeSql },
-      { buildBoardAndThreads, createFixtureResources, grant, request, revokeGrant, setupRequest },
+      { buildBoardAndThreads, createFixtureResources, grant, provisionExactReads, request, revokeGrant, setupRequest },
       { openGrowthDatabase },
     ] = await Promise.all([
       import('../../src/access/write-rate.ts'),
@@ -880,6 +913,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     const ownerValidity = new Map<string, string>();
     const accountReadValidity = new Map<string, string[]>();
     const receiptBaselines = new Map<number, Set<string>>();
+    const preparedStock: Fixture[] = [];
+    const readsProvisioned = new Set<string>();
     const inspectionCache = new Map<string, { token: string; value: Inspection }>();
     const commandQueries: { key: string; statements: string[] }[] = [];
     const system = resources.system;
@@ -1160,9 +1195,9 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const f = [...fixtureData.values()].at(-1);
         if (!f) throw new Error('No native author-erasure fixture is available');
         const route = routeOf(f.thread)!;
-        for (let start = 0; start < f.targeted.length; start += 1) {
+        for (let start = 0; start < f.targeted.length; start += 2) {
           await Promise.all(
-            f.targeted.slice(start, start + 1).map(async (post) => {
+            f.targeted.slice(start, start + 2).map(async (post) => {
               if (operation === 'revoke') {
                 const valid = ownerValidity.get(post.id);
                 if (!valid) throw new Error(`Missing native owner grant for ${post.id}`);
@@ -1194,21 +1229,43 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       throw new Error(`Unsupported author authority axis: ${axis}`);
     }
 
+    async function captureReceiptBaseline(partition: number): Promise<void> {
+      const baseline = await readPool.query<{ idempotency_key: string }>(
+        'SELECT idempotency_key FROM core.receipt WHERE partition_no=$1',
+        [partition],
+      );
+      receiptBaselines.set(partition, new Set(baseline.rows.map((row) => row.idempotency_key)));
+    }
+
     async function seedFixture(
       posts: number,
       revisions: number,
       marker: string,
       targetPartition?: number,
+      tail = true,
     ): Promise<Fixture> {
-      // Board projection consumes every post on this partition. Pause it so the
-      // publish commands do not lose the request deadline waiting on that lock.
-      await worker!.pause();
-      let data: Awaited<ReturnType<typeof buildBoardAndThreads>>;
+      if (targetPartition === undefined) {
+        const index = preparedStock.findIndex(
+          (item) => item.targeted.length === posts && item.targeted[0]?.revisions.length === revisions,
+        );
+        const stocked = index < 0 ? undefined : preparedStock.splice(index, 1)[0];
+        if (stocked) {
+          mark(`seed-stock ${posts}`);
+          return stocked;
+        }
+      }
+      // Board projection reads the same partition log the publish command writes.
+      // Stop the relays without recycling DBOS; a second launch does not fit the hook.
+      await worker!.pauseRelays();
+      let data: Awaited<ReturnType<typeof buildBoardAndThreads>> | undefined;
       try {
         data = await buildBoardAndThreads(resources, posts, revisions, marker, targetPartition);
       } finally {
-        await worker!.restart();
+        // Exact-read grants are same-partition writes. Leave the relays paused until
+        // they finish, or each projection snapshot conflicts with the grant.
+        if (!data || tail) await worker!.resumeRelays();
       }
+      if (!data) throw new Error('Board setup produced no thread');
       const fixture: Fixture = {
         thread: data.thread,
         partition: data.partition,
@@ -1249,18 +1306,24 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         data.authorId,
         direct.rows.map((row) => row.valid),
       );
-      await request(
-        resources,
-        'anonymous',
-        'GET',
-        `/v1/boards/${data.board}/threads?query=${encodeURIComponent(marker)}`,
-      );
-      await drainEffects(data.partition);
-      const baseline = await readPool.query<{ idempotency_key: string }>(
-        'SELECT idempotency_key FROM core.receipt WHERE partition_no=$1',
-        [data.partition],
-      );
-      receiptBaselines.set(data.partition, new Set(baseline.rows.map((row) => row.idempotency_key)));
+      if (!tail) {
+        // Exact reads are same-partition writes. Do them while projection is paused,
+        // during the hook, so the scenario keeps its time budget.
+        mark('reads-start');
+        await provisionExactReads(resources, data);
+        readsProvisioned.add(fixture.thread);
+        mark('reads-done');
+      }
+      if (tail) {
+        await request(
+          resources,
+          'anonymous',
+          'GET',
+          `/v1/boards/${data.board}/threads?query=${encodeURIComponent(marker)}`,
+        );
+        await drainEffects(data.partition);
+        await captureReceiptBaseline(data.partition);
+      }
       return fixture;
     }
 
@@ -1290,7 +1353,28 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       async seed(input): Promise<Fixture> {
         mark(`seed-start ${input.posts}`);
         const marker = `erasure-${randomUUID().replaceAll('-', '')}`;
-        const fixture = await seedFixture(input.posts, input.revisions, marker);
+        const fixture = await seedFixture(input.posts, input.revisions, marker, undefined, false);
+        const data = fixtureData.get(fixture.thread);
+        if (!data) throw new Error('Seeded thread has no stored board');
+        if (!readsProvisioned.has(fixture.thread)) {
+          mark('reads-start');
+          await provisionExactReads(resources, data);
+          readsProvisioned.add(fixture.thread);
+          mark('reads-done');
+        }
+        // Projection stays paused through publish and grants. Resume it now so the
+        // erasure effect can be bound, after those writes have committed.
+        await worker!.resumeRelays();
+        await request(
+          resources,
+          'anonymous',
+          'GET',
+          `/v1/boards/${data.board}/threads?query=${encodeURIComponent(fixture.marker)}`,
+        );
+        mark('drain-start');
+        await drainEffects(data.partition);
+        mark('drain-done');
+        await captureReceiptBaseline(data.partition);
         mark(`seed-done ${input.posts}`);
         return fixture;
       },
@@ -1372,6 +1456,10 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const workflowId = await workflowIdFor(name);
         const serial = (serialByOperation.get(id) ?? 0) + 1;
         const event = await waitForBarrier(workflowId, serial);
+        // Point-erasure events would null revision bodies as soon as the logical
+        // page commits. Hold that consumer until finish, so the paused inspect
+        // still sees the physical bytes.
+        await worker!.pauseRelays();
         await readPool.query(`UPDATE ${BARRIER_TABLE} SET released=true WHERE workflow_id=$1 AND serial=$2`, [
           workflowId,
           serial,
@@ -1392,6 +1480,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         mark('finish-start');
         const id = operationId(name);
         const workflowId = await workflowIdFor(name);
+        await worker!.resumeRelays();
         await worker!.resume();
         await worker!.waitResult(workflowId);
         mark('finish-result');
@@ -1658,6 +1747,15 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       }
     }
 
+    // The hook has its own budget. Publish the corpus the scenarios ask for before
+    // the test body starts. Exact-read grants run when that corpus is dispensed.
+    mark('stock-start');
+    const [stockedFixture] = await Promise.all([
+      seedFixture(205, 3, `erasure-${randomUUID().replaceAll('-', '')}`, undefined, false),
+      resources.bootstrap,
+    ]);
+    preparedStock.push(stockedFixture);
+    mark('stock-ready');
     return driver;
   } catch (error) {
     const cleanup: Promise<unknown>[] = [];
@@ -1671,7 +1769,11 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     if (ownedAppPool) cleanup.push(ownedAppPool.end());
     if (ownedReadPool) cleanup.push(ownedReadPool.end());
     if (ownedGrowth) cleanup.push(ownedGrowth.close());
-    if (ownedResources) cleanup.push(ownedResources.system.close());
+    if (ownedResources) {
+      ownedResources.stopBootstrap();
+      cleanup.push(ownedResources.bootstrap.catch(() => undefined));
+      cleanup.push(ownedResources.system.close());
+    }
     const results = await Promise.allSettled(cleanup);
     const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failures.length)
@@ -1723,7 +1825,10 @@ async function checkGrowthActual(
     dependencies.getStoredFixture(firstFixture),
     dependencies.actor,
   );
-  await driver.barrier('hold');
+  // The governance queue runs two workflows. Parking every scale at once leaves
+  // the third operation queued, so each initiation releases its own step and
+  // lets that workflow finish before the next scale starts.
+  const stepCosts = new Map<number, Cost>();
 
   let seedCalls = 0;
   const bounds = { rows: 'constant' as const, statements: 'constant' as const, blocks: 'logarithmic' as const };
@@ -1747,11 +1852,19 @@ async function checkGrowthActual(
           const fixture = fixtures.get(scale);
           if (!fixture) throw new Error(`Missing fixed native growth fixture at scale ${scale}`);
           if (measurement === 'initiation') {
+            await worker.hold();
             const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
             if (reply.response.status !== 202 || !reply.value)
               throw new Error(`Native erasure initiation returned ${reply.response.status}`);
             operations.set(scale, reply.value);
             await dependencies.waitForOperationBarrier(reply.value.name, 1);
+            await worker.captureNextStep();
+            const finished = driver.finish(reply.value.name);
+            const measured = await worker.waitCost();
+            if (measured.serial !== 1)
+              throw new Error('Native growth step did not capture the first persisted logical batch');
+            stepCosts.set(scale, measured.cost);
+            await finished;
             return;
           }
           const operation = operations.get(scale);
@@ -1762,14 +1875,9 @@ async function checkGrowthActual(
               throw new Error(`Native erasure status returned ${reply.response.status}`);
             return;
           }
-          await worker.captureNextStep();
-          const postIds = await driver.step(operation.name);
-          if (postIds.length !== 100)
-            throw new Error(`Native growth step changed ${postIds.length} posts instead of 100`);
-          const measured = await worker.waitCost();
-          if (measured.serial !== 1)
-            throw new Error('Native growth step did not capture the first persisted logical batch');
-          workerCosts.push(measured.cost);
+          const measured = stepCosts.get(scale);
+          if (!measured) throw new Error(`Native growth step at scale ${scale} was not measured`);
+          workerCosts.push(measured);
         } finally {
           await dependencies.useMeasuredKernel(false);
         }
@@ -1788,12 +1896,6 @@ async function checkGrowthActual(
     cost: combineCost(sample.cost, workerCosts[index]!),
   }));
   assertGrowth(nativeSamples, nativeReport.bounds);
-
-  for (const scale of fixtureScales) {
-    const operation = operations.get(scale);
-    if (!operation) throw new Error(`Native growth operation at scale ${scale} was not initiated`);
-    await driver.finish(operation.name);
-  }
 
   return input.measurements.map((measurement) => {
     const report = reports.get(measurement);

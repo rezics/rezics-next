@@ -25,6 +25,9 @@ export type FixtureResources = {
   appUrl: string;
   kernel: NativeContentSystem['kernel'];
   governanceBearer: string;
+  /** The operator bootstrap command, overlapped with publishing. */
+  bootstrap: Promise<void>;
+  stopBootstrap(): void;
   accountIds: Record<'author' | 'legal' | 'unrelated' | 'suspended', string>;
   bearer(persona: DriverPersona): string | undefined;
   updateBearer(persona: DriverPersona, bearer: string): void;
@@ -128,6 +131,7 @@ export async function createFixtureResources(
 ): Promise<FixtureResources> {
   const system = await createNativeContentSystem({ databaseUrl });
   const overlapped = duringSetup?.(system) ?? Promise.resolve();
+  let bootstrapProcess: ReturnType<typeof Bun.spawn> | undefined;
   try {
     const pool = system.database.pool;
     const appUrl = pool.options.connectionString;
@@ -145,18 +149,25 @@ export async function createFixtureResources(
     const governanceId = govRow.rows[0]?.account_id;
     if (!governanceId) throw new Error('Native governance bootstrap did not return its account');
     const commandPath = fileURLToPath(new URL('../../../../kernel/scripts/bootstrap-governance.ts', import.meta.url));
-    // Asynchronous so a worker process started beside setup can keep its stdout drained.
-    const bootstrap = Bun.spawn([process.execPath, commandPath, '--account', governanceId], {
+    // The account is already bootstrapped. Run the operator command beside publishing;
+    // waiting for its process import first spends the hook budget before any post exists.
+    bootstrapProcess = Bun.spawn([process.execPath, commandPath, '--account', governanceId], {
       env: { ...process.env, DATABASE_URL: appUrl },
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    const [stdout, stderr, status] = await Promise.all([
-      new Response(bootstrap.stdout).text(),
-      new Response(bootstrap.stderr).text(),
-      bootstrap.exited,
-    ]);
-    if (status !== 0) throw new Error(`Native governance bootstrap command failed: ${stdout}${stderr}`);
+    const piped = (output: typeof bootstrapProcess.stdout): ReadableStream<Uint8Array> => {
+      if (typeof output === 'number' || output === undefined)
+        throw new Error('Governance bootstrap command did not pipe its output');
+      return output;
+    };
+    const bootstrap = Promise.all([
+      new Response(piped(bootstrapProcess.stdout)).text(),
+      new Response(piped(bootstrapProcess.stderr)).text(),
+      bootstrapProcess.exited,
+    ]).then(([stdout, stderr, status]) => {
+      if (status !== 0) throw new Error(`Native governance bootstrap command failed: ${stdout}${stderr}`);
+    });
     const governance = await system.auth.issue({
       accountId: governanceId,
       clientId: system.auth.ordinaryClient.id,
@@ -191,6 +202,14 @@ export async function createFixtureResources(
       appUrl,
       kernel,
       governanceBearer: governance.bearer,
+      bootstrap,
+      stopBootstrap() {
+        try {
+          bootstrapProcess?.kill();
+        } catch {
+          // The operator process has already exited.
+        }
+      },
       accountIds,
       bearer: (persona) => bearers.get(persona),
       updateBearer(persona, bearer) {
@@ -239,13 +258,55 @@ export async function createFixtureResources(
     await overlapped;
     return resources;
   } catch (error) {
+    bootstrapProcess?.kill();
     await overlapped.catch(() => undefined);
     await system.close();
     throw error;
   }
 }
 
+/** Explicit post:read survives owner-role revocation, and Governance must hold the
+ * role's other actions before it can revoke that role. The author's platform
+ * access:grant is removed once those rows exist. */
 export type SeededBoard = Awaited<ReturnType<typeof buildBoardAndThreads>>;
+
+export async function provisionExactReads(resources: FixtureResources, board: SeededBoard): Promise<void> {
+  const governorId = (
+    await resources.pool.query<{ account_id: string }>(
+      'SELECT account_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
+      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
+    )
+  ).rows[0]!.account_id;
+  await runInBatches(board.targeted.length, 2, async (index) => {
+    const post = board.targeted[index]!;
+    const target = { route: board.route, id: post.id };
+    await setupRequest(resources, 'author', 'POST', '/v1/grants', {
+      resource: target,
+      subject: { kind: 'account', id: board.authorId },
+      actions: ['post:read'],
+      valid: '(,)',
+    });
+    await setupRequest(resources, 'author', 'POST', '/v1/grants', {
+      resource: target,
+      subject: { kind: 'account', id: governorId },
+      actions: ['post:read', 'post:revise', 'media:create'],
+      valid: '(,)',
+    });
+  });
+  const grants = await resources.pool.query<{ valid: string }>(
+    `SELECT valid::text FROM access.resource_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+       AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, board.authorId],
+  );
+  for (const row of grants.rows)
+    await revokeGrant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: board.authorId },
+      actions: ['access:grant'],
+      valid: row.valid,
+    });
+}
 
 export async function buildBoardAndThreads(
   resources: FixtureResources,
@@ -352,7 +413,9 @@ export async function buildBoardAndThreads(
   await grant(resources, 'governance', authorPostCreate);
 
   const targeted: { id: string; revisions: { id: string; digest: string; body: string }[] }[] = new Array(posts);
-  await runInBatches(posts, 1, async (postIndex) => {
+  // The partition gate runs one command. A second chain overlaps the account
+  // read that happens before that gate, without queueing past the request deadline.
+  await runInBatches(posts, 2, async (postIndex) => {
     const firstBody = `${marker} post-${postIndex} revision-0`;
     if (postIndex % 50 === 0) mark(`seed-post ${postIndex}`);
     const created = await setupRequest<{
@@ -384,51 +447,19 @@ export async function buildBoardAndThreads(
   });
   mark('seed-posts-done');
 
-  // Preserve exact-history reads independently of the creator role. Give the
-  // workflow initiator its own post:read grants and let Governance hold the old
-  // role actions so ordinary role-revocation commands can remove only authorship.
-  const governorId = (
-    await resources.pool.query<{ account_id: string }>(
-      'SELECT account_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
-      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
-    )
-  ).rows[0]!.account_id;
-  await runInBatches(targeted.length, 1, async (index) => {
-    const post = targeted[index]!;
-    const target = { route, id: post.id };
-    await grant(resources, 'governance', {
-      resource: target,
-      subject: { kind: 'account', id: authorId },
+  const unrelatedGrant = await resources.pool.query<{ valid: string }>(
+    `SELECT valid::text FROM access.resource_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+       AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, otherId],
+  );
+  for (const row of unrelatedGrant.rows)
+    await revokeGrant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: otherId },
       actions: ['access:grant'],
+      valid: row.valid,
     });
-    await setupRequest(resources, 'author', 'POST', '/v1/grants', {
-      resource: target,
-      subject: { kind: 'account', id: authorId },
-      actions: ['post:read'],
-      valid: '(,)',
-    });
-    await setupRequest(resources, 'author', 'POST', '/v1/grants', {
-      resource: target,
-      subject: { kind: 'account', id: governorId },
-      actions: ['post:read', 'post:revise', 'media:create'],
-      valid: '(,)',
-    });
-  });
-  for (const accountId of [authorId, otherId]) {
-    const grants = await resources.pool.query<{ valid: string }>(
-      `SELECT valid::text FROM access.resource_grant
-       WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
-         AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
-      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, accountId],
-    );
-    for (const row of grants.rows)
-      await revokeGrant(resources, 'governance', {
-        resource: PLATFORM_RESOURCE,
-        subject: { kind: 'account', id: accountId },
-        actions: ['access:grant'],
-        valid: row.valid,
-      });
-  }
 
   let sentinelKey = randomUUID();
   while (partitionOf(threadTarget(system.routeKey, otherId, sentinelKey).route) === partition)

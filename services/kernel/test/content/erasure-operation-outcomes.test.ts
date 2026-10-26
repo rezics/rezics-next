@@ -123,8 +123,7 @@ function createPrefetchedLane(): PrefetchedLane {
   return lane;
 }
 
-const prefetched: PrefetchedLane[] = [];
-for (let index = 0; index < 8; index++) prefetched.push(createPrefetchedLane());
+const prefetched: PrefetchedLane[] = [createPrefetchedLane()];
 (globalThis as { __erasureWorkerLanes?: PrefetchedLane[] }).__erasureWorkerLanes = prefetched;
 
 // Compile the parent graph before the hook timer starts. The frozen suite's
