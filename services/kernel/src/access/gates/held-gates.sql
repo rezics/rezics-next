@@ -1,3 +1,4 @@
+-- unbound: Global partition only: exact identity/action temporal seeks for the mounted gate catalogue, a deployment constant.
 -- One identity probe of the viewer's gate actions on the Global Context.
 -- Scalar counts stay on the temporal primary key for the actor and principal,
 -- so other accounts' grants are not scanned. gate:any and gate:<group> stay exact.

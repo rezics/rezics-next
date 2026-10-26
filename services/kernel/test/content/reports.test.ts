@@ -257,10 +257,11 @@ async function reportEvent(id: string) {
   const effect = createReportEffect(system.database.pool);
   const { projectBatch } = await import('../../src/events/log.ts');
   let delivered = 0;
-  // Explicit bounded projection barrier; only persisted outbox events are delivered.
-  for (let batch = 0; batch < 20 && delivered === 0; batch++) {
+  // Explicit projection barrier; only persisted outbox events are delivered. One consumer per
+  // partition resumes after the events it has passed, so a new report reads only the log's new tail.
+  for (let batch = 0; batch < 1000 && delivered === 0; batch++) {
     const delivery = await projectBatch(system.database.pool, {
-      consumer: `reports_${id.replaceAll('-', '')}`,
+      consumer: `reports_partition_${partitionOf(routeOf(id)!)}`,
       partition: partitionOf(routeOf(id)!),
       apply: async (envelopes) => {
         for (const envelope of envelopes) {
@@ -277,7 +278,7 @@ async function reportEvent(id: string) {
         }
       },
     });
-    if (batch === 0 && delivery.status === 'stopped') {
+    if (delivery.status === 'stopped') {
       const { rows } = await system.database.pool.query(
         'SELECT type FROM core.outbox WHERE partition_no=$1 AND position=$2 ORDER BY event_seq',
         [partitionOf(routeOf(id)!), (delivery.position + 1n).toString()],
@@ -288,7 +289,9 @@ async function reportEvent(id: string) {
         position: (delivery.position + 1n).toString(),
         types: rows.map((row) => row.type),
       });
+      break;
     }
+    if (delivery.status === 'read' && delivery.envelopes === 0) break;
   }
   expect(delivered).toBe(1);
 }
@@ -494,9 +497,14 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       await _db.admin.query('ANALYZE access.resource_grant');
     }
     // Setup is outside capture. Same-target distractors exercise the hot reverse-index prefix.
+    // An authenticated actor is usable until its authentication deadline, so re-authenticate by elapsed time.
     let author = f.author;
+    let authenticatedAt = 0;
     for (let index = previous; index < scale; index++) {
-      if ((index - previous) % 256 === 0) author = await accountActor((await renew(f.author)).bearer);
+      if (Date.now() - authenticatedAt > 5_000) {
+        author = await accountActor((await renew(f.author)).bearer);
+        authenticatedAt = Date.now();
+      }
       const distractor = await createReport(deps(), author, { ...f.input, evidence: `Distractor ${index}` }, context());
       await reportEvent(distractor.value.reportId);
     }

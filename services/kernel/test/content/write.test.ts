@@ -377,7 +377,60 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   const db = await openGrowthDatabase();
   let seedRoute: number;
   async function grow(database: GrowthDatabase, scale: number, previous: number) {
-    // Setup is unmeasured. Grow both hot-route and unrelated-route content.
+    // Setup is unmeasured. Neighbouring rows keep every key index worth its cost to the planner at the smallest scale,
+    // where it would otherwise scan a table of a few dozen rows once per probe.
+    if (previous === 0)
+      for (const route of [seedRoute, 0x5678]) {
+        const resources = Array.from({ length: 2048 }, () => newId(route));
+        const posts = resources.map(() => newId(route));
+        const revisions = resources.map(() => newId(route));
+        const transaction = Bun.randomUUIDv7();
+        const body = Buffer.from('Neighbour body');
+        await database.admin.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           SELECT $1,resource_id,$2,'post:read','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
+          [route, newId(0x2345), transaction, resources],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+           SELECT $1,resource_id,$2,'content.post.owner','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
+          [route, newId(0x2345), transaction, resources],
+        );
+        const client = await database.admin.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query(
+            `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
+             SELECT $1,thread_id,$2,$3,'Neighbour','published',1,$4 FROM unnest($5::uuid[]) AS thread_id`,
+            [route, owner.accountId, board.id, transaction, resources],
+          );
+          await client.query(
+            `INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+             SELECT $1,thread_id,post_id,$2,revision_id,'published',1,$3
+             FROM unnest($4::uuid[],$5::uuid[],$6::uuid[]) AS row(thread_id,post_id,revision_id)`,
+            [route, owner.accountId, transaction, resources, posts, revisions],
+          );
+          await client.query(
+            `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+             SELECT $1,thread_id,post_id,revision_id,$2,sha256($2),'neighbour','MIT','{}',$3,'available',$4
+             FROM unnest($5::uuid[],$6::uuid[],$7::uuid[]) AS row(thread_id,post_id,revision_id)`,
+            [route, body, board.id, transaction, resources, posts, revisions],
+          );
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
+        }
+        await database.admin.query(
+          `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+           SELECT $1,'account',$2,'content.post.create',key,sha256(convert_to(key,'UTF8')),1,1,$3,'{}'
+           FROM unnest($4::text[]) AS key`,
+          [partitionOf(route), newId(0x2345), transaction, resources],
+        );
+      }
+    // Grow both hot-route and unrelated-route content.
     for (let i = previous; i < scale; i++) {
       for (const route of [seedRoute, 0x5678]) {
         await database.admin.query(

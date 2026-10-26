@@ -8,7 +8,7 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -21,10 +21,19 @@ let service: AuthService;
 let bindings: ReturnType<typeof createNativeAccountBindings>;
 let accountId: string;
 let authDatabase: Pool;
+let fixturePool: Pool;
 let token = '';
+let delivered: (() => void) | undefined;
 let serial = 0;
 const issuer = 'https://growth-recovery.auth.test';
 const password = 'native growth recovery password';
+const baselineHistory = 256;
+const historyPerScale = 4;
+const repetitions = 3;
+// Each history item runs native fencing, delivery, password replacement,
+// completion replay and another password-hashing registration. Allow five
+// seconds per item under the six-file gate, including warm-up and captures.
+const growthTimeout = (baselineHistory + 64 * historyPerScale + 3 * (1 + repetitions)) * 5_000;
 const request = (path: string, body: unknown) =>
   service.handler(
     new Request(issuer + path, {
@@ -34,20 +43,18 @@ const request = (path: string, body: unknown) =>
     }),
   );
 async function recover() {
-  await bindings.internalLifecycle.raiseFence({ accountId, key: `growth-fence-${serial++}` });
-  // One admitted start per minute per account. The measured completion needs a fresh proof.
+  // Prepare a fresh delivery without changing any authoritative recovery,
+  // credential, barrier or completion history measured by this series.
   const mailKey = createHmac('sha256', 'native-growth-recovery-persistent-secret-32-bytes')
     .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
     .digest('hex');
-  await authDatabase.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
-  const previous = token;
+  await fixturePool.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
+  await bindings.internalLifecycle.raiseFence({ accountId, key: `growth-fence-${serial++}` });
+  const delivery = new Promise<void>((resolve) => {
+    delivered = resolve;
+  });
   expect((await request('/recovery/start', { email: 'human@growth.test' })).status).toBe(200);
-  // Start returns before the non-enumerating delivery stores the token.
-  const deadline = Date.now() + 5_000;
-  while (token === previous) {
-    if (Date.now() >= deadline) throw new Error('Recovery start did not deliver a token');
-    await Bun.sleep(5);
-  }
+  await delivery;
   const body = { account_id: accountId, token, new_password: password };
   expect((await request('/recovery/complete', body)).status).toBe(200);
   // Exact success replay includes real Auth/current-credential resolution and
@@ -61,6 +68,7 @@ async function unrelated(index: number) {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   fixture = testDatabase();
+  fixturePool = new Pool({ connectionString: fixture.url });
   const database = db.openPool();
   authDatabase = database;
   const system = db.openPool();
@@ -104,6 +112,7 @@ beforeAll(async () => {
     recoveryDelivery: {
       async deliver(value) {
         token = value.token;
+        delivered?.();
       },
     },
     maintenanceSchedule: '0 0 1 1 *',
@@ -118,12 +127,6 @@ beforeAll(async () => {
       password,
     })
   ).accountId;
-  // Real native history on the same owner and unrelated owners, beyond the
-  // small-table scan crossover. None of these rows grants the measured effect.
-  for (let i = 0; i < 256; i++) {
-    await recover();
-    await unrelated(i);
-  }
   // Recovery start seeks "user" by email and completion seeks account by id.
   // Unrelated owners keep both relations past the sequential-scan crossover
   // before the first scale, without matching the measured human.
@@ -144,59 +147,74 @@ beforeAll(async () => {
 afterAll(async () => {
   await host?.stop();
   await db?.close();
+  await fixturePool?.end();
   fixture?.close();
 });
 
-test('native completion growth independent of receipt history', async () => {
-  const report = await checkGrowth(db, {
-    name: 'native recovery completion with all Auth and Access queries',
-    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    // The native DBOS supervisor can overlap a capture with a bounded wake.
-    slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
-    repetitions: 3,
-    async grow(_db, scale, previous) {
-      for (let i = previous * 4; i < scale * 4; i++) {
+test(
+  'native completion growth independent of receipt history',
+  async () => {
+    const report = await checkGrowth(db, {
+      name: 'native recovery completion with all Auth and Access queries',
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      // The native DBOS supervisor can overlap a capture with a bounded wake.
+      slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
+      repetitions,
+      warmups: 1,
+      async grow(_db, scale, previous) {
+        // Real native history on the same owner and unrelated owners, beyond the
+        // small-table scan crossover. None of these rows grants the measured effect.
+        // Native baseline history belongs to growth setup, before warm-up and capture.
+        if (previous === 0) {
+          for (let i = 0; i < baselineHistory; i++) {
+            await recover();
+            await unrelated(i);
+          }
+        }
+        for (let i = previous * historyPerScale; i < scale * historyPerScale; i++) {
+          await recover();
+          await unrelated(baselineHistory + i);
+        }
+        for (const table of [
+          'access.account',
+          'access.lifecycle_fence_receipt',
+          'access.resource_grant',
+          'access.handle_claim',
+          'core.receipt',
+          'core.outbox',
+          'editorial.write_basis',
+        ])
+          await db.admin.query(`VACUUM (ANALYZE) ${table}`);
+        for (const table of [
+          'auth_recovery',
+          'auth_barrier_proof',
+          'auth_recovery_establishment',
+          'auth_effect_receipt',
+          'account',
+          '"user"',
+          'session',
+          'verification',
+        ])
+          await authDatabase.query(`VACUUM (ANALYZE) ${table}`);
+      },
+      async operation() {
         await recover();
-        await unrelated(256 + i);
-      }
+      },
+    });
+    expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
+    for (const sample of report.samples) {
       for (const table of [
+        'public.auth_recovery_establishment',
+        'public.auth_barrier_proof',
+        'public.auth_recovery',
+        'public.auth_effect_receipt',
+        'public.account',
         'access.account',
         'access.lifecycle_fence_receipt',
-        'access.resource_grant',
-        'access.handle_claim',
         'core.receipt',
-        'core.outbox',
-        'editorial.write_basis',
       ])
-        await db.admin.query(`VACUUM (ANALYZE) ${table}`);
-      for (const table of [
-        'auth_recovery',
-        'auth_barrier_proof',
-        'auth_recovery_establishment',
-        'auth_effect_receipt',
-        'account',
-        '"user"',
-        'session',
-        'verification',
-      ])
-        await authDatabase.query(`VACUUM (ANALYZE) ${table}`);
-    },
-    async operation() {
-      await recover();
-    },
-  });
-  expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
-  for (const sample of report.samples) {
-    for (const table of [
-      'public.auth_recovery_establishment',
-      'public.auth_barrier_proof',
-      'public.auth_recovery',
-      'public.auth_effect_receipt',
-      'public.account',
-      'access.account',
-      'access.lifecycle_fence_receipt',
-      'core.receipt',
-    ])
-      expect(sample.cost.relations?.[table]).toBeDefined();
-  }
-}, 600000);
+        expect(sample.cost.relations?.[table]).toBeDefined();
+    }
+  },
+  growthTimeout,
+);

@@ -5,6 +5,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { handleFixture } from './workflow-handle-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 
 let deployment: ReturnType<typeof testDatabase>;
 let fixture: Awaited<ReturnType<typeof handleFixture>>;
@@ -131,8 +132,13 @@ test('DBOS sequences actual member and organization commands and resumes a lost 
   expect(history).toContain('accounts.change-membership');
   expect(history).toContain('accounts.release-membership');
   fixture.approve('member', await token(member));
-  await fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member });
+  // The committed continuation authorizes cleanup, but cannot disclose a
+  // result through the initiating bearer after its account was deleted.
+  await expect(
+    fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
   expect(await fixture.read(member)).toMatchObject({ state: 'deleted', fenced: true });
+  expect((await fixture.database.query('SELECT id FROM "user" WHERE id=$1', [member])).rows).toEqual([]);
 }, 60000);
 
 test('active hold and last owner cannot be released through the durable workflow', async () => {
@@ -353,13 +359,17 @@ test('successful consent and client reductions invalidate already issued JWTs at
   const old = ((await tokenResponse.json()) as { access_token: string }).access_token;
   expect((await fixture.authenticate(old)).kind).toBe('account');
   fixture.approve('consent-reduction', login.token);
-  await fixture.workflows.reduceConsent({
-    key: 'native_consent_reduction',
-    authorization: 'consent-reduction',
-    accountId: actor,
-    clientId: 'reduction-client',
-    scopes: ['read'],
-  });
+  // The reduction commits its fence and effect, then current-authority result
+  // disclosure refuses the initiating bearer that the operation just revoked.
+  await expect(
+    fixture.workflows.reduceConsent({
+      key: 'native_consent_reduction',
+      authorization: 'consent-reduction',
+      accountId: actor,
+      clientId: 'reduction-client',
+      scopes: ['read'],
+    }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
   await expect(fixture.authenticate(old)).rejects.toThrow();
   expect(
     (
@@ -379,6 +389,32 @@ test('successful consent and client reductions invalidate already issued JWTs at
     receiptId: receipt.receipt_id,
   });
 
+  const deleted = await person('deleted_reduction_owner');
+  const deletedLogin = await operatorLogin(deleted);
+  fixture.approve('delete-reduction-owner', deletedLogin.token);
+  await expect(
+    fixture.workflows.deleteAccount({
+      key: 'delete_reduction_owner',
+      authorization: 'delete-reduction-owner',
+      accountId: deleted,
+    }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  await expect(fixture.authenticate(deletedLogin.token)).rejects.toThrow();
+  const deletedAccount = await fixture.read(deleted);
+  expect(deletedAccount).toMatchObject({ state: 'deleted' });
+  expect(
+    (
+      await fixture.database.query('SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2', [
+        deleted,
+        'durable-web',
+      ])
+    ).rows,
+  ).toEqual([{ account_id: deleted }]);
+  const deletedFences = await fixture.kernel.query(
+    'SELECT receipt_id FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 ORDER BY receipt_id',
+    [routeOf(deleted), deleted],
+  );
+
   const administrator = await person('client_reduction_admin');
   const adminLogin = await operatorLogin(administrator);
   fixture.approve('client-reduction', adminLogin.token);
@@ -395,4 +431,22 @@ test('successful consent and client reductions invalidate already issued JWTs at
     (await fixture.database.query('SELECT scopes FROM auth_client WHERE client_id=$1', ['durable-web'])).rows,
   ).toEqual([{ scopes: ['account:update'] }]);
   expect((await fixture.database.query('SELECT client_id FROM auth_client_reduction')).rows).toEqual([]);
+  expect(await fixture.read(deleted)).toEqual(deletedAccount);
+  expect(
+    (
+      await fixture.kernel.query(
+        'SELECT receipt_id FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 ORDER BY receipt_id',
+        [routeOf(deleted), deleted],
+      )
+    ).rows,
+  ).toEqual(deletedFences.rows);
+  expect(
+    (
+      await fixture.database.query(
+        "SELECT receipt_id FROM auth_effect_receipt WHERE account_id=$1 AND purpose='client-reduction'",
+        [deleted],
+      )
+    ).rows,
+  ).toEqual([]);
+  expect((await fixture.database.query('SELECT id FROM session WHERE "userId"=$1', [deleted])).rows).toEqual([]);
 }, 60000);

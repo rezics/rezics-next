@@ -242,6 +242,11 @@ and a hidden growth under `constant` ones. `checkGrowth` runs `VACUUM (ANALYZE)`
 
 ## HTTP contract
 
+JSON request bodies are validated against the declared body schema without type coercion. JSON strings are
+refused for numeric or boolean fields, as are numbers for string fields, with `400 invalid_request` and the field's
+JSON pointer. The app composition compiles each route's body check once and runs it before Elysia's coercing
+validation. Query and path parameters retain type coercion because their values arrive as strings.
+
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client
 declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
 stale.
@@ -496,3 +501,7 @@ persistent `content.collection.hourly` DBOS schedule in UTC. Each sweep visits t
 partition numbers with at most eight partition workflows in flight and batches of at most 100.
 Collection jobs obtain authoritative command time; the schedule timestamp cannot change the
 24-hour retention cutoff. The shared worker owns draining work and closing resources on shutdown.
+
+`CONTENT_TEST_COLLECTION_PARTITIONS` optionally restricts collection to a comma-separated list of distinct
+partition numbers from 0 through 4095 for worker fixtures. Leave it unset in deployment so collection visits
+all partitions.

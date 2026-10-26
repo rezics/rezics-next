@@ -81,7 +81,7 @@ function instrumentPool(pool: Pool, state: CaptureState): void {
 export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promise<GrowthDatabase> {
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 
-  const pool = createPool(url);
+  const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const libraryPools = new Set<pg.Pool>();
   const state: CaptureState = { active: undefined, setupTasks: new Set() };

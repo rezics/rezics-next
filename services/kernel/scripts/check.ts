@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { accessSync, constants, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ import {
   writeTimings,
 } from './check-timings.ts';
 import { affectedTests } from './affected.ts';
-import { buildSearchImage, waitForSearch } from './search.ts';
+import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -324,6 +324,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
   return dockerCommand([
     'run',
     '-d',
+    ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
     '-p',
@@ -411,12 +412,53 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
+let remoteRun: ReturnType<typeof Bun.spawn> | undefined;
+
+/** The hosts file when this check should run on a development host: named, readable and not already on one. */
+function remoteHostsFile(): string | null {
+  const file = process.env.KERNEL_CHECK_REMOTE;
+  if (!file || process.env.KERNEL_CHECK_ON_REMOTE) return null;
+  try {
+    accessSync(file, constants.R_OK);
+    return file;
+  } catch {
+    process.stderr.write(`KERNEL_CHECK_REMOTE ${file} is not readable; running the check locally\n`);
+    return null;
+  }
+}
+
+/** The plan was computed here, where Git history is; the host runs exactly its files. */
+async function runRemotely(plan: CheckPlan): Promise<void> {
+  const root = resolve(directory, '../..');
+  const forwarded = process.env.KERNEL_CHECK_CONCURRENCY
+    ? ['env', `KERNEL_CHECK_CONCURRENCY=${process.env.KERNEL_CHECK_CONCURRENCY}`]
+    : [];
+  remoteRun = Bun.spawn(
+    [
+      process.execPath,
+      resolve(root, 'scripts/remote-check.ts'),
+      '--cwd',
+      relative(root, directory),
+      root,
+      '--',
+      ...forwarded,
+      'bun',
+      'scripts/check.ts',
+      ...(plan.files ?? []),
+    ],
+    { cwd: root, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
+  );
+  process.exitCode = await remoteRun.exited;
+}
+
 async function main(): Promise<void> {
   const { plan, announcement } = planCheck(process.argv.slice(2), directory);
   if (announcement) console.log(announcement);
   const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrationFiles, new Date());
 
+  // An affected selection of no tests stays here: the remote check reads an empty file list as the whole suite.
+  if (remoteHostsFile() && plan.files?.length !== 0) return await runRemotely(plan);
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
@@ -426,6 +468,7 @@ async function main(): Promise<void> {
   searchContainer = docker([
     'run',
     '-d',
+    ...cgroupArgs(),
     '--label',
     `rezics.kernel.check.pid=${pid}`,
     '-p',
@@ -532,11 +575,14 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
+  // A run handed to a host must clean up there; the hand-off removes its run directory and releases its slot on a signal.
   process.on('SIGINT', () => {
+    if (remoteRun) return void remoteRun.kill('SIGINT');
     cleanup();
     process.exit(130);
   });
   process.on('SIGTERM', () => {
+    if (remoteRun) return void remoteRun.kill('SIGTERM');
     cleanup();
     process.exit(143);
   });

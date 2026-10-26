@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { t } from 'elysia';
 import { createApp } from '../../src/http/app.ts';
@@ -15,7 +16,7 @@ test('mounted declarations and one native counter statement stay bounded as rout
   const lookup = spyOn(MountedRouteCatalogue.prototype, 'find');
   try {
     for (const units of [1, 100] as const) {
-      await db.admin.query('TRUNCATE access.write_rate_counter');
+      await resetGrowthTables(db.admin, ['access.write_rate_counter']);
       const real = createWriteRateLimiter({
         secret,
         overrides: '{"anonymous":{"write":{"maximum":100000,"seconds":86400}}}',

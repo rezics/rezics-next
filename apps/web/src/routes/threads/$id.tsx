@@ -155,7 +155,7 @@ function PostSlot({
   const menuButton = useRef<HTMLButtonElement>(null);
   const deleteKey = useRef<string | undefined>(undefined);
   const restoreMenuFocus = useRef(false);
-  const ownsPost = viewerId !== undefined && post.authorId === viewerId;
+  const ownsPost = viewerId !== undefined && post.availability === 'available' && post.authorId === viewerId;
 
   useEffect(() => {
     if (restoreMenuFocus.current && !editing) {

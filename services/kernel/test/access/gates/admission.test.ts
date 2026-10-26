@@ -21,6 +21,8 @@ const { createKernel } = await import('../../../src/http/kernel.ts');
 const { defineRateLimit } = await import('../../../src/http/rate-limit.ts');
 const appModule = await import('../../../src/http/app.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
+const { deriveAccess } = await import('../../../src/access/derived-access.ts');
+const { createGrantCommands } = await import('../../../src/access/grant-commands.ts');
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -30,10 +32,10 @@ const audience = 'https://gate-admission.api.test';
 const password = 'native platform gate registration password';
 const routeKey = new Uint8Array(32).fill(91);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) };
-const operationAction = 'context:create';
+const operationAction = 'fixture:create';
 const groupAction = 'gate:fixture_group';
 const group = 'fixture_group';
-const clientScopes = ['access:grant', 'context:create', 'exposure:open', 'exposure:close', 'gate:any', groupAction];
+const clientScopes = ['access:grant', operationAction, 'exposure:open', 'exposure:close', 'gate:any', groupAction];
 
 type Person = { accountId: string; email: string; bearer: string };
 const pool = createPool(databaseUrl);
@@ -250,9 +252,9 @@ beforeAll(async () => {
   await host.start();
 
   staff = await person('gate_platform_staff', clientScopes);
-  ordinary = await person('gate_ordinary_account', ['context:create']);
-  gated = await person('gate_group_tester', ['context:create']);
-  principal = await person('gate_ungranted_principal', ['context:create']);
+  ordinary = await person('gate_ordinary_account', [operationAction]);
+  gated = await person('gate_group_tester', [operationAction]);
+  principal = await person('gate_ungranted_principal', [operationAction]);
 
   const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', staff.accountId], {
     cwd: root,
@@ -267,6 +269,40 @@ beforeAll(async () => {
   ]);
   expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
   await grant(staff.bearer, gated.accountId, groupAction);
+  // The native fixture owns this action; platform governance does not include it.
+  // Seed staff once through the native command, retaining real account admission
+  // and access:grant authorization. Later grants use the ordinary route.
+  const fixtureAccess = deriveAccess(access, {
+    async authorize(client, actor, action, resource, evidence, time) {
+      if (
+        actor.kind === 'account' &&
+        actor.accountId === staff.accountId &&
+        action === operationAction &&
+        resource.route === PLATFORM_RESOURCE.route &&
+        resource.id === PLATFORM_RESOURCE.id
+      )
+        return true;
+      return access.authorize(client, actor, action, resource, evidence, time);
+    },
+  });
+  const context = { pool, deadline: Date.now() + 20_000 };
+  const actor = await access.authenticate(staff.bearer, context);
+  const seeded = await createGrantCommands({ pool, access: fixtureAccess, managementAction: 'access:grant' }).create(
+    { ...context, actor },
+    {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: staff.accountId },
+      actions: [operationAction],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    },
+  );
+  expect(seeded.value).toEqual({
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: staff.accountId },
+    actions: [operationAction],
+    valid: '(,)',
+  });
 }, 90_000);
 
 afterAll(async () => {

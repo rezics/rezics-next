@@ -25,7 +25,7 @@ WITH input AS NOT MATERIALIZED (
 )
 INSERT INTO community.realm_member_terminal
   (route, realm_id, account_id, reservation_id, transaction_id, at)
-SELECT c.route, c.realm_id, c.account_id, c.reservation_id, i.transaction_id, i.at
+SELECT i.route, c.realm_id, c.account_id, c.reservation_id, i.transaction_id, i.at
 FROM changed c
 CROSS JOIN input i
 ON CONFLICT (route, realm_id, account_id, reservation_id) DO NOTHING

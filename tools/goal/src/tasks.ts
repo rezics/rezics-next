@@ -115,6 +115,8 @@ export type RetryOptions = {
   consultation?: string;
   excludePools?: string[];
   conflictFiles?: string[];
+  /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
+  expectedAttempt?: number;
 };
 export class HeldTaskConflictError extends Error {
   constructor(readonly detail: string) {
@@ -283,6 +285,8 @@ export class WorkerTasks {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
+      if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
         throw new Error(`cannot retry ${task.state} task`);

@@ -1,6 +1,6 @@
+import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { subjectSource } from '../semantic/search-source.ts';
-import { ConfigError } from '../server.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createOpenSearch } from './opensearch.ts';
 import { startSearchIndexing } from './runner.ts';

@@ -12,6 +12,65 @@ type Progress = {
   completed: boolean;
 };
 
+type ReductionOwner = { clientId: string; operationId: string; accountId: string };
+
+async function advanceReductionOwner(connection: PoolClient, row: Progress, input: ReductionOwner, deny: () => never) {
+  const acknowledged = (
+    await connection.query<{ done: boolean }>('SELECT $1::text <= $2::text AS done', [
+      input.accountId,
+      row.after_account,
+    ])
+  ).rows[0]!.done;
+  if (acknowledged) return;
+  const next = (
+    await connection.query<{ account_id: string }>(
+      'SELECT account_id FROM auth_consent WHERE client_id=$1 AND account_id>$2 ORDER BY account_id LIMIT 1',
+      [input.clientId, row.after_account],
+    )
+  ).rows[0];
+  if (next?.account_id !== input.accountId) deny();
+  await connection.query('UPDATE auth_client_reduction_progress SET after_account=$2 WHERE operation_id=$1', [
+    input.operationId,
+    input.accountId,
+  ]);
+}
+
+/** Deleted owners cannot use tokens, but their retained consent still occupies the cursor. */
+export async function completeDeletedClientReductionOwner(
+  pool: Pool,
+  readAccount: (accountId: string) => Promise<{ accountId: string; state: string } | null>,
+  input: ReductionOwner,
+): Promise<boolean> {
+  const deny: () => never = () => {
+    throw new Error('Client reduction owner denied');
+  };
+  const current = await readAccount(input.accountId);
+  if (!current || current.accountId !== input.accountId) deny();
+  if (current.state !== 'deleted') return false;
+  // Deletion is terminal. Once observed, no new floor, receipt or Auth cleanup
+  // is needed; retain the same client lock and next-owner check as barrier completion.
+  const connection = await pool.connect();
+  try {
+    await connection.query('BEGIN');
+    await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-client:${input.clientId}`]);
+    const row = (
+      await connection.query<Progress>(
+        'SELECT * FROM auth_client_reduction_progress WHERE operation_id=$1 FOR UPDATE',
+        [input.operationId],
+      )
+    ).rows[0];
+    if (!row || row.client_id !== input.clientId || row.completed) deny();
+    await advanceReductionOwner(connection, row, input, deny);
+    await connection.query('COMMIT');
+    return true;
+  } catch (error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 /** Native client consent/issuance authority; no account/profile facts live here. */
 export function clientAuthority(
   pool: Pool,
@@ -240,24 +299,7 @@ export function clientAuthority(
           saved.minimum_authn_epoch !== receipt.minimumAuthnEpoch
         )
           deny();
-        const acknowledged = (
-          await connection.query<{ done: boolean }>('SELECT $1::text <= $2::text AS done', [
-            input.accountId,
-            row.after_account,
-          ])
-        ).rows[0]!.done;
-        if (acknowledged) return;
-        const next = (
-          await connection.query<{ account_id: string }>(
-            'SELECT account_id FROM auth_consent WHERE client_id=$1 AND account_id>$2 ORDER BY account_id LIMIT 1',
-            [input.clientId, row.after_account],
-          )
-        ).rows[0];
-        if (next?.account_id !== input.accountId) deny();
-        await connection.query('UPDATE auth_client_reduction_progress SET after_account=$2 WHERE operation_id=$1', [
-          input.operationId,
-          input.accountId,
-        ]);
+        await advanceReductionOwner(connection, row, input, deny);
       });
     },
     async finishClientReduction(input) {

@@ -41,6 +41,23 @@ counted.query = ((query: QueryConfig) => {
   queries.push(query);
   return pool.query(query);
 }) as Pool['query'];
+// Permission preparation releases each separate anchor's borrowed connection.
+// Observe those queries as well as direct pool queries before resource checkout.
+counted.connect = (async () => {
+  const client = await pool.connect();
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === 'query')
+        return (query: QueryConfig) => {
+          if (resourceCheckedOut) throw new Error('Evidence must precede resource checkout');
+          queries.push(query);
+          return target.query(query);
+        };
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}) as Pool['connect'];
 const context = () => ({ pool: counted, deadline: Date.now() + 3000 });
 const recovery = new Map<object, RecoveryEvidence>();
 const lifecycle = createLifecycleInternals({
@@ -181,15 +198,11 @@ beforeAll(async () => {
 }, timeout);
 
 beforeEach(async () => {
-  for (const table of [
-    'resource_grant',
-    'resource_denial',
-    'principal_assignment',
-    'organization_member',
-    'membership_inverse',
-    'account',
-  ])
-    await pool.query(`DELETE FROM access.${table}`);
+  // Reset this isolated fixture without pretending inverse cleanup has a
+  // terminal compensation proof. Production DELETE remains guarded.
+  await pool.query(`TRUNCATE access.resource_grant, access.resource_denial,
+    access.principal_assignment, access.organization_member, access.membership_inverse,
+    access.account CASCADE`);
   for (const id of [person, principal, organization]) await account(id);
   await assignments.create({ principalId: principal, requestId, assignedActorId: person, valid: '(,)' });
   await grant(person);
@@ -309,9 +322,14 @@ test('fenced or missing organization cannot supply a role grant while actor and 
   const access = verifier();
   const jwt = await delegatedToken();
   expect(await run(access, jwt)).toBe(true);
-  const receipt = await fence(organization);
+  await fence(organization);
   expect(await run(access, jwt)).toBe(false);
-  await restore(receipt.value);
+  // Human credential recovery cannot clear an organization's fence. Restore
+  // the seeded organization directly to isolate its contribution to the ACL.
+  await pool.query('UPDATE access.account SET authn_fenced=false WHERE route=$1 AND account_id=$2', [
+    routeOf(organization),
+    organization,
+  ]);
   expect(await run(access, jwt)).toBe(true);
   await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [
     routeOf(organization),

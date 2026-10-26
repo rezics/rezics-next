@@ -239,6 +239,7 @@ export async function reserveMedia(
   let insertedTransaction: string | undefined;
   let preparedChain: MediaParent[] = [];
   let disclosure: (AccessCheck | null)[] = [];
+  let boardRealmId: string | null = null;
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let boardRead: AccessCheck | undefined;
   let threadCreate: AccessCheck | undefined;
@@ -277,12 +278,9 @@ export async function reserveMedia(
           const check = disclosure[i];
           if (check && !(await check(client, time))) return false;
         }
-        const boardId = current.at(-1)!.board_id!;
-        const currentBoard = await mediaParentBoard(client, boardId);
-        if (
-          dependencies.realmParticipation &&
-          !realmParticipationMatches(participation.get(time), currentBoard.realm_id)
-        )
+        // The board lives on its own anchor and is read only in prepare; a parent
+        // checkout on the container's partition never reads it.
+        if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), boardRealmId))
           throw new GrantDeniedError();
         return true;
       },
@@ -365,7 +363,6 @@ export async function reserveMedia(
         { route: route(boardId), id: boardId },
         { pool: dependencies.pool, deadline: context.deadline },
       );
-      let boardRealmId: string | null = null;
       await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, async (client) => {
         const board = await mediaParentBoard(client, boardId);
         boardRealmId = board.realm_id;

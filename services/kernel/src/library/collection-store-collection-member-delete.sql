@@ -1,4 +1,4 @@
-WITH input AS (
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :collection_id::uuid AS collection_id,
          :member_id::uuid AS member_id, :time::timestamptz AS time, :transaction_id::uuid AS transaction_id
 ), deleted AS (

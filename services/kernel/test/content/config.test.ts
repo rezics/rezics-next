@@ -11,11 +11,7 @@ afterEach(() => {
 test('content API can start without Turnstile credentials and anonymous admission remains closed', async () => {
   const config = readContentConfig({});
   expect(config.fetchConfig).toBeUndefined();
-  expect(config.anonymousVerifier).toBeDefined();
-  await expect(config.anonymousVerifier!.verify('untrusted-token')).resolves.toEqual({
-    ok: false,
-    reason: 'unavailable',
-  });
+  expect(config.anonymousVerifier).toBeUndefined();
 });
 
 test('content configuration binds the real Siteverify transport to the report hostname and action', async () => {

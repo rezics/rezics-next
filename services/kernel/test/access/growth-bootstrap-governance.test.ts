@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -70,9 +71,17 @@ async function clearInstallation() {
 
 for (const mode of ['first', 'no-op', 'refusal'] as const) {
   test(`checkGrowth 1x/8x/64x ${mode}: native operator command and exact child CLI use bounded seeks`, async () => {
-    await db.admin.query(`TRUNCATE access.governance_bootstrap, access.resource_role_grant, access.resource_grant,
-      access.operator_fence_page, access.committed_continuation, access.account, core.receipt, core.outbox,
-      editorial.write_basis`);
+    await resetGrowthTables(db.admin, [
+      'access.governance_bootstrap',
+      'access.resource_role_grant',
+      'access.resource_grant',
+      'access.operator_fence_page',
+      'access.committed_continuation',
+      'access.account',
+      'core.receipt',
+      'core.outbox',
+      'editorial.write_basis',
+    ]);
     await db.admin.query('DELETE FROM semantic.context WHERE route=0 AND context_id<>$1', [PLATFORM_RESOURCE.id]);
     // Starting account facts only; the functional test creates real humans with
     // lifecycle commands and verifies native Auth-issued sessions separately.
@@ -200,6 +209,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
         const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
         expect(code).toBe(mode === 'refusal' ? 1 : 0);
         if (mode !== 'refusal') expect(stderr).toBe('');
+        else expect(stderr).toContain('BootstrapGovernanceUnavailableError');
         const raw = JSON.parse(readFileSync(output, 'utf8')) as Capture;
         const cost = costOf(raw);
         expect(cost.statements, stderr).toBeGreaterThan(0);
@@ -222,7 +232,8 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }
     for (const sample of children) {
-      // The child issues the same statements as the in-process command.
+      // The CLI runs the same governance and standing-parent commands. Catalog
+      // validation is classified separately from their operation statements.
       expect(sample.cost.statements).toBe(mode === 'first' ? 12 : mode === 'refusal' ? 3 : 10);
       expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }

@@ -40,7 +40,7 @@ async function append(
       board_id,availability,recorded_transaction_id,recorded_at)
      SELECT $1::integer,$2::uuid,$3::uuid,r.revision_id,
        CASE WHEN (r.position-1+$5::integer)%11=10 THEN NULL::bytea ELSE $6::bytea END,
-       sha256($6::bytea),
+       CASE WHEN (r.position-1+$5::integer)%11=10 THEN NULL::bytea ELSE sha256($6::bytea) END,
        CASE WHEN (r.position-1+$5::integer)%11=10 THEN NULL::text ELSE 'Historical edition' END,
        'CC-BY-SA-4.0',ARRAY[$7::uuid],$8::uuid,
        CASE WHEN (r.position-1+$5::integer)%11=10 THEN 'erased' ELSE 'available' END,$9::uuid,

@@ -8,7 +8,7 @@ import { subjectPartition, type IndexedSubject } from '../../src/search/source.t
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createFakeSource } from './support/fake-source.ts';
-import { activateManifests, manifestQuery, manifestSubjects } from './support/manifests.ts';
+import { activateManifests, manifestQuery, manifestSubjects, seedActivationHistory } from './support/manifests.ts';
 
 const searchUrl = process.env.OPENSEARCH_URL;
 if (!searchUrl) throw new Error('OPENSEARCH_URL must name the check node');
@@ -84,6 +84,7 @@ test('filtered search and facet counts stay within budget at 1, 10 and 100 verti
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(growthDb, scale, previous) {
       release = await activateManifests(growthDb, scale);
+      if (previous === 0) await seedActivationHistory(growthDb);
       await indexSubjects(manifestSubjects(release, previous, scale));
       fields.set(scale, await mappedFields());
     },

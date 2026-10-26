@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { PoolClient } from 'pg';
@@ -38,9 +39,14 @@ afterAll(async () => {
 });
 for (const mode of ['generic', 'multi-action'] as const) {
   test(`${mode} command admission adds one account seek per attempt at all three growth scales`, async () => {
-    await db.admin.query(
-      'TRUNCATE access.account, access.membership_inverse, access.organization_member, access.principal_assignment, access.resource_grant, core.receipt',
-    );
+    await resetGrowthTables(db.admin, [
+      'access.account',
+      'access.membership_inverse',
+      'access.organization_member',
+      'access.principal_assignment',
+      'access.resource_grant',
+      'core.receipt',
+    ]);
     const f = await actorFixture(db.pool, db.admin);
     await db.admin.query(
       "UPDATE access.organization_member SET valid='[2000-01-01,)' WHERE route=$1 AND organization_id=$2",

@@ -205,7 +205,7 @@ test('logical erasure preserves exact revision metadata and bounded immutable me
       [id('bad-media'), id('media', route + 1), route, id('revision-0')],
     );
     await client.query(
-      "UPDATE content.revision SET body=NULL,search_text=NULL,availability='erased' WHERE route=$1 AND revision_id=$2",
+      "UPDATE content.revision SET body=NULL,body_sha256=NULL,search_text=NULL,availability='erased' WHERE route=$1 AND revision_id=$2",
       [route, id('revision-0')],
     );
     expect(
@@ -215,7 +215,7 @@ test('logical erasure preserves exact revision metadata and bounded immutable me
           id('revision-0'),
         ])
       ).rows,
-    ).toEqual([{ ...before[0], body: null, search_text: null, availability: 'erased' }]);
+    ).toEqual([{ ...before[0], body: null, body_sha256: null, search_text: null, availability: 'erased' }]);
   });
 });
 

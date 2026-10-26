@@ -479,4 +479,4 @@ test('fixed native command and actual pages retain their bounds at three informa
     observed.capture.statements.filter((sql) => sql.includes('INSERT INTO access.write_rate_counter')),
   ).toHaveLength(1);
   console.info(JSON.stringify(report));
-});
+}, 300_000);

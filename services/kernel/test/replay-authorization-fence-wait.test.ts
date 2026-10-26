@@ -145,7 +145,7 @@ test('writable recovery reauthorizes current grants before any receipt or body',
     const result = await pending;
     expect(result.error).toBeInstanceOf(LifecycleDeniedError);
     expect(result.value).toBeNull();
-    expect(f.counts).toEqual({ prepare: 1, authorize: 4 });
+    expect(f.counts).toEqual({ prepare: 2, authorize: 4 });
     expect(trace.body).toBe(1);
     expect(await f.snapshot()).toEqual(before);
   } finally {
@@ -153,7 +153,7 @@ test('writable recovery reauthorizes current grants before any receipt or body',
   }
 });
 
-test('evidence expires during fence wait and denies only after becoming writable', async () => {
+test('evidence expires during fence wait and refreshes only after becoming writable', async () => {
   const f = await fixture(0xd130);
   const before = await f.snapshot();
   try {
@@ -164,10 +164,16 @@ test('evidence expires during fence wait and denies only after becoming writable
     expect(trace.body).toBe(1);
     await f.state('active');
     const result = await pending;
-    expect(result.error).toBeInstanceOf(LifecycleDeniedError);
-    expect(result.value).toBeNull();
-    expect(f.counts).toEqual({ prepare: 1, authorize: 4 });
-    expect(await f.snapshot()).toEqual(before);
+    expect(result.error).toBeNull();
+    expect(result.value?.replayed).toBe(false);
+    expect(f.counts).toEqual({ prepare: 2, authorize: 6 });
+    expect(trace.body).toBe(2);
+    expect(await f.snapshot()).toEqual({
+      position: String(BigInt(before.position) + 1n),
+      receipts: before.receipts + 1,
+      events: before.events + 1,
+      name: 'written',
+    });
   } finally {
     await f.state('active');
   }
@@ -183,7 +189,7 @@ test('writable recovery executes exactly one effect after the rolled back attemp
     const result = await pending;
     expect(result.error).toBeNull();
     expect(result.value?.replayed).toBe(false);
-    expect(f.counts).toEqual({ prepare: 1, authorize: 6 });
+    expect(f.counts).toEqual({ prepare: 2, authorize: 6 });
     expect(trace.body).toBe(2);
     expect(await f.snapshot()).toEqual({
       position: String(BigInt(before.position) + 1n),

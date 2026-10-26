@@ -1,6 +1,5 @@
 WITH args AS (
-  SELECT :route::integer AS route,
-         :account_id::uuid AS account_id,
+  SELECT :account_id::uuid AS account_id,
          :target_id::uuid AS target_id,
          :target_type::text AS target_type,
          :state::text AS state,
@@ -11,7 +10,7 @@ WITH args AS (
 )
 INSERT INTO library.follow (
   route, account_id, target_id, target_type, state, reason, created_at, updated_at, transaction_id
-) SELECT route, account_id, target_id, target_type, state, reason, time, time, transaction_id
+) SELECT :route::integer, account_id, target_id, target_type, state, reason, time, time, transaction_id
   FROM args
 ON CONFLICT (route, account_id, target_id) DO UPDATE
 SET target_type = EXCLUDED.target_type,

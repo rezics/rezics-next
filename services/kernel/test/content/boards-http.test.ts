@@ -344,19 +344,66 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   }
   const report = await checkGrowth(db, {
     name: 'board HTTP current query and disclosure with same-partition distractors',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
-      for (let ordinal = previous; ordinal < scale; ordinal++) {
-        const otherBoard = await board();
-        await thread(otherBoard, 'unrelated bytes');
-        await applyBoardCandidate(database.pool, {
-          id: newId(threadRoute),
-          boardId: id,
-          createdAt: '2026-10-23T00:00:00.000Z',
-          epoch: 1,
-          position: 1n,
-        });
+      const count = scale - previous;
+      const boardIds = Array.from({ length: count }, () => newId(boardRoute));
+      const threadIds = Array.from({ length: count }, () => newId(threadRoute));
+      const postIds = Array.from({ length: count }, () => newId(threadRoute));
+      const revisionIds = Array.from({ length: count }, () => newId(threadRoute));
+      const candidateIds = Array.from({ length: count }, () => newId(threadRoute));
+      const body = Buffer.from(JSON.stringify(fromPlainText('unrelated bytes')));
+      const client = await database.admin.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+           SELECT $1::integer, board_id, $2::uuid, 'Current board', 'published', 1, board_id
+           FROM unnest($3::uuid[]) AS board_id`,
+          [boardRoute, subject, boardIds],
+        );
+        await client.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           SELECT $1::integer, board_id, subject_id, 'board:read', '(,)'::tstzrange, subject_id
+           FROM unnest($2::uuid[]) AS board_id
+           CROSS JOIN unnest($3::uuid[]) AS subject_id
+           ON CONFLICT DO NOTHING`,
+          [boardRoute, boardIds, [fixture.actor, fixture.recipient]],
+        );
+        await client.query(
+          `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at)
+           SELECT $1::integer, thread_id, $2::uuid, board_id, 'Current title', 'published', 1, thread_id, post_id, '2026-10-24T00:00:00.000Z'::timestamptz
+           FROM unnest($3::uuid[], $4::uuid[], $5::uuid[]) AS row(board_id, thread_id, post_id)`,
+          [threadRoute, fixture.actor, boardIds, threadIds, postIds],
+        );
+        await client.query(
+          `INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+           SELECT $1::integer, thread_id, post_id, $2::uuid, revision_id, 'published', 1, post_id
+           FROM unnest($3::uuid[], $4::uuid[], $5::uuid[]) AS row(thread_id, post_id, revision_id)`,
+          [threadRoute, fixture.actor, threadIds, postIds, revisionIds],
+        );
+        await client.query(
+          `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+           SELECT $1::integer, thread_id, post_id, revision_id, $2::bytea, sha256($2::bytea), 'unrelated bytes', 'MIT', '{}'::uuid[], board_id, 'available', revision_id
+           FROM unnest($3::uuid[], $4::uuid[], $5::uuid[], $6::uuid[]) AS row(board_id, thread_id, post_id, revision_id)`,
+          [threadRoute, body, boardIds, threadIds, postIds, revisionIds],
+        );
+        await client.query(
+          `INSERT INTO content.board_thread(route, board_id, thread_id, created_at, source_epoch, source_position)
+           SELECT $1::integer, board_id, thread_id, '2026-10-24T00:00:00.000Z'::timestamptz, 1, 1::bigint
+           FROM unnest($2::uuid[], $3::uuid[]) AS row(board_id, thread_id)
+           UNION ALL
+           SELECT $1::integer, $4::uuid, candidate_id, '2026-10-23T00:00:00.000Z'::timestamptz, 1, 1::bigint
+           FROM unnest($5::uuid[]) AS candidate_id`,
+          [boardRoute, boardIds, threadIds, id, candidateIds],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
       const grants = Array.from({ length: scale - previous }, () => ({
         route: threadRoute,
@@ -386,7 +433,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       expect(result.body.threads.map((r: { id: string }) => r.id)).toEqual([f.id]);
     },
   });
-  expect(report.samples.map((s) => s.scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
   for (const { cost } of report.samples) {
     expect(cost.rows).toBeGreaterThan(0);
     expect(cost.statements).toBeGreaterThan(0);

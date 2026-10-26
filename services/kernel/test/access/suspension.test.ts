@@ -30,6 +30,9 @@ const audience = 'https://suspension.api.test';
 const password = 'native grant routes registration password';
 const routeKey = new Uint8Array(32).fill(71);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
+// Auth provisioning has a 120 s command budget; each of three registrations
+// waits up to 30 s for pending, credential and activation.
+const setupTimeout = 120_000 + 3 * 3 * 30_000;
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let authDatabase: ReturnType<typeof testDatabase>;
 let authPool: Pool;
@@ -218,7 +221,7 @@ beforeAll(async () => {
     stderr: 'pipe',
   });
   expect(await bootstrap.exited).toBe(0);
-}, 60000);
+}, setupTimeout);
 afterAll(async () => {
   await host?.stop();
   authDatabase?.close();
@@ -415,7 +418,7 @@ test('strict input, anonymous requests and wrong-resource authority have zero ef
   expect((await call(recipient.bearer, pathFor(target.accountId), {})).response.status).toBe(403);
 });
 
-test('membership, first-owner and operator reservations fail closed and remain held indefinitely', async () => {
+test('suspension preserves membership, first-owner and operator reservations indefinitely', async () => {
   const owner = await person('held_owner');
   const member = await person('held_member');
   const operator = await person('held_operator');
@@ -447,9 +450,30 @@ test('membership, first-owner and operator reservations fail closed and remain h
   for (const subject of [owner, member, operator]) {
     const before = await account(subject.accountId);
     const effectsBefore = await effects();
-    expect((await call(root.bearer, pathFor(subject.accountId), {})).response.status).toBe(403);
-    expect(await account(subject.accountId)).toEqual(before);
-    expect(await effects()).toEqual(effectsBefore);
+    expect((await call(root.bearer, pathFor(subject.accountId), {})).response.status).toBe(200);
+    const after = await account(subject.accountId);
+    expect(after).toMatchObject({
+      ...before,
+      state: 'suspended',
+      authn_fenced: true,
+      minimum_authn_epoch: String(Number(before.minimum_authn_epoch) + 1),
+      fence_receipt_id: expect.any(String),
+      transaction_id: expect.any(String),
+    });
+    const effectsAfter = (await effects())[0]!;
+    expect(effectsAfter).toEqual({
+      ...effectsBefore[0]!,
+      receipts: effectsBefore[0]!.receipts + 1,
+      events: effectsBefore[0]!.events + 1,
+    });
+    expect(
+      (
+        await db.admin.query(
+          'SELECT count(*)::int AS count FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2',
+          [routeOf(subject.accountId), subject.accountId],
+        )
+      ).rows,
+    ).toEqual([{ count: 1 }]);
   }
   expect(
     (
@@ -493,7 +517,7 @@ test('concurrent retries have one effect; a different command cannot transition 
   expect(await account(pending)).toEqual(pendingBefore);
 });
 
-test('a native responsibility reservation races suspension without exposing a held terminal account', async () => {
+test('a native responsibility reservation races suspension and cannot block the safety transition', async () => {
   const subject = await person('reservation_race');
   const before = await account(subject.accountId);
   const { createSuspensionCommands } = await import('../../src/access/suspension.ts');
@@ -511,15 +535,21 @@ test('a native responsibility reservation races suspension without exposing a he
   ]);
   db.pool.options.max = 1;
   const after = await account(subject.accountId);
-  if (suspended.status === 'fulfilled') {
-    expect(reserved.status).toBe('rejected');
-    expect(after).toMatchObject({
-      state: 'suspended',
-      authn_fenced: true,
-      minimum_authn_epoch: String(Number(before.minimum_authn_epoch) + 1),
-    });
+  expect(suspended.status).toBe('fulfilled');
+  expect(after).toMatchObject({
+    state: 'suspended',
+    authn_fenced: true,
+    minimum_authn_epoch: String(Number(before.minimum_authn_epoch) + 1),
+  });
+  const holds = (
+    await db.admin.query(
+      'SELECT reservation_id::text FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2',
+      [routeOf(subject.accountId), subject.accountId],
+    )
+  ).rows;
+  if (reserved.status === 'fulfilled') {
+    expect(holds).toEqual([{ reservation_id: reserved.value.value.reservationId }]);
   } else {
-    expect(reserved.status).toBe('fulfilled');
-    expect(after).toEqual(before);
+    expect(holds).toEqual([]);
   }
 });

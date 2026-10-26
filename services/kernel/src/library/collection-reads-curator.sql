@@ -1,4 +1,4 @@
-WITH args AS (
+WITH args AS NOT MATERIALIZED (
   SELECT :route::integer AS route,
          :curator_account_id::uuid AS curator_account_id,
          :public_only::boolean AS public_only,

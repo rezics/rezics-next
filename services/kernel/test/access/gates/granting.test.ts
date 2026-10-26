@@ -144,108 +144,113 @@ async function formula(bearer: string, action: string): Promise<{ allowed: boole
   });
 }
 
-beforeAll(async () => {
-  kernel = createKernel({
-    pool,
-    routeKey,
-    tokens,
-    writeRate: {
-      async spend() {
-        return { allowed: true as const };
-      },
-    },
-    access: () => {
-      if (access) return access;
-      const actions = new Map(actionCatalogue(kernel));
-      for (const action of gates) actions.set(action, { anonymous: false });
-      access = createAccess({
-        actions,
-        auth: {
-          issuer,
-          audience,
-          jwksUrl: `${issuer}/.well-known/jwks.json`,
-          fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-        },
-      });
-      return access;
-    },
-  });
-  scopes = ['access:grant', 'gate:any', group, otherGroup, 'thread:create'];
-  authDatabase = testDatabase();
-  authPool = new Pool({ connectionString: authDatabase.url });
-  const signingKey = {
-    ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-    kid: 'gate-grants',
-  };
-  const proofs = createNativeWorkflowProofPorts({ database: authPool });
-  const registration = createRegistrationProofBindings({ pool, referenceKeys: tokens });
-  const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-  const internal = createLifecycleInternals({
-    pool,
-    routeKey,
-    provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-    recoveryEvidence: async () => null,
-  });
-  const registrationPorts = {
-    ...internal,
-    async createPending(input: Parameters<typeof internal.createPending>[0]) {
-      const outcome = await internal.createPending(input);
-      const pair = { accountId: input.accountId, reservationId: input.reservationId };
-      if (!(await proofs.pendingReference(pair))) {
-        const reference = await registration.createProvisioningReference({ input, outcome });
-        if (!reference) throw new Error('Missing native registration reference');
-        await proofs.recordPending({ ...pair, reference });
-      }
-      return outcome;
-    },
-    async provisioningReference(input: { accountId: string; reservationId: string }) {
-      const reference = await proofs.pendingReference(input);
-      if (!reference) throw new Error('Missing persisted registration reference');
-      return reference;
-    },
-    provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
-  };
-  host = await createAuthHost({
-    database: authPool,
-    systemDatabasePool: authPool,
-    issuer,
-    audience,
-    secret: 'gate-grants-auth-persistent-secret-32bytes',
-    signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: createAuthBindings({
+beforeAll(
+  async () => {
+    kernel = createKernel({
       pool,
-      ...registration,
-      verifyPendingIdentity: registration.verifyNativePendingIdentity,
-    }),
-    access: registrationPorts,
-    stagingKey: new Uint8Array(32).fill(83),
-    maintenanceSchedule: '0 0 1 1 *',
-    executorId: 'gate-grants-executor',
-  });
-  service = host.service;
-  await service.internal.registerClient({ clientId: 'gate-grants-client', firstParty: true, scopes });
-  await host.start();
-  // Staff's grant token carries access:grant and gate:any, not the group itself.
-  const staffScopes = ['access:grant', 'gate:any', 'thread:create'];
-  const broad = ['access:grant', 'gate:any', group, otherGroup, 'thread:create'];
-  staff = await person('gate_staff', staffScopes);
-  delegate = await person('gate_delegate', broad);
-  plain = await person('gate_plain', broad);
-  recipient = await person('gate_recipient', broad);
-  carrier = await person('gate_carrier', broad);
-  const child = Bun.spawn(['bun', script, '--account', staff.accountId], {
-    cwd: root,
-    env: { ...process.env, DATABASE_URL: url },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [code, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
-}, 60_000);
+      routeKey,
+      tokens,
+      writeRate: {
+        async spend() {
+          return { allowed: true as const };
+        },
+      },
+      access: () => {
+        if (access) return access;
+        const actions = new Map(actionCatalogue(kernel));
+        for (const action of gates) actions.set(action, { anonymous: false });
+        access = createAccess({
+          actions,
+          auth: {
+            issuer,
+            audience,
+            jwksUrl: `${issuer}/.well-known/jwks.json`,
+            fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+          },
+        });
+        return access;
+      },
+    });
+    scopes = ['access:grant', 'gate:any', group, otherGroup, 'thread:create'];
+    authDatabase = testDatabase();
+    authPool = new Pool({ connectionString: authDatabase.url });
+    const signingKey = {
+      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+      kid: 'gate-grants',
+    };
+    const proofs = createNativeWorkflowProofPorts({ database: authPool });
+    const registration = createRegistrationProofBindings({ pool, referenceKeys: tokens });
+    const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
+    const internal = createLifecycleInternals({
+      pool,
+      routeKey,
+      provisioningEvidence: (evidence) => provisioning.resolve(evidence),
+      recoveryEvidence: async () => null,
+    });
+    const registrationPorts = {
+      ...internal,
+      async createPending(input: Parameters<typeof internal.createPending>[0]) {
+        const outcome = await internal.createPending(input);
+        const pair = { accountId: input.accountId, reservationId: input.reservationId };
+        if (!(await proofs.pendingReference(pair))) {
+          const reference = await registration.createProvisioningReference({ input, outcome });
+          if (!reference) throw new Error('Missing native registration reference');
+          await proofs.recordPending({ ...pair, reference });
+        }
+        return outcome;
+      },
+      async provisioningReference(input: { accountId: string; reservationId: string }) {
+        const reference = await proofs.pendingReference(input);
+        if (!reference) throw new Error('Missing persisted registration reference');
+        return reference;
+      },
+      provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
+    };
+    host = await createAuthHost({
+      database: authPool,
+      systemDatabasePool: authPool,
+      issuer,
+      audience,
+      secret: 'gate-grants-auth-persistent-secret-32bytes',
+      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
+      trustedAccess: createAuthBindings({
+        pool,
+        ...registration,
+        verifyPendingIdentity: registration.verifyNativePendingIdentity,
+      }),
+      access: registrationPorts,
+      stagingKey: new Uint8Array(32).fill(83),
+      maintenanceSchedule: '0 0 1 1 *',
+      executorId: 'gate-grants-executor',
+    });
+    service = host.service;
+    await service.internal.registerClient({ clientId: 'gate-grants-client', firstParty: true, scopes });
+    await host.start();
+    // Staff's grant token carries access:grant and gate:any, not the group itself.
+    const staffScopes = ['access:grant', 'gate:any', 'thread:create'];
+    const broad = ['access:grant', 'gate:any', group, otherGroup, 'thread:create'];
+    staff = await person('gate_staff', staffScopes);
+    delegate = await person('gate_delegate', broad);
+    plain = await person('gate_plain', broad);
+    recipient = await person('gate_recipient', broad);
+    carrier = await person('gate_carrier', broad);
+    const child = Bun.spawn(['bun', script, '--account', staff.accountId], {
+      cwd: root,
+      env: { ...process.env, DATABASE_URL: url },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
+    // Auth database setup runs four external commands with 120 s limits, followed
+    // by five native registrations, token exchanges and the governance bootstrap.
+  },
+  4 * 120_000 + 60_000,
+);
 
 afterAll(async () => {
   if (host) await host.stop();
@@ -256,12 +261,10 @@ afterAll(async () => {
 
 test('platform gates are granted and revoked through the ordinary grant routes', async () => {
   // A direct access:grant holding alone cannot grant either gate action.
-  await pool.query(
-    `INSERT INTO access.resource_grant
-       (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
-     VALUES ($1, $2, 'identity', $3, '', 'access:grant', '(,)', $4)`,
-    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, plain.accountId, Bun.randomUUIDv7()],
-  );
+  const beforePlainGrant = await grantRows();
+  await expectGranted(staff.bearer, plain.accountId, ['access:grant']);
+  expect(await grantRows()).toBe(beforePlainGrant + 1);
+  expect(await formula(plain.bearer, 'access:grant')).toMatchObject({ allowed: true });
   await expectDenied(plain.bearer, recipient.accountId, [group]);
   await expectDenied(plain.bearer, carrier.accountId, ['gate:any']);
 
@@ -278,7 +281,6 @@ test('platform gates are granted and revoked through the ordinary grant routes',
   await expectDenied(staff.bearer, recipient.accountId, ['thread:create']);
 
   await expectGranted(staff.bearer, delegate.accountId, ['access:grant', group]);
-  await expectGranted(staff.bearer, plain.accountId, ['access:grant']);
 
   // One group's gate plus access:grant grants that gate and no other.
   await expectGranted(delegate.bearer, carrier.accountId, [group]);

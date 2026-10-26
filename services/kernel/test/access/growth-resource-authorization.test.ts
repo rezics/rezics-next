@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { actorFixture } from './actor-side-fixture.ts';
@@ -29,10 +30,18 @@ for (const mode of ['stable tuple', 'creation'] as const) {
   test(`${mode} authorization composes bounded actor proofs, authority validation and target execution`, async () => {
     // Each path starts with the same population; prior runs must not flatten
     // the first growth step by leaving a larger authority index behind.
-    await db.admin.query(`TRUNCATE access.resource_grant, access.resource_role_grant,
-      access.resource_denial, access.organization_member, access.membership_inverse,
-      access.principal_assignment, access.account, core.receipt,
-      public.authorization_growth_resource, public.authorization_growth_tuple`);
+    await resetGrowthTables(db.admin, [
+      'access.resource_grant',
+      'access.resource_role_grant',
+      'access.resource_denial',
+      'access.organization_member',
+      'access.membership_inverse',
+      'access.principal_assignment',
+      'access.account',
+      'core.receipt',
+      'public.authorization_growth_resource',
+      'public.authorization_growth_tuple',
+    ]);
     const f = await actorFixture(db.pool, db.admin);
     await db.admin.query('INSERT INTO public.authorization_growth_resource(route,id) VALUES ($1,$2)', [
       f.resource.route,

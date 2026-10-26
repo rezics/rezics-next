@@ -27,6 +27,7 @@ import {
   type RetryOptions,
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
+import type { Attempt } from './types.ts';
 import type { RunningWorker } from './launch.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
@@ -114,7 +115,7 @@ export class WorkerJob implements GateOutcomeSink {
           });
         }
       }
-      const worker = await this.tasks.retry(task.id, intent.options);
+      const worker = await this.tasks.retry(task.id, { ...intent.options, expectedAttempt: ref.attempt });
       task = store.task(task.id);
       store.updateRetryIntent(ref, (value) => {
         value.status = 'started';
@@ -122,7 +123,9 @@ export class WorkerJob implements GateOutcomeSink {
       });
       if (worker) await this.follow(worker);
     } catch (error) {
-      if (error instanceof TaskHeldForDependenciesError) {
+      // Another process holds the task: the intent stays pending for the next sweep.
+      if (error instanceof LeaseHeldError) return;
+      if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
         store.updateRetryIntent(ref, (value) => {
           value.status = 'started';
           value.nextAttempt = store.task(ref.taskId).currentAttempt;
@@ -338,7 +341,14 @@ export class WorkerJob implements GateOutcomeSink {
     const merged = (id: string) => ['integrated', 'merged'].includes(store.task(id).state);
     for (const task of store
       .tasks()
-      .filter((t) => t.state === 'ready' && t.brief.after.length && t.brief.after.every(merged)))
+      .filter(
+        (t) =>
+          t.state === 'ready' &&
+          t.brief.after.length &&
+          t.brief.after.every(merged) &&
+          // A ready task with a pending retry intent is a retry, started from the intent.
+          store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
+      ))
       this.track(
         this.startReleased(task.id).catch((error) => {
           if (store.task(task.id).state === 'ready') throw error;
@@ -393,7 +403,6 @@ export class WorkerJob implements GateOutcomeSink {
           .map((event) => event.kind);
         if (events.includes('landing-requested')) continue;
         if (events.includes('driver-environment-failure')) continue;
-        if (attempt.state === 'exited' && attempt.failureKind && events.includes('attempt-exit-classified')) continue;
         if (attempt.state === 'exited' && attempt.failureKind) {
           this.onAttemptExit(ref);
           continue;
@@ -416,7 +425,9 @@ export class WorkerJob implements GateOutcomeSink {
       }
     }
     await Promise.all(follows);
-    await this.resumeRetryIntents();
+    // The host keeps sweeping while retried workers run; a command settles its retries before it returns.
+    if (adoptRunning) this.resumePendingRetries();
+    else await this.resumeRetryIntents();
   }
   reportPromotionEnvironment(taskId: string, failure: NonNullable<GateOutcome['firstFailure']>): void {
     const store = this.tasks.store,
@@ -475,7 +486,14 @@ export class WorkerJob implements GateOutcomeSink {
   /** Launch/exit facts do not fabricate a gate outcome. */
   onAttemptExit(ref: AttemptRef): void {
     const store = this.tasks.store;
-    let retry: RetryOptions | undefined;
+    let retry = false;
+    const queueRetry = (options: RetryOptions) => {
+      store.updateTask(ref, (t) => {
+        t.state = 'ready';
+      });
+      store.saveRetryIntent(ref, options);
+      retry = true;
+    };
     store.write(ref, () => {
       const task = store.task(ref.taskId),
         attempt = store.attempt(ref),
@@ -483,8 +501,12 @@ export class WorkerJob implements GateOutcomeSink {
       if (!kind) return;
       if (
         store.events(task.id).some((event) => event.attempt === ref.attempt && event.kind === 'attempt-exit-classified')
-      )
+      ) {
+        // A retry decided before the retry intent existed, and lost with its process, is queued again.
+        if (task.state === 'running' && task.currentAttempt === ref.attempt && !store.retryIntent(ref))
+          queueRetry(this.exitRetryOptions(attempt, attempt.evidencePath));
         return;
+      }
       const failureClass = kind === 'tool' ? 'environment' : kind;
       const record = store.record(ref)!;
       record.outcome = 'stopped';
@@ -535,17 +557,30 @@ export class WorkerJob implements GateOutcomeSink {
           this.inbox.deliver(event);
           return;
         }
-        retry = { evidence: evidencePath, escalation: failureClass, fixRound: attempt.fixRound };
         if (kind === 'pool-exhausted') {
           const key = this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.allowanceKey;
           if (key) markExhausted(this.tasks.settings.stateDirectory, key);
-          retry.excludePools = this.tasks.settings.pools
-            .filter((pool) => pool.allowanceKey === key)
-            .map((pool) => pool.name);
         }
+        queueRetry(this.exitRetryOptions(attempt, evidencePath));
       }
     });
-    if (retry) this.track(this.start(ref.taskId, retry));
+    // The recovery sweep calls this while it holds the task's lease, which the retry takes: start after it is released.
+    if (retry) this.track(new Promise<void>((done) => setImmediate(done)).then(() => this.runRetryIntent(ref)));
+  }
+  private exitRetryOptions(attempt: Attempt, evidencePath: string): RetryOptions {
+    const kind = attempt.failureKind!;
+    const options: RetryOptions = {
+      evidence: evidencePath,
+      escalation: kind === 'tool' ? 'environment' : kind,
+      fixRound: attempt.fixRound,
+    };
+    if (kind === 'pool-exhausted') {
+      const key = this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.allowanceKey;
+      options.excludePools = this.tasks.settings.pools
+        .filter((pool) => pool.allowanceKey === key)
+        .map((pool) => pool.name);
+    }
+    return options;
   }
   onGateOutcome(outcome: GateOutcome): void {
     const store = this.tasks.store;

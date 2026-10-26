@@ -95,6 +95,7 @@ beforeAll(async () => {
     },
     access: (config) =>
       createAccess({
+        ...config,
         actions: new Map(config.actions),
         auth: {
           issuer,
@@ -112,26 +113,6 @@ beforeAll(async () => {
   if (route === null) throw new Error('Fixture actor must have a route');
   accountGrowthIds = Array.from({ length: accountPlannerSeedCount + 64 }, () => newId(route));
   grantSubjectIds = Array.from({ length: 64 }, () => newId(route));
-  const timestamp = Bun.randomUUIDv7();
-  await db.admin.query(
-    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-     SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
-    [route, accountGrowthIds.slice(0, accountPlannerSeedCount), timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-     SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
-    [route, grantSubjectIds, timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.resource_grant
-       (route, resource_id, subject_id, action, valid, transaction_id)
-     SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'gate:unrelated', '(,)', $2
-     FROM unnest($1::uuid[]) id`,
-    [accountGrowthIds.slice(0, accountPlannerSeedCount), timestamp],
-  );
-  await db.admin.query('ANALYZE access.account');
-  await db.admin.query('ANALYZE access.resource_grant');
 }, 60_000);
 
 afterAll(async () => {
@@ -158,6 +139,59 @@ test('checkGrowth keeps gate admission bounded as unrelated accounts, grants, an
     repetitions: 1,
     warmups: 1,
     async grow(database, scale, previous) {
+      if (previous === 0) {
+        const timestamp = Bun.randomUUIDv7();
+        await database.admin.query(
+          `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+       SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+          [route, accountGrowthIds.slice(0, accountPlannerSeedCount), timestamp],
+        );
+        await database.admin.query(
+          `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+       SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+          [route, grantSubjectIds, timestamp],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_grant
+         (route, resource_id, subject_id, action, valid, transaction_id)
+       SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'gate:unrelated', '(,)', $2
+       FROM unnest($1::uuid[]) id`,
+          [accountGrowthIds.slice(0, accountPlannerSeedCount), timestamp],
+        );
+        await database.admin.query('ANALYZE access.account');
+        await database.admin.query('ANALYZE access.resource_grant');
+        // Unrelated membership keys keep native actor preparation on point
+        // probes without changing the selected actor's actual memberships.
+        const unrelated = accountGrowthIds.slice(0, accountPlannerSeedCount);
+        await database.admin.query(
+          `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+           SELECT $1,id,'organization',id,id,id FROM unnest($2::uuid[]) id`,
+          [route, unrelated],
+        );
+        await database.admin.query(
+          `INSERT INTO access.organization_member(route,organization_id,member_account_id,role,valid,transaction_id)
+           SELECT $1,id,id,'member','(,)',id FROM unnest($2::uuid[]) id`,
+          [route, unrelated],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_role_grant
+             (route,resource_id,subject_id,grant_role,valid,transaction_id)
+           SELECT $1,id,id,'owner','(,)',id FROM unnest($2::uuid[]) id`,
+          [route, unrelated],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_denial
+             (route,resource_id,subject_id,action,reason,valid,transaction_id)
+           SELECT $1,id,id,'fixture:read','resource','(,)',id FROM unnest($2::uuid[]) id`,
+          [route, unrelated],
+        );
+        await database.admin.query(
+          `INSERT INTO access.exposure_opening ("group",valid,transaction_id)
+           SELECT name,tstzrange('2000-01-01T00:00:00Z'::timestamptz,NULL,'[)'),$2
+           FROM unnest($1::text[]) name`,
+          [unrelated.map((_, index) => `baseline_${alpha(index)}`), timestamp],
+        );
+      }
       const ids = accountGrowthIds.slice(accountPlannerSeedCount + previous, accountPlannerSeedCount + scale);
       await database.admin.query(
         `INSERT INTO access.account (route, account_id, kind, state, transaction_id)

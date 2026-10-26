@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
@@ -40,6 +41,9 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const ordinalsPerScale = 500;
 const baselineOrdinals = 2_000;
 const operationsPerCheck = 18;
+// Budget the 34,000 generated ordinals at 20 ms each under concurrent gates,
+// plus up to twelve native 3 s boundaries for every warm-up/measured operation.
+const growthTimeout = (baselineOrdinals + 64 * ordinalsPerScale) * 20 + operationsPerCheck * 12 * 3000;
 const resourceSchema = 'growth_access_commands';
 const resourceTable = `${resourceSchema}.resource`;
 const actions: ActionCatalogue = new Map([
@@ -197,14 +201,15 @@ async function check(population: Population, operation: GrowthCheck['operation']
   db.pool.on('acquire', observeClient);
 
   try {
-    await seed({ pool: db.pool, admin: db.admin }, population, {
-      from: 100_000,
-      to: 100_000 + baselineOrdinals,
-    });
     const report = await checkGrowth(db, {
       name,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (growthDb, scale, previous) => {
+        if (previous === 0)
+          await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+            from: 100_000,
+            to: 100_000 + baselineOrdinals,
+          });
         await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
           from: previous * ordinalsPerScale,
           to: scale * ordinalsPerScale,
@@ -309,27 +314,25 @@ function printCatalogQueryTexts(samples: GrowthReport['samples'], queryTexts: Se
 }
 
 async function clearFixtureRows(): Promise<void> {
-  await db.admin.query(`
-    TRUNCATE TABLE
-      core.receipt,
-      core.outbox,
-      editorial.write_basis,
-      access.account,
-      access.handle_claim,
-      access.lifecycle_coordination,
-      access.lifecycle_fence_receipt,
-      access.lifecycle_membership_slot,
-      access.membership_inverse,
-      access.organization_member,
-      access.principal_assignment,
-      access.resource_denial,
-      access.resource_grant,
-      access.resource_initialization,
-      access.resource_role_grant,
-      access.standing_parent_installation,
-      ${resourceTable}
-    CASCADE
-  `);
+  await resetGrowthTables(db.admin, [
+    'core.receipt',
+    'core.outbox',
+    'editorial.write_basis',
+    'access.account',
+    'access.handle_claim',
+    'access.lifecycle_coordination',
+    'access.lifecycle_fence_receipt',
+    'access.lifecycle_membership_slot',
+    'access.membership_inverse',
+    'access.organization_member',
+    'access.principal_assignment',
+    'access.resource_denial',
+    'access.resource_grant',
+    'access.resource_initialization',
+    'access.resource_role_grant',
+    'access.standing_parent_installation',
+    resourceTable,
+  ]);
   await db.admin.query('UPDATE core.partition SET position = 0');
   await db.admin.query('CHECKPOINT');
   accountEvidence.clear();
@@ -1692,7 +1695,7 @@ test.serial(
     );
     expect(report).toMatchObject({ bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } });
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1737,7 +1740,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1803,7 +1806,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1851,7 +1854,7 @@ test.serial(
     expect(context.account.accountId).toBe(actor.accountId);
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1894,7 +1897,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -1962,7 +1965,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -2011,7 +2014,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -2058,30 +2061,30 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
   'Membership change stays within its bound as m grows',
   async () => {
     const partition = 1545;
+    // Keep the authorization resource and authority fixed across scales.
+    // Every warm-up and capture still performs a fresh native membership write.
+    const owner = await createActor(partition, 'growth_membership_owner');
+    const organizationId = await organization(owner.accountId, partition);
     const anchors: {
-      owner: Awaited<ReturnType<typeof createActor>>;
       member: Awaited<ReturnType<typeof createActor>>;
-      organizationId: string;
       reservationId: string;
     }[] = [];
     for (let index = 0; index < operationsPerCheck; index++) {
-      const owner = await createActor(partition, `growth_membership_owner_${index}`);
       const member = await createActor(partition, `growth_membership_member_${index}`);
-      const organizationId = await organization(owner.accountId, partition);
       const hold = await internal.reserveCoordination({
         accountId: member.accountId,
         relatedAccountId: organizationId,
         purpose: 'membership',
         key: `growth-membership-hold-${index}`,
       });
-      anchors.push({ owner, member, organizationId, reservationId: hold.value.reservationId });
+      anchors.push({ member, reservationId: hold.value.reservationId });
     }
     const commands = createLifecycleCommands({ pool: db.pool, access });
     const population = membershipPopulation('growth-access-membership-change', partition);
@@ -2089,8 +2092,8 @@ test.serial(
       population,
       async (_growthDb, _scale, repetition) => {
         const target = anchors[repetition]!;
-        return commands.setMembership(contextFor(target.owner.accountId, target.owner.account), {
-          organizationId: target.organizationId,
+        return commands.setMembership(contextFor(owner.accountId, owner.account), {
+          organizationId,
           memberAccountId: target.member.accountId,
           reservationId: target.reservationId,
           role: 'member',
@@ -2101,7 +2104,7 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );
 
 test.serial(
@@ -2148,5 +2151,5 @@ test.serial(
     );
     expect(report.samples).toHaveLength(3);
   },
-  150_000,
+  growthTimeout,
 );

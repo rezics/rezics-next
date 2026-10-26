@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import { NO_COMPILE_CACHE } from './merge.ts';
+import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { processIdentity, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
@@ -196,8 +196,14 @@ export function workerPrompt(
 export function attemptEnvironment(
   task: Pick<Task, 'id' | 'base'>,
   attempt: Pick<Attempt, 'attempt'>,
+  stateDirectory?: string,
 ): Record<string, string> {
-  return { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), KERNEL_CHECK_AFFECTED: task.base };
+  return {
+    GOAL_TASK_ID: task.id,
+    GOAL_ATTEMPT: String(attempt.attempt),
+    KERNEL_CHECK_AFFECTED: task.base,
+    ...remoteCheckEnvironment(stateDirectory),
+  };
 }
 export type RunningWorker = { child?: ChildProcess; exited: Promise<WorkerExit>; attempt: Attempt };
 /**
@@ -253,7 +259,7 @@ export async function launch(
     ...(codex ? { codex } : {}),
     ...(task.taskClass === 'research' ? { readOnly: true, research: true } : {}),
   });
-  const env = workerEnvironment(pool, attemptEnvironment(task, attempt));
+  const env = workerEnvironment(pool, attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))));
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {

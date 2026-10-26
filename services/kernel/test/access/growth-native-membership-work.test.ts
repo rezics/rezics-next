@@ -138,6 +138,32 @@ test('native resolver and membership workflow commands stay bounded across prior
         `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response) SELECT $1,'account',$2,'access.workflow-approval.create',$3||':'||id::text,decode(repeat('0',64),'hex'),1,1,id,'{}' FROM unnest($4::uuid[]) id`,
         [route >>> 4, actor, route, ids],
       );
+      // Keep fixed member/reservation probes on populated indexes. The measured
+      // join/leave cycle adds terminal rows of its own at every repetition.
+      await database.admin.query(
+        `INSERT INTO access.membership_inverse
+          (route,account_id,kind,group_id,reservation_id,transaction_id)
+         SELECT $1,id,'organization',$3,id,id FROM unnest($2::uuid[]) id`,
+        [route, ids, group],
+      );
+      await database.admin.query(
+        `INSERT INTO access.membership_inverse_terminal
+          (route,account_id,kind,group_id,reservation_id,reservation_transaction_id,proof_transaction_id,transaction_id)
+         SELECT $1,id,'organization',$3,id,id,id,id FROM unnest($2::uuid[]) id`,
+        [route, ids, group],
+      );
+      await database.admin.query(
+        `INSERT INTO access.lifecycle_coordination
+          (route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+         SELECT $1,id,id,$3,'membership',id FROM unnest($2::uuid[]) id`,
+        [route, ids, group],
+      );
+      await database.admin.query(
+        `INSERT INTO access.lifecycle_membership_slot
+          (route,organization_id,member_account_id,reservation_id,terminal,transaction_id)
+         SELECT $1,$2,id,id,true,id FROM unnest($3::uuid[]) id`,
+        [groupRoute, group, ids],
+      );
       for (const table of [
         'access.account',
         'access.resource_grant',

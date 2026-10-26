@@ -359,7 +359,7 @@ test('the production API admits trusted content and leaves effects to the native
       method: 'POST',
       body: { target: { kind: 'thread', id: thread.id }, reason: 'spam', botToken: 'invalid-one-use-proof' },
     });
-    expect(invalidProof.response.status).toBe(404);
+    expect(invalidProof.response.status).toBe(403);
     const afterInvalid = await system.database.pool.query<{ reports: string; receipts: string }>(`
       SELECT (SELECT count(*)::text FROM content.report) AS reports,
              (SELECT count(*)::text FROM core.receipt) AS receipts`);

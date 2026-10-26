@@ -57,7 +57,8 @@ async function seedPosts(threadId: string, keys: readonly Key[]): Promise<void> 
       `INSERT INTO content.revision
        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
        SELECT $1::integer,$2::uuid,k.id,k.revision,
-              CASE WHEN k.id=$3::uuid THEN NULL ELSE $4::bytea END,$5::bytea,
+              CASE WHEN k.id=$3::uuid THEN NULL ELSE $4::bytea END,
+              CASE WHEN k.id=$3::uuid THEN NULL ELSE $5::bytea END,
               CASE WHEN k.id=$3::uuid THEN NULL ELSE $6::text END,$7::text,'{}'::uuid[],$8::uuid,
               CASE WHEN k.id=$3::uuid THEN 'erased' ELSE 'available' END,$9::uuid
        FROM unnest($10::uuid[],$11::uuid[]) AS k(id,revision)`,
@@ -164,7 +165,7 @@ test('stable time/id ties and insertion between pages never duplicate a row', as
     await db.admin.query(
       `INSERT INTO content.revision
        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-       SELECT route,thread_id,post_id,$3::uuid,NULL,body_sha256,NULL,licence,subject_ids,board_id,'erased',recorded_transaction_id
+       SELECT route,thread_id,post_id,$3::uuid,NULL,NULL,NULL,licence,subject_ids,board_id,'erased',recorded_transaction_id
        FROM content.revision WHERE route=$1::integer AND revision_id=$2::uuid`,
       [route, id(`head-${keys[0]!.id}`), id('historical')],
     );

@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { AccountOperation } from '@rezics/auth';
@@ -73,9 +74,13 @@ async function fixture() {
 for (const population of ['same-actor history', 'unrelated accounts and resources'] as const) {
   for (const mode of ['approve', 'resolve', 'denied replay', 'expiry sweep'] as const) {
     test(`${mode} stays bounded as ${population} grows with K fixed`, async () => {
-      await db.admin.query(
-        'TRUNCATE access.workflow_approval, access.resource_grant, access.resource_denial, access.account, core.receipt',
-      );
+      await resetGrowthTables(db.admin, [
+        'access.workflow_approval',
+        'access.resource_grant',
+        'access.resource_denial',
+        'access.account',
+        'core.receipt',
+      ]);
       const f = await fixture();
       const commands = createLifecycleCommands({ pool: db.pool, access: f.native });
       const request = await f.approvals.resolve(f.approval.reference, f.operation, context());

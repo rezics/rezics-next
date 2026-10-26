@@ -124,6 +124,17 @@ export async function activateManifests(db: { pool: Pool }, count: number): Prom
   return release;
 }
 
+/** Seed route 0's activation history so the active-release probe reads a relation of thousands of rows, not a few. */
+export async function seedActivationHistory(db: { admin: Pool }, rows = 4096): Promise<void> {
+  await db.admin.query(
+    `INSERT INTO semantic.definition_activation (route, head, digest, recorded_transaction_id)
+     SELECT 0, latest.head + series.step, latest.digest, gen_random_uuid()
+     FROM (SELECT head, digest FROM semantic.definition_activation WHERE route = 0 ORDER BY head DESC LIMIT 1) AS latest,
+          generate_series(1, $1::integer) AS series(step)`,
+    [rows],
+  );
+}
+
 /** Two visible subjects for each class of verticals v`from` through v`to - 1`. */
 export function manifestSubjects(release: Release, from: number, to: number): IndexedSubject[] {
   const subjects: IndexedSubject[] = [];

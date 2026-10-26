@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { newId } from '../../src/route/route.ts';
@@ -109,7 +110,7 @@ function expectIndexedOpenLookup(plans: readonly unknown[], table: Table) {
 
 async function checkDenialHistory(statistics: Statistics) {
   const table = 'resource_denial';
-  await db.admin.query(`TRUNCATE access.${table}`);
+  await resetGrowthTables(db.admin, [`access.${table}`]);
   await seedUnrelated(table, 4096);
   await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
 
@@ -160,7 +161,7 @@ async function checkDenialHistory(statistics: Statistics) {
 
 async function checkDenialUnrelated(statistics: Statistics) {
   const table = 'resource_denial';
-  await db.admin.query(`TRUNCATE access.${table}`);
+  await resetGrowthTables(db.admin, [`access.${table}`]);
   await seedUnrelated(table, 4096);
   await addDenialCycle(historyStart);
   await record.run(db.admin, { ...key, at: unrelatedAt });
@@ -197,7 +198,7 @@ async function checkDenialUnrelated(statistics: Statistics) {
 
 async function checkGroupUnrelated(statistics: Statistics) {
   const table = 'resource_role_grant';
-  await db.admin.query(`TRUNCATE access.${table}`);
+  await resetGrowthTables(db.admin, [`access.${table}`]);
   await seedUnrelated(table, 4096);
   await grant.run(db.admin, { ...groupKey, at: unrelatedAt });
   await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
@@ -243,7 +244,7 @@ for (const statistics of ['analyze after growth', 'leave growth unanalyzed'] as 
 
 test('partial unique indexes enforce one open interval per complete key', async () => {
   for (const table of tables) {
-    await db.admin.query(`TRUNCATE access.${table}`);
+    await resetGrowthTables(db.admin, [`access.${table}`]);
     if (table === 'resource_denial') await record.run(db.admin, { ...key, at: unrelatedAt });
     else await grant.run(db.admin, { ...groupKey, at: unrelatedAt });
     const columns = table === 'resource_denial' ? 'action, reason' : 'subject_kind, grant_role';
@@ -269,7 +270,7 @@ test('partial unique indexes enforce one open interval per complete key', async 
 });
 
 test('T still filters future open rows and preserves denial close outcomes', async () => {
-  await db.admin.query('TRUNCATE access.resource_denial, access.resource_role_grant');
+  await resetGrowthTables(db.admin, ['access.resource_denial', 'access.resource_role_grant']);
   const later = at(Date.parse(unrelatedAt) + 1000);
   await record.run(db.admin, { ...key, at: later });
   expect((await end.run(db.admin, { ...key, at: unrelatedAt })).outcome).toBe('absent');

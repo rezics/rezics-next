@@ -71,6 +71,34 @@ export async function waitForSearch(url: string, containerName: string, timeoutM
   );
 }
 
+/** A check running on a development host keeps its containers inside that host's capped slice. */
+export function cgroupArgs(): string[] {
+  return process.env.KERNEL_CHECK_ON_REMOTE ? ['--cgroup-parent=rezics-check.slice'] : [];
+}
+
+export function searchRunArgs(image: string): string[] {
+  return [
+    'run',
+    '-d',
+    ...cgroupArgs(),
+    '--name',
+    container,
+    '-p',
+    `127.0.0.1:${port}:9200`,
+    '-v',
+    `${volume}:/usr/share/opensearch/data`,
+    '-e',
+    'discovery.type=single-node',
+    '-e',
+    'DISABLE_SECURITY_PLUGIN=true',
+    '-e',
+    'DISABLE_INSTALL_DEMO_CONFIG=true',
+    '-e',
+    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+    image,
+  ];
+}
+
 function developmentEnv(existing: string, url: string): string {
   const lines = existing.split('\n');
   if (lines.at(-1) === '') lines.pop();
@@ -100,25 +128,7 @@ async function up(): Promise<void> {
     if (running !== 'true') docker(['start', container]);
   } else {
     docker(['volume', 'create', volume]);
-    docker([
-      'run',
-      '-d',
-      '--name',
-      container,
-      '-p',
-      `127.0.0.1:${port}:9200`,
-      '-v',
-      `${volume}:/usr/share/opensearch/data`,
-      '-e',
-      'discovery.type=single-node',
-      '-e',
-      'DISABLE_SECURITY_PLUGIN=true',
-      '-e',
-      'DISABLE_INSTALL_DEMO_CONFIG=true',
-      '-e',
-      'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
-      image,
-    ]);
+    docker(searchRunArgs(image));
   }
 
   const url = `http://127.0.0.1:${port}`;

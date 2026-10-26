@@ -138,13 +138,20 @@ test('uncommitted rolled back wrong kind or reservation only evidence denies', a
   ).rows[0]!;
   expect(await proof.verifyProvisioningReceipt(reference)).toBeNull();
   const writer = await pool.connect();
+  // Explicitly omit the generated actor_account_id from both sides of the insert.
+  const columns = Object.keys(saved)
+    .filter((column) => column !== 'actor_account_id')
+    .join(',');
   const insert = () =>
-    writer.query(`INSERT INTO core.receipt SELECT * FROM jsonb_populate_record(NULL::core.receipt,$1::jsonb)`, [
-      JSON.stringify({
-        ...Object.fromEntries(Object.entries(saved).filter(([column]) => column !== 'actor_account_id')),
-        request_digest: `\\x${Buffer.from(saved.request_digest).toString('hex')}`,
-      }),
-    ]);
+    writer.query(
+      `INSERT INTO core.receipt (${columns}) SELECT ${columns} FROM jsonb_populate_record(NULL::core.receipt,$1::jsonb)`,
+      [
+        JSON.stringify({
+          ...Object.fromEntries(Object.entries(saved).filter(([column]) => column !== 'actor_account_id')),
+          request_digest: `\\x${Buffer.from(saved.request_digest).toString('hex')}`,
+        }),
+      ],
+    );
   try {
     await writer.query('BEGIN');
     await insert();

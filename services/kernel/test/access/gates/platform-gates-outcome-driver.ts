@@ -47,6 +47,20 @@ const { openGrowthDatabase, seed: seedGrowthData } = await import('../../support
 const password = 'native platform gates fixture password';
 const FIXTURE_GROUP = 'spec_fixture';
 const FIXTURE_TABLES = new Map<string, string>();
+let preparedAuthDatabase: ReturnType<typeof testDatabase> | undefined;
+
+/** Prepare the adapter's external database work under its own hook budget. */
+export function preparePlatformGatesAuthDatabase(): void {
+  if (preparedAuthDatabase) throw new Error('Previous platform gates Auth database was not claimed');
+  preparedAuthDatabase = testDatabase();
+}
+
+/** A failed driver initialization may leave the prepared database unclaimed. */
+export function closePreparedPlatformGatesAuthDatabase(): void {
+  const database = preparedAuthDatabase;
+  preparedAuthDatabase = undefined;
+  database?.close();
+}
 
 type FixtureRoute = {
   readonly path: string;
@@ -608,7 +622,8 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     if (seeded) throw new Error('Platform gates fixture can only be seeded once');
     await initialize();
 
-    authDatabase = testDatabase();
+    authDatabase = preparedAuthDatabase ?? testDatabase();
+    preparedAuthDatabase = undefined;
     authPool = new Pool({ connectionString: authDatabase.url });
     const privateKey = await generateKeyPair('ES256', { extractable: true });
     signingKey = { ...(await exportJWK(privateKey.privateKey)), kid: signingKid };

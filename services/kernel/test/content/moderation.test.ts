@@ -461,6 +461,30 @@ test('checkGrowth proves point writes include shared Access within the three-sca
     }
   }
   async function grow(growthDb: GrowthDatabase, scale: number, previous: number) {
+    // Neighbouring rows keep every key index worth its cost to the planner at the smallest scale, where it would
+    // otherwise scan a table of a few dozen rows once per probe and add every earlier receipt and grant to the cost.
+    if (previous === 0) {
+      const neighbours = Array.from({ length: 2048 }, () => population(newId(route), newId(route)));
+      await insertRows(neighbours);
+      const resources = neighbours.map(({ postId }) => postId);
+      const transaction = Bun.randomUUIDv7();
+      await growthDb.admin.query(
+        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+         SELECT $1,resource_id,$2,'post:read','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
+        [route, newId(0x2345), transaction, resources],
+      );
+      await growthDb.admin.query(
+        `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+         SELECT $1,resource_id,$2,'content.post.owner','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
+        [route, newId(0x2345), transaction, resources],
+      );
+      await growthDb.admin.query(
+        `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+         SELECT $1,'account',$2,'content.post.create',key,sha256(convert_to(key,'UTF8')),1,1,$3,'{}'
+         FROM unnest($4::text[]) AS key`,
+        [partitionOf(route), newId(0x2345), transaction, resources],
+      );
+    }
     await insertRows(Array.from({ length: scale - previous }, () => population(newId(route), newId(route))));
     // Six real changed sets per scale: one warmup and five measured operations.
     const points = Array.from({ length: 6 }, () => population(newId(route), newId(route)));
