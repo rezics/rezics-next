@@ -1,11 +1,15 @@
 import { createFileRoute, Link, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
-import { setResponseHeader } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { ReactNode } from 'react';
 import { loadSubjectPage, SubjectPage, subjectPageJsonLd, subjectPageTitle } from '../../features/pages/subject';
 import { kernelClient } from '../../kernel/client';
+import { loadSubjectLibrarySlot } from '../../library/subject-slot';
+import { SubjectLibrarySlot } from '../../library/subject-slot-view';
+import type { SessionEnv } from '../../session/client';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { env } from 'cloudflare:workers';
 
 // Page documents type their props as unknown. The kernel already returned JSON.
 const readSubject = createServerFn({ method: 'GET', strict: false })
@@ -17,26 +21,59 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       typeof input.id !== 'string' ||
       input.id.length > 128 ||
       !('locale' in input) ||
-      typeof input.locale !== 'string'
+      typeof input.locale !== 'string' ||
+      !('loadCollections' in input) ||
+      typeof input.loadCollections !== 'boolean' ||
+      !('slotResult' in input) ||
+      (input.slotResult !== undefined && typeof input.slotResult !== 'string')
     )
       throw notFound();
-    return { id: input.id, locale: input.locale };
+    return {
+      id: input.id,
+      locale: input.locale,
+      loadCollections: input.loadCollections,
+      slotResult: input.slotResult as string | undefined,
+    };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const result = await loadSubjectPage(kernelClient(), data.id);
+    const client = kernelClient();
+    const [result, library] = await Promise.all([
+      loadSubjectPage(client, data.id),
+      loadSubjectLibrarySlot(
+        client,
+        getRequest(),
+        env as Partial<SessionEnv>,
+        data.id,
+        data.loadCollections,
+        data.slotResult,
+      ),
+    ]);
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'redirect') throw redirect({ href: `/${data.locale}/subjects/${result.id}`, statusCode: 308 });
-    return result.page;
+    return { page: result.page, library };
   });
 
 export const Route = createFileRoute('/subjects/$id')({
-  loader: ({ params }) => readSubject({ data: { id: params.id, locale: getLocale() } }),
+  validateSearch: (search: Record<string, unknown>): { slot?: 'collections'; slotResult?: string } => ({
+    ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
+    ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
+  }),
+  loaderDeps: ({ search }) => ({ slot: search.slot, slotResult: search.slotResult }),
+  loader: ({ params, deps }) =>
+    readSubject({
+      data: {
+        id: params.id,
+        locale: getLocale(),
+        loadCollections: deps.slot === 'collections',
+        slotResult: deps.slotResult,
+      },
+    }),
   head: ({ loaderData }) => {
     const locale = getLocale();
-    const jsonLd = loaderData ? subjectPageJsonLd(loaderData, locale) : undefined;
+    const jsonLd = loaderData ? subjectPageJsonLd(loaderData.page, locale) : undefined;
     return {
-      meta: [{ title: loaderData ? subjectPageTitle(loaderData, locale) : m.not_found_heading() }],
+      meta: [{ title: loaderData ? subjectPageTitle(loaderData.page, locale) : m.not_found_heading() }],
       ...(jsonLd ? { scripts: [{ type: 'application/ld+json', children: jsonLd }] } : {}),
     };
   },
@@ -59,7 +96,7 @@ function SubjectLink({ href, lang, children }: { href: string; lang?: string; ch
 }
 
 function SubjectRoute() {
-  const page = Route.useLoaderData();
+  const { page, library } = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
   return (
     <SubjectPage
@@ -76,6 +113,13 @@ function SubjectRoute() {
       link={SubjectLink}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
+      actions={(subject) => (
+        <SubjectLibrarySlot
+          subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
+          locale={subject.locale}
+          data={library}
+        />
+      )}
     />
   );
 }

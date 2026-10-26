@@ -2,6 +2,7 @@ Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to 
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
+Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
 
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
@@ -444,6 +445,14 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`;
   `services/kernel/test/semantic/growth-reads.test.ts`: `the fact writer refuses more than 512 facts for one subject`;
   `Anchored subject read stays within its bound as the subject's history grows`
+
+### Subject library slot
+
+- **Touches:** In parallel with the subject page, read the viewer's FULL library entry when signed in and the first FULL
+  public-collections page; load the viewer's first 100 FULL collections only when the add menu opens
+- **Bound:** Initial slot read is 2 K and 1 D signed in, or 1 K and 0 D signed out; opening the add menu adds 1 K and
+  at most 1 D. 0 R/A. Each list is one page of at most 100 entries, independent of account and subject history
+- **Growth check:** `tests/library-subject-slot-cost.test.ts`: `subject library slot stays within its bound as its collections grow`
 
 ### Credential resolution (media prelude)
 

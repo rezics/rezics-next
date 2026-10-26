@@ -1,0 +1,158 @@
+import type { KernelClient } from '@rezics/client';
+import { isPlatformClosedError } from '../kernel/platform-closed';
+import type { SessionEnv } from '../session/client';
+import { readSessionIdentity, type SessionIdentity } from '../session/state';
+import { libraryFullQuery, libraryListQuery, readLibraryResult } from './reads';
+
+export type LibraryEntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
+export type SubjectSlotEntry = {
+  subjectId: string;
+  state: LibraryEntryState;
+  revision: number;
+};
+export type SubjectSlotCollection = {
+  id: string;
+  curatorAccountId: string;
+  title: string;
+  memberCount: number;
+  curator: { id: string; handle: string | null; displayName: string | null } | null;
+};
+export type SubjectPublicCollection = {
+  id: string;
+  curatorAccountId: string;
+  title: string;
+  multiplicity: number;
+  curator: { id: string; handle: string | null; displayName: string | null } | null;
+};
+export type SubjectLibrarySlotResult =
+  | 'added'
+  | 'saved'
+  | 'cleared'
+  | 'collection-full'
+  | 'conflict'
+  | 'closed'
+  | 'unavailable';
+export type SubjectLibrarySlotData = {
+  session: SessionIdentity['state'];
+  csrfToken: string | null;
+  entryAvailable: boolean;
+  entry: SubjectSlotEntry | null;
+  publicCollections: SubjectPublicCollection[] | null;
+  publicCollectionsNext: string | null;
+  collectionsLoaded: boolean;
+  collections: SubjectSlotCollection[] | null;
+  result?: SubjectLibrarySlotResult;
+};
+
+export type SubjectLibraryMutation = {
+  subjectId: string;
+  intent: 'entry' | 'member';
+  action?: 'save' | 'clear';
+  state?: LibraryEntryState;
+  revision?: number;
+  collectionId?: string;
+  idempotencyKey: string;
+};
+export type SubjectLibraryMutationResponse = {
+  result: SubjectLibrarySlotResult;
+  entry?: SubjectSlotEntry | null;
+};
+export type SubjectSlotCollectionsResult = {
+  state: 'loaded' | 'closed' | 'unavailable';
+  collections: SubjectSlotCollection[] | null;
+};
+
+type EntryResult = { libraryEntry: SubjectSlotEntry };
+type PublicCollectionsResult = { collections: SubjectPublicCollection[]; next: string | null };
+type CollectionsResult = { collections: SubjectSlotCollection[]; next: string | null };
+
+async function readEntry(client: KernelClient, subjectId: string): Promise<SubjectSlotEntry | null> {
+  const result = await client.libraryEntries({ subjectId }).get({ query: libraryFullQuery() });
+  if (result.status === 404) return null;
+  return readLibraryResult<EntryResult>(result as never).libraryEntry;
+}
+
+async function readPublicCollections(client: KernelClient, subjectId: string): Promise<PublicCollectionsResult> {
+  const result = await client.subjects({ id: subjectId }).collections.get({ query: libraryListQuery() });
+  return readLibraryResult<PublicCollectionsResult>(result as never);
+}
+
+async function readCollections(client: KernelClient, accountId: string): Promise<SubjectSlotCollection[]> {
+  const result = await client.collections.get({ query: { ...libraryListQuery(), curatorAccountId: accountId } });
+  return readLibraryResult<CollectionsResult>(result as never).collections;
+}
+
+/** Reads the viewer's first collections page for the add menu. */
+export async function loadSubjectLibraryCollections(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<SubjectSlotCollectionsResult> {
+  const identity = await readSessionIdentity(request, sessionEnv);
+  if (identity.state !== 'signed-in' || !identity.subject) return { state: 'unavailable', collections: null };
+  try {
+    return { state: 'loaded', collections: await readCollections(client, identity.subject) };
+  } catch (error) {
+    return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable', collections: null };
+  }
+}
+
+/** Reads the entry and public collection page alongside the subject template read. */
+export async function loadSubjectLibrarySlot(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  subjectId: string,
+  loadCollections = false,
+  resultValue?: string,
+): Promise<SubjectLibrarySlotData> {
+  const identityPromise = readSessionIdentity(request, sessionEnv);
+  const publicPromise = readPublicCollections(client, subjectId).then(
+    (page) => ({ available: true as const, ...page }),
+    () => ({ available: false as const, collections: null, next: null }),
+  );
+  const [identity, publicResult] = await Promise.all([identityPromise, publicPromise]);
+  let entryAvailable = false;
+  let entry: SubjectSlotEntry | null = null;
+  let collections: SubjectSlotCollection[] | null = null;
+  let collectionsLoaded = false;
+  if (identity.state === 'signed-in') {
+    const entryPromise = readEntry(client, subjectId).then(
+      (value) => ({ available: true as const, value }),
+      () => ({ available: false as const, value: null }),
+    );
+    const collectionPromise =
+      loadCollections && identity.subject
+        ? readCollections(client, identity.subject).then(
+            (value) => ({ loaded: true as const, value }),
+            () => ({ loaded: false as const, value: null }),
+          )
+        : Promise.resolve({ loaded: false as const, value: null });
+    const [entryResult, collectionResult] = await Promise.all([entryPromise, collectionPromise]);
+    entryAvailable = entryResult.available;
+    entry = entryResult.value;
+    collectionsLoaded = collectionResult.loaded;
+    collections = collectionResult.value;
+  }
+  const result =
+    resultValue === 'added' ||
+    resultValue === 'saved' ||
+    resultValue === 'cleared' ||
+    resultValue === 'collection-full' ||
+    resultValue === 'conflict' ||
+    resultValue === 'closed' ||
+    resultValue === 'unavailable'
+      ? resultValue
+      : undefined;
+  return {
+    session: identity.state,
+    csrfToken: identity.csrfToken,
+    entryAvailable,
+    entry,
+    publicCollections: publicResult.available ? publicResult.collections : null,
+    publicCollectionsNext: publicResult.next,
+    collectionsLoaded,
+    collections,
+    ...(result ? { result } : {}),
+  };
+}
