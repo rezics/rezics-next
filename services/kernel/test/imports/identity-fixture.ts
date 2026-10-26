@@ -17,6 +17,8 @@ import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
+import { createApp } from '../../src/http/app.ts';
+import { accessRoutes } from '../../src/access/routes.ts';
 import type { Access, AccountActor } from '../../src/request/access.ts';
 import type { GrantInput } from '../../src/access/grant-commands.ts';
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
@@ -31,12 +33,24 @@ import {
 } from '../../../../specs/imports-identity-driver.ts';
 
 export const MISSING_IMPORT_IDENTITY = 'openImportIdentity is not implemented';
+let mountedActions: ReturnType<typeof actionCatalogue> | undefined;
+
+/** Route metadata is immutable; every fixture still owns its Access and credentials. */
+export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8Array) {
+  mountedActions ??= actionCatalogue(createKernel({ pool: database.pool, routeKey }));
+  return new Map(mountedActions);
+}
+
 export interface ImportIdentityOptions {
   /** Borrowed application database, including its original capture pool. */
   readonly database: GrowthDatabase;
   readonly clock: NonNullable<AccountWorkflowOptions['clock']>;
   /** Optional migrated, credential-free Auth template owned by the composition. */
   readonly authTemplate?: string;
+  /** Start independent deployment services once their native configuration exists. */
+  readonly configured?: (
+    identity: Pick<ImportIdentity, 'access' | 'accessConfig' | 'routeKey' | 'tokenKeys'>,
+  ) => Promise<void>;
   /** Fault observation only, after each actual committed setup boundary. */
   readonly afterStage?: (stage: Stage) => Promise<void>;
 }
@@ -291,15 +305,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const routeKey = new Uint8Array(randomBytes(32));
     const tokenKeys = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
     let auth: AuthService;
-    const kernel = createKernel({
-      // Match the shared test kernel's request deadline.
-      requestDeadlineMs: 30_000,
-      pool: database.pool,
-      routeKey,
-      tokens: tokenKeys,
-      clock,
-    });
-    const actions = new Map([...actionCatalogue(kernel), ...LIFECYCLE_ACTIONS]);
+    const actions = new Map([...importActionCatalogue(database, routeKey), ...LIFECYCLE_ACTIONS]);
     // Mounted actions already carry resource-type declarations. Replacing them with a
     // bare scope drops those declarations and makes public media reservation throw.
     for (const scope of managementScopes) if (!actions.has(scope)) actions.set(scope, { anonymous: false });
@@ -348,6 +354,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       maintenanceSchedule: '0 0 1 1 *',
     });
     auth = host.service;
+    await options.configured?.({ access, accessConfig, routeKey, tokenKeys });
     owned.set(
       `host:${namespace.name}`,
       async () => (await auth.handler(new Request(auth.verifier.jwksUrl))).status === 200,
@@ -386,8 +393,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       const result = await host!.workflows.register({ key: name, handle: name, email, password });
       return { ...result, email };
     };
-    const human = await person('governance');
-    const comparison = await person('ordinary');
+    const [human, comparison] = await Promise.all([person('governance'), person('ordinary')]);
     await options.afterStage?.('auth-registration');
     // The deployment CLI owns a fresh connection. No HTTP bootstrap or actor bypass.
     const beforeBootstrap = String(
@@ -489,21 +495,26 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const grantLocators: GrantInput[] = [];
     // Reuse this actual Access instance in the HTTP composition; it owns native
     // authenticated identities and durable approval bridges for this exact pool.
-    const app = createKernel({
-      // Match the shared test kernel's request deadline.
-      requestDeadlineMs: 30_000,
-      pool: database.pool,
-      routeKey,
-      tokens: tokenKeys,
-      clock,
-      access,
-      // A finite isolated deployment budget admits history seeding while retaining
-      // the real request-stage identity, counter SQL and admission pipeline.
-      writeRate: createWriteRateLimiter({
-        secret: randomBytes(32).toString('hex'),
-        overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
-      }),
-    });
+    // Setup needs only the production Access routes. Mount their real request
+    // pipeline without compiling unrelated content routes in every identity.
+    // API and media fixtures still own their separate complete kernel apps.
+    const app = accessRoutes(
+      createApp({
+        // Match the shared test kernel's request deadline.
+        requestDeadlineMs: 30_000,
+        pool: database.pool,
+        tokens: tokenKeys,
+        clock,
+        access,
+        // A finite isolated deployment budget admits history seeding while retaining
+        // the real request-stage identity, counter SQL and admission pipeline.
+        writeRate: createWriteRateLimiter({
+          secret: randomBytes(32).toString('hex'),
+          overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
+        }),
+      }) as unknown as Parameters<typeof accessRoutes>[0],
+      { pool: database.pool, access: () => access, clock },
+    );
     /** The ordinary /token call on the management session. Never run inside a measured operation. */
     async function renewManagement() {
       try {
@@ -516,32 +527,42 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
     }
     async function grant(path: string, accountId: string, actions: readonly string[]) {
-      const response = await app.handle(
-        new Request(`https://kernel.identity.test${path}`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${management.bearer}`,
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(randomUUID()),
-          },
-          body: JSON.stringify({
-            resource: GLOBAL,
-            subject: { kind: 'account', id: accountId },
-            actions,
-            valid: '(,)',
+      const key = randomUUID();
+      const send = () =>
+        app.handle(
+          new Request(`https://kernel.identity.test${path}`, {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${management.bearer}`,
+              'content-type': 'application/json',
+              'idempotency-key': JSON.stringify(key),
+            },
+            body: JSON.stringify({
+              resource: GLOBAL,
+              subject: { kind: 'account', id: accountId },
+              actions,
+              valid: '(,)',
+            }),
           }),
-        }),
-      );
+        );
+      let response = await send();
+      for (let attempt = 1; response.status === 503 && attempt < 3; attempt++) {
+        await response.body?.cancel();
+        await Bun.sleep(1000);
+        response = await send();
+      }
       if (![200, 201].includes(response.status)) throw new Error(`Public ${path} ${actions}: HTTP ${response.status}`);
       const body = (await response.json()) as { grant: GrantInput };
       if (path === '/v1/grants') grantLocators.push(body.grant);
     }
-    for (const action of importerScopes) await grant('/v1/grants', robot.accountId, [action]);
-    for (const action of COMMON_ACTIONS) await grant('/v1/grants', comparison.accountId, [action]);
+    await grant('/v1/grants', robot.accountId, importerScopes);
+    await grant('/v1/grants', comparison.accountId, COMMON_ACTIONS);
     await options.afterStage?.('grants');
-    const governance = await issue(human.accountId, importerScopes);
-    const ordinary = await issue(comparison.accountId, COMMON_ACTIONS);
-    const bulk = await issue(robot.accountId, importerScopes);
+    const [governance, ordinary, bulk] = await Promise.all([
+      issue(human.accountId, importerScopes),
+      issue(comparison.accountId, COMMON_ACTIONS),
+      issue(robot.accountId, importerScopes),
+    ]);
     let bulkEnabled = true;
     const result: ImportIdentity = {
       database,

@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { decodeJwt } from 'jose';
 import { afterAll } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
@@ -17,7 +18,6 @@ import { createDumpCounters } from '../../../importer/src/dumps-bytes.ts';
 import { VndbTablesStore } from '../../../importer/src/vndb-tables.ts';
 import type { DriverOptions, Dump, Exchange, ImportApiDriver, Run } from '../../../../specs/imports-api-driver.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { actionCatalogue } from '../../src/http/request.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -28,6 +28,7 @@ import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import {
   createIdentityNamespace,
+  importActionCatalogue,
   identitySupport,
   openImportIdentity,
   type ImportIdentity,
@@ -123,6 +124,7 @@ export async function openApiRuntime(options: DriverOptions) {
   let ownedDatabase: GrowthDatabase | undefined;
   let namespace: Namespace | undefined;
   let boundary: Awaited<ReturnType<typeof createMediaBoundary>> | undefined;
+  let workerStart: Promise<void> | undefined;
   let importer: Importer | undefined;
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let directory: string | undefined;
@@ -163,12 +165,44 @@ export async function openApiRuntime(options: DriverOptions) {
       createIdentityNamespace(base, prepared.application.name),
     );
     ownedDatabase = await openGrowthDatabase(namespace.url);
+    const fetchConfig = { allowedHosts: ['lain.bgm.tv', 'covers.openlibrary.org'] };
     let stageStart = Date.now();
     const identity = await time('identity and Auth setup', () =>
       openImportIdentity({
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
         clock: () => new Date(),
+        async configured(configuration) {
+          const auth = configuration.accessConfig.auth!;
+          boundary = await time('media boundary', () =>
+            createMediaBoundary({
+              content: {
+                pool: ownedDatabase!.pool,
+                access: configuration.access,
+                routeKey: configuration.routeKey,
+                clock: () => new Date(),
+              },
+              fetchConfig,
+              workerEnvironment: {
+                AUTH_ISSUER: auth.issuer,
+                AUTH_AUDIENCE: auth.audience,
+                AUTH_JWKS_URL: auth.jwksUrl,
+                KERNEL_SESSION_KEYS: [...configuration.tokenKeys.keys]
+                  .map(([id, bytes]) => `${id}:${Buffer.from(bytes).toString('base64url')}`)
+                  .join(','),
+                CONTENT_AUTH_CONSENT_URL: `${auth.issuer}/internal/v1/consents:read`,
+                CF_ACCESS_CLIENT_ID: 'external-fixture',
+                CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
+                OPENSEARCH_URL: '',
+                STRIPE_SECRET_KEY: '',
+              },
+            }),
+          );
+          // The isolated kernel worker and Auth provisioning are independent.
+          // Keep their real startup work inside setup, but let it overlap.
+          workerStart = time('media worker start', () => boundary!.start());
+          void workerStart.catch(() => {});
+        },
         async afterStage(stage) {
           recordPhase(`identity: ${stage}`, stageStart);
           stageStart = Date.now();
@@ -177,38 +211,16 @@ export async function openApiRuntime(options: DriverOptions) {
     );
     ownedIdentity = identity;
     // Request the registered client's complete import scopes through the native account-key flow.
-    const bulk = await time('importer account-key sign-in', () =>
+    let bulk = await time('importer account-key sign-in', () =>
       identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),
     );
     const database = identity.database;
     const auth = identity.accessConfig.auth!;
     // The application resolves resource declarations from its complete mounted
     // routes. Identity administration's action-only extensions are not route metadata.
-    const declarations = timeSync('kernel route declarations', () =>
-      createKernel({ pool: database.pool, routeKey: identity.routeKey }),
-    );
-    const access = createAccess({ actions: actionCatalogue(declarations), auth });
-    const fetchConfig = { allowedHosts: ['lain.bgm.tv', 'covers.openlibrary.org'] };
-    boundary = await time('media boundary', () =>
-      createMediaBoundary({
-        content: { pool: database.pool, access, routeKey: identity.routeKey, clock: () => new Date() },
-        fetchConfig,
-        workerEnvironment: {
-          AUTH_ISSUER: auth.issuer,
-          AUTH_AUDIENCE: auth.audience,
-          AUTH_JWKS_URL: auth.jwksUrl,
-          KERNEL_SESSION_KEYS: [...identity.tokenKeys.keys]
-            .map(([id, bytes]) => `${id}:${Buffer.from(bytes).toString('base64url')}`)
-            .join(','),
-          CONTENT_AUTH_CONSENT_URL: `${auth.issuer}/internal/v1/consents:read`,
-          CF_ACCESS_CLIENT_ID: 'external-fixture',
-          CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
-          OPENSEARCH_URL: '',
-          STRIPE_SECRET_KEY: '',
-        },
-      }),
-    );
-    const mediaBoundary = boundary;
+    const actions = timeSync('kernel route declarations', () => importActionCatalogue(database, identity.routeKey));
+    const access = createAccess({ actions, auth });
+    const mediaBoundary = boundary!;
     await mediaBoundary.source('https://lain.bgm.tv/cover.jpg');
     await mediaBoundary.source('https://lain.bgm.tv/replacement.jpg');
     work = await time('work client', () => createWorkClient(database.url, database.openPool()));
@@ -238,19 +250,38 @@ export async function openApiRuntime(options: DriverOptions) {
       });
     }
     let app = timeSync('kernel composition', kernel);
+    // Observer fan-out shares one native pool; admit reads before HTTP deadlines start.
+    let observerRequests = 0;
+    const observerWaiting: (() => void)[] = [];
     async function request(path: string, body?: unknown, bearer?: string, key = randomUUID()) {
-      return app.handle(
-        new Request(`${origin}${path}`, {
-          method: body === undefined ? 'GET' : 'POST',
-          headers: {
-            ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-            ...(body === undefined
-              ? {}
-              : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
-          },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }),
-      );
+      if (observerRequests === 1) await new Promise<void>((resolve) => observerWaiting.push(resolve));
+      else observerRequests++;
+      const send = () =>
+        app.handle(
+          new Request(`${origin}${path}`, {
+            method: body === undefined ? 'GET' : 'POST',
+            headers: {
+              ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+              ...(body === undefined
+                ? {}
+                : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+        );
+      try {
+        let response = await send();
+        for (let attempt = 1; response.status === 503 && attempt < 3; attempt++) {
+          await response.body?.cancel();
+          await Bun.sleep(1000);
+          response = await send();
+        }
+        return response;
+      } finally {
+        const next = observerWaiting.shift();
+        if (next) next();
+        else observerRequests--;
+      }
     }
 
     const tierKey = randomUUID();
@@ -292,9 +323,29 @@ export async function openApiRuntime(options: DriverOptions) {
       return found.rows[0] ? JSON.stringify(found.rows[0]) : null;
     }
 
+    let renewingBulk: Promise<void> | undefined;
+    // Bound HTTP connections alongside the sixteen record workers so their
+    // three-way preflights cannot overflow the native admission queue.
+    let requests = 0;
+    const waiting: (() => void)[] = [];
+    // Writes share one account's native transaction fences. Order them while
+    // record reads and deferred media work retain their pipeline concurrency.
+    let writing = false;
+    const writes: (() => void)[] = [];
     const transport = createImportTransport({
       origin,
-      tokenProvider: async () => (current?.controls.as === 'ordinary' ? identity.ordinary.bearer : bulk.bearer),
+      async tokenProvider() {
+        if (current?.controls.as === 'ordinary') return identity.ordinary.bearer;
+        if ((decodeJwt(bulk.bearer).exp ?? 0) * 1000 - Date.now() < 60_000) {
+          renewingBulk ??= time('importer account-key renewal', async () => {
+            bulk = await identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes);
+          }).finally(() => {
+            renewingBulk = undefined;
+          });
+          await renewingBulk;
+        }
+        return bulk.bearer;
+      },
       now: Date.now,
       sleep: async (ms) => {
         current?.result.waits.push({ startedAtMs: Date.now(), durationMs: ms });
@@ -302,71 +353,88 @@ export async function openApiRuntime(options: DriverOptions) {
       },
       fetch: (async (input, init) => {
         const req = new Request(input, init);
-        const atMs = Date.now();
-        const bytes = req.method === 'POST' ? await req.clone().text() : '';
         const bulk = new URL(req.url).pathname === '/v1/subjects:batchWrite';
         if (bulk) {
-          budget((JSON.parse(bytes) as BatchWriteRequest).commands.length);
-          await current?.controls.beforeWrite?.();
+          if (writing) await new Promise<void>((resolve) => writes.push(resolve));
+          else writing = true;
         }
-        const response = await time(`HTTP: ${req.method} ${new URL(req.url).pathname}`, () => app.handle(req));
-        // Detach the actual response bytes before a simulated transport loss
-        // aborts the request and its connected response streams.
-        const captured = new Response(await response.clone().arrayBuffer(), {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        });
-        captures.push({ request: req, body: bytes, response: captured });
-        if (bulk && current) {
-          const body = JSON.parse(bytes) as BatchWriteRequest;
-          for (const command of body.commands)
-            commands.set(command.key, {
-              command,
-              actor: current.controls.as === 'ordinary' ? identity.ordinary.accountId : identity.bulk.accountId,
-            });
-          const exchange: Exchange = {
-            request: {
-              url: req.url,
-              method: req.method,
-              headers: new Headers(req.headers),
-              body,
-              serializedBody: bytes,
-              keys: body.commands.map((c) => c.key),
-            },
-            response: {
-              status: response.status,
-              headers: new Headers(response.headers),
-              body: await captured.clone().json(),
-            },
-            atMs,
-            receipts:
-              response.status === 200
-                ? await Promise.all(body.commands.map(async (c) => ({ key: c.key, identity: await receipt(c.key) })))
-                : [],
-          };
-          current.result.exchanges.push(exchange);
-          if (response.status === 429) await current.controls.onRateLimited?.(exchange);
-          if (response.status === 200 && current.controls.loseCommittedResponse && !current.lost) {
-            current.lost = true;
-            current.abort.abort(new Error('Committed response lost at HTTP boundary'));
-            throw current.abort.signal.reason;
+        if (requests >= 8) await new Promise<void>((resolve) => waiting.push(resolve));
+        else requests++;
+        try {
+          req.signal.throwIfAborted();
+          const atMs = Date.now();
+          const bytes = req.method === 'POST' ? await req.clone().text() : '';
+          if (bulk) {
+            budget((JSON.parse(bytes) as BatchWriteRequest).commands.length);
+            await current?.controls.beforeWrite?.();
+          }
+          const response = await time(`HTTP: ${req.method} ${new URL(req.url).pathname}`, () => app.handle(req));
+          // Detach the actual response bytes before a simulated transport loss
+          // aborts the request and its connected response streams.
+          const captured = new Response(await response.clone().arrayBuffer(), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          });
+          captures.push({ request: req, body: bytes, response: captured });
+          if (bulk && current) {
+            const body = JSON.parse(bytes) as BatchWriteRequest;
+            for (const command of body.commands)
+              commands.set(command.key, {
+                command,
+                actor: current.controls.as === 'ordinary' ? identity.ordinary.accountId : identity.bulk.accountId,
+              });
+            const exchange: Exchange = {
+              request: {
+                url: req.url,
+                method: req.method,
+                headers: new Headers(req.headers),
+                body,
+                serializedBody: bytes,
+                keys: body.commands.map((c) => c.key),
+              },
+              response: {
+                status: response.status,
+                headers: new Headers(response.headers),
+                body: await captured.clone().json(),
+              },
+              atMs,
+              receipts:
+                response.status === 200
+                  ? await Promise.all(body.commands.map(async (c) => ({ key: c.key, identity: await receipt(c.key) })))
+                  : [],
+            };
+            current.result.exchanges.push(exchange);
+            if (response.status === 429) await current.controls.onRateLimited?.(exchange);
+            if (response.status === 200 && current.controls.loseCommittedResponse && !current.lost) {
+              current.lost = true;
+              current.abort.abort(new Error('Committed response lost at HTTP boundary'));
+              throw current.abort.signal.reason;
+            }
+          }
+          return response;
+        } finally {
+          const next = waiting.shift();
+          if (next) next();
+          else requests--;
+          if (bulk) {
+            const write = writes.shift();
+            if (write) write();
+            else writing = false;
           }
         }
-        return response;
       }) as typeof fetch,
     });
     const root = resolve(import.meta.dir, '../../../../.temp');
     await mkdir(root, { recursive: true });
     directory = await mkdtemp(`${root}/import-api-`);
     const path = `${directory}/state.sqlite`;
-    let workerStart: Promise<void> | undefined;
-    function openImporter() {
+    function openImporter(serial = false) {
       const next = new Importer({
         path,
-        // Outcome scenarios exercise one account's durable retry sequence. The
-        // separate throughput binding owns concurrency across records.
-        recordConcurrency: 1,
+        // Fault controls select one record so the chosen commit or one-request
+        // rate window has a deterministic boundary within bounded retries.
+        ...(serial || limited ? { recordConcurrency: 1 } : {}),
         now: Date.now,
         sleep: async (ms, signal) => {
           current?.result.waits.push({ startedAtMs: Date.now(), durationMs: ms });
@@ -419,14 +487,22 @@ export async function openApiRuntime(options: DriverOptions) {
       return next;
     }
     importer = timeSync('importer state', openImporter);
+    // A deployment's worker is already running when imports reach its API.
+    // Compile and launch this isolated native worker before request deadlines start.
+    await (workerStart ??= time('media worker start', () => mediaBoundary.start()));
     async function run(dump: Dump, controls: Controls = {}): Promise<Run> {
       if (current) throw new Error('Concurrent fixture run');
+      if (controls.loseCommittedResponse) {
+        await importer!.close();
+        importer = openImporter(true);
+      }
       const started = Date.now();
       const measured = !!measurement.active;
       const result: Run = { outcome: 'interrupted', conversions: [], exchanges: [], waits: [], vanished: [] };
       current = { result, controls, abort: new AbortController(), lost: false };
       const counters = createDumpCounters();
       let tableDb: Database | undefined;
+      let readerMs = 0;
       try {
         let records: AsyncIterable<SourceRecord>;
         if (dump.source === 'vndb' && dump.entries) {
@@ -458,7 +534,24 @@ export async function openApiRuntime(options: DriverOptions) {
         }
         const native = await importer!.runRecords(
           createSourceRegistration(dump.source, { source: dump.source, converterRevision: dump.converterRevision }),
-          records,
+          (async function* () {
+            const reader = records[Symbol.asyncIterator]();
+            try {
+              while (true) {
+                const started = performance.now();
+                let next: IteratorResult<SourceRecord>;
+                try {
+                  next = await reader.next();
+                } finally {
+                  readerMs += performance.now() - started;
+                }
+                if (next.done) return;
+                yield next.value;
+              }
+            } finally {
+              await reader.return?.();
+            }
+          })(),
           { maxRecordBytes: options.maxRecordBytes, collectionLimit: 10000, signal: current.abort.signal },
         );
         result.outcome = current.lost
@@ -491,6 +584,7 @@ export async function openApiRuntime(options: DriverOptions) {
           reader.maxPageRecords = Math.max(reader.maxPageRecords, counters.yieldedRecords > 0 ? 1 : 0);
           reader.workUnits += counters.scannedBytes + counters.copiedBytes;
         }
+        recordPhase(`reader: ${dump.source} ${dump.bytes.length} bytes`, Date.now() - readerMs);
         tableDb?.close();
         current = undefined;
         recordPhase(
@@ -503,7 +597,9 @@ export async function openApiRuntime(options: DriverOptions) {
     recordPhase('runtime setup total', started);
     return {
       identity,
-      bulk,
+      get bulk() {
+        return bulk;
+      },
       database,
       mediaBoundary,
       measurement,
@@ -525,6 +621,8 @@ export async function openApiRuntime(options: DriverOptions) {
       async rateLimit(input: Parameters<ImportApiDriver['rateLimit']>[0]) {
         limited = input;
         batchUnits = 0;
+        await importer!.close();
+        importer = openImporter();
       },
       replay: (req: Request) => app.handle(req),
     };

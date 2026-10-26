@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import sharp from 'sharp';
+import type { PoolClient, QueryConfig } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, BatchStatement, Rights, Source } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
@@ -368,6 +369,48 @@ test("a summary proposal stores content's document reference and never the body"
   const shown = requireStatus('read', await call('GET', `/v1/subjects/${book.id}`, { token: importer }), 200);
   expect(shown.subject.statements['schema:abstract'][0].value.content).toEqual(stored.rows[0]!.content);
   expect(JSON.stringify(shown)).not.toContain(token);
+});
+
+test('a summary transaction retry retains the source document and stores it once', async () => {
+  const book = await createBook('Retry summary');
+  const token = `BodyToken${randomUUID()}`;
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  let retried = false;
+  const intercept = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const query = client.query;
+    originals.set(client, query);
+    client.query = ((statement: QueryConfig | string, ...args: unknown[]) => {
+      const text = typeof statement === 'string' ? statement : statement.text;
+      // The content install has replaced the candidate's document body before
+      // the command fence commits. Retry that complete transaction once.
+      if (!retried && text.includes('INSERT INTO core.receipt')) {
+        retried = true;
+        throw Object.assign(new Error('Retry imported summary transaction'), { code: '40001' });
+      }
+      return Reflect.apply(query, client, [statement, ...args]);
+    }) as PoolClient['query'];
+  };
+  pool.on('acquire', intercept);
+  let proposed!: Awaited<ReturnType<typeof batch>>;
+  try {
+    proposed = await batch([
+      summary(book.externalId, book.id, token, 'retry-summary', 'https://openlibrary.org/works/OL1W'),
+    ]);
+  } finally {
+    pool.off('acquire', intercept);
+    for (const [client, query] of originals) client.query = query;
+  }
+  expect(retried).toBe(true);
+  const result = commandAt('retried summary', proposed, 0, 201);
+  expect(await documentCount(book.id)).toBe(1);
+  const stored = await pool.query(
+    `SELECT position(convert_to($3, 'UTF8') IN body) > 0 AS held
+     FROM content.imported_field WHERE subject = $1 AND candidate = $2`,
+    [book.id, result.value.candidate, token],
+  );
+  expect(stored.rows).toEqual([{ held: true }]);
+  expect(await leaked(token)).toBe(0);
 });
 
 test('an unchanged summary refresh appends no document', async () => {

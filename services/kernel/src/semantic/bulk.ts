@@ -256,7 +256,9 @@ export async function batchCommand(
             let written: Awaited<ReturnType<typeof writeProposal>>;
             const proposal = {
               subject: command.subject,
-              statement: command.statement,
+              // Content installation rewrites the candidate body. Keep the
+              // original snapshot available to a transaction retry.
+              statement: imported ? structuredClone(command.statement) : command.statement,
               release: options.release,
               source,
               allowContent: imported,

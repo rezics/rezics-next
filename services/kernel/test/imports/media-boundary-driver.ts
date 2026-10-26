@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { decodeJwt } from 'jose';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import type { MediaBoundaryDriver } from '../../../../specs/imports-media-boundary-driver.ts';
 import type { MediaBoundary } from './media-boundary.ts';
@@ -33,6 +34,15 @@ import type { Envelope } from '../../src/events/log.ts';
 // application processes; each child owns and removes its private loader files.
 const compiledSql = new Map<string, { source: string; code: string }>();
 async function sqlLoader() {
+  // A host has already compiled the same migrated SQL before it starts its
+  // worker. Carry only that compiler output into the child's private loader.
+  if (process.env.MEDIA_SQL_CACHE) {
+    const entries = JSON.parse(await readFile(process.env.MEDIA_SQL_CACHE, 'utf8')) as [
+      string,
+      { source: string; code: string },
+    ][];
+    for (const [file, value] of entries) compiledSql.set(file, value);
+  }
   const directory = await mkdtemp(resolve(import.meta.dir, '../../../../.temp/media-sql-'));
   const cache = `${directory}/compiled.json`;
   const loader = `${directory}/loader.ts`;
@@ -63,6 +73,7 @@ Bun.plugin({ name: 'native-reylo-cache', setup(build) {
     return {
       loader,
       config,
+      cache,
       async close() {
         try {
           const entries = JSON.parse(await readFile(cache, 'utf8')) as [string, { source: string; code: string }][];
@@ -108,7 +119,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
         [process.execPath, `--config=${sql.config}`, '--preload', sql.loader, import.meta.path, `--media-${mode}`],
         {
           cwd: process.cwd(),
-          env: { ...process.env, ...env },
+          env: { ...process.env, ...env, MEDIA_SQL_CACHE: sql.cache },
           stdin: 'pipe',
           stdout: 'pipe',
           stderr: 'pipe',
@@ -278,6 +289,7 @@ export async function createMediaBoundaryDriver(): Promise<MediaBoundaryDriver> 
 
 type RpcHost = { call(method: string, input: any, signal?: AbortSignal): Promise<unknown>; close(): Promise<void> };
 async function applicationHost(): Promise<RpcHost> {
+  const { COMMON_ACTIONS, IMPORT_ACTIONS } = await import('../../../../specs/imports-identity-driver.ts');
   // The worker process loads the registered application modules, but has no
   // application HTTP/identity host to install. Keep those host-only dependencies
   // out of every isolated worker's module loading and SQL compilation.
@@ -285,18 +297,16 @@ async function applicationHost(): Promise<RpcHost> {
     { createKernelClient },
     { bundledRelease },
     { createKernel },
-    { actionCatalogue },
     { createAccess },
     { bootstrapRelease },
     { createWriteRateLimiter },
     { createImportIdentityDriver },
-    { identitySupport },
+    { identitySupport, importActionCatalogue },
     { createMediaBoundary },
   ] = await Promise.all([
     import('@rezics/client'),
     import('@rezics/definitions/bundled'),
     import('../../src/http/kernel.ts'),
-    import('../../src/http/request.ts'),
     import('../../src/access/index.ts'),
     import('../../src/semantic/definitions.ts'),
     import('../../src/access/write-rate.ts'),
@@ -318,8 +328,7 @@ async function applicationHost(): Promise<RpcHost> {
   try {
     const f = await identities.open({ clock: () => new Date() });
     const auth = f.accessConfig.auth!;
-    const declarations = createKernel({ pool: f.database.pool, routeKey: f.routeKey });
-    const access = createAccess({ actions: actionCatalogue(declarations), auth });
+    const access = createAccess({ actions: importActionCatalogue(f.database, f.routeKey), auth });
     // The media client consents to its private status read as well as import.
     // Auth performs ordinary account-key signin and issuance; no token is edited.
     const mediaScopes = [...f.client.scopes, 'media:read_reservation'];
@@ -357,11 +366,45 @@ async function applicationHost(): Promise<RpcHost> {
         overrides: '{"new-account":{"write":{"maximum":100000,"seconds":60},"upload":{"maximum":100000,"seconds":60}}}',
       }),
     });
+    // Fixture population shares each caller's native account and partition
+    // fences. Admit its public writes in order; worker drains still overlap.
+    const writing = new Map<string, Promise<void>>();
+    async function handle(request: Request, accountId: string) {
+      if (request.method === 'GET') return app.handle(request);
+      const previous = writing.get(accountId);
+      const next = Promise.withResolvers<void>();
+      writing.set(accountId, next.promise);
+      await previous;
+      try {
+        return await app.handle(request);
+      } finally {
+        if (writing.get(accountId) === next.promise) writing.delete(accountId);
+        next.resolve();
+      }
+    }
+    function authenticated(initial: ImportIdentity['bulk'], scopes: readonly string[]) {
+      let credential = initial;
+      let renewing: Promise<ImportIdentity['bulk']> | undefined;
+      return async (request: Request) => {
+        if ((decodeJwt(credential.bearer).exp ?? 0) * 1000 - Date.now() < 60_000) {
+          renewing ??= identitySupport(f).issue(credential.accountId, scopes);
+          try {
+            credential = await renewing;
+          } finally {
+            renewing = undefined;
+          }
+        }
+        request.headers.set('authorization', `Bearer ${credential.bearer}`);
+        return handle(request, credential.accountId);
+      };
+    }
+    const importRequest = authenticated(credential, mediaScopes);
+    const setupRequest = authenticated(f.governance, [...COMMON_ACTIONS, ...IMPORT_ACTIONS]);
     const client = createKernelClient('https://kernel.media.test', {
       headers: { authorization: `Bearer ${credential.bearer}` },
       fetch: (async (input, init) => {
         const request = new Request(input, init);
-        const response = await app.handle(request);
+        const response = await importRequest(request);
         if (process.env.MEDIA_DEBUG)
           console.error(
             'Public fixture HTTP',
@@ -375,7 +418,7 @@ async function applicationHost(): Promise<RpcHost> {
     });
     const setupClient = createKernelClient('https://kernel.media.test', {
       headers: { authorization: `Bearer ${f.governance.bearer}` },
-      fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+      fetch: ((input, init) => setupRequest(new Request(input, init))) as typeof fetch,
     });
     const anonymous = createKernelClient('https://kernel.media.test', {
       fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
@@ -699,8 +742,21 @@ async function workerHost(): Promise<RpcHost> {
   const names: string[] = [];
   const calls: { workflowId: string; name: string; mediaId: string }[] = [];
   const network: string[] = [];
-  let drainStart = 0;
-  let drainMaximum = 0;
+  const drains = new Map<string, { id: string; jobs: number; maximum: number }>();
+  const workflowDrains = new Map<string, string>();
+  function beginDrain(mediaIds: readonly string[], maximum: number) {
+    if (maximum !== 16 || mediaIds.length > 16) throw new Error('Unbounded media drain');
+    const budget = { id: randomUUID(), jobs: 0, maximum };
+    for (const id of mediaIds) drains.set(id, budget);
+  }
+  function checkDrain(mediaId: string, executed = false) {
+    const budget = drains.get(mediaId);
+    if (!budget || budget.jobs >= budget.maximum) throw new Error('Exceeded bounded native dispatch');
+    if (executed) {
+      budget.jobs++;
+      workflowDrains.set(DBOS.workflowID!, budget.id);
+    }
+  }
   const registerStep = DBOS.registerStep;
   const registerWorkflow = DBOS.registerWorkflow;
   // Observe registration and executed native steps while delegating unchanged to
@@ -721,7 +777,7 @@ async function workerHost(): Promise<RpcHost> {
     return Reflect.apply(registerStep, DBOS, [
       name
         ? async (...args: any[]) => {
-            if (calls.length - drainStart >= drainMaximum) throw new Error('Exceeded bounded native dispatch');
+            checkDrain(args[0].mediaId, true);
             calls.push({ workflowId: DBOS.workflowID!, name, mediaId: args[0].mediaId });
             return Reflect.apply(fn, undefined, args);
           }
@@ -742,7 +798,10 @@ async function workerHost(): Promise<RpcHost> {
       network.push(url.href);
       throw new Error(`Unconfigured external network request: ${url.origin}`);
     }
-    return originalFetch(new URL(`/${kind}?url=${encodeURIComponent(url.href)}`, endpoint), request);
+    const target = new URL(`/${kind}?url=${encodeURIComponent(url.href)}`, endpoint);
+    const drain = workflowDrains.get(DBOS.workflowID!);
+    if (drain) target.searchParams.set('drain', drain);
+    return originalFetch(target, request);
   }) as typeof fetch;
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   let ending: Promise<void> | undefined;
@@ -769,6 +828,9 @@ async function workerHost(): Promise<RpcHost> {
     })());
   try {
     const env = { ...process.env };
+    // The complete worker also registers rating effects, which require a
+    // deployment counting secret even though these fixtures only dispatch media.
+    env.KERNEL_RATING_COUNTER_SECRET ??= randomBytes(32).toString('base64url');
     // Optional services remain disabled in this complete kernel deployment.
     for (const name of [
       'STRIPE_SECRET_KEY',
@@ -825,13 +887,12 @@ async function workerHost(): Promise<RpcHost> {
       close,
       async call(method, input) {
         if (method === 'reset') {
-          drainStart = calls.length;
-          drainMaximum = 0;
+          drains.clear();
+          workflowDrains.clear();
           return null;
         }
         if (method === 'beginDrain') {
-          drainStart = calls.length;
-          drainMaximum = input.maxJobs;
+          beginDrain(input.mediaIds, input.maxJobs);
           return null;
         }
         if (method === 'trace') return observer.trace(input.mediaId);
@@ -840,7 +901,7 @@ async function workerHost(): Promise<RpcHost> {
         const envelope = input.envelope as Envelope;
         const mediaId = input.mediaId as string;
         const run = async (source: Envelope, effect: string, kind: 'importFromUrl' | 'image') => {
-          if (calls.length - drainStart >= drainMaximum) throw new Error('Exceeded bounded native dispatch');
+          checkDrain(mediaId);
           const type =
             kind === 'image' ? 'com.rezics.content.media.uploaded.v1' : 'com.rezics.content.media.import-requested.v1';
           const index = source.events.findIndex((event) => event.subject === mediaId && event.type === type);
@@ -851,8 +912,7 @@ async function workerHost(): Promise<RpcHost> {
           return DBOS.retrieveWorkflow(id).getResult({ pollingIntervalMs: 1 });
         };
         if (method === 'measure') {
-          drainStart = calls.length;
-          drainMaximum = 16;
+          beginDrain([mediaId], 16);
           // Queue polling and result polling share this pool, and a sweep walks
           // every enqueued partition head. Either one adds statements as the
           // measured import waits or as unrelated heads accumulate. Stop the
@@ -866,7 +926,7 @@ async function workerHost(): Promise<RpcHost> {
           );
           return (
             await capture(database, async () => {
-              if (calls.length - drainStart >= drainMaximum) throw new Error('Exceeded bounded native dispatch');
+              checkDrain(mediaId);
               const index = envelope.events.findIndex(
                 (event) => event.subject === mediaId && event.type === 'com.rezics.content.media.import-requested.v1',
               );

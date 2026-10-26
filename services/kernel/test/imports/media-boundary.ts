@@ -111,11 +111,11 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
   let failPut = false;
   let putFailure = 0;
   let worker: Awaited<ReturnType<(typeof import('./media-boundary-driver.ts'))['launchBoundaryProcess']>> | undefined;
-  let workerTrace: MediaTrace = { anchors: {}, fences: [] };
+  const workerTraces = new Map<string, MediaTrace>();
   let ending: Promise<void> | undefined;
   let starting: Promise<void> | undefined;
   let callStart = 0;
-  let requestStart = 0;
+  const sourceRequestsByDrain = new Map<string, number>();
   const endpoint = 'https://00000000000000000000000000000000.r2.cloudflarestorage.com';
   const transport = globalThis.fetch;
   const server = Bun.serve({
@@ -126,7 +126,10 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       const incoming = new URL(request.url);
       const target = new URL(incoming.searchParams.get('url')!);
       if (incoming.pathname === '/source') {
-        if (requests.length - requestStart >= 64) return new Response(null, { status: 429 });
+        const drain = incoming.searchParams.get('drain')!;
+        const count = sourceRequestsByDrain.get(drain) ?? 0;
+        if (count >= 64) return new Response(null, { status: 429 });
+        sourceRequestsByDrain.set(drain, count + 1);
         const source =
           sources.get(target.href) ??
           [...sources.entries()].find(([url]) => {
@@ -216,9 +219,9 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
     maxObjectBytes: 20 * 1024 * 1024,
     fetch: externalFetch,
   });
-  const traces = (id: string) => [native.trace(id), workerTrace];
+  const traces = (id: string) => [native.trace(id), workerTraces.get(id) ?? { anchors: {}, fences: [] }];
   async function syncTrace(mediaId: string) {
-    if (worker) workerTrace = await worker.call<MediaTrace>('trace', { mediaId });
+    if (worker) workerTraces.set(mediaId, await worker.call<MediaTrace>('trace', { mediaId }));
   }
   const boundary: MediaBoundary = {
     configuration: { storage, fetchConfig: options.fetchConfig },
@@ -274,40 +277,42 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       input.signal.throwIfAborted();
       if (input.maxJobs !== 16 || input.mediaIds.length > 16) throw new Error('Unbounded media drain');
       await boundary.start();
-      requestStart = requests.length;
-      await worker!.call('beginDrain', { maxJobs: input.maxJobs });
+      await worker!.call('beginDrain', { mediaIds: input.mediaIds, maxJobs: input.maxJobs });
       const failures = putFailure;
-      for (const id of input.mediaIds) {
-        await syncTrace(id);
-        const envelope = await mediaEnvelope(
-          options.content.pool,
-          id,
-          traces(id),
-          'com.rezics.content.media.import-requested.v1',
-        );
-        const running = worker!.call('dispatch', { envelope, mediaId: id, redeliver: input.redeliver });
-        // A failed external operation is reported immediately; DBOS owns its retry.
-        // The next bounded drain observes that same durable identity to completion.
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const failure = new Promise<never>((_, reject) => {
-          const check = () => {
-            if (putFailure !== failures) reject(new Error('Actual object provider PUT failed'));
-            else if (input.signal.aborted) reject(input.signal.reason);
-            else timer = setTimeout(check, 5);
-          };
-          timer = setTimeout(check, 5);
-        });
-        try {
-          await Promise.race([running, failure]);
-        } finally {
-          clearTimeout(timer);
+      // Dispatch every pending ID before awaiting completion, including IDs
+      // from other drain calls using the same native worker concurrently.
+      const running = Promise.all(
+        input.mediaIds.map(async (id) => {
           await syncTrace(id);
-        }
+          const envelope = await mediaEnvelope(
+            options.content.pool,
+            id,
+            traces(id),
+            'com.rezics.content.media.import-requested.v1',
+          );
+          await worker!.call('dispatch', { envelope, mediaId: id, redeliver: input.redeliver });
+        }),
+      );
+      // A failed external operation is reported immediately; DBOS owns its retry.
+      // The next bounded drain observes that same durable identity to completion.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const failure = new Promise<never>((_, reject) => {
+        const check = () => {
+          if (putFailure !== failures) reject(new Error('Actual object provider PUT failed'));
+          else if (input.signal.aborted) reject(input.signal.reason);
+          else timer = setTimeout(check, 5);
+        };
+        timer = setTimeout(check, 5);
+      });
+      try {
+        await Promise.race([running, failure]);
+      } finally {
+        clearTimeout(timer);
+        await Promise.all(input.mediaIds.map(syncTrace));
       }
     },
     async measureTransition(id) {
       await boundary.start();
-      requestStart = requests.length;
       await syncTrace(id);
       const envelope = await mediaEnvelope(
         options.content.pool,
@@ -361,10 +366,11 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
         callStart = capture.calls.length;
         await worker.call('reset');
       }
+      workerTraces.clear();
       objects.clear();
       sources.clear();
       requests.length = 0;
-      requestStart = 0;
+      sourceRequestsByDrain.clear();
       internet.length = 0;
       peak = 0;
       failPut = false;

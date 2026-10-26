@@ -67,7 +67,9 @@ export async function observeMediaPool(pool: Pool) {
       });
     }) as PoolClient['query'];
   };
-  pool.on('connect', attach);
+  // Identity setup may already have populated the pool. Observe those clients
+  // too, before their next native transaction can append media events.
+  pool.on('acquire', attach);
   const client = await pool.connect();
   attach(client);
   client.release();

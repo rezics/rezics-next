@@ -1080,6 +1080,53 @@ test('shared PostgreSQL harness measures real bounded API Auth Access fences and
         }
     }
   }));
+test('a full dump imports end to end through the public API with fixed reader memory and re-imports idempotently', async () => {
+  await scenario(async (d) => {
+    const count = 32;
+    const input = await catalogue(count);
+    let run!: Run;
+    const measured = await d.measure(async () => {
+      run = await d.run(input);
+      expect(run.outcome).toBe('complete');
+    });
+    const reader = measured.reader;
+    expect(reader.inputBytes).toBe(input.bytes.byteLength);
+    expect(reader.records).toBe(count);
+    expect(reader.workUnits).toBeGreaterThan(0);
+    expect(reader.workUnits).toBeLessThanOrEqual(32 * input.bytes.byteLength + 64 * count);
+    const maxRecordBytes = Math.max(
+      ...new TextDecoder()
+        .decode(input.bytes)
+        .trim()
+        .split('\n')
+        .map((line) => encoder.encode(line).length),
+    );
+    expect(reader.peakBufferedBytes).toBeLessThanOrEqual(65536 + 8 * maxRecordBytes);
+    expect(reader.maxPageRecords).toBeLessThanOrEqual(8);
+    expect(reader.statements).toBe(0);
+    expect(reader.rowsReturned).toBe(0);
+    expect(reader.sqlite.executions).toEqual([]);
+    expect(reader.postgres.statements).toEqual([]);
+    expect(reader.postgres.plans).toEqual([]);
+    expect(reader.partitions).toBe(0);
+    expect(run.conversions).toHaveLength(count);
+    expect(measured.converter.statements).toBe(0);
+    expect(measured.converter.rowsReturned).toBe(0);
+    expect(measured.converter.partitions).toBe(0);
+    expect(measured.converter.sqlite.executions).toEqual([]);
+    expect(measured.converter.postgres.statements).toEqual([]);
+    expect(measured.converter.postgres.plans).toEqual([]);
+    expect((await d.effects()).subjects).toBe(count);
+    const effects = await d.effects();
+    const unchanged = await d.measure(async () => {
+      const run = await d.run(input);
+      expect(run.outcome).toBe('complete');
+      expect(run.exchanges).toEqual([]); // Public writes are for D, not S.
+    });
+    expect(unchanged.reader.records).toBe(count);
+    expect(await d.effects()).toEqual(effects);
+  });
+});
 test('pure conversion scales with bounded fields and rejects the hard field cap without database work', () =>
   scenario(async (d) => {
     const first = JSON.parse(new TextDecoder().decode((await dump('wikidata')).bytes).split('\n')[0]!);
