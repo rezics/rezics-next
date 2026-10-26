@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type Locator, type Page } from 'playwright';
 import fixtures from '../src/kernel/fixtures.json';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 
@@ -36,6 +36,9 @@ let counter = 0;
 let libraryEntry: null | { subjectId: string; state: string; revision: number; createdAt: string; updatedAt: string } =
   null;
 let members = new Set<string>();
+let releaseWrite: (() => void) | undefined;
+let writeGate: Promise<void> | undefined;
+let refuseEntryWrite: 'closed' | undefined;
 let calls: {
   method: string;
   path: string;
@@ -59,6 +62,19 @@ function reset() {
   libraryEntry = null;
   members = new Set();
   calls = [];
+  refuseEntryWrite = undefined;
+  releaseWrite?.();
+  releaseWrite = undefined;
+  writeGate = undefined;
+}
+function holdEntryWrite() {
+  writeGate = new Promise((resolve) => {
+    releaseWrite = () => {
+      releaseWrite = undefined;
+      writeGate = undefined;
+      resolve();
+    };
+  });
 }
 
 // The auth provider and the site dev-server setup follow posting.test.ts.
@@ -177,6 +193,12 @@ const fake = Bun.serve({
       key: request.headers.get('idempotency-key'),
       authorization: request.headers.get('authorization'),
     });
+    if (
+      writeGate &&
+      (request.method === 'PUT' || request.method === 'DELETE') &&
+      url.pathname === `/v1/libraryEntries/${subjectId}`
+    )
+      await writeGate;
     const subjectRead = createFakeKernelFetch(fixtures as never);
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') return subjectRead(request);
     if (url.pathname === `/v1/libraryEntries/${subjectId}`) {
@@ -190,6 +212,10 @@ const fake = Bun.serve({
             })
           : json(problem(404, 'not_found'), 404);
       if (request.method === 'PUT') {
+        if (refuseEntryWrite === 'closed') {
+          refuseEntryWrite = undefined;
+          return json(problem(403, 'platform_closed'), 403);
+        }
         const value = body as { state?: string; revision?: number } | null;
         if (libraryEntry && value?.revision !== libraryEntry.revision) return json(problem(409, 'conflict'), 409);
         libraryEntry = {
@@ -394,6 +420,16 @@ async function eventually(check: () => boolean | Promise<boolean>) {
   while (!(await check()) && Date.now() < deadline) await Bun.sleep(50);
   expect(await check()).toBe(true);
 }
+function librarySlot(page: Page) {
+  return page.locator('section[aria-label="Library"]');
+}
+function stateControl(slot: Locator) {
+  return slot.getByRole('combobox', { name: 'Library state' });
+}
+async function pick(page: Page, select: Locator, name: string) {
+  await select.click();
+  await page.getByRole('option', { name, exact: true }).click();
+}
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
@@ -406,52 +442,115 @@ afterAll(async () => {
 });
 
 test(
-  'a signed-in person sets or clears their library state for a subject from its page',
+  'a signed-in person without an entry adds the subject to their library by choosing a state, which saves at once',
   async () => {
     reset();
     const { page } = await open(`/en/subjects/${subjectId}`);
     try {
-      const form = page.locator('form[data-library-entry]');
-      const requestLog: unknown[] = [];
-      page.on('request', (request) =>
-        requestLog.push({
-          url: request.url(),
-          method: request.method(),
-          headers: request.headers(),
-          body: request.postData(),
-        }),
-      );
-      page.on('response', (response) =>
-        requestLog.push({
-          status: response.status(),
-          url: response.url(),
-          body: response.status() >= 400 ? response.text() : undefined,
-        }),
-      );
-      const select = form.getByLabel(/library state/i);
-      await select.selectOption('in_progress');
-      await form.getByRole('button', { name: /save/i }).click();
-      try {
-        await eventually(() => libraryEntry?.state === 'in_progress');
-      } catch (error) {
-        throw new Error(
-          `${String(error)}; URL=${page.url()}; calls=${JSON.stringify(calls)}; requests=${JSON.stringify(requestLog)}; body=${await page.locator('body').innerText()}`,
-        );
-      }
+      const slot = librarySlot(page);
+      const select = stateControl(slot);
+      expect(await select.innerText()).toContain('Add to library');
+      expect(await select.innerText()).not.toContain('Planned');
+      expect(await slot.getByRole('button', { name: 'Save', exact: true }).count()).toBe(0);
+      expect(await slot.getByRole('button', { name: 'Clear', exact: true }).count()).toBe(0);
+      await select.click();
+      const options = page.getByRole('listbox').getByRole('option');
+      expect(
+        await options.evaluateAll((nodes) =>
+          nodes.some(
+            (node) => node.getAttribute('aria-selected') === 'true' || node.getAttribute('data-state') === 'checked',
+          ),
+        ),
+      ).toBe(false);
+      expect(await page.getByRole('option', { name: 'Remove from library', exact: true }).count()).toBe(0);
+      holdEntryWrite();
+      await page.getByRole('option', { name: 'In progress', exact: true }).click();
+      await eventually(async () => (await select.getAttribute('aria-busy')) === 'true' && (await select.isDisabled()));
+      const pending = calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`);
+      expect(pending).toHaveLength(1);
+      releaseWrite?.();
+      await eventually(() => libraryEntry?.state === 'in_progress' && libraryEntry.revision === 1);
+      expect(await select.getAttribute('aria-busy')).not.toBe('true');
+      expect(await select.isDisabled()).toBe(false);
       const put = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(put.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(put.body).toEqual({ state: 'in_progress' });
-      await form.getByRole('button', { name: /clear/i }).click();
-      try {
-        await eventually(() => libraryEntry === null);
-      } catch (error) {
-        throw new Error(
-          `${String(error)}; URL=${page.url()}; calls=${JSON.stringify(calls)}; requests=${JSON.stringify(requestLog)}; body=${await page.locator('body').innerText()}`,
-        );
-      }
+      expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
+      expect(await select.innerText()).toContain('In progress');
+    } finally {
+      releaseWrite?.();
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a signed-in person changes or removes their library state from the same control, and a refused change goes back and says why',
+  async () => {
+    reset();
+    libraryEntry = { subjectId, state: 'planned', revision: 1, createdAt: stamp, updatedAt: stamp };
+    const { page } = await open(`/en/subjects/${subjectId}`);
+    try {
+      const slot = librarySlot(page);
+      const select = stateControl(slot);
+      expect(await select.innerText()).toContain('Planned');
+      expect(await select.innerText()).not.toContain('Add to library');
+      expect(await slot.getByRole('button', { name: 'Save', exact: true }).count()).toBe(0);
+      expect(await slot.getByRole('button', { name: 'Clear', exact: true }).count()).toBe(0);
+
+      refuseEntryWrite = 'closed';
+      await pick(page, select, 'Dropped');
+      await eventually(
+        async () =>
+          (await slot.getByRole('alert').count()) > 0 &&
+          (await slot.getByRole('alert').innerText()) === 'This part of REZICS is not open yet.',
+      );
+      expect(libraryEntry).toMatchObject({ state: 'planned', revision: 1 });
+      expect(await select.innerText()).toContain('Planned');
+      expect(await select.innerText()).not.toContain('Dropped');
+      const refused = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
+      expect(refused.body).toEqual({ state: 'dropped', revision: 1 });
+      expect(refused.key).toMatch(/^[0-9a-f-]{36}$/i);
+
+      calls.length = 0;
+      await pick(page, select, 'In progress');
+      await eventually(() => libraryEntry?.state === 'in_progress' && libraryEntry.revision === 2);
+      const put = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
+      expect(put.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(put.body).toEqual({ state: 'in_progress', revision: 1 });
+      expect(await select.innerText()).toContain('In progress');
+
+      await select.click();
+      const list = page.getByRole('listbox');
+      const names = await list.getByRole('option').allInnerTexts();
+      expect(names.at(-1)).toBe('Remove from library');
+      expect(await list.locator('[data-slot=select-separator]').count()).toBe(1);
+      await page.keyboard.press('Escape');
+
+      libraryEntry = { ...libraryEntry!, state: 'completed', revision: 8, updatedAt: stamp };
+      calls.length = 0;
+      await pick(page, select, 'Paused');
+      await eventually(async () => (await select.innerText()).includes('Completed'));
+      expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+        `PUT /v1/libraryEntries/${subjectId}`,
+        `GET /v1/libraryEntries/${subjectId}`,
+      ]);
+      expect(calls[0]?.body).toEqual({ state: 'paused', revision: 2 });
+      expect(calls[0]?.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(new URLSearchParams(calls[1]?.query).get('view')).toBe('FULL');
+      expect(calls[1]?.authorization).toMatch(/^Bearer /);
+      expect(libraryEntry).toMatchObject({ state: 'completed', revision: 8 });
+      expect(await slot.getByRole('alert').innerText()).toBe('This entry changed elsewhere.');
+      expect(await select.innerText()).not.toContain('Paused');
+
+      calls.length = 0;
+      await pick(page, select, 'Remove from library');
+      await eventually(() => libraryEntry === null);
       const remove = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(remove.key).toMatch(/^[0-9a-f-]{36}$/i);
-      expect(remove.query).toContain('revision=');
+      expect(remove.query).toContain('revision=8');
+      expect(await select.innerText()).toContain('Add to library');
     } finally {
       await page.context().close();
     }
