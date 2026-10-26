@@ -211,8 +211,10 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     `rezics.kernel.check.pid=${pid}`,
     '-p',
     '127.0.0.1::5432',
+    // Six concurrent test databases, growth seeds at three scales and up to max_wal_size of WAL outgrew 1g, and every
+    // later file then failed to create its database. tmpfs only takes memory for what is written.
     '--tmpfs',
-    '/var/lib/postgresql:rw,size=1g',
+    '/var/lib/postgresql:rw,size=8g',
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -226,6 +228,8 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     'synchronous_commit=off',
     '-c',
     'full_page_writes=off',
+    '-c',
+    'max_wal_size=256MB',
   ]);
 }
 
