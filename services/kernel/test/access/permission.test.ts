@@ -2,7 +2,7 @@ import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess, checkPermission, checkDelegationBounds } from '../../src/access/permission.ts';
-import { createResourcePublicEligibility } from '../../src/access/index.ts';
+import { AccessUnavailableError, createResourcePublicEligibility } from '../../src/access/index.ts';
 import { accessCheck, type AccountActor, type Actor, type Resource } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -353,12 +353,11 @@ test('prepared evidence is opaque, bound to identity/action/resource/deadline an
   expect(await access.authorize(pool, identity({ clientId: 'other' }), action, resource, evidence)).toBe(false);
   expect(await access.authorize(pool, actor, 'subject:update', resource, evidence)).toBe(false);
   expect(await access.authorize(pool, actor, action, otherResource, evidence)).toBe(false);
-  const expired = await prepare(actor, action, resource, Date.now() - 1);
-  expect(await expired(pool)).toBe(false);
+  await expect(prepare(actor, action, resource, Date.now() - 1)).rejects.toBeInstanceOf(AccessUnavailableError);
   const delayed = await prepare(actor, action, resource, Date.now() + 80);
   expect(await delayed(pool)).toBe(true);
   await Bun.sleep(100);
-  expect(await delayed(pool)).toBe(false);
+  await expect(delayed(pool)).rejects.toBeInstanceOf(AccessUnavailableError);
 });
 
 test('every final attempt rechecks grants and denials on its resource client without pool reads', async () => {

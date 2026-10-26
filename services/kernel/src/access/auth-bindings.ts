@@ -1,3 +1,4 @@
+import { throwAccessUnavailable } from './unavailable.ts';
 import type {
   AccessAccount,
   ProvisioningReceiptMetadata,
@@ -117,14 +118,16 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     if (route === null) return null;
     try {
       return await readAccount(pool, route, id);
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error);
       return null;
     }
   }
   async function read(id: string, recovery = false): Promise<AccessAccount | null> {
     try {
       return translate(await account(id), recovery);
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error);
       return null;
     }
   }
@@ -209,14 +212,16 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     readErasureAccount: async (id) => {
       try {
         return await erasure(id);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     },
     async readProvisioningAccount(id, reference) {
       try {
         return await provisioning(id, reference);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     },

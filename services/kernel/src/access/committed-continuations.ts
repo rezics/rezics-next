@@ -1,3 +1,4 @@
+import { throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -500,7 +501,8 @@ export function createCommittedContinuations(config: {
       let actor: AccountActor;
       try {
         actor = await config.access.authenticate(token, context);
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         throw new GrantDeniedError();
       }
       const authorization = resourceAuthorization({

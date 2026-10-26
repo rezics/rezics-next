@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
+  AccessUnavailableError,
   captureDurableInitiator,
   createAccess,
   durableInitiatorCommitment,
@@ -267,7 +268,7 @@ if (Bun.main === import.meta.path) {
                     ? commandAccessContext({ ...context, deadline: Date.now() - 1 }, attempt)
                     : context;
               await expect(captureDurableInitiator(ctx, actor)).rejects.toBeInstanceOf(
-                DurableInitiatorCaptureUnavailableError,
+                failure === 'expired' ? AccessUnavailableError : DurableInitiatorCaptureUnavailableError,
               );
               throw new DurableInitiatorCaptureUnavailableError();
             },

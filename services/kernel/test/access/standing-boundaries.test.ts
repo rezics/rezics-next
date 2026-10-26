@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import {
   ACTIVE_ACCOUNTS,
+  AccessUnavailableError,
   initializeResourceGrants,
   parentCreationAuthorization,
   installStandingParentGrant,
@@ -31,7 +32,7 @@ afterAll(() => f?.close());
 function commands() {
   return createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
 }
-async function creation() {
+async function creation(evidenceMs?: number) {
   const context = await f.context(f.recipient);
   const child = { route: f.otherResource.route, id: newId(f.otherResource.route) };
   const authorization = parentCreationAuthorization({
@@ -39,7 +40,11 @@ async function creation() {
     actor: context.actor,
     action: 'subject:create',
     parent: await f.parent(),
-    context: { ...context, resource: child },
+    context: {
+      ...context,
+      ...(evidenceMs === undefined ? {} : { deadline: Date.now() + evidenceMs }),
+      resource: child,
+    },
   });
   const options = {
     partition: partitionOf(child.route),
@@ -136,7 +141,7 @@ test('proofs reject JSON replacement, changed command basis and changed authoriz
 });
 
 test('a parent proof cannot outlive its actual Access evidence deadline', async () => {
-  const c = await creation();
+  const c = await creation(1000);
   const authorization: CommandAuthorization = {
     ...c.authorization,
     async prepare(attempt) {
@@ -146,7 +151,7 @@ test('a parent proof cannot outlive its actual Access evidence deadline', async 
     },
   };
   await expect(runCommand(f.pool, { ...c.options, authorization }, (tx) => insert(tx, c.child))).rejects.toBeInstanceOf(
-    GrantDeniedError,
+    AccessUnavailableError,
   );
 });
 

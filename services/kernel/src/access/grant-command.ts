@@ -1,3 +1,4 @@
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -116,7 +117,8 @@ export async function grantCommand<T>(
         const proof = Object.freeze({});
         proofs.set(proof, { attempt, checks });
         return proof;
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         throw options.denied();
       }
     },
@@ -131,7 +133,7 @@ export async function grantCommand<T>(
       )
         throw options.denied();
       for (const check of prepared.checks) if (!(await check.check(tx, attempt.time))) throw options.denied();
-      if (Date.now() >= context.deadline) throw options.denied();
+      requireAccessDeadline(context.deadline);
       return 'execute';
     },
   };
@@ -156,9 +158,9 @@ export async function grantCommand<T>(
       },
       async (tx, { transactionId }) => {
         if (conflict !== undefined) throw conflict;
-        if (Date.now() >= context.deadline) throw options.denied();
+        requireAccessDeadline(context.deadline);
         const value = await mutate(tx, transactionId);
-        if (Date.now() >= context.deadline) throw options.denied();
+        requireAccessDeadline(context.deadline);
         return {
           value,
           events: [{ type: `com.rezics.${options.kind}.v1`, subject: options.resource.id, data: value }],

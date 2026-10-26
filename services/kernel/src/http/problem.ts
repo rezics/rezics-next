@@ -1,3 +1,4 @@
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError, t } from 'elysia';
@@ -193,7 +194,7 @@ export function problemResponse(error: unknown, context: { method: string; id: s
   } else if (error instanceof TooManyEventsError) {
     code = 'too_many_events';
     detail = error.message;
-  } else if (error instanceof CommandUnavailableError) {
+  } else if (error instanceof CommandUnavailableError || error instanceof AccessUnavailableError) {
     switch (error.reason) {
       case 'overloaded':
         code = 'overloaded';

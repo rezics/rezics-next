@@ -1,3 +1,4 @@
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import { verifiedBearerExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';
@@ -185,7 +186,8 @@ async function lockOrdered(client: AccessClient, ids: readonly string[]): Promis
 }
 function request(context: LifecycleRequest): LifecycleRequest {
   requireAllowed(context.actor.kind === 'account' && human(context.account, context.actor));
-  requireAllowed(Number.isFinite(context.deadline) && Date.now() < context.deadline);
+  requireAccessDeadline(context.deadline);
+  requireAllowed(Number.isFinite(context.deadline));
   return {
     ...context,
     actor: Object.isFrozen(context.actor) ? context.actor : { ...context.actor, scopes: [...context.actor.scopes] },
@@ -193,7 +195,7 @@ function request(context: LifecycleRequest): LifecycleRequest {
   };
 }
 function live(deadline: number) {
-  requireAllowed(Date.now() < deadline);
+  requireAccessDeadline(deadline);
 }
 function databaseDeadline(row: AccountRow, deadline: number) {
   return new Date(Date.parse(row.observedAt) + Math.max(0, deadline - Date.now())).toISOString();
@@ -228,7 +230,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     attempt: CommandAttempt,
   ) {
     requireAllowed(input.purpose === 'session' || input.purpose === 'credential-management');
-    const deadline = Math.min(context.deadline, Date.now() + EVIDENCE_TTL_MS);
+    const deadline = context.deadline;
     try {
       // Independent reads finish before the management-resource checkout. The
       // supplied request evidence is required; consumption additionally refreshes
@@ -279,7 +281,8 @@ export function createOperatorCommands(config: OperatorConfig) {
         databaseDeadline: databaseDeadline(operator, deadline),
         allowed,
       };
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error, deadline);
       throw new OperatorDeniedError();
     }
   }

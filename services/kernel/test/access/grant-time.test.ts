@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { accessCheck } from '../../src/request/access.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import permission from '../../src/access/permission-check.sql';
@@ -158,9 +159,9 @@ test('transaction policy time cannot extend an elapsed real database evidence de
   });
 });
 
-test('expired prepared evidence denies within a still live command and leaves no receipt or effect', async () => {
+test('expired prepared evidence is unavailable within a still live command and leaves no receipt or effect', async () => {
   const context = await f.context();
-  const prepared = await checks(context);
+  const prepared = await checks({ ...context, deadline: Date.now() + 1000 });
   const before = await f.snapshot();
   const denial = new Error('Expired evidence');
   await expect(
@@ -180,7 +181,7 @@ test('expired prepared evidence denies within a still live command and leaves no
         expect(await prepared[0]!(tx)).toBe(true);
         await tx.query('SELECT pg_sleep(1.05)');
         expect(Date.now()).toBeLessThan(context.deadline);
-        for (const check of prepared) expect(await check(tx)).toBe(false);
+        for (const check of prepared) await expect(check(tx)).rejects.toBeInstanceOf(AccessUnavailableError);
         throw denial;
       },
     ),

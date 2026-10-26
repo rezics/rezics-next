@@ -1,3 +1,4 @@
+import { requireAccessDeadline } from './unavailable.ts';
 import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from './durable-initiator-capture.ts';
 import type { Access, AccessContext, AccountActor } from '../request/access.ts';
@@ -48,14 +49,15 @@ export function consumeDurableIdentity(
 ): Facts | undefined {
   const facts = proofs.get(proof);
   proofs.delete(proof);
+  requireAccessDeadline(context.deadline);
+  if (facts) requireAccessDeadline(facts.deadline);
   authoritativeTimeValue(time);
   if (
     !facts ||
     facts.scope !== scope ||
     facts.context !== context ||
     facts.context.pool !== context.pool ||
-    facts.time !== time ||
-    Date.now() >= facts.deadline
+    facts.time !== time
   )
     return undefined;
   return facts;
@@ -86,12 +88,12 @@ export async function restoreOperationIdentity(
   const { access, pool, readOperation, readConsent } = config;
   const bridge = bridges.get(accessRoot(access));
   const { context, operation } = input;
+  requireAccessDeadline(context.deadline);
   authoritativeTimeValue(time);
   if (
     !bridge ||
     context.pool !== pool ||
     !Number.isFinite(context.deadline) ||
-    Date.now() >= context.deadline ||
     !resource(operation) ||
     !text(operation.kind, 255) ||
     routeOf(operation.sourceId) === null ||
@@ -101,7 +103,7 @@ export async function restoreOperationIdentity(
     typeof readConsent !== 'function'
   )
     throw new Error('Durable identity unavailable');
-  const deadline = Math.min(context.deadline, Date.now() + 1000);
+  const deadline = context.deadline;
   // Copy the allowlisted result before releasing the module's reader. Subsequent
   // callback/JSON mutations can never change the verified receipt binding.
   const record: DurableInitiatorRecord | null = await within(deadline, () =>

@@ -1,3 +1,5 @@
+export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
+
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
 import fenceStatement from './fence.sql';
@@ -411,7 +413,7 @@ export async function runCommand<T>(
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
-  const deadline = options.deadline ?? Date.now() + 2000;
+  const deadline = options.deadline ?? Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
   let contentionAttempts = 0;
   while (Date.now() < deadline) {
     let time: AuthoritativeTime | undefined;

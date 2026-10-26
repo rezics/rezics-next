@@ -4,6 +4,7 @@ import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands, OperatorDeniedError } from '../../src/access/operator.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
@@ -514,13 +515,13 @@ test('unknown actions, missing evidence and delayed preparation fail closed thro
       ...access,
       async prepare(actor, action, resource, context) {
         prepares++;
-        const evidence = await access.prepare!(actor, action, resource, context);
+        const evidence = await access.prepare!(actor, action, resource, { ...context, deadline: Date.now() + 1000 });
         await Bun.sleep(1050);
         return evidence;
       },
     },
   });
-  await deny(delayed.authorizeOpening(await ctx(human), input));
+  await expect(delayed.authorizeOpening(await ctx(human), input)).rejects.toBeInstanceOf(AccessUnavailableError);
   expect(prepares).toBe(1);
   const original = await operators.authorizeOpening(await ctx(human), input);
   await expect(

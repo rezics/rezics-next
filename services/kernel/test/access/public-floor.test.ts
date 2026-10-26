@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
 import {
+  AccessUnavailableError,
   createAccess,
   createResourceAnonymousEligibility,
   createResourcePublicEligibility,
@@ -301,7 +302,7 @@ test('resource and container publication, disclosure, revisions and validity are
   const check = await prepare(personToken, publicResource(), read, Date.now() + 80);
   expect(await check(pool)).toBe(true);
   await Bun.sleep(100);
-  expect(await check(pool)).toBe(false);
+  await expect(check(pool)).rejects.toBeInstanceOf(AccessUnavailableError);
 });
 
 test('publication callbacks and the one SQL formula use exactly the same authoritative time', async () => {

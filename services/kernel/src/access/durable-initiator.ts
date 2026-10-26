@@ -1,3 +1,4 @@
+import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import { commandAccessContext } from './command-admission.ts';
 import { discardDurableIdentity, restoreOperationIdentity } from './durable-identity.ts';
@@ -234,8 +235,9 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
           }),
         );
         return actor;
-      } catch {
+      } catch (error) {
         if (actor) discardDurableIdentity(config.access, actor);
+        throwAccessUnavailable(error);
         throw new DurableInitiatorUnavailableError();
       }
     },

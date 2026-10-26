@@ -1,3 +1,5 @@
+export { AccessUnavailableError } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
 import { withConnection } from '../database/pool.ts';
 import {
@@ -44,6 +46,8 @@ type Prepared = {
   id: string;
   pageBinding?: string;
   deadline: number;
+  requestDeadline: number;
+  expires: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 };
 
@@ -116,8 +120,13 @@ export function createAccess(config: AccessConfig): Access {
       actions.set(action, { anonymous: false });
     if (!actions.has(action)) return null;
     try {
+      requireAccessDeadline(context.deadline);
       const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
       if (actor.kind === 'account' && (!identity || identity.pool !== context.pool)) return null;
+      const requestDeadline = Math.min(context.deadline, identity?.deadline ?? Infinity);
+      requireAccessDeadline(requestDeadline);
+      const expires = identity?.expires ?? Infinity;
+      if (Date.now() >= expires) return null;
       const attempt = accessCommandAttempt(context);
       if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
         return null;
@@ -155,10 +164,13 @@ export function createAccess(config: AccessConfig): Access {
         id: resource.id,
         ...(page ? { pageBinding: JSON.stringify(page) } : {}),
         deadline,
+        requestDeadline,
+        expires,
         ...(identity?.durableTime ? { durableTime: identity.durableTime } : {}),
       });
       return evidence;
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error, context.deadline);
       return null;
     }
   }
@@ -185,6 +197,8 @@ export function createAccess(config: AccessConfig): Access {
     )
       return { allowed: false, explicit: false };
     try {
+      requireAccessDeadline(facts.requestDeadline);
+      if (Date.now() >= facts.expires) return { allowed: false, explicit: false };
       return await within(facts.deadline, async () => {
         const bounded = deadlineClient(client, facts.deadline);
         if (explicit) return permissions.authorizeExplicit!(bounded, actor, action, page ?? resource, evidence, time);
@@ -193,7 +207,8 @@ export function createAccess(config: AccessConfig): Access {
           : permissions.authorize(bounded, actor, action, resource, evidence, time));
         return { allowed, explicit: false };
       });
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error, facts.deadline);
       return { allowed: false, explicit: false };
     }
   }
@@ -222,12 +237,12 @@ export function createAccess(config: AccessConfig): Access {
   };
 
   platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
+    requireAccessDeadline(context.deadline);
     if (
       actor.kind !== 'account' ||
       !actor.scopes.includes(clientAction) ||
       !Number.isFinite(Date.parse(at)) ||
       !Number.isFinite(context.deadline) ||
-      Date.now() >= context.deadline ||
       requested.length === 0 ||
       requested.some((action) => !/^gate:(?:any|[a-z][a-z_]{0,62})$/.test(action))
     )
@@ -261,7 +276,7 @@ export function createAccess(config: AccessConfig): Access {
       const evidence = await gatePermissions.prepare!(gateActor, action, resource, gateContext);
       checks.push({ action, actor: gateActor, evidence });
     }
-    if (Date.now() >= context.deadline) return false;
+    requireAccessDeadline(context.deadline);
     return withConnection(context.pool, async (client) => {
       const bounded = deadlineClient(client, context.deadline);
       await bounded.query('BEGIN READ ONLY');
@@ -269,10 +284,7 @@ export function createAccess(config: AccessConfig): Access {
         await bounded.query('SET LOCAL enable_seqscan = off');
         const pinned = atTimeClient(bounded, at);
         for (const check of checks) {
-          if (Date.now() >= context.deadline) {
-            await bounded.query('ROLLBACK');
-            return false;
-          }
+          requireAccessDeadline(context.deadline);
           if (await gatePermissions.authorize(pinned, check.actor, check.action, resource, check.evidence)) {
             await bounded.query('COMMIT');
             return true;

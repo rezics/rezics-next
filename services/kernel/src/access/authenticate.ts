@@ -1,3 +1,4 @@
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRemoteJWKSet, customFetch, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
 import type { QueryConfig } from 'pg';
@@ -40,7 +41,8 @@ const invalid = () => new AuthenticationError(401, 'Bearer error="invalid_token"
 const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
 
 function remaining(deadline: number): number {
-  if (!Number.isFinite(deadline) || Date.now() >= deadline) throw invalid();
+  if (!Number.isFinite(deadline)) throw invalid();
+  if (Date.now() >= deadline) throw new AccessUnavailableError('deadline');
   return Math.max(1, Math.floor(deadline - Date.now()));
 }
 
@@ -49,12 +51,17 @@ export async function within<T>(deadline: number, work: () => Promise<T>): Promi
   const ms = remaining(deadline);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       Promise.resolve().then(work),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(invalid()), ms);
+        timer = setTimeout(() => reject(new AccessUnavailableError('deadline')), ms);
       }),
     ]);
+    remaining(deadline);
+    return result;
+  } catch (error) {
+    throwAccessUnavailable(error, deadline);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -241,7 +248,8 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
       });
       bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
       return actor;
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error, context.deadline);
       throw invalid();
     }
   };
@@ -309,7 +317,8 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         });
         bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
         return actor;
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         throw invalid();
       }
     },

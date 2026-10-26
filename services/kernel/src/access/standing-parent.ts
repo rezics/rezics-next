@@ -1,3 +1,4 @@
+import { requireAccessDeadline } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import { runCommand, authoritativeTimeValue, type CommandAuthorization } from '../command/command.ts';
 import { accessCheck, type Access, type AccessCheck } from '../request/access.ts';
@@ -43,11 +44,8 @@ export async function installStandingParentGrant(input: {
     denied: () => new GrantDeniedError(),
     ...(authority.prepare ? { prepare: authority.prepare.bind(authority) } : {}),
     async authorize(tx, attempt, evidence) {
-      if (
-        Date.now() >= deadline ||
-        (await authority.authorize(tx, attempt, evidence)) !== 'execute' ||
-        !(await validate(tx, attempt.time))
-      )
+      requireAccessDeadline(deadline);
+      if ((await authority.authorize(tx, attempt, evidence)) !== 'execute' || !(await validate(tx, attempt.time)))
         throw new GrantDeniedError();
       for (const check of checks) if (!(await check(tx, attempt.time))) throw new GrantDeniedError();
       return 'execute';

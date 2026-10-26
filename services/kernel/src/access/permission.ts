@@ -1,3 +1,4 @@
+import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { Account } from './account-data.ts';
 import { accessCommandAttempt } from './command-admission.ts';
 import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
@@ -107,12 +108,13 @@ const routeOf = (id: string): number => Number.parseInt(id.slice(24, 28), 16);
 async function readPermissionTime(
   client: Parameters<typeof timeRead.run>[0],
   clock?: () => Date,
-): Promise<{ at: string; databaseAt: string | undefined } | undefined> {
+): Promise<{ at: string; databaseAt: string | undefined; observedAt: number } | undefined> {
   const configured = clock?.();
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
+  const observedAt = Date.now();
   const row = await timeRead.run(client, { at: configured?.toISOString() ?? '' });
   if (!row?.at) return undefined;
-  return { at: row.at, databaseAt: row.databaseAt };
+  return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }
 const bind = (actor: Actor, action: string, resource: Resource, page?: ResourcePage): string =>
   JSON.stringify([
@@ -165,38 +167,43 @@ async function checkPreparedPermission(
   includeExplicit = false,
 ): Promise<AccessDecision> {
   setGovernanceReach(evidence, []);
+  const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
   try {
-    const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
+    if (facts) requireAccessDeadline(facts.deadline);
     if (
       !facts ||
       facts.binding !== bind(actor, action, resource, page) ||
       facts.capability !== (resource.eligibility ?? resource.anonymousEligibility) ||
       (resource.eligibility !== undefined &&
         resource.anonymousEligibility !== undefined &&
-        resource.eligibility !== resource.anonymousEligibility) ||
-      Date.now() >= facts.deadline
+        resource.eligibility !== resource.anonymousEligibility)
     )
       return { allowed: false, explicit: false };
     // Obtain one authoritative T on this attempt's own resource client. Domain
     // verification and the permission formula must evaluate exactly this instant.
     const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock))?.at;
+    requireAccessDeadline(facts.deadline);
     if (!at) return { allowed: false, explicit: false };
     const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
+    requireAccessDeadline(facts.deadline);
     const floor = facts.admitsAnonymous && domainEligible;
     // Scope caps only the independent authenticated grant branch. Other token
     // scopes neither supply the requested scope nor poison a verified public floor.
     if (!floor && (facts.anonymous || !facts.scope)) return { allowed: false, explicit: false };
-    if (facts.binding !== bind(actor, action, resource, page) || Date.now() >= facts.deadline)
-      return { allowed: false, explicit: false };
-    const stillValid = () =>
-      facts.binding === bind(actor, action, resource, page) &&
-      facts.capability === (resource.eligibility ?? resource.anonymousEligibility) &&
-      !(
-        resource.eligibility !== undefined &&
-        resource.anonymousEligibility !== undefined &&
-        resource.eligibility !== resource.anonymousEligibility
-      ) &&
-      Date.now() < facts.deadline;
+    requireAccessDeadline(facts.deadline);
+    if (facts.binding !== bind(actor, action, resource, page)) return { allowed: false, explicit: false };
+    const stillValid = () => {
+      requireAccessDeadline(facts.deadline);
+      return (
+        facts.binding === bind(actor, action, resource, page) &&
+        facts.capability === (resource.eligibility ?? resource.anonymousEligibility) &&
+        !(
+          resource.eligibility !== undefined &&
+          resource.anonymousEligibility !== undefined &&
+          resource.eligibility !== resource.anonymousEligibility
+        )
+      );
+    };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
     const rows = await permissionRead.run(client, {
@@ -236,7 +243,8 @@ async function checkPreparedPermission(
         ),
       );
     return { allowed, explicit: includeExplicit && rows.every((row) => row.explicit === true) };
-  } catch {
+  } catch (error) {
+    throwAccessUnavailable(error, facts?.deadline);
     return { allowed: false, explicit: false };
   }
 }
@@ -254,7 +262,9 @@ export function createAccess(config: PermissionConfig): Access {
     page?: ResourcePage,
   ) {
     const evidence = Object.freeze({});
+    const deadline = context.deadline;
     try {
+      requireAccessDeadline(deadline);
       const metadata = actions.get(action);
       if (
         !metadata ||
@@ -263,12 +273,10 @@ export function createAccess(config: PermissionConfig): Access {
         resource.route > 65535 ||
         !uuidPattern.test(resource.id) ||
         routeOf(resource.id) !== resource.route ||
-        !Number.isFinite(context.deadline) ||
-        Date.now() >= context.deadline
+        !Number.isFinite(context.deadline)
       )
         return evidence;
       const binding = bind(actor, action, resource, page);
-      const deadline = Math.min(context.deadline, Date.now() + 1000);
       let account: Account | null | undefined;
       if (actor.kind === 'anonymous') {
         if (!metadata.anonymous) return evidence;
@@ -290,8 +298,6 @@ export function createAccess(config: PermissionConfig): Access {
       // of these reads holds a connection while another partition is consulted.
       const recorded = await readPermissionTime(context.pool, config.clock);
       if (!recorded?.databaseAt) return evidence;
-      // The wall-clock reading that pairs with databaseAt; a later one would charge preparation time twice.
-      const recordedWall = Date.now();
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
       const attempt = accessCommandAttempt(context);
@@ -444,6 +450,8 @@ export function createAccess(config: PermissionConfig): Access {
               return true;
             }),
           );
+          for (const result of results)
+            if (result.status === 'rejected') throwAccessUnavailable(result.reason, deadline);
           if (results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
         }
       }
@@ -454,8 +462,9 @@ export function createAccess(config: PermissionConfig): Access {
       // The wall-clock check above stays local.
       const origin = Date.parse(recorded.databaseAt);
       if (!Number.isFinite(origin)) return evidence;
-      const databaseDeadline = new Date(origin + Math.max(0, deadline - recordedWall)).toISOString();
-      if (binding !== bind(actor, action, resource, page) || Date.now() >= deadline) return evidence;
+      const databaseDeadline = new Date(origin + Math.max(0, deadline - recorded.observedAt)).toISOString();
+      requireAccessDeadline(deadline);
+      if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
         binding,
         deadline,
@@ -470,8 +479,9 @@ export function createAccess(config: PermissionConfig): Access {
         capability: resource.eligibility ?? resource.anonymousEligibility,
         verifyFloor,
       });
-    } catch {
-      // Missing tables, unresolved accounts and failed separately anchored reads deny.
+    } catch (error) {
+      throwAccessUnavailable(error, deadline);
+      // Missing tables, unresolved accounts and other unclassified evidence failures deny.
     }
     return evidence;
   }
@@ -555,11 +565,13 @@ export async function checkDelegationBounds(
       try {
         for (const check of checks) if (!(await check(client, time))) return false;
         return true;
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
         return false;
       }
     };
-  } catch {
+  } catch (error) {
+    throwAccessUnavailable(error, context.deadline);
     return async () => false;
   }
 }

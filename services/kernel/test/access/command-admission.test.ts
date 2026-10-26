@@ -5,7 +5,7 @@ import type { PoolClient } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createResourceAnonymousEligibility } from '../../src/access/eligibility.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { parentCreationAuthorization, creationCapability } from '../../src/access/parent-creation.ts';
 import { grantCommand } from '../../src/access/grant-command.ts';
@@ -374,7 +374,9 @@ test('read snapshot is bounded by actual authentication observation, original de
     expect(await (await accessCheck(access, readActor, 'subject:read', f.resource, context))(pool)).toBe(true);
     expect(statements.filter(({ text }) => actorRead(text))).toHaveLength(0);
     Date.now = () => observed + 180_001;
-    expect(await (await accessCheck(access, readActor, 'subject:read', f.resource, context))(pool)).toBe(false);
+    await expect(accessCheck(access, readActor, 'subject:read', f.resource, context)).rejects.toBeInstanceOf(
+      AccessUnavailableError,
+    );
   } finally {
     Date.now = realNow;
   }
@@ -382,7 +384,9 @@ test('read snapshot is bounded by actual authentication observation, original de
   const actor = await access.authenticate(f.token, short);
   try {
     Date.now = () => short.deadline + 1;
-    expect(await (await accessCheck(access, actor, 'subject:read', f.resource, f.context))(pool)).toBe(false);
+    await expect(accessCheck(access, actor, 'subject:read', f.resource, f.context)).rejects.toBeInstanceOf(
+      AccessUnavailableError,
+    );
   } finally {
     Date.now = realNow;
   }
@@ -415,8 +419,8 @@ test('target-local stable check uses fresh evidence and T after a serialization 
     expect(await allowed(tx)).toBe(true);
     times.push(authoritativeTimeValue(time));
     if (++attempts === 1) {
-      // Outlive permission preparation's one-second evidence budget. A retry
-      // must prepare again rather than retain the first closure's evidence.
+      // A delayed retry must prepare again rather than retain the first
+      // closure's evidence, within the same original request deadline.
       await Bun.sleep(1010);
       throw Object.assign(new Error('Retry'), { code: '40001' });
     }

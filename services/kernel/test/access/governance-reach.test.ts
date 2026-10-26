@@ -290,6 +290,7 @@ test.serial(
 
     const context = { pool: fixture.pool, access: fixture.access, routeKey };
     const recordsBeforeFloors = await reachRows();
+    staff = (await fixture.context(staff.accountId)).actor;
     const accountRoute = routeOf(staff.accountId)!;
     const originalAccount = (
       await fixture.reader.query(

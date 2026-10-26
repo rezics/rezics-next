@@ -1,3 +1,5 @@
+import { requireAccessDeadline } from './unavailable.ts';
+import { within } from './authenticate.ts';
 import type { AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
 
 declare const resourceEligibility: unique symbol;
@@ -111,10 +113,11 @@ export async function evaluateResourceEligibility(
   if (!attempt) throw new ResourceEligibilityUnavailableError();
   const facts =
     typeof attempt.evidence === 'object' && attempt.evidence !== null ? observations.get(attempt.evidence) : undefined;
-  if (!facts || facts.token !== eligibility || Date.now() >= facts.deadline || !Number.isFinite(Date.parse(attempt.at)))
-    return false;
-  const result = await facts.verify(attempt.client, attempt.at);
-  return result === true && Date.now() < facts.deadline;
+  if (facts) requireAccessDeadline(facts.deadline);
+  if (!facts || facts.token !== eligibility || !Number.isFinite(Date.parse(attempt.at))) return false;
+  const result = await within(facts.deadline, () => facts.verify(attempt.client, attempt.at));
+  requireAccessDeadline(facts.deadline);
+  return result === true;
 }
 
 /** Prepare bounded owning-module evidence before resource checkout. Each check
@@ -129,6 +132,7 @@ export async function prepareAnonymousEligibility(
   binding: Binding,
   context: AccessContext,
 ): Promise<Verify | undefined> {
+  requireAccessDeadline(context.deadline);
   const { eligibility, anonymousEligibility } = binding.resource;
   if (eligibility !== undefined && anonymousEligibility !== undefined && eligibility !== anonymousEligibility)
     throw new Error('Conflicting resource eligibility capabilities');

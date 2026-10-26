@@ -1,4 +1,6 @@
 import { Elysia, t, ValidationError } from 'elysia';
+import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { TSchema } from 'typebox';
@@ -34,10 +36,11 @@ import healthCheck from './health.sql';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
 
-export const REQUEST_DEADLINE_MS = 2000;
+export const REQUEST_DEADLINE_MS = DEFAULT_REQUEST_DEADLINE_MS;
 
 export function createApp({
   pool,
+  requestDeadlineMs = REQUEST_DEADLINE_MS,
   admission = new Admission(),
   access = createAccess,
   tokens,
@@ -47,6 +50,7 @@ export function createApp({
   clock,
 }: {
   pool: Pool;
+  requestDeadlineMs?: number;
   admission?: Admission;
   access?: Access | AccessFactory;
   tokens?: KeyRing;
@@ -57,6 +61,8 @@ export function createApp({
   /** The kernel's single domain clock, shared by request admission and commands. */
   clock?: () => Date;
 }) {
+  if (!Number.isFinite(requestDeadlineMs) || requestDeadlineMs <= 0)
+    throw new TypeError('Request deadline must be positive milliseconds');
   const requestClock = clock ?? (() => new Date());
   const sessionKeys = tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
   const rateStage = createWriteRateStage(writeRate, rateAttribution);
@@ -177,7 +183,7 @@ export function createApp({
       if (error) throw error;
     })
     .derive(async ({ request, route, set }) => {
-      const job = { deadline: (arrivals.get(request) ?? Date.now()) + REQUEST_DEADLINE_MS, signal: request.signal };
+      const job = { deadline: (arrivals.get(request) ?? Date.now()) + requestDeadlineMs, signal: request.signal };
       const actor =
         request.headers.get('authorization') === null || invalidJsonBodies.has(request)
           ? { kind: 'anonymous' as const }
@@ -185,6 +191,7 @@ export function createApp({
               try {
                 return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
               } catch (error) {
+                throwAccessUnavailable(error, job.deadline);
                 if (error instanceof AuthenticationError) throw error;
                 throw new AuthenticationError(401, 'Bearer error="invalid_token"');
               }

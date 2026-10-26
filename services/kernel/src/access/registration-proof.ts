@@ -1,3 +1,4 @@
+import { throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
@@ -298,7 +299,8 @@ export function createRegistrationProofBindings(config: {
           throw error;
         }
       });
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error);
       return null;
     }
   }
@@ -354,7 +356,8 @@ export function createRegistrationProofBindings(config: {
           throw error;
         }
       });
-    } catch {
+    } catch (error) {
+      throwAccessUnavailable(error);
       return null;
     }
   }
@@ -381,7 +384,8 @@ export function createRegistrationProofBindings(config: {
           return null;
         const encoded = seal(referenceKeys, AUTOMATED_SCOPE, reference);
         return encoded.length <= MAX_REFERENCE_LENGTH && (await verifyPendingIdentity(encoded)) ? encoded : null;
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     },
@@ -416,7 +420,8 @@ export function createRegistrationProofBindings(config: {
         const encoded = seal(referenceKeys, SCOPE, reference);
         if (encoded.length > MAX_REFERENCE_LENGTH) return null;
         return (await verifyProvisioningReceipt(encoded)) ? encoded : null;
-      } catch {
+      } catch (error) {
+        throwAccessUnavailable(error);
         return null;
       }
     },

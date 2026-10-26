@@ -1,3 +1,4 @@
+import { requireAccessDeadline } from './unavailable.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -71,6 +72,7 @@ const creations = new WeakMap<CommandTransaction, Creation>();
 function liveCreation(tx: CommandTransaction): Creation {
   const command = currentCommand(tx);
   const creation = creations.get(tx);
+  if (creation) requireAccessDeadline(creation.deadline);
   if (
     !creation ||
     creation.failed ||
@@ -80,8 +82,7 @@ function liveCreation(tx: CommandTransaction): Creation {
     command.authorization.resource.route !== creation.parent.route ||
     command.authorization.resource.id !== creation.parent.id ||
     command.basis !== creation.attempt.basis ||
-    command.partition !== creation.attempt.partition ||
-    Date.now() >= creation.deadline
+    command.partition !== creation.attempt.partition
   ) {
     if (creation) creation.failed = true;
     throw new GrantDeniedError();
@@ -186,8 +187,7 @@ export function parentCreationAuthorization(input: {
             entry.resource.id !== parent.id &&
             partitionOf(entry.resource.route) === attempt.partition,
         )) &&
-      attempt.partition === partitionOf(resource.route) &&
-      Date.now() < deadline
+      attempt.partition === partitionOf(resource.route)
     );
   }
   return Object.freeze<CommandAuthorization>({
@@ -195,6 +195,7 @@ export function parentCreationAuthorization(input: {
     resource: parent,
     denied,
     async prepare(attempt) {
+      requireAccessDeadline(deadline);
       if (!bound(attempt)) throw denied();
       let proofDeadline = -Infinity;
       // One helper per attempt lets the creation wrapper retain the exact evidence
@@ -217,13 +218,16 @@ export function parentCreationAuthorization(input: {
         context: { pool, deadline, partition: partitionOf(resource.route) },
       });
       const proof = await authorization.prepare!(attempt);
+      requireAccessDeadline(deadline);
       if (typeof proof !== 'object' || proof === null || !bound(attempt)) throw denied();
       proofs.set(proof, { authorization, deadline: proofDeadline });
       return proof;
     },
     async authorize(tx, attempt, proof) {
+      requireAccessDeadline(deadline);
       const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
-      if (!bound(attempt) || !prepared || Date.now() >= prepared.deadline) throw denied();
+      if (prepared) requireAccessDeadline(prepared.deadline);
+      if (!bound(attempt) || !prepared) throw denied();
       proofs.delete(proof as object);
       if ((await prepared.authorization.authorize(tx, attempt, proof)) !== 'execute') throw denied();
       creations.set(tx, {
