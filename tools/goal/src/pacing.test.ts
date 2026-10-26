@@ -53,3 +53,15 @@ test('an allowance that will expire unused alerts the supermanager, at most ever
     expect(alertUnspentAllowances([claude, codex], read, state, () => {}, now + 4 * hour)).toBe(1);
   } finally { rmSync(state, { recursive: true, force: true }); }
 });
+
+test("an ending week's reserve shrinks to the managers' need for the hours left, while the five-hour window keeps its whole reserve", () => {
+  const ending = { ...claude, policy: { ...policy(30), reservePerHour: 3 } } as Pool;
+  // Two hours before the weekly reset only six percent stays back, so 64% used leaves 30% to spend.
+  expect(pace(reading(ending, 64, 2), ending, now)?.unusedPercent).toBe(30);
+  expect(choosePoolWithFallback(sonnet, [], [ending], [reading(ending, 64, 2)]).pool.name).toBe('claude-worker');
+  // Days before the reset the full reserve applies, and 75% used is over it.
+  expect(() => choosePoolWithFallback(sonnet, [], [ending], [reading(ending, 75, 48)])).toThrow('no allowed pool');
+  // The five-hour window keeps its 30% reserve however close its reset is.
+  const fiveHourFull: PoolReading = { ...reading(ending, 10, 2), windows: [{ usedPercent: 71, resetsAt: now + hour / 4, minutes: 300 }, { usedPercent: 10, resetsAt: now + 2 * hour, minutes: 10080 }] };
+  expect(() => choosePoolWithFallback(sonnet, [], [ending], [fiveHourFull])).toThrow('no allowed pool');
+});

@@ -10,6 +10,16 @@ export function burnPerHour(current: PoolReading, previous?: PoolReading): numbe
     return old ? Math.max(0, window.usedPercent - old.usedPercent) * 3600000 / elapsed : 0;
   }));
 }
+/**
+ * The percent a window keeps back. A reserve keeps allowance for the managers until the window resets, so in a window
+ * longer than a day it need not exceed reservePerHour for each hour left: an ending week's leftover goes to work. A
+ * window of a day or less keeps its whole reserve, since that window is what keeps managers running.
+ */
+export function effectiveReserve(pool: Pool, window: PoolReading['windows'][number], now: number): number {
+  const perHour = pool.policy.reservePerHour;
+  if (perHour === undefined || window.resetsAt === null || (window.minutes ?? 0) <= 24 * 60) return pool.policy.reservePercent;
+  return Math.min(pool.policy.reservePercent, (perHour * Math.max(0, window.resetsAt - now)) / 3_600_000);
+}
 export function choosePool(profile: Profile, pools: readonly Pool[], readings: readonly PoolReading[], options: {
   preferred?: string; exclude?: string[]; history?: readonly PoolReading[]; now?: number;
 } = {}): Pool {
@@ -19,7 +29,7 @@ export function choosePool(profile: Profile, pools: readonly Pool[], readings: r
     // A shared allowance cannot be made available by choosing a different CLI or account alias.
     const shared = readings.filter(r => r.allowanceKey === pool.allowanceKey);
     const fresh = shared.filter(r => r.observedAt && now - Date.parse(r.observedAt) <= pool.policy.maxAgeMs && Date.parse(r.observedAt) <= now + 60000);
-    if (fresh.some(r => r.exhausted || r.windows.some(w => w.usedPercent >= 100 - pool.policy.reservePercent))) return null;
+    if (fresh.some(r => r.exhausted || r.windows.some(w => w.usedPercent >= 100 - effectiveReserve(pool, w, now)))) return null;
     if (!fresh.length && !pool.policy.allowUnknown) return null;
     const rates = fresh.map(r => burnPerHour(r, [...(options.history ?? [])].reverse().find(old => old.allowanceKey === r.allowanceKey && old.observedAt !== r.observedAt)));
     if (pool.policy.maxBurnPerHour !== undefined && rates.some(rate => rate > pool.policy.maxBurnPerHour!)) return null;

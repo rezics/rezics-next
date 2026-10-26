@@ -12,7 +12,7 @@ export type Pool = {
   /** Pools with the same allowanceKey share a quota, including pools across CLIs. */
   allowanceKey: string;
   usageFile?: string;
-  policy: { weight: number; reservePercent: number; allowUnknown: boolean; maxAgeMs: number; maxBurnPerHour?: number };
+  policy: { weight: number; reservePercent: number; reservePerHour?: number; allowUnknown: boolean; maxAgeMs: number; maxBurnPerHour?: number };
 };
 export type Settings = {
   version: 1; mainCheckout: string; stateDirectory: string; worktreeRoot: string;
