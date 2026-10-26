@@ -117,14 +117,13 @@ function context() {
 // prettier-ignore
 function newPartition(): number { let selected: number; do selected = 64 + Math.floor(Math.random() * 3968); while (partitions.has(selected)); partitions.add(selected); return selected; }
 
-function sourceNeighbours(fixture: Fixture): string[] {
-  const ids: string[] = [];
-  for (let candidate = 0; ids.length < ordinalsPerScale * scales[2]; candidate++) {
-    const externalId = `neighbour-${candidate}`;
-    if (partitionOf(tupleRoute(routeKey, fixture.seedSource, externalId)) === fixture.sourcePartition)
-      ids.push(externalId);
-  }
-  return ids;
+// No constraint or read path of the measured operations ties a stored fence route to the hash of its tuple, so the
+// neighbours take fixed ids and spread over the hot partition's 16 routes without hashing.
+function sourceNeighbours(fixture: Pick<Fixture, 'sourcePartition'>): { externalId: string; route: number }[] {
+  return Array.from({ length: ordinalsPerScale * scales[2] }, (_, index) => ({
+    externalId: `neighbour-${index}`,
+    route: fixture.sourcePartition * 16 + (index % 16),
+  }));
 }
 
 // prettier-ignore
@@ -323,9 +322,9 @@ async function growthPopulation(
     hotPartition: options.sourceOnly ? fixture.sourcePartition : fixture.partition,
     hotShare: 1,
     rows: ({ ordinal }) => {
-      const externalId = sourceIds[ordinal];
-      const sourceRows = externalId === undefined ? {} : { 'content.source_fences': [seedRow('sourceFence',
-        [tupleRoute(routeKey, fixture.seedSource, externalId), fixture.seedSource, externalId, 'cover', true, 1])] };
+      const neighbour = sourceIds[ordinal];
+      const sourceRows = neighbour === undefined ? {} : { 'content.source_fences': [seedRow('sourceFence',
+        [neighbour.route, fixture.seedSource, neighbour.externalId, 'cover', true, 1])] };
       if (options.sourceOnly) return sourceRows;
       const route = fixture.route, mediaId = newId(route), containerId = newId(route), postId = newId(route), revisionId = newId(route);
       const otherUploader = newId(route), uploaderId = ordinal % 2 === 0 ? fixture.actor.accountId : otherUploader;
