@@ -356,21 +356,42 @@ export class WorkerTasks {
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
       const routing = readRouting(this.settings.routingFile);
-      const fallbacks = options.profile ? [] : retryFallbacks(routing, nextTaskClass);
+      let fallbacks = options.profile ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
+      // A retry keeps its engine, but three failed attempts in a row on one model say the model is the problem: the
+      // next attempt goes to the route's first other model. Failures no model change can fix do not count.
+      const recent = task.currentAttempt
+        ? Array.from({ length: Math.min(3, task.currentAttempt) }, (_, index) =>
+            this.store.attempt({ taskId, attempt: task.currentAttempt - index }),
+          )
+        : [];
+      const sameModelFailures =
+        !options.profile &&
+        recent.length === 3 &&
+        recent.every(
+          (attempt) =>
+            attempt.profile.model === old?.profile.model &&
+            attempt.profile.cli === old?.profile.cli &&
+            this.store.record({ taskId, attempt: attempt.attempt })?.outcome !== 'passed' &&
+            !['pool-exhausted', 'rebase-conflict', 'scope-growth'].includes(attempt.escalation ?? ''),
+        );
+      const switched = sameModelFailures
+        ? fallbacks.find((candidate) => candidate.model !== old!.profile.model || candidate.cli !== old!.profile.cli)
+        : undefined;
+      if (switched) fallbacks = fallbacks.filter((candidate) => candidate !== switched && candidate.model !== old!.profile.model);
       const { profile, pool } = choosePoolWithFallback(
-        options.profile ?? route.profile,
+        options.profile ?? switched ?? route.profile,
         fallbacks,
         this.settings.pools,
         readings,
         {
           history,
-          ...(old ? { preferred: old.pool } : {}),
+          ...(old && !switched ? { preferred: old.pool } : {}),
           ...(options.excludePools ? { exclude: options.excludePools } : {}),
         },
-        // A new task goes to the allowance that would otherwise expire unused first; an explicit profile, or a class
-        // routed with paced: false, keeps its order.
-        options.profile || !paced
+        // A new task goes to the allowance that would otherwise expire unused first; an explicit profile, a switched
+        // engine, or a class routed with paced: false keeps its order.
+        options.profile || switched || !paced
           ? undefined
           : (candidate) => {
               const reading = readings.find((value) => value.pool === candidate.name);
