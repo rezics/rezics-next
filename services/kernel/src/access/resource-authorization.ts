@@ -14,6 +14,7 @@ import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import type { ResourceEligibility } from './eligibility.ts';
 import type { Access, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
+import { governanceReachUse, recordGovernanceReachUse, type GovernanceReachUse } from './governance-reach.ts';
 
 /** Trusted server binding to the authorization resource. validate checks THAT
  * anchor's existence and domain prerequisites at command T on its supplied client;
@@ -86,7 +87,10 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
     actor.kind === 'account'
       ? { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy }
       : null;
-  const proofs = new WeakMap<object, { attempt: CommandAttempt; deadline: number }>();
+  const proofs = new WeakMap<
+    object,
+    { attempt: CommandAttempt; deadline: number; governanceReach: GovernanceReachUse | undefined }
+  >();
   const denied = () => new GrantDeniedError();
   function bound(attempt: CommandAttempt): boolean {
     try {
@@ -134,19 +138,18 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
         );
         const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
         if (Date.now() >= proofDeadline) throw denied();
+        let governanceReach: GovernanceReachUse | undefined;
         await within(proofDeadline, () =>
           withConnection(pool, async (client) => {
             const bounded = deadlineClient(client, proofDeadline);
-            if (
-              !(await validate(bounded, attempt.time)) ||
-              !(await authorize(bounded, actor, action, resource, evidence, attempt.time))
-            )
-              throw denied();
+            if (!(await validate(bounded, attempt.time))) throw denied();
+            if (!(await authorize(bounded, actor, action, resource, evidence, attempt.time))) throw denied();
+            governanceReach = governanceReachUse(evidence, actor, action, resource);
           }),
         );
         if (!bound(attempt) || Date.now() >= proofDeadline) throw denied();
         const proof = Object.freeze({});
-        proofs.set(proof, { attempt, deadline: proofDeadline });
+        proofs.set(proof, { attempt, deadline: proofDeadline, governanceReach });
         return proof;
       } catch (error) {
         // Domain unavailability must not expose a receipt or reach target checkout.
@@ -168,6 +171,7 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
         Date.now() >= prepared.deadline
       )
         throw denied();
+      if (prepared.governanceReach && !recordGovernanceReachUse(tx, prepared.governanceReach)) throw denied();
       return 'execute';
     },
   });

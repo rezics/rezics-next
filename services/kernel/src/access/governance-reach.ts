@@ -1,4 +1,6 @@
+import { hasLiveCommandTransaction, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
+import recordGovernanceReach from './governance-reach-record.sql';
 import governance from './platform-governance.json';
 
 export const PLATFORM_RESOURCE = Object.freeze({
@@ -8,6 +10,13 @@ export const PLATFORM_RESOURCE = Object.freeze({
 
 const actions = new Set<string>(governance.globalReach);
 const reached = new WeakMap<object, boolean>();
+const registered = new WeakMap<CommandTransaction, Set<string>>();
+
+export type GovernanceReachUse = Readonly<{
+  actorAccountId: string;
+  action: string;
+  resource: Readonly<Resource>;
+}>;
 
 export function isGlobalReachAction(action: string): boolean {
   return actions.has(action);
@@ -38,6 +47,50 @@ export async function checkWithGovernanceReach(
 
 export function usedGovernanceReach(evidence: unknown): boolean {
   return typeof evidence === 'object' && evidence !== null && reached.get(evidence) === true;
+}
+
+/** Retain the exact write attribution when an opaque permission proof used the
+ * Global Context. The caller must record this use in its command transaction.
+ */
+export function governanceReachUse(
+  evidence: unknown,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+): GovernanceReachUse | undefined {
+  if (actor.kind !== 'account' || !usedGovernanceReach(evidence)) return undefined;
+  return Object.freeze({
+    actorAccountId: actor.accountId,
+    action,
+    resource: Object.freeze({ route: resource.route, id: resource.id }),
+  });
+}
+
+/** Register one reach row for this action/resource/actor in a live command.
+ * Returning false lets command authorizers fail closed when no transaction can
+ * carry the record. The SQL callback runs only after body/finalizer success.
+ */
+export function recordGovernanceReachUse(tx: CommandTransaction, use: GovernanceReachUse): boolean {
+  if (!hasLiveCommandTransaction(tx)) return false;
+  const key = JSON.stringify([use.action, use.resource.route, use.resource.id, use.actorAccountId]);
+  const uses = registered.get(tx) ?? new Set<string>();
+  if (uses.has(key)) return true;
+  try {
+    registerCommandCallback(tx, (transactionId) =>
+      recordGovernanceReach.run(tx, {
+        route: use.resource.route,
+        transaction_id: transactionId,
+        action: use.action,
+        resource_id: use.resource.id,
+        actor_account_id: use.actorAccountId,
+      }),
+    );
+  } catch {
+    return false;
+  }
+  uses.add(key);
+  registered.set(tx, uses);
+  return true;
 }
 
 /** Prepare one exact Access check while retaining only the opaque evidence

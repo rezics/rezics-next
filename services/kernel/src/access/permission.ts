@@ -1,11 +1,6 @@
 import type { Account } from './account-data.ts';
 import { accessCommandAttempt } from './command-admission.ts';
-import {
-  authoritativeTimeValue,
-  hasLiveCommandTransaction,
-  registerCommandCallback,
-  type AuthoritativeTime,
-} from '../command/command.ts';
+import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import {
   accessCheck,
   AuthenticationError,
@@ -28,13 +23,13 @@ import membershipRead from './permission-membership.sql';
 import timeRead from './permission-time.sql';
 import permissionRead from './permission-check.sql';
 import governanceReachCandidatesRead from './governance-reach-candidates.sql';
-import recordGovernanceReach from './governance-reach-record.sql';
 import {
   checkWithGovernanceReach,
+  governanceReachUse,
   isGlobalReachAction,
   isPlatformResource,
   PLATFORM_RESOURCE,
-  usedGovernanceReach,
+  recordGovernanceReachUse,
 } from './governance-reach.ts';
 import { prepareAnonymousEligibility } from './eligibility.ts';
 
@@ -448,18 +443,10 @@ export function createAccess(config: PermissionConfig): Access {
     },
     async authorize(client, actor, action, resource, evidence, time) {
       const allowed = await checkPermission(client, actor, action, resource, evidence, time, config.clock);
-      if (allowed && actor.kind === 'account' && usedGovernanceReach(evidence) && hasLiveCommandTransaction(client)) {
-        const target = Object.freeze({ route: resource.route, id: resource.id });
-        registerCommandCallback(client, (transactionId) =>
-          recordGovernanceReach.run(client, {
-            route: target.route,
-            transaction_id: transactionId,
-            action,
-            resource_id: target.id,
-            actor_account_id: actor.accountId,
-          }),
-        );
-      }
+      const use = allowed ? governanceReachUse(evidence, actor, action, resource) : undefined;
+      // Standalone checks have no write effect. Command authorizers that prove
+      // on another connection must retain this same use and record it later.
+      if (use && hasLiveCommandTransaction(client) && !recordGovernanceReachUse(client, use)) return false;
       return allowed;
     },
   };
