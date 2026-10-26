@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "paths": { "@rezics/ui/*": ["./src/*"] },
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     // The relaxed setting is for stories only; the consumer type test checks package sources strictly.
     "exactOptionalPropertyTypes": false

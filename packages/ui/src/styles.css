@@ -1,8 +1,19 @@
 /* Rezics UI: a maintained fork of SharkUI d43c3c2 (MIT) styled as Rezics Aura. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 @import './hitbox.css';
 @import './prose.css';
+
+/* shadcn's Rhea defaults come first; the Aura tokens below are layered after them. The cloned components in
+   src/shadcn/ use shadcn's data-selected="true", while the Ark components set a bare data-selected, so the variant
+   matches both. */
+@custom-variant data-selected {
+  &:where([data-selected='true']),
+  &:where([data-selected]:not([data-selected='false'])) {
+    @slot;
+  }
+}
 
 /* Each app names the component sources Tailwind scans (apps/web builds only the ones it uses). */
 
@@ -63,6 +74,7 @@
 
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-solid: var(--destructive-solid);
 
   --color-brand: var(--brand);
   --color-rating: var(--rating);
@@ -320,8 +332,11 @@
   --rating: #bf7a0e; /* stars and rating bars */
   --vote-down: #6a5bb5; /* active downvote, kept apart from blue actions */
 
-  --destructive: #c42840;
+  /* shadcn colors text, borders and tints with --destructive, so it is the text-safe tone; a filled
+     destructive control with white text uses --destructive-solid. */
+  --destructive: #b0233a;
   --destructive-foreground: #b0233a;
+  --destructive-solid: #c42840;
   --info: #65bae1;
   --info-foreground: #1f6f93;
   --success: #4aa651;
@@ -394,8 +409,9 @@
     --rating: #e9a93a;
     --vote-down: #a99cf0;
 
-    --destructive: #d63a50;
+    --destructive: #f0617a;
     --destructive-foreground: #f0617a;
+    --destructive-solid: #d63a50;
     --info: #3bacda;
     --info-foreground: #8fd0ee;
     --success: #3a9742;

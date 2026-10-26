@@ -2,5 +2,15 @@
   "printWidth": 120,
   "singleQuote": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["contracts/**", "packages/client/src/kernel/**", "packages/document/schema/**"]
+  "ignorePatterns": [
+    "contracts/**",
+    "packages/client/src/kernel/**",
+    "packages/document/schema/**",
+    "packages/ui/src/shadcn/**",
+    "packages/ui/src/lib/highlighter.tsx",
+    "packages/ui/src/hooks/use-mobile.ts",
+    "packages/ui/src/hooks/use-highlighted-code.ts",
+    "packages/ui/shadcn-registry.json",
+    "packages/ui/SHADCN.md"
+  ]
 }

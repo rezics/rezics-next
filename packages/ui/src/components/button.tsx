@@ -38,10 +38,10 @@ export const buttonVariants = tv({
         'focus-visible:border-primary',
       ],
       destructive: [
-        'bg-destructive',
+        'bg-destructive-solid',
         'text-white',
         'border border-transparent shadow-(--aura-shadow-card)',
-        'hover:bg-destructive/90',
+        'hover:bg-destructive-solid/90',
         'focus-visible:border-background focus-visible:ring-destructive-foreground/32',
       ],
       secondary: [

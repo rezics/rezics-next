@@ -41,7 +41,10 @@ function block(css: string, open: number): string {
 
 function hexTokens(source: string): Tokens {
   return Object.fromEntries(
-    [...source.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((match) => [match[1]!, match[2]!.toLowerCase()]),
+    [...source.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((match) => [
+      match[1]!,
+      match[2]!.toLowerCase(),
+    ]),
   );
 }
 
@@ -103,7 +106,8 @@ test('packages/ui and apps/web share one shadcn configuration: the Rhea style on
   const web = await readJson<Components>(join(repository, 'apps', 'web', 'components.json'));
 
   expect(ui.style).toBe('base-rhea');
-  for (const key of ['style', 'iconLibrary', 'rtl', 'menuColor', 'menuAccent'] as const) expect(web[key], key).toEqual(ui[key]);
+  for (const key of ['style', 'iconLibrary', 'rtl', 'menuColor', 'menuAccent'] as const)
+    expect(web[key], key).toEqual(ui[key]);
   expect(web.tailwind.baseColor).toBe(ui.tailwind.baseColor);
   expect(ui.iconLibrary).toBe('lucide');
   expect(ui.tailwind.cssVariables).toBe(true);
@@ -152,8 +156,7 @@ test('every shadcn component is cloned into the one directory the shadcn CLI wri
   const manifest = await readJson<Manifest>(join(root, 'package.json'));
   expect(manifest.exports?.['./shadcn/*']).toBe('./src/shadcn/*.tsx');
   expect(text(join(root, 'src', 'index.ts'))).not.toMatch(/shadcn/);
-  for (const name of components)
-    expect(text(join(shadcn, `${name}.tsx`)), name).not.toMatch(/from ['"]\.{1,2}\//);
+  for (const name of components) expect(text(join(shadcn, `${name}.tsx`)), name).not.toMatch(/from ['"]\.{1,2}\//);
 
   // Exact pins, and every package the cloned files import is declared.
   const declared = {
@@ -268,7 +271,9 @@ test('the shadcn color variables resolve to the Aura tokens with AA text contras
         `${name} destructive on its 10% tint over ${surface}`,
       ).toBeGreaterThanOrEqual(4.5);
     // The logo red is a mark, never a text-bearing variable.
-    for (const variable of variables.filter((variable) => /foreground$|^(?:primary|destructive|ring)$|^sidebar-primary$/.test(variable)))
+    for (const variable of variables.filter((variable) =>
+      /foreground$|^(?:primary|destructive|ring)$|^sidebar-primary$/.test(variable),
+    ))
       expect(tokens[variable], `${name} --${variable} is not the logo red`).not.toBe(tokens.brand);
     expect(contrast(tokens.brand!, tokens.background!), `${name} brand mark`).toBeGreaterThanOrEqual(3);
   }
@@ -330,7 +335,7 @@ test('the first shadcn components have stories that pass as accessible browser t
     const story = text(file);
     expect(story, name).toMatch(/title:\s*'shadcn\//);
     expect(story, name).toContain(`@rezics/ui/shadcn/${name}`);
-    expect(story, name).toMatch(/play:/);
+    expect(story, name).toMatch(/\bplay\b/);
   }
   // Accessibility violations fail a story.
   expect(text(join(root, '.storybook', 'preview.tsx'))).toMatch(/a11y:\s*\{\s*test:\s*'error'\s*\}/);
@@ -362,7 +367,9 @@ test('the first shadcn components have stories that pass as accessible browser t
   );
   for (const name of first) {
     const assertions = byFile.get(`shadcn-${name}.stories.tsx`) ?? [];
-    expect(assertions.filter((assertion) => assertion.status === 'passed').length, `${name} stories`).toBeGreaterThan(0);
+    expect(assertions.filter((assertion) => assertion.status === 'passed').length, `${name} stories`).toBeGreaterThan(
+      0,
+    );
   }
 }, 900_000);
 
@@ -370,7 +377,8 @@ test('SHADCN.md indexes every shadcn registry item with its purpose and add comm
   const registry = await snapshot();
   expect(registry.items.length).toBeGreaterThan(150);
   const types = new Set(registry.items.map((item) => item.type));
-  for (const type of ['registry:ui', 'registry:block', 'registry:hook', 'registry:lib']) expect(types, type).toContain(type);
+  for (const type of ['registry:ui', 'registry:block', 'registry:hook', 'registry:lib'])
+    expect(types, type).toContain(type);
 
   const script = await import(join(root, 'scripts', 'shadcn-index.ts'));
   const rendered = (script.renderIndex as (registry: Snapshot) => string)(registry);
@@ -383,7 +391,11 @@ test('SHADCN.md indexes every shadcn registry item with its purpose and add comm
     const matching = lines.filter((line) => line.startsWith(`- \`${item.name}\``));
     expect(matching.length, item.name).toBe(1);
     expect(matching[0], item.name).toContain(`bunx shadcn@latest add ${item.name}`);
-    const purpose = matching[0]!.slice(`- \`${item.name}\``.length).split('`bunx')[0]!.replace(/[\s—–-]+/g, ' ').trim();
+    const purpose = matching[0]!
+      .slice(`- \`${item.name}\``.length)
+      .split('`bunx')[0]!
+      .replace(/[\s—–-]+/g, ' ')
+      .trim();
     expect(purpose.length, `${item.name} purpose`).toBeGreaterThan(8);
   }
   // Regeneration is offline and stable.

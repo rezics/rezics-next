@@ -8,6 +8,17 @@ Tests run in a private network namespace that holds only loopback, so changes to
 
 The logo red (`--brand`) marks identity and never colors text; use ink blue (`--primary`) for colored text and actions. Use Manrope for interface text and Source Serif 4 for Work titles only. Fonts are self-hosted, and theme selection belongs on `<html>` without a script. Mark icons in red with `fill-*` or `stroke-*` utilities, never `text-brand`.
 
+## shadcn components
+
+Before building any interface piece, look it up in [SHADCN.md](SHADCN.md), which lists every item in the shadcn registry with its purpose and add command, and add it from shadcn when it exists. Build our own only for what shadcn does not offer, and say so in that component's doc comment.
+
+The package uses shadcn's Rhea style on the Base UI primitives (`components.json`, style `base-rhea`). `apps/web/components.json` shares that configuration, so `bunx shadcn@latest add <name>` run from either directory writes into `packages/ui`.
+
+- Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand: brand changes belong in `src/styles.css`, and our own components in `src/components/`. Import them as `@rezics/ui/shadcn/<name>`; `src/index.ts` does not re-export them, because their names clash with the Ark components.
+- The shadcn colour variables map to the Aura tokens in `src/styles.css`, layered after the Rhea defaults.
+- Stories for shadcn components are `src/components/shadcn-<name>.stories.tsx`, titled `shadcn/<Name>`.
+- The package tracks the newest shadcn release; a sync workflow that re-runs the CLI and shows the diff arrives in a follow-up task. Refresh the capability index with `bun scripts/shadcn-index.ts`, which rewrites `shadcn-registry.json` and `SHADCN.md` (`--offline` regenerates `SHADCN.md` from the snapshot).
+
 ## Cover
 
 `Cover` draws the image area of any subject: a work, edition, character, person, organization, recipe or Realm. Import it from `@rezics/ui/cover`. Do not draw subject images with a bare `<img>`.
