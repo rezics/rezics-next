@@ -8,6 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -87,7 +88,13 @@ async function createSourceThread(boardId: string, createdAt: string): Promise<{
     );
     return {
       value: null,
-      events: [{ type: createdType, subject: threadId, data: { threadId, itemId, revisionId, actorId: authorId } }],
+      events: [
+        {
+          type: createdType,
+          subject: threadId,
+          data: { threadId, itemId, revisionId, actorId: authorId, ...SUBJECT_THREAD_EVENT_FIELDS },
+        },
+      ],
     };
   });
   return { threadId, itemId };
@@ -117,7 +124,13 @@ async function createReply(boardId: string, threadId: string, parentId: string, 
     );
     return {
       value: null,
-      events: [{ type: replyType, subject: postId, data: { threadId, itemId: postId, revisionId, actorId: authorId } }],
+      events: [
+        {
+          type: replyType,
+          subject: postId,
+          data: { threadId, itemId: postId, revisionId, actorId: authorId, ...SUBJECT_THREAD_EVENT_FIELDS },
+        },
+      ],
     };
   });
 }

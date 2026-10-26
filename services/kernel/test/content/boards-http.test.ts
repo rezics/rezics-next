@@ -9,6 +9,7 @@ import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
@@ -93,7 +94,13 @@ async function thread(boardId: string, text = 'current searchable sentinel', at 
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: id,
-          data: { threadId: id, itemId: post, revisionId: revision, actorId: fixture.actor },
+          data: {
+            threadId: id,
+            itemId: post,
+            revisionId: revision,
+            actorId: fixture.actor,
+            ...SUBJECT_THREAD_EVENT_FIELDS,
+          },
         },
       ],
     };

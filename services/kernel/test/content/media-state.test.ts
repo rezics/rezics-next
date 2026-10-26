@@ -20,6 +20,7 @@ import insertPost from '../../src/content/insert-post.sql';
 import insertRevision from '../../src/content/insert-revision.sql';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const route = 0x4312;
@@ -389,7 +390,13 @@ async function reference(
         events: [
           {
             type: 'com.rezics.content.post.created.v1',
-            data: { threadId: thread, itemId: postId, revisionId, actorId: actor.accountId },
+            data: {
+              threadId: thread,
+              itemId: postId,
+              revisionId,
+              actorId: actor.accountId,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+            },
           },
         ],
       };

@@ -26,6 +26,7 @@ import { prepareRealmParticipationResult, type RealmParticipationCheck } from '.
 import { readPartition } from '../partition/partition.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { claimMedia, InvalidMediaClaimError } from './media.ts';
 import {
   mediaParentBoard,
@@ -232,6 +233,11 @@ function document(body: unknown, licence: string, subjectIds: readonly (string |
   return validateContentDocument({ body, licence, subjectIds });
 }
 
+function storedSubjectIds(values: readonly (string | null)[]): string[] {
+  if (values.some((value) => typeof value !== 'string')) throw new TypeError('Stored subject references are invalid');
+  return values as string[];
+}
+
 async function prepareContentParticipation(
   dependencies: ContentCommandDependencies,
   actor: Actor,
@@ -267,6 +273,7 @@ function containerAuthorization(
   let current: Chain;
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
+  let currentPlaceId = GLOBAL_CONTEXT;
   const limit = revising ? 33 : 32;
   // A non-author never held a revise receipt. Keep today's not_found ahead of
   // the authorship denial. The author's fresh key is refused in the body so an
@@ -280,6 +287,7 @@ function containerAuthorization(
     if (!sameChain(prepared, current)) throw new ContentNotFoundError();
     concealErasedRevise(current);
     const board = await mediaParentBoard(client, current.thread.board_id);
+    currentPlaceId = board.realm_id ?? GLOBAL_CONTEXT;
     if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), board.realm_id))
       throw new ContentForbiddenError();
     if (revising && current.posts[0]?.author_account_id !== account(actor).accountId) throw new ContentForbiddenError();
@@ -291,6 +299,9 @@ function containerAuthorization(
     validate,
     get current() {
       return current;
+    },
+    get placeId() {
+      return currentPlaceId;
     },
     wrap(base: CommandAuthorization): CommandAuthorization {
       return {
@@ -430,6 +441,7 @@ async function appendRevision(
     transaction_id: transactionId,
     at: authoritativeTimeValue(time),
   });
+  return validated.subjectIds;
 }
 const CREATED_EVENT = {
   thread: 'com.rezics.content.thread.created.v1',
@@ -437,14 +449,36 @@ const CREATED_EVENT = {
   revision: 'com.rezics.content.revision.created.v1',
 } as const;
 
-function result<Noun extends keyof typeof CREATED_EVENT>(value: ContentCommandValue, actor: Actor, noun: Noun) {
+type ThreadIndexEventFields = Readonly<{
+  placeId: string;
+  kind: 'discussion';
+  subjectIds: readonly string[];
+  activityAt: string;
+  previousSubjectIds?: readonly string[];
+}>;
+
+function eventActivityAt(time: AuthoritativeTime): string {
+  const authoritative = authoritativeTimeValue(time);
+  const value = new Date(authoritative);
+  if (!Number.isFinite(value.getTime())) throw new TypeError('Invalid authoritative content time');
+  const fraction = /\.(\d+)(?=(?:Z|[+-]\d\d(?::?\d\d)?)$)/.exec(authoritative)?.[1] ?? '';
+  const microseconds = `${fraction}000000`.slice(0, 6);
+  return value.toISOString().replace(/\.\d{3}Z$/, `.${microseconds}Z`);
+}
+
+function result<Noun extends keyof typeof CREATED_EVENT>(
+  value: ContentCommandValue,
+  actor: Actor,
+  noun: Noun,
+  index: ThreadIndexEventFields,
+) {
   return {
     value,
     events: [
       {
         type: CREATED_EVENT[noun],
         subject: value.itemId,
-        data: { ...value, actorId: account(actor).accountId },
+        data: { ...value, actorId: account(actor).accountId, ...index },
       },
     ],
   };
@@ -473,6 +507,7 @@ export async function createThread(
     inserted,
   );
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
+  let threadPlaceId = GLOBAL_CONTEXT;
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const base = parentCreationAuthorization({
     access: dependencies.access,
@@ -491,6 +526,7 @@ export async function createThread(
         )
           throw new ContentNotFoundError();
         const current = await mediaParentBoard(client, board.id);
+        threadPlaceId = current.realm_id ?? GLOBAL_CONTEXT;
         if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
           throw new ContentForbiddenError();
         return true;
@@ -567,7 +603,7 @@ export async function createThread(
         transaction_id: command.transactionId,
         at,
       });
-      await appendRevision(
+      const subjectIds = await appendRevision(
         tx,
         value,
         body.body,
@@ -589,7 +625,12 @@ export async function createThread(
           revisionId: value.revisionId,
           boardId: body.boardId,
         });
-      return result(value, actor, 'thread');
+      return result(value, actor, 'thread', {
+        placeId: threadPlaceId,
+        kind: 'discussion',
+        subjectIds,
+        activityAt: eventActivityAt(command.time),
+      });
     },
   );
   return outcome;
@@ -633,7 +674,7 @@ export async function createPost(
       const root = container.current.thread;
       if (body.boardId !== undefined && body.boardId !== root.board_id)
         throw new InvalidDocumentError('Board mismatch');
-      const defaults = body.subjectIds === undefined ? await post(tx, root.first_post_id!, body.threadId) : null;
+      const firstPost = await post(tx, root.first_post_id!, body.threadId);
       const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, r);
       await insertPost.run(tx, {
         route: r,
@@ -651,7 +692,7 @@ export async function createPost(
         value,
         body.body,
         body.licence,
-        body.subjectIds === undefined ? defaults!.subject_ids : body.subjectIds,
+        body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
         root.board_id,
         mediaIds,
         command.transactionId,
@@ -667,7 +708,12 @@ export async function createPost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'post');
+      return result(value, actor, 'post', {
+        placeId: container.placeId,
+        kind: 'discussion',
+        subjectIds: storedSubjectIds(firstPost.subject_ids),
+        activityAt: eventActivityAt(command.time),
+      });
     },
   );
 }
@@ -705,7 +751,7 @@ export async function revisePost(
       if (body.boardId !== undefined && body.boardId !== container.current.thread.board_id)
         throw new InvalidDocumentError('Board mismatch');
       const mediaIds = mediaReferences(body.mediaIds === undefined ? previous.media_ids : body.mediaIds, r);
-      await appendRevision(
+      const revisedSubjectIds = await appendRevision(
         tx,
         value,
         body.body,
@@ -733,7 +779,17 @@ export async function revisePost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'revision');
+      const isFirstPost = value.itemId === container.current.thread.first_post_id;
+      const indexSubjectIds = isFirstPost
+        ? revisedSubjectIds
+        : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
+      return result(value, actor, 'revision', {
+        placeId: container.placeId,
+        kind: 'discussion',
+        subjectIds: indexSubjectIds,
+        activityAt: eventActivityAt(command.time),
+        ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
+      });
     },
   );
 }

@@ -51,6 +51,7 @@ import selectCandidates from '../../src/content/select-collectable-media.sql';
 import insertPost from '../../src/content/insert-post.sql';
 import insertRevision from '../../src/content/insert-revision.sql';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -412,7 +413,8 @@ async function commandOptions(fixture: Fixture, kind: string, action?: string) {
 // prettier-ignore
 function postEvent(fixture: Fixture, postId: string, revisionId: string) {
   return { type: 'com.rezics.content.post.created.v1', subject: postId,
-    data: { threadId: fixture.threadId, itemId: postId, revisionId, actorId: fixture.actor.accountId } };
+    data: { threadId: fixture.threadId, itemId: postId, revisionId, actorId: fixture.actor.accountId,
+      ...SUBJECT_THREAD_EVENT_FIELDS } };
 }
 
 // prettier-ignore

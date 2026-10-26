@@ -29,6 +29,7 @@ import {
 import { observeSql } from './support/sql-observer.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const route = 0x6b21;
 const routeKey = new Uint8Array(32).fill(7);
@@ -452,7 +453,14 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
             epoch: 1,
             id: revision,
             type: 'com.rezics.content.post.created.v1',
-            data: { postId: post },
+            subject: post,
+            data: {
+              threadId: neighbour.thread,
+              itemId: post,
+              revisionId: revision,
+              actorId: author,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+            },
           },
         ],
         'editorial.write_basis': [

@@ -10,6 +10,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const scales = [1, 4, 16] as const;
 const ordinalsPerScale = 500;
@@ -361,7 +362,7 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             id: randomUUID(),
             type: 'com.rezics.content.thread.created.v1',
             subject: postId,
-            data: { ...standardValue, actorId: actor.accountId },
+            data: { ...standardValue, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
           },
         ],
         'editorial.write_basis': [
@@ -471,7 +472,7 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             id: randomUUID(),
             type: 'com.rezics.content.post.created.v1',
             subject: extraPostId,
-            data: { ...value, actorId: actor.accountId },
+            data: { ...value, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
           },
         ];
         resultRows['editorial.write_basis'] = [
@@ -532,8 +533,8 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             epoch: 1,
             id: randomUUID(),
             type: 'com.rezics.content.revision.created.v1',
-            subject: extraRevisionId,
-            data: { ...value, actorId: actor.accountId },
+            subject: anchor.postId,
+            data: { ...value, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
           },
         ];
         resultRows['editorial.write_basis'] = [
