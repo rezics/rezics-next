@@ -117,6 +117,14 @@ export const ReportResponseSchema = t.Object(
 );
 const subjects = t.Array(ContentIdSchema, { maxItems: 128, uniqueItems: true });
 const media = t.Array(ContentIdSchema, { maxItems: 32, uniqueItems: true });
+const voteCitation = t.Object(
+  {
+    questionId: ContentIdSchema,
+    units: t.Integer({ minimum: 0, maximum: 20 }),
+    revision: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+  },
+  closed,
+);
 const licence = t.String({ minLength: 1, maxLength: 128 });
 const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
 const visibility = t.Union(['published', 'draft', 'protected', 'taken_down'].map((value) => t.Literal(value)));
@@ -161,6 +169,7 @@ const item = {
   revisionId: ContentIdSchema,
   sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
   mediaIds: media,
+  voteCitation: t.Union([voteCitation, t.Null()]),
   revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
   ...viewerReaction,
   ...reactions,
@@ -198,6 +207,7 @@ export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & React
       ...metadata,
       ...references,
       authorId: ContentIdSchema,
+      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
       title: t.Union([t.String(), t.Null()]),
       availability,
       firstPost: PostEntrySchema,
@@ -208,15 +218,25 @@ export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & React
   ),
 );
 export const BoardViewSchema = t.Unsafe<BoardView>(
-  t.Object({ ...metadata, title: t.Union([t.String(), t.Null()]), availability }, closed),
+  t.Object(
+    {
+      ...metadata,
+      title: t.Union([t.String(), t.Null()]),
+      purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
+      availability,
+    },
+    closed,
+  ),
 );
 export const ThreadInputSchema = t.Object(
   {
+    kind: t.Optional(t.Union([t.Literal('discussion'), t.Literal('review')])),
     title: t.String({ minLength: 1, maxLength: 1024 }),
     body: document,
     ...references,
     visibility: t.Union([t.Literal('published'), t.Literal('draft')]),
     mediaIds: t.Optional(media),
+    voteCitation: t.Optional(voteCitation),
   },
   closed,
 );
@@ -238,6 +258,7 @@ export const RevisionInputSchema = t.Object(
     subjectIds: t.Optional(subjects),
     boardId: t.Optional(ContentIdSchema),
     mediaIds: t.Optional(media),
+    voteCitation: t.Optional(voteCitation),
   },
   closed,
 );

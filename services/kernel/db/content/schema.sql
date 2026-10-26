@@ -265,6 +265,66 @@ $$;
 
 
 --
+-- Name: guard_review_revision(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_review_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  thread_kind text;
+  first_post_id uuid;
+  review_subject_id uuid;
+BEGIN
+  SELECT t.kind, t.first_post_id, t.review_subject_id
+    INTO thread_kind, first_post_id, review_subject_id
+  FROM content.thread t
+  WHERE t.route = NEW.route AND t.thread_id = NEW.thread_id;
+
+  IF thread_kind IS NULL THEN
+    RAISE EXCEPTION 'Revision thread is missing' USING ERRCODE = '23503';
+  END IF;
+  IF thread_kind = 'review' THEN
+    IF NEW.post_id = first_post_id AND NEW.subject_ids IS DISTINCT FROM ARRAY[review_subject_id]::uuid[] THEN
+      RAISE EXCEPTION 'A review revision must retain exactly its target subject' USING ERRCODE = '23514';
+    END IF;
+    IF NEW.post_id <> first_post_id AND NEW.vote_citation IS NOT NULL THEN
+      RAISE EXCEPTION 'Only a review first post may cite a vote' USING ERRCODE = '23514';
+    END IF;
+  ELSIF NEW.vote_citation IS NOT NULL THEN
+    RAISE EXCEPTION 'Only a review may cite a vote' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_review_thread(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_review_thread() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  board_purpose text;
+BEGIN
+  SELECT purpose INTO board_purpose
+  FROM content.board
+  WHERE route = get_byte(uuid_send(NEW.board_id), 10) * 256 + get_byte(uuid_send(NEW.board_id), 11)
+    AND board_id = NEW.board_id;
+  IF board_purpose IS NULL OR (board_purpose = 'reviews') IS DISTINCT FROM (NEW.kind = 'review') THEN
+    RAISE EXCEPTION 'Thread kind must match its board purpose' USING ERRCODE = '23514';
+  END IF;
+  IF OLD.review_live IS FALSE AND NEW.review_live IS TRUE THEN
+    RAISE EXCEPTION 'A removed review cannot become live again' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_revision(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -276,10 +336,12 @@ BEGIN
     RAISE EXCEPTION 'Revision identity must survive erasure' USING ERRCODE = '23514';
   END IF;
   IF ROW(NEW.route, NEW.thread_id, NEW.post_id, NEW.revision_id,
-         NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at, NEW.media_ids)
+         NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at,
+         NEW.media_ids, NEW.vote_citation)
      IS DISTINCT FROM
      ROW(OLD.route, OLD.thread_id, OLD.post_id, OLD.revision_id,
-         OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at, OLD.media_ids)
+         OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at,
+         OLD.media_ids, OLD.vote_citation)
      OR OLD.availability <> 'available' OR NEW.availability <> 'erased'
      OR OLD.body IS NULL OR OLD.body_sha256 IS NULL
      OR NEW.body IS NOT NULL OR NEW.body_sha256 IS NOT NULL OR NEW.search_text IS NOT NULL
@@ -395,7 +457,9 @@ CREATE TABLE content.board (
     recorded_transaction_id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     realm_id uuid,
+    purpose text DEFAULT 'discussion'::text NOT NULL,
     CONSTRAINT board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT board_purpose_check CHECK ((purpose = ANY (ARRAY['discussion'::text, 'reviews'::text]))),
     CONSTRAINT board_realm_id_routed_check CHECK (((realm_id IS NULL) OR (((realm_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND (route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))))),
     CONSTRAINT board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_security_revision_check CHECK ((security_revision > 0)),
@@ -785,6 +849,7 @@ CREATE TABLE content.revision (
     recorded_transaction_id uuid NOT NULL,
     recorded_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     media_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    vote_citation jsonb,
     CONSTRAINT revision_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
     CONSTRAINT revision_body_sha256_matches CHECK ((NOT (body_sha256 IS DISTINCT FROM sha256(body)))),
@@ -797,7 +862,8 @@ CREATE TABLE content.revision (
     CONSTRAINT revision_media_ids_limit CHECK ((cardinality(media_ids) <= 32)),
     CONSTRAINT revision_media_routes_check CHECK (content.media_routes_match(route, media_ids)),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT revision_subject_ids_limit CHECK ((cardinality(subject_ids) <= 128))
+    CONSTRAINT revision_subject_ids_limit CHECK ((cardinality(subject_ids) <= 128)),
+    CONSTRAINT revision_vote_citation_check CHECK (((vote_citation IS NULL) OR ((jsonb_typeof(vote_citation) = 'object'::text) AND (vote_citation ?& ARRAY['questionId'::text, 'units'::text, 'revision'::text]) AND ((vote_citation - ARRAY['questionId'::text, 'units'::text, 'revision'::text]) = '{}'::jsonb) AND (jsonb_typeof((vote_citation -> 'questionId'::text)) = 'string'::text) AND ((vote_citation ->> 'questionId'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND (jsonb_typeof((vote_citation -> 'units'::text)) = 'number'::text) AND ((vote_citation ->> 'units'::text) ~ '^(0|[1-9][0-9]*)$'::text) AND ((((vote_citation ->> 'units'::text))::numeric >= (0)::numeric) AND (((vote_citation ->> 'units'::text))::numeric <= (20)::numeric)) AND (jsonb_typeof((vote_citation -> 'revision'::text)) = 'number'::text) AND ((vote_citation ->> 'revision'::text) ~ '^[1-9][0-9]*$'::text) AND (((vote_citation ->> 'revision'::text))::numeric <= (2147483647)::numeric))))
 );
 ALTER TABLE ONLY content.revision ALTER COLUMN body SET COMPRESSION lz4;
 
@@ -862,8 +928,14 @@ CREATE TABLE content.thread (
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     first_post_id uuid,
     availability text DEFAULT 'available'::text NOT NULL,
+    kind text DEFAULT 'discussion'::text NOT NULL,
+    review_subject_id uuid,
+    review_live boolean DEFAULT true NOT NULL,
     CONSTRAINT thread_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT thread_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT thread_kind_check CHECK ((kind = ANY (ARRAY['discussion'::text, 'review'::text]))),
+    CONSTRAINT thread_review_route_check CHECK (((kind <> 'review'::text) OR (route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11))))),
+    CONSTRAINT thread_review_subject_check CHECK ((((kind = 'review'::text) AND (review_subject_id IS NOT NULL)) OR ((kind = 'discussion'::text) AND (review_subject_id IS NULL)))),
     CONSTRAINT thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT thread_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT thread_title_size CHECK (((title IS NULL) OR ((char_length(title) >= 1) AND (char_length(title) <= 1024)))),
@@ -1056,6 +1128,20 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: board_one_global_reviews_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX board_one_global_reviews_idx ON content.board USING btree (purpose) WHERE ((realm_id IS NULL) AND (purpose = 'reviews'::text));
+
+
+--
+-- Name: board_one_realm_reviews_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX board_one_realm_reviews_idx ON content.board USING btree (route, realm_id) WHERE ((realm_id IS NOT NULL) AND (purpose = 'reviews'::text));
+
+
+--
 -- Name: board_realm_page; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -1162,10 +1248,17 @@ CREATE INDEX subject_thread_page_idx ON content.subject_thread USING btree (rout
 
 
 --
+-- Name: thread_one_live_review_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX thread_one_live_review_idx ON content.thread USING btree (route, board_id, author_account_id, review_subject_id) WHERE ((kind = 'review'::text) AND review_live AND (availability = 'available'::text) AND (visibility <> 'taken_down'::text));
+
+
+--
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'realm_id', 'subject_id', 'created_at');
+CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'realm_id', 'subject_id', 'created_at', 'purpose');
 
 
 --
@@ -1246,6 +1339,13 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON content.revision FO
 
 
 --
+-- Name: revision revision_review_contract; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER revision_review_contract BEFORE INSERT ON content.revision FOR EACH ROW EXECUTE FUNCTION content.guard_review_revision();
+
+
+--
 -- Name: source_fences source_fence_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -1263,7 +1363,14 @@ CREATE TRIGGER subject_thread_identity BEFORE UPDATE ON content.subject_thread F
 -- Name: thread thread_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'created_at');
+CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'board_id', 'first_post_id', 'kind', 'review_subject_id');
+
+
+--
+-- Name: thread thread_review_board; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER thread_review_board BEFORE INSERT OR UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_review_thread();
 
 
 --

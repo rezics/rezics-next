@@ -21,6 +21,7 @@ export type MediaParent = {
   thread_id: string | null;
   board_id: string | null;
   realm_id: string | null;
+  purpose: string | null;
   visibility: string;
   security_revision: string;
   availability: string;
@@ -65,6 +66,7 @@ function existing(
     thread_id: string | null;
     board_id: string | null;
     realm_id: string | null;
+    purpose: string | null;
     visibility: string;
     security_revision: string;
     availability: string;
@@ -90,6 +92,7 @@ function existing(
     thread_id: row.thread_id,
     board_id: row.board_id,
     realm_id: row.realm_id,
+    purpose: row.purpose,
     visibility: row.visibility,
     security_revision: row.security_revision,
     availability: row.availability,

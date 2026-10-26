@@ -30,6 +30,7 @@ import type {
   ReadContext,
   RevisionId,
   RevisionView as StoredRevisionView,
+  ReviewVoteCitation,
   ThreadId,
   ThreadView as StoredThreadView,
   Visibility,
@@ -74,6 +75,9 @@ type Row = {
   author_id: string | null;
   head_id: string | null;
   first_post_id: string | null;
+  thread_kind: 'discussion' | 'review' | null;
+  board_purpose: 'discussion' | 'reviews' | null;
+  vote_citation: ReviewVoteCitation | null;
   title: string | null;
   visibility: Visibility;
   security_revision: string;
@@ -181,6 +185,8 @@ const signature = (row: Row) =>
     row.author_id,
     row.head_id,
     row.first_post_id,
+    row.thread_kind,
+    row.board_purpose,
     row.visibility,
     row.security_revision,
     row.availability,
@@ -273,6 +279,7 @@ export async function readBoard(
       id: current.id,
       route: route(boardId),
       title: current.title,
+      purpose: current.board_purpose!,
       visibility: current.visibility,
       securityRevision: current.security_revision,
       availability: current.availability,
@@ -375,6 +382,7 @@ async function disclose(
       id: thread.id,
       route: route(thread.id),
       authorId: thread.author_id!,
+      kind: thread.thread_kind!,
       title: erased ? null : thread.title,
       licence: revision.licence,
       subjectIds: revision.subject_ids,
@@ -416,6 +424,7 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
     createdAt: post.created_at.toISOString(),
     revisedAt: post.revised_at === null ? null : post.revised_at.toISOString(),
     mediaIds: revision.media_ids,
+    voteCitation: erased ? null : revision.vote_citation,
     revisionId: revision.id,
   };
   if (erased) return { ...metadata, removed: true, body: null, sha256: null, availability: 'erased' };

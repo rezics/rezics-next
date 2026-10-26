@@ -358,6 +358,8 @@ function publishedModels(): void {
         subjectIds: readonly string[];
         boardId: string;
         visibility: 'published' | 'draft';
+        kind?: 'discussion' | 'review';
+        voteCitation?: model.ReviewVoteCitation;
       }>
     >
   >();
@@ -387,6 +389,7 @@ function publishedModels(): void {
         boardId?: string;
         mediaIds?: readonly string[];
         expectedRevisionId?: string | null;
+        voteCitation?: model.ReviewVoteCitation;
       }>
     >
   >();
@@ -415,6 +418,7 @@ function publishedModels(): void {
         revisedAt: string | null;
         sha256: string;
         mediaIds: readonly string[];
+        voteCitation: model.ReviewVoteCitation | null;
       }>
     >
   >();
@@ -434,6 +438,7 @@ function publishedModels(): void {
         revisedAt: string | null;
         sha256: string;
         mediaIds: readonly string[];
+        voteCitation: model.ReviewVoteCitation | null;
       }>
     >
   >();
@@ -444,6 +449,7 @@ function publishedModels(): void {
         id: string;
         route: number;
         authorId: string;
+        kind: 'discussion' | 'review';
         title: string | null;
         licence: string;
         subjectIds: readonly string[];
@@ -463,6 +469,7 @@ function publishedModels(): void {
         id: string;
         route: number;
         title: string | null;
+        purpose: 'discussion' | 'reviews';
         visibility: model.Visibility;
         securityRevision: string;
         availability: model.Availability;

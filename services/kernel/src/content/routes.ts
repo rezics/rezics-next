@@ -26,6 +26,7 @@ import {
   ContentNotFoundError as CommandNotFoundError,
   createPost,
   createThread,
+  ReviewConflictError,
   RevisionPreconditionError,
   revisePost,
   type ContentCommandDependencies,
@@ -135,6 +136,7 @@ const boardCreateInput = t.Object(
     conceptId: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' }),
     title: t.String({ minLength: 1, maxLength: 1024 }),
     visibility: t.Union([t.Literal('published'), t.Literal('protected'), t.Literal('draft')]),
+    purpose: t.Optional(t.Union([t.Literal('discussion'), t.Literal('reviews')])),
   },
   { additionalProperties: false },
 );
@@ -196,6 +198,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('forbidden');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
+    if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
     if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
     if (
       error instanceof TypeError &&
@@ -386,6 +389,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           201: withHeaders(threadResponse, { ...sessionHeader, location: t.String() }),
           ...writeFailures,
+          409: problemSchema('conflict'),
         },
         detail: {
           operationId: 'thread.create',
