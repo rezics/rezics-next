@@ -14,7 +14,7 @@ import updateRealm from './voter-realm-update.sql';
 import deleteRealm from './voter-realm-delete.sql';
 import promoteRealm from './voter-realm-promote.sql';
 import ensureVoterState from './voter-state-ensure.sql';
-import readVoterState from './voter-state-status-read.sql';
+import readVoterState from './voter-state-read.sql';
 
 export const VOTER_REALM_CAP = 100;
 const MEMBERSHIP = 'com.rezics.community.realm.membership.v1';
@@ -195,11 +195,19 @@ export function populationsForVoteKey(input: VoteKey, rows: readonly VoterRealmP
 /** Read only the capped set, in the same transaction as the vote and its emitted populations. */
 export async function readVotePopulations(
   tx: CommandTransaction,
-  input: { route: number; voterId: string } & VoteKey,
+  input: { route: number; voterId: string; includeLeaving?: boolean } & VoteKey,
 ): Promise<string[]> {
   await ensureVoterState.run(tx, { route: input.route, voter_id: input.voterId });
   const eligibility = await readVoterState.run(tx, { route: input.route, voter_id: input.voterId });
-  if (eligibility?.state === 'leaving' || eligibility?.state === 'ineligible') return [];
+  if (eligibility?.state === 'ineligible') return [];
   const rows = await readCapped.run(tx, { route: input.route, voter_id: input.voterId });
+  if (eligibility?.state === 'leaving') {
+    if (!input.includeLeaving) return [];
+    const saved = new Set(eligibility.populations ?? []);
+    return [
+      ...(saved.has(GLOBAL_CONTEXT.id) ? [GLOBAL_CONTEXT.id] : []),
+      ...populationsForVoteKey(input, rows).filter((realmId) => saved.has(realmId)),
+    ];
+  }
   return [GLOBAL_CONTEXT.id, ...populationsForVoteKey(input, rows)];
 }

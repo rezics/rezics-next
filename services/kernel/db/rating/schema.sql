@@ -24,6 +24,21 @@ CREATE SCHEMA rating;
 
 
 --
+-- Name: initialize_vote_counting(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.initialize_vote_counting() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.counted_target IS NULL THEN NEW.counted_target := NEW.target_id; END IF;
+  NEW.counted_revision := GREATEST(NEW.counted_revision, NEW.revision);
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: nonnegative_histogram(bigint[]); Type: FUNCTION; Schema: rating; Owner: -
 --
 
@@ -163,7 +178,10 @@ CREATE TABLE rating.vote (
     revision integer NOT NULL,
     changed_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    counted_target uuid,
+    counted_revision integer DEFAULT 1 NOT NULL,
     CONSTRAINT vote_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11)))),
+    CONSTRAINT vote_counted_revision_check CHECK ((counted_revision >= 1)),
     CONSTRAINT vote_revision_check CHECK ((revision >= 1)),
     CONSTRAINT vote_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT vote_units_check CHECK (((units IS NULL) OR ((units >= 0) AND (units <= 20))))
@@ -306,6 +324,20 @@ CREATE INDEX population_vote_target_page_idx ON rating.population_vote USING btr
 
 
 --
+-- Name: population_vote_target_voter_page_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX population_vote_target_voter_page_idx ON rating.population_vote USING btree (route, population_id, target_id, voter_id, question_id);
+
+
+--
+-- Name: vote_counted_target_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE UNIQUE INDEX vote_counted_target_idx ON rating.vote USING btree (route, voter_id, question_id, counted_target) WHERE (counted_target IS NOT NULL);
+
+
+--
 -- Name: voter_realm_capped_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -317,6 +349,13 @@ CREATE INDEX voter_realm_capped_idx ON rating.voter_realm USING btree (route, vo
 --
 
 CREATE INDEX voter_realm_waiting_idx ON rating.voter_realm USING btree (route, voter_id, joined_at, realm_id) WHERE (state = 'uncounted'::text);
+
+
+--
+-- Name: vote vote_initialize_counting; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER vote_initialize_counting BEFORE INSERT ON rating.vote FOR EACH ROW EXECUTE FUNCTION rating.initialize_vote_counting();
 
 
 --

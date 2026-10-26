@@ -13,6 +13,7 @@ export const RATING_EVENTS = {
       voterId: Type.String({ pattern: UUID }),
       questionId: Type.String({ pattern: UUID }),
       targetId: Type.String({ pattern: UUID }),
+      aggregateTargetId: Type.Optional(Type.String({ pattern: UUID })),
       previous: units,
       units,
       revision: Type.Integer({ minimum: 1 }),
@@ -36,6 +37,7 @@ export const RATING_EVENTS = {
             {
               questionId: Type.String({ pattern: UUID }),
               targetId: Type.String({ pattern: UUID }),
+              countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
               units,
               revision: Type.Integer({ minimum: 1 }),
               populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
@@ -57,6 +59,7 @@ export const RATING_EVENTS = {
             {
               questionId: Type.String({ pattern: UUID }),
               targetId: Type.String({ pattern: UUID }),
+              countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
               units,
               revision: Type.Integer({ minimum: 1 }),
               populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
@@ -78,6 +81,7 @@ export const RATING_EVENTS = {
             {
               questionId: Type.String({ pattern: UUID }),
               targetId: Type.String({ pattern: UUID }),
+              countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
               units,
               revision: Type.Integer({ minimum: 1 }),
             },
@@ -102,6 +106,14 @@ export const RATING_EVENTS = {
       subjectId: Type.String({ pattern: UUID }),
       source: Type.Literal('vndb'),
       sourceRecordId: Type.String({ minLength: 1, maxLength: 1024 }),
+    },
+    { additionalProperties: false },
+  ),
+  'com.rezics.rating.subject-merge.page.v1': Type.Object(
+    {
+      id: Type.String({ pattern: UUID }),
+      survivor: Type.String({ pattern: UUID }),
+      voters: Type.Integer({ minimum: 0, maximum: 100 }),
     },
     { additionalProperties: false },
   ),

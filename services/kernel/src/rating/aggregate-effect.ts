@@ -301,6 +301,7 @@ export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCoun
     voterId: string;
     questionId: string;
     targetId: string;
+    aggregateTargetId?: string;
     units: number | null;
     revision: number;
     populations: string[];
@@ -311,7 +312,7 @@ export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCoun
     countingKey,
     questionId: data.questionId,
     populationId,
-    targetId: data.targetId,
+    targetId: data.aggregateTargetId ?? data.targetId,
     units: data.units,
     revision: data.revision,
     at: event.time,
@@ -352,6 +353,7 @@ export async function applyRatingSegmentPageEvent(
         votes: Array<{
           questionId: string;
           targetId: string;
+          countedTargetId?: string | null;
           units: number | null;
           revision: number;
           populations: string[];
@@ -364,6 +366,7 @@ export async function applyRatingSegmentPageEvent(
         votes: Array<{
           questionId: string;
           targetId: string;
+          countedTargetId?: string | null;
           units: number | null;
           revision: number;
           populations: string[];
@@ -373,47 +376,72 @@ export async function applyRatingSegmentPageEvent(
         voterId: string;
         realmId: string;
         direction: 'adding' | 'removing';
-        votes: Array<{ questionId: string; targetId: string; units: number | null; revision: number }>;
+        votes: Array<{
+          questionId: string;
+          targetId: string;
+          countedTargetId?: string | null;
+          units: number | null;
+          revision: number;
+        }>;
       };
   if (data.votes.length === 0) return;
   if (data.direction === 'rekey') {
     const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, data.at));
     const changes: RatingChange[] = data.votes.flatMap((vote) =>
-      vote.populations.map((populationId) => ({
-        voterId: data.voterId,
-        countingKey,
-        questionId: vote.questionId,
-        populationId,
-        targetId: vote.targetId,
-        units: vote.units,
-        revision: vote.revision,
-        at: vote.changedAt,
-        rekey: true as const,
-        rekeyAt: data.at,
-        rekeyAllowMissing: data.allowMissing,
-      })),
+      vote.countedTargetId === null
+        ? []
+        : vote.populations.map((populationId) => ({
+            voterId: data.voterId,
+            countingKey,
+            questionId: vote.questionId,
+            populationId,
+            targetId: vote.countedTargetId ?? vote.targetId,
+            units: vote.units,
+            revision: vote.revision,
+            at: vote.changedAt,
+            rekey: true as const,
+            rekeyAt: data.at,
+            rekeyAllowMissing: data.allowMissing,
+          })),
     );
     await applyRatingChanges(pool, changes);
     return;
   }
   const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, event.time));
   const change = (
-    vote: { questionId: string; targetId: string; units: number | null; revision: number },
+    vote: {
+      questionId: string;
+      targetId: string;
+      countedTargetId?: string | null;
+      units: number | null;
+      revision: number;
+    },
     populationId: string,
-  ): RatingChange => ({
-    voterId: data.voterId,
-    countingKey,
-    questionId: vote.questionId,
-    populationId,
-    targetId: vote.targetId,
-    revision: vote.revision,
-    at: event.time,
-    ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
-  });
+  ): RatingChange | null => {
+    if (vote.countedTargetId === null) return null;
+    return {
+      voterId: data.voterId,
+      countingKey,
+      questionId: vote.questionId,
+      populationId,
+      targetId: vote.countedTargetId ?? vote.targetId,
+      revision: vote.revision,
+      at: event.time,
+      ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
+    };
+  };
   const changes: RatingChange[] =
     'realmId' in data
-      ? data.votes.flatMap((vote) => [change(vote, data.realmId)])
-      : data.votes.flatMap((vote) => vote.populations.map((populationId) => change(vote, populationId)));
+      ? data.votes.flatMap((vote) => {
+          const next = change(vote, data.realmId);
+          return next ? [next] : [];
+        })
+      : data.votes.flatMap((vote) =>
+          vote.populations.flatMap((populationId) => {
+            const next = change(vote, populationId);
+            return next ? [next] : [];
+          }),
+        );
   await applyRatingChanges(pool, changes);
 }
 
@@ -452,7 +480,7 @@ export async function readAggregate(
   return { count, sum, histogram, appliedAt, updating: first.updating };
 }
 
-/** Page population votes in (question_id, voter_id) order without exposing their counting keys. */
+/** Page population votes by voter id, with all their questions and no counting keys. */
 export async function readPopulationVoters(
   client: Queryable,
   input: {
@@ -476,7 +504,6 @@ export async function readPopulationVoters(
     route,
     population_id: input.populationId,
     target_id: input.targetId,
-    after_question_id: input.after?.questionId ?? null,
     after_voter_id: input.after?.voterId ?? null,
     limit: input.limit,
   });

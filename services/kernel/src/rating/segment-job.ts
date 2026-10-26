@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { runCommand } from '../command/command.ts';
+import { runCommand, type CommandEvent } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -27,6 +27,7 @@ import updateVoterState from './voter-state-update.sql';
 import deleteVotePage from './voter-votes-delete-page.sql';
 import deleteVoterRealms from './voter-realms-delete-all.sql';
 import { finishVoterRealmRemoval, type VoterRealmJob } from './voter-realms.ts';
+import { reconcileMergedSubjectVote, resolveSubjectTarget } from './merge-job.ts';
 
 export const RATING_SEGMENT_WORKFLOW = 'rating.segmentJob';
 export const RATING_SEGMENT_PAGE_SIZE = 100;
@@ -37,6 +38,7 @@ const COUNTER_CHANGED = 'com.rezics.access.rating-counter.changed.v1';
 
 export type SegmentCursor = { questionId: string; targetId: string };
 export type SegmentVote = SegmentCursor & {
+  countedTargetId?: string | null;
   units: number | null;
   revision: number;
   populations: string[];
@@ -88,7 +90,12 @@ type VotePageInput = {
   direction: 'adding' | 'removing' | 'rekey';
   limitKey: SegmentCursor | null;
 };
-type StoredSegmentVote = SegmentCursor & { units: number | null; revision: number; changedAt: string };
+type StoredSegmentVote = SegmentCursor & {
+  countedTargetId: string | null;
+  units: number | null;
+  revision: number;
+  changedAt: string;
+};
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 
@@ -168,6 +175,7 @@ export async function readRatingSegmentVotes(client: Queryable, input: VotePageI
   return rows.map((row) => ({
     questionId: row.questionId,
     targetId: row.targetId,
+    countedTargetId: row.countedTargetId,
     units: row.units === null ? null : Number(row.units),
     revision: Number(row.revision),
     changedAt: row.changedAt,
@@ -304,10 +312,35 @@ export async function processRatingSegmentPage(
       });
       if (votes.length > 0) {
         const realms = await readCapped.run(tx, { route: voterRoute, voter_id: input.voterId });
-        const page = votes.map(({ changedAt: _changedAt, ...vote }) => ({
-          ...vote,
-          populations: [GLOBAL_CONTEXT.id, ...populationsForVoteKey(vote, realms)],
-        }));
+        const mergeEvents: CommandEvent[] = [];
+        const page: SegmentVote[] = [];
+        const resolvedTargets = new Map<string, string>();
+        for (const { changedAt: _changedAt, ...vote } of votes) {
+          if (input.direction === 'adding') {
+            let resolvedTarget = resolvedTargets.get(vote.targetId);
+            if (resolvedTarget === undefined) {
+              resolvedTarget = await resolveSubjectTarget(tx, vote.targetId);
+              resolvedTargets.set(vote.targetId, resolvedTarget);
+            }
+            if (resolvedTarget !== vote.targetId) {
+              mergeEvents.push(
+                ...(await reconcileMergedSubjectVote(tx, {
+                  route: voterRoute,
+                  voterId: input.voterId,
+                  questionId: vote.questionId,
+                  sourceTargetId: vote.targetId,
+                  survivorId: resolvedTarget,
+                  mode: 'return',
+                })),
+              );
+              continue;
+            }
+          }
+          page.push({
+            ...vote,
+            populations: [GLOBAL_CONTEXT.id, ...populationsForVoteKey(vote, realms)],
+          });
+        }
         const last = votes.at(-1)!;
         if (row.purgeVotes) {
           await deleteVotePage.run(tx, {
@@ -337,7 +370,7 @@ export async function processRatingSegmentPage(
             eventData,
             nextJobs: [],
           },
-          events: [{ type: SEGMENT_PAGE, subject: input.voterId, data: eventData }],
+          events: [{ type: SEGMENT_PAGE, subject: input.voterId, data: eventData }, ...mergeEvents],
         };
       }
 

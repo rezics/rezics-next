@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue } from '../command/command.ts';
+import { authoritativeTimeValue, type CommandEvent } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
@@ -12,6 +12,8 @@ import { readVotePopulations } from './voter-realms.ts';
 import questionRead from './question-read.sql';
 import voteInsert from './vote-insert.sql';
 import voteLock from './vote-lock.sql';
+import voteCountedTargetLock from './vote-counted-target-lock.sql';
+import voteCountedTargetSet from './vote-counted-target-set.sql';
 import voteRead from './vote-read.sql';
 import voteUpdate from './vote-update.sql';
 
@@ -86,6 +88,7 @@ function asQuestion(row: QuestionRow): RatingQuestion {
 }
 
 function asVote(row: VoteRow): Vote {
+  if (row.changedAt === null) throw new Error('Rating vote has no change time');
   return {
     voterId: row.voterId,
     questionId: row.questionId,
@@ -94,6 +97,32 @@ function asVote(row: VoteRow): Vote {
     revision: Number(row.revision),
     changedAt: new Date(row.changedAt).toISOString(),
     transactionId: row.transactionId,
+  };
+}
+
+function changedVoteEvent(input: {
+  voterId: string;
+  questionId: string;
+  sourceTargetId: string;
+  aggregateTargetId: string;
+  previous: number | null;
+  units: number | null;
+  revision: number;
+  populations: string[];
+}) {
+  return {
+    type: VOTE_EVENT,
+    subject: input.voterId,
+    data: {
+      voterId: input.voterId,
+      questionId: input.questionId,
+      targetId: input.sourceTargetId,
+      ...(input.sourceTargetId === input.aggregateTargetId ? {} : { aggregateTargetId: input.aggregateTargetId }),
+      previous: input.previous,
+      units: input.units,
+      revision: input.revision,
+      populations: input.populations,
+    },
   };
 }
 
@@ -181,12 +210,61 @@ export function createVoteCommands(config: Dependencies) {
             question_id: question.id,
             target_id: resolved.subjectId,
           });
+          const countedRow = await voteCountedTargetLock.run(queryClient(tx), {
+            route,
+            voter_id: owner.accountId,
+            question_id: question.id,
+            counted_target: resolved.subjectId,
+          });
           const previous = previousRow ? asVote(previousRow) : null;
-          if ((!previous && input.units === null) || (previous && previous.units === input.units))
+          const isAlreadyCurrent = previousRow?.countedTarget === resolved.subjectId;
+          if (
+            (!previous && !countedRow && input.units === null) ||
+            (isAlreadyCurrent && previous?.units === input.units)
+          )
             throw new VoteUnchanged(previous);
 
           const time = authoritativeTimeValue(command.time);
           let nextRow: Awaited<ReturnType<typeof voteRead.run>>;
+          const events: CommandEvent[] = [];
+          let countedRevision = Number(previousRow?.countedRevision ?? 0) + 1;
+
+          if (countedRow && countedRow.targetId !== resolved.subjectId) {
+            const priorCountedRevision = Number(countedRow.countedRevision);
+            const baseRevision = Math.max(priorCountedRevision, Number(previousRow?.countedRevision ?? 0));
+            const removalRevision = baseRevision + 1;
+            const nextCountedRevision = baseRevision + 2;
+            const previousPopulations = await readVotePopulations(tx, {
+              route,
+              voterId: owner.accountId,
+              questionId: question.id,
+              targetId: countedRow.targetId,
+            });
+            const cleared = await voteCountedTargetSet.run(queryClient(tx), {
+              route,
+              voter_id: owner.accountId,
+              question_id: question.id,
+              target_id: countedRow.targetId,
+              expected_counted_target: resolved.subjectId,
+              counted_target: null,
+              counted_revision: removalRevision,
+            });
+            if (!cleared) throw new Error('Rating vote count changed while its row was locked');
+            events.push(
+              changedVoteEvent({
+                voterId: owner.accountId,
+                questionId: question.id,
+                sourceTargetId: countedRow.targetId,
+                aggregateTargetId: resolved.subjectId,
+                previous: countedRow.units === null ? null : Number(countedRow.units),
+                units: null,
+                revision: removalRevision,
+                populations: previousPopulations,
+              }),
+            );
+            countedRevision = nextCountedRevision;
+          } else if (countedRow) countedRevision = Number(countedRow.countedRevision) + 1;
+
           if (previousRow) {
             nextRow = await voteUpdate.run(queryClient(tx), {
               route,
@@ -194,17 +272,20 @@ export function createVoteCommands(config: Dependencies) {
               question_id: question.id,
               target_id: resolved.subjectId,
               revision: previousRow.revision,
+              counted_target: resolved.subjectId,
+              counted_revision: countedRevision,
               units: input.units,
               changed_at: time,
               transaction_id: command.transactionId,
             });
           } else {
-            if (input.units === null) throw new VoteUnchanged(null);
             nextRow = await voteInsert.run(queryClient(tx), {
               route,
               voter_id: owner.accountId,
               question_id: question.id,
               target_id: resolved.subjectId,
+              counted_target: resolved.subjectId,
+              counted_revision: countedRevision,
               units: input.units,
               changed_at: time,
               transaction_id: command.transactionId,
@@ -212,28 +293,27 @@ export function createVoteCommands(config: Dependencies) {
           }
           if (!nextRow) throw new Error('Rating vote changed while its row was locked');
           const vote = asVote(nextRow);
+          const populations = await readVotePopulations(tx, {
+            route,
+            voterId: owner.accountId,
+            questionId: question.id,
+            targetId: resolved.subjectId,
+          });
+          events.push(
+            changedVoteEvent({
+              voterId: owner.accountId,
+              questionId: question.id,
+              sourceTargetId: resolved.subjectId,
+              aggregateTargetId: resolved.subjectId,
+              previous: countedRow && countedRow.targetId !== resolved.subjectId ? null : (previous?.units ?? null),
+              units: vote.units,
+              revision: countedRevision,
+              populations,
+            }),
+          );
           return {
             value: vote,
-            events: [
-              {
-                type: VOTE_EVENT,
-                subject: owner.accountId,
-                data: {
-                  voterId: owner.accountId,
-                  questionId: question.id,
-                  targetId: resolved.subjectId,
-                  previous: previous?.units ?? null,
-                  units: vote.units,
-                  revision: vote.revision,
-                  populations: await readVotePopulations(tx, {
-                    route,
-                    voterId: owner.accountId,
-                    questionId: question.id,
-                    targetId: resolved.subjectId,
-                  }),
-                },
-              },
-            ],
+            events,
           };
         },
       );

@@ -4,6 +4,7 @@ import { createRatingAggregateEffect } from './aggregate-effect.ts';
 import { createVoterEligibilityEffect } from './eligibility.ts';
 import { registerRatingSegmentWork } from './segment-job.ts';
 import { createVoterRealmsEffect } from './voter-realms.ts';
+import { registerRatingSubjectMergeWork } from './merge-job.ts';
 
 export const RATING_COUNTER_SECRET_ENV = 'KERNEL_RATING_COUNTER_SECRET';
 
@@ -29,7 +30,10 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
         createVoterEligibilityEffect(context.pool),
       ]);
       // The direct module-registration test uses a minimal context; composed workers always provide a DBOS client.
-      if (context.client) registerRatingSegmentWork(context);
+      if (context.client) {
+        registerRatingSegmentWork(context);
+        registerRatingSubjectMergeWork(context);
+      }
     },
   };
 }

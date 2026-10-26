@@ -15,10 +15,14 @@ A **vote** is one person's current answer to one question about one target. Ther
 (person, question, target). It lives in the voter's partition, so a popular target is never a write hotspot.
 Accounts declared under one controller count once, with the latest vote.
 
-A vote keeps the target it was cast on. When two subjects merge, a person who voted on both counts once on the
-survivor: their vote on the survivor wins, an explicit clear included; otherwise their vote on the merged subject
-counts. Aggregates are recomputed from votes, never from stored means. An unmerge returns every vote to its own
-target, and a vote cast on the merged group meanwhile waits for its author to assign it; one vote never becomes two.
+A vote keeps the target it was cast on. Its `counted_target` equals that target until a merge changes where it counts;
+it is NULL when the vote counts nowhere. Aggregates use the counted target, and a partial unique index allows at most
+one counted vote per voter, question and target. When two subjects merge, a person's vote or clear on the survivor
+wins; otherwise their vote on the merged subject counts there. If several merged subjects feed one survivor and the
+person has no survivor vote, the latest-changed merged vote counts. Equal change times choose the vote whose original
+target id sorts first. A later vote on the survivor replaces the merged vote that counted there, while both vote rows
+keep their original targets. Unmerge does not exist in the kernel. Because targets stay on the votes, a later unmerge
+can recount them; one vote never becomes two.
 
 A **population** is a set of people whose votes an aggregate counts: Global (every eligible account) or one Realm
 (its current members). A population is a segment of one measurement, not a separate measurement: the same vote
@@ -193,6 +197,22 @@ page is empty, the remaining `voter_realm` rows are deleted and the voter remain
 both votes and Realm memberships for reinstatement.
 
 ## Cost
+
+### Merge page
+
+- Touches: at most 100 Global population voters by keyset, all their questions for the merged target, and their vote
+  rows by the counted-target and vote primary-key indexes. Voters are grouped by partition and each partition receives
+  one command per step.
+- Bound: 100 voters per step.
+- Growth check: `test/rating/subject-merge.test.ts`, test "merge page has constant rows and statements as merged target
+  voters grow", at scales `[256, 1024, 4096]`.
+
+### Put vote
+
+- Touches: the existing vote row and one lookup by the counted-target unique index, which finds a merged vote that is
+  counting on the survivor.
+- Bound: constant.
+- Growth check: `test/rating/growth-votes.test.ts`, unchanged.
 
 ### Segment page
 
