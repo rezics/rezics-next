@@ -19,6 +19,7 @@ import { progressRoutes } from '../library/progress-routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
+import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
@@ -51,7 +52,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   workClient?: WorkClient;
 };
 
-type ContentReadAssociation = Readonly<{ found: boolean; realmId: string | null }>;
+type ContentReadAssociation = Readonly<{ realmId: string | null }>;
 type ContentReadProof = Readonly<{
   actor: Actor;
   action: string;
@@ -64,18 +65,6 @@ type ContentReadProof = Readonly<{
 }>;
 const realmAwareAccesses = new WeakMap<Access, Access>();
 
-const threadRealmRead = `SELECT b.realm_id
-  FROM content.thread t
-  JOIN content.board b ON b.route=get_byte(uuid_send(t.board_id), 10) * 256 + get_byte(uuid_send(t.board_id), 11)
-    AND b.board_id=t.board_id
-  WHERE t.route=$1 AND t.thread_id=$2`;
-const postRealmRead = `SELECT b.realm_id
-  FROM content.post p
-  JOIN content.thread t ON t.route=p.route AND t.thread_id=p.thread_id
-  JOIN content.board b ON b.route=get_byte(uuid_send(t.board_id), 10) * 256 + get_byte(uuid_send(t.board_id), 11)
-    AND b.board_id=t.board_id
-  WHERE p.route=$1 AND p.post_id=$2`;
-
 /** A Realm's read grant gates every content item on its boards. Bind the
  * relationship before checkout, then recheck it with both read formulas at T. */
 function realmAwareContentAccess(access: Access): Access {
@@ -87,18 +76,13 @@ function realmAwareContentAccess(access: Access): Access {
       const primary = access.prepare ? await access.prepare(actor, action, resource, context) : undefined;
       if (action !== 'thread:read' && action !== 'post:read') return primary;
 
-      const statement = action === 'thread:read' ? threadRealmRead : postRealmRead;
-      const result = await withConnection(context.pool, (connection) =>
+      const kind = action === 'thread:read' ? 'thread' : 'post';
+      const realmId = await withConnection(context.pool, (connection) =>
         within(context.deadline, () =>
-          deadlineClient(connection, context.deadline).query<{ realm_id: string | null }>(statement, [
-            resource.route,
-            resource.id,
-          ]),
+          realmOfItem(deadlineClient(connection, context.deadline), kind, resource.route, resource.id),
         ),
       );
-      const row = result.rows[0];
-      const association: ContentReadAssociation =
-        result.rows.length === 1 && row ? { found: true, realmId: row.realm_id } : { found: false, realmId: null };
+      const association: ContentReadAssociation = { realmId };
       let realmResource: Resource | undefined;
       let realmEvidence: unknown;
       let valid = true;
@@ -144,11 +128,9 @@ function realmAwareContentAccess(access: Access): Access {
       const primaryAllowed = await access.authorize(client, actor, action, resource, proof.primary, time);
       if (!primaryAllowed) return false;
 
-      const statement = action === 'thread:read' ? threadRealmRead : postRealmRead;
-      const current = await client.query<{ realm_id: string | null }>(statement, [resource.route, resource.id]);
-      const row = current.rows[0];
-      if (current.rows.length !== 1 || !row || row.realm_id !== proof.association.realmId || !proof.association.found)
-        return false;
+      const kind = action === 'thread:read' ? 'thread' : 'post';
+      const realmId = await realmOfItem(client, kind, resource.route, resource.id);
+      if (realmId !== proof.association.realmId) return false;
       if (proof.association.realmId === null) return true;
       if (!proof.realmResource) return false;
       return access.authorize(client, actor, 'realm:read', proof.realmResource, proof.realmEvidence, time);
