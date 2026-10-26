@@ -191,8 +191,15 @@ never to request booleans or a second permission engine in Auth.
   credentials the operator is null and the person manages their own account.
   For an automated actor Access decides the operator approval. Session receipts
   and the exact credential purposes (`set-password`, `remove-password`,
-  `add-key`, `remove-key`, `add-passkey`, `remove-passkey`) cannot be interchanged. Auth also journals receipt IDs
+  `add-key`, `remove-key`) cannot be interchanged. Auth also journals receipt IDs
   durably to prevent duplicate local issuance across instances.
+- `consumePasskeyAuthorization({ authorization, subjectAccountId, purpose, operationKey, effectReference, human })`
+  consumes an exact `add-passkey` or `remove-passkey` approval for the human's own
+  account. The host opts into these floor purposes with `passkeys: true`.
+  Passkey approvals bind the same immutable stage locators and current session
+  evidence; they cannot authorize an operator or automated-account credential
+  operation. `consumeAuthorization` retains the four password and key purposes
+  above, plus `session`.
 - `invalidateAccount({ accountId, previousEpoch, reason, proofReference, operationKey })` atomically checks the
   old floor and commits an increased account floor before returning an
   `InvalidationReceipt`. Its receipt ID, account and higher minimum epoch are
