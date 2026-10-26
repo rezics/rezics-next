@@ -203,7 +203,7 @@ beforeAll(async () => {
     stderr: 'pipe',
   });
   expect(await bootstrap.exited).toBe(0);
-  for (let i = 0; i < 4; i++) positives.push(await person(`positive_${i}`));
+  for (let i = 0; i < 7; i++) positives.push(await person(`positive_${i}`));
   await lifecycle.reserveCoordination({
     accountId: grantor.accountId,
     relatedAccountId: newId(0x7311),
@@ -232,15 +232,20 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
       (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
     ).toBe(200);
     expect((await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {})).response.status).toBe(403);
+    // Coordination does not block suspension. Its exact success replay stays
+    // available; a fresh command against the now-suspended account is refused.
+    expect(
+      (await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {}, 'growth-coordinated')).response.status,
+    ).toBe(200);
     expect((await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {})).response.status).toBe(403);
   };
   const report = await checkGrowth(db, {
     name: 'mounted native suspension',
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 1,
-    warmups: 0,
+    warmups: 1,
     async grow(database, scale, previous) {
-      positive = positives[[1, 8, 64].indexOf(scale)]!;
+      positive = positives[[1, 8, 64].indexOf(scale) * 2]!;
       // Unrelated account rows are produced by native pending registration;
       // no SQL fixture writes an account state, floor, fence or measured outcome.
       for (let start = previous * 500; start < scale * 500; start += 8) {
@@ -292,14 +297,26 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
       // Native seeding can outlast the pool's idle lifetime. Warm the real
       // mounted path after seeding so per-connection SQL type discovery does
       // not enter only the largest sample. The positive mutation remains fresh.
-      expect((await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {})).response.status).toBe(403);
+      expect(
+        (await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {}, 'growth-coordinated')).response
+          .status,
+      ).toBe(200);
       expect(
         (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
       ).toBe(200);
     },
+    async warmup(_database, scale) {
+      const measured = positive;
+      positive = positives[[1, 8, 64].indexOf(scale) * 2 + 1]!;
+      try {
+        await exercise();
+      } finally {
+        positive = measured;
+      }
+    },
     operation: exercise,
   });
-  positive = positives[3]!;
+  positive = positives[6]!;
   const observed = await capture(db, exercise);
   for (const fragment of [
     'access.account',
