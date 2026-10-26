@@ -12,6 +12,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { readPublicIdentities } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
+import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
 import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
 import { createSuspensionCommands } from './suspension.ts';
 
@@ -160,6 +161,13 @@ export function accessRoutes(
       access: dependencies.access(),
       clock: dependencies.clock,
     }));
+  let rateTier: ReturnType<typeof createRateTierCommands> | undefined;
+  const rateTierCommands = () =>
+    (rateTier ??= createRateTierCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
     .get(
       '/v1/accounts',
@@ -294,6 +302,62 @@ export function accessRoutes(
           return { reinstatement: { accountId, state, minimumAuthnEpoch, receiptId } };
         } catch (error) {
           if (error instanceof ReinstatementNotAppliedError) throw new ProblemError('conflict');
+          denied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'setRateTier'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(
+          t.Object(
+            {
+              key: t.String({ minLength: 1, maxLength: 255 }),
+              tier: t.Union([t.Literal('ordinary'), t.Literal('trusted'), t.Literal('service')]),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: withHeaders(
+            t.Object(
+              {
+                rateTier: t.Object(
+                  {
+                    accountId: id,
+                    tier: t.Union([t.Literal('ordinary'), t.Literal('trusted'), t.Literal('service')]),
+                    receiptId: id,
+                  },
+                  closed,
+                ),
+              },
+              closed,
+            ),
+            { [SESSION_HEADER]: t.String() },
+          ),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: { ...detail('account.set_rate_tier'), 'x-action': 'account:set_rate_tier' },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        if (key !== body.key) throw new ProblemError('invalid_request');
+        try {
+          const result = await admission.run('normal', job, () =>
+            rateTierCommands().setRateTier(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key, tier: body.tier },
+            ),
+          );
+          session.record(result);
+          const { accountId, tier, receiptId } = result.value;
+          return { rateTier: { accountId, tier, receiptId } };
+        } catch (error) {
+          if (error instanceof RateTierNotAppliedError) throw new ProblemError('conflict');
           denied(error);
         }
       },

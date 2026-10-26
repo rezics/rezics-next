@@ -150,6 +150,12 @@ That read is still one statement per non-command check and returns one more colu
 - Bound: `O((1 + K) log G)` added, the same shape as `gate:any`, independent of the requested resource, other resources and other grants.
 - Growth check: `test/access/growth-governance-reach.test.ts` at [1, 8, 64], growing unrelated resources, their grants and Global grants to other accounts; default warm-up; constant rows and statements, logarithmic buffers.
 
+### Rate tier
+
+- Touches: one governance check on the Global Context, the receipt, one locked account row and its operator relation.
+- Bound: `O(log R)` per statement, a fixed number of statements, independent of other accounts.
+- Growth check: `test/access/growth-rate-tier.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts and operated accounts; warm-up on a spare account; constant rows and statements, logarithmic buffers.
+
 ### Operator transfer
 
 Touches: the source approval and optional destination acceptance, with receipts on the actors' anchors (one approval

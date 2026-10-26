@@ -129,6 +129,14 @@ export const ACCESS_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.access.account.rate-tier-set.v1': Type.Object(
+    {
+      accountId: identity,
+      tier: Type.Union([Type.Literal('ordinary'), Type.Literal('trusted'), Type.Literal('service')]),
+      receiptId: identity,
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.grant.create.v1': grant,
   'com.rezics.access.grant.change.v1': grant,
   'com.rezics.access.grant.revoke.v1': grant,

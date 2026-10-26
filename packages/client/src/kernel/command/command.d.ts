@@ -6,6 +6,7 @@ export type CommandEvent = {
     data: unknown;
 };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
+export type CommandCallback = (transactionId: string) => void | Promise<void>;
 type CommandResult<T> = {
     value: T;
     events: CommandEvent[];
@@ -145,6 +146,15 @@ export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
 export declare function currentCommand(tx: CommandTransaction): CurrentCommand;
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export declare function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined;
+/** Register work for the current command after its body and finalizer succeed.
+ * The callback receives the executor-minted transaction id and runs before the
+ * receipt and outbox are written. Registration is scoped to one live attempt.
+ */
+export declare function registerCommandCallback(tx: CommandTransaction, callback: CommandCallback): void;
+/** True for the transaction and deadline-bound wrappers around it while the
+ * executor attempt is live. The symbol capability is private to this module.
+ */
+export declare function hasLiveCommandTransaction(tx: CommandTransaction): boolean;
 export declare class IdempotencyConflictError extends Error {
     readonly partition: number;
     constructor(partition: number);

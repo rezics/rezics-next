@@ -33,6 +33,11 @@ declare const productEventTypes: {
         minimumAuthnEpoch: Type.TString;
         receiptId: Type.TString;
     }>;
+    readonly 'com.rezics.access.account.rate-tier-set.v1': Type.TObject<{
+        accountId: Type.TString;
+        tier: Type.TUnion<[Type.TLiteral<"ordinary">, Type.TLiteral<"trusted">, Type.TLiteral<"service">]>;
+        receiptId: Type.TString;
+    }>;
     readonly 'com.rezics.access.grant.create.v1': Type.TUnion<[Type.TObject<{
         resource: Type.TObject<{
             route: Type.TInteger;

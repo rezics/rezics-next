@@ -68,6 +68,7 @@ const typed = [
   'POST /v1/pages/$read',
   'POST /v1/accounts/:accountId/$suspend',
   'POST /v1/accounts/:accountId/$reinstate',
+  'POST /v1/accounts/:accountId/$setRateTier',
   'GET /v1/accounts',
   'POST /v1/platform/exposure/:group/$close',
   'POST /v1/platform/exposure/:group/$open',
