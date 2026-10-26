@@ -1,10 +1,13 @@
 'use client';
 
+import { Button } from '@rezics/ui/shadcn/button';
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@rezics/ui/shadcn/sheet';
+import { Toggle } from '@rezics/ui/shadcn/toggle';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
 import { Blocks, Bold, ChevronDown, Code, Italic, Link, Redo2, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '../utils.ts';
-import { Button } from './button.tsx';
 import {
   availableInsertCommands,
   touchBarFormatCommands,
@@ -14,7 +17,7 @@ import {
   type EditorCommand,
 } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
-import { Sheet, SheetBody, SheetContent, SheetHeader } from './sheet.tsx';
+import { pressedTone, returnFocus } from './editor-selection-menu.tsx';
 
 const icons = {
   bold: Bold,
@@ -86,7 +89,14 @@ function scrollSelectionAboveBar(editor: Editor, bar: HTMLElement | null) {
   window.scrollBy({ top: overflow, behavior: 'auto' });
 }
 
-/** A keyboard resting row that preserves the editor selection while pointer controls are used. */
+/** Every bar control is a square that fills a thumb. */
+const barButton = 'size-11 min-h-11 min-w-11 shrink-0 focus-visible:text-primary [&_svg:not([class*=size-])]:size-5';
+
+/**
+ * A keyboard resting row that preserves the editor selection while pointer controls are used. shadcn has no toolbar,
+ * so the row is a `toolbar` role over `toggle` and `button`, each named by a tooltip; the block picker is a bottom
+ * `sheet`.
+ */
 export function EditorTouchBar({
   editor,
   labels,
@@ -154,26 +164,40 @@ export function EditorTouchBar({
     buttons[next]?.focus();
   }
 
+  function barControl(id: string, label: string, control: React.ReactElement) {
+    return (
+      <Tooltip key={id}>
+        <TooltipTrigger render={control} />
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   function commandButton(command: EditorCommand, disabled = false) {
     const Icon = icons[command.id as keyof typeof icons];
     const active = command.active?.(editor) ?? false;
-    return (
-      <Button
-        key={command.id}
-        type="button"
-        size="icon-xl"
-        variant={active ? 'soft' : 'ghost'}
-        className="min-h-11 min-w-11 shrink-0 focus-visible:text-primary"
-        aria-label={labels[command.label]}
-        aria-pressed={command.active ? active : undefined}
-        disabled={disabled}
-        tabIndex={tabStop === command.id ? 0 : -1}
-        onFocus={() => setTabStop(command.id)}
-        {...focusPreservingPointer}
-        onClick={() => command.run(editor, onLink, onImage)}
-      >
-        {Icon ? <Icon aria-hidden="true" /> : null}
-      </Button>
+    const common = {
+      type: 'button' as const,
+      className: cn(barButton, command.active && pressedTone),
+      'aria-label': labels[command.label],
+      disabled,
+      tabIndex: tabStop === command.id ? 0 : -1,
+      onFocus: () => setTabStop(command.id),
+      ...focusPreservingPointer,
+    };
+    const icon = Icon ? <Icon aria-hidden="true" /> : null;
+    return barControl(
+      command.id,
+      labels[command.label],
+      command.active ? (
+        <Toggle pressed={active} onPressedChange={() => command.run(editor, onLink, onImage)} {...common}>
+          {icon}
+        </Toggle>
+      ) : (
+        <Button variant="ghost" onClick={() => command.run(editor, onLink, onImage)} {...common}>
+          {icon}
+        </Button>
+      ),
     );
   }
 
@@ -183,8 +207,10 @@ export function EditorTouchBar({
     onSheetOpenChange(false);
   }
 
+  const sheetFocus = returnFocus(editor);
+
   return (
-    <>
+    <TooltipProvider delay={600}>
       {visible ? (
         <div
           ref={bar}
@@ -203,75 +229,80 @@ export function EditorTouchBar({
             {touchBarFormatCommands
               .filter((command) => state.marks.some((item) => item.command.id === command.id))
               .map((command) => commandButton(command))}
-            <Button
-              type="button"
-              size="icon-xl"
-              variant={blocksOpen ? 'soft' : 'ghost'}
-              className="min-h-11 min-w-11 shrink-0 focus-visible:text-primary"
-              aria-label={labels.blocks}
-              aria-haspopup="dialog"
-              aria-expanded={blocksOpen}
-              tabIndex={tabStop === 'blocks' ? 0 : -1}
-              onFocus={() => setTabStop('blocks')}
-              {...focusPreservingPointer}
-              onClick={() => {
-                setBlocksOpen(true);
-                onSheetOpenChange(true);
-              }}
-            >
-              <Blocks aria-hidden="true" />
-            </Button>
+            {barControl(
+              'blocks',
+              labels.blocks,
+              <Button
+                type="button"
+                variant="ghost"
+                className={cn(barButton, blocksOpen && 'bg-primary/10 text-primary')}
+                aria-label={labels.blocks}
+                aria-haspopup="dialog"
+                aria-expanded={blocksOpen}
+                tabIndex={tabStop === 'blocks' ? 0 : -1}
+                onFocus={() => setTabStop('blocks')}
+                {...focusPreservingPointer}
+                onClick={() => {
+                  setBlocksOpen(true);
+                  onSheetOpenChange(true);
+                }}
+              >
+                <Blocks aria-hidden="true" />
+              </Button>,
+            )}
             {commandButton(undoCommand, !state.canUndo)}
             {commandButton(redoCommand, !state.canRedo)}
           </div>
-          <Button
-            type="button"
-            size="icon-xl"
-            variant="ghost"
-            className="min-h-11 min-w-11 shrink-0 focus-visible:text-primary"
-            aria-label={labels.hideKeyboard}
-            title={labels.hideKeyboard}
-            tabIndex={tabStop === 'hideKeyboard' ? 0 : -1}
-            onFocus={() => setTabStop('hideKeyboard')}
-            {...focusPreservingPointer}
-            onClick={() => editor.commands.blur()}
-          >
-            <ChevronDown aria-hidden="true" />
-          </Button>
+          {barControl(
+            'hideKeyboard',
+            labels.hideKeyboard,
+            <Button
+              type="button"
+              variant="ghost"
+              className={barButton}
+              aria-label={labels.hideKeyboard}
+              tabIndex={tabStop === 'hideKeyboard' ? 0 : -1}
+              onFocus={() => setTabStop('hideKeyboard')}
+              {...focusPreservingPointer}
+              onClick={() => editor.commands.blur()}
+            >
+              <ChevronDown aria-hidden="true" />
+            </Button>,
+          )}
         </div>
       ) : null}
       <Sheet
         open={blocksOpen}
-        onOpenChange={({ open }) => {
+        onOpenChange={(open) => {
           setBlocksOpen(open);
           onSheetOpenChange(open);
         }}
-        finalFocusEl={() => editor.view.dom as HTMLElement}
       >
-        <SheetContent placement="bottom" aria-label={labels.blocks}>
-          <SheetHeader title={labels.blocks} />
-          <SheetBody>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label={labels.blocks}>
-              {blockCommands.map((command) => {
-                const active = command.active?.(editor) ?? false;
-                return (
-                  <Button
-                    key={command.id}
-                    type="button"
-                    variant={active ? 'soft' : 'ghost'}
-                    className="min-h-11 justify-start"
-                    aria-pressed={command.active ? active : undefined}
-                    {...focusPreservingPointer}
-                    onClick={() => chooseBlock(command)}
-                  >
-                    {labels[command.label]}
-                  </Button>
-                );
-              })}
-            </div>
-          </SheetBody>
+        <SheetContent side="bottom" showCloseButton={false} finalFocus={sheetFocus}>
+          <SheetHeader className="flex-row items-center justify-between gap-2 p-4 pb-2">
+            <SheetTitle>{labels.blocks}</SheetTitle>
+            <SheetClose render={<Button variant="ghost" />}>{labels.cancel}</SheetClose>
+          </SheetHeader>
+          <div className="grid grid-cols-2 gap-2 p-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-3">
+            {blockCommands.map((command) => {
+              const active = command.active?.(editor) ?? false;
+              return (
+                <Button
+                  key={command.id}
+                  type="button"
+                  variant="ghost"
+                  className={cn('min-h-11 justify-start px-3 text-start', active && 'bg-primary/10 text-primary')}
+                  aria-pressed={command.active ? active : undefined}
+                  {...focusPreservingPointer}
+                  onClick={() => chooseBlock(command)}
+                >
+                  {labels[command.label]}
+                </Button>
+              );
+            })}
+          </div>
         </SheetContent>
       </Sheet>
-    </>
+    </TooltipProvider>
   );
 }

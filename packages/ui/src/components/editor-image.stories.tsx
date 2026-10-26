@@ -1,8 +1,8 @@
 import { checkDocument, fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { Button } from '@rezics/ui/shadcn/button';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { Button } from './button.tsx';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
 

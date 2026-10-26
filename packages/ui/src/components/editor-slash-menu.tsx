@@ -1,9 +1,9 @@
 'use client';
 
+import { Command, CommandItem, CommandList } from '@rezics/ui/shadcn/command';
 import { Extension, type Editor as TiptapEditor } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { cn } from '../utils.ts';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { availableCommands, insertCommands, type EditorCommand } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 
@@ -159,7 +159,10 @@ interface OpenMenu {
   rect: DOMRect | null;
 }
 
-/** Lists insert commands for the slash before the caret. Focus stays in the editor. */
+/**
+ * Lists insert commands for the slash before the caret. Focus stays in the editor, so the list is a `command` whose
+ * highlighted item the editor drives from its own key handler, with no search field of its own.
+ */
 export const SlashMenu = memo(function SlashMenu({
   editor,
   labels,
@@ -179,7 +182,6 @@ export const SlashMenu = memo(function SlashMenu({
   const [index, setIndex] = useState(0);
   const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const list = useRef<HTMLDivElement>(null);
-  const listId = useId();
   const commands = availableCommands(insertCommands, editor).filter((command) => command.id !== 'image' || upload);
   const items = open ? matchCommands(commands, labels, open.query) : [];
   const activeIndex = items.length ? index % items.length : 0;
@@ -265,59 +267,59 @@ export const SlashMenu = memo(function SlashMenu({
     );
   }, [open]);
 
-  useEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex, open]);
-
+  // The list names its options, so the editor points at whichever one carries the highlight.
   useEffect(() => {
     const dom = editor.view.dom;
     if (!open) return;
-    dom.setAttribute('aria-controls', listId);
+    const option = list.current?.querySelector<HTMLElement>(`[role="option"][data-value="${active?.id}"]`);
+    const listbox = list.current?.querySelector<HTMLElement>('[role="listbox"]');
+    if (listbox) dom.setAttribute('aria-controls', listbox.id);
     dom.setAttribute('aria-expanded', 'true');
-    if (active) dom.setAttribute('aria-activedescendant', `${listId}-${active.id}`);
+    if (option?.id) dom.setAttribute('aria-activedescendant', option.id);
     else dom.removeAttribute('aria-activedescendant');
     return () => {
       dom.removeAttribute('aria-controls');
       dom.removeAttribute('aria-expanded');
       dom.removeAttribute('aria-activedescendant');
     };
-  }, [editor, open, active, listId]);
+  }, [editor, open, active, items.length]);
 
   if (!open) return null;
   const position = place?.bottom === undefined ? { left: place?.left ?? 8, top: place?.top ?? 8 } : place;
   return (
     <div
       ref={list}
-      id={listId}
-      role="listbox"
-      aria-label={labels.insertBlock}
       data-slot="editor-slash-menu"
       onMouseDown={(event) => event.preventDefault()}
       style={{ position: 'fixed', ...position }}
-      className="z-50 max-h-72 w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+      className="z-50 w-64 max-w-[calc(100vw-1rem)]"
     >
-      {items.length ? (
-        items.map((command, position) => (
-          <div
-            key={command.id}
-            id={`${listId}-${command.id}`}
-            role="option"
-            aria-selected={position === activeIndex}
-            className={cn(
-              'flex min-h-9 cursor-default items-center rounded-lg px-2 text-sm',
-              position === activeIndex && 'bg-accent text-accent-foreground',
-            )}
-            onMouseMove={() => {
-              if (position !== activeIndex) setIndex(position);
-            }}
-            onClick={() => choose(command)}
-          >
-            {labels[command.label]}
-          </div>
-        ))
-      ) : (
-        <p className="px-2 py-1.5 text-sm text-muted-foreground">{labels.slashEmpty}</p>
-      )}
+      <Command
+        shouldFilter={false}
+        loop
+        label={labels.insertBlock}
+        value={active?.id ?? ''}
+        onValueChange={(id) => {
+          const next = items.findIndex((command) => command.id === id);
+          if (next >= 0 && next !== activeIndex) {
+            latest.current.index = next;
+            setIndex(next);
+          }
+        }}
+        className="rounded-2xl p-1 shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+      >
+        <CommandList label={labels.insertBlock}>
+          {items.length ? (
+            items.map((command) => (
+              <CommandItem key={command.id} value={command.id} onSelect={() => choose(command)}>
+                {labels[command.label]}
+              </CommandItem>
+            ))
+          ) : (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">{labels.slashEmpty}</p>
+          )}
+        </CommandList>
+      </Command>
     </div>
   );
 });

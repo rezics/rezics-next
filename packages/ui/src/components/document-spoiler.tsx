@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 
 const useIsoLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -21,8 +22,10 @@ export function DocumentSpoiler({ children, label = 'Reveal spoiler' }: { childr
   }
 
   return (
-    <button
+    <Button
       type="button"
+      variant={null}
+      size={null}
       className="document-spoiler"
       aria-expanded="false"
       aria-label={label}
@@ -36,6 +39,6 @@ export function DocumentSpoiler({ children, label = 'Reveal spoiler' }: { childr
       }}
     >
       <span aria-hidden="true">{children}</span>
-    </button>
+    </Button>
   );
 }

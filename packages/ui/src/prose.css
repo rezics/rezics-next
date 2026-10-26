@@ -74,297 +74,294 @@ img.ProseMirror-separator {
 }
 
 /*
- * Long-form text styles. Colors use the raw theme tokens (var(--primary)), not
- * Tailwind's --color-* aliases: those resolve once at :root, so text inside a
- * `.dark` subtree would keep the light colors.
+ * The document surface, drawn by Prose for the reading page and the editor alike. Body text is interface text; only a
+ * Work title (.work-title) takes the serif face. CJK scripts need more leading than Latin, and their measure is counted
+ * in characters because a "ch" is the width of a zero, which is about half of an ideograph.
  */
-.prose h1:not(.not-prose h1) {
-  font-size: var(--text-2xl);
-  font-weight: 800;
-  line-height: var(--text-2xl--line-height);
-  letter-spacing: var(--tracking-tight);
-  scroll-margin: calc(var(--spacing) * 20);
-}
-
-.prose h2:not(.not-prose h2) {
-  padding-bottom: calc(var(--spacing) * 2);
-  margin-top: calc(var(--spacing) * 8);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  line-height: var(--text-xl--line-height);
-  letter-spacing: var(--tracking-tight);
-  scroll-margin: calc(var(--spacing) * 20);
-}
-
-.prose h2:not(.not-prose h2):first-child {
-  margin-top: 0;
-}
-
-.prose h3:not(.not-prose h3) {
-  margin-top: calc(var(--spacing) * 8);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  line-height: var(--text-lg--line-height);
-  letter-spacing: var(--tracking-tight);
-  scroll-margin: calc(var(--spacing) * 20);
-}
-
-.prose h3:not(.not-prose h3):first-child {
-  margin-top: 0;
-}
-
-.prose h4:not(.not-prose h4) {
-  margin-top: calc(var(--spacing) * 8);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  line-height: var(--text-lg--line-height);
-  letter-spacing: var(--tracking-tight);
-  scroll-margin: calc(var(--spacing) * 20);
-}
-
-.prose h4:not(.not-prose h4):first-child {
-  margin-top: 0;
-}
-
-.prose h5:not(.not-prose h5) {
-  margin-top: calc(var(--spacing) * 8);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  line-height: var(--text-lg--line-height);
-  letter-spacing: var(--tracking-tight);
-  scroll-margin: calc(var(--spacing) * 20);
-}
-
-.prose h5:not(.not-prose h5):first-child {
-  margin-top: 0;
-}
-
-.prose h6:not(.not-prose h6) {
-  margin-top: calc(var(--spacing) * 8);
-  font-size: var(--text-base);
-  font-weight: 600;
-  line-height: var(--text-base--line-height);
-  letter-spacing: var(--tracking-tight);
-  scroll-margin: calc(var(--spacing) * 20);
-}
-
-.prose h6:not(.not-prose h6):first-child {
-  margin-top: 0;
-}
-
-.prose h1:not(.not-prose h1) + p,
-.prose h2:not(.not-prose h2) + p,
-.prose h3:not(.not-prose h3) + p,
-.prose h4:not(.not-prose h4) + p,
-.prose h5:not(.not-prose h5) + p,
-.prose h6:not(.not-prose h6) + p {
-  margin-top: 0;
-}
-
-.prose p:not(.not-prose p) {
+.rezics-document {
+  min-width: 0;
+  font-family: var(--font-interface);
+  font-size: 1.0625rem;
   line-height: 1.75;
+  overflow-wrap: anywhere;
+  text-autospace: normal;
 }
-
-.prose p:not(.not-prose p):not(:first-child) {
-  margin-top: calc(var(--spacing) * 6);
+.rezics-document:lang(zh),
+.rezics-document:lang(ja),
+.rezics-document:lang(ko) {
+  line-height: 1.9;
 }
-
-.prose li:not(.not-prose li) {
-  line-height: 1.75;
+.rezics-document[data-measure]:lang(zh),
+.rezics-document[data-measure]:lang(ja),
+.rezics-document[data-measure]:lang(ko) {
+  max-width: 36em;
 }
-
-.prose a:not(.not-prose a) {
-  font-weight: 500;
+.rezics-document .work-title,
+.work-title {
+  font-family: var(--font-work-serif);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.rezics-document .tiptap {
+  outline: none;
+  min-width: 0;
+}
+.rezics-document .tiptap:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+.document-editor .tiptap {
+  min-height: 45dvh;
+}
+.document-editor-compact .tiptap {
+  min-height: 6rem;
+}
+.rezics-document p {
+  margin-block: 0.75em;
+}
+.rezics-document > :first-child,
+.rezics-document .tiptap > :first-child {
+  margin-block-start: 0;
+}
+.rezics-document h1 {
+  font-size: 1.8em;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-block: 1em 0.4em;
+}
+.rezics-document h2 {
+  font-size: 1.45em;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-block: 1em 0.4em;
+}
+.rezics-document h3,
+.rezics-document h4,
+.rezics-document h5,
+.rezics-document h6 {
+  font-size: 1.2em;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-block: 1em 0.4em;
+}
+.rezics-document ul {
+  list-style: disc;
+  padding-inline-start: 1.5em;
+  margin-block: 0.75em;
+}
+.rezics-document ol {
+  list-style: decimal;
+  padding-inline-start: 1.5em;
+  margin-block: 0.75em;
+}
+.rezics-document li > p {
+  margin-block: 0.25em;
+}
+.rezics-document blockquote {
+  border-inline-start: 3px solid var(--border);
+  padding-inline-start: 1em;
+  margin-block: 1em;
+  color: var(--muted-foreground);
+}
+.rezics-document a {
   color: var(--primary);
   text-decoration: underline;
-  text-underline-offset: var(--spacing);
+  text-underline-offset: 0.15em;
 }
-
-.prose blockquote:not(.not-prose blockquote) {
-  padding-left: calc(var(--spacing) * 6);
-  margin-top: calc(var(--spacing) * 6);
-  font-style: italic;
-  border-left: 2px solid var(--border);
+.rezics-document code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  padding: 0.12em 0.3em;
 }
-
-.prose table:not(.not-prose table) {
-  width: 100%;
-  margin-top: calc(var(--spacing) * 6);
-  margin-bottom: calc(var(--spacing) * 6);
-  overflow-y: auto;
+.rezics-document pre {
+  overflow-x: auto;
+  padding: 1em;
+  border-radius: var(--radius);
+  background: var(--muted);
+  margin-block: 1em;
+  white-space: pre;
 }
-
-.prose table:not(.not-prose table) thead tr {
+.rezics-document pre code {
+  background: none;
   padding: 0;
-  margin: 0;
-  border-top: 1px solid var(--border);
 }
-
-.prose table:not(.not-prose table) thead tr:nth-child(even) {
-  background-color: var(--muted);
+.rezics-document hr {
+  border-block-start: 1px solid var(--border);
+  margin-block: 1.5em;
 }
-
-.prose table:not(.not-prose table) th {
-  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
-  font-weight: 700;
-  text-align: left;
-  border: 1px solid var(--border);
+.rezics-document figure {
+  margin-block: 1em;
 }
-
-.prose table:not(.not-prose table) th[align='center'] {
-  text-align: center;
-}
-
-.prose table:not(.not-prose table) th[align='right'] {
-  text-align: right;
-}
-.prose table:not(.not-prose table) tbody tr {
-  padding: 0;
-  margin: 0;
-  border-top: 1px solid var(--border);
-}
-
-.prose table:not(.not-prose table) tbody tr:nth-child(even) {
-  background-color: var(--muted);
-}
-
-.prose table:not(.not-prose table) td {
-  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
-  text-align: left;
-  border: 1px solid var(--border);
-}
-
-.prose table:not(.not-prose table) td[align='center'] {
-  text-align: center;
-}
-
-.prose table:not(.not-prose table) td[align='right'] {
-  text-align: right;
-}
-
-.prose ul:not(.not-prose ul) {
-  margin-top: calc(var(--spacing) * 6);
-  margin-left: calc(var(--spacing) * 6);
-  list-style: disc;
-}
-
-.prose ul:not(.not-prose ul) > li {
-  margin-top: calc(var(--spacing) * 2);
-}
-
-.prose ul:not(.not-prose ul) p {
-  display: inline;
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.prose ol:not(.not-prose ol) {
-  margin-top: calc(var(--spacing) * 6);
-  margin-left: calc(var(--spacing) * 6);
-  list-style: decimal;
-}
-
-.prose ol:not(.not-prose ol) > li {
-  margin-top: calc(var(--spacing) * 2);
-}
-
-.prose ol:not(.not-prose ol) p {
-  display: inline;
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.prose img:not(.not-prose img),
-.prose picture:not(.not-prose picture),
-.prose video:not(.not-prose video) {
-  margin-top: calc(var(--spacing) * 6);
-  margin-bottom: calc(var(--spacing) * 6);
-}
-
-.prose picture > img:not(.not-prose picture > img) {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.prose kbd:not(.not-prose kbd) {
-  padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  line-height: var(--text-xs--line-height);
-  background-color: var(--muted);
-  border-radius: calc(var(--radius) - 2px);
-}
-
-.prose hr {
-  margin-top: calc(var(--spacing) * 10);
-  margin-bottom: calc(var(--spacing) * 10);
-}
-
-.prose dl:not(.not-prose dl) {
-  margin-top: calc(var(--spacing) * 6);
-  margin-bottom: calc(var(--spacing) * 6);
-}
-
-.prose dl:not(.not-prose dl) dt {
-  margin-top: calc(var(--spacing) * 6);
-  font-weight: 600;
-  letter-spacing: var(--tracking-tight);
-}
-
-.prose dl:not(.not-prose dl) dt:first-child {
-  margin-top: 0;
-}
-
-.prose details:not(.not-prose details) {
-  margin-top: calc(var(--spacing) * 6);
-}
-
-.prose details:not(.not-prose details) summary {
-  margin-top: calc(var(--spacing) * 6);
-  font-weight: 600;
-  letter-spacing: var(--tracking-tight);
-  cursor: pointer;
-}
-
-.prose details:not(.not-prose details) p:first-of-type {
-  margin-top: calc(var(--spacing) * 2);
-}
-
-.prose mark:not(.not-prose mark) {
-  background-color: var(--accent);
-  color: var(--accent-foreground);
-}
-
-.prose small:not(.not-prose small) {
-  font-size: var(--text-xs);
-  line-height: 1;
-}
-
-.prose figure:not(.not-prose figure) {
-  margin-top: calc(var(--spacing) * 6);
-  margin-bottom: calc(var(--spacing) * 6);
-}
-
-.prose figure:not(.not-prose figure) img {
-  margin-top: 0;
-  margin-bottom: 0;
+.rezics-document img,
+.rezics-document video {
+  max-width: 100%;
+  height: auto;
   border-radius: var(--radius);
 }
-
-.prose figure:not(.not-prose figure) figcaption {
-  margin-top: calc(var(--spacing) * 2);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: var(--text-sm--line-height);
+.rezics-document audio {
+  max-width: 100%;
+}
+.rezics-document figcaption {
+  margin-block-start: 0.4em;
+  font-family: var(--font-interface);
+  font-size: 0.8em;
   color: var(--muted-foreground);
 }
-
-.prose code:not(.not-prose code) {
-  padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  line-height: var(--text-xs--line-height);
-  color: var(--muted-foreground);
-  background-color: var(--muted);
+.rezics-document .document-table-scroll,
+.rezics-document .tableWrapper {
+  overflow-x: auto;
+  margin-block: 1em;
+}
+.rezics-document table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.rezics-document td,
+.rezics-document th {
+  position: relative;
+  min-width: 4rem;
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  vertical-align: top;
+}
+.rezics-document th {
+  background: var(--muted);
+  font-weight: 600;
+  text-align: start;
+}
+.rezics-document td > p,
+.rezics-document th > p {
+  margin-block: 0;
+}
+.rezics-document .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--primary) 16%, transparent);
+  pointer-events: none;
+}
+.rezics-document ul[data-type='taskList'] {
+  list-style: none;
+  padding-inline-start: 0;
+}
+.rezics-document li[data-type='taskItem'] {
+  display: flex;
+  gap: 0.65em;
+  align-items: baseline;
+}
+.rezics-document li[data-type='taskItem'] > label {
+  flex-shrink: 0;
+}
+.rezics-document li[data-type='taskItem'] > div {
+  min-width: 0;
+  flex: 1;
+}
+.rezics-document li[data-type='taskItem'] > [role='checkbox']::before {
+  content: '☐';
+}
+.rezics-document li[data-type='taskItem'] > [role='checkbox'][aria-checked='true']::before {
+  content: '☑';
+}
+.rezics-document input[type='checkbox'] {
+  accent-color: var(--primary);
+}
+.rezics-document ruby {
+  ruby-align: center;
+}
+.rezics-document rt {
+  font-size: 0.55em;
+}
+.rezics-document .document-component {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75em 1em;
+  background: var(--muted);
+  font-family: var(--font-interface);
+  font-size: 0.85em;
+  margin-block: 0.75em;
+}
+.rezics-document span.document-component {
+  display: inline;
+  padding: 0.12em 0.35em;
+}
+.rezics-document .ProseMirror-selectednode {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.rezics-document .document-spoiler-authored {
+  background: var(--accent);
+  color: var(--accent-foreground);
   border-radius: var(--radius-sm);
+}
+.rezics-document .document-spoiler {
+  display: inline;
+  appearance: none;
+  margin: 0;
+  padding: 0 0.12em;
+  border: 0;
+  border-radius: 0.25em;
+  background: var(--muted-foreground);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  cursor: pointer;
+  white-space: normal;
+  text-align: inherit;
+  box-shadow: none;
+  transition: none;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.rezics-document .document-spoiler,
+.rezics-document .document-spoiler :where(*) {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+.rezics-document .document-spoiler:hover {
+  background: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground));
+}
+.rezics-document .document-spoiler:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.rezics-document .document-spoiler::selection,
+.rezics-document .document-spoiler *::selection {
+  background: transparent;
+  color: transparent;
+}
+.rezics-document .document-spoiler-revealed {
+  background: color-mix(in oklab, var(--primary) 16%, transparent);
+  border-radius: 0.2em;
+  color: inherit;
+  outline: none;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.rezics-document .tiptap .is-empty[data-placeholder]::before {
+  content: attr(data-placeholder);
+  float: inline-start;
+  color: var(--muted-foreground);
+  height: 0;
+  pointer-events: none;
+}
+.rezics-document .tiptap .is-empty:not(.is-editor-empty)[data-placeholder]::before {
+  opacity: 0.72;
+}
+[data-placeholder-dir='ltr'] .tiptap [data-placeholder]::before {
+  unicode-bidi: plaintext;
+  text-align: left;
+  direction: ltr;
+}
+[data-placeholder-dir='rtl'] .tiptap [data-placeholder]::before {
+  unicode-bidi: plaintext;
+  text-align: right;
+  direction: rtl;
 }

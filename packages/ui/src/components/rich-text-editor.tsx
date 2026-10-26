@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@rezics/ui/shadcn/button';
 import {
   documentVersion,
   normalizeDocument,
@@ -24,7 +25,6 @@ import { ImageInsert, withImageView } from './editor-image.tsx';
 import { editorUploads, type ImageUploader, type UploadEntry, type UploadState } from './editor-uploads.ts';
 import { availableCommands, imageCommand } from './editor-commands.ts';
 import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
-import { Button } from './button.tsx';
 
 export type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
 export type { RichTextEditorLabels } from './editor-labels.ts';
@@ -483,10 +483,15 @@ export function RichTextEditor({
             <p>
               {resolvedLabels.uploadFailed}: {entry.file.name}
             </p>
-            <Button type="button" disabled={!editable} onClick={() => uploads.current?.retry(entry.id)}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!editable}
+              onClick={() => uploads.current?.retry(entry.id)}
+            >
               {resolvedLabels.retryUpload}
             </Button>
-            <Button type="button" onClick={() => uploads.current?.dismiss(entry.id)}>
+            <Button type="button" variant="ghost" onClick={() => uploads.current?.dismiss(entry.id)}>
               {resolvedLabels.dismissUpload}
             </Button>
           </div>

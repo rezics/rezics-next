@@ -1,6 +1,7 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { DocumentSpoiler } from './document-spoiler.tsx';
+import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
 
@@ -84,11 +85,8 @@ export function DocumentBody({ document, className, labels }: Props) {
     },
   });
   return (
-    <div
-      className={`rezics-document space-y-4 text-foreground [&_a]:text-primary [&_a]:underline ${className ?? ''}`}
-      data-slot="document-body"
-    >
+    <Prose className={className} data-slot="document-body">
       {content}
-    </div>
+    </Prose>
   );
 }

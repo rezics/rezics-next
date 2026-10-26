@@ -1,11 +1,12 @@
 'use client';
 
+import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldError } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import type { Editor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useId, useState, type RefObject } from 'react';
-import { Button } from './button.tsx';
-import { Input } from './input.tsx';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { bubbleOptions } from './editor-selection-menu.tsx';
 import { safeDocumentUrl } from './document-url.ts';
@@ -26,7 +27,10 @@ export function applyLink(editor: Editor, range: LinkRange, href: string | null)
   return chain.setMark('link', { href }).run();
 }
 
-/** Inline address editing on a saved document range. */
+/**
+ * Inline address editing on a saved document range. The bubble menu places it against the text, which a shadcn popover
+ * cannot do: its anchor is a trigger element, not a range in the document.
+ */
 export function LinkField({
   editor,
   labels,
@@ -68,16 +72,15 @@ export function LinkField({
         }
       }}
     >
-      <div className="flex flex-wrap items-center gap-1">
+      <Field orientation="horizontal" className="flex-wrap items-center gap-1">
         <Input
           autoFocus
-          size="sm"
           dir="ltr"
           inputMode="url"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className="aria-invalid:text-foreground dark:aria-invalid:text-foreground"
+          className="min-w-40 flex-1 text-foreground"
           aria-label={labels.url}
           aria-invalid={invalid}
           aria-describedby={invalid ? errorId : undefined}
@@ -87,23 +90,19 @@ export function LinkField({
             setInvalid(false);
           }}
         />
-        <Button type="submit" size="sm" variant="soft">
+        <Button type="submit" variant="secondary">
           {labels.apply}
         </Button>
         {linked ? (
-          <Button type="button" size="sm" variant="ghost" onClick={() => finish(null)}>
+          <Button type="button" variant="ghost" onClick={() => finish(null)}>
             {labels.unlink}
           </Button>
         ) : null}
-        <Button type="button" size="sm" variant="ghost" onClick={cancel}>
+        <Button type="button" variant="ghost" onClick={cancel}>
           {labels.cancel}
         </Button>
-      </div>
-      {invalid ? (
-        <p id={errorId} role="alert" className="text-sm text-foreground">
-          {labels.invalidUrl}
-        </p>
-      ) : null}
+      </Field>
+      {invalid ? <FieldError id={errorId}>{labels.invalidUrl}</FieldError> : null}
     </form>
   );
 }
@@ -147,7 +146,7 @@ export function LinkMenu({
       <div
         role="group"
         aria-label={labels.link}
-        className="max-w-80 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+        className="flex max-w-80 flex-col gap-1 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
@@ -166,16 +165,15 @@ export function LinkMenu({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={labels.openLink}
-                className="block truncate text-primary"
+                className="block truncate rounded-lg px-2 py-1 text-sm text-primary underline underline-offset-2"
               >
                 {state.href}
               </a>
             ) : null}
-            <Button size="sm" variant="ghost" onClick={onEdit}>
+            <Button variant="ghost" onClick={onEdit}>
               {labels.editLink}
             </Button>
             <Button
-              size="sm"
               variant="ghost"
               onClick={() => {
                 editor.chain().focus().extendMarkRange('link').unsetMark('link').run();
