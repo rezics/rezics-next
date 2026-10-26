@@ -121,6 +121,11 @@ in `src/work/modules.ts`, just as its HTTP routes register in `createKernel`. Re
 options and work client. Duplicate module names and registration after launch are refused. Modules never launch
 DBOS or create their own worker. The list is empty until modules add their work.
 
+Every test that starts the shared kernel worker takes its environment from `workerTestEnv(overrides)` in
+`test/support/worker-env.ts`. Use `overrides` for optional all-or-nothing groups such as commerce's Stripe settings.
+Add a fixture there whenever a module adds a required worker variable; `test/support/worker-env.test.ts` fails when a
+module's required variable has no fixture.
+
 API processes use `createWorkClient(databaseUrl)` from `src/work/client.ts` to enqueue by workflow and queue name,
 pass that client to modules, and call `close()` on shutdown. Enqueueing needs no running worker; the next worker
 runs the persisted work. A workflow ID provides idempotency only while its workflow row is retained; never reuse an ID
