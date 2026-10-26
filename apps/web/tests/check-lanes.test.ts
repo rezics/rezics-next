@@ -14,16 +14,28 @@ mkdirSync(events, { recursive: true });
 
 afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 
-function addFakeTest(name: string, options: { browser?: boolean; delay?: number; failure?: string } = {}) {
+function addFakeTest(
+  name: string,
+  options: { browser?: boolean; delay?: number; failure?: string; waitForStart?: string } = {},
+) {
   const source = [
     "import { expect, test } from 'bun:test';",
-    "import { writeFileSync } from 'node:fs';",
+    "import { existsSync, writeFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
     options.browser ? "// Browser test marker: import { chromium } from 'playwright';" : '',
     `const events = ${JSON.stringify(events)};`,
     `const name = ${JSON.stringify(name)};`,
     `test(${JSON.stringify(name)}, async () => {`,
     '  writeFileSync(join(events, `start-${name}`), String(Date.now()));',
+    ...(options.waitForStart
+      ? [
+          `  const deadline = Date.now() + 10000;`,
+          `  while (!existsSync(join(events, ${JSON.stringify(`start-${options.waitForStart}`)}))) {`,
+          '    if (Date.now() > deadline) throw new Error("parallel peer did not start");',
+          '    await Bun.sleep(10);',
+          '  }',
+        ]
+      : []),
     `  await Bun.sleep(${options.delay ?? 50});`,
     options.failure ? `  throw new Error(${JSON.stringify(options.failure)});` : '  expect(true).toBe(true);',
     '  writeFileSync(join(events, `end-${name}`), String(Date.now()));',
@@ -92,8 +104,8 @@ test('runs fake files longest first in separate browser and unit pools, then rec
 test('bounds browser lanes separately while unit files use a wider pool', async () => {
   const browserOne = addFakeTest('browser-one.test.ts', { browser: true, delay: 500 });
   const browserTwo = addFakeTest('browser-two.test.ts', { browser: true, delay: 500 });
-  const unitOne = addFakeTest('unit-one.test.ts', { delay: 500 });
-  const unitTwo = addFakeTest('unit-two.test.ts', { delay: 500 });
+  const unitOne = addFakeTest('unit-one.test.ts', { delay: 1000, waitForStart: 'unit-two.test.ts' });
+  const unitTwo = addFakeTest('unit-two.test.ts', { delay: 1000, waitForStart: 'unit-one.test.ts' });
   const runOptions = options('pools', [browserOne, browserTwo, unitOne, unitTwo], {
     WEB_BROWSER_CHECK_CONCURRENCY: '1',
     WEB_UNIT_CHECK_CONCURRENCY: '2',
@@ -102,8 +114,11 @@ test('bounds browser lanes separately while unit files use a wider pool', async 
   const result = await runWebTestLanes(runOptions);
   expect(result.failed).toEqual([]);
   const start = (name: string) => Number(readFileSync(join(events, `start-${name}`), 'utf8'));
-  expect(Math.abs(start('unit-one.test.ts') - start('unit-two.test.ts'))).toBeLessThan(400);
-  expect(Math.abs(start('browser-one.test.ts') - start('browser-two.test.ts'))).toBeGreaterThan(400);
+  const end = (name: string) => Number(readFileSync(join(events, `end-${name}`), 'utf8'));
+  expect(start('browser-two.test.ts')).toBeGreaterThanOrEqual(end('browser-one.test.ts'));
+  expect(Math.max(start('unit-one.test.ts'), start('unit-two.test.ts'))).toBeLessThan(
+    Math.min(end('unit-one.test.ts'), end('unit-two.test.ts')),
+  );
 });
 
 test('reports a failed fake file with its own output', async () => {
