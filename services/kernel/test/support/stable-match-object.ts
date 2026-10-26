@@ -14,7 +14,10 @@ function copy(value: unknown, seen: Map<object, unknown>): unknown {
   if (known !== undefined) return known;
   const prototype = Object.getPrototypeOf(value);
   const copyable =
-    prototype === Object.prototype || prototype === null || Array.isArray(value) || value instanceof Error;
+    prototype === Object.prototype ||
+    prototype === null ||
+    Array.isArray(value) ||
+    (value instanceof Error && !(value instanceof DOMException));
   if (!copyable) return value;
   const result = Array.isArray(value) ? [] : Object.create(prototype);
   seen.set(value, result);

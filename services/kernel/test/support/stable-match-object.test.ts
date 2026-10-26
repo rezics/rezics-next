@@ -48,6 +48,26 @@ test('toMatchObject sees the own properties of a rejected error', async () => {
   expect(error).toBeInstanceOf(Error);
 });
 
+test('toMatchObject preserves a DOMException AbortError and its internal state', async () => {
+  const error = new DOMException('The client disconnected', 'AbortError');
+
+  expect(error).toMatchObject({ name: 'AbortError', message: 'The client disconnected' });
+  expect({ failure: error }).toMatchObject({ failure: { name: 'AbortError' } });
+  await expect(Promise.reject(error)).rejects.toMatchObject({ name: 'AbortError' });
+  expect(error.name).toBe('AbortError');
+  expect(error.code).toBe(DOMException.ABORT_ERR);
+});
+
+test('toMatchObject copies plain error subclasses and preserves their own properties', () => {
+  class Refusal extends Error {
+    readonly code = 'forbidden';
+  }
+  const error = new Refusal('denied');
+
+  expect(error).toMatchObject({ code: expect.any(String), message: 'denied' });
+  expect(error.code).toBe('forbidden');
+});
+
 test('toMatchObject leaves a frozen or cyclic received value unchanged', () => {
   const frozen = Object.freeze({ revision: 4, rows: Object.freeze([{ id: 'a' }]) });
   const cyclic: { id: string; self?: unknown } = { id: 'b' };
