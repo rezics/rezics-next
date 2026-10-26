@@ -23,7 +23,9 @@ import {
 } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
 import { prepareRealmParticipationResult, type RealmParticipationCheck } from '../community/participation.ts';
+import membershipHistory from '../community/membership-history.sql';
 import { readPartition } from '../partition/partition.ts';
+import { withConnection } from '../database/pool.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
 import { claimMedia, InvalidMediaClaimError } from './media.ts';
@@ -91,6 +93,12 @@ export class ContentNotFoundError extends Error {
   constructor() {
     super('Content not found');
     this.name = 'ContentNotFoundError';
+  }
+}
+export class ContentUndisclosedError extends ContentNotFoundError {
+  constructor() {
+    super();
+    this.name = 'ContentUndisclosedError';
   }
 }
 export class ContentForbiddenError extends Error {
@@ -238,6 +246,7 @@ async function prepareContentParticipation(
   realmId: string | null,
   time: AuthoritativeTime,
   deadline: number,
+  concealDepartedMember = false,
 ): Promise<RealmParticipationProof> {
   const proof = await prepareRealmParticipationResult(
     dependencies.pool,
@@ -247,7 +256,18 @@ async function prepareContentParticipation(
     time,
     deadline,
   );
-  if (proof.readable === false) throw new ContentNotFoundError();
+  if (proof.readable === false) {
+    if (concealDepartedMember && actor.kind === 'account' && realmId !== null) {
+      const route = routeOf(realmId);
+      if (route !== null) {
+        const history = await withConnection(dependencies.pool, (client) =>
+          membershipHistory.run(client, { route, realm_id: realmId, account_id: actor.accountId }),
+        );
+        if (history?.hadMembership) throw new ContentUndisclosedError();
+      }
+    }
+    throw new ContentNotFoundError();
+  }
   return proof;
 }
 
@@ -260,6 +280,7 @@ function containerAuthorization(
   itemId: string | null,
   context: RequestContext,
   revising: boolean,
+  concealDepartedMember = false,
 ) {
   const r = route(threadId);
   const resource = { route: r, id: revising ? itemId! : threadId };
@@ -346,6 +367,7 @@ function containerAuthorization(
               board.realm_id,
               attempt.time,
               context.deadline,
+              concealDepartedMember,
             );
             if (!proof.allowed) throw new ContentForbiddenError();
             participation.set(attempt.time, proof);
@@ -607,7 +629,15 @@ export async function createPost(
   const r = route(body.threadId);
   const target = { route: r, id: newId(r) };
   const value = { threadId: body.threadId, itemId: target.id, revisionId: newId(r) };
-  const container = containerAuthorization(dependencies, actor, body.threadId, body.parentId ?? null, context, false);
+  const container = containerAuthorization(
+    dependencies,
+    actor,
+    body.threadId,
+    body.parentId ?? null,
+    context,
+    false,
+    true,
+  );
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(actor, [{ resource: target, type: 'content.post' }], inserted);
   const authorization = container.wrap(

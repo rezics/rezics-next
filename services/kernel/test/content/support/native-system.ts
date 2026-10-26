@@ -12,6 +12,7 @@ import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/boot
 import { createNativeAccountBindings } from '../../../src/access/native-account-bindings.ts';
 import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { createRealmMembership } from '../../../src/community/membership.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
@@ -144,9 +145,14 @@ async function createNativeContentSystemWithOptions(
       ratePeer: () => '127.0.0.1',
     });
     const actions = actionCatalogue(kernel);
+    let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
     const access = createAccess({
       actions,
       clock,
+      realmRoleReader: (client, input) => {
+        realmMembership ??= createRealmMembership({ pool, access, clock });
+        return realmMembership.roleReader(client, input);
+      },
       auth: {
         issuer,
         audience,

@@ -439,10 +439,11 @@ export async function listBoardThreads(
     { partition: board.anchor.partition, epoch: selected.epoch, position: selected.position },
   ];
   const entries: ThreadView[] = [];
+  const entryPositions: BoardPageAfter[] = [];
   let lastScanned: BoardPageAfter | null = null;
   let scanned = 0;
-  while (scanned < candidates.length && entries.length < limit) {
-    const batch = candidates.slice(scanned, scanned + limit - entries.length);
+  while (scanned < candidates.length && entries.length <= limit) {
+    const batch = candidates.slice(scanned, scanned + Math.max(1, limit + 1 - entries.length));
     const disclosed = await discloseThreads(
       readDependencies,
       batch.map((candidate) => candidate.id),
@@ -464,6 +465,8 @@ export async function listBoardThreads(
         if (!matched.value) continue;
       }
       entries.push(thread);
+      entryPositions.push(lastScanned);
+      if (entries.length > limit) break;
     }
   }
   // Revalidate after query snapshots, keeping current fields and refusing a
@@ -474,6 +477,7 @@ export async function listBoardThreads(
     context,
   );
   const current: ThreadView[] = [];
+  const currentPositions: BoardPageAfter[] = [];
   for (const [index, result] of final.entries()) {
     anchors.push(result.anchor);
     if (!result.value || result.value.boardId !== boardId) continue;
@@ -488,31 +492,38 @@ export async function listBoardThreads(
       continue;
     if (query && firstPost.availability !== 'available') continue;
     current.push(result.value);
+    currentPositions.push(entryPositions[index]!);
   }
+  const pageEntries = current.slice(0, limit);
   const parent = await readRealmBoard(readDependencies, boardId, context);
   if (!parent.value) throw new ContentNotFoundError();
   if (parent.anchor.epoch !== board.anchor.epoch) throw new TypeError('Invalid content cursor');
   anchors.push(parent.anchor);
-  const more = scanned < candidates.length || selected.hasMore;
-  const oldest = current.at(-1);
+  const hasVisibleMore = current.length > limit;
+  const more = hasVisibleMore || scanned < candidates.length || selected.hasMore;
+  const cursorAfter =
+    hasVisibleMore || (entries.length > limit && pageEntries.length > 0)
+      ? currentPositions[Math.min(limit, current.length) - 1]!
+      : lastScanned;
+  const oldest = pageEntries.at(-1);
   const rankRefreshedAt =
     (sort === 'active' || sort === 'hot') && oldest ? (rankFreshness.get(oldest.id) ?? null) : null;
   let nextCursor: string | null = null;
-  if (more && lastScanned) {
-    if (lastScanned.kind === 'rank') {
-      nextCursor = encodeBoardRankCursor(dependencies.tokens, binding, parent.anchor.epoch, lastScanned, now);
+  if (more && cursorAfter) {
+    if (cursorAfter.kind === 'rank') {
+      nextCursor = encodeBoardRankCursor(dependencies.tokens, binding, parent.anchor.epoch, cursorAfter, now);
     } else {
       nextCursor = encodeBoardCursor(
         dependencies.tokens,
         binding,
         parent.anchor.epoch,
-        { createdAt: lastScanned.createdAt, threadId: lastScanned.threadId },
+        { createdAt: cursorAfter.createdAt, threadId: cursorAfter.threadId },
         now,
       );
     }
   }
   return {
-    entries: current,
+    entries: pageEntries,
     anchor: parent.anchor,
     anchors,
     nextCursor,

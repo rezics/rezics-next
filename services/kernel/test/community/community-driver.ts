@@ -15,6 +15,7 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import readReceipt from '../../src/command/read-receipt.sql';
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
+import type { QueryResultRow } from 'pg';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
@@ -261,6 +262,15 @@ export async function closeCommunityDrivers(): Promise<void> {
   if (shared) await closeShared(shared);
 }
 
+/** Read the isolated fixture database from a companion integration test. */
+export async function queryCommunityDatabase<T extends QueryResultRow>(
+  statement: string,
+  values?: unknown[],
+): Promise<T[]> {
+  if (!shared) throw new Error('Community driver is not open');
+  return (await shared.system.database.pool.query<T>(statement, values)).rows;
+}
+
 function bindDriver(base: SharedCommunity): CommunityDriver {
   const { system, kernel, worker, work, observer } = base;
   const pending = new Set<string>();
@@ -397,7 +407,41 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
     },
     async provision() {
       if (base.provisioned) {
-        ({ fixture, governance: governanceAccount } = base.provisioned);
+        governanceAccount = base.provisioned.governance;
+        const previous = base.provisioned.fixture;
+        const response = await checked('Fixture Context creation', {
+          actor: previous.owner,
+          method: 'POST',
+          path: '/v1/contexts',
+          key: nextKey(),
+          body: { labels: { en: 'Community outcome Context' } },
+        });
+        const contextId = ((await response.clone().json()) as { context: { id: string } }).context.id;
+        const author = await createSubject(previous.subjectOwner, {
+          type: 'schema:Person',
+          labels: { en: 'Fixture subject author' },
+        });
+        const subject = await createSubject(previous.subjectOwner, {
+          type: 'schema:Book',
+          labels: { en: 'Fixture subject' },
+          descriptions: { en: 'A globally owned fixture subject' },
+          aliases: { en: ['Fixture book'] },
+          statements: {
+            'schema:author': [{ property: { id: 'schema:author' }, value: { type: 'value', content: author.id } }],
+            'schema:inLanguage': [{ property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'en' } }],
+          },
+        });
+        const candidateId = subject.statements['schema:author']?.[0]?.id;
+        if (!candidateId) throw new Error('Fixture subject author candidate is missing');
+        fixture = {
+          ...previous,
+          contextId,
+          subject: {
+            ...previous.subject,
+            id: subject.id,
+            candidateId,
+          },
+        };
         return fixture;
       }
       const owner = accountOf(system.actors.author);
@@ -1076,6 +1120,13 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
             statement: {
               property: { id: 'schema:inLanguage' },
               value: { type: 'value', content: 'fr' },
+              references: [
+                {
+                  parts: [
+                    { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } },
+                  ],
+                },
+              ],
             },
           },
         });
