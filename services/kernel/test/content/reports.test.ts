@@ -97,16 +97,12 @@ async function permission(path: string, body: unknown, bearer = governanceBearer
 }
 
 async function grant(target: ReportTarget, actorId: string, action: string) {
-  const result = await permission(
-    '/v1/grants',
-    {
-      resource: resource(target),
-      subject: { kind: 'account', id: actorId },
-      actions: [action],
-      valid: '(,)',
-    },
-    target.kind === 'board' ? system.actors.moderator.bearer : governanceBearer,
-  );
+  const result = await permission('/v1/grants', {
+    resource: resource(target),
+    subject: { kind: 'account', id: actorId },
+    actions: [action],
+    valid: '(,)',
+  });
   grantRanges.set(grantKey(target, actorId, action), result.grant.valid);
 }
 
@@ -148,16 +144,12 @@ async function fixture() {
   await provisionGrantAuthority(target, ['report:create', 'reaction:set', 'moderation:read_reports']);
   // A separate setup grantor keeps each real actor within its native write budget.
   await provisionGrantAuthority(target, ['reaction:set'], author.accountId);
-  const standing = await permission(
-    '/v1/roleGrants',
-    {
-      resource: resource(target),
-      subject: { kind: 'active_accounts' },
-      role: 'content.post.standing',
-      valid: '(,)',
-    },
-    system.actors.author.bearer,
-  );
+  const standing = await permission('/v1/roleGrants', {
+    resource: resource(target),
+    subject: { kind: 'active_accounts' },
+    role: 'content.post.standing',
+    valid: '(,)',
+  });
   const input: ReportInput = {
     target,
     revisionId: created.value.revisionId,
@@ -171,14 +163,12 @@ async function fixture() {
 }
 
 async function provisionGrantAuthority(target: ReportTarget, actions: string[], accountId = governanceAccountId) {
-  // Account subjects use the shared Access identity storage discriminant.
-  await system.database.pool.query(
-    `INSERT INTO access.resource_grant
-       (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
-     SELECT $1,$2,'identity',$3,'',action,'(,)'::tstzrange,$4
-     FROM unnest($5::text[]) AS action`,
-    [routeOf(target.id), target.id, accountId, randomUUID(), ['access:grant', ...actions]],
-  );
+  await permission('/v1/grants', {
+    resource: resource(target),
+    subject: { kind: 'account', id: accountId },
+    actions,
+    valid: '(,)',
+  });
 }
 
 async function nativeReport(id: string, pool = system.database.pool) {
@@ -327,16 +317,12 @@ test('missing proof and malformed anonymous possession keys deny; authenticated 
   });
   await expect(createReport(deps(), credential.actor, f.input, context())).rejects.toThrow();
   await revoke(f.target, f.author.accountId, 'report:create');
-  await permission(
-    '/v1/roleGrants:revoke',
-    {
-      resource: resource(f.target),
-      subject: { kind: 'active_accounts' },
-      role: 'content.post.standing',
-      valid: f.standingValid,
-    },
-    system.actors.author.bearer,
-  );
+  await permission('/v1/roleGrants:revoke', {
+    resource: resource(f.target),
+    subject: { kind: 'active_accounts' },
+    role: 'content.post.standing',
+    valid: f.standingValid,
+  });
   await expect(createReport(deps(), f.author, f.input, context())).rejects.toThrow();
 });
 
