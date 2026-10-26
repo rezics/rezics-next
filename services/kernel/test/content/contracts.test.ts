@@ -682,7 +682,12 @@ function publishedModels(): void {
       }>
     >
   >();
-  same<Equal<moderation.ModerationDependencies, commands.ContentCommandDependencies>>();
+  same<
+    Equal<
+      moderation.ModerationDependencies,
+      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
+    >
+  >();
   same<Equal<moderation.TakedownTarget, reports.ReportTarget>>();
   same<Equal<moderation.TakedownInput, Readonly<{ target: moderation.TakedownTarget; reason: string }>>>();
   same<Equal<AuthorErasureInput, Readonly<{ threadId: string; authorId: string }>>>();
@@ -698,7 +703,12 @@ function publishedModels(): void {
   same<Equal<ReturnType<BeginAuthorErasure>, Promise<CommandOutcome<{ operationId: string }>>>>();
   same<Equal<erasePost.ErasePostInput, Readonly<{ postId: string; reason: string }>>>();
   same<Equal<erasePost.ErasePostContext, model.RequestContext>>();
-  same<Equal<erasePost.ErasePostDependencies, commands.ContentCommandDependencies>>();
+  same<
+    Equal<
+      erasePost.ErasePostDependencies,
+      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
+    >
+  >();
   same<Equal<moderation.EraseStandaloneMediaInput, Readonly<{ mediaId: string; reason: string }>>>();
   same<Equal<reports.ReportRequestContext, model.RequestContext & Readonly<{ botToken?: string }>>>();
 }
