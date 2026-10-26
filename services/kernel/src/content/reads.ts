@@ -242,8 +242,7 @@ async function prepare(
         if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
           throw new ContentNotFoundError();
         // Erased public slots still require the requested scope from account tokens.
-        if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action))
-          return false;
+        if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action)) return false;
         return (
           current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
         );
