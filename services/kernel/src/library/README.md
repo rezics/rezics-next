@@ -121,7 +121,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: Own-account `library_entry:delete` and one primary-key delete matching account, subject and revision. The event subject is the account id. Copies are left in place.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus authorization and the envelope.
-- Growth check: `test/library/entries.test.ts`: `put, delete and list statement counts stay equal at three scales of unrelated account entries`. Delete statements stay equal at 1, 8 and 64. Blocks are not classified.
+- Growth check: `test/library/growth-personal-writes.test.ts`: `Entry delete has constant rows and statements as entries grow` checks the whole command at scales 1, 4 and 16 while the owner's entries, other accounts' entries in the same and another partition, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation. `test/library/entries.test.ts`: `put, delete and list statement counts stay equal at three scales of unrelated account entries` still checks delete statement counts at 1, 8 and 64.
 
 ### Entry read
 
@@ -199,7 +199,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: The same admit, lock, primary-key read and revision check as update, then one primary-key delete. The event subject is the account id.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus the admit, authorization and the envelope. The same shape as update, with a delete in place of the update.
-- Growth check: The scale sample does not call delete. `test/library/copies.test.ts`: `statement counts stay equal at three scales of unrelated copies` measures create, update and page. `test/library/copies.test.ts`: `an account records two private copies of one edition and changes each by revision` deletes one copy and does not assert a scale bound.
+- Growth check: `test/library/growth-personal-writes.test.ts`: `Copy delete has constant rows and statements as copies grow` checks the whole command at scales 1, 4 and 16 while the owner's copies, other accounts' copies in the same and another partition, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation.
 
 ### Copy read
 
@@ -229,13 +229,13 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: The same admit, target resolve, follow upsert and read-back as follow, with intent `unfollow`. A string target first reads the existing row so the stored target type is kept. An explicit unfollow is not overridden by a later implied follow. The event subject is the account id.
 - Bound: The same body as follow: `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus one extra primary-key read when the caller passes only an id, the admit, the resolve, authorization and the envelope.
-- Growth check: The scale samples do not call unfollow. `test/library/follows.test.ts`: `statements per follow, membership step and page stay equal as unrelated follows grow` measures follow, membership and page. `test/library/follows.test.ts`: `an account follows, unfollows and refollows a readable subject in its own partition` unfollows and is not a scale measurement. The store scale sample applies intent `follow` only.
+- Growth check: `test/library/growth-personal-writes.test.ts`: `Unfollow has constant rows and statements as follows grow` checks the whole command at scales 1, 4 and 16 while the owner's follows, other accounts' follows in the same and another partition, Collection targets, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation.
 
 ### Membership follow
 
 - Touches: `trustedAccount` for `library.follow.membership`, then the same follow upsert and read-back, with implied intent and reason `membership`. The library command does not resolve the Space. Community's join step is the caller. An explicit unfollow is preserved by the upsert predicate. The event subject is the account id.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus trusted-account authorization and the envelope. No subject, Collection or Space read inside this command.
-- Growth check: `test/library/follows.test.ts`: `statements per follow, membership step and page stay equal as unrelated follows grow`. Membership steps keep statement counts equal at 1, 8 and 64. Blocks are not classified.
+- Growth check: `test/library/growth-personal-writes.test.ts`: `Membership follow has constant rows and statements as follows grow` checks the whole command at scales 1, 4 and 16 while the owner's follows, other accounts' follows in the same and another partition, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation. `test/library/follows.test.ts`: `statements per follow, membership step and page stay equal as unrelated follows grow` still checks membership statement counts at 1, 8 and 64.
 
 ### Follow read
 
