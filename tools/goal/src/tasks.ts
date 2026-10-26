@@ -250,6 +250,13 @@ export class WorkerTasks {
       lease.release();
     }
   }
+  /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
+  protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
+    const ownership = readRiskOwnership(this.settings.riskAreasFile);
+    return Object.entries(ownership.areas)
+      .filter(([area]) => !brief.riskAreas.includes(area))
+      .flatMap(([, patterns]) => patterns);
+  }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
     const worker = await this.retryTask(taskId, options);
     if (!worker) throw new TaskHeldForDependenciesError();

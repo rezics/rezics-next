@@ -62,12 +62,12 @@ describe('sequential integration', () => {
       expect(existsSync(join(s.main, 'a'))).toBe(true); expect(existsSync(join(s.main, 'b'))).toBe(false);
     } finally { s.close(); }
   });
-  test('scope checks both sides of renames and refuses undeclared changes', async () => {
+  test('scope checks both sides of renames and refuses changes in protected paths', async () => {
     const s = setup();
     try {
       const request = s.branch('alpha', 'allowed');
       git(request.worktree, 'mv', 'base', 'renamed'); git(request.worktree, 'commit', '-m', 'Rename');
-      s.queue.enqueue({ ...request, declaredPaths: ['allowed', 'renamed'] });
+      s.queue.enqueue({ ...request, declaredPaths: ['allowed', 'renamed'], protectedPaths: ['base'] });
       let called = false;
       await new MergeTrain({ ...s.options, runGate: async () => { called = true; return { passed: true, output: '', timedOut: false }; } }).run();
       expect(s.outcomes[0]?.stage).toBe('scope'); expect(called).toBe(false);

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { completionChecker } from './completion.ts';
 import { gateRunner, git } from './merge.ts';
@@ -26,13 +26,14 @@ test('a passing worker branch integrates into dev without running the gate and m
   } finally { h.dispose(); }
 });
 
-test('integration into dev still refuses a scope violation and reports a rebase conflict against dev', async () => {
+test('integration into dev refuses a change in an undeclared risk area and reports a rebase conflict against dev', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev(); const main = h.head('main');
     const scope = h.dispatch('allowed'); await h.start(scope);
-    writeFileSync(join(scope.worktree, 'outside'), 'undeclared');
-    git(scope.worktree, 'add', 'outside'); git(scope.worktree, 'commit', '-qm', 'Outside scope');
+    mkdirSync(join(scope.worktree, 'auth'), { recursive: true });
+    writeFileSync(join(scope.worktree, 'auth/outside'), 'undeclared');
+    git(scope.worktree, 'add', 'auth/outside'); git(scope.worktree, 'commit', '-qm', 'Outside scope in a risk area');
     await h.train(undefined, false);
     expect(h.outcomes[0]?.stage).toBe('scope'); expect(h.outcomes[0]?.passed).toBe(false);
     expect(h.head()).toBe(main); expect(h.head('main')).toBe(main);
