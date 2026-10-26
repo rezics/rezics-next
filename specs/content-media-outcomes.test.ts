@@ -397,6 +397,8 @@ test('over-pixel truncated and malformed images reject retaining digest decision
 
 test('public download allows only sanitized available derivative and original only to uploader', async () => {
   const { media } = await available('tiny');
+  expect(await driver.download('anonymous', media.id, 'derivative')).toEqual({ outcome: 'denied' });
+  expect(await driver.reference('author', reference(media))).toBe('permitted');
   const derivatives = await driver.derivatives(media.id);
   for (const as of ['anonymous', 'other', 'moderator'] as const) {
     const decision = await driver.download(as, media.id, 'derivative');
@@ -429,6 +431,7 @@ test('uploaded and rejected objects are hidden from everyone except uploader', a
 
 test('parent visibility revocation rechecks even conditional download authorization', async () => {
   const { media } = await available('tiny');
+  expect(await driver.reference('author', reference(media))).toBe('permitted');
   const decision = await driver.download('anonymous', media.id, 'derivative');
   expect(decision.outcome).toBe('permitted');
   if (decision.outcome !== 'permitted') throw new Error('Download positive control failed');

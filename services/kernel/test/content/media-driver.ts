@@ -17,7 +17,7 @@ import fenceCollection from '../../src/content/fence-collection.sql';
 import selectCandidates from '../../src/content/select-collectable-media.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
-import { createContentSystem, type ContentCredential } from './support/system.ts';
+import { createContentSystem, type ContentCredential, type ContentSystem } from './support/system.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
 import { digest, embeddedMetadata, imageSource, provisionMediaContainers } from './support/media-fixtures.ts';
 import { createMediaStorage, StorageDeleteFailure } from './support/storage.ts';
@@ -34,6 +34,14 @@ mock.module('sharp', () => ({
 const { createImageJob } = await import('../../src/content/image-job.ts');
 const { createCollectionJob } = await import('../../src/content/collection-job.ts');
 const { createErasureJob } = await import('../../src/content/erasure-job.ts');
+
+let scenario: { system: ContentSystem; anchors: Awaited<ReturnType<typeof provisionMediaContainers>> } | undefined;
+
+/** The focused growth test shares the unchanged suite's ordinary beforeEach fixture. */
+export function currentMediaScenario() {
+  if (!scenario) throw new Error('The native media scenario has not been opened');
+  return scenario;
+}
 
 function outcome(response: Response, invalid = false): Outcome {
   if (response.ok) return 'permitted';
@@ -65,6 +73,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
   let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
+      if (scenario?.system === system) scenario = undefined;
       observeSharp = undefined;
       await jobObserver.close();
       await jobPool.end();
@@ -528,6 +537,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         return { claim: claimResult, collection: collectionResult };
       },
     };
+    scenario = { system, anchors: { containers, posts } };
     return driver;
   } catch (error) {
     await close();
