@@ -679,6 +679,49 @@ function publishPrefix(
   return true;
 }
 
+// Promotion regenerates derived files on stabilize alone, so dev can lack main's last commit. The merge keeps dev's
+// side of a derived-file conflict, since the next promotion regenerates those files anyway.
+function mergeMainIntoDev(options: PromotionOptions, target: string): string | undefined {
+  const settings = options.settings,
+    checkout = settings.mainCheckout;
+  const derived = (options.derivedFiles ?? defaultDerivedFiles).map((file) => file.path);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const dev = optionalHead(checkout, settings.integrationBranch);
+    if (!dev) return undefined;
+    if (isAncestor(checkout, target, dev)) return dev;
+    const tree = join(settings.worktreeRoot, `promotion-merge-${randomUUID()}`);
+    mkdirSync(settings.worktreeRoot, { recursive: true });
+    git(checkout, 'worktree', 'add', '--detach', tree, dev);
+    try {
+      const merged = spawnSync('git', ['merge', '--no-ff', '--no-edit', '-m', 'Merge main into dev', target], {
+        cwd: tree,
+        encoding: 'utf8',
+      });
+      if (merged.status !== 0) {
+        const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
+        if (!conflicts.length || conflicts.some((path) => !matchesPath(path, derived))) return undefined;
+        try {
+          git(tree, 'checkout', '--ours', '--', ...conflicts);
+          git(tree, 'add', '--', ...conflicts);
+          git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
+        } catch {
+          return undefined;
+        }
+      }
+      const commit = git(tree, 'rev-parse', 'HEAD');
+      try {
+        git(checkout, 'update-ref', ref(settings.integrationBranch), commit, dev);
+        return commit;
+      } catch {
+        // Dev moved during the merge; merge again onto its new head.
+      }
+    } finally {
+      git(checkout, 'worktree', 'remove', '--force', tree);
+    }
+  }
+  return undefined;
+}
+
 function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): boolean {
   const settings = options.settings,
     checkout = settings.mainCheckout,
@@ -686,11 +729,11 @@ function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionR
   const stabilize = optionalHead(checkout, settings.stabilizeBranch);
   if (stabilize === undefined) return false;
   if (stabilize !== target) return true;
-  const dev = optionalHead(checkout, settings.integrationBranch);
-  if (!dev || !isAncestor(checkout, target, dev)) {
+  const dev = mergeMainIntoDev(options, target);
+  if (!dev) {
     notifySupermanager(
       options,
-      `Published main at ${target}, but dev does not contain main; stabilize remains at ${target}.`,
+      `Published main at ${target}, but main does not merge into dev; stabilize remains at ${target}.`,
     );
     return true;
   }
