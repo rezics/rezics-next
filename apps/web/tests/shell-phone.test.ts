@@ -329,7 +329,8 @@ test.serial(
         expect(await visible(page, own.shell_theme!), `${where} theme`).toBe(true);
         if (signed) {
           expect(await visible(page, own.account_menu!), `${where} account`).toBe(true);
-          expect(await header.getByText(own.account_menu!, { exact: true }).isVisible(), `${where} label`).toBe(false);
+          const label = await header.getByText(own.account_menu!, { exact: true }).boundingBox();
+          expect(label?.width ?? 0, `${where} label`).toBeLessThanOrEqual(1);
         } else {
           const link = header.getByRole('link', { name: own.account_sign_in!, exact: true });
           expect(await link.isVisible(), `${where} sign in`).toBe(true);

@@ -14,18 +14,16 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  useSidebar,
 } from '@rezics/ui/sidebar';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { use, useEffect, useRef, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { PageHeading } from './page-heading';
 import { ShellSearch } from '../search/search.tsx';
 import {
@@ -42,7 +40,6 @@ import {
   Sun,
   UserRound,
   Users,
-  X,
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import type { SessionState } from '../session/state.ts';
@@ -111,108 +108,51 @@ function Mark() {
     </svg>
   );
 }
-function Logo({ locale: _locale, showWordmarkOnMobile = false }: { locale: string; showWordmarkOnMobile?: boolean }) {
-  const { isMobile, setOpenMobile } = useSidebar();
+function Logo() {
   return (
-    <Link
-      to="/"
-      aria-label="REZICS"
-      onClick={() => isMobile && setOpenMobile(false)}
-      className="flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5"
-    >
+    <Link to="/" aria-label="REZICS" className="flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5">
       <Mark />
-      <span
-        className={`${showWordmarkOnMobile ? 'inline' : 'hidden sm:inline'} font-extrabold text-[15px] text-foreground tracking-[0.28em]`}
-      >
-        REZICS
-      </span>
+      <span className="hidden font-extrabold text-[15px] text-foreground tracking-[0.28em] sm:inline">REZICS</span>
     </Link>
   );
 }
 function Navigation({ pathname, session }: { pathname: string; session: SessionState }) {
-  const { setOpenMobile, isMobile } = useSidebar();
   return (
-    <>
-      {isMobile && (
-        <SidebarHeader className="flex-row items-center justify-between">
-          <Logo locale={getLocale()} showWordmarkOnMobile />
-          <Button
-            variant="ghost"
-            size="icon-md"
-            aria-label={m.shell_close_navigation()}
-            onClick={() => setOpenMobile(false)}
-          >
-            <X aria-hidden="true" />
-          </Button>
-        </SidebarHeader>
-      )}
-      <nav aria-label={m.shell_navigation()}>
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarMenu>
-              {offeredDestinations(session).map((item) => {
-                const Icon = item.icon;
-                return (
-                  <SidebarMenuItem key={item.to}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={destinationCurrent(pathname, item.to)}
-                      tooltip={item.message()}
-                    >
-                      <Link to={item.to} onClick={() => setOpenMobile(false)} data-autofocus className="text-primary">
-                        <Icon aria-hidden="true" className="size-5" />
-                        <span>{item.message()}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroup>
-        </SidebarContent>
-      </nav>
-    </>
+    <nav aria-label={m.shell_navigation()}>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarMenu>
+            {offeredDestinations(session).map((item) => {
+              const Icon = item.icon;
+              return (
+                <SidebarMenuItem key={item.to}>
+                  <SidebarMenuButton asChild isActive={destinationCurrent(pathname, item.to)} tooltip={item.message()}>
+                    <Link to={item.to} className="text-primary">
+                      <Icon aria-hidden="true" className="size-5" />
+                      <span>{item.message()}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
+    </nav>
   );
 }
 function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { setOpenMobile, openMobile, isMobile } = useSidebar();
-  const trigger = useRef<HTMLButtonElement>(null);
-  const wasOpen = useRef(false);
-  useEffect(() => {
-    if (!isMobile) return;
-    if (openMobile) {
-      wasOpen.current = true;
-      return;
-    }
-    if (!wasOpen.current) return;
-    wasOpen.current = false;
-    const frame = requestAnimationFrame(() => trigger.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [isMobile, openMobile]);
   return (
-    <>
-      <Button
-        ref={trigger}
-        className={`md:hidden ${headerControlClass}`}
-        variant="ghost"
-        size="icon-md"
-        pill
-        aria-label={m.shell_open_navigation()}
-        onClick={() => setOpenMobile(true)}
-      >
-        <MenuIcon aria-hidden="true" />
-      </Button>
-      <Button
-        className={`hidden md:inline-flex ${headerControlClass}`}
-        variant="ghost"
-        size="icon-md"
-        pill
-        aria-label={collapsed ? m.shell_expand_navigation() : m.shell_collapse_navigation()}
-        onClick={onToggle}
-      >
-        <MenuIcon aria-hidden="true" />
-      </Button>
-    </>
+    <Button
+      className={`hidden md:inline-flex ${headerControlClass}`}
+      variant="ghost"
+      size="icon-md"
+      pill
+      aria-label={collapsed ? m.shell_expand_navigation() : m.shell_collapse_navigation()}
+      onClick={onToggle}
+    >
+      <MenuIcon aria-hidden="true" />
+    </Button>
   );
 }
 function ThemeControl() {
@@ -311,7 +251,7 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
       <>
         <Button
           id="account-menu-button"
-          className={headerControlClass}
+          className={`${headerControlClass} px-3 sm:px-4`}
           variant="ghost"
           size="md"
           pill
@@ -320,7 +260,7 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
           popoverTarget="account-menu"
         >
           <UserRound aria-hidden="true" className="size-4" />
-          <span>{m.account_menu()}</span>
+          <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
         </Button>
         <div
           id="account-menu"
@@ -409,9 +349,13 @@ export function AppShell({
         <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
           <div className="flex h-16 items-center gap-2 px-3">
             <NavigationToggle collapsed={railCollapsed} onToggle={() => setCollapsed(!railCollapsed)} />
-            <Logo locale={locale} />
+            <Logo />
             <div className="ms-auto flex items-center gap-2">
-              {location.pathname !== '/' && location.pathname !== '/search' ? <ShellSearch /> : null}
+              {location.pathname !== '/' && location.pathname !== '/search' ? (
+                <div className="hidden md:block">
+                  <ShellSearch />
+                </div>
+              ) : null}
               <LanguageControl />
               <ThemeControl />
               <SessionControl session={session} csrfToken={csrfToken} />
