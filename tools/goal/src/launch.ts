@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:f
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import { NO_COMPILE_CACHE } from './merge.ts';
+import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { processIdentity } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
@@ -68,9 +68,10 @@ export function workerPrompt(task: Task, evidence: string | undefined, consultat
     resolutionFiles.length ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.` : '',
   ].filter(Boolean).join('\n\n');
 }
-/** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
-export function attemptEnvironment(task: Pick<Task, 'id' | 'base'>, attempt: Pick<Attempt, 'attempt'>): Record<string, string> {
-  return { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), KERNEL_CHECK_AFFECTED: task.base };
+/** Per-attempt variables: the attempt's identity, the base the kernel check selects affected tests against, and the
+ * check hosts when the state directory lists them. */
+export function attemptEnvironment(task: Pick<Task, 'id' | 'base'>, attempt: Pick<Attempt, 'attempt'>, stateDirectory?: string): Record<string, string> {
+  return { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), KERNEL_CHECK_AFFECTED: task.base, ...remoteCheckEnvironment(stateDirectory) };
 }
 export type RunningWorker = { child: ChildProcess; exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>; attempt: Attempt };
 export async function launch(store: WorkerStore, task: Task, attempt: Attempt, pool: Pool, prompt: string, codex?: Settings['codex']): Promise<RunningWorker> {
@@ -86,7 +87,8 @@ export async function launch(store: WorkerStore, task: Task, attempt: Attempt, p
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
       const started = spawn(program, args, { cwd: task.worktree, detached: true, stdio: ['ignore', out, err], env: workerEnvironment(pool, {
-        ...attemptEnvironment(task, attempt),
+        // Attempt logs live at <state directory>/runs/<task>/<attempt>.jsonl.
+        ...attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))),
       }) });
       const identity = started.pid ? processIdentity(started.pid) : null;
       store.updateAttempt(attempt, current => { current.driver = driver; current.process = identity; current.state = 'running'; });

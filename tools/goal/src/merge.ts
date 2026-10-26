@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import type { FirstFailure } from './contracts.ts';
 
 export function git(cwd: string, ...args: string[]): string {
@@ -14,21 +15,33 @@ export function git(cwd: string, ...args: string[]): string {
 // Node's compile cache, which Vite's bin turns on, keys its entries by path under os.tmpdir(); every worktree adds its
 // own, and 862k of them exhausted /tmp's inodes. It cannot be shared across worktrees, so it is off.
 export const NO_COMPILE_CACHE = { NODE_DISABLE_COMPILE_CACHE: '1' } as const;
-export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  return { ...Object.fromEntries(Object.entries(parent).filter(([name]) => !name.startsWith('GOAL_') && name !== 'CODEX_THREAD_ID')),
-    ...NO_COMPILE_CACHE };
+/** Kernel checks run on the development check hosts when the control plane's state directory lists them. */
+export function remoteCheckEnvironment(stateDirectory: string | undefined): { KERNEL_CHECK_REMOTE?: string } {
+  const hosts = stateDirectory === undefined ? undefined : join(stateDirectory, 'remote-check-hosts.json');
+  return hosts !== undefined && existsSync(hosts) ? { KERNEL_CHECK_REMOTE: hosts } : {};
+}
+/** Gates run in the main checkout's worktrees, so the state directory is the one the control plane itself defaults to. */
+function gateStateDirectory(cwd: string, parent: NodeJS.ProcessEnv): string | undefined {
+  try {
+    const main = dirname(git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'));
+    return resolve(main, parent.GOAL_STATE_DIRECTORY || '.temp/goal');
+  } catch { return undefined; }
+}
+export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDirectory?: string): NodeJS.ProcessEnv {
+  return { ...Object.fromEntries(Object.entries(parent).filter(([name]) => !name.startsWith('GOAL_') && name !== 'CODEX_THREAD_ID' && name !== 'KERNEL_CHECK_REMOTE')),
+    ...NO_COMPILE_CACHE, ...remoteCheckEnvironment(stateDirectory) };
 }
 
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
 export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
 
-export function gateRunner(timeoutMs = 600_000): GateRunner {
+export function gateRunner(timeoutMs = 600_000, stateDirectory?: string): GateRunner {
   return async (argv, cwd, logPath) => {
     if (!argv.length) throw new Error('A gate command is required');
     // A separate process group allows the timeout to stop grandchildren as well as the shell.
     const { spawn } = await import('node:child_process');
     return await new Promise<GateResult>((resolve, reject) => {
-      const child = spawn(argv[0]!, argv.slice(1), { cwd, env: gateEnvironment(), detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(argv[0]!, argv.slice(1), { cwd, env: gateEnvironment(process.env, stateDirectory ?? gateStateDirectory(cwd, process.env)), detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
       let output = '';
       let timedOut = false;
       const collect = (chunk: Buffer) => { const text = chunk.toString(); output += text; appendFileSync(logPath, text); };
