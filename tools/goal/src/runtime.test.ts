@@ -184,3 +184,33 @@ test('the production CLI dispatch, train and inbox commands compose the real run
     expect(await command('train')).toBe(''); expect(JSON.parse(await command('inbox', 'read', 'fixture'))).toEqual([]);
   } finally { h.dispose(); }
 });
+
+test('three failed attempts on one model send the next attempt to the route’s next model', async () => {
+  const h = harness(`#!/usr/bin/env bun
+import {writeFileSync} from 'node:fs'; import {spawnSync} from 'node:child_process';
+const model = process.argv[process.argv.indexOf('-m') + 1];
+if (model === 'model-a') {
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({status:'blocked',summary:'stuck',blocker:{kind:'spec-conflict',detail:'cannot satisfy'},approaches:[]})}}));
+  console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}})); process.exit(0);
+}
+writeFileSync('result.txt','accepted');spawnSync('git',['add','result.txt']);spawnSync('git',['commit','-m','Complete result']);
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
+`); h.settings.gate = ['true']; simpleBrief(h.briefFile);
+  try {
+    const routing = JSON.parse(readFileSync(h.settings.routingFile, 'utf8'));
+    const profile = (model: string) => ({ cli: 'codex', model, effort: 'high', poolClass: h.settings.pools[0]!.classes[0] });
+    for (const route of Object.values(routing.classes) as { first: unknown; fallbacks?: unknown[] }[]) {
+      route.first = profile('model-a'); route.fallbacks = [profile('model-b')];
+    }
+    routing.experiments = [];
+    const routingFile = join(h.settings.stateDirectory, 'routing-switch.json');
+    writeFileSync(routingFile, JSON.stringify(routing));
+    h.settings.routingFile = routingFile;
+    const runtime = createRuntime({ tasks: h.tasks });
+    const task = h.tasks.dispatch(h.briefFile);
+    for (let attempt = 1; attempt <= 4; attempt++) { await runtime.job.start(task.id); await runtime.job.drain(); }
+    const models = h.store.attempts(task.id).map(attempt => attempt.profile.model);
+    expect(models).toEqual(['model-a', 'model-a', 'model-a', 'model-b']);
+  } finally { h.dispose(); }
+});
