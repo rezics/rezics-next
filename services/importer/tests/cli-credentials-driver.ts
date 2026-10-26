@@ -2,14 +2,8 @@ import { createPublicKey, randomUUID, verify } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
-import {
-  IMPORTER_SCOPES,
-} from '../src/credentials.ts';
-import {
-  MAX_IMPORT_BODY_BYTES,
-  MAX_IMPORT_DEADLINE_MS,
-  MAX_IMPORT_RESPONSE_BYTES,
-} from '../src/import-fetch.ts';
+import { IMPORTER_SCOPES } from '../src/credentials.ts';
+import { MAX_IMPORT_BODY_BYTES, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from '../src/import-fetch.ts';
 import type {
   ApiRequestObservation,
   AuthRequestObservation,
@@ -226,7 +220,11 @@ export const createImportCliCredentialsDriver: CreateImportCliCredentialsDriver 
         });
         await api.afterResponse?.(
           request,
-          new Response(responseText, { status: response.status, statusText: response.statusText, headers: response.headers }),
+          new Response(responseText, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          }),
           options.clock,
         );
         return response;
@@ -262,8 +260,9 @@ export const createImportCliCredentialsDriver: CreateImportCliCredentialsDriver 
       } finally {
         active.delete(pending);
       }
-      const databaseFiles = [options.directory, resolve(options.directory, 'state.sqlite')]
-        .filter((value, index, all) => all.indexOf(value) === index);
+      const databaseFiles = [options.directory, resolve(options.directory, 'state.sqlite')].filter(
+        (value, index, all) => all.indexOf(value) === index,
+      );
       const execution: ImportCliCredentialsExecution = {
         code: result.code,
         stdout: result.stdout,

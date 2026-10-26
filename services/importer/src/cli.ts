@@ -17,11 +17,7 @@ import { DEFAULT_VNDB_ARCHIVE_BYTES, VndbTablesStore } from './vndb-tables.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
-import {
-  createAccountTokenProvider,
-  CredentialInputError,
-  type CredentialsObserver,
-} from './credentials.ts';
+import { createAccountTokenProvider, CredentialInputError, type CredentialsObserver } from './credentials.ts';
 
 const ARCHIVE_METADATA_LIMIT = 4096;
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;

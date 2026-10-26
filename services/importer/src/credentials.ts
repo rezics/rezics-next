@@ -1,11 +1,7 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import {
-  MAX_IMPORT_BODY_BYTES,
-  MAX_IMPORT_DEADLINE_MS,
-  MAX_IMPORT_RESPONSE_BYTES,
-} from './import-fetch.ts';
+import { MAX_IMPORT_BODY_BYTES, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from './import-fetch.ts';
 
 const KEY_LIMIT = 16 * 1024;
 const REFRESH_EARLY_MS = 60_000;
@@ -98,13 +94,9 @@ async function readAccountKey(path: string, observer?: CredentialsObserver): Pro
       inputFailure();
     let key: CryptoKey;
     try {
-      key = await crypto.subtle.importKey(
-        'jwk',
-        value as JsonWebKey,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['sign'],
-      );
+      key = await crypto.subtle.importKey('jwk', value as JsonWebKey, { name: 'ECDSA', namedCurve: 'P-256' }, false, [
+        'sign',
+      ]);
     } catch {
       inputFailure();
     }
