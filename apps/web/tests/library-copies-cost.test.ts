@@ -18,7 +18,9 @@ const origin = 'https://site.example.test';
 test('copies stay within their bound as the copy list grows', async () => {
   for (const scale of sizes) {
     const unrelated = Array.from({ length: scale }, (_, index) => `unrelated-${scale}-${index}`);
-    for (const operation of ['view', 'create', 'update', 'delete'] as const) {
+    for (const operation of ['view', 'filtered-view', 'create', 'update', 'delete'] as const) {
+      const viewing = operation === 'view' || operation === 'filtered-view';
+      const filtered = operation === 'filtered-view';
       const counts = { D: 0, K: 0, R: 0, A: 0 };
       let pending = 0;
       let maxPending = 0;
@@ -82,16 +84,16 @@ test('copies stay within their bound as the copy list grows', async () => {
             try {
               expect(request.headers.get('authorization')).toBe('Bearer fresh-token');
               expect(unrelated.some((id) => url.pathname.includes(id) || url.search.includes(id))).toBe(false);
-              if (operation === 'view') {
+              if (viewing) {
                 expect(request.method).toBe('GET');
                 expect(url.pathname).toBe('/v1/copies');
                 expect(url.searchParams.get('view')).toBe('FULL');
                 expect(url.searchParams.get('limit')).toBe('100');
-                expect(url.searchParams.get('subjectId')).toBeNull();
+                expect(url.searchParams.get('subjectId')).toBe(filtered ? subjectId : null);
                 return Response.json({
                   copies: Array.from({ length: scale }, (_, index) => ({
                     id: `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`,
-                    subjectId: `subject-${index}`,
+                    subjectId: filtered ? subjectId : `subject-${index}`,
                     status: 'owned',
                     revision: 1,
                     location: 'Shelf',
@@ -99,7 +101,7 @@ test('copies stay within their bound as the copy list grows', async () => {
                     acquiredOn: '2030-01-01',
                     disposedOn: null,
                     note: `note-${index}`,
-                    subject: { id: `subject-${index}`, type: 'book', label: `Label ${index}` },
+                    subject: { id: filtered ? subjectId : `subject-${index}`, type: 'book', label: `Label ${index}` },
                   })),
                   next: null,
                 });
@@ -170,15 +172,16 @@ test('copies stay within their bound as the copy list grows', async () => {
           }) as typeof fetch,
         }),
       );
-      const request = new Request(`${origin}/en/library/copies`, {
-        method: operation === 'view' ? 'GET' : 'POST',
+      const request = new Request(`${origin}/en/library/copies${filtered ? `?subjectId=${subjectId}` : ''}`, {
+        method: viewing ? 'GET' : 'POST',
         headers: {
           cookie: `__Host-rezics_session=${sessionId}`,
-          ...(operation === 'view' ? {} : { origin, 'x-csrf-token': csrf }),
+          ...(viewing ? {} : { origin, 'x-csrf-token': csrf }),
         },
       });
-      if (operation === 'view') {
-        const page = await loadCopiesPage(client, request, env, {});
+      if (viewing) {
+        const page = await loadCopiesPage(client, request, env, filtered ? { subjectId } : {});
+        expect(page.subjectId).toBe(filtered ? subjectId : null);
         expect(page.copies).toHaveLength(scale);
         expect(page.copies.some((copy) => 'subjectId' in copy)).toBe(false);
       } else if (operation === 'create') {

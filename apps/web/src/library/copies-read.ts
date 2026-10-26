@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { copiesSubjectId } from './copies-query';
 import { libraryListQuery, readLibraryResult, StaleCursorError, type LibrarySubject } from './reads';
 
 export type CopyStatus = 'ordered' | 'owned' | 'lent' | 'disposed';
@@ -243,24 +244,25 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
   return authorization;
 }
 
-async function readCopyPage(client: KernelClient, authorization: string, cursor?: string) {
-  try {
+async function readCopyPage(client: KernelClient, authorization: string, subjectId?: string, cursor?: string) {
+  const read = async (pageCursor?: string) => {
     const result = await client.copies.get({
-      query: libraryListQuery(cursor),
+      query: { ...libraryListQuery(pageCursor), ...(subjectId ? { subjectId } : {}) },
       headers: { authorization },
     });
+    const body = problemBody(result.error);
+    if (result.status === 400 && isRecord(body) && body.code === 'invalid_cursor') throw new StaleCursorError();
     return readLibraryResult(result);
+  };
+  try {
+    return await read(cursor);
   } catch (error) {
     if (!(error instanceof StaleCursorError) || !cursor) throw error;
-    const result = await client.copies.get({
-      query: libraryListQuery(),
-      headers: { authorization },
-    });
-    return readLibraryResult(result);
+    return read();
   }
 }
 
-/** One credential read, then one unfiltered FULL page of the viewer's copies. */
+/** One credential read, then one FULL page of the viewer's copies, optionally filtered by subject. */
 export async function loadCopiesPage(
   client: KernelClient,
   request: Request,
@@ -269,9 +271,9 @@ export async function loadCopiesPage(
 ): Promise<CopiesPageData> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
-  const subjectId = input.subjectId ?? null;
+  const subjectId = copiesSubjectId(input.subjectId) ?? null;
   if (!authorization) return { signedIn: false, subjectId, copies: [], next: null, addKey: crypto.randomUUID() };
-  const page = await readCopyPage(client, authorization, input.cursor);
+  const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor);
   const copies = page.copies.map(present);
   return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID() };
 }

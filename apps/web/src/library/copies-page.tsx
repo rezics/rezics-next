@@ -408,6 +408,7 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
     setAddKey(page.addKey);
   }, [page]);
   const returnTo = location.publicHref.split('#')[0] ?? location.publicHref;
+  const subjectTitle = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
 
   return (
     <div className="max-w-4xl space-y-8 text-foreground">
@@ -418,6 +419,14 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
       </header>
       {page.signedIn ? (
         <>
+          {page.subjectId ? (
+            <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
+              <span>{m.library_copy_filtered_heading({ title: subjectTitle ?? m.library_copy_this_edition() })}</span>
+              <Link to="/library/copies" search={{}} className="text-primary underline underline-offset-4">
+                {m.library_copy_all()}
+              </Link>
+            </p>
+          ) : null}
           {copies.length ? (
             <div className="divide-y divide-border/60 border-y border-border/60">
               {copies.map((copy) => (
@@ -430,7 +439,9 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
               ))}
             </div>
           ) : (
-            <p className="text-muted-foreground">{m.library_copy_empty()}</p>
+            <p className="text-muted-foreground">
+              {page.subjectId ? m.library_copy_filtered_empty() : m.library_copy_empty()}
+            </p>
           )}
           {page.next ? (
             <nav aria-label={m.library_copy_heading()}>
