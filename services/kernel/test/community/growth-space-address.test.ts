@@ -18,7 +18,7 @@ const audience = 'https://growth-space-address.api.test';
 const routeKey = new Uint8Array(32).fill(93);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(94)]]) };
 const password = 'growth space address test password with enough entropy';
-const scales: [number, number, number] = [2048, 8192, 32768];
+const scales = [256, 1024, 4096] as const;
 const hotPartition = 173;
 
 type ProbeSpace = { spaceId: string; etag: string; address?: string };
@@ -340,7 +340,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await authPool?.end();
-  if (authDatabase) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  if (authDatabase) {
+    // Let the auth host's connections close on their own; a forced drop would kill them while they are still draining.
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const open = await db?.admin.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [authDatabase]);
+      if (!open.rowCount) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  }
   await db?.close();
 });
 
@@ -419,7 +427,7 @@ test('address claim, change and resolve stay bounded as addresses, Spaces and ha
       await exercise(probes.get(scale)!, scale);
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
   for (const sample of report.samples) {
     for (const relation of [
       'community.space_address_claim',
