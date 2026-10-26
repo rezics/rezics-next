@@ -90,7 +90,10 @@ export interface LibraryDriver {
   }): Promise<Response>;
   inspect(): Promise<LibraryInspection>;
   settle(): Promise<void>;
-  /** Append this many members through production commands, allowing repeated subjects. */
+  /**
+   * Append this many members through the library store in batched transactions; seeded members emit no events. A
+   * scenario that needs member events adds members through the API.
+   */
   seedMembers(input: { collectionId: string; subjectId: string; count: number }): Promise<void>;
   /**
    * Grow unrelated data to this total in each relevant relation: collections,
