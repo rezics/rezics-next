@@ -113,8 +113,8 @@ afterAll(async () => {
   await fixture?.close();
 });
 
-async function scope(posts: number, revisions = 1) {
-  const actor = (await fixture.context()).actor;
+async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
+  const actor = (await fixture.context(accountId)).actor;
   const threadId = newId(route);
   const boardId = newId(route);
   const ids = Array.from({ length: posts }, () => newId(route)).sort();
@@ -287,10 +287,10 @@ test('the content initiator reader accepts only the committed operation source a
   const copiedId = newId(route);
   await fixture.reader.query(
     `INSERT INTO content.operation
-     (route,operation_id,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
+     (route,operation_id,initiator_account_id,author_account_id,thread_id,anchor_post_id,actor_kind,actor_account_id,
       actor_client_id,actor_scopes,actor_requested_by,actor_authn_epoch,empty_scope,upper_created_at,
       upper_post_id,requested_at,recorded_transaction_id)
-     SELECT route,$3,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
+     SELECT route,$3,initiator_account_id,author_account_id,thread_id,anchor_post_id,actor_kind,actor_account_id,
        actor_client_id,actor_scopes,actor_requested_by,actor_authn_epoch,empty_scope,upper_created_at,
        upper_post_id,requested_at,recorded_transaction_id
      FROM content.operation WHERE route=$1 AND operation_id=$2`,
@@ -800,7 +800,7 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
         // the same 205-post, three-revision shape outside the measured boundary.
         // The warm-up author is seeded the same way and erased before the sample.
         selected = await scope(205, 3);
-        spare = await scope(205, 3);
+        spare = await scope(205, 3, fixture.principal);
         await seed(
           target,
           {
@@ -870,6 +870,7 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
                     initiator_account_id: selected.actor.accountId,
                     author_account_id: noiseAccount,
                     thread_id: selected.threadId,
+                    anchor_post_id: postId,
                     actor_kind: 'account',
                     actor_account_id: selected.actor.accountId,
                     actor_client_id: selected.actor.clientId,
