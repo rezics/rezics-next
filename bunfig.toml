@@ -1,2 +1,2 @@
 [test]
-preload = ["./tools/goal/src/test-environment.ts"]
+preload = ["./tools/goal/src/test-environment.ts", "./scripts/stack-lease-preload.ts"]
