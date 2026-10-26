@@ -517,7 +517,12 @@ test('authorized erasure nulls every authored revision and exact references rema
     const after = await d().observe(target);
     expect(after.revisions).toHaveLength(before[index]!.revisions.length);
     for (const old of before[index]!.revisions) {
-      expect(after.revisions.find((r) => r.id === old.id)).toEqual({ ...old, body: null, hash: null, availability: 'erased' });
+      expect(after.revisions.find((r) => r.id === old.id)).toEqual({
+        ...old,
+        body: null,
+        hash: null,
+        availability: 'erased',
+      });
       const response = await d().read('author', target, old.id);
       expect((await ok(response)).revision).toEqual({ ...old, body: null, hash: null, availability: 'erased' });
       for (const row of before)
@@ -599,7 +604,11 @@ test('authorized create and revision replay cannot recover erased bytes from rec
     { key: createKey, revision: thread.revision },
     { key: editKey, revision: edited },
   ];
-  await minimizedCopies(thread, commands.map(({ revision }) => revision.id), bodies);
+  await minimizedCopies(
+    thread,
+    commands.map(({ revision }) => revision.id),
+    bodies,
+  );
   const beforeReplay = await d().observe(thread);
   const originalCopies = await d().inspectCommandCopies(thread);
   const statuses: number[] = [];
@@ -639,7 +648,11 @@ test('authorized create and revision replay cannot recover erased bytes from rec
     expect(await d().observe(thread)).toEqual(erased);
     expect(await d().inspectCommandCopies(thread)).toEqual(erasedCopies);
   }
-  await minimizedCopies(thread, commands.map(({ revision }) => revision.id), bodies);
+  await minimizedCopies(
+    thread,
+    commands.map(({ revision }) => revision.id),
+    bodies,
+  );
   await d().projection('drain');
   await d().projection('replay');
   const page = await d().list('author', board, { limit: 10 });
@@ -647,5 +660,9 @@ test('authorized create and revision replay cannot recover erased bytes from rec
   for (const body of bodies) {
     expect(await wire(page)).not.toContain(body);
   }
-  await minimizedCopies(thread, commands.map(({ revision }) => revision.id), bodies);
+  await minimizedCopies(
+    thread,
+    commands.map(({ revision }) => revision.id),
+    bodies,
+  );
 });
