@@ -249,3 +249,30 @@ test('tasks without target integrate into dev exactly as before', async () => {
     h.dispose();
   }
 });
+
+test('a stabilize commit whose only conflict with dev is two added imports merges into dev keeping both', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const body = (second: string, imports: string, d: string, s: string) =>
+      `import { a } from './a.ts';\n${imports}\na();\none;\n${d}\nthree;\n${s}\nend;\n${second}`;
+    h.advanceDev('shared.ts', body('', '', 'two;', 'four;'));
+    git(h.root, 'branch', 'stabilize', h.head());
+    h.advanceDev('shared.ts', body('', "import { d } from './d.ts';\n", 'd();', 'four;'));
+    const task = dispatch(h, 'shared.ts', true, 'kernel');
+    writeFileSync(join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'shared.ts', content: body('', "import { s } from './s.ts';\n", 'two;', 's();') }));
+    await h.start(task);
+    await h.train();
+
+    const stabilizeHead = h.head('stabilize');
+    expect(() => git(h.root, 'merge-base', '--is-ancestor', stabilizeHead, 'dev')).not.toThrow();
+    expect(git(h.root, 'show', 'dev:shared.ts')).toBe(
+      body('', "import { d } from './d.ts';\nimport { s } from './s.ts';\n", 'd();', 's();').trimEnd(),
+    );
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    expect(inbox.read(h.settings.integration.supermanager)).toHaveLength(0);
+  } finally {
+    h.dispose();
+  }
+});
