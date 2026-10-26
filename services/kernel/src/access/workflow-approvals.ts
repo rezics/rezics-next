@@ -369,6 +369,24 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       },
     };
   }
+  /** An automated account is deleted by the managers of its current operator; only the
+   * account itself holds its own delete action. The relation is one anchored point read. */
+  async function deletionDescriptor(
+    actor: AccountActor,
+    operation: NativeOperation,
+    descriptor: Descriptor,
+    deadline: number,
+  ): Promise<Descriptor> {
+    if (operation.kind !== 'delete' || actor.accountId === operation.accountId) return descriptor;
+    const subject = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        readAccount(deadlineClient(client, deadline), routeOf(operation.accountId)!, operation.accountId),
+      ),
+    );
+    if (subject?.kind !== 'actor' || subject.state !== 'active' || subject.operatorAccountId === null)
+      return descriptor;
+    return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
+  }
   async function requireHuman(actor: AccountActor) {
     const account = await readAccount(config.pool, routeOf(actor.accountId)!, actor.accountId);
     requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null && actor.requestedBy === null);
@@ -460,10 +478,11 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     caller?: AccountActor,
   ) {
     const bounded = boundary(context);
-    const { operation, descriptor } = operationSnapshot(input);
+    const { operation, descriptor: native } = operationSnapshot(input);
     const { row, actor } = await within(bounded.deadline, () =>
       readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
     );
+    const descriptor = await deletionDescriptor(actor, operation, native, bounded.deadline);
     requireAllowed(
       !caller ||
         (caller.accountId === actor.accountId &&
@@ -570,7 +589,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       const bounded = boundary(context);
       requireAllowed(input && text(input.operationKey));
       const operationKey = input.operationKey;
-      const { operation, descriptor } = operationSnapshot(input.operation);
+      const { operation, descriptor: native } = operationSnapshot(input.operation);
       requireAllowed(operation.kind !== 'transfer-acceptance' || operation.sourceOperationKey === operationKey);
       requireAllowed(
         operation.kind !== 'automated' || (operation.registrationId === '' && operation.operationKey === operationKey),
@@ -580,6 +599,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
       const expires = verifiedBearerExpiry(config.access, actor, bounded);
       const deadline = bounded.deadline;
+      const descriptor = await deletionDescriptor(actor, operation, native, deadline);
       const route = routeOf(actor.accountId)!;
       const digest = hash([operationKey, businessOperation(operation)]);
       // A fresh credential approval observes a new floor without changing Auth's

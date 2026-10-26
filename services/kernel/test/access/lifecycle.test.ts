@@ -488,6 +488,113 @@ test('operator responsibility and unresolved membership reservations deny tombst
   expect(await counts(id)).toEqual(before);
 });
 
+async function automated(operator: string, handle: string) {
+  const id = await person(handle);
+  await reader.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(id),
+    id,
+    operator,
+  ]);
+  return id;
+}
+async function manages(manager: string, operator: string) {
+  await reader.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [routeOf(operator), operator, manager],
+  );
+}
+
+test('a human who manages an operator can delete an automated account that operator operates, a human who does not manage that operator cannot', async () => {
+  const operator = await person('delete_operator');
+  const manager = await person('delete_manager');
+  const stranger = await person('delete_stranger');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'delete_automated');
+  const before = await row(subject);
+  await expect(commands.tombstone(await context(stranger), { accountId: subject, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(subject)).toEqual(before);
+  const grants = await reader.query(
+    'SELECT count(*)::int AS n FROM access.resource_grant WHERE route=$1 AND resource_id=$2',
+    [routeOf(subject), subject],
+  );
+  const result = await commands.tombstone(await context(manager), { accountId: subject, key: key() });
+  expect(result.value).toMatchObject({ accountId: subject, priorOperatorAccountId: operator });
+  expect(await row(subject)).toMatchObject({ state: 'deleted', operatorAccountId: null });
+  // Authority is read through the relation: no standing grant was written on the account.
+  const after = await reader.query(
+    'SELECT count(*)::int AS n FROM access.resource_grant WHERE route=$1 AND resource_id=$2',
+    [routeOf(subject), subject],
+  );
+  expect(after.rows[0].n).toBe(grants.rows[0].n);
+});
+
+test("after a transfer the old operator's managers can no longer delete it and the new operator's can", async () => {
+  const oldOperator = await person('transfer_old');
+  const newOperator = await person('transfer_new');
+  const oldManager = await person('transfer_old_manager');
+  const newManager = await person('transfer_new_manager');
+  await manages(oldManager, oldOperator);
+  await manages(newManager, newOperator);
+  const subject = await automated(oldOperator, 'transfer_automated');
+  await reader.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(subject),
+    subject,
+    newOperator,
+  ]);
+  const before = await row(subject);
+  await expect(
+    commands.tombstone(await context(oldManager), { accountId: subject, key: key() }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  expect(await row(subject)).toEqual(before);
+  const result = await commands.tombstone(await context(newManager), { accountId: subject, key: key() });
+  expect(result.value).toMatchObject({ accountId: subject, priorOperatorAccountId: newOperator });
+  expect(await row(subject)).toMatchObject({ state: 'deleted' });
+});
+
+test("a person's account is still deleted only by that person", async () => {
+  const person_ = await person('delete_person');
+  const other = await person('delete_person_other');
+  const holder = await person('delete_person_manager');
+  await manages(holder, other);
+  await manages(holder, person_);
+  const before = await row(person_);
+  await expect(commands.tombstone(await context(holder), { accountId: person_, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await expect(commands.tombstone(await context(other), { accountId: person_, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(person_)).toEqual(before);
+  await commands.tombstone(await context(person_), { accountId: person_, key: key() });
+  expect(await row(person_)).toMatchObject({ state: 'deleted' });
+});
+
+test('an operator with operated accounts still cannot be deleted', async () => {
+  const operator = await person('held_operator');
+  const subject = await automated(operator, 'held_automated');
+  const manager = await person('held_manager');
+  await manages(manager, operator);
+  await internal.reserveCoordination({
+    accountId: operator,
+    relatedAccountId: subject,
+    purpose: 'operator',
+    key: key(),
+  });
+  const before = await row(operator);
+  await expect(commands.tombstone(await context(operator), { accountId: operator, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await commands.tombstone(await context(manager), { accountId: subject, key: key() });
+  // The responsibility hold outlives the operated account until it is released.
+  await expect(commands.tombstone(await context(operator), { accountId: operator, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(operator)).toEqual(before);
+});
+
 test('fenced and moved partitions reject through the actual executor and authorization unavailability denies', async () => {
   const id = await person('partition_fence');
   const partition = partitionOf(routeOf(id)!);

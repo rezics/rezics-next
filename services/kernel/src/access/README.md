@@ -26,6 +26,21 @@ actions they do not hold. Operator session and credential capabilities also requ
 so a management grant to a non-member is inert. Revocation removes management authority at command time T,
 including when consuming a previously approved opening.
 
+Who may delete an account (`account:delete`):
+
+- A person's account is deleted only by that person.
+- An automated account is deleted by that account itself or by the managers of its current operator. The managers'
+  authority is `account:manage` on the operator, read through the operator relation at command time. It is never
+  copied into a standing grant on the automated account, so it follows the relation on transfer: the previous
+  operator's managers lose it and the new operator's managers gain it. The delete approval reads the same relation.
+- Organizations are unchanged.
+
+The operator relation adds one anchored point read to deleting another account: O(log R), with no extra statement
+when the account deletes itself.
+
+An operator cannot be deleted while it operates accounts; the responsibility hold ends only when each operated
+account has transferred or been deleted and its responsibility released.
+
 No organization exists in any deployment yet, so these creation defaults need no upgrade path.
 Organization creation writes two additional grant rows; request paths and their costs are unchanged.
 

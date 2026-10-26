@@ -14,6 +14,7 @@ import {
 } from '../request/access.ts';
 import { anchorRoute, derivedId, routeOf } from '../route/route.ts';
 import type { PermissionContext } from './permission.ts';
+import { readAccount } from './account-data.ts';
 import accountRead from './lifecycle-account.sql';
 import handleRead from './lifecycle-handle-read.sql';
 import handleReserve from './lifecycle-handle-reserve.sql';
@@ -64,6 +65,7 @@ export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['account:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
   ['account:delete', { anonymous: false, replay: 'self-account-read' }],
+  ['account:manage', { anonymous: false }],
   ['organization:create', { anonymous: false }],
   ['organization:membership', { anonymous: false }],
 ]);
@@ -1387,7 +1389,16 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       const continuation = input.continuation;
       if (continuation) validateContinuationBinding(continuation);
       const route = accountRoute(input.accountId);
-      const authorization = await authorize(context, 'account:delete', input.accountId);
+      // An automated account is deleted by the managers of its current operator, read here and
+      // fixed again under the account lock. Only the account itself holds its own delete action.
+      const subject =
+        context.actor.kind === 'account' && context.actor.accountId !== input.accountId
+          ? await withConnection(pool, (client) => readAccount(client, route, input.accountId))
+          : null;
+      const operatorId = subject?.kind === 'actor' && subject.state === 'active' ? subject.operatorAccountId : null;
+      const authorization = operatorId
+        ? await authorize(context, 'account:manage', operatorId)
+        : await authorize(context, 'account:delete', input.accountId);
       const allowed = authorization.check;
       return execute(
         {
@@ -1408,6 +1419,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         },
         async (tx, transactionId) => {
           const account = await locked(tx, input.accountId);
+          requireAllowed(operatorId === null || account.operatorAccountId === operatorId);
           requireAllowed(await allowed(tx));
           requireAllowed(account.state === 'active');
           const holds = await holdsRead.run(tx, { route, account_id: input.accountId });

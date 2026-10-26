@@ -351,6 +351,45 @@ test('native mappings require action grants for rename, delete and membership; o
   }
 });
 
+test('a delete approval for an automated account follows its current operator', async () => {
+  const f = await fixture();
+  const operator = newId(0x2468);
+  const next = newId(0x3579);
+  for (const id of [operator, next]) {
+    await admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+      VALUES ($1,$2,'actor','active',$2,true)`,
+      [routeOf(id), id],
+    );
+  }
+  await admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.target),
+    f.target,
+    operator,
+  ]);
+  await admin.query(`DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2`, [
+    routeOf(f.target),
+    f.target,
+  ]);
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [routeOf(operator), operator, f.actor],
+  );
+  const approvals = build();
+  const bearer = await token(f.actor, { scope: 'account:delete account:manage' });
+  const deletion: AccountOperation = { kind: 'delete', accountId: f.target, authorization: 'input' };
+  const approved = await approvals.approve(bearer, { operationKey: 'managed-delete', operation: deletion }, context());
+  expect(await approvals.resolve(approved.reference, deletion, context())).toHaveProperty('actor.accountId', f.actor);
+  await admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.target),
+    f.target,
+    next,
+  ]);
+  await denied(approvals.resolve(approved.reference, deletion, context()));
+  await denied(approvals.approve(bearer, { operationKey: 'moved-delete', operation: deletion }, context()));
+});
+
 test('expiry sweep is bounded and cannot revive an expired approval', async () => {
   const f = await fixture();
   const a = await build().approve(f.bearer, f, context());
