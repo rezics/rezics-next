@@ -64,5 +64,6 @@
     }
   ],
   "next": null,
+  "rankRefreshedAt": null,
   "status": 200
 }

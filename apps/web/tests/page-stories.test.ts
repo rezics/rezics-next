@@ -166,6 +166,7 @@ test(
         await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
           waitUntil: 'networkidle',
         });
+        await page.locator('html[data-hydrated]').waitFor();
         // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
         await page.getByRole('main').waitFor();
         expect(await page.getByRole('main').count()).toBe(1);
