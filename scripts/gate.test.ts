@@ -16,6 +16,17 @@ const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl
 if (script.includes('MemAvailable')) {
   log({ kind: 'probe' });
   console.log('AVAILABLE 8000000000');
+} else if (script.includes('REMOTE_CHECK_RESERVATION')) {
+  log({ kind: 'reservation' });
+  console.log('RESERVATION');
+  const release = () => {
+    log({ kind: 'reservation-release' });
+    process.exit(0);
+  };
+  process.stdin.on('end', release);
+  process.on('SIGTERM', release);
+  process.on('SIGHUP', release);
+  process.stdin.resume();
 } else if (script.includes('flock')) {
   log({ kind: 'slot' });
   console.log('SLOT 0');

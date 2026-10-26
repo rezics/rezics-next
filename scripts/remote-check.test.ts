@@ -343,9 +343,11 @@ test('a host with no free slot is skipped and with none free the check waits', a
   expect(first.stderr).not.toContain('waiting');
   const seen = skipped.events();
   expect(seen.find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
-  expect(seen.filter((event) => event.kind === 'slot' && event.address === 'ops@b.test').map(({ kind, granted }) => ({ kind, granted }))).toEqual([
-    { kind: 'slot', granted: false },
-  ]);
+  expect(
+    seen
+      .filter((event) => event.kind === 'slot' && event.address === 'ops@b.test')
+      .map(({ kind, granted }) => ({ kind, granted })),
+  ).toEqual([{ kind: 'slot', granted: false }]);
 
   const waiting = scenario({ a: { available: 4e9, busy: 3 }, b: { available: 30e9, busy: 3 } });
   const second = await remote(waiting.env, workspace());
@@ -420,30 +422,29 @@ test('a remote run holds the requested number of slots on one host and releases 
   const { env, events } = scenario({
     a: { available: 4e9, slots: 3 },
     b: { available: 40e9, slots: 1 },
-    c: { available: 30e9, slots: 3, grantOnly: 1 },
+    c: { available: 30e9, slots: 3, busy: 3 },
   });
   const result = await remote(env, workspace(), ['bun', 'test'], ['--slots', '2']);
   expect(result.code).toBe(0);
 
   const seen = events();
   const on = (host: string) => seen.filter((event) => event.address === `ops@${host}.test`);
-  // b is never asked for a slot; c grants one, refuses the second and gives the first back at once.
+  // b cannot serve this run; c wins by available memory and keeps its reservation while the slots free up.
   expect(on('b').filter((event) => event.kind === 'slot')).toEqual([]);
-  expect(on('c').map((event) => event.kind)).toEqual(['probe', 'slot', 'slot', 'release']);
+  expect(on('c').filter((event) => event.kind === 'reservation')).toHaveLength(1);
+  expect(on('c').filter((event) => event.kind === 'reservation-release')).toHaveLength(1);
+  expect(on('c').filter((event) => event.kind === 'slot' && event.granted === false)).toHaveLength(3);
+  expect(on('c').filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(2);
+  // c holds two slots for the whole run and drops both after the run directory is removed.
+  const kinds = on('c').map((event) => event.kind);
   expect(
     on('c')
       .filter((event) => event.kind === 'slot')
       .map((event) => event.granted),
-  ).toEqual([true, false]);
-  // a holds two slots for the whole run and drops both after the run directory is removed.
-  const kinds = on('a').map((event) => event.kind);
-  expect(kinds.filter((kind) => kind === 'slot')).toHaveLength(2);
-  expect(
-    on('a')
-      .filter((event) => event.kind === 'slot')
-      .every((event) => event.granted),
-  ).toBe(true);
+  ).toEqual([false, false, false, true, true]);
   expect(kinds.indexOf('run')).toBeGreaterThan(kinds.lastIndexOf('slot'));
+  expect(kinds.indexOf('reservation-release')).toBeGreaterThan(kinds.lastIndexOf('slot'));
+  expect(kinds.indexOf('run')).toBeGreaterThan(kinds.indexOf('reservation-release'));
   expect(kinds.slice(-3)).toEqual(['cleanup', 'release', 'release']);
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
 
@@ -477,15 +478,20 @@ test('a multi-slot waiter reserves its host and later single-slot runs go elsewh
 
     laterSingle = startRemote(env, workspace(), ['true']);
     await waitFor(() => events().some((event) => event.kind === 'run' && event.address === 'ops@a.test'));
-    expect((await laterSingle.child.exited)).toBe(0);
-    expect(events().some((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.reason === 'reserved')).toBe(
-      true,
-    );
-    expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
+    expect(await laterSingle.child.exited).toBe(0);
+    expect(
+      events().some((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.reason === 'reserved'),
+    ).toBe(true);
+    expect(
+      events().find((event) => event.kind === 'rsync' && String(event.destination).startsWith('ops@a.test:'))!
+        .destination,
+    ).toStartWith('ops@a.test:');
 
     first.child.kill('SIGTERM');
     await first.child.exited;
-    await waitFor(() => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 2);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 2,
+    );
     multi.child.kill('SIGTERM');
     await multi.child.exited;
     const onB = events().filter((event) => event.address === 'ops@b.test');
@@ -504,7 +510,7 @@ test('a multi-slot waiter reserves its host and later single-slot runs go elsewh
   }
 });
 
-test('a multi-slot waiter keeps partial slots and only one multi-slot run reserves a host', async () => {
+test('a multi-slot waiter keeps partial slots, serializes reservations and releases them on abort', async () => {
   const { env, events } = scenario({ a: { available: 12e9, slots: 3, hang: true } });
   const first = startRemote(env, workspace(), ['sleep', '120']);
   let multiOne: ReturnType<typeof startRemote> | undefined;
@@ -514,8 +520,10 @@ test('a multi-slot waiter keeps partial slots and only one multi-slot run reserv
     multiOne = startRemote(env, workspace(), ['true'], ['--slots', '3']);
     await waitFor(() => {
       const seen = events();
-      return seen.filter((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === true).length === 2 &&
-        seen.some((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === false);
+      return (
+        seen.filter((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === true).length ===
+          2 && seen.some((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === false)
+      );
     });
 
     multiTwo = startRemote(env, workspace(), ['true'], ['--slots', '2']);
@@ -523,27 +531,30 @@ test('a multi-slot waiter keeps partial slots and only one multi-slot run reserv
     const waiting = events();
     expect(waiting.filter((event) => event.kind === 'reservation')).toHaveLength(1);
     expect(waiting.filter((event) => event.kind === 'release' && event.mode === 'reserved')).toHaveLength(0);
-    expect(waiting.filter((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === true)).toHaveLength(2);
-
-    first.child.kill('SIGTERM');
-    await first.child.exited;
-    await waitFor(() => {
-      const seen = events();
-      return seen.filter((event) => event.kind === 'reservation').length === 2 &&
-        seen.filter((event) => event.kind === 'run').length === 2 &&
-        seen.some((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === false);
-    });
-    const beforeStoppingFirstMulti = events();
-    const reservations = beforeStoppingFirstMulti.filter((event) => event.kind === 'reservation');
-    expect(beforeStoppingFirstMulti.indexOf(beforeStoppingFirstMulti.find((event) => event.kind === 'reservation-release')!)).toBeLessThan(
-      beforeStoppingFirstMulti.indexOf(reservations[1]),
-    );
+    expect(
+      waiting.filter((event) => event.kind === 'slot' && event.mode === 'reserved' && event.granted === true),
+    ).toHaveLength(2);
 
     multiOne.child.kill('SIGTERM');
-    await multiOne.child.exited;
-    await waitFor(() => events().filter((event) => event.kind === 'run').length === 3);
+    expect(await multiOne.child.exited).toBe(143);
+    await waitFor(
+      () =>
+        events().filter((event) => event.kind === 'reservation').length === 2 &&
+        events().filter((event) => event.kind === 'run').length === 2,
+    );
+    const afterSecondAcquired = events();
+    const reservations = afterSecondAcquired.filter((event) => event.kind === 'reservation');
+    const secondReservation = afterSecondAcquired.indexOf(reservations[1]);
+    const releasedSlots = afterSecondAcquired.filter((event) => event.kind === 'release' && event.mode === 'reserved');
+    expect(releasedSlots).toHaveLength(2);
+    expect(
+      afterSecondAcquired.indexOf(afterSecondAcquired.find((event) => event.kind === 'reservation-release')!),
+    ).toBeLessThan(secondReservation);
+    expect(afterSecondAcquired.indexOf(releasedSlots[1])).toBeLessThan(secondReservation);
     multiTwo.child.kill('SIGTERM');
     await multiTwo.child.exited;
+    first.child.kill('SIGTERM');
+    await first.child.exited;
     expect(events().filter((event) => event.kind === 'reservation')).toHaveLength(2);
     expect(events().filter((event) => event.kind === 'reservation-release')).toHaveLength(2);
   } finally {
