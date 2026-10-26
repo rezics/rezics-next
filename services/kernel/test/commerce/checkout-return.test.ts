@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { ConfigError, readCommerceConfig } from '../../src/commerce/config.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
@@ -151,20 +152,20 @@ beforeAll(async () => {
   workClient = await createWorkClient(db.url);
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'checkout-return', alg: 'ES256' };
-  const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
-    auth: {
-      issuer: 'https://auth.example.test',
-      audience: 'https://api.rezics.test',
-      jwksUrl: 'https://auth.example.test/jwks',
-      fetch: async () => Response.json({ keys: [jwk] }),
-    },
-  });
   app = createKernel({
     pool: db.pool,
     routeKey: new Uint8Array(32),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
-    access: () => access,
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer: 'https://auth.example.test',
+          audience: 'https://api.rezics.test',
+          jwksUrl: 'https://auth.example.test/jwks',
+          fetch: async () => Response.json({ keys: [jwk] }),
+        },
+      }),
     writeRate: {
       async spend() {
         return { allowed: true };
@@ -191,7 +192,7 @@ beforeAll(async () => {
       id,
       await new SignJWT({
         client_id: 'web',
-        scope: actions.join(' '),
+        scope: (id === seller ? [...actions, 'exposure:open'] : actions).join(' '),
         authn_epoch: 1,
         auth_time: Math.floor(Date.now() / 1000),
         amr: ['pwd'],
@@ -204,6 +205,19 @@ beforeAll(async () => {
         .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
+  }
+  await bootstrapGovernance(db.pool, seller);
+  for (const group of ['purchases', 'selling']) {
+    const opened = await app.handle(
+      new Request(`http://kernel.test/v1/platform/exposure/${group}:open`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${tokens.get(seller)!}`,
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+      }),
+    );
+    if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
   }
 });
 

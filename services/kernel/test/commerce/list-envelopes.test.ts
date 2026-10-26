@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -60,6 +61,11 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32),
     tokens: keys,
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
     access: (config) =>
       createAccess({
         ...config,
@@ -85,7 +91,7 @@ beforeAll(async () => {
       account,
       await new SignJWT({
         client_id: 'web',
-        scope: 'entitlement:list payout_statement:list payout_statement:read',
+        scope: `entitlement:list payout_statement:list payout_statement:read${account === owner ? ' exposure:open' : ''}`,
         authn_epoch: 1,
         auth_time: Math.floor(Date.now() / 1000),
         amr: ['pwd'],
@@ -98,6 +104,19 @@ beforeAll(async () => {
         .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
+  }
+  await bootstrapGovernance(db.pool, owner);
+  for (const group of ['purchases', 'selling']) {
+    const opened = await app.handle(
+      new Request(`https://kernel.test/v1/platform/exposure/${group}:open`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${credentials.get(owner)!}`,
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+      }),
+    );
+    if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
   }
   statements = await seed(owner, 101);
   await seed(other, 101);

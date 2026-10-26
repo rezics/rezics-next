@@ -22171,7 +22171,7 @@
           }
         ],
         "x-action": "entitlement:list",
-        "x-exposure": "public"
+        "x-exposure": "gate:purchases"
       }
     },
     "/v1/entitlements/{entitlementId}": {
@@ -22557,7 +22557,7 @@
           }
         ],
         "x-action": "entitlement:read",
-        "x-exposure": "public"
+        "x-exposure": "gate:purchases"
       }
     },
     "/v1/follows": {
@@ -39108,7 +39108,7 @@
           }
         ],
         "x-action": "offer:create",
-        "x-exposure": "public",
+        "x-exposure": "gate:selling",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -39483,7 +39483,7 @@
           {}
         ],
         "x-action": "offer:read",
-        "x-exposure": "public"
+        "x-exposure": "gate:purchases"
       }
     },
     "/v1/offers/{offerId}:delist": {
@@ -40030,7 +40030,7 @@
           }
         ],
         "x-action": "offer:manage",
-        "x-exposure": "public",
+        "x-exposure": "gate:selling",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -41709,7 +41709,7 @@
           }
         ],
         "x-action": "order:create",
-        "x-exposure": "public",
+        "x-exposure": "gate:purchases",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -42095,7 +42095,7 @@
           }
         ],
         "x-action": "order:read",
-        "x-exposure": "public"
+        "x-exposure": "gate:purchases"
       }
     },
     "/v1/pages:read": {

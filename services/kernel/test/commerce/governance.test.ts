@@ -20,7 +20,7 @@ const reader = new Pool({ connectionString: url, max: 1 });
 const issuer = 'https://auth.example.test';
 const audience = 'https://api.rezics.test';
 const password = 'correct horse battery staple';
-const actions = ['access:grant', 'offer:create', 'payout_statement:mark_paid'];
+const actions = ['access:grant', 'offer:create', 'payout_statement:mark_paid', 'exposure:open'];
 const operator = newId(0x7101);
 const seller = newId(0x7102);
 const other = newId(0x7103);
@@ -182,6 +182,18 @@ test('platform governance delegates offer creation and pays an ended statement t
     new Response(child.stderr).text(),
   ]);
   expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
+  for (const group of ['purchases', 'selling']) {
+    const opened = await app.handle(
+      new Request(`https://kernel.test/v1/platform/exposure/${group}:open`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${tokens.get(operator)!}`,
+          'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+        },
+      }),
+    );
+    if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
+  }
 
   const input = {
     targetSubjectId: newId(0x7104),

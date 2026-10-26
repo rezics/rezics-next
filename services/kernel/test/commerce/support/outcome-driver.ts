@@ -6,7 +6,8 @@ import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../..
 import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
-import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import { readExposure } from '../../../src/access/gates/catalogue.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createCommerceCommands } from '../../../src/commerce/commands.ts';
@@ -28,8 +29,20 @@ import { startFakeStripe } from './fake-stripe.ts';
 if (import.meta.main) {
   const instant = Number(process.env.COMMERCE_OUTCOME_TIME);
   const realNow = Date.now;
+  const RealDate = Date;
   let offset = instant - realNow();
-  Date.now = () => realNow() + offset;
+  const shiftedNow = () => realNow() + offset;
+  // DBOS schedules its crons from `new Date()` and decides they are due with `Date.now()`.
+  // Moving only `Date.now` to the fixture instant makes every cron from real time until that
+  // instant look already due, and each content collection then walks every partition.
+  class ShiftedDate extends RealDate {
+    constructor(...args: (string | number | Date)[]) {
+      if (args.length === 0) super(shiftedNow());
+      else super(args[0] as string | number);
+    }
+  }
+  ShiftedDate.now = shiftedNow;
+  globalThis.Date = ShiftedDate as unknown as DateConstructor;
   process.on('message', (message: unknown) => {
     if (
       typeof message === 'object' &&
@@ -45,6 +58,8 @@ if (import.meta.main) {
     KERNEL_WORK_MODULES,
     process.env,
   );
+  // This executor only drains commerce. A deadline jump must not run the host's content crons.
+  for (const schedule of await DBOS.listSchedules()) await DBOS.deleteSchedule(schedule.scheduleName);
   // Shorten scheduling latency while preserving the production queues' concurrency policies.
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
@@ -81,6 +96,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   let instant = new Date().toISOString();
   let managedPayments = false;
   const workPool = db.openPool({ max: 2 });
+  // Seeding is outside statement capture. Its own pool keeps the measured pool at one connection.
+  const seedPool = new Pool({ connectionString: databaseUrl, max: 8, connectionTimeoutMillis: 10_000 });
+  seedPool.on('error', () => {});
   const client = await createWorkClient(databaseUrl, workPool);
   const work = createCommerceWork(client);
   const account = (route: number) => ({ id: newId(route), route, partition: partitionOf(route) });
@@ -92,7 +110,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   };
   const seller = account(0x2200);
   const governor = account(0x1100);
-  const seedAccounts = [account(0x3300), account(0x6610)];
+  // Distinct from the buyer's partition, so seeded orders can drain while measured orders stay unread.
+  const seedAccounts = [account(0x1010), account(0x6610)];
   const people = [...Object.values(accounts), seller, governor, ...seedAccounts];
   const approvals = new Set(people.map(({ id }) => id));
   // All registered work modules share the real fixture issuer, including the
@@ -173,7 +192,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     }
   }
   let app = kernel();
-  const scopes = [...actionCatalogue(app).keys(), 'access:grant'];
+  const scopes = [...actionCatalogue(app).keys(), 'access:grant'].filter((scope) => scope !== 'media:complete');
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes });
   const tokens = new Map<string, string>();
   for (const person of people) {
@@ -218,6 +237,19 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       headers: { authorization: `Bearer ${tokens.get(accounts.buyer.id)!}` },
     }),
   );
+  await bootstrapGovernance(db.pool, governor.id);
+  for (const group of ['purchases', 'selling']) {
+    const opened = await app.handle(
+      new Request(`http://kernel.test/v1/platform/exposure/${group}:open`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${tokens.get(governor.id)!}`,
+          'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+        },
+      }),
+    );
+    if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
+  }
   const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 5000 });
   const commands = () => createCommerceCommands({ pool: db.pool, access });
   // Grant administration is an internal command, with its management action
@@ -281,22 +313,34 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     const readiness = new Promise<void>((resolve) => {
       ready = resolve;
     });
+    // Search indexing is optional and would share this executor. The outcome suite does not configure it.
+    const childEnv: Record<string, string> = {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
+      KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
+      AUTH_ISSUER: issuer,
+      AUTH_AUDIENCE: audience,
+      AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+      STRIPE_SECRET_KEY: 'sk_test_commerce',
+      STRIPE_MANAGED_PAYMENTS: String(managedPayments),
+      STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
+      CHECKOUT_SUCCESS_URL: configuration.successUrl,
+      CHECKOUT_CANCEL_URL: configuration.cancelUrl,
+      COMMERCE_OUTCOME_TIME: String(Date.parse(instant)),
+      // Content joins the shared worker and refuses to register without host storage config.
+      CONTENT_R2_ENDPOINT: `https://${'ab'.repeat(16)}.r2.cloudflarestorage.com`,
+      CONTENT_R2_BUCKET: 'content-media',
+      CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
+      CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
+      CONTENT_SOURCE_HOSTS: 'images.example.org',
+      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+      CF_ACCESS_CLIENT_ID: 'fixture.access',
+      CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
+    };
+    delete childEnv.OPENSEARCH_URL;
     child = Bun.spawn([process.execPath, import.meta.filename], {
-      env: {
-        ...process.env,
-        DATABASE_URL: databaseUrl,
-        KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
-        KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
-        AUTH_ISSUER: issuer,
-        AUTH_AUDIENCE: audience,
-        AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
-        STRIPE_SECRET_KEY: 'sk_test_commerce',
-        STRIPE_MANAGED_PAYMENTS: String(managedPayments),
-        STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
-        CHECKOUT_SUCCESS_URL: configuration.successUrl,
-        CHECKOUT_CANCEL_URL: configuration.cancelUrl,
-        COMMERCE_OUTCOME_TIME: String(Date.parse(instant)),
-      },
+      env: childEnv,
       stdout: 'ignore',
       stderr: 'pipe',
       ipc(message) {
@@ -321,6 +365,136 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       }),
     ]);
     held = false;
+  }
+  const seedPartitions = seedAccounts.map((person) => person.partition);
+  // Far past any reconciliation or expiry delay this fixture's clock jump reaches. The final settle
+  // releases these workflows; seeding must not, or the scale listing would observe their grants.
+  const parkedUntil = Date.parse('2040-01-01T00:00:00.000Z');
+  type HeldCheckpoint = { partition: number; epoch: number | null; position: string };
+  async function shieldMeasuredPartitions(): Promise<HeldCheckpoint[]> {
+    const saved = await db.admin.query<{ partition_no: number; epoch: number | null; position: string }>(
+      `SELECT partition.partition_no, checkpoint.epoch, COALESCE(checkpoint.position, 0)::text AS position
+       FROM core.partition AS partition
+       LEFT JOIN core.consumer_checkpoint AS checkpoint
+         ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = 'effects'
+       WHERE partition.position > COALESCE(checkpoint.position, 0)
+         AND NOT (partition.partition_no = ANY($1::int[]))`,
+      [seedPartitions],
+    );
+    const partitions = saved.rows.map((row) => row.partition_no);
+    if (partitions.length) {
+      await db.admin.query(
+        `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+         SELECT partition.partition_no, 'effects',
+           CASE WHEN partition.position = 0 THEN NULL ELSE partition.epoch END, partition.position
+         FROM core.partition AS partition
+         WHERE partition.partition_no = ANY($1::int[])
+         ON CONFLICT (partition_no, consumer) DO UPDATE
+         SET epoch = EXCLUDED.epoch, position = EXCLUDED.position, updated_at = now()`,
+        [partitions],
+      );
+    }
+    return saved.rows.map((row) => ({ partition: row.partition_no, epoch: row.epoch, position: row.position }));
+  }
+  async function restoreMeasuredPartitions(saved: readonly HeldCheckpoint[]) {
+    for (const checkpoint of saved) {
+      await db.admin.query(
+        `UPDATE core.consumer_checkpoint
+         SET epoch = $2, position = $3::bigint, updated_at = now()
+         WHERE partition_no = $1 AND consumer = 'effects'`,
+        [checkpoint.partition, checkpoint.epoch, checkpoint.position],
+      );
+    }
+  }
+  // Every measured workflow parked by any seed call. A later seed must not treat an earlier
+  // park deadline as work it should jump to, or those orders grant before the scale listing.
+  const parkedWorkflows = new Set<string>();
+  async function parkQueuedWorkflows() {
+    const parked = await db.admin.query<{ workflow_uuid: string }>(
+      `UPDATE dbos.workflow_status
+       SET status = 'DELAYED', delay_until_epoch_ms = $1,
+         updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+       WHERE status = 'ENQUEUED'
+       RETURNING workflow_uuid`,
+      [parkedUntil],
+    );
+    for (const row of parked.rows) parkedWorkflows.add(row.workflow_uuid);
+    return parkedWorkflows;
+  }
+  async function waitForWork(
+    parked: ReadonlySet<string>,
+    partitions: readonly number[] | null,
+    stillSeeding: () => boolean = () => false,
+  ) {
+    let quiet = 0;
+    for (;;) {
+      if (workerFailure) throw new Error(`Production commerce executor: ${workerFailure}`);
+      // One grouped read. Listing every seeded workflow on each pass dominates the suite budget.
+      const pending = await db.admin.query<{
+        status: string;
+        count: number;
+        delay_until: string | null;
+        failed_id: string | null;
+      }>(
+        `SELECT status, count(*)::int AS count, max(delay_until_epoch_ms)::text AS delay_until,
+           (array_agg(workflow_uuid) FILTER (
+             WHERE status IN ('ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')
+           ))[1] AS failed_id
+         FROM dbos.workflow_status
+         WHERE status <> 'SUCCESS' AND NOT (workflow_uuid = ANY($1::text[]))
+         GROUP BY status`,
+        [[...parked]],
+      );
+      const failed = pending.rows.find((row) => row.failed_id);
+      if (failed?.failed_id) {
+        await client.retrieveWorkflow(failed.failed_id).getResult();
+        throw new Error(`Commerce workflow ended ${failed.status}`);
+      }
+      const delayed = pending.rows.filter((row) => row.status === 'DELAYED');
+      if (pending.rows.length && delayed.length === pending.rows.length) {
+        // Jump to the latest queued deadline so this wave runs together. One millisecond
+        // at a time cannot drain the seeded reconciliations inside the suite budget.
+        // Workflows these start are a later wave with later deadlines. PostgreSQL still
+        // supplies command and provider observation times.
+        const delayedUntil = Math.max(...delayed.map((row) => Number(row.delay_until ?? Number.NaN)));
+        if (!Number.isFinite(delayedUntil)) throw new Error('Delayed workflow has no durable deadline');
+        child!.send({ advanceTo: delayedUntil });
+      }
+      const backlog = await db.admin.query(
+        `SELECT 1 FROM core.partition AS partition
+         LEFT JOIN core.consumer_checkpoint AS checkpoint
+           ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = 'effects'
+         WHERE partition.position > COALESCE(checkpoint.position, 0)
+           AND ($1::int[] IS NULL OR partition.partition_no = ANY($1::int[]))
+         LIMIT 1`,
+        [partitions],
+      );
+      if (!pending.rows.length && !backlog.rowCount && !stillSeeding()) {
+        // The relay enqueues after it commits. A single empty read can land in that gap.
+        if (++quiet >= 3) break;
+      } else quiet = 0;
+      await Bun.sleep(50);
+    }
+  }
+  async function databaseIsIdle() {
+    const active = await db.admin.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM pg_stat_activity
+       WHERE datname = current_database() AND pid <> pg_backend_pid() AND state <> 'idle'`,
+    );
+    return active.rows[0]?.count === '0';
+  }
+  async function pauseExecutor() {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      if (child && !held) {
+        child.kill('SIGSTOP');
+        held = true;
+      }
+      if (await databaseIsIdle()) return;
+      // A stopped transaction cannot release its locks. Let that scan finish, then stop between ticks.
+      if (child) await startExecutor();
+      await Bun.sleep(50);
+    }
+    throw new Error('Commerce executor still holds a database transaction');
   }
   const driver: CommerceDriver = {
     accounts,
@@ -420,37 +594,11 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
     async settle() {
       await startExecutor();
-      for (;;) {
-        // Surface the production relay's stop reason instead of waiting forever
-        // for a checkpoint it explicitly refused to advance. Never skip its events.
-        if (workerFailure) throw new Error(`Production commerce executor: ${workerFailure}`);
-        const pending = (await client.listWorkflows({ limit: 10000 })).filter((row) => row.status !== 'SUCCESS');
-        if (pending.length) {
-          const runnable = pending.filter((row) => row.status !== 'DELAYED');
-          if (runnable.length) {
-            for (const row of runnable) await client.retrieveWorkflow(row.workflowID).getResult();
-            continue;
-          }
-          // Advance only the executor's scheduling clock to real durable queue deadlines.
-          // PostgreSQL still supplies all command and provider observation times.
-          const delayedUntil = Math.min(...pending.map((row) => row.delayUntilEpochMS ?? Infinity));
-          if (!Number.isFinite(delayedUntil)) throw new Error('Delayed workflow has no durable deadline');
-          child!.send({ advanceTo: delayedUntil });
-          for (const row of pending.filter((row) => row.delayUntilEpochMS === delayedUntil))
-            await client.retrieveWorkflow(row.workflowID).getResult();
-          continue;
-        }
-        // A finished workflow can append events which the production effects relay
-        // has yet to enqueue. Its checkpoint commits only after those enqueues finish.
-        const backlog = await db.admin.query(`SELECT 1 FROM core.partition AS p
-          LEFT JOIN core.consumer_checkpoint AS c ON c.partition_no=p.partition_no AND c.consumer='effects'
-          WHERE p.position > COALESCE(c.position,0) LIMIT 1`);
-        if (
-          !backlog.rowCount &&
-          (await client.listWorkflows({ limit: 10000 })).every((row) => row.status === 'SUCCESS')
-        )
-          break;
-      }
+      // Surface the production relay's stop reason instead of waiting forever
+      // for a checkpoint it explicitly refused to advance. Never skip its events.
+      await waitForWork(new Set(), null);
+      // Stop only between relay ticks so the next seed can hold measured partitions without waiting on a lock.
+      await pauseExecutor();
     },
     stripe: {
       async creates() {
@@ -539,38 +687,76 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       },
     },
     async seedUnrelatedOrders(total) {
-      if (!seedOffer && total > 0) seedOffer = (await driver.provisionOffer()).id;
-      // Use POST /v1/orders' production orchestration, including provider session
-      // creation. The resulting reconciliation workflows remain part of settle().
-      while (seeded < total) {
-        const person = seedAccounts[seeded % seedAccounts.length]!;
-        await checkout(
-          {
-            pool: db.pool,
-            commands: commands(),
-            stripe: createStripePort({
-              apiKey: 'sk_test_commerce',
-              managedPayments,
-              host: '127.0.0.1',
-              port: fake.port,
-              protocol: 'http',
-              maxNetworkRetries: 0,
-              clock: () => new Date(instant),
-            }),
-            ...configuration,
-          },
-          await actor(person.id),
-          seedOffer!,
-          Bun.randomUUIDv7(),
-        );
-        seeded++;
+      if (seeded >= total) return;
+      if (!seedOffer) seedOffer = (await driver.provisionOffer()).id;
+      // Measured orders are already queued and must stay unsettled until the final settle.
+      // Hold their partitions and stripe workflows, then drain seeded orders while inserting them.
+      // Do not resume here: the executor is already between ticks, and resuming would grant those orders.
+      if (child && !held) {
+        child.kill('SIGSTOP');
+        held = true;
+      }
+      if (!(await databaseIsIdle())) throw new Error('Commerce executor still holds a database transaction');
+      const shielded = await shieldMeasuredPartitions();
+      const parked = await parkQueuedWorkflows();
+      await startExecutor();
+      const stripe = createStripePort({
+        apiKey: 'sk_test_commerce',
+        managedPayments,
+        host: '127.0.0.1',
+        port: fake.port,
+        protocol: 'http',
+        maxNetworkRetries: 0,
+        clock: () => new Date(instant),
+      });
+      const seedCommands = createCommerceCommands({ pool: seedPool, access });
+      let next = seeded;
+      let seeding = true;
+      const seedOne = async () => {
+        for (;;) {
+          const index = next++;
+          if (index >= total) return;
+          const person = seedAccounts[index % seedAccounts.length]!;
+          await checkout(
+            { pool: seedPool, commands: seedCommands, stripe, ...configuration },
+            await access.authenticate(tokens.get(person.id)!, { pool: seedPool, deadline: Date.now() + 5000 }),
+            seedOffer!,
+            Bun.randomUUIDv7(),
+          );
+        }
+      };
+      const drained = waitForWork(parked, seedPartitions, () => seeding);
+      try {
+        try {
+          await Promise.all(Array.from({ length: 8 }, () => seedOne()));
+          seeded = total;
+        } finally {
+          seeding = false;
+          await drained;
+        }
+      } finally {
+        try {
+          await pauseExecutor();
+        } finally {
+          if (child && !held) {
+            child.kill('SIGSTOP');
+            held = true;
+          }
+          await restoreMeasuredPartitions(shielded);
+        }
       }
     },
     async measure(operation) {
       await driver.holdWork();
+      // The exposure probe is once per connection. Warm it before capture so a
+      // connection replaced while seeding does not add its catalogue read to one scale.
+      await readExposure(db.pool, 'purchases', new Date(), Date.now() + 5000);
       const result = await capture(db, operation);
+      // Reylo rechecks table shape every minute. That catalog read is not part of the request and
+      // lands on whichever scale crosses the minute, so the scale comparison does not count it.
+      const statements = result.capture.statements.filter((statement) => !statement.includes(' AS fresh_table,'));
       const cost = costOf(result.capture);
-      measurements.push({ seeded, statements: result.capture.statements, buffers: cost.blocks });
+      measurements.push({ seeded, statements, buffers: cost.blocks });
       // Keep the actual SQL available for comparing scales and runs when the
       // frozen suite reports a count mismatch. Trace I/O is outside the capture.
       await Bun.write(
@@ -579,7 +765,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       );
       return {
         value: result.value,
-        statements: result.capture.statements.length,
+        statements: statements.length,
         buffers: cost.blocks,
       };
     },
@@ -591,6 +777,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       approvals.clear();
       await client.close();
       await authPool.end();
+      await seedPool.end();
       await db.close();
       try {
         await owner.query(`DROP DATABASE ${authName} WITH (FORCE)`);

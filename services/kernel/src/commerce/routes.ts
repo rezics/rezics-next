@@ -86,8 +86,8 @@ const unavailable = problemSchema(
   'deadline_exceeded',
 );
 const bearer = [{ bearerAuth: [] }];
-function detail(operationId: string, action: string, anonymous = false) {
-  return { operationId, 'x-exposure': 'public', 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
+function detail(operationId: string, action: string, exposure: 'gate:purchases' | 'gate:selling', anonymous = false) {
+  return { operationId, 'x-exposure': exposure, 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
 }
 function offerView(offer: Offer) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
@@ -150,7 +150,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         params: t.Object({ offerId: id }),
         response: { 200: offerResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
-        detail: detail('offer.get', 'offer:read', true),
+        detail: detail('offer.get', 'offer:read', 'gate:purchases', true),
       },
       async ({ params, admission, job }) => {
         const route = routeOf(params.offerId);
@@ -182,7 +182,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },
-        detail: { ...detail('offer.create', 'offer:create'), 'x-resource-types': ['commerce.offer'] },
+        detail: { ...detail('offer.create', 'offer:create', 'gate:selling'), 'x-resource-types': ['commerce.offer'] },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
@@ -212,7 +212,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },
-        detail: detail('offer.delist', 'offer:manage'),
+        detail: detail('offer.delist', 'offer:manage', 'gate:selling'),
       },
       async ({ params, headers, actor, admission, job, session }) => {
         requireAccount(actor);
@@ -243,7 +243,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           503: unavailable,
         },
         detail: {
-          ...detail('order.create', 'order:create'),
+          ...detail('order.create', 'order:create', 'gate:purchases'),
           responses: {
             201: {
               description: 'The created order',
@@ -280,7 +280,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         params: t.Object({ orderId: id }),
         response: { 200: orderResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
-        detail: detail('order.get', 'order:read'),
+        detail: detail('order.get', 'order:read', 'gate:purchases'),
       },
       async ({ params, actor, admission, job }) => {
         const route = routeOf(params.orderId);
@@ -316,7 +316,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           409: problemSchema('stale_cursor'),
           503: unavailable,
         },
-        detail: detail('entitlement.list', 'entitlement:list'),
+        detail: detail('entitlement.list', 'entitlement:list', 'gate:purchases'),
       },
       async ({ query, actor, admission, job }) => {
         const account = requireAccount(actor);
@@ -381,7 +381,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         params: t.Object({ entitlementId: id }),
         response: { 200: entitlementResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
-        detail: detail('entitlement.get', 'entitlement:read'),
+        detail: detail('entitlement.get', 'entitlement:read', 'gate:purchases'),
       },
       async ({ params, actor, admission, job }) => {
         const route = routeOf(params.entitlementId);

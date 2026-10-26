@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import type { Entitlement, Offer, Order, StripeEventRef } from '../../src/commerce/model.ts';
@@ -103,6 +104,11 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
     access: (config) =>
       (access = createAccess({
         ...config,
@@ -134,7 +140,7 @@ beforeAll(async () => {
       id,
       await new SignJWT({
         client_id: 'web',
-        scope: actions.join(' '),
+        scope: (id === seller ? [...actions, 'exposure:open'] : actions).join(' '),
         authn_epoch: 1,
         auth_time: Math.floor(Date.now() / 1000),
         amr: ['pwd'],
@@ -147,6 +153,19 @@ beforeAll(async () => {
         .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
+  }
+  await bootstrapGovernance(db.pool, seller);
+  for (const group of ['purchases', 'selling']) {
+    const opened = await app.handle(
+      new Request(`http://kernel.test/v1/platform/exposure/${group}:open`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${tokens.get(seller)!}`,
+          'idempotency-key': JSON.stringify(key()),
+        },
+      }),
+    );
+    if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
   }
 });
 beforeEach(async () => {

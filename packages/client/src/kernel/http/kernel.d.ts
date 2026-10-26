@@ -56543,7 +56543,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
     detail: {
         operationId: string;
-        'x-exposure': string;
+        'x-exposure': "gate:purchases" | "gate:selling";
         'x-action': string;
         security: {}[];
     };
@@ -56730,7 +56730,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         };
         detail: {
             operationId: string;
-            'x-exposure': string;
+            'x-exposure': "gate:purchases" | "gate:selling";
             'x-action': string;
             security: {}[];
         };
@@ -56847,7 +56847,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
     detail: {
         operationId: string;
-        'x-exposure': string;
+        'x-exposure': "gate:purchases" | "gate:selling";
         'x-action': string;
         security: {}[];
     };
