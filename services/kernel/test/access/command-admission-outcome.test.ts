@@ -6,4 +6,5 @@ process.env.COMMAND_ADMISSION_DRIVER_MODULE = pathToFileURL(
   resolve(directory, 'command-admission-outcome-driver.ts'),
 ).href;
 
+await import('./command-admission-outcome-driver.ts');
 await import('../../../../specs/command-admission-outcomes.test.ts');
