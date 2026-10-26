@@ -224,6 +224,12 @@ Only the author receives this owner permission. A repeat succeeds without anothe
 a harmful field document is handled by retracting its semantic statement, which ends the candidate's disclosure so its
 body is no longer served.
 
+`GET /v1/documents/{id}` serves an authored field document only while its stored semantic candidate is disclosed and
+the subject passes the current `subject:read` check. Its response identifies `origin: account`, the author account and
+the document licence. Erased authored documents, like missing or undisclosed documents, answer not found. The matching
+`DELETE /v1/documents/{id}` requires an `Idempotency-Key` and the author's `document:erase` permission; a successful
+deletion and authorized replay return 204 with the stored session position.
+
 ## Cost
 
 ### Authored field document append and read
@@ -231,6 +237,12 @@ body is no longer served.
 - **Touches:** Validate and hash at most 2 MiB of canonical document bytes; insert one authored-field row by primary key in the subject's partition and emit one event in the caller's command. `readAuthoredField` performs one exact primary-key read, including tombstones.
 - **Bound:** Constant rows and statements; O(log D) blocks in the partition, where D is its authored document count.
 - **Growth check:** `test/content/authored-fields.test.ts`, `authored document append and read` at 64, 512 and 4096 documents in the partition. Rows and statements stay constant.
+
+### Authored document read
+
+- **Touches:** For each initial and final subject snapshot, one exact imported-field probe followed by one exact authored-field probe when no import exists; one prepared subject Access check, rechecked on both passes; and one candidate disclosure read on each pass. All document, Access and disclosure probes are in the subject's partition. Authored reads skip the source-fence lookup because they have no source.
+- **Bound:** Constant rows and statements, independent of the partition's documents.
+- **Growth check:** `test/content/authored-document-http.test.ts`, `authored document read` at 64, 512 and 4096 documents in the partition. Rows and statements stay constant.
 
 ### Authored document erasure
 

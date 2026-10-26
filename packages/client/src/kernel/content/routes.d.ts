@@ -3559,7 +3559,38 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     };
                     response: {
                         200: {
-                            document: import("./document-read.ts").DocumentView;
+                            document: Omit<Readonly<{
+                                id: string;
+                                subjectId: string;
+                                candidateId: string;
+                                revision: number;
+                                language: string;
+                                digest: string;
+                            }> & (Readonly<{
+                                origin: 'import';
+                                source: import("./imported-fields.ts").ImportedFieldView['source'];
+                                rights: import("./imported-fields.ts").ImportedFieldView['rights'];
+                            }> & (Readonly<{
+                                availability: 'available';
+                                body: import("@rezics/document").DocumentSnapshot;
+                            }> | Readonly<{
+                                availability: 'erased';
+                                body: null;
+                            }>)), "origin"> | (Readonly<{
+                                id: string;
+                                subjectId: string;
+                                candidateId: string;
+                                revision: number;
+                                language: string;
+                                digest: string;
+                            }> & Readonly<{
+                                origin: 'account';
+                                author: string;
+                                licence: string;
+                            }> & Readonly<{
+                                availability: 'available';
+                                body: import("@rezics/document").DocumentSnapshot;
+                            }>);
                         };
                         400: {
                             type: unknown;
@@ -3613,6 +3644,153 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             found?: unknown;
                             property?: string;
                             expected?: string;
+                        };
+                        500: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        documents: {
+            ":id": {
+                delete: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        204: void;
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        413: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        429: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
                         };
                         500: {
                             type: unknown;

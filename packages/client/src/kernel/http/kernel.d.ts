@@ -57,6 +57,7 @@ type Subjects = Routes['v1']['subjects'];
  * one key to retain a single subjects({ id }) entry point with all its child routes. */
 type ClientRoutes = Omit<Routes, 'v1'> & {
     v1: Omit<Routes['v1'], 'subjects'> & {
+        documents: Routes['v1']['documents'];
         subjects: Omit<Subjects, ':id' | ':subjectId'> & {
             ':id': Subjects[':id'] & Subjects[':subjectId'];
         };

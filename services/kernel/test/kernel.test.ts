@@ -126,6 +126,7 @@ const typed = [
   'POST /v1/media/$importFromUrl',
   'GET /v1/media/:id/$importStatus',
   'GET /v1/documents/:id',
+  'DELETE /v1/documents/:id',
   'POST /v1/reports',
   'GET /v1/reports/:id',
   'POST /v1/threads',
