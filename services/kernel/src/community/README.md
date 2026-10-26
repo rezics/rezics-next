@@ -277,16 +277,16 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 - Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, plus a member interval point read and, when present, one removal acceptance command (one operation insert) and one native leave workflow keyed by the ban.
 - Bound: O(1) rows and statements in the ban command, plus Access and one leave workflow; O(log R) blocks. No scan of members, bans or content.
-- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.
+- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
 
 ### Unban an account
 
 - Touches: One admission and Realm authorization; one Realm record close and two identity denial closes in the Realm partition.
 - Bound: O(1) rows and statements, plus Access; O(log R) blocks. Membership is not restored.
-- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.
+- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
 
 ### List current bans
 
 - Touches: One admission and Realm authorization; one current-ban keyset seek of L rows, with one lookahead row for the next cursor.
 - Bound: O(L) rows and O(1) statements, plus Access; O(log R + L) blocks. Historical intervals and other Realms do not widen the window.
-- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.
+- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.

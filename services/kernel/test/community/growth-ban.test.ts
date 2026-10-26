@@ -20,6 +20,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -54,12 +55,14 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
 }
 
 /** Auth and the kernel worker each launch DBOS. The worker runs in its own process. */
-async function startKernelWorker(env: Record<string, string>): Promise<Bun.Subprocess> {
+async function startKernelWorker(env: Record<string, string | undefined>): Promise<Bun.Subprocess> {
   const childEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (typeof value === 'string') childEnv[key] = value;
   }
-  Object.assign(childEnv, env);
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') childEnv[key] = value;
+  }
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     env: childEnv,
@@ -215,25 +218,15 @@ beforeAll(async () => {
   // Auth's current consent, served over HTTPS from this process: the worker restores initiators from it.
   const consentReader = createCurrentConsentReader({ database: authPool });
   consent = await startConsentServer(async (input) => (await consentReader.readCurrentConsent(input))?.scopes ?? null);
-  const workerEnv = {
+  const workerEnv = workerTestEnv({
     DATABASE_URL: url,
-    KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
-    KERNEL_SESSION_KEYS: `1:${Buffer.from(sessionKey).toString('base64url')}`,
-    AUTH_ISSUER: issuer,
-    AUTH_AUDIENCE: audience,
-    AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
     STRIPE_SECRET_KEY: 'sk_test_realm_ban_worker',
     STRIPE_MANAGED_PAYMENTS: 'false',
     CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
     CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
-    CONTENT_R2_ENDPOINT: `https://${'a'.repeat(32)}.r2.cloudflarestorage.com`,
-    CONTENT_R2_BUCKET: 'content-media',
-    CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
-    CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
-    CONTENT_SOURCE_HOSTS: 'images.example.org',
     ...consent.env,
     OPENSEARCH_URL: '',
-  };
+  });
   worker = await startKernelWorker(workerEnv);
   work = await createWorkClient(url);
   kernel = createKernel({
