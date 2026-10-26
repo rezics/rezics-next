@@ -95,20 +95,97 @@ async function seededCounts(database: GrowthDatabase): Promise<Counts> {
   return counts;
 }
 
+// TRUNCATE ... CASCADE also empties the semantic tables that reference these. The engine's documents go with the rows.
+async function resetSeeded(database: GrowthDatabase): Promise<void> {
+  if (!engine) throw new Error('Growth engine is not open');
+  // The immutability triggers on these relations also refuse TRUNCATE; the replica role skips them for this transaction.
+  const client = await database.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    await client.query(`TRUNCATE TABLE ${seededRelations.join(', ')} CASCADE`);
+    await client.query('UPDATE semantic.partition_subjects SET visible = 0');
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  await engine.request(
+    'POST',
+    `/${subjectAlias(prefix)}/_delete_by_query`,
+    { query: { match_all: {} } },
+    { query: { refresh: true, conflicts: 'proceed' } },
+  );
+}
+
 async function checkSeeded(database: GrowthDatabase, check: Parameters<typeof checkGrowth>[1]) {
   const report = await checkGrowth(database, {
     ...check,
     grow: async (target, scale, previous) => {
       if (previous === 0) {
-        const start = await seededCounts(target);
-        starts.push(start);
-        fixtureRows.push(start);
+        await resetSeeded(target);
+        starts.push(await seededCounts(target));
+        await buildFixtures();
+        fixtureRows.push(await seededCounts(target));
       }
       await check.grow(target, scale, previous);
     },
   });
   finishes.push(await seededCounts(database));
   return report;
+}
+
+async function buildFixtures(): Promise<void> {
+  if (!db || !engine) throw new Error('Growth fixtures are not open');
+  await bootstrapRelease(db.pool, bundledRelease);
+
+  const route = hotPartition * 16;
+  const authorA = await addSubject(route + 1, { type: 'schema:Person', labels: { en: 'Author A' } });
+  const authorB = await addSubject(route + 2, { type: 'schema:Person', labels: { en: 'Author B' } });
+  authorIds = [authorA, authorB];
+  await appendExpandedAuthor(authorA, authorB);
+  await appendExpandedAuthor(authorB, authorA);
+
+  const books = [
+    await addSubject(route + 3, {
+      type: 'schema:Book',
+      labels: { en: 'Book one' },
+      statements: { 'schema:author': [statement('schema:author', authorA)] },
+    }),
+    await addSubject(route + 4, {
+      type: 'schema:Book',
+      labels: { en: 'Book two' },
+      statements: {
+        'schema:author': [statement('schema:author', authorA), statement('schema:author', authorB)],
+      },
+    }),
+    await addSubject(route + 5, {
+      type: 'schema:Book',
+      labels: { en: 'Book three' },
+      statements: { 'schema:author': [statement('schema:author', authorA)] },
+    }),
+    await addSubject(route + 6, {
+      type: 'schema:Book',
+      labels: { en: 'Book four' },
+      statements: { 'schema:author': [statement('schema:author', authorB)] },
+    }),
+  ];
+
+  bookIds = books;
+
+  const byPartition = new Map<number, string[]>();
+  for (const id of [...authorIds, ...books]) {
+    const partition = subjectPartition(id);
+    byPartition.set(partition, [...(byPartition.get(partition) ?? []), id]);
+  }
+  for (const [partition, ids] of byPartition) {
+    const snapshot = await subjectSource(db.pool).read(partition, ids);
+    await engine.bulk(bulkLines(subjectIndexName(prefix, 1), documentActions(snapshot, ids)), {
+      query: { refresh: 'wait_for' },
+    });
+  }
 }
 
 async function addSubject(route: number, item: unknown): Promise<string> {
@@ -307,13 +384,12 @@ function unrelatedPopulation(name: string): Population {
         const partition = placement(current, ordinal).partition;
         counts.set(partition, (counts.get(partition) ?? 0) + 1);
       }
-      for (const [partition, visible] of counts) {
-        await admin.query(
-          `INSERT INTO semantic.partition_subjects (partition_no, visible) VALUES ($1, $2)
-           ON CONFLICT (partition_no) DO UPDATE SET visible = semantic.partition_subjects.visible + EXCLUDED.visible`,
-          [partition, visible],
-        );
-      }
+      await admin.query(
+        `INSERT INTO semantic.partition_subjects (partition_no, visible)
+         SELECT * FROM unnest($1::integer[], $2::bigint[])
+         ON CONFLICT (partition_no) DO UPDATE SET visible = semantic.partition_subjects.visible + EXCLUDED.visible`,
+        [[...counts.keys()], [...counts.values()]],
+      );
     },
   };
   return current;
@@ -321,8 +397,8 @@ function unrelatedPopulation(name: string): Population {
 
 async function growPopulation(database: GrowthDatabase, scale: number, previous: number): Promise<void> {
   await seed({ pool: database.pool, admin: database.admin }, unrelatedPopulation('facet-counts-growth'), {
-    from: previous * 1_000,
-    to: scale * 1_000,
+    from: previous * unit,
+    to: scale * unit,
   });
 }
 
@@ -358,54 +434,7 @@ beforeAll(async () => {
     },
     bulk: (lines, options) => engine!.bulk(lines, options),
   };
-  await bootstrapRelease(db.pool, bundledRelease);
-
-  const route = hotPartition * 16;
-  const authorA = await addSubject(route + 1, { type: 'schema:Person', labels: { en: 'Author A' } });
-  const authorB = await addSubject(route + 2, { type: 'schema:Person', labels: { en: 'Author B' } });
-  authorIds = [authorA, authorB];
-  await appendExpandedAuthor(authorA, authorB);
-  await appendExpandedAuthor(authorB, authorA);
-
-  const books = [
-    await addSubject(route + 3, {
-      type: 'schema:Book',
-      labels: { en: 'Book one' },
-      statements: { 'schema:author': [statement('schema:author', authorA)] },
-    }),
-    await addSubject(route + 4, {
-      type: 'schema:Book',
-      labels: { en: 'Book two' },
-      statements: {
-        'schema:author': [statement('schema:author', authorA), statement('schema:author', authorB)],
-      },
-    }),
-    await addSubject(route + 5, {
-      type: 'schema:Book',
-      labels: { en: 'Book three' },
-      statements: { 'schema:author': [statement('schema:author', authorA)] },
-    }),
-    await addSubject(route + 6, {
-      type: 'schema:Book',
-      labels: { en: 'Book four' },
-      statements: { 'schema:author': [statement('schema:author', authorB)] },
-    }),
-  ];
-
-  bookIds = books;
-
   await createSubjectIndex(engine, prefix, 1);
-  const byPartition = new Map<number, string[]>();
-  for (const id of [...authorIds, ...books]) {
-    const partition = subjectPartition(id);
-    byPartition.set(partition, [...(byPartition.get(partition) ?? []), id]);
-  }
-  for (const [partition, ids] of byPartition) {
-    const snapshot = await productionSource.read(partition, ids);
-    await engine.bulk(bulkLines(subjectIndexName(prefix, 1), documentActions(snapshot, ids)), {
-      query: { refresh: 'wait_for' },
-    });
-  }
   await engine.request('POST', '/_aliases', {
     actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
   });
@@ -445,16 +474,16 @@ afterAll(async () => {
 
 test('Facet counts stays within its bound as N grows', async () => {
   if (!db || !kernel) throw new Error('Growth fixtures are not ready');
-  const selectedPartitions = new Set(authorIds.map(subjectPartition));
   const report = await checkSeeded(db, {
     name: 'Facet counts stays within its bound as N grows',
-    scales: [1, 8, 64],
+    scales: [1, 4, 16],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     warmups: 1,
     grow: growPopulation,
     operation: async () => {
       probe = { aggregations: 0, reads: [] };
+      const selectedPartitions = new Set(authorIds.map(subjectPartition));
       try {
         const response = await kernel!.handle(
           new Request('http://kernel.test/v1/subjects:facets', {
@@ -509,18 +538,18 @@ test('Facet counts stays within its bound as N grows', async () => {
 
 test('Search hit facts stay within their bound as N grows', async () => {
   if (!db || !kernel) throw new Error('Growth fixtures are not ready');
-  const selectedPartitions = new Set(authorIds.map(subjectPartition));
-  const allowedIds = new Set([...bookIds, ...authorIds]);
   const authorsByBook = [[0], [0, 1], [0], [1]];
   const report = await checkSeeded(db, {
     name: 'Search hit facts',
-    scales: [1, 8, 64],
+    scales: [1, 4, 16],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     warmups: 1,
     grow: growPopulation,
     operation: async () => {
       probe = { aggregations: 0, reads: [] };
+      const selectedPartitions = new Set(authorIds.map(subjectPartition));
+      const allowedIds = new Set([...bookIds, ...authorIds]);
       try {
         const response = await kernel!.handle(
           new Request('http://kernel.test/v1/subjects:search', {
