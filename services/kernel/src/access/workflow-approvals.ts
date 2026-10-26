@@ -62,11 +62,12 @@ type TransferAcceptanceOperation = {
   sourceOperationKey: string;
   authorization: string;
 };
-type AccountOperation =
+type AccountOperation = (
   | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
   | RevokeOperation
   | TransferOperation
-  | TransferAcceptanceOperation;
+  | TransferAcceptanceOperation
+) & { operationKey?: string };
 type NativeOperation = AccountOperation | CredentialOperation;
 export type WorkflowApprovalRequest = { operationKey: string; operation: AccountOperation };
 export type WorkflowApprovalBinding = Readonly<{
@@ -132,6 +133,9 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
   const encoded = canonicalize(value);
   requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= 12000);
   const operation = JSON.parse(encoded) as NativeOperation;
+  // The requested workflow key is resolution metadata. Automated creation also
+  // binds it in its business input, so retain it for that operation's digest.
+  if (operation.kind !== 'automated' && operation.kind !== 'credential') delete operation.operationKey;
   if (Object.hasOwn(unavailableAdapters, operation.kind)) throw new WorkflowApprovalUnavailableError();
   let descriptor: Descriptor;
   let fields: string[];
@@ -545,6 +549,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     const { row, actor } = await within(bounded.deadline, () =>
       readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
     );
+    requireAllowed(input.operationKey === row.operationKey);
     const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline, row);
     requireAllowed(
       !caller ||
@@ -659,6 +664,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       if (source.operation.acceptance !== undefined) {
         const acceptance: AccountOperation = {
           kind: 'transfer-acceptance',
+          operationKey: source.row.operationKey,
           previous: source.operation.previous,
           expectedVersion: source.operation.expectedVersion,
           operatorAccountId: source.operation.operatorAccountId,

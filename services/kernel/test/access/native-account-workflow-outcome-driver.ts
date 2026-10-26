@@ -1,4 +1,5 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { AsyncResource } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
 import {
   createAuthHost,
@@ -7,7 +8,7 @@ import {
   createProvisioningEvidenceVerifier,
   type AuthService,
 } from '@rezics/auth';
-import { DBOS, type FunctionName, type StepConfig } from '@dbos-inc/dbos-sdk';
+import { DBOS, DBOSClient, type FunctionName, type StepConfig } from '@dbos-inc/dbos-sdk';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -16,14 +17,20 @@ import { createAccess } from '../../src/access/index.ts';
 import type { Actor, AccessContext, Resource } from '../../src/request/access.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { COMMITTED_CONTINUATION_ACTIONS, ContinuationDeniedError } from '../../src/access/committed-continuations.ts';
-import { LIFECYCLE_ACTIONS, LifecycleDeniedError } from '../../src/access/lifecycle.ts';
-import { WORKFLOW_APPROVAL_ACTIONS, WorkflowApprovalDeniedError } from '../../src/access/workflow-approvals.ts';
-import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { createDelegationCommands, DelegationDeniedError } from '../../src/access/delegation-commands.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { COMMITTED_CONTINUATION_ACTIONS } from '../../src/access/committed-continuations.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { WORKFLOW_APPROVAL_ACTIONS } from '../../src/access/workflow-approvals.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import platformGovernance from '../../src/access/platform-governance.json';
+import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
 import { seal, unseal } from '../../src/tokens/seal.ts';
+import { registerOperatorFenceWork } from '../../src/access/operator-fence-work.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import type { WorkClient } from '../../src/work/client.ts';
+import type { Effect } from '../../src/events/effects.ts';
+import type { CloudEvent } from '../../src/events/log.ts';
 import type {
   Family,
   Fixture,
@@ -37,7 +44,9 @@ import type {
 } from '../../../../specs/native-account-workflow-driver.ts';
 
 const password = 'native-account-workflow-test-password';
+const hookContext = new AsyncResource('native-account-workflow-driver');
 const requestedScopes = [
+  ...platformGovernance.actions,
   ...LIFECYCLE_ACTIONS.keys(),
   ...COMMITTED_CONTINUATION_ACTIONS.keys(),
   ...WORKFLOW_APPROVAL_ACTIONS.keys(),
@@ -58,6 +67,7 @@ const source = new URL(process.env.DATABASE_URL ?? '');
 if (!source.protocol) throw new Error('DATABASE_URL must name the isolated migrated kernel database');
 const suffix = randomUUID().replaceAll('-', '');
 let authDatabase = '';
+let kernelDatabase = '';
 const databaseUrl = (database: string) => {
   const url = new URL(source.href);
   url.pathname = `/${database}`;
@@ -67,7 +77,7 @@ let authUrl = '';
 const issuer = `https://native-workflow-${suffix}.auth.test`;
 const audience = 'https://native-workflow.api.test';
 const loginClient = `native-login-${suffix}`;
-const appClient = `native-app-${suffix}`;
+let appClient = `native-app-${suffix}`;
 const otherClient = `native-other-${suffix}`;
 const routeKey = randomBytes(32);
 const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
@@ -90,8 +100,11 @@ let accessPort: ReturnType<typeof createAccess> | undefined;
 let approvalPort:
   | ReturnType<typeof import('../../src/access/workflow-approvals.ts').createWorkflowApprovals>
   | undefined;
+let fenceClient: WorkClient | undefined;
+let fenceEffects: Effect[] = [];
+let releaseBackgroundPages: (() => void) | undefined;
+let backgroundPages = Promise.resolve();
 let governor: Awaited<ReturnType<typeof person>> | undefined;
-let authDatabaseInitialized = false;
 let clientsRegistered = false;
 const owned = new Set<Fixture>();
 const operationFixtures = new Map<string, Fixture>();
@@ -100,19 +113,17 @@ const registrations = new Map<
   string,
   { accountId: string; email: string; handle: string; session: Headers; otherSession?: Headers }
 >();
-const observedStepNames = new Map<Family, { name: string; authority: ProtectedStep['authority'] }[]>();
+const observedStepNames = new Map<Family, { fixture: Fixture; steps: ProtectedStep[] }>();
 type StepObserver = (name: string, args: unknown[]) => Promise<void>;
 type PendingWorkflow = { release(): void; promise: Promise<unknown> };
 let stepObserver: StepObserver | undefined;
 let afterStep: StepObserver | undefined;
 let activeStepName: string | undefined;
+let activeStepTarget: string | undefined;
 let activeHook: { before: Step; boundary?: 'step' | 'attempt-T'; run(): Promise<void>; used: boolean } | undefined;
 let restoreEvidenceReader: (() => void) | undefined;
+let evidenceUnavailable = false;
 const pendingWorkflows = new Map<string, PendingWorkflow>();
-const preparedApprovals = new Map<
-  string,
-  { caller: string; reference: string; expiresAt: string; signature: string }
->();
 const originalRegisterStep = DBOS.registerStep.bind(DBOS);
 DBOS.registerStep = (<This, Args extends unknown[], Return>(
   func: (this: This, ...args: Args) => Promise<Return>,
@@ -120,7 +131,9 @@ DBOS.registerStep = (<This, Args extends unknown[], Return>(
 ) => {
   const wrapped = async function (this: This, ...args: Args) {
     const name = config?.name ?? '';
-    const logicalName = name.startsWith('accounts.') ? name.slice('accounts.'.length) : name;
+    const phase = name.startsWith('accounts.') ? name.slice('accounts.'.length) : name;
+    const logicalName = phase === 'operator-fence-page.run' ? 'operator-responsibility-page' : phase;
+    if (phase === 'operator-fence-page.run') await backgroundPages;
     const previous = activeStepName;
     activeStepName = logicalName;
     try {
@@ -135,13 +148,7 @@ DBOS.registerStep = (<This, Args extends unknown[], Return>(
   return originalRegisterStep<This, Args, Return>(wrapped, config);
 }) as typeof DBOS.registerStep;
 const deniedError = (error: unknown) =>
-  error instanceof WorkflowApprovalDeniedError ||
-  error instanceof LifecycleDeniedError ||
-  error instanceof GrantDeniedError ||
-  error instanceof DelegationDeniedError ||
-  error instanceof ContinuationDeniedError ||
-  (typeof error === 'object' && error !== null && 'status' in error && error.status === 403) ||
-  (error instanceof Error && error.message === 'Account workflow denied');
+  typeof error === 'object' && error !== null && 'status' in error && error.status === 403;
 const refused = async <T>(work: () => Promise<T>): Promise<T | { outcome: 'denied' }> => {
   try {
     return await work();
@@ -190,10 +197,16 @@ async function login(
   requested = scopes,
 ): Promise<{ session: Headers; bearer: string }> {
   const signed = await request('/signin', { email, password, client_id: clientId, scope: requested });
-  if (!signed.ok) throw new Error(`Auth signin failed: ${signed.status} ${await signed.text()}`);
+  if (!signed.ok)
+    throw Object.assign(new Error(`Auth signin failed: ${signed.status} ${await signed.text()}`), {
+      status: signed.status,
+    });
   const session = tokenCookies(signed);
   const token = await request('/token', {}, session);
-  if (!token.ok) throw new Error(`Auth token failed: ${token.status} ${await token.text()}`);
+  if (!token.ok)
+    throw Object.assign(new Error(`Auth token failed: ${token.status} ${await token.text()}`), {
+      status: token.status,
+    });
   const body = (await token.json()) as { access_token?: unknown };
   if (typeof body.access_token !== 'string') throw new Error('Auth did not issue an access token');
   return { session, bearer: body.access_token };
@@ -210,7 +223,30 @@ async function tokenFor(accountId: string, requestedBy: string, clientId = appCl
   return { bearer: body.access_token, session: session.session };
 }
 
-async function person(prefix: string) {
+async function consentSession(accountId: string): Promise<Headers> {
+  const account = await facts.query<{ operator_account_id: string | null }>(
+    'SELECT operator_account_id::text FROM access.account WHERE route=$1 AND account_id=$2',
+    [route(accountId), accountId],
+  );
+  const operatorAccountId = required(account.rows[0], 'Missing consent account').operator_account_id;
+  const identity = required(registrations.get(operatorAccountId ?? accountId), 'Missing consent session identity');
+  const current = await login(identity.email, loginClient);
+  if (!operatorAccountId) return current.session;
+  const key = reference('consent-operator-session');
+  const operation = { kind: 'opening' as const, operatorAccountId, subjectAccountId: accountId };
+  const approval = await approvalFor(current.bearer, { operationKey: key, operation });
+  const response = await workflows().openOperatorSession({
+    key,
+    authorization: approval.reference,
+    operatorAccountId,
+    subjectAccountId: accountId,
+    headers: current.session,
+  });
+  if (!response.ok) throw new Error(`Native consent session opening failed: ${response.status}`);
+  return tokenCookies(response);
+}
+
+async function person(prefix: string, firstPartyOnly = false) {
   const id = randomUUID().replaceAll('-', '');
   const email = `${id}@native-workflow.test`;
   const handleValue = handle(prefix);
@@ -221,12 +257,12 @@ async function person(prefix: string) {
     password,
   });
   const loginSession = await login(email, loginClient);
-  for (const clientId of [appClient, otherClient]) {
+  for (const clientId of firstPartyOnly ? [] : [appClient, otherClient]) {
     const consent = await request('/consent', { client_id: clientId, scope: scopes }, loginSession.session);
     if (!consent.ok) throw new Error(`Auth consent failed: ${consent.status} ${await consent.text()}`);
   }
-  const main = await login(email, appClient);
-  const alternate = await login(email, otherClient);
+  const main = firstPartyOnly ? loginSession : await login(email, appClient);
+  const alternate = firstPartyOnly ? loginSession : await login(email, otherClient);
   const record = { accountId: account.accountId, email, handle: handleValue, session: main.session };
   registrations.set(record.accountId, { ...record, otherSession: alternate.session });
   return { ...record, bearer: main.bearer, otherBearer: alternate.bearer, otherSession: alternate.session };
@@ -254,22 +290,22 @@ async function buildHost() {
         resource: Resource,
         commandContext: AccessContext,
       ) => {
+        const evidence = await prepare(actor, action, resource, commandContext);
         const hook = activeHook;
         if (
           hook &&
           !hook.used &&
           hook.boundary === 'attempt-T' &&
           activeStepName === hook.before.name &&
-          resource.id === hook.before.target
+          activeStepTarget === hook.before.target
         ) {
           hook.used = true;
           activeHook = undefined;
-          await hook.run();
+          await hookContext.runInAsyncScope(() => hook.run());
         }
-        const currentPrepare = accessPort?.prepare;
-        if (currentPrepare && currentPrepare !== wrappedPrepare)
-          return currentPrepare(actor, action, resource, commandContext);
-        return prepare(actor, action, resource, commandContext);
+        if (evidenceUnavailable)
+          throw Object.assign(new Error('Native authority evidence unavailable'), { status: 403 });
+        return evidence;
       };
       accessPort.prepare = wrappedPrepare;
     }
@@ -286,6 +322,20 @@ async function buildHost() {
         barriers: createBarrierProofVerifier({ database: proofsPool }),
       },
     });
+    const authorizeOpening = bindings.workflowPorts.authorizeOpening;
+    if (authorizeOpening)
+      bindings.workflowPorts.authorizeOpening = async (...args) => {
+        const previous = activeStepName;
+        activeStepName = 'authorize-opening';
+        try {
+          await stepObserver?.('authorize-opening', args);
+          const value = await authorizeOpening(...args);
+          await afterStep?.('authorize-opening', args);
+          return value;
+        } finally {
+          activeStepName = previous;
+        }
+      };
     approvalPort = (await import('../../src/access/workflow-approvals.ts')).createWorkflowApprovals({
       pool: kernel,
       access: accessPort,
@@ -309,7 +359,35 @@ async function buildHost() {
     executorId: `native-workflow-${suffix}`,
   });
   service = host.service;
+  const client = await DBOSClient.create({
+    systemDatabaseUrl: authUrl,
+    systemDatabaseSchemaName: 'auth_dbos',
+    applicationName: 'rezics-auth-accounts',
+    systemDatabasePool: proofsPool,
+  });
+  fenceClient = Object.assign(client, { close: () => client.destroy() });
+  fenceEffects = [];
+  backgroundPages = new Promise<void>((resolve) => {
+    releaseBackgroundPages = resolve;
+  });
+  registerOperatorFenceWork(
+    {
+      pool: kernel,
+      queues: WORK_QUEUES,
+      client: fenceClient,
+      env: process.env,
+      clock: () => new Date(),
+      addEffects: (effects) => {
+        fenceEffects.push(...effects);
+      },
+      addService: () => {
+        throw new Error('Unexpected fence background service');
+      },
+    },
+    referenceKeys,
+  );
   await host.start();
+  await DBOS.registerQueue('workflows', WORK_QUEUES.workflows);
   if (!clientsRegistered) {
     await auth().internal.registerClient({ clientId: loginClient, firstParty: true, scopes });
     await auth().internal.registerClient({ clientId: appClient, firstParty: false, scopes });
@@ -328,11 +406,16 @@ async function approvalFor(caller: string, work: Work) {
 }
 
 function accountOperation(work: Work) {
-  return { ...work.operation, authorization: 'native-approval-request' };
+  return { ...work.operation, operationKey: work.operationKey, authorization: 'native-approval-request' };
 }
 
-async function getAuthWorkflowId(key: string) {
-  return `accounts:${createHash('sha256').update(`operation:${key}`).digest('hex')}`;
+function observedReceiptId(row: { transaction_id: string; response: unknown }): string {
+  return row.response &&
+    typeof row.response === 'object' &&
+    'receiptId' in row.response &&
+    typeof row.response.receiptId === 'string'
+    ? row.response.receiptId
+    : row.transaction_id;
 }
 
 function route(id: string): number {
@@ -346,13 +429,15 @@ function continuationAccount(f: Fixture): string {
 }
 
 async function connect() {
-  if (!authDatabaseInitialized) {
-    authDatabase = `native_workflow_${randomUUID().replaceAll('-', '')}`;
-    authUrl = databaseUrl(authDatabase);
-  }
+  authDatabase = `native_workflow_${randomUUID().replaceAll('-', '')}`;
+  kernelDatabase = `native_kernel_${randomUUID().replaceAll('-', '')}`;
+  authUrl = databaseUrl(authDatabase);
   admin = new Pool({ connectionString: databaseUrl('postgres') });
-  kernel = createPool(source.href);
-  facts = new Pool({ connectionString: source.href });
+  const template = source.pathname.slice(1);
+  if (!/^[a-z0-9_]+$/.test(template)) throw new Error('Invalid migrated kernel database name');
+  await admin.query(`CREATE DATABASE "${kernelDatabase}" TEMPLATE "${template}"`);
+  kernel = createPool(databaseUrl(kernelDatabase));
+  facts = new Pool({ connectionString: databaseUrl(kernelDatabase) });
   proofsPool = undefined;
   authPool = undefined;
   host = undefined;
@@ -362,16 +447,34 @@ async function connect() {
   approvalPort = undefined;
   owned.clear();
   operationFixtures.clear();
-  if (!authDatabaseInitialized) {
-    await admin.query(`CREATE DATABASE "${authDatabase}"`);
-    migrateAuth(authUrl, fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url)));
-    authDatabaseInitialized = true;
-  }
+  registrations.clear();
+  observedStepNames.clear();
+  clientsRegistered = false;
+  governor = undefined;
+  await admin.query(`CREATE DATABASE "${authDatabase}"`);
+  migrateAuth(authUrl, fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url)));
   await buildHost();
   if (!governor) {
-    governor = await person('platform-staff');
+    governor = await person('platform-staff', true);
     registrations.set(governor.accountId, { ...governor, session: governor.session });
     await bootstrapGovernance(kernel, governor.accountId);
+    const actor = await accessPort!.authenticate(governor.bearer, context());
+    const standing = await facts.query<{ valid: string }>(
+      `SELECT valid::text FROM access.resource_grant WHERE resource_id=$1
+       AND subject_kind='active_accounts' AND action='organization:create'`,
+      [PLATFORM_RESOURCE.id],
+    );
+    for (const row of standing.rows)
+      await createGrantCommands({ pool: kernel, access: accessPort!, managementAction: 'access:grant' }).revoke(
+        { ...context(), actor },
+        {
+          resource: PLATFORM_RESOURCE,
+          subject: { kind: 'active_accounts' },
+          actions: ['organization:create'],
+          valid: row.valid,
+          key: reference('remove-standing-organization-grant'),
+        },
+      );
   }
   return governor;
 }
@@ -444,7 +547,7 @@ async function addOrganizationOwner(
     key: reference('membership-owner-reservation'),
   });
   const actor = await required(accessPort, 'Access is not composed').authenticate(owner.bearer, context());
-  await native().lifecycle.setMembership(
+  await native().workflowPorts.setMembership!(
     { ...context(), actor },
     {
       organizationId,
@@ -559,15 +662,20 @@ async function makeFixture(
   } = {},
 ): Promise<Fixture> {
   const staff = required(governor, 'Platform governance is not bootstrapped');
-  const owner = await person(`${family}-owner`);
-  const nextOperator = await person(`${family}-destination`);
-  const subjectPerson = await person(`${family}-subject`);
-  const otherSubjectPerson = await person(`${family}-other-subject`);
+  appClient = `native-app-${randomUUID()}`;
+  await auth().internal.registerClient({ clientId: appClient, firstParty: false, scopes });
+  Object.assign(staff, await login(staff.email, loginClient));
+  const [owner, nextOperator, subjectPerson, otherSubjectPerson] = await Promise.all([
+    person(`${family}-owner`),
+    person(`${family}-destination`),
+    person(`${family}-subject`),
+    person(`${family}-other-subject`),
+  ]);
   const callerPerson =
     family === 'organization' || family === 'opening'
       ? owner
       : family === 'fence-operator'
-        ? staff
+        ? await person('fence-caller')
         : family === 'subject-delete'
           ? subjectPerson
           : family === 'operator-delete'
@@ -598,10 +706,8 @@ async function makeFixture(
       otherSession: other.session,
     });
   }
-  const principalAssignment =
-    family === 'organization' || family === 'fence-operator' || family === 'opening'
-      ? null
-      : await selfDelegate(callerPerson);
+  // Auth session openings consume the personal human session proof, which has no assignment.
+  const principalAssignment = family === 'opening' ? null : await selfDelegate(callerPerson);
   const requestedBy = principalAssignment?.requestedBy ?? null;
   const caller = principalAssignment?.bearer ?? callerPerson.bearer;
   const otherClientCaller = callerPerson.otherBearer;
@@ -611,7 +717,6 @@ async function makeFixture(
   const handleValue = handle(family);
   let organizationId = newId(0);
   let operatorId = owner.accountId;
-  let organizationApproval: { caller: string; reference: string; expiresAt: string; signature: string } | undefined;
   let relation: { operatorAccountId: string; subjectAccountId: string; reservationId: string } | undefined;
 
   if (family === 'organization') {
@@ -623,15 +728,15 @@ async function makeFixture(
       reference('organization-creator-grant'),
     );
     const operation = { kind: 'organization' as const, authorization: 'native-approval-request', handle: handleValue };
-    const approval = await approvalFor(owner.bearer, { operationKey, operation });
-    const resolved = await approvals().resolveForCaller(owner.bearer, approval.reference, operation, context());
+    const approval = await approvalFor(caller, { operationKey, operation });
+    const resolved = await approvals().resolveForCaller(
+      caller,
+      approval.reference,
+      { ...operation, operationKey },
+      context(),
+    );
     const organizationKey = native().workflowPorts.stableCommandKey!(resolved, 'organization-id');
     organizationId = native().workflowPorts.registrationTarget(organizationKey);
-    organizationApproval = {
-      caller: owner.bearer,
-      ...approval,
-      signature: JSON.stringify({ kind: 'organization', handle: handleValue }),
-    };
   }
   if (family === 'transfer') {
     await grantActions(
@@ -655,9 +760,30 @@ async function makeFixture(
   }
   if (family === 'operator-delete') {
     const count = options.heldResponsibilities ? Math.max(1, options.subjects ?? 1) : 0;
-    for (let i = 0; i < count; i++) await automated(owner, `delete-child-${i}`);
+    for (let i = 0; i < count; i++) {
+      const child = await person(`delete-child-${i}`);
+      await grantActions(
+        child.accountId,
+        owner.accountId,
+        ['account:delete'],
+        child.bearer,
+        reference('child-deleter'),
+      );
+      await createOperatorLink(owner.accountId, child.accountId);
+    }
   }
   if (family === 'fence-operator') {
+    const actor = await accessPort!.authenticate(staff.bearer, context());
+    await createGrantCommands({ pool: kernel, access: accessPort!, managementAction: 'access:grant' }).createRole(
+      { ...context(), actor },
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: callerPerson.accountId },
+        role: platformGovernance.role,
+        valid: '(,)',
+        key: reference('operator-fencer'),
+      },
+    );
     const count = Math.max(1, options.subjects ?? 1);
     for (let i = 0; i < count; i++) {
       const child =
@@ -677,7 +803,7 @@ async function makeFixture(
       nextOperator.accountId,
       callerPerson.accountId,
       ['account:manage'],
-      staff.bearer,
+      nextOperator.bearer,
       reference('opening-relation-mismatch-manager'),
     );
     if (operatorId !== callerPerson.accountId)
@@ -685,7 +811,7 @@ async function makeFixture(
         operatorId,
         callerPerson.accountId,
         ['account:manage'],
-        staff.bearer,
+        callerPerson.bearer,
         reference('opening-manager'),
       );
     const automatedSubject = await automatedFor(operatorId, callerPerson, 'opening-subject');
@@ -741,7 +867,6 @@ async function makeFixture(
   owned.add(fixture);
   if (staleCaller) staleCallerTokens.set(fixture, staleCaller);
   operationFixtures.set(operationKey, fixture);
-  if (organizationApproval) preparedApprovals.set(operationKey, organizationApproval);
   return fixture;
 }
 
@@ -765,6 +890,15 @@ function bindOperationFixture(caller: string, work: Work): Fixture | undefined {
 }
 
 async function executeWorkflow(authReference: string, work: Work): Promise<unknown> {
+  try {
+    return await startWorkflow(authReference, work);
+  } catch (error) {
+    if (!deniedError(error) || work.operation.kind === 'opening') throw error;
+    return workflows().resumeOperation(work.operationKey);
+  }
+}
+
+async function startWorkflow(authReference: string, work: Work): Promise<unknown> {
   const request = { key: work.operationKey, authorization: authReference };
   switch (work.operation.kind) {
     case 'organization':
@@ -801,11 +935,6 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
   const driver: NativeAccountWorkflowDriver = {
     fixture: makeFixture,
     async approve(caller, work) {
-      const prepared = preparedApprovals.get(work.operationKey);
-      if (prepared && prepared.caller === caller && JSON.stringify(work.operation) === prepared.signature) {
-        preparedApprovals.delete(work.operationKey);
-        return { outcome: 'approved', reference: prepared.reference, expiresAt: prepared.expiresAt };
-      }
       bindOperationFixture(caller, work);
       const result = await refused(async () => approvalFor(caller, work));
       if ('outcome' in result) return result;
@@ -838,7 +967,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       if (!found) return null;
       const receipt = await facts.query<{ transaction_id: string }>(
         "SELECT transaction_id::text FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind='access.workflow-approval.create' AND idempotency_key=$3",
-        [Math.floor(locator.route / 256), found.actor_id, `${locator.route}:${locator.id}`],
+        [partitionOf(locator.route), found.actor_id, `${locator.route}:${locator.id}`],
       );
       return {
         actorId: found.actor_id,
@@ -888,7 +1017,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       return required(saved.rows[0]?.digest, 'Native approval did not persist its digest');
     },
     async execute(caller, referenceValue, work, hook) {
-      if (typeof referenceValue !== 'string') return { outcome: 'denied' };
+      const reference = referenceValue as string;
       let f: Fixture | undefined;
       const priorObserver = stepObserver;
       let pendingCompletion = false;
@@ -901,6 +1030,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       const executionObserver: StepObserver = async (name, args) => {
         await priorObserver?.(name, args);
         const fixture = required(f, 'Native workflow observer ran before its fixture was bound');
+        activeStepTarget = stepTargetFromArgs(fixture, name, args);
         const pending = activeHook;
         if (
           pending &&
@@ -911,7 +1041,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         ) {
           pending.used = true;
           activeHook = undefined;
-          await pending.run();
+          await hookContext.runInAsyncScope(() => pending.run());
         }
         if (work.operation.kind === 'delete' && name === 'erase-auth-owner') {
           const view = await native().continuations.read(work.operationKey, work.operation.accountId);
@@ -927,7 +1057,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       try {
         const result = await refused(async () => {
           const nativeOperation = accountOperation(work);
-          const resolved = await approvals().resolveForCaller(caller, referenceValue, nativeOperation, context());
+          const resolved = await approvals().resolveForCaller(caller, reference, nativeOperation, context());
           const fixture = required(
             operationFixtures.get(work.operationKey) ?? bindOperationFixture(caller, work),
             'Unknown native operation fixture',
@@ -939,7 +1069,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           ).commandKeyPrefix;
           let value: unknown;
           if (work.operation.kind === 'delete') {
-            const completion = executeWorkflow(referenceValue, work);
+            const completion = executeWorkflow(reference, work);
             completion.catch(() => {});
             let settled = false;
             void completion.then(
@@ -960,7 +1090,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             if (continuation) {
               await continuationReached;
               const current = await refused(() =>
-                approvals().resolveForCaller(caller, referenceValue, nativeOperation, context()),
+                approvals().resolveForCaller(caller, reference, nativeOperation, context()),
               );
               if ('outcome' in current) {
                 pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
@@ -982,12 +1112,12 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
               value = await completion;
             }
           } else {
-            value = await executeWorkflow(referenceValue, work);
+            value = await executeWorkflow(reference, work);
           }
           if (value && typeof value === 'object' && 'outcome' in value) return value as { outcome: 'denied' };
-          const receipts = await facts.query<{ transaction_id: string }>(
-            'SELECT transaction_id::text FROM core.receipt WHERE idempotency_key LIKE $1 ORDER BY created_at DESC LIMIT 1',
-            [`${commandKeyPrefix}:%`],
+          const receipts = await facts.query<{ transaction_id: string; response: unknown }>(
+            'SELECT transaction_id::text, response FROM core.receipt WHERE idempotency_key LIKE $1 ORDER BY created_at DESC LIMIT 1',
+            [`%:${commandKeyPrefix}:%`],
           );
           const receiptId =
             (work.operation.kind !== 'opening' &&
@@ -996,7 +1126,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             'receiptId' in value &&
             typeof value.receiptId === 'string'
               ? value.receiptId
-              : undefined) ?? receipts.rows[0]?.transaction_id;
+              : undefined) ?? (receipts.rows[0] ? observedReceiptId(receipts.rows[0]) : undefined);
           if (!receiptId) throw new Error('Native workflow completed without an observable command receipt');
           return {
             outcome: 'permitted' as const,
@@ -1029,45 +1159,63 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       if (existing) return existing;
       let observed = observedStepNames.get(f.family);
       if (!observed) {
+        const probe = await makeFixture(f.family);
         const captured: ProtectedStep[] = [];
         const previousObserver = stepObserver;
         stepObserver = async (name, args) => {
           await previousObserver?.(name, args);
           if (!name || name === 'operator-fence-page.run') return;
-          const target = stepTargetFromArgs(f, name, args);
+          const target = stepTargetFromArgs(probe, name, args);
           const operationAccount =
-            f.work.operation.kind === 'delete'
-              ? f.work.operation.accountId
-              : f.work.operation.kind === 'fence-operator'
-                ? f.work.operation.accountId
-                : f.ownerId;
+            probe.work.operation.kind === 'delete'
+              ? probe.work.operation.accountId
+              : probe.work.operation.kind === 'fence-operator'
+                ? probe.work.operation.accountId
+                : probe.ownerId;
           const continuation =
             f.family === 'subject-delete' || f.family === 'operator-delete' || f.family === 'fence-operator'
-              ? await native().continuations.read(f.work.operationKey, operationAccount)
+              ? await native().continuations.read(probe.work.operationKey, operationAccount)
               : null;
           captured.push({
             name,
             target,
-            authority: continuation && isContinuationStep(f.family, name) ? 'committed-continuation' : 'caller',
+            authority: continuation?.allowlist.some((entry) => entry.step === name)
+              ? 'committed-continuation'
+              : 'caller',
           });
         };
         try {
-          const approval = await driver.approve(f.caller, f.work);
-          if (approval.outcome !== 'approved') throw new Error('Native workflow step observation was refused');
-          await driver.execute(f.caller, approval.reference, f.work);
-          const continuation = await driver.continuation(f);
+          const approval = await driver.approve(probe.caller, probe.work);
+          if (approval.outcome !== 'approved')
+            throw new Error(`Native ${probe.family} workflow step observation was refused`);
+          await driver.execute(probe.caller, approval.reference, probe.work);
+          const continuation = await driver.continuation(probe);
+          const pending = pendingWorkflows.get(probe.work.operationKey);
+          if (pending) {
+            pending.release();
+            await pending.promise.catch((error: unknown) => {
+              if (!deniedError(error)) throw error;
+            });
+            pendingWorkflows.delete(probe.work.operationKey);
+          }
           for (const entry of continuation?.allowed ?? [])
-            captured.push({ name: entry.step, target: entry.target, authority: 'committed-continuation' });
-          if (continuation) await driver.continueCommitted(continuation.reference);
+            if (!captured.some((step) => step.name === entry.step))
+              captured.push({ name: entry.step, target: entry.target, authority: 'committed-continuation' });
+          if (continuation && !pending) await driver.continueCommitted(continuation.reference);
         } finally {
           stepObserver = previousObserver;
         }
-        observed = [...new Map(captured.map((item) => [`${item.name}\0${item.target}`, item])).values()].map(
-          ({ name, authority }) => ({ name, authority }),
-        );
+        observed = {
+          fixture: probe,
+          steps: [...new Map(captured.map((item) => [`${item.name}\0${item.target}`, item])).values()],
+        };
         observedStepNames.set(f.family, observed);
       }
-      const result = observed.map(({ name, authority }) => ({ name, target: stepTarget(f, name), authority }));
+      const result = observed.steps.map(({ name, target, authority }) => ({
+        name,
+        target: translateTarget(observed.fixture, f, target),
+        authority,
+      }));
       stepsCache.set(f, result);
       return result;
     },
@@ -1099,22 +1247,21 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
                 : PLATFORM_RESOURCE.id);
       const actor = await required(accessPort, 'Access is not composed').authenticate(f.caller, context());
       if (fact === 'actor-grant' || fact === 'principal-grant') {
-        const who = fact === 'actor-grant' ? actor.accountId : actor.requestedBy ? actor.accountId : f.ownerId;
+        const who = actor.accountId;
         const revokeCommand = createGrantCommands({
           pool: kernel,
           access: required(accessPort, 'Access is not composed'),
           managementAction: 'access:grant',
         });
-        await revokeCommand.revoke(
-          { ...context(), actor },
-          {
-            resource: { route: route(target), id: target },
-            subject: { kind: 'account', id: who },
-            actions: [action],
-            valid: '(,)',
-            key: reference(`revoke-${fact}`),
-          },
-        );
+        const input = {
+          resource: { route: route(target), id: target },
+          subject: { kind: 'account' as const, id: who },
+          valid: '(,)',
+          key: reference(`revoke-${fact}`),
+        };
+        if (f.family === 'fence-operator')
+          await revokeCommand.revokeRole({ ...context(), actor }, { ...input, role: platformGovernance.role });
+        else await revokeCommand.revoke({ ...context(), actor }, { ...input, actions: [action] });
       } else if (fact === 'assignment') {
         if (actor.requestedBy) {
           const match = /urn:rezics:request:([^:]+):([^:]+)/.exec(actor.requestedBy);
@@ -1130,37 +1277,45 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           );
         }
       } else if (fact === 'client-consent') {
-        const signed = registrations.get(actor.accountId);
-        if (!signed) throw new Error('Missing original login session for consent reduction');
         const result = await request(
           '/consent',
           { client_id: actor.clientId, scope: scopes.filter((scope) => scope !== action) },
-          signed.session,
+          await consentSession(actor.accountId),
         );
         if (!result.ok) throw new Error(`Consent reduction failed: ${result.status} ${await result.text()}`);
       } else if (fact === 'scope') {
-        const fresh = await driver.approve(f.caller, f.work);
-        if (fresh.outcome !== 'approved') throw new Error('Unable to establish native client-reduction approval');
+        const key = reference('reduce-scopes');
+        const reduction = {
+          kind: 'client-reduction' as const,
+          authorization: 'native-approval-request',
+          clientId: actor.clientId,
+          firstParty: false,
+          scopes: scopes.filter((scope) => scope !== action),
+        };
+        const fresh = await approvals().approve(
+          required(governor, 'Platform governance is not bootstrapped').bearer,
+          { operationKey: key, operation: reduction },
+          context(),
+        );
         const result = await workflows().reduceClientScopes({
-          key: reference('reduce-scopes'),
+          key,
           authorization: fresh.reference,
-          clientId: appClient,
+          clientId: actor.clientId,
           firstParty: false,
           scopes: scopes.filter((scope) => scope !== action),
         });
         void result;
       } else if (fact === 'actor-epoch') {
-        const signed = registrations.get(actor.accountId);
-        if (!signed) throw new Error('Missing Auth login session for epoch advancement');
         const response = await request(
           '/consent',
           { client_id: otherClient, scope: scopes.filter((scope) => scope !== action) },
-          signed.session,
+          await consentSession(actor.accountId),
         );
         if (!response.ok) throw new Error(`Auth epoch barrier failed: ${response.status}`);
       } else if (fact === 'actor-fenced') {
         await native().internalLifecycle.raiseFence({ accountId: actor.accountId, key: reference('actor-fenced') });
       } else if (fact === 'missing-evidence') {
+        evidenceUnavailable = true;
         const access = required(accessPort, 'Access is not composed');
         const prepare = required(access.prepare, 'Access has no authoritative evidence reader');
         const failClosed = async (...args: [Actor, string, Resource, AccessContext]) => {
@@ -1169,6 +1324,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         };
         access.prepare = failClosed;
         restoreEvidenceReader = () => {
+          evidenceUnavailable = false;
           if (access.prepare === failClosed) access.prepare = prepare;
         };
       } else if (fact === 'operator-relation') {
@@ -1212,7 +1368,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           purpose: 'membership',
           key: reference('backup-owner-hold'),
         });
-        await native().lifecycle.setMembership(
+        await native().workflowPorts.setMembership!(
           { ...context(), actor: ownerContext },
           {
             organizationId: f.ownerId,
@@ -1231,7 +1387,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           [route(f.ownerId), f.identity.actorId, f.ownerId],
         );
         if (old.rows[0])
-          await native().lifecycle.setMembership(
+          await native().workflowPorts.setMembership!(
             { ...context(), actor: backupContext },
             {
               organizationId: f.ownerId,
@@ -1247,16 +1403,71 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       return observe(f);
     },
     async crashAfter(f, referenceValue, step) {
-      // The DBOS checkpoint list is native. Restarting the host after the named
-      // DBOS step gives the same receipt-replay path the production runtime uses.
-      const steps = await DBOS.listWorkflowSteps((await getAuthWorkflowId(f.work.operationKey)) ?? '');
-      if (!steps?.some((row) => row.name.endsWith(`.${step.name}`)))
-        throw new Error(`DBOS did not register ${step.name}`);
-      await driver.execute(f.caller, referenceValue, f.work);
-      await required(host, 'Auth host is not running').stop();
-      host = undefined;
+      const previous = afterStep;
+      let reached!: () => void;
+      const committed = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      afterStep = async (name, args) => {
+        await previous?.(name, args);
+        if (name !== step.name || stepTargetFromArgs(f, name, args) !== step.target) return;
+        reached();
+        // Keep the committed step from returning its DBOS acknowledgement. The
+        // real executor and its database transport are shut down below.
+        await new Promise<never>(() => {});
+      };
+      try {
+        const execution = executeWorkflow(f, referenceValue, f.work);
+        await Promise.race([
+          committed,
+          execution.then(async () => {
+            const continuation = await native().continuations.read(f.work.operationKey, continuationAccount(f));
+            if (continuation) {
+              if (step.name === 'operator-responsibility-page') {
+                const events = await facts.query<{
+                  id: string;
+                  type: string;
+                  subject: string | null;
+                  data: unknown;
+                  recorded_at: Date;
+                  position: string;
+                  partition_no: number;
+                  epoch: number;
+                }>("SELECT * FROM core.outbox WHERE partition_no=$1 AND data->>'receiptId'=$2", [
+                  partitionOf(route(continuationAccount(f))),
+                  continuation.barrierReceiptId,
+                ]);
+                if (!events.rows.length) throw new Error('Native fencing barrier event was not observed');
+                for (const row of events.rows) {
+                  const event: CloudEvent = {
+                    specversion: '1.0',
+                    id: row.id,
+                    source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+                    type: row.type,
+                    ...(row.subject === null ? {} : { subject: row.subject }),
+                    time: row.recorded_at.toISOString(),
+                    datacontenttype: 'application/json',
+                    sequence: String(row.position).padStart(19, '0'),
+                    data: row.data,
+                  };
+                  for (const effect of fenceEffects) if (effect.types.includes(event.type)) await effect.run(event);
+                }
+                releaseBackgroundPages?.();
+                await committed;
+              } else await native().continuations.continueCommitted(continuation.reference);
+            }
+            throw new Error(`Native workflow completed before ${step.name}`);
+          }),
+        ]);
+        await required(host, 'Auth host is not running').workflows.close();
+      } finally {
+        afterStep = previous;
+        activeStepName = undefined;
+      }
     },
     async restart() {
+      await fenceClient?.close();
+      fenceClient = undefined;
       if (host) await host.stop();
       host = undefined;
       bindings = undefined;
@@ -1296,32 +1507,27 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             const sealed = unseal(referenceKeys, 'access.committed-continuation.v1', referenceValue) as
               | { route: number; continuationId: string; digest: string }
               | undefined;
-            if (!sealed) throw new ContinuationDeniedError();
             const forged = seal(referenceKeys, 'access.committed-continuation.v1', {
               ...sealed,
-              digest: '00'.repeat(32),
+              ...override,
             });
             await native().continuations.continueCommitted(forged);
           }
           return { outcome: 'continued' };
         }
         if (hook) activeHook = { ...hook, boundary: 'step', used: false };
-        if (f.family === 'fence-operator') {
-          await native().continuations.continueCommitted(referenceValue);
-        } else {
-          const pending = pendingWorkflows.get(f.work.operationKey);
-          if (pending) {
-            pending.release();
-            const outcome = await pending.promise.then(
-              () => undefined,
-              (error: unknown) => error,
-            );
-            if (outcome !== undefined && !deniedError(outcome)) throw outcome;
-            pendingWorkflows.delete(f.work.operationKey);
-          } else {
-            await workflows().resumeOperation(f.work.operationKey);
-          }
+        releaseBackgroundPages?.();
+        const pending = pendingWorkflows.get(f.work.operationKey);
+        if (pending) {
+          pending.release();
+          const outcome = await pending.promise.then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+          if (outcome !== undefined && !deniedError(outcome)) throw outcome;
+          pendingWorkflows.delete(f.work.operationKey);
         }
+        await native().continuations.continueCommitted(referenceValue);
         activeHook = undefined;
         return { outcome: 'continued' };
       } catch (error) {
@@ -1331,34 +1537,23 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       }
     },
     async continuationEffects(f) {
-      const view = await native().continuations.read(f.work.operationKey, f.ownerId);
-      if (!view) return [];
       const result = await facts.query<{
         step: string;
         target: string;
         key: string;
         digest: string;
-        receipt_id: string;
+        receiptId: string;
       }>(
-        `SELECT c.step,c.target,c.key,c.digest,c.receipt_id::text FROM access.committed_continuation_completion c WHERE c.route=$1 AND c.continuation_id=$2 ORDER BY c.step,c.target`,
-        [
-          route(continuationAccount(f)),
-          (
-            (await import('../../src/tokens/seal.ts')).unseal(
-              referenceKeys,
-              'access.committed-continuation.v1',
-              view.reference,
-            ) as { continuationId?: string } | undefined
-          )?.continuationId,
-        ],
+        `SELECT completion.step, completion.target, completion.key, completion.digest,
+                completion.receipt_id::text AS "receiptId"
+         FROM access.committed_continuation_completion AS completion
+         JOIN access.committed_continuation AS continuation
+           USING (route, continuation_id)
+         WHERE continuation.route=$1 AND continuation.operation_key=$2
+         ORDER BY completion.step, completion.target, completion.key`,
+        [route(continuationAccount(f)), f.work.operationKey],
       );
-      return result.rows.map((row) => ({
-        step: row.step,
-        target: row.target,
-        key: row.key,
-        digest: row.digest,
-        receiptId: row.receipt_id,
-      }));
+      return result.rows;
     },
     async awaitExpiry(referenceValue) {
       const approval = await driver.approval(referenceValue);
@@ -1371,24 +1566,40 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
     async access(f) {
       const access = required(accessPort, 'Access is not composed');
       const actor = await access.authenticate(f.caller, context());
-      const openingAllowed = async (operatorAccountId: string) =>
-        native()
-          .operators.authorizeOpening(
-            { ...context(), actor },
-            {
-              operatorAccountId,
-              subjectAccountId: f.subjectId,
-              purpose: 'session',
-              key: reference('access-check'),
-            },
-          )
-          .then(
-            () => true,
-            (error: unknown) => {
-              if (deniedError(error)) return false;
+      const openingAllowed = async (operatorAccountId: string) => {
+        const identity = registrations.get(operatorAccountId);
+        const session = identity
+          ? await login(identity.email, f.identity.clientId).catch((error: unknown) => {
+              if (
+                typeof error === 'object' &&
+                error !== null &&
+                'status' in error &&
+                (error.status === 401 || error.status === 403)
+              )
+                return null;
               throw error;
-            },
-          );
+            })
+          : undefined;
+        if (session === null) return false;
+        const operatorActor = identity
+          ? await access.authenticate(required(session, 'Operator login has no session').bearer, context())
+          : actor;
+        return native().workflowPorts.authorizeOpening!(
+          { ...context(), actor: operatorActor },
+          {
+            operatorAccountId,
+            subjectAccountId: f.subjectId,
+            purpose: 'session',
+            key: reference('access-check'),
+          },
+        ).then(
+          () => true,
+          (error: unknown) => {
+            if (deniedError(error)) return false;
+            throw error;
+          },
+        );
+      };
       const canAccess = async (accountId: string, action: string) => {
         const resource = { route: route(accountId), id: accountId };
         const evidence = await access.prepare!(actor, action, resource, context());
@@ -1437,14 +1648,14 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           };
         }
         if (action === 'delete') {
-          const value = await native().lifecycle.tombstone(
+          const value = await native().workflowPorts.tombstone!(
             { ...context(), actor },
-            { accountId: f.organizationId, key: reference('last-owner-delete') },
+            { accountId: f.identity.actorId, key: reference('last-owner-delete') },
           );
           return {
             outcome: 'permitted',
-            accountId: f.organizationId,
-            receiptId: value.value.receiptId ?? value.transactionId,
+            accountId: f.identity.actorId,
+            receiptId: value.value.receiptId,
             value: value.value,
           };
         }
@@ -1455,7 +1666,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         const operation: Operation = { kind: 'organization', handle: f.handle };
         void operation;
         const role = action === 'remove' ? null : 'member';
-        await native().lifecycle.setMembership(
+        await native().workflowPorts.setMembership!(
           { ...context(), actor },
           {
             organizationId: f.organizationId,
@@ -1526,12 +1737,13 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         });
       }
       if ('outcome' in response) return response;
-      if (!response.ok) return { outcome: 'denied' };
-      const receipt = await facts.query<{ transaction_id: string }>(
-        "SELECT transaction_id::text FROM core.receipt WHERE command_kind='access.operator.opening-authorized' AND actor_account_id=$1 ORDER BY created_at DESC LIMIT 1",
+      if (response.status === 403) return { outcome: 'denied' };
+      if (!response.ok) throw new Error(`Native opening failed: ${response.status} ${await response.text()}`);
+      const receipt = await facts.query<{ transaction_id: string; response: unknown }>(
+        "SELECT transaction_id::text, response FROM core.receipt WHERE command_kind='access.operator.opening-authorized' AND actor_account_id=$1 ORDER BY created_at DESC LIMIT 1",
         [f.identity.actorId],
       );
-      const receiptId = required(receipt.rows[0]?.transaction_id, 'Native opening produced no command receipt');
+      const receiptId = observedReceiptId(required(receipt.rows[0], 'Native opening produced no command receipt'));
       return {
         outcome: 'permitted',
         accountId: f.subjectId,
@@ -1540,42 +1752,22 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       };
     },
     async page(f, limit, cursor, mismatch) {
-      if (mismatch) {
-        try {
-          let supplied = cursor;
-          if (mismatch === 'bytes') supplied = `${cursor ?? ''}x`;
-          if (mismatch === 'epoch' && cursor) {
-            const binding = {
-              operation: 'access.operator.responsibility.list',
-              parameters: {
-                operatorAccountId: f.ownerId,
-                purpose: 'operator',
-                sort: 'reservationId:asc',
-              },
-            };
-            const decoded = decodeCursor(referenceKeys, binding, cursor);
-            if (!decoded.ok) throw new Error('Native page returned an invalid signed cursor');
-            supplied = encodeCursor(referenceKeys, binding, {
-              epoch: decoded.epoch + 1,
-              after: decoded.after,
-            });
-          }
-          await native().operators.responsibilityPage({
-            operatorAccountId: mismatch === 'operator' ? f.nextOperatorId : f.ownerId,
-            limit,
-            ...(supplied ? { cursor: supplied } : {}),
-          });
-          return { outcome: 'denied' };
-        } catch (error) {
-          if (deniedError(error)) return { outcome: 'denied' };
-          throw error;
-        }
+      let supplied = cursor;
+      if (mismatch === 'bytes') supplied = `${cursor ?? ''}x`;
+      if (mismatch === 'epoch' && cursor) {
+        const binding = {
+          operation: 'access.operator.responsibility.list',
+          parameters: { operatorAccountId: f.ownerId, purpose: 'operator', sort: 'reservationId:asc' },
+        };
+        const decoded = decodeCursor(referenceKeys, binding, cursor);
+        if (!decoded.ok) throw new Error('Native page returned an invalid signed cursor');
+        supplied = encodeCursor(referenceKeys, binding, { epoch: decoded.epoch + 1, after: decoded.after });
       }
-      try {
+      return refused(async () => {
         const value = await native().operators.responsibilityPage({
-          operatorAccountId: f.ownerId,
+          operatorAccountId: mismatch === 'operator' ? f.nextOperatorId : f.ownerId,
           limit,
-          ...(cursor ? { cursor } : {}),
+          ...(supplied === undefined ? {} : { cursor: supplied }),
         });
         return {
           operators: value.operators.map((x) => ({
@@ -1584,13 +1776,10 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           })),
           next: value.next,
         };
-      } catch (error) {
-        if (deniedError(error)) return { outcome: 'denied' };
-        throw error;
-      }
+      });
     },
     async durableState(f) {
-      const dbos = await authPool!.query<{ total: string; document: string }>(
+      const dbos = await proofsPool!.query<{ total: string; document: string }>(
         `SELECT count(*)::text AS total,COALESCE(string_agg(coalesce(inputs::text,'')||coalesce(output::text,'')||coalesce(error::text,''),' '),'') AS document FROM auth_dbos.workflow_status`,
       );
       const approvalRows = await facts.query<{ count: string }>(
@@ -1614,6 +1803,9 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       await Promise.allSettled(pending.map((workflow) => workflow.promise));
       pendingWorkflows.clear();
       try {
+        releaseBackgroundPages?.();
+        await fenceClient?.close();
+        fenceClient = undefined;
         await host?.stop();
       } finally {
         await proofsPool?.end().catch(() => {});
@@ -1624,6 +1816,21 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         kernel = undefined as unknown as ReturnType<typeof createPool>;
         await facts.end().catch(() => {});
         facts = undefined as unknown as Pool;
+        // Pool.end releases its clients before their server sockets necessarily
+        // finish closing. Observe disconnects before dropping our databases so
+        // teardown cannot turn an ending idle client into an unhandled error.
+        const until = Date.now() + 10_000;
+        while (true) {
+          const connections = await admin.query<{ total: number }>(
+            'SELECT count(*)::int AS total FROM pg_stat_activity WHERE datname=ANY($1::text[])',
+            [[authDatabase, kernelDatabase]],
+          );
+          if (connections.rows[0]?.total === 0) break;
+          if (Date.now() >= until) throw new Error('Owned native fixture database connections did not close');
+          await Bun.sleep(10);
+        }
+        await admin.query(`DROP DATABASE "${authDatabase}"`);
+        await admin.query(`DROP DATABASE "${kernelDatabase}"`);
         await admin.end().catch(() => {});
         admin = undefined as unknown as Pool;
         host = undefined;
@@ -1661,6 +1868,12 @@ function stepTarget(f: Fixture, name: string): string {
   return f.organizationId || f.subjectId || f.ownerId;
 }
 
+function translateTarget(from: Fixture, to: Fixture, target: string): string {
+  const fields = ['ownerId', 'nextOperatorId', 'subjectId', 'otherSubjectId', 'organizationId', 'handle'] as const;
+  for (const field of fields) if (target === from[field]) return to[field];
+  return target;
+}
+
 function stepTargetFromArgs(f: Fixture, name: string, args: unknown[]): string {
   const target = stepTarget(f, name);
   const ids: string[] = [];
@@ -1674,23 +1887,15 @@ function stepTargetFromArgs(f: Fixture, name: string, args: unknown[]): string {
   return ids.includes(target) || ids.length === 0 ? target : ids[0]!;
 }
 
-function isContinuationStep(family: Family, name: string): boolean {
-  return (
-    ['subject-delete', 'operator-delete', 'fence-operator'].includes(family) &&
-    [
-      'erase-auth-owner',
-      'retire-operator',
-      'release-operator',
-      'redirect-deleted-handle',
-      'fence',
-      'revoke-auth-sessions',
-      'operator-responsibility-page',
-    ].includes(name)
-  );
-}
-
 async function observe(f: Fixture): Promise<Snapshot> {
   const ids = new Set([f.ownerId, f.nextOperatorId, f.subjectId, f.otherSubjectId, f.organizationId]);
+  const operated = await facts.query<{ account_id: string }>(
+    `SELECT related_account_id::text AS account_id FROM access.lifecycle_coordination
+     WHERE purpose='operator' AND account_id=ANY($1::uuid[])
+     UNION SELECT subject_account_id::text FROM access.operator_relation_slot WHERE operator_account_id=ANY($1::uuid[])`,
+    [[...ids]],
+  );
+  for (const row of operated.rows) ids.add(row.account_id);
   const all = await facts.query<{
     account_id: string;
     kind: string;
@@ -1710,11 +1915,15 @@ async function observe(f: Fixture): Promise<Snapshot> {
     terminal: boolean;
     held: boolean;
   }>(
-    `SELECT c.account_id::text AS operator_account_id,c.related_account_id::text AS subject_account_id,c.reservation_id::text,
-       COALESCE(s.terminal,false) AS terminal, NOT COALESCE(s.terminal,false) AS held
-     FROM access.lifecycle_coordination c LEFT JOIN access.operator_relation_slot s
-       ON s.route=c.route AND s.subject_account_id=c.related_account_id AND s.reservation_id=c.reservation_id
-     WHERE c.purpose='operator' AND (c.account_id=ANY($1::uuid[]) OR c.related_account_id=ANY($1::uuid[])) ORDER BY c.account_id,c.related_account_id,c.reservation_id`,
+    `SELECT COALESCE(c.account_id,s.operator_account_id)::text AS operator_account_id,
+       COALESCE(c.related_account_id,s.subject_account_id)::text AS subject_account_id,
+       COALESCE(c.reservation_id,s.reservation_id)::text AS reservation_id,
+       COALESCE(s.terminal,false) AS terminal,c.reservation_id IS NOT NULL AS held
+     FROM (SELECT * FROM access.lifecycle_coordination WHERE purpose='operator') c
+     FULL JOIN access.operator_relation_slot s ON s.subject_account_id=c.related_account_id
+       AND s.operator_account_id=c.account_id AND s.reservation_id=c.reservation_id
+     WHERE COALESCE(c.account_id,s.operator_account_id)=ANY($1::uuid[])
+       OR COALESCE(c.related_account_id,s.subject_account_id)=ANY($1::uuid[]) ORDER BY 1,2,3`,
     [[...ids]],
   );
   const membership = await facts.query<{
@@ -1724,9 +1933,23 @@ async function observe(f: Fixture): Promise<Snapshot> {
     reservation_id: string;
   }>(
     `SELECT m.organization_id::text,m.member_account_id::text,m.role,c.reservation_id::text FROM access.organization_member m
-     JOIN access.lifecycle_coordination c ON c.route=m.route AND c.account_id=m.member_account_id AND c.related_account_id=m.organization_id AND c.purpose='membership'
-     WHERE m.organization_id=ANY($1::uuid[]) OR m.member_account_id=ANY($1::uuid[]) ORDER BY m.organization_id,m.member_account_id`,
+     JOIN access.lifecycle_coordination c ON c.account_id=m.member_account_id AND c.related_account_id=m.organization_id AND c.purpose='membership'
+     WHERE (m.organization_id=ANY($1::uuid[]) OR m.member_account_id=ANY($1::uuid[]))
+       AND m.valid @> clock_timestamp() ORDER BY m.organization_id,m.member_account_id`,
     [[...ids]],
+  );
+  const ownerInverses = await facts.query<{
+    organization_id: string;
+    owner_id: string;
+    reservation_id: string;
+    terminal: boolean;
+  }>(
+    `SELECT c.related_account_id::text AS organization_id,c.account_id::text AS owner_id,
+       c.reservation_id::text,COALESCE(s.terminal,false) AS terminal
+     FROM access.lifecycle_coordination c LEFT JOIN access.lifecycle_membership_slot s
+       ON s.organization_id=c.related_account_id AND s.member_account_id=c.account_id AND s.reservation_id=c.reservation_id
+     WHERE c.purpose='membership' AND c.related_account_id=$1 ORDER BY c.account_id,c.reservation_id`,
+    [f.organizationId],
   );
   const handleRows = await facts.query<{ handle: string; account_id: string; phase: string }>(
     `SELECT normalized_handle AS handle,account_id::text,state AS phase FROM access.handle_claim WHERE account_id=ANY($1::uuid[]) OR normalized_handle=$2 ORDER BY normalized_handle,account_id`,
@@ -1740,27 +1963,26 @@ async function observe(f: Fixture): Promise<Snapshot> {
     response: unknown;
   }>(
     `SELECT transaction_id::text,command_kind,idempotency_key,encode(request_digest,'hex') AS request_digest,response
-     FROM core.receipt WHERE (actor_account_id=ANY($1::uuid[]) OR principal_id=ANY($1::uuid[]))
+     FROM core.receipt WHERE (actor_account_id=ANY($1::uuid[]) OR principal_id=ANY($1::uuid[]) OR response::text LIKE ANY($2::text[]))
        AND command_kind NOT LIKE 'access.workflow-approval.%'
        AND command_kind NOT LIKE 'access.grant.%'
        AND command_kind NOT LIKE 'access.role-grant.%'
        AND command_kind NOT LIKE 'access.delegation.%'
        AND command_kind NOT LIKE 'access.standing-parent.%'
      ORDER BY transaction_id`,
-    [[...ids]],
+    [[...ids], [...ids].map((id) => `%${id}%`)],
   );
   const ownerRows = await facts.query<{ organization_id: string; member_account_id: string; reservation_id: string }>(
     `SELECT m.organization_id::text,m.member_account_id::text,c.reservation_id::text FROM access.organization_member m
-     JOIN access.lifecycle_coordination c ON c.route=m.route AND c.account_id=m.member_account_id AND c.related_account_id=m.organization_id AND c.purpose='membership'
-     WHERE m.organization_id=$1 AND m.role='owner' ORDER BY m.member_account_id`,
+     JOIN access.lifecycle_coordination c ON c.account_id=m.member_account_id AND c.related_account_id=m.organization_id AND c.purpose='membership'
+     WHERE m.organization_id=$1 AND m.role='owner' AND m.valid @> clock_timestamp() ORDER BY m.member_account_id`,
     [f.organizationId],
   );
-  const authEffects = await authPool!
-    .query<{ account_id: string; effect: string }>(
-      `SELECT account_id::text,effect FROM auth_effect_receipt WHERE account_id=ANY($1::uuid[]) ORDER BY account_id,effect`,
-      [[...ids]],
-    )
-    .catch(() => ({ rows: [] as { account_id: string; effect: string }[] }));
+  const authEffects = await required(proofsPool, 'Auth observation pool is unavailable').query(
+    `SELECT receipt_id,account_id,purpose,minimum_authn_epoch FROM auth_effect_receipt
+     WHERE account_id=ANY($1::text[]) ORDER BY account_id,receipt_id`,
+    [[...ids]],
+  );
   const history = await facts
     .query(
       `SELECT 'membership' AS kind,organization_id::text AS resource_id,member_account_id::text AS account_id,role,lower(valid)::text AS lower,upper(valid)::text AS upper,transaction_id::text FROM access.organization_member WHERE organization_id=ANY($1::uuid[]) OR member_account_id=ANY($1::uuid[])
@@ -1768,8 +1990,7 @@ async function observe(f: Fixture): Promise<Snapshot> {
      ORDER BY 1,2,3,7`,
       [[...ids]],
     )
-    .then((x) => x.rows)
-    .catch(() => []);
+    .then((x) => x.rows);
   const responsibility = responsibilitiesRows.rows.map((row) => ({
     operatorAccountId: row.operator_account_id,
     subjectAccountId: row.subject_account_id,
@@ -1799,15 +2020,13 @@ async function observe(f: Fixture): Promise<Snapshot> {
       version: row.operator_relation_version,
     })),
     responsibilities: responsibility,
-    ownerInverses: members
-      .filter((row) => row.role === 'owner')
-      .map((row) => ({
-        organizationId: row.organizationId,
-        ownerId: row.accountId,
-        reservationId: row.reservationId,
-        held: true,
-        terminal: false,
-      })),
+    ownerInverses: ownerInverses.rows.map((row) => ({
+      organizationId: row.organization_id,
+      ownerId: row.owner_id,
+      reservationId: row.reservation_id,
+      held: true,
+      terminal: row.terminal,
+    })),
     memberships: members,
     owners: [...ownerIds].map((organizationId) => ({
       organizationId,
@@ -1819,7 +2038,7 @@ async function observe(f: Fixture): Promise<Snapshot> {
     handles: handleRows.rows.map((row) => ({ handle: row.handle, accountId: row.account_id, phase: row.phase })),
     history,
     receipts: receipts.rows.map((row) => ({
-      id: row.transaction_id,
+      id: observedReceiptId(row),
       kind: row.command_kind,
       key: row.idempotency_key,
       digest: row.request_digest.toString(),

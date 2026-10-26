@@ -29,11 +29,12 @@ export type TransferAcceptanceOperation = {
 };
 /** Native hosts bind a session revocation to an approval; a callback-only historical host runs it without one. */
 export type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
-export type AccountOperation =
+export type AccountOperation = (
   | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
   | RevokeOperation
   | TransferOperation
-  | TransferAcceptanceOperation;
+  | TransferAcceptanceOperation
+) & { operationKey?: string };
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -144,7 +145,14 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(valu
 const workflowId = (key: string) => `accounts:${hash(key).toString('hex')}`;
 
 function businessOperation(input: AccountOperation) {
-  const { authorization: _reference, ...business } = input as AccountOperation & { authorization?: string };
+  const {
+    authorization: _reference,
+    operationKey,
+    ...operation
+  } = input as AccountOperation & {
+    authorization?: string;
+  };
+  const business = input.kind === 'automated' ? { ...operation, operationKey } : operation;
   const ordered = (value: unknown): unknown =>
     Array.isArray(value)
       ? value.map(ordered)
@@ -1125,7 +1133,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   }
   async function runOperation(key: string, input: AccountOperation) {
     active();
-    requestKey(key);
+    input = { ...input, operationKey: requestKey(key) };
     if (input.kind === 'transfer-acceptance') denied();
     const context = 'authorization' in input ? await approved(input) : undefined;
     if (!context) await access.authorizeUnprotectedOperation?.(input);
@@ -1465,6 +1473,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const key = requestKey(input.key);
       const operation = {
         kind: 'client-reduction' as const,
+        operationKey: key,
         authorization: input.authorization,
         clientId: input.clientId,
         firstParty: input.firstParty,
