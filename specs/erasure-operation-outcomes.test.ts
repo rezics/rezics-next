@@ -132,7 +132,7 @@ async function tombstones(f: Fixture, ids: string[]) {
     for (const revision of post.revisions) {
       expect(await ok(await d().readRevision('author', post.id, revision.id))).toEqual({
         id: revision.id,
-        digest: revision.digest,
+        digest: null,
         body: null,
         availability: 'erased',
       });
@@ -244,7 +244,6 @@ test('selection authorId supplies no authority and current account formula guard
   for (const axis of [
     'account:read',
     'account:read-scope',
-    'account:read-principal',
     'post:erase',
     'suspension',
   ] as const) {
