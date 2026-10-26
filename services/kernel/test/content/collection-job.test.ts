@@ -318,11 +318,10 @@ test('selection enumerates sixteen exact routes with two bounded seeks and caps 
   expect(
     selections
       .map(({ text, values }) => {
-        const bindings = [...text.matchAll(/route\s*=\s*\$(\d+)/gi)];
-        expect(bindings).toHaveLength(2);
-        const selectedRoute = values[Number(bindings[0]![1]) - 1];
-        for (const binding of bindings) expect(values[Number(binding[1]) - 1]).toBe(selectedRoute);
-        return selectedRoute;
+        const bindings = [...text.matchAll(/\$(\d+)::integer\s+AS\s+route\b/gi)];
+        expect(bindings).toHaveLength(1);
+        expect(text.match(/media\.route\s*=\s*input\.route\b/gi)).toHaveLength(2);
+        return values[Number(bindings[0]![1]) - 1];
       })
       .sort((a, b) => Number(a) - Number(b)),
   ).toEqual(Array.from({ length: 16 }, (_, i) => route + i));
