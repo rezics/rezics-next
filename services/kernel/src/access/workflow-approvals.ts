@@ -24,6 +24,7 @@ import {
   readApprovedIdentity,
   ApprovalIdentityUnavailableError,
   verifiedBearerExpiry,
+  type ApprovalRow,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { GrantDeniedError } from './grant-commands.ts';
