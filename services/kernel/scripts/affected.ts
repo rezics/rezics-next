@@ -250,6 +250,8 @@ export function affectedTests(root: string, moduleDirectory: string, changed: st
   const module = resolve(moduleDirectory);
   const modulePath = normalize(relative(repository, module));
   const forced = [`${modulePath}/test/support/`, `${modulePath}/scripts/`, `${modulePath}/db/`, 'contracts/'];
+  // Tests read catalogue, presentation and fixture files at run time, so a data file here may be one no import names.
+  const data = [`${modulePath}/`, 'packages/', 'specs/'];
 
   const tests = moduleTests(module).map((file) => normalize(relative(repository, join(module, file))));
   const paths = changed.map(normalize).filter((path) => path !== '');
@@ -268,7 +270,10 @@ export function affectedTests(root: string, moduleDirectory: string, changed: st
     if (/\.md$/i.test(path)) continue;
 
     const known = CODE.test(path) || SQL.test(path) || /\.json$/.test(path);
-    if (!known) continue;
+    if (!known) {
+      if (data.some((prefix) => path.startsWith(prefix))) return { kind: 'all', reason: path };
+      continue;
+    }
     if (!graph) {
       graph = buildGraph(repository, tests);
       importers = reverse(graph.dependencies);
@@ -277,6 +282,7 @@ export function affectedTests(root: string, moduleDirectory: string, changed: st
     const absolute = resolve(repository, path);
     if (!graph.dependencies.has(absolute)) {
       if ((CODE.test(path) || SQL.test(path)) && !TEST.test(path)) return { kind: 'all', reason: path };
+      if (/\.json$/.test(path) && data.some((prefix) => path.startsWith(prefix))) return { kind: 'all', reason: path };
       continue;
     }
     participates = true;

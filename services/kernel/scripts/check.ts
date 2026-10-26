@@ -4,7 +4,16 @@ import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
-import { createRecorder, orderFiles, parseJunit, readLatest, timingsDirectory, writeTimings } from './check-timings.ts';
+import {
+  createRecorder,
+  orderFiles,
+  type FileTiming,
+  parseJunit,
+  readLatest,
+  timingsDirectory,
+  writeTimings,
+} from './check-timings.ts';
+import { affectedTests } from './affected.ts';
 import { buildSearchImage, waitForSearch } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,6 +66,75 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
   return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
 }
 
+/** Repository-relative paths changed since `revision`: committed, staged, unstaged and untracked. */
+export function gitChangedPaths(revision: string, repository: string = resolve(directory, '../..')): string[] {
+  const git = (args: string[]): string => {
+    const result = spawnSync('git', ['-C', repository, ...args], { encoding: 'utf8' });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
+    return result.stdout;
+  };
+  const changed = new Set(git(['diff', '--name-only', '--no-relative', '-z', `${revision}...HEAD`]).split('\0'));
+  // A rename lists its new path, then its old path as a separate field.
+  const status = git(['status', '--porcelain', '-z', '--untracked-files=all']).split('\0');
+  for (let index = 0; index < status.length; index += 1) {
+    const entry = status[index]!;
+    if (entry.length < 4) continue;
+    changed.add(entry.slice(3));
+    if (/[RC]/.test(entry.slice(0, 2))) changed.add(status[(index += 1)] ?? '');
+  }
+  changed.delete('');
+  return Array.from(changed).sort();
+}
+
+/** The revision affected mode compares against: the flag wins over the environment; the flag and its value leave `args`. */
+function affectedRevision(args: string[], env: NodeJS.ProcessEnv): { revision: string | null; files: string[] } {
+  const files: string[] = [];
+  let revision: string | null = null;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === '--affected') {
+      revision = args[(index += 1)] ?? '';
+      if (revision === '' || revision.startsWith('--')) throw new Error('--affected needs a revision');
+    } else if (argument.startsWith('--affected=')) {
+      revision = argument.slice('--affected='.length);
+      if (revision === '') throw new Error('--affected needs a revision');
+    } else {
+      files.push(argument);
+    }
+  }
+  return { revision: revision ?? (env.KERNEL_CHECK_AFFECTED || null), files };
+}
+
+/**
+ * Plan a run from its arguments. With affected mode on and no file arguments, the changed paths choose the test files:
+ * a list behaves as if those files were named, `all` as a run with no arguments, and an empty list as a run with
+ * arguments that names no test file. The announcement is the line to print first, or null outside affected mode.
+ */
+export function planCheck(
+  args: string[],
+  moduleDirectory: string,
+  options: { env?: NodeJS.ProcessEnv; changed?: (revision: string) => string[] } = {},
+): { plan: CheckPlan; announcement: string | null } {
+  const { revision, files } = affectedRevision(args, options.env ?? process.env);
+  if (files.length > 0 || revision === null) return { plan: checkPlan(files, moduleDirectory), announcement: null };
+
+  const root = resolve(moduleDirectory);
+  const total = moduleTests(root).length;
+  const changed = (options.changed ?? gitChangedPaths)(revision);
+  const selection = affectedTests(resolve(root, '../..'), root, changed);
+  if (selection.kind === 'all') {
+    return {
+      plan: checkPlan([], moduleDirectory),
+      announcement: `Affected mode: all, ${total} of ${total} test files selected (${selection.reason})`,
+    };
+  }
+  return {
+    plan: selection.tests.length > 0 ? checkPlan(selection.tests, moduleDirectory) : { files: [], tests: [] },
+    announcement: `Affected mode: tests, ${selection.tests.length} of ${total} test files selected`,
+  };
+}
+
 function diagnosticPath(line: string): string | null | undefined {
   if (/^error TS\d+\b/.test(line)) return null;
   return line.match(/^(.+?)\(\d+,\d+\): error TS\d+\b/)?.[1];
@@ -97,6 +175,16 @@ type FileRunner<T> = {
   drop: (file: string, database: string) => void | Promise<void>;
   onComplete?: (outcome: FileOutcome<T>) => void;
 };
+
+/** Run the planned test files longest first, each on its own database. */
+export function runTestFiles<T>(
+  files: string[],
+  latest: Record<string, FileTiming>,
+  concurrency: number,
+  runner: FileRunner<T>,
+): Promise<FileOutcome<T>[]> {
+  return scheduleFiles(orderFiles(files, latest), concurrency, runner);
+}
 
 /** Run independent files through a fixed-size worker pool, cleaning up each created database. */
 export async function scheduleFiles<T>(
@@ -324,10 +412,11 @@ function fail(message: string): never {
 }
 
 async function main(): Promise<void> {
+  const { plan, announcement } = planCheck(process.argv.slice(2), directory);
+  if (announcement) console.log(announcement);
   const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrationFiles, new Date());
 
-  const plan = checkPlan(process.argv.slice(2), directory);
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
@@ -429,7 +518,7 @@ async function main(): Promise<void> {
     },
     async (_file, database) => parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
   );
-  const outcomes = await scheduleFiles(orderFiles(testFiles, latest), concurrency, {
+  const outcomes = await runTestFiles(testFiles, latest, concurrency, {
     ...runner,
     onComplete: (outcome) => {
       if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);

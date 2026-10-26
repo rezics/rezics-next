@@ -188,6 +188,11 @@ When a task changes a kernel-wide contract, run the full kernel check and fix ev
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
 
+Affected mode, `bun run check --affected <rev>` or `KERNEL_CHECK_AFFECTED=<rev>` (the flag wins), runs only the test
+files that import a path changed since `<rev>` (committed, staged, unstaged or untracked), or the whole suite when the
+selector cannot place a change, and prints its selection first; named files ignore it. The full run stays the gate for
+promotion.
+
 Each check run writes every test file's wall, database create and drop, and per-test times to
 `.temp/kernel-check/timings/<UTC timestamp>.json` in the main checkout (`KERNEL_CHECK_TIMINGS` overrides the directory)
 and replaces `latest.json` there. Files run longest first by `latest.json`, files without a recorded time first;
