@@ -18,6 +18,7 @@ import {
 import { pageActiveBoardCandidates, pageBoardCandidates } from './board-projection.ts';
 import boardRankPage from './board-rank-page.sql';
 import match from './match-thread-text.sql';
+import { isErasedPlaceholder } from './model.ts';
 import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext } from './model.ts';
 import {
   ContentNotFoundError,
@@ -322,7 +323,7 @@ async function matchesCurrentText(
           route: thread.route,
           thread_id: thread.id,
           post_id: thread.firstPost.id,
-          revision_id: thread.firstPost.revisionId,
+          revision_id: isErasedPlaceholder(thread.firstPost) ? null : thread.firstPost.revisionId,
           query,
         };
         const result = await client.query<(typeof match)['~reylo']['element']>(
@@ -478,8 +479,16 @@ export async function listBoardThreads(
   for (const [index, result] of final.entries()) {
     anchors.push(result.anchor);
     if (!result.value || result.value.boardId !== boardId) continue;
-    if (query && result.value.firstPost.revisionId !== entries[index]!.firstPost.revisionId) continue;
-    if (query && result.value.firstPost.availability !== 'available') continue;
+    const firstPost = result.value.firstPost;
+    const previousFirstPost = entries[index]!.firstPost;
+    if (
+      query &&
+      (isErasedPlaceholder(firstPost) ||
+        isErasedPlaceholder(previousFirstPost) ||
+        firstPost.revisionId !== previousFirstPost.revisionId)
+    )
+      continue;
+    if (query && firstPost.availability !== 'available') continue;
     current.push(result.value);
   }
   const parent = await readRealmBoard(readDependencies, boardId, context);

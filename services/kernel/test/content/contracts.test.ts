@@ -82,7 +82,7 @@ function publishedSignatures(): void {
         postId: string,
         context: model.ReadContext,
         revisionId?: string,
-      ) => Promise<model.Anchored<reads.ItemView | null>>
+      ) => Promise<model.Anchored<reads.PostEntry | null>>
     >
   >();
   same<
@@ -94,7 +94,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
-      ) => Promise<model.Page<reads.ItemView>>
+      ) => Promise<model.Page<reads.PostEntry>>
     >
   >();
   same<
@@ -333,9 +333,7 @@ function publishedModels(): void {
   same<Equal<model.SecurityRevision, string>>();
   same<
     Equal<
-      | model.ThreadView['securityRevision']
-      | Extract<model.ItemView, { securityRevision: string }>['securityRevision']
-      | model.BoardView['securityRevision'],
+      model.ThreadView['securityRevision'] | model.ItemView['securityRevision'] | model.BoardView['securityRevision'],
       string
     >
   >();
@@ -454,7 +452,7 @@ function publishedModels(): void {
         securityRevision: string;
         availability: model.Availability;
         createdAt: string;
-        firstPost: model.ItemView;
+        firstPost: model.PostEntry;
       }>
     >
   >();
@@ -472,36 +470,49 @@ function publishedModels(): void {
       }>
     >
   >();
-  same<Equal<reads.ItemView, model.ItemView>>();
   same<
     Equal<
-      model.ItemView,
-      | Readonly<model.ItemMetadata & { revisionId: string; body: DocumentSnapshot; availability: 'available' }>
-      | Readonly<
-          Omit<model.ItemMetadata, 'sha256'> & {
-            revisionId: string;
-            removed: true;
-            body: null;
-            sha256: null;
-            availability: 'erased';
-          }
-        >
-      | Readonly<{
-          id: string;
-          threadId: string;
-          route: number;
-          parentId: string | null;
-          removed: true;
-          availability: 'erased';
-          body: null;
-          sha256: null;
-        }>
+      reads.ItemView,
+      Omit<model.ItemView, 'availability' | 'body' | 'sha256'> &
+        (
+          | Readonly<{ availability: 'available'; body: DocumentSnapshot; sha256: string }>
+          | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>
+        )
     >
   >();
-  same<Equal<reads.ThreadView, Omit<model.ThreadView, 'firstPost'> & Readonly<{ firstPost: reads.ItemView }>>>();
+  same<
+    Equal<
+      model.ErasedPlaceholder,
+      Readonly<{
+        id: string;
+        threadId: string;
+        route: number;
+        parentId: string | null;
+        removed: true;
+        availability: 'erased';
+        body: null;
+        sha256: null;
+      }>
+    >
+  >();
+  same<Equal<model.PostEntry, model.ItemView | model.ErasedPlaceholder>>();
+  same<Equal<reads.PostEntry, reads.ItemView | model.ErasedPlaceholder>>();
+  same<
+    Equal<
+      typeof model.isErasedPlaceholder,
+      (entry: Readonly<{ availability: model.Availability; revisionId?: string }>) => entry is model.ErasedPlaceholder
+    >
+  >();
+  same<Equal<reads.ThreadView, Omit<model.ThreadView, 'firstPost'> & Readonly<{ firstPost: reads.PostEntry }>>>();
   same<Equal<media.NewThreadMediaTarget, Readonly<{ thread: Resource; boardId: string }>>>();
   same<Equal<moderation.ModerationValue, ModerationValue>>();
-  same<Equal<keyof model.ItemView, 'id' | 'threadId' | 'route' | 'parentId' | 'availability' | 'body' | 'sha256'>>();
+  same<Equal<keyof model.ItemView, keyof model.ItemMetadata | 'revisionId' | 'body'>>();
+  same<
+    Equal<
+      keyof model.ErasedPlaceholder,
+      'id' | 'threadId' | 'route' | 'parentId' | 'removed' | 'availability' | 'body' | 'sha256'
+    >
+  >();
   same<Equal<keyof model.RevisionView, keyof model.RevisionMetadata | 'availability' | 'body'>>();
   same<Equal<board.BoardCandidateKey, Readonly<{ createdAt: string; id: string }>>>();
   same<
@@ -540,7 +551,7 @@ function publishedModels(): void {
   same<
     Equal<erasureJob.PurgeOutcome, Readonly<{ mediaId: string; outcome: 'purged' | 'already_absent' | 'fenced' }>>
   >();
-  same<Equal<Extract<model.ItemView, { revisionId: string }>['revisionId'], string>>();
+  same<Equal<model.ItemView['revisionId'], string>>();
   same<Equal<Pick<model.ItemView, 'body' | 'availability'>, Pick<model.RevisionView, 'body' | 'availability'>>>();
   same<Equal<Extract<model.ItemView, { availability: 'available' }>['body'], DocumentSnapshot>>();
   same<Equal<Extract<model.ItemView, { availability: 'erased' }>['body'], null>>();

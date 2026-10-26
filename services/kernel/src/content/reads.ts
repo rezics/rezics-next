@@ -8,6 +8,7 @@ import { accessCheck, type Access, type AccessCheck, type AccessClient, type Act
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { isErasedPlaceholder } from './model.ts';
 import type {
   Anchored,
   BoardId,
@@ -38,9 +39,10 @@ export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ContentPayload =
   | Readonly<{ availability: 'available'; body: NonNullable<StoredItemView['body']>; sha256: string }>
   | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>;
-export type ItemView = StoredItemView;
+export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
 export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
-export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: ItemView }>;
+export type PostEntry = ItemView | ErasedPlaceholder;
+export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
 export type { Actor };
@@ -297,7 +299,7 @@ async function disclose(
   postId?: string,
   revisionId?: string,
   threadDetail = false,
-): Promise<Anchored<ItemView | ThreadView | null>> {
+): Promise<Anchored<PostEntry | ThreadView | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
       const thread = await point(client, 'thread', threadId);
@@ -418,10 +420,8 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
   };
 }
 
-function isPlaceholder(target: { readonly id: string }): boolean {
-  return (
-    'availability' in target && target.availability === 'erased' && 'parentId' in target && !('revisionId' in target)
-  );
+function isPlaceholder(target: { readonly id: string }): target is ErasedPlaceholder {
+  return isErasedPlaceholder(target as PostEntry);
 }
 
 /** One partition seek for the account viewer's slots. Anonymous responses omit the field. */
@@ -561,11 +561,11 @@ export async function readPost(
   postId: PostId,
   context: ReadContext,
   revisionId?: RevisionId,
-): Promise<Anchored<ItemView | null>> {
+): Promise<Anchored<PostEntry | null>> {
   if (route(postId) !== route(threadId) || (revisionId && route(revisionId) !== route(threadId))) {
     return snapshot(dependencies, threadId, context, async () => null);
   }
-  return (await disclose(dependencies, threadId, context, postId, revisionId)) as Anchored<ItemView | null>;
+  return (await disclose(dependencies, threadId, context, postId, revisionId)) as Anchored<PostEntry | null>;
 }
 
 async function list(
@@ -575,7 +575,7 @@ async function list(
   cursor: string | undefined,
   limit: number,
   postId?: string,
-): Promise<Page<ItemView | RevisionView>> {
+): Promise<Page<PostEntry | RevisionView>> {
   const clock = dependencies.clock ?? (() => new Date());
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
   const root = postId
@@ -604,7 +604,7 @@ async function list(
       throw new TypeError('Invalid content cursor');
     after = { at: decoded.after[0], id: decoded.after[1] };
   }
-  const entries: (ItemView | RevisionView)[] = [];
+  const entries: (PostEntry | RevisionView)[] = [];
   let scanned = 0;
   let more = false;
   while (scanned < 200 && entries.length < limit) {
@@ -662,8 +662,8 @@ export async function listThreadPosts(
   context: ReadContext,
   cursor?: string,
   limit = 100,
-): Promise<Page<ItemView>> {
-  return (await list(dependencies, threadId, context, cursor, limit)) as Page<ItemView>;
+): Promise<Page<PostEntry>> {
+  return (await list(dependencies, threadId, context, cursor, limit)) as Page<PostEntry>;
 }
 export async function listPostRevisions(
   dependencies: ContentReadDependencies,

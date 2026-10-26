@@ -11,7 +11,7 @@ import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { REACTION_KINDS } from './events.ts';
 import type { BoardView } from './model.ts';
-import type { ItemView, ThreadView } from './reads.ts';
+import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReportView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
 
@@ -171,23 +171,26 @@ export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot & ReactionC
   t.Union([
     t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
     t.Object(
-      {
-        id: ContentIdSchema,
-        threadId: ContentIdSchema,
-        route: metadata.route,
-        parentId: nullableId,
-        removed: t.Literal(true),
-        availability: t.Literal('erased'),
-        body: t.Null(),
-        sha256: t.Null(),
-      },
-      closed,
-    ),
-    t.Object(
       { ...item, availability: t.Literal('erased'), removed: t.Literal(true), body: t.Null(), sha256: t.Null() },
       closed,
     ),
   ]),
+);
+export const ErasedPlaceholderSchema = t.Object(
+  {
+    id: ContentIdSchema,
+    threadId: ContentIdSchema,
+    route: metadata.route,
+    parentId: nullableId,
+    removed: t.Literal(true),
+    availability: t.Literal('erased'),
+    body: t.Null(),
+    sha256: t.Null(),
+  },
+  closed,
+);
+export const PostEntrySchema = t.Unsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>(
+  t.Union([ItemViewSchema, ErasedPlaceholderSchema]),
 );
 export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & ReactionCountsSlot>(
   t.Object(
@@ -197,7 +200,7 @@ export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & React
       authorId: ContentIdSchema,
       title: t.Union([t.String(), t.Null()]),
       availability,
-      firstPost: ItemViewSchema,
+      firstPost: PostEntrySchema,
       ...viewerReaction,
       ...reactions,
     },
@@ -251,11 +254,11 @@ export const ThreadResponseSchema = t.Object(
   { thread: ThreadViewSchema, reactionsAsOf: t.Optional(reactionFreshness) },
   closed,
 );
-export const PostResponseSchema = t.Object({ post: ItemViewSchema }, closed);
+export const PostResponseSchema = t.Object({ post: PostEntrySchema }, closed);
 export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
 export const PostPageResponseSchema = t.Object(
   {
-    posts: t.Array(ItemViewSchema, { maxItems: 100 }),
+    posts: t.Array(PostEntrySchema, { maxItems: 100 }),
     next: t.Union([t.String(), t.Null()]),
     reactionsAsOf: t.Optional(reactionFreshness),
   },

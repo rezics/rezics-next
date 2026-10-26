@@ -5,6 +5,7 @@ import { withConnection } from '../../src/database/pool.ts';
 import { readPartition } from '../../src/partition/partition.ts';
 import { accessCheck, type Resource } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { isErasedPlaceholder } from '../../src/content/model.ts';
 import {
   readBoard,
   readThread,
@@ -141,7 +142,8 @@ test('native floor admits anonymous and zero-scope accounts; explicit denial sti
   const f = await fixture();
   for (const selected of [actor, viewer(f.unrelated, [])]) {
     expect((await readThread(deps(), f.thread, ctx(selected))).value?.firstPost.id).toBe(f.post);
-    expect((await readPost(deps(), f.thread, f.post, ctx(selected))).value?.revisionId).toBe(f.revision);
+    const post = (await readPost(deps(), f.thread, f.post, ctx(selected))).value;
+    expect(post && !isErasedPlaceholder(post) ? post.revisionId : null).toBe(f.revision);
     expect((await listThreadPosts(deps(), f.thread, ctx(selected))).entries.map(({ id }) => id)).toContain(f.post);
   }
   await database.admin.query(
@@ -219,6 +221,7 @@ test('exact revision retains its own bytes and references; takedown never disclo
   ]);
   const old = (await readPost(deps(), f.thread, f.post, ctx(), f.revision)).value!;
   const current = (await readPost(deps(), f.thread, f.post, ctx())).value!;
+  if (isErasedPlaceholder(old) || isErasedPlaceholder(current)) throw new Error('Available post became a placeholder');
   expect(old.revisionId).toBe(f.revision);
   expect(old.subjectIds).toEqual([subject]);
   expect(old.boardId).toBe(board.id);

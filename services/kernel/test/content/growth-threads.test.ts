@@ -4,6 +4,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Pool } from 'pg';
 import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
 import { createPost, createThread, revisePost, threadTarget } from '../../src/content/commands.ts';
+import { isErasedPlaceholder } from '../../src/content/model.ts';
 import { readBoard, readPost, readThread, listPostRevisions, listThreadPosts } from '../../src/content/reads.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -734,7 +735,7 @@ test('Revision read stays within its bound as T grows', async () => {
       readContext(),
       anchor.revisionId,
     );
-    expect(result.value?.revisionId).toBe(anchor.revisionId);
+    expect(result.value && !isErasedPlaceholder(result.value) ? result.value.revisionId : null).toBe(anchor.revisionId);
     return result;
   });
 }, 90_000);

@@ -59,18 +59,13 @@ export type ErasedPlaceholder = Readonly<{
   body: null;
   sha256: null;
 }>;
-export type ItemView =
-  | Readonly<ItemMetadata & { revisionId: RevisionId; body: DocumentSnapshot; availability: 'available' }>
-  | Readonly<
-      Omit<ItemMetadata, 'sha256'> & {
-        revisionId: RevisionId;
-        removed: true;
-        body: null;
-        sha256: null;
-        availability: 'erased';
-      }
-    >
-  | ErasedPlaceholder;
+export type ItemView = Readonly<
+  ItemMetadata & { revisionId: RevisionId } & (
+      | { body: DocumentSnapshot; availability: 'available' }
+      | { body: null; availability: 'erased' }
+    )
+>;
+export type PostEntry = ItemView | ErasedPlaceholder;
 export type RevisionView = Readonly<
   RevisionMetadata & ({ body: DocumentSnapshot; availability: 'available' } | { body: null; availability: 'erased' })
 >;
@@ -87,8 +82,14 @@ export type ThreadView = Readonly<{
   securityRevision: SecurityRevision;
   availability: Availability;
   createdAt: string;
-  firstPost: ItemView;
+  firstPost: PostEntry;
 }>;
+
+export function isErasedPlaceholder(
+  entry: Readonly<{ availability: Availability; revisionId?: RevisionId }>,
+): entry is ErasedPlaceholder {
+  return entry.availability === 'erased' && 'removed' in entry && !('revisionId' in entry);
+}
 
 export type BoardView = Readonly<{
   id: BoardId;

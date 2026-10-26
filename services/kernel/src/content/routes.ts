@@ -32,7 +32,8 @@ import { InvalidMediaClaimError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
 import { reportRoutes } from './report-routes.ts';
-import type { AnchoredPosition, ReadContext } from './model.ts';
+import { isErasedPlaceholder } from './model.ts';
+import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
@@ -42,6 +43,8 @@ import {
   listThreadPosts,
   readPost,
   readThread,
+  type ItemView,
+  type PostEntry,
   type ThreadView,
   withReactionCounts,
   withViewerReactions,
@@ -249,10 +252,24 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     return result.rows[0].thread_id;
   }
 
-  async function exactPost(threadId: string, postId: string, context: ReadContext, revisionId?: string) {
+  async function exactPost(
+    threadId: string,
+    postId: string,
+    context: ReadContext,
+    revisionId: string,
+  ): Promise<Anchored<ItemView>>;
+  async function exactPost(threadId: string, postId: string, context: ReadContext): Promise<Anchored<PostEntry>>;
+  async function exactPost(
+    threadId: string,
+    postId: string,
+    context: ReadContext,
+    revisionId?: string,
+  ): Promise<Anchored<PostEntry>> {
     if (revisionId !== undefined && existingId(revisionId) !== existingId(postId)) throw new ProblemError('not_found');
     const result = await readPost(dependencies, threadId, postId, context, revisionId);
     if (!result.value) throw new ProblemError('not_found');
+    if (revisionId !== undefined && isErasedPlaceholder(result.value))
+      throw new Error('An exact post read returned an erased placeholder');
     return { value: result.value, anchor: result.anchor };
   }
 
@@ -508,7 +525,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id',
       {
         params,
-        response: { 200: withHeaders(postResponse, { ...sessionHeader, etag: t.String() }), ...readFailures },
+        response: {
+          200: withHeaders(postResponse, { ...sessionHeader, etag: t.Optional(t.String()) }),
+          ...readFailures,
+        },
         detail: { operationId: 'post.get', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
       },
       async ({ params: { id }, actor, admission, job, session, set }) =>
@@ -517,7 +537,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const context = { actor, deadline: job.deadline };
             const post = await exactPost(await containingThread(id, context), id, context);
             session.record(sessionComponent(post.anchor));
-            set.headers.etag = JSON.stringify(post.value.revisionId);
+            if (!isErasedPlaceholder(post.value)) set.headers.etag = JSON.stringify(post.value.revisionId);
             return { post: post.value };
           }),
         ),
