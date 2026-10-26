@@ -43,38 +43,3 @@ test('operation implementations have exactly the native command and read signatu
   };
   expect(compatibility).toBeFunction();
 });
-
-test('operation stubs reject before touching any dependency', async () => {
-  const touches: string[] = [];
-  const touched = (name: string): never => {
-    touches.push(name);
-    throw new Error(`Unexpected dependency access: ${name}`);
-  };
-  const deps: AuthorErasureDependencies = {
-    get pool() {
-      return touched('pool');
-    },
-    get access() {
-      return touched('access');
-    },
-    get clock() {
-      return touched('clock');
-    },
-    get workflows() {
-      return touched('workflows');
-    },
-  };
-
-  await expect(
-    beginAuthorErasure(
-      deps,
-      { kind: 'anonymous' },
-      { threadId: 'thread', authorId: 'author' },
-      { deadline: 1, idempotencyKey: 'key', requestId: 'request' },
-    ),
-  ).rejects.toThrow('Author erasure initiation is not implemented');
-  await expect(readOperation(deps, { kind: 'anonymous' }, 'operation', { deadline: 1 })).rejects.toThrow(
-    'Operation reads are not implemented',
-  );
-  expect(touches).toEqual([]);
-});

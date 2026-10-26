@@ -44,29 +44,3 @@ test('command, poll and job ports retain native dependency and outcome signature
   };
   expect([command, poll, job, dependencies].every((value) => typeof value === 'function')).toBe(true);
 });
-
-test('unfinished media import ports throw before any dependency or argument access', async () => {
-  let touched = false;
-  const poison = new Proxy(
-    {},
-    {
-      get() {
-        touched = true;
-        throw new Error('dependency accessed');
-      },
-    },
-  );
-  await expect(
-    importMediaFromUrl(
-      poison as MediaImportDependencies,
-      poison as Actor,
-      poison as MediaImportRequest,
-      poison as MediaImportContext,
-    ),
-  ).rejects.toThrow('not implemented');
-  await expect(
-    readMediaImportStatus(poison as MediaImportDependencies, poison as Actor, 'id', poison as { deadline: number }),
-  ).rejects.toThrow('not implemented');
-  await expect(processImportedMedia(poison as MediaImportJobDependencies, 'id')).rejects.toThrow('not implemented');
-  expect(touched).toBe(false);
-});

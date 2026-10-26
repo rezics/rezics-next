@@ -79,6 +79,23 @@ const consumer = 'content_registration';
 const append = (partition: number, events: CommandEvent[]) =>
   runCommand(pool, { partition }, async () => ({ value: null, events }));
 
+async function insertOutboxEvent(partition: number, event: CommandEvent): Promise<void> {
+  const result = await admin.query(
+    `WITH next AS (
+       UPDATE core.partition
+       SET position = position + 1
+       WHERE partition_no = $1
+       RETURNING epoch, position
+     )
+     INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
+     SELECT $1, next.position, 0, 1, next.epoch, $2, $3, $4, $5::jsonb
+     FROM next
+     RETURNING position`,
+    [partition, crypto.randomUUID(), event.type, event.subject ?? null, JSON.stringify(event.data)],
+  );
+  if (result.rowCount !== 1) throw new Error(`Partition ${partition} is unavailable for malformed event setup`);
+}
+
 async function checkpoint(partition: number) {
   const { rows } = await admin.query<{ position: string }>(
     'SELECT position::text FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no = $2',
@@ -179,7 +196,7 @@ test.each(poisons)(
       envelopes: 1,
       position: before.position,
     });
-    await append(partition, [valid, event]);
+    await insertOutboxEvent(partition, event);
     await append(partition, [valid]);
     let applied = false;
     for (let attempt = 0; attempt < 2; attempt++) {

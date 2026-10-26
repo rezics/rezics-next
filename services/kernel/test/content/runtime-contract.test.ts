@@ -39,7 +39,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
   const workflows: NativeAuthorErasureWorkflows = Object.freeze({ enqueue: forbidden, status: forbidden });
   const anonymousVerifier: TurnstileVerifier = Object.freeze({ verify: forbidden });
   const cursorNow = forbidden;
-  const runtime: KernelContent = Object.freeze({ fetchConfig, workflows, anonymousVerifier, cursorNow });
+  const runtime: ContentRuntime = Object.freeze({ fetchConfig, workflows, anonymousVerifier });
   const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) };
   const base: KernelDependencies = { pool, routeKey: new Uint8Array(32), tokens, access: forbidden, clock: forbidden };
   try {
@@ -49,12 +49,12 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
     const omitted = compose.mock.calls.at(-1)![1];
     for (const field of Object.keys(runtime)) expect(Object.hasOwn(omitted, field)).toBe(false);
 
-    for (let mask = 0; mask < 16; mask++) {
+    for (let mask = 0; mask < 8; mask++) {
       const content: KernelContent = {
         ...(mask & 1 ? { fetchConfig } : {}),
         ...(mask & 2 ? { workflows } : {}),
         ...(mask & 4 ? { anonymousVerifier } : {}),
-        ...(mask & 8 ? { cursorNow } : {}),
+        cursorNow,
       };
       // Extra JavaScript properties cannot introduce another clock or request authority.
       const provided = { ...content, clock: forbidden, actor: forbidden, provider: forbidden, permission: forbidden };
