@@ -6,22 +6,33 @@ import { createMembershipWorkPorts, enqueueMembership, registerAccounts } from '
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { derivedId, newId, routeOf } from '../../src/route/route.ts';
 import { authenticated } from './membership-work-fixture.ts';
-import { capture, openGrowthDatabase } from '../support/growth-capture.ts';
-import { costOf, type Cost } from '../support/growth-cost.ts';
-import { assertGrowth, type GrowthSample } from '../support/growth-bound.ts';
-import { seed, type Population } from '../support/growth-seed.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
-test('real durable joins and leaves have fixed command/history work under one 1x/8x/64x common seed', async () => {
-  const database = await openGrowthDatabase();
-  database.pool.options.max = 1;
+const PHASES = ['reserve', 'join', 'leave', 'release'] as const;
+type Phase = (typeof PHASES)[number];
+
+test('real durable joins and leaves keep reserve join leave and release command and history work within the same bounds through the shared growth harness at scales 256 1024 and 4096', async () => {
+  const started = performance.now();
+  // One instrumented pool per phase: a capture on a phase's database sees only that phase's command statements,
+  // so the shared harness measures the four phases of the same durable workflow separately.
+  const databases = {} as Record<Phase, GrowthDatabase>;
+  try {
+    for (const phase of PHASES) {
+      databases[phase] = await openGrowthDatabase();
+      databases[phase].pool.options.max = 1;
+    }
+  } catch (error) {
+    await Promise.allSettled(Object.values(databases).map((opened) => opened.close()));
+    throw error;
+  }
+  const database = databases.reserve;
   const client = await createWorkClient(database.url);
   const owner = newId(0x5170);
   const member = newId(0x5180);
   const group = newId(0x7190);
   const routeKey = Buffer.alloc(32, 59);
   const key = () => randomUUID();
-  const measurements: Record<string, Cost[]> = { reserve: [], publish: [], release: [] };
-  let measuring = false;
+  const calls: Record<Phase, number> = { reserve: 0, join: 0, leave: 0, release: 0 };
   let runtime: Awaited<ReturnType<typeof composeWork>> | undefined;
   try {
     for (const id of [owner, member])
@@ -49,23 +60,28 @@ test('real durable joins and leaves have fixed command/history work under one 1x
         {
           name: 'accounts',
           register(context) {
-            const ports = createMembershipWorkPorts(
-              { ...context, pool: database.pool },
-              { authorize: async () => authenticated(database.admin, owner) },
-            );
-            const wrapped = { ...ports };
-            for (const phase of ['reserve', 'publish', 'release'] as const) {
-              const original = ports[phase];
-              Object.assign(wrapped, {
-                [phase]: async (...args: unknown[]) => {
-                  if (!measuring) return (original as Function)(...args);
-                  const measured = await capture(database, () => (original as Function)(...args));
-                  measurements[phase]!.push(costOf(measured.capture));
-                  return measured.value;
-                },
-              });
-            }
-            registerAccounts(context, wrapped);
+            const ports = {} as Record<Phase, ReturnType<typeof createMembershipWorkPorts>>;
+            for (const phase of PHASES)
+              ports[phase] = createMembershipWorkPorts(
+                { ...context, pool: databases[phase].pool },
+                { authorize: async () => authenticated(database.admin, owner) },
+              );
+            registerAccounts(context, {
+              ...ports.reserve,
+              async reserve(...args) {
+                calls.reserve++;
+                return ports.reserve.reserve(...args);
+              },
+              async publish(request, input, ...rest) {
+                const phase = input.kind === 'membership' && input.role === null ? 'leave' : 'join';
+                calls[phase]++;
+                return ports[phase].publish(request, input, ...rest);
+              },
+              async release(...args) {
+                calls.release++;
+                return ports.release.release(...args);
+              },
+            });
           },
         },
       ],
@@ -101,6 +117,10 @@ test('real durable joins and leaves have fixed command/history work under one 1x
           ])
         ).rows,
       ).toHaveLength(5);
+      for (const phase of PHASES) {
+        expect(calls[phase]).toBe(1);
+        calls[phase] = 0;
+      }
     }
     await change(); // Resolve catalog types and exercise every measured command first.
     const namespace = '658735df-3867-8020-8b4a-00a287891094';
@@ -181,49 +201,32 @@ test('real durable joins and leaves have fixed command/history work under one 1x
         };
       },
     };
-    const samples: Record<string, GrowthSample[]> = { reserve: [], join: [], leave: [], release: [] };
-    let from = 0;
-    for (const scale of [1024, 8192, 65536]) {
-      await seed(database, population, { from, to: scale });
-      from = scale;
-      for (const values of Object.values(measurements)) values.length = 0;
-      measuring = true;
-      await change();
-      measuring = false;
-      const costs = {
-        reserve: measurements.reserve![0]!,
-        join: measurements.publish![0]!,
-        leave: measurements.publish![1]!,
-        release: measurements.release![0]!,
-      };
-      expect(measurements.reserve).toHaveLength(1);
-      expect(measurements.publish).toHaveLength(2);
-      expect(measurements.release).toHaveLength(1);
-      for (const [phase, cost] of Object.entries(costs)) {
-        expect(cost.plans).toBeGreaterThan(0);
-        samples[phase]!.push({ scale, cost });
-      }
+    let seeded = 0;
+    const report: Record<string, { scale: number; rows: number; blocks: number; statements: number }[]> = {};
+    for (const phase of PHASES) {
+      const result = await checkGrowth(databases[phase], {
+        name: `durable membership ${phase}`,
+        scales: [256, 1024, 4096],
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        async grow(db, scale) {
+          if (scale > seeded) await seed(db, population, { from: seeded, to: scale });
+          seeded = Math.max(seeded, scale);
+        },
+        async operation() {
+          await change();
+        },
+      });
+      report[phase] = result.samples.map(({ scale, cost }) => ({
+        scale,
+        rows: cost.rows,
+        blocks: cost.blocks,
+        statements: cost.statements,
+      }));
     }
-    for (const values of Object.values(samples))
-      assertGrowth(values, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
-    console.log(
-      JSON.stringify(
-        Object.fromEntries(
-          Object.entries(samples).map(([phase, values]) => [
-            phase,
-            values.map(({ scale, cost }) => ({
-              scale,
-              rows: cost.rows,
-              blocks: cost.blocks,
-              statements: cost.statements,
-            })),
-          ]),
-        ),
-      ),
-    );
+    console.log(JSON.stringify({ ...report, wallSeconds: Math.round((performance.now() - started) / 100) / 10 }));
   } finally {
     await runtime?.shutdown();
     await client.close();
-    await database.close();
+    await Promise.all(PHASES.map((phase) => databases[phase].close()));
   }
-}, 180000);
+}, 600000);
