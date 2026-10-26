@@ -63,8 +63,8 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 
 ### Page reaction counts read
 
-- Touches: One `GET /v1/subjects/:id/reactions` call. The standalone route checks subject visibility and Access, then uses the existing reaction-total read for the subject id; it does not read or return the viewer's own reaction.
-- Bound: The reaction-total range returns at most seven rows in one statement, independent of reaction contributors. Subject visibility and authorization add a constant number of point reads and statements.
+- Touches: One `GET /v1/subjects/:id/reactions` call. The route checks subject visibility and Access, reads at most five relayed reaction totals in the subject's partition, and reads the caller's slot by primary key in the viewer's partition.
+- Bound: The response includes every subject reaction kind and the viewer's own kind. Count and viewer reads are separate statements and remain constant as reaction contributors grow.
 - Growth check: `test/presentation/page-read-kinds.test.ts`: `reaction counts read stays within its bound at 1, 10 and 100 contributors`.
 
 ### Profile publish

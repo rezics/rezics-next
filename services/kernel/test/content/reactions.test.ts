@@ -194,6 +194,11 @@ export async function reactionFixture() {
     db,
     access,
     verified,
+    bearer(id = accountId) {
+      const token = tokens.get(id);
+      if (!token) throw new Error(`No bearer token for ${id}`);
+      return token;
+    },
     accountId,
     managerId,
     home,

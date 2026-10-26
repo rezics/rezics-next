@@ -42,8 +42,10 @@ import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
 import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
+import pageSubjectReactionCounts from './subject-reaction-count-page.sql';
 
 const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
+const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 /** The receipt revision for the command response currently being disclosed. */
 const replayedRevision = new AsyncLocalStorage<string>();
 export type RealmDisclosureScope = {
@@ -506,6 +508,8 @@ export async function withViewerReactions<T extends { readonly id: string }>(
 
 export type ReactionCountFreshness = Readonly<{ epoch: number; position: string }>;
 type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
+export type SubjectReactionKind = (typeof subjectReactionKinds)[number];
+export type SubjectReactionCounts = Readonly<Record<SubjectReactionKind, number>>;
 type Counted<T> = T extends ErasedPlaceholder & { readonly revisionId?: never }
   ? T
   : T & { readonly reactions: ReactionCountMap };
@@ -583,6 +587,50 @@ export async function withReactionCounts<T extends { readonly id: string }>(
     }) as Counted<T>[],
     reactionsAsOf: oldest === null ? null : { epoch: oldest.epoch, position: oldest.position.toString() },
   };
+}
+
+/** Read at most five relayed subject totals per id with one statement per target partition. */
+export async function readSubjectReactionCounts(
+  dependencies: Pick<ContentReadDependencies, 'pool'>,
+  subjectIds: readonly string[],
+  deadline?: number,
+): Promise<Map<string, SubjectReactionCounts>> {
+  if (subjectIds.length < 1 || subjectIds.length > 100)
+    throw new RangeError('Subject reaction count reads require 1 to 100 ids');
+  const counts = new Map<string, Record<SubjectReactionKind, number>>();
+  const groups = new Map<number, { ids: string[]; routes: number[] }>();
+  for (const id of subjectIds) {
+    let targetRoute = routeOf(id);
+    if (targetRoute === null) throw new TypeError('Invalid content identity');
+    if (counts.has(id)) continue;
+    counts.set(id, { like: 0, love: 0, laugh: 0, insightful: 0, sad: 0 });
+    const partition = partitionOf(targetRoute);
+    const group = groups.get(partition) ?? { ids: [], routes: [] };
+    group.ids.push(id);
+    group.routes.push(targetRoute);
+    groups.set(partition, group);
+  }
+
+  for (const [partition, group] of groups) {
+    const parameters = { partition, target_ids: group.ids, routes: group.routes };
+    const read = () =>
+      withConnection(dependencies.pool, (client) =>
+        client.query<(typeof pageSubjectReactionCounts)['~reylo']['element']>(
+          pageSubjectReactionCounts.sql,
+          pageSubjectReactionCounts.params.map((name) => parameters[name as keyof typeof parameters]),
+        ),
+      );
+    const result = deadline === undefined ? await read() : await within(deadline, read);
+    for (const row of result.rows) {
+      if (typeof row.targetId !== 'string' || !subjectReactionKinds.includes(row.kind as SubjectReactionKind))
+        throw new TypeError('Invalid subject reaction count');
+      if (!Number.isSafeInteger(row.count) || row.count < 0) throw new TypeError('Invalid subject reaction count');
+      const counted = counts.get(row.targetId);
+      if (!counted) throw new TypeError('Unexpected subject reaction count target');
+      counted[row.kind as SubjectReactionKind] = row.count;
+    }
+  }
+  return counts;
 }
 
 export async function readThread(

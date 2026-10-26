@@ -67,6 +67,8 @@ import {
   PostResponseSchema,
   ReactionInputSchema,
   ReactionResponseSchema,
+  SubjectReactionInputSchema,
+  SubjectReactionResponseSchema,
   RevisionInputSchema,
   strictContentSchema,
   ThreadInputSchema,
@@ -120,6 +122,8 @@ const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const reactionInput = strictContentSchema(ReactionInputSchema);
 const reactionResponse = strictContentSchema(ReactionResponseSchema);
+const subjectReactionInput = strictContentSchema(SubjectReactionInputSchema);
+const subjectReactionResponse = strictContentSchema(SubjectReactionResponseSchema);
 const threadInput = strictContentSchema(ThreadInputSchema);
 const postInput = strictContentSchema(PostInputSchema);
 const revisionInput = strictContentSchema(RevisionInputSchema);
@@ -943,13 +947,54 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
     );
 
+  routes
+    .put(
+      '/v1/subjects/:id/reaction',
+      {
+        params: t.Object({ id: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        body: subjectReactionInput,
+        response: { 200: subjectReactionResponse, ...writeFailures },
+        detail: {
+          operationId: 'subject.set_reaction',
+          'x-exposure': 'public',
+          'x-action': 'reaction:set',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, actor, body, request, admission, job, session }) => {
+        await writeReaction(dependencies, actor, 'subject', id, body.kind, request, admission, job, session);
+        return { kind: body.kind };
+      },
+    )
+    .delete(
+      '/v1/subjects/:id/reaction',
+      {
+        params: t.Object({ id: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        response: { 204: t.Void(), ...writeFailures },
+        detail: {
+          operationId: 'subject.clear_reaction',
+          'x-exposure': 'public',
+          'x-action': 'reaction:set',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        await writeReaction(dependencies, actor, 'subject', id, null, request, admission, job, session);
+        set.status = 204;
+      },
+    );
+
   return routes;
 }
 
 async function writeReaction(
   dependencies: Dependencies,
   actor: Actor,
-  targetKind: 'thread' | 'post',
+  targetKind: 'thread' | 'post' | 'subject',
   targetId: string,
   kind: ReactionKind | null,
   request: Request,

@@ -130,6 +130,10 @@ const licence = t.String({ minLength: 1, maxLength: 128 });
 const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
 const visibility = t.Union(['published', 'draft', 'protected', 'taken_down'].map((value) => t.Literal(value)));
 const reactionKind = t.Unsafe<ViewerReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
+const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
+const subjectReactionKind = t.Unsafe<(typeof subjectReactionKinds)[number]>(
+  t.Union(subjectReactionKinds.map((kind) => t.Literal(kind))),
+);
 const viewerReaction = { viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])) };
 const reactionCount = t.Integer({ minimum: 1 });
 const reactions = {
@@ -272,6 +276,24 @@ export const ContentPageQuerySchema = t.Object(
 );
 export const ReactionInputSchema = t.Object({ kind: reactionKind }, closed);
 export const ReactionResponseSchema = t.Object({ kind: reactionKind }, closed);
+export const SubjectReactionInputSchema = t.Object({ kind: subjectReactionKind }, closed);
+export const SubjectReactionResponseSchema = t.Object({ kind: subjectReactionKind }, closed);
+export const SubjectReactionsResponseSchema = t.Object(
+  {
+    counts: t.Object(
+      {
+        like: t.Integer({ minimum: 0 }),
+        love: t.Integer({ minimum: 0 }),
+        laugh: t.Integer({ minimum: 0 }),
+        insightful: t.Integer({ minimum: 0 }),
+        sad: t.Integer({ minimum: 0 }),
+      },
+      closed,
+    ),
+    viewer: t.Union([subjectReactionKind, t.Null()]),
+  },
+  closed,
+);
 export const ThreadResponseSchema = t.Object(
   { thread: ThreadViewSchema, reactionsAsOf: t.Optional(reactionFreshness) },
   closed,
