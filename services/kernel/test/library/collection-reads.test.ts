@@ -580,9 +580,13 @@ test("a subject's public Collections page shows only Collections that are public
     multiplicity,
   });
   const first = await reads.listSubjectCollections(owner, subjectId, { limit: 1 });
-  expect(first).toEqual({ collections: [], next: expect.any(String) });
+  expect(first).toEqual({ collections: [], count: { value: 1, exact: true }, next: expect.any(String) });
   const second = await reads.listSubjectCollections(anonymous, subjectId, { limit: 1, cursor: first.next });
-  expect(second).toEqual({ collections: [view(shown, shown.id === alpha.id ? 2 : 1)], next: null });
+  expect(second).toEqual({
+    collections: [view(shown, shown.id === alpha.id ? 2 : 1)],
+    count: { value: 1, exact: true },
+    next: null,
+  });
   expect(Object.keys(second.collections[0]!).sort()).toEqual(['curatorAccountId', 'id', 'multiplicity', 'title']);
   expect(JSON.stringify(second)).not.toContain(hidden.id);
 
@@ -599,6 +603,7 @@ test("a subject's public Collections page shows only Collections that are public
   );
   expect(await reads.listSubjectCollections(anonymous, denied)).toEqual({
     collections: [view(visible, 1)],
+    count: { value: 1, exact: true },
     next: null,
   });
 

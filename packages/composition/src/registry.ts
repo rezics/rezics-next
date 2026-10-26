@@ -11,6 +11,7 @@ import {
   curie,
   href,
   localizedText,
+  subjectId,
   safetyKind,
 } from './strings.ts';
 
@@ -31,6 +32,9 @@ type InferredStatementRead = {
 
 export type PageRead =
   | { kind: 'subject'; id: string }
+  | { kind: 'links'; id: string; property: string; filter?: string; type?: string; limit: number }
+  | { kind: 'collections'; id: string; limit: number }
+  | { kind: 'reactions'; id: string }
   | {
       kind: 'search';
       body: {
@@ -89,6 +93,7 @@ export interface CompositionRegistry {
 export interface SchemaNode {
   '~kind'?: string;
   type?: string;
+  format?: string;
   properties?: Record<string, SchemaNode>;
   required?: readonly string[];
   additionalProperties?: unknown;
@@ -157,6 +162,13 @@ function isSafeString(schema: SchemaNode): boolean {
   if (kind === 'plainText') return isPlainText(schema);
   if (kind === 'href') return schema.pattern === HREF_PATTERN && schema.maxLength === 2_048;
   if (kind === 'curie') return schema.pattern === CURIE_PATTERN && schema.maxLength === 128;
+  if (kind === 'subjectId')
+    return (
+      schema.pattern === '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])' &&
+      schema.format === 'uuid' &&
+      schema.minLength === 36 &&
+      schema.maxLength === 36
+    );
   return false;
 }
 
@@ -330,6 +342,43 @@ export const platformRegistry = defineRegistry({
                 limit: props.limit as number,
               },
             },
+    },
+    {
+      type: 'RelationGroups',
+      props: Type.Object(
+        {
+          property: curie(),
+          filter: Type.Optional(subjectId()),
+          type: Type.Optional(curie()),
+          limit: Type.Integer({ minimum: 1, maximum: 24 }),
+        },
+        closed,
+      ),
+      read: (props, page) =>
+        page.subject === null
+          ? null
+          : {
+              kind: 'links',
+              id: page.subject,
+              property: props.property as string,
+              ...(props.filter === undefined ? {} : { filter: props.filter as string }),
+              ...(props.type === undefined ? {} : { type: props.type as string }),
+              limit: props.limit as number,
+            },
+    },
+    {
+      type: 'CollectionList',
+      props: Type.Object(
+        { title: localizedText({ maxLength: 120 }), limit: Type.Integer({ minimum: 1, maximum: 6 }) },
+        closed,
+      ),
+      read: (_props, page) =>
+        page.subject === null ? null : { kind: 'collections', id: page.subject, limit: _props.limit as number },
+    },
+    {
+      type: 'ReactionSummary',
+      props: Type.Object({}, closed),
+      read: (_props, page) => (page.subject === null ? null : { kind: 'reactions', id: page.subject }),
     },
     {
       type: 'SearchBox',

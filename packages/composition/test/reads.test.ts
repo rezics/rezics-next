@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test';
-import { MAX_PAGE_READS, planReads, platformRegistry, shownProperties, validateComposition } from '../src/index.ts';
+import {
+  MAX_PAGE_READS,
+  planReads,
+  platformRegistry,
+  readCost,
+  shownProperties,
+  validateComposition,
+} from '../src/index.ts';
 
 const subject = '018f0000-0000-7000-8000-00a000000001';
 const node = (type: string, id: string, props: Record<string, unknown> = {}) => ({ type, props: { id, ...props } });
@@ -74,6 +81,35 @@ test('a page plans one read per distinct descriptor and maps every data node to 
 
 test('a page without a subject plans no subject reads', () => {
   expect(planReads(platformRegistry, document, { subject: null })).toEqual({ reads: {}, nodes: {} });
+});
+
+test('subject data components plan bounded links, public collections and reaction reads', () => {
+  const overview = page(
+    node('RelationGroups', 'roles', {
+      property: 'wdt:P725',
+      filter: subject,
+      type: 'schema:Person',
+      limit: 12,
+    }),
+    node('CollectionList', 'collections', { title: 'Collections', limit: 6 }),
+    node('ReactionSummary', 'reactions'),
+  );
+  expect(validateComposition(platformRegistry, overview)).toEqual([]);
+  const plan = planReads(platformRegistry, overview, { subject });
+  expect(plan.reads).toEqual({
+    r0: { kind: 'links', id: subject, property: 'wdt:P725', filter: subject, type: 'schema:Person', limit: 12 },
+    r1: { kind: 'collections', id: subject, limit: 6 },
+    r2: { kind: 'reactions', id: subject },
+  });
+  expect(plan.nodes).toEqual({ roles: 'r0', collections: 'r1', reactions: 'r2' });
+  expect(Object.values(plan.reads).map(readCost)).toEqual([12, 6, 1]);
+  expect(planReads(platformRegistry, overview, { subject: null })).toEqual({ reads: {}, nodes: {} });
+  expect(
+    validateComposition(
+      platformRegistry,
+      page(node('RelationGroups', 'bad', { property: 'wdt:P725', filter: 'not-a-uuid', limit: 12 })),
+    ),
+  ).toEqual([{ pointer: '/content/0/props/filter', code: 'unsafe' }]);
 });
 
 test('a document needing more than sixteen distinct reads is refused at publish', () => {

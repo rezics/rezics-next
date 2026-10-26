@@ -156,8 +156,13 @@ test("a subject's public Collections are served under the subjects path with the
 
   const response = await request('GET', `/v1/subjects/${subjectId}/collections`, undefined, true);
   expect(response.status).toBe(200);
-  const body = (await response.json()) as { collections: { id: string }[]; next: string | null };
-  expect(Object.keys(body).sort()).toEqual(['collections', 'next']);
+  const body = (await response.json()) as {
+    collections: { id: string }[];
+    count: { value: number; exact: true };
+    next: string | null;
+  };
+  expect(Object.keys(body).sort()).toEqual(['collections', 'count', 'next']);
+  expect(body.count).toEqual({ value: 0, exact: true });
   expect(body.collections.map((collection) => collection.id)).toContain(shelf.id);
 });
 

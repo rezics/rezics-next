@@ -17,6 +17,7 @@ import collectionRead from './collection-reads-collection.sql';
 import curatorPublicPage from './collection-reads-curator-public.sql';
 import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
+import listingCounts from './listing-counts.sql';
 
 type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
@@ -334,10 +335,12 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
     viewer: Actor,
     subjectId: string,
     options: { cursor?: string | null; limit?: number } = {},
-  ): Promise<{ collections: PublicCollectionView[]; next: string | null }> {
+  ): Promise<{ collections: PublicCollectionView[]; count: { value: number; exact: true }; next: string | null }> {
     const page = pageRequest(options, ['cursor', 'limit']);
     if (typeof subjectId !== 'string' || (await resolveSubject(anchors, viewer, subjectId)) === null) throw notFound();
     const route = routeOf(subjectId)!;
+    const counts = await listingCounts.run(pool, { partition_no: partitionOf(route), subject_ids: [subjectId] });
+    const count = counts[0]?.publicCollectionCount ?? 0;
     const binding: CursorBinding = { operation: 'library.subject.collections', parameters: { subjectId } };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = subjectPosition(cursor);
@@ -368,6 +371,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
     const last = considered.at(-1);
     return {
       collections: shown,
+      count: { value: count, exact: true },
       next:
         hasMore && last && partition
           ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.collectionId] })

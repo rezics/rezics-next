@@ -33,12 +33,13 @@ export const MAX_LOCALIZED_ENTRIES = 16;
 
 const SAFETY = '~safety';
 
-export type SafetyKind = 'plainText' | 'href' | 'curie' | 'localizedText';
+export type SafetyKind = 'plainText' | 'href' | 'curie' | 'subjectId' | 'localizedText';
 
 /** Marker TypeBox leaves on the schema object. JSON Schema export drops every `~` key. */
 export function safetyKind(schema: object): SafetyKind | undefined {
   const kind = (schema as Record<string, unknown>)[SAFETY];
-  if (kind === 'plainText' || kind === 'href' || kind === 'curie' || kind === 'localizedText') return kind;
+  if (kind === 'plainText' || kind === 'href' || kind === 'curie' || kind === 'subjectId' || kind === 'localizedText')
+    return kind;
   return undefined;
 }
 
@@ -52,6 +53,17 @@ export function href() {
 
 export function curie() {
   return Type.String({ maxLength: 128, pattern: CURIE_PATTERN, [SAFETY]: 'curie' });
+}
+
+/** A canonical UUID that identifies a subject in a component read descriptor. */
+export function subjectId() {
+  return Type.String({
+    minLength: 36,
+    maxLength: 36,
+    format: 'uuid',
+    pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])',
+    [SAFETY]: 'subjectId',
+  });
 }
 
 /** Plain text, or 1–16 locale keys mapped to plain text of the same maximum length. */

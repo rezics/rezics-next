@@ -22,6 +22,7 @@ const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
 const realAccess = await createRealAccess(admin, accounts, ['subject:create']);
 const kernel = createKernel({
   pool,
+  requestDeadlineMs: 30_000,
   routeKey: new Uint8Array(32).fill(7),
   access: realAccess.access,
   writeRate: realAccess.writeRate,

@@ -54,6 +54,7 @@ const subjectPage = t.Object(
         closed,
       ),
     ),
+    count: t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Literal(true) }, closed),
     next: nullableString,
   },
   closed,

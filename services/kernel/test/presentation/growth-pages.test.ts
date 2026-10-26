@@ -98,6 +98,7 @@ beforeAll(async () => {
   });
   kernel = createKernel({
     pool: db.pool,
+    requestDeadlineMs: 30_000,
     routeKey,
     access: {
       async authenticate() {

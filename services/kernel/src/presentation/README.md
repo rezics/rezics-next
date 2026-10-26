@@ -49,6 +49,24 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 - Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
 - Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`
 
+### Page inverse links read
+
+- Touches: One `GET /v1/subjects/:id/links` property-page call. The standalone route checks subject visibility and Access, reads the indexed inverse page, returns its exact property count or bounded type-filter count, and fills labels for returned holders.
+- Bound: At most `limit` holders are returned. With a type filter, the established route scans at most `4 × limit + 1` page candidates and samples at most 1,000 count candidates; without a type filter the page scan is at most `limit + 1`. Label work is bounded by the returned holders. Rows stay within those fixed limits and statements remain constant as the anchor's in-degree grows.
+- Growth check: `test/presentation/page-read-kinds.test.ts`: `inverse links read stays within its bound at 1, 10 and 100 holders`.
+
+### Page public collections read
+
+- Touches: One `GET /v1/subjects/:id/collections` call with a limit of 1–6. The standalone route resolves the subject, reads its public collection count from `subject_listing`, scans at most `limit + 1` indexed pairs, then checks at most `limit` Collection rows for current public visibility.
+- Bound: The count is one primary-key probe and remains exact. Pair and Collection work is bounded by `limit + 1` and `limit`, respectively. At the fixed preview limit, rows and statements grow only until six collections are considered, then stay constant as the subject's public collection count grows.
+- Growth check: `test/presentation/page-read-kinds.test.ts`: `public collections read stays within its bound at 1, 10 and 100 collections`.
+
+### Page reaction counts read
+
+- Touches: One `GET /v1/subjects/:id/reactions` call. The standalone route checks subject visibility and Access, then uses the existing reaction-total read for the subject id; it does not read or return the viewer's own reaction.
+- Bound: The reaction-total range returns at most seven rows in one statement, independent of reaction contributors. Subject visibility and authorization add a constant number of point reads and statements.
+- Growth check: `test/presentation/page-read-kinds.test.ts`: `reaction counts read stays within its bound at 1, 10 and 100 contributors`.
+
 ### Profile publish
 
 - Touches: `publishProfile` validates and hashes one body (linear in at most 1 MiB, once per publish, before a connection is checked out) and inserts 0 or 1 `presentation.profile` row through `profile_pkey(route, digest)`; a conflict does nothing. The receipted command emits one `com.rezics.presentation.profile.published.v1` event even when the digest exists. Grow P and H; fix body size and authorization evidence.

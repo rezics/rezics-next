@@ -66,14 +66,22 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
     }
 
     try {
-      if (!statSync(normalized).isFile() || !pathIsWithin(rootRealPath, realpathSync(normalized))) {
+      const stats = statSync(normalized);
+      if (!pathIsWithin(rootRealPath, realpathSync(normalized))) throw new Error();
+      if (stats.isDirectory()) {
+        for (const file of new Bun.Glob('**/*.test.ts').scanSync({ cwd: normalized })) {
+          const candidate = resolve(normalized, file);
+          if (!pathIsWithin(rootRealPath, realpathSync(candidate))) throw new Error();
+          files.add(relative(root, candidate).split(sep).join('/'));
+        }
+      } else if (stats.isFile()) {
+        files.add(relative(root, normalized).split(sep).join('/'));
+      } else {
         throw new Error();
       }
     } catch {
       throw new Error(`Check path must name an existing file inside ${moduleDirectory}: ${argument}`);
     }
-
-    files.add(relative(root, normalized).split(sep).join('/'));
   }
 
   const sortedFiles = Array.from(files).sort();
@@ -445,7 +453,7 @@ async function main(): Promise<void> {
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
-  cleanupStale();
+  if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1') cleanupStale();
   const searchImage = buildSearchImage();
   container = startPostgresContainer();
   searchContainer = docker([

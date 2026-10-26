@@ -57,6 +57,7 @@ beforeAll(async () => {
 });
 const kernel = createKernel({
   pool,
+  requestDeadlineMs: 30_000,
   access,
   tokens,
   routeKey: new Uint8Array(32).fill(6),

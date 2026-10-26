@@ -138,6 +138,32 @@ test('a merged subject is followed once to its survivor', async () => {
   expect(kernel.seen.map(({ path }) => path)).toEqual([`/v1/subjects/${merged}`, `/v1/subjects/${survivor}`]);
 });
 
+test('links, collections and reactions dispatch through their standalone subject routes', async () => {
+  const kernel = fakeKernel();
+  await readPage({
+    dispatch: kernel.dispatch,
+    incoming: incoming(),
+    reads: {
+      links: {
+        kind: 'links',
+        id: book,
+        property: 'schema:author',
+        filter: merged,
+        type: 'schema:Person',
+        limit: 12,
+      },
+      collections: { kind: 'collections', id: book, limit: 6 },
+      reactions: { kind: 'reactions', id: book },
+    },
+    session: { ring, scope },
+  });
+  expect(kernel.seen.map(({ method, path }) => `${method} ${path}`).sort()).toEqual([
+    `GET /v1/subjects/${book}/collections?limit=6`,
+    `GET /v1/subjects/${book}/links?property=schema%3Aauthor&filter=${merged}&type=schema%3APerson&limit=12`,
+    `GET /v1/subjects/${book}/reactions`,
+  ]);
+});
+
 test("session tokens from every read are merged with the caller's", async () => {
   const kernel = fakeKernel();
   const { session } = await readPage({

@@ -43,6 +43,9 @@ import {
 } from '../moderation.ts';
 import { ContextNotFoundError, editorialContextAnchor, globalContextAnchor } from '../context.ts';
 import type { CommandAuthorization } from '../../command/command.ts';
+import { REACTION_KINDS } from '../../content/events.ts';
+import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
+import readVisibility from '../read-visibility.sql';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const ValueSchema = t.Union([
@@ -248,6 +251,22 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
+const reactionKind = t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
+const reactionCountResponse = t.Object(
+  {
+    counts: t.Array(
+      t.Object({ kind: reactionKind, count: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+    ),
+    watermark: t.Union([
+      t.Object(
+        { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
+        { additionalProperties: false },
+      ),
+      t.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
 type SubjectRouteDependencies = {
   pool: Pool;
   routeKey: Uint8Array;
@@ -1546,6 +1565,44 @@ function subjectRoutes(
           }
           return candidateError(error);
         }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/reactions',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          200: withHeaders(reactionCountResponse, cacheControl),
+          ...listingErrors,
+        },
+        detail: {
+          operationId: 'subject.reactions',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job, set }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const resource = { route, id: params.id };
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const result = await admission.run('normal', job, () =>
+          withConnection(pool, async (client) => {
+            const subject = await readVisibility.run(client, { route, subject_id: params.id });
+            if (!subject || subject.visibility !== 'visible' || !(await check(client)))
+              throw new ProblemError('not_found');
+            const result = await readReactionCounts(client, { targetId: params.id });
+            return {
+              counts: result.counts.map(({ kind, count }) => ({ kind, count })),
+              watermark: result.watermark
+                ? { epoch: result.watermark.epoch, position: result.watermark.position.toString() }
+                : null,
+            };
+          }),
+        );
+        set.headers['cache-control'] = 'no-cache';
+        return result;
       },
     );
 }

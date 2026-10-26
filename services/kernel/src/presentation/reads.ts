@@ -6,7 +6,12 @@ import type { KeyRing } from '../tokens/seal.ts';
 
 export const MAX_PAGE_READS = 16;
 
-export type PageRead = { kind: 'subject'; id: string } | { kind: 'search'; body: object };
+export type PageRead =
+  | { kind: 'subject'; id: string }
+  | { kind: 'links'; id: string; property: string; filter?: string; type?: string; limit: number }
+  | { kind: 'collections'; id: string; limit: number }
+  | { kind: 'reactions'; id: string }
+  | { kind: 'search'; body: object };
 
 export class PageReadError extends Error {
   readonly errors: FieldError[];
@@ -32,6 +37,7 @@ type DispatchResult = { result: PageResult; tokens: string[] };
 
 const KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CURIE_PATTERN = /^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -43,6 +49,17 @@ function escapePointerSegment(segment: string): string {
 
 function addError(errors: FieldError[], pointer: string, code: FieldError['code']): void {
   errors.push({ pointer, code });
+}
+
+function unknownFields(
+  descriptor: Record<string, unknown>,
+  allowed: readonly string[],
+  pointer: string,
+  errors: FieldError[],
+) {
+  for (const key of Object.keys(descriptor)) {
+    if (!allowed.includes(key)) addError(errors, `${pointer}/${escapePointerSegment(key)}`, 'unknown_field');
+  }
 }
 
 function validateReads(reads: unknown): PreparedRead[] {
@@ -69,6 +86,48 @@ function validateReads(reads: unknown): PreparedRead[] {
         addError(errors, `${pointer}/id`, 'invalid_format');
       } else {
         canonicalDescriptor = { kind: 'subject', id: descriptor.id };
+      }
+    } else if (descriptor.kind === 'links') {
+      unknownFields(descriptor, ['kind', 'id', 'property', 'filter', 'type', 'limit'], pointer, errors);
+      const idValid = typeof descriptor.id === 'string' && UUID_PATTERN.test(descriptor.id);
+      if (!idValid) addError(errors, `${pointer}/id`, 'invalid_format');
+      const propertyValid = typeof descriptor.property === 'string' && CURIE_PATTERN.test(descriptor.property);
+      if (!propertyValid) addError(errors, `${pointer}/property`, 'invalid_format');
+      const filterValid =
+        descriptor.filter === undefined ||
+        (typeof descriptor.filter === 'string' && UUID_PATTERN.test(descriptor.filter));
+      if (!filterValid) addError(errors, `${pointer}/filter`, 'invalid_format');
+      const typeValid =
+        descriptor.type === undefined || (typeof descriptor.type === 'string' && CURIE_PATTERN.test(descriptor.type));
+      if (!typeValid) addError(errors, `${pointer}/type`, 'invalid_format');
+      const limitValid =
+        Number.isInteger(descriptor.limit) && (descriptor.limit as number) >= 1 && (descriptor.limit as number) <= 24;
+      if (!limitValid) addError(errors, `${pointer}/limit`, 'out_of_range');
+      if (idValid && propertyValid && filterValid && typeValid && limitValid) {
+        canonicalDescriptor = {
+          kind: 'links',
+          id: descriptor.id as string,
+          property: descriptor.property as string,
+          ...(descriptor.filter === undefined ? {} : { filter: descriptor.filter as string }),
+          ...(descriptor.type === undefined ? {} : { type: descriptor.type as string }),
+          limit: descriptor.limit as number,
+        };
+      }
+    } else if (descriptor.kind === 'collections') {
+      unknownFields(descriptor, ['kind', 'id', 'limit'], pointer, errors);
+      const idValid = typeof descriptor.id === 'string' && UUID_PATTERN.test(descriptor.id);
+      if (!idValid) addError(errors, `${pointer}/id`, 'invalid_format');
+      const limitValid =
+        Number.isInteger(descriptor.limit) && (descriptor.limit as number) >= 1 && (descriptor.limit as number) <= 6;
+      if (!limitValid) addError(errors, `${pointer}/limit`, 'out_of_range');
+      if (idValid && limitValid)
+        canonicalDescriptor = { kind: 'collections', id: descriptor.id as string, limit: descriptor.limit as number };
+    } else if (descriptor.kind === 'reactions') {
+      unknownFields(descriptor, ['kind', 'id'], pointer, errors);
+      if (typeof descriptor.id !== 'string' || !UUID_PATTERN.test(descriptor.id)) {
+        addError(errors, `${pointer}/id`, 'invalid_format');
+      } else {
+        canonicalDescriptor = { kind: 'reactions', id: descriptor.id };
       }
     } else if (descriptor.kind === 'search') {
       if (!isObject(descriptor.body)) {
@@ -121,10 +180,21 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
   if (credentials.authorization !== null) headers.set('authorization', credentials.authorization);
   if (credentials.session !== null) headers.set(SESSION_HEADER, credentials.session);
 
-  const init: RequestInit = { method: descriptor.kind === 'subject' ? 'GET' : 'POST', headers, redirect: 'manual' };
+  const init: RequestInit = { method: descriptor.kind === 'search' ? 'POST' : 'GET', headers, redirect: 'manual' };
   if (descriptor.kind === 'search') {
     headers.set('content-type', 'application/json');
     init.body = JSON.stringify(descriptor.body);
+  } else if (descriptor.kind === 'links') {
+    url.pathname = `/v1/subjects/${descriptor.id}/links`;
+    url.searchParams.set('property', descriptor.property);
+    if (descriptor.filter !== undefined) url.searchParams.set('filter', descriptor.filter);
+    if (descriptor.type !== undefined) url.searchParams.set('type', descriptor.type);
+    url.searchParams.set('limit', String(descriptor.limit));
+  } else if (descriptor.kind === 'collections') {
+    url.pathname = `/v1/subjects/${descriptor.id}/collections`;
+    url.searchParams.set('limit', String(descriptor.limit));
+  } else if (descriptor.kind === 'reactions') {
+    url.pathname = `/v1/subjects/${descriptor.id}/reactions`;
   }
   return new Request(url, init);
 }
@@ -145,7 +215,7 @@ async function executeRead(
   credentials: ForwardedCredentials,
   dispatch: (request: Request) => Promise<Response>,
 ): Promise<DispatchResult> {
-  const initialPath = read.descriptor.kind === 'subject' ? `/v1/subjects/${read.descriptor.id}` : '/v1/subjects:search';
+  const initialPath = read.descriptor.kind === 'search' ? '/v1/subjects:search' : `/v1/subjects/${read.descriptor.id}`;
   const tokens: string[] = [];
   let response = await dispatch(requestFor(new URL(initialPath, origin), read.descriptor, credentials));
   readToken(response, tokens);

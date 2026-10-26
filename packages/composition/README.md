@@ -86,6 +86,7 @@ Every string a registry admits is one of:
   absolute `https:` URL has a host name, an optional port and no user information. Any other
   scheme, a protocol-relative URL or a control character is refused;
 - `curie()`: `^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*$`, at most 128 characters;
+- `subjectId()`: a lowercase canonical UUID;
 - `localizedText({ maxLength })`: `plainText({ maxLength })`, or an object of 1 to 16 entries
   whose keys match `^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$` and whose values are plain text of
   that maximum length;
@@ -104,7 +105,7 @@ the object, and the object uses `propertyNames` for its keys.
 | -------------- | ------------------------------------------------------------------------------------- |
 | `invalid`      | Envelope or value shape, an unknown key, a missing required key, or a schema mismatch |
 | `unknown_type` | `type` is not registered; that node's props are not checked                           |
-| `unsafe`       | A string fails a plain-text, link or CURIE pattern                                    |
+| `unsafe`       | A string fails a plain-text, link, CURIE or subject UUID pattern                      |
 | `duplicate`    | A repeated `props.id` after its first occurrence                                      |
 | `limit`        | Canonical size, node count, depth, distinct page reads or their total cost            |
 
@@ -127,20 +128,23 @@ tokens: `density` (`compact` or `comfortable`), `radius` (`sm`, `md` or `lg`), `
 or `lg`). Every token is optional. Colours and type faces are not tokens; pages share the
 REZICS visual language.
 
-| Component        | Props                                                                                                               | Slots          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `Stack`          | `gap`: `sm`, `md` or `lg`                                                                                           | `children`     |
-| `Columns`        | `split`: `even`, `start` or `end`                                                                                   | `start`, `end` |
-| `Heading`        | `text` (localized text, 200), `level`: 1, 2, 3 or 4                                                                 |                |
-| `Text`           | `text` (localized text, 2,000)                                                                                      |                |
-| `Slot`           | `name`: one of `SLOT_NAMES`                                                                                         | `children`     |
-| `SubjectHeader`  | none                                                                                                                |                |
-| `Statements`     | `properties`: 1–32 unique `curie()` values                                                                          |                |
-| `MoreStatements` | none                                                                                                                |                |
-| `SubjectList`    | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24                                         |                |
-| `SearchBox`      | `placeholder` (localized text, 80)                                                                                  |                |
-| `LinkGrid`       | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
-| `TypeList`       | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
+| Component         | Props                                                                                                               | Slots          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `Stack`           | `gap`: `sm`, `md` or `lg`                                                                                           | `children`     |
+| `Columns`         | `split`: `even`, `start` or `end`                                                                                   | `start`, `end` |
+| `Heading`         | `text` (localized text, 200), `level`: 1, 2, 3 or 4                                                                 |                |
+| `Text`            | `text` (localized text, 2,000)                                                                                      |                |
+| `Slot`            | `name`: one of `SLOT_NAMES`                                                                                         | `children`     |
+| `SubjectHeader`   | none                                                                                                                |                |
+| `Statements`      | `properties`: 1–32 unique `curie()` values                                                                          |                |
+| `MoreStatements`  | none                                                                                                                |                |
+| `SubjectList`     | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24                                         |                |
+| `RelationGroups`  | `property`: `curie()`, optional `filter`: subject UUID, optional `type`: `curie()`, `limit`: integer 1–24           |                |
+| `CollectionList`  | `title` (localized text, 120), `limit`: integer 1–6                                                                 |                |
+| `ReactionSummary` | none                                                                                                                |                |
+| `SearchBox`       | `placeholder` (localized text, 80)                                                                                  |                |
+| `LinkGrid`        | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
+| `TypeList`        | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
 
 `SLOT_NAMES` is `header`, `hero`, `entity`, `aside`, `footer`, `actions` and `personal`. The
 host site fills the `actions` slot with its controls for the page subject, before any children
@@ -160,6 +164,11 @@ the named properties; `MoreStatements` shows the subject's statements whose prop
 once, in document order. `SubjectList` reads subjects whose `property` statement points at the
 page subject, sorted by name and bounded by `limit`. `TypeList` reads subjects matching its
 `types` on any page, sorted by name or by most public Collections first, and bounded by `limit`.
+`RelationGroups` reads inverse links for its property, optional qualifier value and optional
+holder type, including holder labels and the route's exact or at-least count. `CollectionList`
+reads public Collections and their exact total count. `ReactionSummary` reads the subject's
+reaction totals without viewer-specific reaction data. These three components read nothing
+when `page.subject` is `null`.
 
 ## Subject data components
 
@@ -167,21 +176,22 @@ The registry's data components cover every overview section. Each reads a bounde
 receives the total or an "at least" count, and renders a link to its full view when the count
 exceeds the preview.
 
-| Component        | Reads                                                                                      | Preview limit |
-| ---------------- | ------------------------------------------------------------------------------------------ | ------------- |
-| `SubjectHeader`  | The page subject, with its cover summary                                                   | —             |
-| `Cover`          | The page subject's cover summary; always renders, with the placeholder when it is `null`   | —             |
-| `Summary`        | The subject's summary document in the reader's language, spoiler-safe                      | —             |
-| `Statements`     | The named properties                                                                       | 32 properties |
-| `RelationGroups` | Forward and inverse relations, grouped by relation group, each item with its cover summary | 12 per group  |
-| `Appearances`    | Character appearances with role and cast (on a work); works with role (on a character)     | 12            |
-| `Credits`        | Credits grouped by role in credit order (on a work); works by role (on a person)           | 12            |
-| `RatingSummary`  | The headline population's aggregate, the viewer's Realm aggregates, imported scores        | 3 Realms      |
-| `ThreadList`     | The most active threads about the subject in the page's population                         | 5             |
-| `ReviewList`     | The most helpful reviews in the page's population                                          | 5             |
-| `CollectionList` | Public collections containing the subject                                                  | 6             |
-| `Sources`        | Cover credits, fact sources and external identifiers                                       | —             |
-| `MoreStatements` | Facts no other component on the page shows                                                 | —             |
+| Component         | Reads                                                                                      | Preview limit |
+| ----------------- | ------------------------------------------------------------------------------------------ | ------------- |
+| `SubjectHeader`   | The page subject, with its cover summary                                                   | —             |
+| `Cover`           | The page subject's cover summary; always renders, with the placeholder when it is `null`   | —             |
+| `Summary`         | The subject's summary document in the reader's language, spoiler-safe                      | —             |
+| `Statements`      | The named properties                                                                       | 32 properties |
+| `RelationGroups`  | Forward and inverse relations, grouped by relation group, each item with its cover summary | 12 per group  |
+| `Appearances`     | Character appearances with role and cast (on a work); works with role (on a character)     | 12            |
+| `Credits`         | Credits grouped by role in credit order (on a work); works by role (on a person)           | 12            |
+| `RatingSummary`   | The headline population's aggregate, the viewer's Realm aggregates, imported scores        | 3 Realms      |
+| `ReactionSummary` | The subject's public reaction totals                                                       | 1             |
+| `ThreadList`      | The most active threads about the subject in the page's population                         | 5             |
+| `ReviewList`      | The most helpful reviews in the page's population                                          | 5             |
+| `CollectionList`  | Public collections containing the subject                                                  | 6             |
+| `Sources`         | Cover credits, fact sources and external identifiers                                       | —             |
+| `MoreStatements`  | Facts no other component on the page shows                                                 | —             |
 
 Full views use the same components with `paged: true`, which read one page and render a
 continuation link.
@@ -219,6 +229,29 @@ the registry. It is absent from the generated JSON Schema, and documents cannot 
 }
 // POST /v1/subjects:search
 
+{
+  kind: 'links';
+  id: string;
+  property: string;
+  filter?: string;
+  type?: string;
+  limit: number;
+}
+// GET /v1/subjects/{id}/links?property=...&filter=...&type=...&limit=...
+
+{
+  kind: 'collections';
+  id: string;
+  limit: number;
+}
+// GET /v1/subjects/{id}/collections?limit=...
+
+{
+  kind: 'reactions';
+  id: string;
+}
+// GET /v1/subjects/{id}/reactions
+
 type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
 ```
 
@@ -228,8 +261,8 @@ type PageFilter = { statement: { property: string; in: [string] } } | { type: { 
 It walks parents before their slot children, with slots in registry order. Descriptors with
 equal RFC 8785 canonical JSON share a read. `reads` assigns `r0`, `r1`, … in order of first
 use; `nodes` maps every node id with a read to its key. The planner does not mutate the
-document or execute reads. The later kernel aggregate route will dispatch each descriptor
-through its standalone route; data component rendering belongs to the website.
+document or execute reads. The kernel page read dispatches each descriptor through its
+standalone route; data component rendering belongs to the website.
 
 `MAX_PAGE_READS` is 16, and planning throws if more distinct reads are needed. Every page
 subject plans the same number of reads, so the publish-time count bounds every read; a null
@@ -239,8 +272,8 @@ and never depends on the catalogue. A page issues at most 16 distinct reads what
 node count or subject, enforced at publish. The growth check covers 1, 16 and 200 data nodes
 planning 1, 16 and 1 reads, and refuses 17 distinct reads.
 
-`readCost(read)` is the number of subjects that read can return: 1 for a subject read and
-the search `limit` for a search read. `MAX_PAGE_COST` is 128. After the distinct-read count
+`readCost(read)` is the row bound: 1 for a subject or reaction read and the `limit` for a search,
+inverse-links or public-collections read. `MAX_PAGE_COST` is 128. After the distinct-read count
 check, publish-time validation sums `readCost` over the distinct reads planned with the
 placeholder subject. Shared descriptors count once. The sum is one pass over at most 16
 reads, so a page read issues at most 16 reads and returns at most 128 subjects in total,
