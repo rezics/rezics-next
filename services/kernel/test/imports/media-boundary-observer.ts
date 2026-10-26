@@ -22,7 +22,8 @@ export async function observeMediaPool(pool: Pool) {
     let pending: { id: string; anchor: MediaAnchor }[] = [];
     const observed = (text: string | undefined, values: readonly unknown[], result: QueryResult) => {
       if (text === fenceRead.sql) {
-        const tuples = JSON.parse(String(values[0])) as SourceFenceTuple[];
+        const parameters = Object.fromEntries(fenceRead.params.map((name, index) => [name, values[index]]));
+        const tuples = JSON.parse(String(parameters.tuples)) as SourceFenceTuple[];
         for (const tuple of tuples)
           if (!fences.some((f) => JSON.stringify(f) === JSON.stringify(tuple))) fences.push(tuple);
       }
