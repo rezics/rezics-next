@@ -23,6 +23,7 @@ import {
 } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import * as contract from '../../src/content/imported-contract.ts';
 import { readPartition } from '../../src/partition/partition.ts';
 import {
   claimMedia,
@@ -611,3 +612,28 @@ growthTest('Source fence check stays within its bound as P grows', async () => {
     operation: db => withConnection(db.pool, (client: PoolClient) => readFences(client,
       [{ route: f.sourceRoute, source, external_id: externalId, field_group: 'cover' }])) });
 });
+
+// prettier-ignore
+test("the hot partition's neighbour ids are deterministic and cost at most one partition hash each", async () => {
+  const count = ordinalsPerScale * scales[2], real = contract.tupleRoute;
+  const f = await makeAnchor({ partition: 100 });
+  let hashes = 0;
+  const spy = spyOn(contract, 'tupleRoute').mockImplementation((...args: Parameters<typeof real>) => {
+    if (++hashes > count) throw new Error(`Neighbour seeding hashed more than once per id (${hashes} hashes for ${count} ids)`);
+    return real(...args);
+  });
+  const build = async () => {
+    hashes = 0;
+    const population = await growthPopulation(f, { sourceOnly: true });
+    return Array.from({ length: count }, (_, ordinal) => population.rows!({ ordinal, route: f.sourcePartition * 16, partition: f.sourcePartition,
+      hot: true })['content.source_fences']![0]!);
+  };
+  try {
+    const first = await build(), second = await build();
+    expect(second).toEqual(first);
+    expect(new Set(first.map(row => row.external_id)).size).toBe(count);
+    expect(first.every(row => partitionOf(row.route as number) === f.sourcePartition)).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+}, 60_000);
