@@ -71,6 +71,8 @@ const valid: Record<string, string> = {
   STRIPE_MANAGED_PAYMENTS: 'false',
   CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
   CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+  // The check's one analysis database; without it each child re-describes every statement against the file's own.
+  ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
 };
 
 test("worker configuration children read Reylo analyses from the check's analysis database", async () => {
