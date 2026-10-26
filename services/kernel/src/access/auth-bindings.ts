@@ -90,12 +90,19 @@ function scopes(left: string[], right: string[]): boolean {
     JSON.stringify([...left].sort()) === JSON.stringify([...right].sort())
   );
 }
-function translate(account: Account | null, recovery = false): AccessAccount | null {
+/** `open` is the ordinary read and denies a fence; `recovery` admits a fenced human without an operator;
+ * `fenced` admits only a fenced account of either kind, automated accounts included. */
+type ReadMode = 'open' | 'recovery' | 'fenced';
+function admitted(account: Account, mode: ReadMode): boolean {
+  if (mode === 'recovery') return account.kind === 'actor' && account.operatorAccountId === null;
+  return mode === 'fenced' ? account.fenced : !account.fenced;
+}
+function translate(account: Account | null, mode: ReadMode = 'open'): AccessAccount | null {
   if (
     !account ||
     account.state !== 'active' ||
     (account.kind !== 'actor' && account.kind !== 'organization') ||
-    (recovery ? account.kind !== 'actor' || account.operatorAccountId !== null : account.fenced)
+    !admitted(account, mode)
   )
     return null;
   return {
@@ -108,13 +115,16 @@ function translate(account: Account | null, recovery = false): AccessAccount | n
   };
 }
 
+/** Cleanup after a barrier reads every account the barrier fenced, automated accounts included. */
+export type FencedAccountPort = { readFencedAccount(accountId: string): Promise<AccessAccount | null> };
+
 /** Production Auth/Access seam. Reads use Access's existing account anchor; no local
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
 export function createAuthBindings(
   config: { pool: Pool; access?: Access } & AuthBindingCapabilities,
-): PasskeyTrustedAccessPorts {
+): PasskeyTrustedAccessPorts & FencedAccountPort {
   const {
     pool,
     verifyPendingIdentity,
@@ -134,9 +144,9 @@ export function createAuthBindings(
       return null;
     }
   }
-  async function read(id: string, recovery = false): Promise<AccessAccount | null> {
+  async function read(id: string, mode: ReadMode = 'open'): Promise<AccessAccount | null> {
     try {
-      return translate(await account(id), recovery);
+      return translate(await account(id), mode);
     } catch {
       return null;
     }
@@ -230,7 +240,7 @@ export function createAuthBindings(
         epoch(input.human.authn_epoch),
     );
     const before = await account(input.subjectAccountId);
-    const human = await read(input.human.account_id, true);
+    const human = await read(input.human.account_id, 'recovery');
     allowed(
       translate(before)?.kind === 'actor' && human && !human.fenced && input.human.authn_epoch >= human.authnEpoch,
     );
@@ -310,7 +320,8 @@ export function createAuthBindings(
         return null;
       }
     },
-    readRecoveryAccount: (id) => read(id, true),
+    readRecoveryAccount: (id) => read(id, 'recovery'),
+    readFencedAccount: (id) => read(id, 'fenced'),
     async authorizeProvisioning(reference) {
       if (!verifyProvisioningReceipt && !verifyPendingIdentity)
         throw new AuthBindingUnavailableError('verifyProvisioningReceipt');
@@ -345,7 +356,7 @@ export function createAuthBindings(
     async authorizeRecovery(input) {
       if (!authorizeRecovery) throw new AuthBindingUnavailableError('authorizeRecovery');
       const before = await account(input.accountId);
-      const human = translate(before, true);
+      const human = translate(before, 'recovery');
       allowed(human && epoch(input.proofEpoch) && human.authnEpoch === input.proofEpoch);
       return barrier(await authorizeRecovery(input), before!, input.proofEpoch);
     },
