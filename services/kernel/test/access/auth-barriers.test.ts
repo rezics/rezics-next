@@ -1,13 +1,32 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, createBarrierProofVerifier, type AuthService, type TrustedAccessPorts } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAuthBarrierCapabilities } from '../../src/access/auth-barriers.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createRecoveryCompletion } from '../../src/access/recovery-completion.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `auth_barriers_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const lifecycle = createLifecycleInternals({
@@ -16,7 +35,7 @@ const lifecycle = createLifecycleInternals({
   provisioningEvidence: async () => null,
   recoveryEvidence: async () => null,
 });
-let fixture: ReturnType<typeof testDatabase>;
+let fixture: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let database: Pool;
 let service: AuthService;
 let barriers: ReturnType<typeof createAuthBarrierCapabilities>;
@@ -60,7 +79,7 @@ async function startRecovery() {
 }
 
 beforeAll(async () => {
-  fixture = testDatabase();
+  fixture = await cloneAuthDatabase();
   database = new Pool({ connectionString: fixture.url });
   barriers = createAuthBarrierCapabilities({ lifecycle, proofs: createBarrierProofVerifier({ database }) });
   access = {
@@ -134,7 +153,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.end();
   await database?.end();
-  fixture?.close();
+  await fixture?.close();
 });
 
 test('native consent commits an exact floor barrier before Auth effects without fencing new sign-in', async () => {

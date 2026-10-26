@@ -1,8 +1,27 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
-import { testDatabase } from '../../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `discovery_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 await import('reylo/register');
 const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
@@ -41,7 +60,7 @@ type Contract = {
   components: unknown;
 };
 const pool = createPool(databaseUrl);
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -239,7 +258,7 @@ beforeAll(async () => {
   });
   composition.mockRestore();
 
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -306,7 +325,7 @@ afterAll(async () => {
   }
   await host?.stop();
   if (!host) await authPool?.end();
-  authDatabase?.close();
+  await authDatabase?.close();
   await pool.end();
 }, 60_000);
 

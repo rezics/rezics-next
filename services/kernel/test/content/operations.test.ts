@@ -3,8 +3,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
@@ -21,8 +21,27 @@ import { AuthenticationError, type AccountActor } from '../../src/request/access
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `operations_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 const db = await openGrowthDatabase();
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let auth: AuthService;
 let access: ReturnType<typeof createAccess>;
@@ -37,7 +56,7 @@ const fixedBodySha256 = createHash('sha256').update(fixedBody).digest();
 afterAll(async () => {
   for (const client of nativeClients) await client.close();
   await authPool?.end();
-  authDatabase?.close();
+  await authDatabase?.close();
   await db.close();
 });
 const route = 0x6a31;
@@ -114,7 +133,7 @@ async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z'
   return post;
 }
 beforeAll(async () => {
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   const pair = await generateKeyPair('ES256', { extractable: true });
   const key = { ...(await exportJWK(pair.privateKey)), kid: 'operations-fixture' };

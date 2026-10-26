@@ -6,12 +6,31 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `native_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 export const issuer = 'https://ordinary.auth.test';
 export const password = 'ordinary native registration password';
@@ -35,12 +54,12 @@ export async function nativeFixture(
   pool: Pool,
   openAuthPool?: () => Pool,
   existing?: {
-    database: ReturnType<typeof testDatabase>;
+    database: { url: string; container?: string; close(): void | Promise<void> };
     privateKey: JWK & { kid: string };
     actions?: ReadonlyMap<string, { anonymous: boolean }>;
   },
 ) {
-  const database = existing?.database ?? testDatabase();
+  const database = existing?.database ?? (await cloneAuthDatabase());
   const pair = existing ? undefined : await generateKeyPair('ES256', { extractable: true });
   const privateKey = existing?.privateKey ?? { ...(await exportJWK(pair!.privateKey)), kid: 'ordinary-native' };
   let service: AuthService;
@@ -158,7 +177,7 @@ export async function nativeFixture(
       try {
         await host.stop();
       } finally {
-        database.close();
+        await database.close();
       }
     },
     async person(key: string) {

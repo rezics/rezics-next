@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import {
@@ -25,6 +25,25 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `suspension_with_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 const issuer = 'https://suspension-coordination.auth.test';
 const audience = 'https://suspension-coordination.api.test';
 const password = 'native grant routes registration password';
@@ -32,7 +51,7 @@ const routeKey = new Uint8Array(32).fill(81);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) };
 const operatorActions = new Map([...LIFECYCLE_ACTIONS, ['account:manage', { anonymous: false }] as const]);
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -177,7 +196,7 @@ beforeAll(async () => {
   });
   const actions = actionCatalogue(kernel);
   scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -241,7 +260,7 @@ beforeAll(async () => {
 }, 60000);
 afterAll(async () => {
   await host?.stop();
-  authDatabase?.close();
+  await authDatabase?.close();
   await db?.close();
 });
 

@@ -8,14 +8,33 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `growth_recovery_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 let db: GrowthDatabase;
-let fixture: ReturnType<typeof testDatabase>;
+let fixture: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
 let bindings: ReturnType<typeof createNativeAccountBindings>;
@@ -67,7 +86,7 @@ async function unrelated(index: number) {
 }
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  fixture = testDatabase();
+  fixture = await cloneAuthDatabase();
   fixturePool = new Pool({ connectionString: fixture.url });
   const database = db.openPool();
   authDatabase = database;
@@ -148,7 +167,7 @@ afterAll(async () => {
   await host?.stop();
   await db?.close();
   await fixturePool?.end();
-  fixture?.close();
+  await fixture?.close();
 });
 
 test(

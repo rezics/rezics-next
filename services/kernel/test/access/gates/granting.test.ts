@@ -1,8 +1,27 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { createAuthHost, type AuthService } from '@rezics/auth';
-import { testDatabase } from '../../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `granting_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 // Root `bun test` does not load services/kernel/bunfig.toml. Register the SQL
 // loader before any SQL-bearing module is linked; a static import is linked first.
@@ -32,7 +51,7 @@ const group = 'gate:moderation';
 const otherGroup = 'gate:support';
 
 const pool = createPool(url);
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -167,7 +186,7 @@ beforeAll(
       },
     });
     scopes = ['access:grant', 'gate:any', group, otherGroup, 'thread:create'];
-    authDatabase = testDatabase();
+    authDatabase = await cloneAuthDatabase();
     authPool = new Pool({ connectionString: authDatabase.url });
     const signingKey = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -229,7 +248,7 @@ beforeAll(
 afterAll(async () => {
   if (host) await host.stop();
   else await authPool?.end();
-  authDatabase?.close();
+  await authDatabase?.close();
   await pool.end();
 }, 60_000);
 

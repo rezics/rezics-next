@@ -1,13 +1,33 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { handleFixture, type FixtureConfiguration } from './workflow-handle-fixture.ts';
 import { REGISTRATION_TTL_MS } from '../../src/access/lifecycle.ts';
 import { newId } from '../../src/route/route.ts';
 
-let deployment: ReturnType<typeof testDatabase>;
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `workflow_handle_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}_system" WITH (FORCE)`);
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
+let deployment: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let fixture: Awaited<ReturnType<typeof handleFixture>>;
 let config: FixtureConfiguration;
 let system: Pool;
@@ -43,12 +63,13 @@ async function token(accountId: string) {
 beforeAll(async () => {
   // This issuer owns its migrated Auth fixture and DBOS database. It never uses
   // the foundation suite's AUTH_TEST_DATABASE_URL or key/client tables.
-  deployment = testDatabase();
+  deployment = await cloneAuthDatabase();
   const database = new Pool({ connectionString: deployment.url });
-  await database.query('CREATE DATABASE durable_handles_system');
+  const systemName = `${new URL(deployment.url).pathname.slice(1)}_system`;
+  await database.query(`CREATE DATABASE "${systemName}"`);
   await database.end();
   const url = new URL(deployment.url);
-  url.pathname = '/durable_handles_system';
+  url.pathname = `/${systemName}`;
   system = new Pool({ connectionString: url.href });
   const signing = await generateKeyPair('ES256', { extractable: true });
   config = {
@@ -64,7 +85,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await fixture?.close();
   await system?.end();
-  deployment?.close();
+  await deployment?.close();
 }, 60000);
 
 test('process loss after real Auth credential and Access handle barrier recovers the same DBOS registration', async () => {
