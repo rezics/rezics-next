@@ -4,6 +4,7 @@ import { Value } from 'typebox/value';
 import { CommandUnavailableError } from '../src/command/command.ts';
 import { createPool } from '../src/database/pool.ts';
 import { createApp } from '../src/http/app.ts';
+import { defineRateLimit } from '../src/http/rate-limit.ts';
 import { PROBLEM_TYPE_BASE, ProblemError, problemSchema } from '../src/http/problem.ts';
 import { AuthenticationError } from '../src/request/access.ts';
 
@@ -33,7 +34,7 @@ const failures: Record<string, () => Error> = {
   deadline: () => new CommandUnavailableError('deadline', 7),
   unexpected: () => new Error('connection to 10.0.0.7 refused; SELECT secret FROM core.partition'),
 };
-const app = createApp({ pool })
+const app = createApp({ pool, writeRate: { spend: async () => ({ allowed: true }) } })
   .post(
     '/probe',
     {
@@ -41,7 +42,7 @@ const app = createApp({ pool })
         { name: t.String({ minLength: 1, maxLength: 4 }), count: t.Integer({ minimum: 0 }) },
         { additionalProperties: false },
       ),
-      detail: { 'x-exposure': 'public' },
+      detail: { 'x-exposure': 'public', 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) },
     },
     ({ body }) => body,
   )

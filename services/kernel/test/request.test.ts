@@ -3,6 +3,7 @@ import { Elysia, t } from 'elysia';
 import { createPool } from '../src/database/pool.ts';
 import { Admission } from '../src/http/admission.ts';
 import { createApp } from '../src/http/app.ts';
+import { defineRateLimit } from '../src/http/rate-limit.ts';
 import { actionCatalogue, SESSION_HEADER } from '../src/http/request.ts';
 import {
   anonymousAccess,
@@ -35,10 +36,12 @@ const read = {
   'x-exposure': 'public',
   security: [{ bearerAuth: [] }, {}],
 };
+const writeRate = { spend: async () => ({ allowed: true as const }) };
 const create = {
   operationId: 'thing.create',
   'x-action': 'thing:create',
   'x-exposure': 'public',
+  'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
   security: [{ bearerAuth: [] }],
 };
 
@@ -66,7 +69,7 @@ function recorder(seen: Seen, admission: Admission, prepare = false): Access {
 }
 
 function thingApp(dependencies: Partial<Parameters<typeof createApp>[0]> = {}) {
-  return createApp({ pool, tokens, ...dependencies })
+  return createApp({ pool, tokens, writeRate, ...dependencies })
     .get(
       '/v1/things/:id',
       { params: t.Object({ id: t.String() }), detail: read },
@@ -207,12 +210,12 @@ test('the session token is read from the request and merged when a route records
 });
 
 test('without configured keys, session tokens are signed with a key of the app', async () => {
-  const one = createApp({ pool }).get('/v1/write', { detail: create }, ({ session }) => {
+  const one = createApp({ pool, writeRate }).get('/v1/write', { detail: create }, ({ session }) => {
     const seen = session.components.length;
     session.record({ partition: 1, epoch: 1, position: 1n });
     return { seen };
   });
-  const other = createApp({ pool }).get('/v1/write', { detail: create }, ({ session }) => ({
+  const other = createApp({ pool, writeRate }).get('/v1/write', { detail: create }, ({ session }) => ({
     seen: session.components.length,
   }));
   const token = (await one.handle(new Request('http://kernel.test/v1/write'))).headers.get(SESSION_HEADER)!;
