@@ -146,7 +146,8 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
       const responseValue = options.receiptKind === 'checkout' ? orderValue : offerValue;
       const receipt = {
         partition_no: actorPartition,
-        actor_account_id: growthActorId,
+        principal_kind: 'account',
+        principal_id: growthActorId,
         command_kind: commandKind,
         idempotency_key: idempotencyKey,
         request_digest: digest,
@@ -154,7 +155,7 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
         position,
         transaction_id: commandTransactionId,
         response: {
-          actorAccountId: growthActorId,
+          principal: { kind: 'account', id: growthActorId },
           kind: commandKind,
           key: idempotencyKey,
           digest: Buffer.from(digest).toString('base64'),
@@ -259,7 +260,8 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
             transaction_id: commandTransactionId,
             epoch: 1,
             position,
-            actor_account_id: growthActorId,
+            principal_kind: 'account',
+            principal_id: growthActorId,
             client_id: 'growth-test',
             requested_by: null,
             recorded_at: createdAt,
