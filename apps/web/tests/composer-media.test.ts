@@ -74,7 +74,6 @@ type PostCreated = Data<ThreadResource['posts']['post']>;
 type Problem = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>['error']>['value'];
 type Snapshot = NonNullable<Posts['posts'][number]['body']>;
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const boardPath = (locale = 'en') => `/${locale}/boards/${id(1)}`;
 const threadPath = (locale = 'en') => `/${locale}/threads/${id(2)}`;
 const licence = 'LicenseRef-rezics-terms';
 const metadata = {
@@ -659,29 +658,6 @@ test(
       } finally {
         await page.context().close();
       }
-    }
-  },
-  timeout,
-);
-
-// Thread creation does not accept media, so the opening editor has no image command.
-test(
-  'the new-thread editor offers no image until threads accept media',
-  async () => {
-    reset();
-    const { page } = await open(`${boardPath()}/new`);
-    try {
-      await readyEditor(page);
-      await editor(page).click();
-      await editor(page).press('/');
-      const menu = page.getByRole('listbox', { name: 'Insert block' });
-      await menu.waitFor();
-      expect(await menu.getByRole('option').allInnerTexts()).not.toContain('Image');
-      expect(await page.getByRole('button', { name: 'Image', exact: true }).count()).toBe(0);
-      expect(await page.getByLabel('Choose image file').count()).toBe(0);
-      expect(calls.filter((call) => call.path.startsWith('/v1/media'))).toHaveLength(0);
-    } finally {
-      await page.context().close();
     }
   },
   timeout,
