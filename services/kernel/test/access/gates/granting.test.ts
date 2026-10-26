@@ -261,12 +261,10 @@ afterAll(async () => {
 
 test('platform gates are granted and revoked through the ordinary grant routes', async () => {
   // A direct access:grant holding alone cannot grant either gate action.
-  await pool.query(
-    `INSERT INTO access.resource_grant
-       (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
-     VALUES ($1, $2, 'identity', $3, '', 'access:grant', '(,)', $4)`,
-    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, plain.accountId, Bun.randomUUIDv7()],
-  );
+  const beforePlainGrant = await grantRows();
+  await expectGranted(staff.bearer, plain.accountId, ['access:grant']);
+  expect(await grantRows()).toBe(beforePlainGrant + 1);
+  expect(await formula(plain.bearer, 'access:grant')).toMatchObject({ allowed: true });
   await expectDenied(plain.bearer, recipient.accountId, [group]);
   await expectDenied(plain.bearer, carrier.accountId, ['gate:any']);
 
@@ -283,7 +281,6 @@ test('platform gates are granted and revoked through the ordinary grant routes',
   await expectDenied(staff.bearer, recipient.accountId, ['thread:create']);
 
   await expectGranted(staff.bearer, delegate.accountId, ['access:grant', group]);
-  await expectGranted(staff.bearer, plain.accountId, ['access:grant']);
 
   // One group's gate plus access:grant grants that gate and no other.
   await expectGranted(delegate.bearer, carrier.accountId, [group]);
