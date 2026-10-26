@@ -1,15 +1,14 @@
 import { Pool } from 'pg';
-import { Elysia } from 'elysia';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { exportJWK, generateKeyPair, importJWK, SignJWT, decodeJwt } from 'jose';
 import { createAuthService } from '@rezics/auth';
 import { createInternalConsentHandler } from '../../../auth/src/internal-consent.ts';
 import { createAuthConsentReader, type CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
+import { registerTestClient, testAccess, testApp } from '../support/test-kernel.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function standingFixture(extraActions: readonly string[] = []) {
@@ -91,8 +90,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
       },
     },
   });
-  await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ordinaryClientScopes });
-  await auth.internal.registerClient({ clientId: 'other-client', firstParty: true, scopes: ordinaryClientScopes });
+  const app = testApp({ pool });
   for (const id of [actor, principal, recipient]) {
     await reader.query(
       `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
@@ -118,7 +116,6 @@ export async function standingFixture(extraActions: readonly string[] = []) {
     'thread:create': ['content.thread', 'content.post'],
     'post:create': ['content.post'],
   };
-  const app = new Elysia();
   for (const [index, action] of actions.entries()) {
     const detail = {
       operationId: action.replace(':', '.'),
@@ -134,7 +131,20 @@ export async function standingFixture(extraActions: readonly string[] = []) {
       () => null,
     );
   }
-  const access = createAccess({
+  await registerTestClient(auth, {
+    clientId: 'web',
+    firstParty: true,
+    actions: actionCatalogue(app),
+    scopes: ordinaryClientScopes,
+  });
+  await registerTestClient(auth, {
+    clientId: 'other-client',
+    firstParty: true,
+    actions: actionCatalogue(app),
+    scopes: ordinaryClientScopes,
+  });
+  const access = testAccess({
+    pool,
     actions: actionCatalogue(app),
     resourceRoles: {
       roles: { 'fixture.owner': ['fixture:own'], 'fixture.unmounted': ['unmounted:action'] },

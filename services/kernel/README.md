@@ -175,6 +175,14 @@ schema dump, runs TypeScript, lint and formatting checks, then runs each test fi
 database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
 database is removed at the end.
 
+New kernel tests compose their app, Access and kernel through `test/support/test-kernel.ts`. `testKernel` mirrors the
+production route catalogue, Realm role reader and write-rate stage, substituting its supplied test pool, local Auth/JWKS
+and fixed route key. `testApp` mounts the same app stage and builds Access from its mounted actions; `testAccess` uses the
+production Access constructor, Realm role reader, resource roles and resource-type binding. Pass a named override such
+as `clock`, `actions` or `writeRate` only when a test needs to vary that contract. Use `registerTestClient` to register a
+client from the mounted production scope set, with a named `scopes` override for tests that exercise narrower consent.
+When a task changes a kernel-wide contract, run the full kernel check and fix every test the change turns red.
+
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
 

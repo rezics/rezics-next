@@ -12,7 +12,6 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { migrate } from '../../../auth/scripts/database.ts';
-import { createAccess } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createWorkflowApprovals, workflowApprovalBinding } from '../../src/access/workflow-approvals.ts';
@@ -21,6 +20,7 @@ import { ACTIVE_ACCOUNTS } from '../../src/access/grant-subject.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { registerTestClient, testKernel, testRouteKey, testTokens } from '../support/test-kernel.ts';
 
 /** Real Auth host, native registration and Auth-issued tokens verified via JWKS.
  * Shared with the growth test; only its entry file registers the functional suite. */
@@ -44,8 +44,12 @@ export async function organizationFixture() {
   ]);
   const scopes = [...actions.keys()];
   let service: AuthService;
-  const access = createAccess({
+  const referenceKeys = testTokens();
+  const routeKey = testRouteKey();
+  const kernel = testKernel({
+    pool: db.pool,
     actions,
+    tokens: referenceKeys,
     auth: {
       issuer,
       audience,
@@ -53,13 +57,13 @@ export async function organizationFixture() {
       fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
     },
   });
+  const access = kernel.testAccess;
   const proofs = createNativeWorkflowProofPorts({ database: authPool });
-  const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
   const bindings = createNativeAccountBindings({
     pool: db.pool,
     access,
     actions,
-    routeKey: randomBytes(32),
+    routeKey,
     referenceKeys,
     auth: () => service,
     proofs: {
@@ -95,10 +99,11 @@ export async function organizationFixture() {
   });
   service = host.service;
   await host.start();
-  await service.internal.registerClient({ clientId: 'organization-test', firstParty: true, scopes });
-  await service.internal.registerClient({
+  await registerTestClient(service, { clientId: 'organization-test', firstParty: true, actions, scopes });
+  await registerTestClient(service, {
     clientId: 'organization-no-scope',
     firstParty: true,
+    actions,
     scopes: ['account:read'],
   });
   const context = () => ({ pool: db.pool, deadline: Date.now() + 10000 });

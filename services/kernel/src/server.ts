@@ -20,6 +20,78 @@ import { setupSemantic } from './semantic/setup.ts';
 import { createOpenSearch } from './search/opensearch.ts';
 import { createSearchService } from './search/service.ts';
 import { readSearchConfig, type SearchConfig } from './search/work.ts';
+import { createAccess, type AccessConfig } from './access/index.ts';
+import type { AuthenticationConfig } from './access/authenticate.ts';
+import type { AccessFactory } from './request/access.ts';
+
+export type KernelRuntimeDefaults = {
+  tokens: KeyRing;
+  writeRate: WriteRateLimiter;
+  rateAttribution: WriteRateStageOptions;
+  clock: () => Date;
+  access: AccessFactory;
+  auth?: AuthenticationConfig;
+};
+
+export type KernelRuntimeOverrides = {
+  env?: NodeJS.ProcessEnv;
+  tokens?: KeyRing;
+  writeRate?: WriteRateLimiter;
+  rateAttribution?: WriteRateStageOptions;
+  clock?: () => Date;
+  auth?: AuthenticationConfig;
+};
+
+function readTokenKeys(env: NodeJS.ProcessEnv): KeyRing {
+  const entries = required(env, 'KERNEL_SESSION_KEYS').split(',');
+  const keys = new Map<number, Uint8Array>();
+  for (const entry of entries) {
+    const match = /^(\d+):([A-Za-z0-9_-]+)$/.exec(entry);
+    const id = match?.[1] === undefined ? NaN : Number(match[1]);
+    const encoded = match?.[2];
+    if (!Number.isInteger(id) || id < 0 || id > 255 || encoded === undefined || keys.has(id)) {
+      throw new ConfigError('KERNEL_SESSION_KEYS');
+    }
+    keys.set(id, decodeKey(encoded, 'KERNEL_SESSION_KEYS'));
+  }
+  const current = keys.keys().next().value as number | undefined;
+  if (current === undefined) throw new ConfigError('KERNEL_SESSION_KEYS');
+  return { current, keys };
+}
+
+function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefined {
+  const issuer = env.AUTH_ISSUER;
+  const audience = env.AUTH_AUDIENCE;
+  const jwksUrl = env.AUTH_JWKS_URL;
+  if (issuer === undefined && audience === undefined && jwksUrl === undefined) return undefined;
+  return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
+}
+
+/** Shared production composition defaults for the server and test factories. */
+export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
+  const env = overrides.env ?? process.env;
+  const tokens = overrides.tokens ?? readTokenKeys(env);
+  const writeRate =
+    overrides.writeRate ??
+    createWriteRateLimiter({
+      ...(env.KERNEL_WRITE_RATE_SECRET === undefined ? {} : { secret: env.KERNEL_WRITE_RATE_SECRET }),
+      ...(env.KERNEL_WRITE_RATE_OVERRIDES === undefined ? {} : { overrides: env.KERNEL_WRITE_RATE_OVERRIDES }),
+    });
+  const rateAttribution = overrides.rateAttribution ?? {
+    trustedProxyPeers: env.KERNEL_RATE_TRUSTED_PROXY_PEERS?.split(',') ?? [],
+    clientIpHeader: env.KERNEL_RATE_CLIENT_IP_HEADER ?? 'cf-connecting-ip',
+  };
+  const auth = overrides.auth ?? readAuthConfig(env);
+  const access: AccessFactory = auth ? (config: AccessConfig) => createAccess({ ...config, auth }) : createAccess;
+  return {
+    tokens,
+    writeRate,
+    rateAttribution,
+    clock: overrides.clock ?? systemClock,
+    access,
+    ...(auth === undefined ? {} : { auth }),
+  };
+}
 
 export type ServerConfig = {
   databaseUrl: string;
@@ -32,6 +104,7 @@ export type ServerConfig = {
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
+  auth?: AuthenticationConfig;
 };
 
 function required(env: NodeJS.ProcessEnv, variable: string): string {
@@ -53,19 +126,8 @@ function decodeKey(value: string, variable: string, exactLength?: number): Uint8
 export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const databaseUrl = required(env, 'DATABASE_URL');
   const routeKey = decodeKey(required(env, 'KERNEL_ROUTE_KEY'), 'KERNEL_ROUTE_KEY', 32);
-  const entries = required(env, 'KERNEL_SESSION_KEYS').split(',');
-  const keys = new Map<number, Uint8Array>();
-  for (const entry of entries) {
-    const match = /^(\d+):([A-Za-z0-9_-]+)$/.exec(entry);
-    const id = match?.[1] === undefined ? NaN : Number(match[1]);
-    const encoded = match?.[2];
-    if (!Number.isInteger(id) || id < 0 || id > 255 || encoded === undefined || keys.has(id)) {
-      throw new ConfigError('KERNEL_SESSION_KEYS');
-    }
-    keys.set(id, decodeKey(encoded, 'KERNEL_SESSION_KEYS'));
-  }
-  const current = keys.keys().next().value as number | undefined;
-  if (current === undefined) throw new ConfigError('KERNEL_SESSION_KEYS');
+  const defaults = createKernelRuntimeDefaults({ env });
+  createWriteRateStage(defaults.writeRate, defaults.rateAttribution); // Validate trusted transport configuration at startup.
 
   const hostname = env.KERNEL_HOSTNAME ?? '127.0.0.1';
   const portValue = env.KERNEL_PORT ?? '4100';
@@ -73,15 +135,6 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const port = Number(portValue);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new ConfigError('KERNEL_PORT');
 
-  const writeRate = createWriteRateLimiter({
-    ...(env.KERNEL_WRITE_RATE_SECRET === undefined ? {} : { secret: env.KERNEL_WRITE_RATE_SECRET }),
-    ...(env.KERNEL_WRITE_RATE_OVERRIDES === undefined ? {} : { overrides: env.KERNEL_WRITE_RATE_OVERRIDES }),
-  });
-  const rateAttribution: WriteRateStageOptions = {
-    trustedProxyPeers: env.KERNEL_RATE_TRUSTED_PROXY_PEERS?.split(',') ?? [],
-    clientIpHeader: env.KERNEL_RATE_CLIENT_IP_HEADER ?? 'cf-connecting-ip',
-  };
-  createWriteRateStage(writeRate, rateAttribution); // Validate trusted transport configuration at startup.
   const search = readSearchConfig(env);
   const commerce = readCommerceConfig(env);
   return {
@@ -89,9 +142,10 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     hostname,
     port,
     routeKey,
-    tokens: { current, keys },
-    writeRate,
-    rateAttribution,
+    tokens: defaults.tokens,
+    writeRate: defaults.writeRate,
+    rateAttribution: defaults.rateAttribution,
+    ...(defaults.auth === undefined ? {} : { auth: defaults.auth }),
     commerce,
     content: readContentConfig(env),
     ...(search === undefined ? {} : { search }),
@@ -104,6 +158,12 @@ type RunningServer = {
 };
 
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
+  const defaults = createKernelRuntimeDefaults({
+    tokens: config.tokens,
+    ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
+    ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
+    ...(config.auth === undefined ? {} : { auth: config.auth }),
+  });
   const pool = createPool(config.databaseUrl);
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
@@ -118,7 +178,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       // Keep Sharp and the worker implementation out of API startup. This
       // status/enqueue adapter is loaded only if an operation route uses it.
       const [{ createContentOperationClient }, client] = await Promise.all([import('./content/work.ts'), workClient!]);
-      return createContentOperationClient({ pool, client, clock: systemClock });
+      return createContentOperationClient({ pool, client, clock: defaults.clock });
     })());
   const operationWorkflows: NativeAuthorErasureWorkflows = {
     async enqueue(input, context) {
@@ -140,11 +200,12 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     app = createKernel({
       pool,
       routeKey: config.routeKey,
-      tokens: config.tokens,
-      clock: systemClock,
+      tokens: defaults.tokens,
+      writeRate: defaults.writeRate,
+      rateAttribution: defaults.rateAttribution,
+      clock: defaults.clock,
+      access: defaults.access,
       content: { ...config.content, workflows: operationWorkflows },
-      ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
-      ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
       ratePeer: (request) => peers.get(request),
       ...(openSearch === undefined || searchConfig === undefined
         ? {}
@@ -161,7 +222,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         ? {}
         : {
             commerce: {
-              stripe: createStripePort({ ...commerce.stripe, clock: () => new Date() }),
+              stripe: createStripePort({ ...commerce.stripe, clock: defaults.clock }),
               successUrl: commerce.successUrl,
               cancelUrl: commerce.cancelUrl,
               webhookSecrets: commerce.webhookSecrets,

@@ -25,8 +25,6 @@ import type {
 } from '../../../../specs/native-credential-effect-driver.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { createAccess } from '../../src/access/index.ts';
-import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -39,6 +37,7 @@ import { OperatorDeniedError } from '../../src/access/operator.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { unseal } from '../../src/tokens/seal.ts';
+import { registerTestClient, testKernel, testRouteKey, type TestKernel } from '../support/test-kernel.ts';
 
 const originalPassword = 'native credential original password';
 const scopes = [
@@ -98,8 +97,8 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   let authPool: Pool | undefined;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let service: AuthService;
-  let access: ReturnType<typeof createAccess>;
-  let kernelHttp: ReturnType<typeof createKernel>;
+  let access: TestKernel['testAccess'];
+  let kernelHttp: TestKernel;
   let bindings: ReturnType<typeof createNativeAccountBindings>;
   let approvals: ReturnType<typeof createWorkflowApprovals>;
   const issuer = `https://credential-${suffix}.auth.test`;
@@ -108,7 +107,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   const loginClient = 'credential-login';
   const callers = new Map<string, Caller>();
   const organizationFixtures = new Map<string, { owner: string; memberReservationId: string }>();
-  const routeKey = randomBytes(32);
+  const routeKey = testRouteKey();
   const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
   const stagingKey = randomBytes(32);
   const secret = randomBytes(48).toString('base64url');
@@ -177,22 +176,19 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     (await successful<{ access_token: string }>(await request('/token', {}, caller), 'approval bearer')).access_token;
   const build = async () => {
     authPool = new Pool({ connectionString: connection(authName) });
-    access = createAccess({
+    kernelHttp = testKernel({
+      pool: kernel(),
       actions,
+      tokens: referenceKeys,
       auth: {
         issuer,
         audience,
         jwksUrl: `${issuer}/.well-known/jwks.json`,
         fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
       },
-    });
-    kernelHttp = createKernel({
-      pool: kernel(),
-      routeKey,
-      tokens: referenceKeys,
-      access: () => access,
       writeRate: createWriteRateLimiter({ secret }),
     });
+    access = kernelHttp.testAccess;
     const proofs = createNativeWorkflowProofPorts({ database: auth() });
     bindings = createNativeAccountBindings({
       pool: kernel(),
@@ -230,9 +226,9 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     });
     service = host.service;
     await host.start();
-    await service.internal.registerClient({ clientId: loginClient, firstParty: true, scopes });
+    await registerTestClient(service, { clientId: loginClient, firstParty: true, actions, scopes });
     for (const id of [clientId, 'credential-other-client'])
-      await service.internal.registerClient({ clientId: id, firstParty: false, scopes });
+      await registerTestClient(service, { clientId: id, firstParty: false, actions, scopes });
     await service.internal.registerWebsiteClient({
       publicJwks: {
         keys: [{ ...(await exportJWK(websitePair.publicKey)), kid: 'fixture-website', alg: 'ES256', use: 'sig' }],
@@ -438,7 +434,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     async seed(mode, sessions = 1) {
       const root = await governance();
       clientId = `credential-${randomUUID()}`;
-      await service.internal.registerClient({ clientId, firstParty: false, scopes });
+      await registerTestClient(service, { clientId, firstParty: false, actions, scopes });
       const human = await person();
       const other = await person();
       const owner = mode === 'organization-operator' ? await person() : other;

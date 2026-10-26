@@ -26,9 +26,18 @@ import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
-import type { Access, AccessConfig, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
+import type {
+  Access,
+  AccessConfig,
+  AccessFactory,
+  AccessRealmRoleReader,
+  Actor,
+  Resource,
+} from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -52,6 +61,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   workClient?: WorkClient;
 };
 
+<<<<<<< HEAD
 type ContentReadAssociation = Readonly<{ found: boolean; realmId: string | null }>;
 type ContentReadProof = Readonly<{
   actor: Actor;
@@ -161,6 +171,37 @@ function realmAwareContentAccess(access: Access): Access {
   return wrapped;
 }
 
+/** Builds the Access resolver shared by production kernels and test compositions. */
+export function createKernelAccessResolver(options: {
+  pool: Pool;
+  tokens: KeyRing;
+  clock: () => Date;
+  access?: Access | AccessFactory;
+  realmRoleReader?: AccessRealmRoleReader;
+}): { resolveAccess: (config: AccessConfig) => Access; realmRoleReader: AccessRealmRoleReader } {
+  const factory = options.access ?? createAccess;
+  let access: Access | undefined;
+  let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
+  const realmRoleReader: AccessRealmRoleReader =
+    options.realmRoleReader ??
+    ((client, input) => {
+      if (!realmMembership) {
+        if (!access) throw new Error('Realm membership role reader is not installed');
+        realmMembership = createRealmMembership({
+          pool: options.pool,
+          access,
+          referenceKeys: options.tokens,
+          clock: options.clock,
+        });
+      }
+      return realmMembership.roleReader(client, input);
+    });
+  const resolveAccess = (config: AccessConfig) =>
+    (access ??=
+      typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock: options.clock }) : factory);
+  return { resolveAccess, realmRoleReader };
+}
+
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies) {
   const sourceClock = dependencies.clock ?? systemClock;
@@ -169,19 +210,13 @@ export function createKernel(dependencies: KernelDependencies) {
     if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) throw new TypeError('Invalid command clock');
     return instant;
   };
-  const factory = dependencies.access ?? createAccess;
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
-  let access: Access | undefined;
-  let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
-  const realmRoleReader: AccessRealmRoleReader = (client, input) => {
-    if (!realmMembership) {
-      if (!access) throw new Error('Realm membership role reader is not installed');
-      realmMembership = createRealmMembership({ pool: dependencies.pool, access, referenceKeys: tokens, clock });
-    }
-    return realmMembership.roleReader(client, input);
-  };
-  const resolveAccess = (config: AccessConfig) =>
-    (access ??= typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock }) : factory);
+  const { resolveAccess, realmRoleReader } = createKernelAccessResolver({
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    ...(dependencies.access === undefined ? {} : { access: dependencies.access }),
+  });
   let opened: Promise<WorkClient> | undefined;
   const workClient = (): Promise<WorkClient> => {
     if (dependencies.workClient) return Promise.resolve(dependencies.workClient);
