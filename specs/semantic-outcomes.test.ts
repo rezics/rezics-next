@@ -358,7 +358,12 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   });
   const result = await read(composition.id);
   expect(result.subject.release).toBe(compiled.digest);
-  expect(result.related[composer.id]).toEqual({ labels: composer.labels });
+  expect(result.related[composer.id]).toEqual({
+    labels: composer.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   shape(
     result.subject.statements['schema:composer']![0]!,
     'schema:composer',
@@ -459,7 +464,12 @@ test('Editor creates a work edition and recipe in Wikibase shape and creation ke
   const result = await read(work.id);
   shape(result.subject.statements['schema:author']![0]!, 'schema:author', 'wikibase-item', person.id, digest);
   expect(result.subject.statements['schema:author']![0]!.qualifiers).toMatchObject(author.qualifiers);
-  expect(result.related[person.id]).toEqual({ labels: person.labels });
+  expect(result.related[person.id]).toEqual({
+    labels: person.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(result.related['schema:author']!.labels.en).toBeTruthy();
   expect(result.related['schema:url']!.labels.en).toBeTruthy();
   shape(edition.statements['schema:exampleOfWork']![0]!, 'schema:exampleOfWork', 'wikibase-item', work.id, digest);
@@ -1028,7 +1038,13 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   expect(redirect.headers.get('location')).toBe(subjectPath(survivor!.id));
   const book = redirected!.id === first.id ? bookA : bookB;
   const result = await read(book.id);
-  expect(result.related[redirected!.id]).toEqual({ redirect: survivor!.id, labels: survivor!.labels });
+  expect(result.related[redirected!.id]).toEqual({
+    redirect: survivor!.id,
+    labels: survivor!.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(result.subject.statements).toEqual(book.statements);
   expect(await driver.inspect.revisions(survivor!.id)).toEqual(survivorBefore);
   const rows = await driver.inspect.revisions(redirected!.id);
