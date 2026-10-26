@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { accessEvidence } from './evidence.ts';
 import type { AccessClient } from '../request/access.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
@@ -234,7 +235,10 @@ export function createMembershipInverseCommands(config: {
             reservation_id: reservationId,
           });
         }
-        const value = await config.realmAuthority?.readTerminal(client, { ...identity, reservationId });
+        const value = await accessEvidence(
+          () => config.realmAuthority?.readTerminal(client, { ...identity, reservationId }),
+          () => new LifecycleDeniedError(),
+        );
         return value &&
           value.accountId === identity.accountId &&
           value.principal.kind === 'realm' &&
@@ -295,7 +299,10 @@ export function createMembershipInverseCommands(config: {
             source_transaction_id: sourceTransactionId,
           });
         }
-        const value = await config.realmAuthority?.readChange(client, { ...identity, sourceTransactionId });
+        const value = await accessEvidence(
+          () => config.realmAuthority?.readChange(client, { ...identity, sourceTransactionId }),
+          () => new LifecycleDeniedError(),
+        );
         return value &&
           value.accountId === identity.accountId &&
           value.principal.kind === 'realm' &&

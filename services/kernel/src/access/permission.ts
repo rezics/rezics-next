@@ -1,3 +1,5 @@
+import { GrantDeniedError } from './grant-commands.ts';
+import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { Account } from './account-data.ts';
 import { accessCommandAttempt } from './command-admission.ts';
@@ -245,6 +247,7 @@ async function checkPreparedPermission(
     return { allowed, explicit: includeExplicit && rows.every((row) => row.explicit === true) };
   } catch (error) {
     throwAccessUnavailable(error, facts?.deadline);
+    throwEvidenceFailure(error);
     return { allowed: false, explicit: false };
   }
 }
@@ -414,12 +417,15 @@ export function createAccess(config: PermissionConfig): Access {
               const group = entries[0]!;
               const proofs = await withConnection(context.pool, async (client) => {
                 if (group.group_kind === 'realm')
-                  return (
-                    config.realmRoleReader?.(client, {
-                      realmId: group.organization_id,
-                      accountId: group.account_id,
-                      at,
-                    }) ?? null
+                  return accessEvidence(
+                    () =>
+                      config.realmRoleReader?.(client, {
+                        realmId: group.organization_id,
+                        accountId: group.account_id,
+                        at,
+                      }) ?? null,
+                    () => new GrantDeniedError(),
+                    deadline,
                   );
                 const rows = await membershipRead.run(client, {
                   route: routeOf(group.organization_id),
@@ -451,7 +457,10 @@ export function createAccess(config: PermissionConfig): Access {
             }),
           );
           for (const result of results)
-            if (result.status === 'rejected') throwAccessUnavailable(result.reason, deadline);
+            if (result.status === 'rejected') {
+              throwAccessUnavailable(result.reason, deadline);
+              throwEvidenceFailure(result.reason);
+            }
           if (results.some((result) => result.status === 'rejected' || !result.value)) return evidence;
         }
       }
@@ -481,6 +490,7 @@ export function createAccess(config: PermissionConfig): Access {
       });
     } catch (error) {
       throwAccessUnavailable(error, deadline);
+      throwEvidenceFailure(error);
       // Missing tables, unresolved accounts and other unclassified evidence failures deny.
     }
     return evidence;
@@ -567,11 +577,13 @@ export async function checkDelegationBounds(
         return true;
       } catch (error) {
         throwAccessUnavailable(error, context.deadline);
+        throwEvidenceFailure(error);
         return false;
       }
     };
   } catch (error) {
     throwAccessUnavailable(error, context.deadline);
+    throwEvidenceFailure(error);
     return async () => false;
   }
 }

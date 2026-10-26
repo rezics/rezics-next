@@ -1,3 +1,5 @@
+import { GrantDeniedError } from './grant-commands.ts';
+import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { within } from './authenticate.ts';
 import type { AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
@@ -69,7 +71,11 @@ export function createResourceAnonymousEligibility<E>(options: ResourceEligibili
       resource: Object.freeze({ route: options.resource.route, id: options.resource.id }),
       action: options.action,
       async prepare(context: ResourceEligibilityPrepareContext) {
-        const evidence = await prepare(context);
+        const evidence = await accessEvidence(
+          () => prepare(context),
+          () => new GrantDeniedError(),
+          context.deadline,
+        );
         if (evidence === null || evidence === undefined) throw new Error('Missing resource eligibility evidence');
         return async (client: AccessClient, at: string) =>
           (await verify(
@@ -115,7 +121,13 @@ export async function evaluateResourceEligibility(
     typeof attempt.evidence === 'object' && attempt.evidence !== null ? observations.get(attempt.evidence) : undefined;
   if (facts) requireAccessDeadline(facts.deadline);
   if (!facts || facts.token !== eligibility || !Number.isFinite(Date.parse(attempt.at))) return false;
-  const result = await within(facts.deadline, () => facts.verify(attempt.client, attempt.at));
+  const result = await within(facts.deadline, () =>
+    accessEvidence(
+      () => facts.verify(attempt.client, attempt.at),
+      () => new GrantDeniedError(),
+      facts.deadline,
+    ),
+  );
   requireAccessDeadline(facts.deadline);
   return result === true;
 }

@@ -1,3 +1,4 @@
+import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import {
   authoritativeTimeValue,
@@ -122,7 +123,14 @@ export async function creationCapability(
     throw new TypeError(`Resource type ${type} is not declared by ${creation.action}`);
   entry.state = 'initializing';
   try {
-    if (!(await entry.validate(tx, entry.resource, creation.attempt.time))) throw new GrantDeniedError();
+    if (
+      !(await accessEvidence(
+        () => entry.validate(tx, entry.resource, creation.attempt.time),
+        () => new GrantDeniedError(),
+        creation.deadline,
+      ))
+    )
+      throw new GrantDeniedError();
     liveCreation(tx);
   } catch (error) {
     creation.failed = true;
@@ -229,7 +237,11 @@ export function parentCreationAuthorization(input: {
       if (prepared) requireAccessDeadline(prepared.deadline);
       if (!bound(attempt) || !prepared) throw denied();
       proofs.delete(proof as object);
-      if ((await prepared.authorization.authorize(tx, attempt, proof)) !== 'execute') throw denied();
+      if (
+        (await accessEvidence(() => prepared.authorization.authorize(tx, attempt, proof), denied, deadline)) !==
+        'execute'
+      )
+        throw denied();
       creations.set(tx, {
         access,
         attempt,

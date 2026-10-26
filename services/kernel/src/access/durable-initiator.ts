@@ -1,3 +1,4 @@
+import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import { commandAccessContext } from './command-admission.ts';
@@ -228,7 +229,11 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
           withConnection(pool, async (client) => {
             const bounded = deadlineClient(client, deadline);
             if (
-              !(await step.anchor.validate(bounded, time)) ||
+              !(await accessEvidence(
+                () => step.anchor.validate(bounded, time),
+                () => new DurableInitiatorUnavailableError(),
+                deadline,
+              )) ||
               !(await access.authorize(bounded, restored, step.action, resource, evidence, time))
             )
               throw new DurableInitiatorUnavailableError();
@@ -238,6 +243,7 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
       } catch (error) {
         if (actor) discardDurableIdentity(config.access, actor);
         throwAccessUnavailable(error);
+        throwEvidenceFailure(error);
         throw new DurableInitiatorUnavailableError();
       }
     },
