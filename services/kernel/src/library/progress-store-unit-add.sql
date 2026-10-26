@@ -1,4 +1,4 @@
-WITH input AS (
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route,
          :session_id::uuid AS session_id,
          :time::timestamptz AS added_at,
@@ -12,7 +12,7 @@ present AS (
 ),
 inserted AS (
   INSERT INTO library.progress_unit (route, session_id, unit_id, added_at)
-  SELECT present.route, present.session_id, unit.unit_id, input.added_at
+  SELECT input.route, present.session_id, unit.unit_id, input.added_at
   FROM present
   CROSS JOIN input
   CROSS JOIN LATERAL (

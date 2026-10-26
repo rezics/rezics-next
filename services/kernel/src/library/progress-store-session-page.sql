@@ -1,4 +1,4 @@
-WITH args AS (
+WITH args AS NOT MATERIALIZED (
   SELECT :route::integer AS route,
          :account_id::uuid AS account_id,
          :subject_id::uuid AS subject_id,
