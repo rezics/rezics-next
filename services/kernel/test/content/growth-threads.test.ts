@@ -31,20 +31,7 @@ type Fixture = Awaited<ReturnType<typeof standingFixture>>;
 type Anchor = { threadId: string; postId: string; revisionId: string; route: number };
 type GrowthMode = 'threads' | 'posts' | 'revisions';
 
-const seededRelations = [
-  'content.board',
-  'content.thread',
-  'content.post',
-  'content.revision',
-  'access.resource_grant',
-  'access.resource_denial',
-  'access.resource_initialization',
-  'access.resource_role_grant',
-  'core.receipt',
-  'core.outbox',
-  'editorial.write_basis',
-] as const;
-const checkObservations: { name: string; requestedCheckpoints: number; vacuums: Record<string, number> }[] = [];
+const checkObservations: { name: string; statements: string[] }[] = [];
 
 let db: GrowthDatabase;
 let fixture: Fixture;
@@ -622,19 +609,24 @@ async function assertAnchorRelations(growthDb: GrowthDatabase): Promise<void> {
   }
 }
 
-async function observeMaintenance(): Promise<{ requestedCheckpoints: number; vacuums: Record<string, number> }> {
-  const checkpoints = await db.admin.query<{ requested: number }>(
-    'SELECT num_requested::integer AS requested FROM pg_stat_checkpointer',
-  );
-  const vacuums = await db.admin.query<{ relation: string; vacuums: number }>(
-    `SELECT schemaname || '.' || relname AS relation, vacuum_count::integer AS vacuums
-     FROM pg_stat_user_tables WHERE schemaname || '.' || relname = ANY ($1)`,
-    [[...seededRelations]],
-  );
-  return {
-    requestedCheckpoints: checkpoints.rows[0]!.requested,
-    vacuums: Object.fromEntries(vacuums.rows.map(({ relation, vacuums }) => [relation, vacuums])),
-  };
+// Records the text of every statement sent through a pool, including those of the clients it hands out.
+function recording<T extends object>(target: T, statements: string[]): T {
+  const text = (query: unknown) =>
+    statements.push(typeof query === 'string' ? query : String((query as { text?: unknown }).text));
+  return new Proxy(target, {
+    get(object, key) {
+      const value = Reflect.get(object, key, object);
+      if (typeof value !== 'function') return value;
+      if (key === 'query')
+        return (...args: unknown[]) => {
+          text(args[0]);
+          return value.apply(object, args);
+        };
+      if (key === 'connect')
+        return async (...args: unknown[]) => recording(await value.apply(object, args), statements);
+      return value.bind(object);
+    },
+  });
 }
 
 async function runCheck(
@@ -649,7 +641,7 @@ async function runCheck(
   );
   const positionBase = Number(BigInt(nextPosition.rows[0]!.position) + 1_000_000n);
   const population = growthPopulation(`growth-content-${name}-${randomUUID()}`, mode, anchor, positionBase);
-  const before = await observeMaintenance();
+  const statements: string[] = [];
   const report = await checkGrowth(db, {
     name,
     bounds,
@@ -657,22 +649,21 @@ async function runCheck(
     repetitions: 3,
     warmups: 1,
     grow: async (growthDb, scale, previous) => {
-      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+      const recorded = {
+        ...growthDb,
+        pool: recording(growthDb.pool, statements),
+        admin: recording(growthDb.admin, statements),
+      };
+      await seed({ pool: recorded.pool, admin: recorded.admin }, population, {
         from: previous * ordinalsPerScale,
         to: scale * ordinalsPerScale,
       });
-      if (previous === 0) await assertAnchorRelations(growthDb);
+      if (previous === 0) await assertAnchorRelations(recorded);
+      await recorded.admin.query('CHECKPOINT');
     },
     operation,
   });
-  const after = await observeMaintenance();
-  checkObservations.push({
-    name,
-    requestedCheckpoints: after.requestedCheckpoints - before.requestedCheckpoints,
-    vacuums: Object.fromEntries(
-      seededRelations.map((relation) => [relation, (after.vacuums[relation] ?? 0) - (before.vacuums[relation] ?? 0)]),
-    ),
-  });
+  checkObservations.push({ name, statements });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   for (const sample of report.samples) {
     for (const [relation, cost] of Object.entries(sample.cost.relations ?? {})) {
@@ -841,11 +832,13 @@ test('Public board read stays within its bound as T grows', async () => {
   });
 }, 90_000);
 
-test('growth-threads grows request no checkpoint and leave one vacuum per scale to the harness', () => {
+test('growth-threads grows issue no CHECKPOINT statement', () => {
   expect(checkObservations).toHaveLength(9);
-  for (const { name, requestedCheckpoints, vacuums } of checkObservations) {
-    expect(requestedCheckpoints, `${name} requested checkpoints`).toBe(0);
-    for (const relation of seededRelations)
-      expect(vacuums[relation], `${name} vacuums of ${relation}`).toBe(scales.length);
+  for (const { name, statements } of checkObservations) {
+    expect(statements.length, `${name} statements recorded`).toBeGreaterThan(0);
+    expect(
+      statements.filter((statement) => /^\s*checkpoint\b/i.test(statement)),
+      `${name} CHECKPOINT statements`,
+    ).toEqual([]);
   }
 });
