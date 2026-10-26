@@ -170,9 +170,9 @@ function hasInvalidToken(challenge: string): boolean {
 export function logInternalError(options: {
   requestId: string;
   method: string;
-  route?: string;
+  route?: string | undefined;
   cause: unknown;
-  commandIndex?: number;
+  commandIndex?: number | undefined;
 }): void {
   const { requestId, method, route, cause, commandIndex } = options;
   const code = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
