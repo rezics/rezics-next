@@ -7,6 +7,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -183,7 +184,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await authPool?.end();
-  await pool.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  await dropTestDatabase(pool, authDatabase);
   await pool.end();
 });
 

@@ -26,6 +26,7 @@ import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { WORKFLOW_APPROVAL_ACTIONS, WorkflowApprovalDeniedError } from '../../src/access/workflow-approvals.ts';
 import { derivedId, newId, routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const password = 'continuation-password';
 const scopes = [
@@ -299,7 +300,7 @@ afterAll(async () => {
   await authPool?.end().catch(() => {});
   await kernel.end();
   await facts.end();
-  await admin.query(`DROP DATABASE IF EXISTS "${authName}" WITH (FORCE)`).catch(() => {});
+  await dropTestDatabase(admin, authName).catch(() => {});
   await admin.end();
 });
 

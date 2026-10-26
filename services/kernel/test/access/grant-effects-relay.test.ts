@@ -19,6 +19,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { grantFixture } from './grant-fixture.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const eventTypes = [
   'com.rezics.access.grant.create.v1',
@@ -93,7 +94,7 @@ afterAll(async () => {
         } finally {
           if (admin) {
             try {
-              if (database) await admin.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
+              if (database) await dropTestDatabase(admin, database);
             } finally {
               await admin.end();
             }

@@ -86,19 +86,11 @@ const helper = ['support/drop-test-database.ts', 'support/drop-test-database.tes
 // Files of other owners that still hold a raw forced drop; each owner deletes its entries as it moves them, and the
 // list goes when it is empty.
 const allowlist = [
-  'access/auth-bindings-contract.test.ts',
-  'access/authenticate.test.ts',
-  'access/bootstrap-governance.test.ts',
-  'access/grant-effects-relay.test.ts',
-  'access/pending-provisioning-read.test.ts',
-  'access/public-floor.test.ts',
   'commerce/governance.test.ts',
   'commerce/payout-mark-paid.test.ts',
   'commerce/support/outcome-driver.ts',
   'library/support/outcome-driver.ts',
   'semantic/governance-actions.test.ts',
-  'support/auth-database.ts',
-  'support/auth-database.test.ts',
 ];
 
 const sources = new Map<string, string>();

@@ -20,6 +20,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { readBatch, EVENT_TYPES } from '../../src/events/log.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
@@ -245,7 +246,7 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => {
   await authPool?.end();
-  if (authDatabase) await reader.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  if (authDatabase) await dropTestDatabase(reader, authDatabase);
   await pool.end();
   await reader.end();
 });

@@ -11,6 +11,7 @@ import {
   type AuthBindingCapabilities,
   type AuthAuthorizationReceipt,
 } from '../../src/access/auth-bindings.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -324,6 +325,6 @@ test('real Auth cannot establish a native session for a fenced Access identity',
     expect((await authPool.query('SELECT id FROM session')).rows).toEqual(before.rows);
   } finally {
     await authPool.end();
-    await pool.query(`DROP DATABASE ${name} WITH (FORCE)`);
+    await dropTestDatabase(pool, name);
   }
 }, 60_000);
