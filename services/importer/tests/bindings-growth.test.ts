@@ -1,7 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
@@ -12,7 +13,6 @@ const SCALES = [1, 8, 64] as const;
 const SOURCE = 'growth';
 const SUBJECT = uuid(1);
 const TABLES = ['binding_records', 'binding_groups', 'binding_journal', 'binding_candidates', 'binding_media'];
-const root = resolve(import.meta.dir, '../../../.temp');
 
 function uuid(value: number): string {
   return `00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
@@ -256,7 +256,7 @@ async function measuredAtScale<T>(
   seed: (database: Database, count: number, target: Owner) => void,
   operation: (bindings: RecordBindings, target: Owner) => T,
 ): Promise<{ value: T; cost: { rows: number; blocks: 0; statements: number }; statements: SqliteEvidence[] }> {
-  const directory = await mkdtemp(join(root, 'bindings-growth-'));
+  const directory = await mkdtemp(join(tmpdir(), 'bindings-growth-'));
   const native = new Database(join(directory, 'bindings.sqlite'), { create: true, strict: true });
   const probe = createSqliteProbe(native, { growingTables: TABLES });
   const bindings = new RecordBindings(probe.database);
@@ -324,7 +324,6 @@ async function check(
 }
 
 test('Binding lookup stays within its bound as B grows', async () => {
-  await mkdir(root, { recursive: true });
   await check(
     'lookup',
     (database, count, target) => {
@@ -340,7 +339,6 @@ test('Binding lookup stays within its bound as B grows', async () => {
 });
 
 test('Binding candidate page stays within its bound as B grows', async () => {
-  await mkdir(root, { recursive: true });
   await check(
     'candidate-page',
     (database, count, target) => {
@@ -357,7 +355,6 @@ test('Binding candidate page stays within its bound as B grows', async () => {
 });
 
 test('Media projection stays within its bound as B grows', async () => {
-  await mkdir(root, { recursive: true });
   await check(
     'media-projection',
     (database, count, target) => {
@@ -374,7 +371,6 @@ test('Media projection stays within its bound as B grows', async () => {
 });
 
 test('Binding write stays within its bound as B grows', async () => {
-  await mkdir(root, { recursive: true });
   const { samples, evidence } = await check(
     'binding-write',
     (database, count, target) => {
@@ -403,7 +399,6 @@ test('Binding write stays within its bound as B grows', async () => {
 });
 
 test('Media write stays within its bound as B grows', async () => {
-  await mkdir(root, { recursive: true });
   const { samples, evidence } = await check(
     'media-write',
     (database, count, target) => {

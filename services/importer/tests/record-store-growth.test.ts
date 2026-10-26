@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import { RecordStore, type RecordRow } from '../src/record-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
@@ -47,8 +48,7 @@ function presentRecord(source: string, recordKey: string): RecordRow {
 }
 
 test('Record upsert stays within its bound as R grows', () => {
-  mkdirSync('.temp', { recursive: true });
-  const directory = mkdtempSync(resolve('.temp/record-store-growth-'));
+  const directory = mkdtempSync(join(tmpdir(), 'record-store-growth-'));
   let probe!: ReturnType<typeof createSqliteProbe>;
   const store = new RecordStore(resolve(directory, 'records.sqlite'), {
     instrumentDatabase(database) {

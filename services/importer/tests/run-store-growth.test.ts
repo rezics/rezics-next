@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import { runStoreCost, type Staged } from '../../../specs/imports-run-store-driver.ts';
@@ -54,8 +56,7 @@ const ack = (keys: string[]): BatchWriteResult => ({
 });
 
 test('fixed run-state operations stay indexed at three scales', async () => {
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp('.temp/run-growth-');
+  const directory = await mkdtemp(join(tmpdir(), 'run-growth-'));
   const d = await createImportRunStoreDriver({ directory });
   const samples = new Map<string, GrowthSample[]>();
   try {
@@ -247,8 +248,7 @@ async function measureRunGrowth(
   const samples: GrowthSample[] = [];
   const plans: string[] = [];
   for (const scale of RUN_SCALES) {
-    await mkdir('.temp', { recursive: true });
-    const directory = await mkdtemp('.temp/run-store-growth-followup-');
+    const directory = await mkdtemp(join(tmpdir(), 'run-store-growth-followup-'));
     const store = new RunStore(`${directory}/runs.sqlite`);
     const probe = createSqliteProbe(store.database, {
       growingTables: [
