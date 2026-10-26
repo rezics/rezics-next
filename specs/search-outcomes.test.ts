@@ -118,6 +118,7 @@ async function absent(subject: Subject, text: string) {
 const typeFilter = (type = 'schema:Book') => ({ type: { in: [type] } });
 const statement = (property: string, content: string): StatementInput =>
   ({ property: { id: property }, value: { type: 'value', content }, rank: 'normal' });
+const part = (property: string, content: string) => ({ property: { id: property }, value: { type: 'value', content } });
 
 test('Traditional and Simplified Chinese match without matching a different title or an extended phrase', async () => {
   const book = await create({ en: marker, 'zh-Hant': '魔法禁書目錄' });
@@ -191,7 +192,7 @@ test('Statement filters use adopted Global values and positive roots admit bound
   const other = await create('Excluded');
   const proposal = await write('editor', `${subjectPath(book.id)}/candidates`, {
     statement: { ...statement('schema:author', author.id),
-      references: [{ parts: [statement('schema:url', 'https://example.org/reference')] }] },
+      references: [{ parts: [part('schema:url', 'https://example.org/reference')] }] },
   });
   expect(proposal.status).toBe(201);
   const candidate = proposal.body.candidate as string;
@@ -260,10 +261,10 @@ test('Name paging has exact totals stable ties and request principal and signatu
   const tie = await create({ en: `${marker} ＡＬＰＨＡ` });
   const beta = await create('Beta');
   const gamma = await create('Gamma');
-  const unlabelled = await create({}, { aliases: { en: [marker] } });
-  const subjects = [first, tie, beta, gamma, unlabelled];
+  const omega = await create('Omega', { aliases: { en: [marker] } });
+  const subjects = [first, tie, beta, gamma, omega];
   await indexed(subjects);
-  const expected = [...[first, tie].sort((a, b) => a.id < b.id ? -1 : 1), beta, gamma, unlabelled];
+  const expected = [...[first, tie].sort((a, b) => a.id < b.id ? -1 : 1), beta, gamma, omega];
   const body = { text: marker, sort: 'name', limit: 2 };
   const one = page(await search(body), 2);
   expect(typeof one.next).toBe('string');
