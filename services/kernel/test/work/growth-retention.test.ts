@@ -44,14 +44,15 @@ async function seed(db: GrowthDatabase, kind: 'old' | 'recent', amount: number, 
 
 async function seedShortBatch(
   db: GrowthDatabase,
-  kind: 'eligible' | 'long-lived' | 'recent',
+  kind: 'short-eligible' | 'short-long-lived' | 'short-recent',
   amount: number,
   offset: number,
 ): Promise<void> {
   if (amount === 0) return;
   const now = Date.now();
-  const createdAt = kind === 'eligible' ? now - 401 * dayMs : kind === 'long-lived' ? now - 400 * dayMs : now - dayMs;
-  const completedAt = kind === 'eligible' ? now - 400 * dayMs : now - dayMs;
+  const createdAt =
+    kind === 'short-eligible' ? now - 401 * dayMs : kind === 'short-long-lived' ? now - 400 * dayMs : now - dayMs;
+  const completedAt = kind === 'short-eligible' ? now - 400 * dayMs : now - dayMs;
   await db.pool.query(
     `INSERT INTO dbos.workflow_status (
        workflow_uuid, status, name, authenticated_roles, recovery_attempts,
@@ -64,6 +65,43 @@ async function seedShortBatch(
     [prefix, kind, createdAt, completedAt, completedAt, offset, amount],
   );
 }
+
+test('a short retention batch stays bounded as retained workflow history grows', async () => {
+  const report = await checkGrowth(db, {
+    name: 'short workflow retention batch',
+    scales: [1000, 8000, 64_000],
+    repetitions: 1,
+    warmups: 0,
+    bounds: {
+      statements: 'constant',
+      rows: 'constant',
+      blocks: 'logarithmic',
+    },
+    slack: {
+      rows: { absolute: 10, relative: 0 },
+      blocks: { absolute: 24, relative: 0 },
+    },
+    async grow(growth, scale, previous) {
+      // Reinsert the same ten eligible rows after the previous measurement deleted them.
+      await seedShortBatch(growth, 'short-eligible', 10, 0);
+      if (previous === 0) {
+        // Keep the existing 128k old/recent history shape fixed. The old rows are long-lived, not eligible.
+        await seedShortBatch(growth, 'short-long-lived', 128_000, 0);
+        await seedShortBatch(growth, 'short-recent', 128_000, 0);
+      }
+      await seedShortBatch(growth, 'short-recent', scale - previous, 128_000 + previous);
+    },
+    async operation() {
+      expect(await runWorkflowRetentionBatch(30, client)).toBe(10);
+    },
+  });
+
+  expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
+  expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
+  expect(report.samples[0]!.cost.rows).toBeGreaterThan(0);
+  expect(report.samples[1]!.cost.statements).toBe(report.samples[0]!.cost.statements);
+  expect(report.samples[2]!.cost.statements).toBe(report.samples[0]!.cost.statements);
+});
 
 test('one retention batch stays bounded as retained and recent workflow history grow', async () => {
   // A fixed deep history keeps the planner on the ordered index path while the measured populations grow.
@@ -92,43 +130,6 @@ test('one retention batch stays bounded as retained and recent workflow history 
     },
     async operation() {
       expect(await runWorkflowRetentionBatch(30, client)).toBe(1000);
-    },
-  });
-
-  expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
-  expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
-  expect(report.samples[0]!.cost.rows).toBeGreaterThan(0);
-  expect(report.samples[1]!.cost.statements).toBe(report.samples[0]!.cost.statements);
-  expect(report.samples[2]!.cost.statements).toBe(report.samples[0]!.cost.statements);
-});
-
-test('a short retention batch stays bounded as retained workflow history grows', async () => {
-  const report = await checkGrowth(db, {
-    name: 'short workflow retention batch',
-    scales: [1000, 8000, 64_000],
-    repetitions: 1,
-    warmups: 0,
-    bounds: {
-      statements: 'constant',
-      rows: 'constant',
-      blocks: 'logarithmic',
-    },
-    slack: {
-      rows: { absolute: 10, relative: 0 },
-      blocks: { absolute: 24, relative: 0 },
-    },
-    async grow(growth, scale, previous) {
-      // Reinsert the same ten eligible rows after the previous measurement deleted them.
-      await seedShortBatch(growth, 'eligible', 10, 0);
-      if (previous === 0) {
-        // Keep the existing 128k old/recent history shape fixed. The old rows are long-lived, not eligible.
-        await seedShortBatch(growth, 'long-lived', 128_000, 0);
-        await seedShortBatch(growth, 'recent', 128_000, 0);
-      }
-      await seedShortBatch(growth, 'recent', scale - previous, 128_000 + previous);
-    },
-    async operation() {
-      expect(await runWorkflowRetentionBatch(30, client)).toBe(10);
     },
   });
 
