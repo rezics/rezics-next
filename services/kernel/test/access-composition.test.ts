@@ -11,9 +11,24 @@ const pool = createPool(databaseUrl);
 afterAll(() => pool.end());
 
 const thing: Resource = { route: 0x1234, id: '019a1b2c-3d4e-7f00-8a00-123400000001' };
-const read = { operationId: 'thing.get', 'x-action': 'thing:read', security: [{ bearerAuth: [] }, {}] };
-const create = { operationId: 'thing.create', 'x-action': 'thing:create', security: [{ bearerAuth: [] }] };
-const list = { operationId: 'thing.list', 'x-action': 'thing:list', security: [{ bearerAuth: [] }, {}] };
+const read = {
+  operationId: 'thing.get',
+  'x-action': 'thing:read',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }, {}],
+};
+const create = {
+  operationId: 'thing.create',
+  'x-action': 'thing:create',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }],
+};
+const list = {
+  operationId: 'thing.list',
+  'x-action': 'thing:list',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }, {}],
+};
 
 /** Routes that answer whether access allowed the request; `listed` adds a third action. */
 function thingApp(access: Access | AccessFactory, listed = false) {
