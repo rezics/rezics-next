@@ -305,8 +305,13 @@ beforeAll(async () => {
     writeRate: limiter,
   });
   scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
-  // The kernel installs its Access on the first routed request. Membership must use that object.
-  await kernel.handle(new Request(`http://kernel.test/v1/realms/${newId(29)}`));
+  // Anonymous reads return before Access is built. A bearer forces the kernel to
+  // install the Access membership must share, so admission sees the same actor.
+  await kernel.handle(
+    new Request(`http://kernel.test/v1/realms/${newId(29)}`, {
+      headers: { authorization: 'Bearer install-access' },
+    }),
+  );
   if (!access) throw new Error('Kernel access was not installed');
   membership = createRealmMembership({ pool, access });
   roleReader = membership.roleReader;
