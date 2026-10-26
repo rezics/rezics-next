@@ -1,8 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { realpathSync, statSync } from 'node:fs';
-import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
+import { createRecorder, orderFiles, parseJunit, readLatest, timingsDirectory, writeTimings } from './check-timings.ts';
 import { buildSearchImage, waitForSearch } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -219,6 +221,11 @@ async function psql(sql: string): Promise<void> {
   if (result.status !== 0) throw new Error(`psql -c ${sql} failed:\n${result.output}`);
 }
 
+/** Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
+export function testCommand(file: string, junitFile: string): string[] {
+  return ['test', '--timeout', '60000', '--reporter=junit', `--reporter-outfile=${junitFile}`, `./${file}`];
+}
+
 export function docker(args: string[]): string {
   return run('docker', args);
 }
@@ -396,25 +403,41 @@ async function main(): Promise<void> {
   await waitForSearch(searchUrl, searchContainer);
   const concurrency = Number(process.env.KERNEL_CHECK_CONCURRENCY ?? 6);
   if (!Number.isInteger(concurrency) || concurrency < 1) fail('KERNEL_CHECK_CONCURRENCY must be a positive integer');
-  const outcomes = await scheduleFiles(testFiles, concurrency, {
-    // Each file gets a fresh copy so its result cannot depend on writes from another file.
-    create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
-    run: async (file, database) => {
-      // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
-      const result = await capture('bun', ['test', '--timeout', '60000', `./${file}`], {
-        ...env,
-        DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
-        OPENSEARCH_URL: searchUrl,
-      });
-      if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
-      return result.output;
+  const reports = mkdtempSync(join(tmpdir(), 'kernel-check-'));
+  const recorder = createRecorder();
+  let timingsPath: string | null = null;
+  try {
+    timingsPath = timingsDirectory(directory);
+  } catch (error) {
+    console.warn(`Check timings are not recorded: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const latest = timingsPath ? readLatest(timingsPath) : {};
+  const runner = recorder.wrap(
+    {
+      // Each file gets a fresh copy so its result cannot depend on writes from another file.
+      create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
+      run: async (file, database) => {
+        const result = await capture('bun', testCommand(file, join(reports, `${database}.xml`)), {
+          ...env,
+          DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
+          OPENSEARCH_URL: searchUrl,
+        });
+        if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
+        return result.output;
+      },
+      drop: (_file, database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
     },
-    drop: (_file, database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
+    async (_file, database) => parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
+  );
+  const outcomes = await scheduleFiles(orderFiles(testFiles, latest), concurrency, {
+    ...runner,
     onComplete: (outcome) => {
       if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
       if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
     },
   });
+  rmSync(reports, { recursive: true, force: true });
+  if (timingsPath) writeTimings(timingsPath, recorder.timings(), { partial: plan.files !== null });
   const failedFiles = outcomes.filter((outcome) => outcome.error).map((outcome) => outcome.file);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }

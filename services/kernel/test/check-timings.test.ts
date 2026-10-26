@@ -41,6 +41,11 @@ const junit = `<?xml version="1.0" encoding="UTF-8"?>
 </testsuites>
 `;
 
+const reported = [
+  { name: 'first', time: 0.01 },
+  { name: 'second', time: 0.005 },
+];
+
 function timing(wall: number): FileTiming {
   return { wall, create: 0, drop: 0, outsideTests: 0, result: 'pass', tests: [] };
 }
@@ -58,7 +63,7 @@ test('a check run records each file’s wall time and per-test times', async () 
         },
         drop: () => Bun.sleep(5),
       },
-      async (file) => (file === 'bad.test.ts' ? [] : parseJunit(junit)),
+      async (file) => (file === 'bad.test.ts' ? [] : reported),
     );
     await scheduleFiles(['ok.test.ts', 'bad.test.ts'], 2, runner);
     writeTimings(directory, recorder.timings(), { partial: false, now: new Date('2026-10-26T01:02:03.456Z') });
@@ -73,17 +78,21 @@ test('a check run records each file’s wall time and per-test times', async () 
     expect(ok.wall).toBeGreaterThanOrEqual(0.04);
     expect(ok.create).toBeGreaterThanOrEqual(0.004);
     expect(ok.drop).toBeGreaterThanOrEqual(0.004);
-    expect(ok.tests).toEqual([
-      { name: 'group one', time: 0.1 },
-      { name: 'two "q" <x>', time: 0.25 },
-      { name: 'bad', time: 0.5 },
-    ]);
+    expect(ok.tests).toEqual(reported);
     // Module load and hooks: the wall time minus the tests' own time.
-    expect(ok.outsideTests).toBeCloseTo(ok.wall - 0.85, 3);
+    expect(ok.outsideTests).toBeCloseTo(ok.wall - 0.015, 3);
 
     expect(latest['bad.test.ts']!.result).toBe('fail');
     expect(latest['bad.test.ts']!.tests).toEqual([]);
   });
+});
+
+test('the JUnit report gives each test’s name and time', () => {
+  expect(parseJunit(junit)).toEqual([
+    { name: 'group one', time: 0.1 },
+    { name: 'two "q" <x>', time: 0.25 },
+    { name: 'bad', time: 0.5 },
+  ]);
 });
 
 test('a run with named files merges them into the last recorded timings', async () => {
