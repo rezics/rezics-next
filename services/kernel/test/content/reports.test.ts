@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { IdempotencyConflictError, principalCommandIdentity } from '../../src/command/command.ts';
 import { createThread } from '../../src/content/commands.ts';
 import { revisePost } from '../../src/content/commands.ts';
@@ -16,12 +18,14 @@ import {
 import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
 import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
 let system: NativeContentSystem;
 let governanceBearer: string;
-let governanceAccountId: string;
+let schemeId: string;
+let conceptId: string;
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const routeKey = new Uint8Array(32).fill(71);
@@ -61,23 +65,38 @@ async function accountActor(bearer: string) {
   return actor;
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
   system = await createNativeContentSystem({ databaseUrl });
+  await bootstrapRelease(system.database.pool, bundledRelease);
   const { rows } = await system.database.pool.query(
     'SELECT account_id FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1',
-    ['00000000-0000-8000-8000-000000000000'],
+    [PLATFORM_RESOURCE.id],
   );
-  governanceAccountId = rows[0]!.account_id;
-  governanceBearer = (
-    await system.auth.issue({
-      accountId: rows[0]!.account_id,
-      clientId: system.auth.ordinaryClient.id,
-      scopes: [...system.actions.keys()].filter((action) => action !== 'media:complete'),
-    })
-  ).bearer;
+  const governance = await system.auth.issue({
+    accountId: rows[0]!.account_id,
+    clientId: system.auth.ordinaryClient.id,
+    scopes: ['access:grant', 'moderation:read_reports'],
+  });
+  governanceBearer = governance.bearer;
+  if (!governance.actor.scopes.includes('moderation:read_reports'))
+    throw new Error('Governance credential lacks report inspection scope');
+  const { subject: scheme } = await command<{ subject: { id: string } }>('POST', '/v1/subjects', {
+    type: 'skos:ConceptScheme',
+    labels: { en: 'Reports fixture scheme' },
+  });
+  const { subject: concept } = await command<{ subject: { id: string } }>('POST', '/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: 'Reports fixture concept' },
+    statements: {
+      'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.id } }],
+    },
+  });
+  schemeId = scheme.id;
+  conceptId = concept.id;
 }, 30_000);
-afterAll(async () => {
+afterEach(async () => {
   await system?.close();
+  grantRanges.clear();
 });
 
 async function permission(path: string, body: unknown, bearer = governanceBearer) {
@@ -94,6 +113,29 @@ async function permission(path: string, body: unknown, bearer = governanceBearer
   );
   if (!response.ok) throw new Error(`Fixture permission ${path}: ${response.status} ${await response.text()}`);
   return (await response.json()) as { grant: { valid: string } };
+}
+
+async function command<T>(
+  method: 'POST' | 'PUT',
+  path: string,
+  body: unknown,
+  bearer = system.actors.moderator.bearer,
+  headers: Record<string, string> = {},
+): Promise<T> {
+  const { response } = await system.transport.capture(
+    new Request(`https://content.test${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${bearer}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(randomUUID()),
+        ...headers,
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (!response.ok) throw new Error(`Fixture command ${method} ${path}: ${response.status} ${await response.text()}`);
+  return (await response.json()) as T;
 }
 
 async function grant(target: ReportTarget, actorId: string, action: string) {
@@ -116,17 +158,35 @@ async function revoke(target: ReportTarget, actorId: string, action: string) {
 }
 
 async function fixture() {
-  const board: ReportTarget = { kind: 'board', id: newId(0x1270) };
-  // Privileged fixture setup creates the parent only. Reports always use the production command.
-  await system.database.pool.query(
-    `INSERT INTO content.board
-       (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Reports fixture','published',1,$4)`,
-    [routeOf(board.id), board.id, newId(0x5600), randomUUID()],
+  const { space } = await command<{ space: { spaceId: string } }>('POST', '/v1/spaces', {
+    title: 'Reports fixture space',
+    summary: 'Reports fixture space',
+  });
+  const { realm } = await command<{ realm: { realmId: string; headRevisionId: string } }>('POST', '/v1/realms', {
+    spaceId: space.spaceId,
+    title: 'Reports fixture Realm',
+    summary: 'Reports fixture Realm',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
+  });
+  await command<unknown>(
+    'PUT',
+    `/v1/realms/${realm.realmId}/boardScheme`,
+    { schemeId },
+    system.actors.moderator.bearer,
+    { 'if-match': JSON.stringify(realm.headRevisionId) },
   );
-  await provisionGrantAuthority(board, ['thread:create'], system.actors.moderator.actor.accountId);
+  const { board: createdBoard } = await command<{ board: { id: string } }>(
+    'POST',
+    `/v1/realms/${realm.realmId}/boards`,
+    {
+      conceptId,
+      title: 'Reports fixture board',
+      visibility: 'published',
+    },
+  );
+  const board: ReportTarget = { kind: 'board', id: createdBoard.id };
   const author = await accountActor(system.actors.author.bearer);
-  await grant(board, author.accountId, 'thread:create');
   const created = await createThread(
     { pool: system.database.pool, access: system.access, routeKey },
     author,
@@ -141,15 +201,12 @@ async function fixture() {
     context(),
   );
   const target: ReportTarget = { kind: 'post', id: created.value.itemId };
-  await provisionGrantAuthority(target, ['report:create', 'reaction:set', 'moderation:read_reports']);
-  // A separate setup grantor keeps each real actor within its native write budget.
-  await provisionGrantAuthority(target, ['reaction:set'], author.accountId);
-  const standing = await permission('/v1/roleGrants', {
-    resource: resource(target),
-    subject: { kind: 'active_accounts' },
-    role: 'content.post.standing',
-    valid: '(,)',
-  });
+  const standing = await system.database.pool.query<{ valid: string }>(
+    `SELECT valid::text AS valid FROM access.resource_role_grant
+     WHERE route=$1 AND resource_id=$2 AND grant_role='content.post.standing' AND upper_inf(valid)`,
+    [routeOf(target.id), target.id],
+  );
+  if (standing.rows.length !== 1) throw new Error('Fixture post standing role was not installed');
   const input: ReportInput = {
     target,
     revisionId: created.value.revisionId,
@@ -157,18 +214,8 @@ async function fixture() {
     evidence: 'Evidence',
   };
   const moderator = await accountActor(system.actors.moderator.bearer);
-  await grant(target, author.accountId, 'report:create');
   await grant(target, moderator.accountId, 'moderation:read_reports');
-  return { board, author, moderator, target, input, created, standingValid: standing.grant.valid };
-}
-
-async function provisionGrantAuthority(target: ReportTarget, actions: string[], accountId = governanceAccountId) {
-  await permission('/v1/grants', {
-    resource: resource(target),
-    subject: { kind: 'account', id: accountId },
-    actions,
-    valid: '(,)',
-  });
+  return { board, author, moderator, target, input, created, standingValid: standing.rows[0]!.valid };
 }
 
 async function nativeReport(id: string, pool = system.database.pool) {
@@ -316,7 +363,6 @@ test('missing proof and malformed anonymous possession keys deny; authenticated 
     scopes: [],
   });
   await expect(createReport(deps(), credential.actor, f.input, context())).rejects.toThrow();
-  await revoke(f.target, f.author.accountId, 'report:create');
   await permission('/v1/roleGrants:revoke', {
     resource: resource(f.target),
     subject: { kind: 'active_accounts' },
@@ -399,7 +445,11 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       // Fixed background at the smallest scale gives the native planner realistic
       // grant statistics. These unrelated resources grant nothing on the target.
       for (let index = 0; index < 4096; index++) {
-        await provisionGrantAuthority({ kind: 'post', id: newId(routeOf(f.target.id)!) }, ['report:create']);
+        await grant(
+          { kind: 'post', id: newId(routeOf(f.target.id)!) },
+          f.moderator.accountId,
+          'moderation:read_reports',
+        );
       }
       await _db.admin.query('ANALYZE access.resource_grant');
     }

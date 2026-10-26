@@ -618,6 +618,7 @@ test('Author erasure binding and status stays within its bound as P grows', asyn
           actor_requested_by: null,
           actor_authn_epoch: 1,
           empty_scope: true,
+          anchor_post_id: postId,
           upper_created_at: null,
           upper_post_id: null,
           requested_at: new Date(),

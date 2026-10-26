@@ -27,6 +27,7 @@
     "subject:merge",
     "moderation:hide",
     "moderation:takedown",
+    "moderation:read_reports",
     "post:erase",
     "media:erase",
     "offer:create",
@@ -34,5 +35,5 @@
     "space:create",
     "realm:create"
   ],
-  "globalReach": ["moderation:takedown", "post:erase", "media:erase", "access:grant"]
+  "globalReach": ["moderation:takedown", "moderation:read_reports", "post:erase", "media:erase", "access:grant"]
 }
