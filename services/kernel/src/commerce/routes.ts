@@ -98,10 +98,7 @@ function entitlementView(entitlement: Entitlement) {
   return { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason, active: revokedAt === null };
 }
 async function orderView(pool: Pool, order: Order) {
-  const entitlements = await pool.query<{ id: string }>(
-    'SELECT entitlement_id AS id FROM commerce.entitlement WHERE route=$1 AND order_id=$2',
-    [routeOf(order.id), order.id],
-  );
+  const entitlement = await store.readOrderEntitlement(pool, routeOf(order.id), order.id);
   const { id, offerId, settlement, checkoutUrl, checkoutExpiresAt, createdAt } = order;
   return {
     id,
@@ -109,7 +106,7 @@ async function orderView(pool: Pool, order: Order) {
     settlement,
     checkoutUrl,
     checkoutExpiresAt,
-    entitlementId: entitlements.rows[0]?.id ?? null,
+    entitlementId: entitlement?.id ?? null,
     createdAt,
   };
 }

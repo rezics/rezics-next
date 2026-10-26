@@ -194,6 +194,14 @@ export async function readEntitlement(client: Client, route: number, id: string)
   const row = await entitlementRead.run(queryClient(client), { route, id });
   return row ? asEntitlement(row) : null;
 }
+export async function readOrderEntitlement(
+  client: Client,
+  route: number,
+  orderId: string,
+): Promise<Entitlement | null> {
+  const row = await entitlementOrder.run(queryClient(client), { route, order_id: orderId });
+  return row ? asEntitlement(row) : null;
+}
 export async function listEntitlements(
   client: Client,
   route: number,
@@ -250,11 +258,11 @@ export async function readSettlementState(
   assertTransactionBound(ids);
   const order = await readOrder(client, route, orderId);
   if (!order) return null;
-  const entitlement = await entitlementOrder.run(queryClient(client), { route, order_id: orderId });
+  const entitlement = await readOrderEntitlement(client, route, orderId);
   const transactions = await transactionsProbe.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
   return {
     order,
-    entitlement: entitlement ? asEntitlement(entitlement) : null,
+    entitlement,
     transactionIds: transactions.map((t) => t.id),
   };
 }
