@@ -41,6 +41,23 @@ counted.query = ((query: QueryConfig) => {
   queries.push(query);
   return pool.query(query);
 }) as Pool['query'];
+// Permission preparation releases each separate anchor's borrowed connection.
+// Observe those queries as well as direct pool queries before resource checkout.
+counted.connect = (async () => {
+  const client = await pool.connect();
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === 'query')
+        return (query: QueryConfig) => {
+          if (resourceCheckedOut) throw new Error('Evidence must precede resource checkout');
+          queries.push(query);
+          return target.query(query);
+        };
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}) as Pool['connect'];
 const context = () => ({ pool: counted, deadline: Date.now() + 3000 });
 const recovery = new Map<object, RecoveryEvidence>();
 const lifecycle = createLifecycleInternals({
