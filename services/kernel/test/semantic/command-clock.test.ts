@@ -5,7 +5,8 @@ import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { contextTarget } from '../../src/semantic/context.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -24,6 +25,9 @@ const actions = [
   'statement:propose',
   'context:accept',
   'context:adopt',
+  'context:create',
+  'definitions:publish',
+  'definitions:activate',
   'subject:merge',
   'moderation:hide',
 ];
@@ -57,10 +61,13 @@ beforeAll(async () => {
             'statement:propose',
             'context:accept',
             'context:adopt',
+            'context:create',
+            'definitions:publish',
+            'definitions:activate',
             'subject:merge',
             'moderation:hide',
           ]
-        : ['subject:batch_write', 'statement:propose'];
+        : ['subject:batch_write', 'statement:propose', 'context:create'];
     for (const action of grantedActions) {
       await admin.query(
         `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
@@ -179,6 +186,117 @@ test("a batch command runs at the kernel's configured clock", async () => {
     [refused[1]!.source.source, refused[1]!.source.external_id],
   );
   expect(refusedProposal.rows).toHaveLength(0);
+});
+
+test("Context and definition commands run at the kernel's configured clock", async () => {
+  const contextKey = randomUUID();
+  const createdContext = await call(
+    '/v1/contexts',
+    { labels: { en: 'Configured clock Context' } },
+    'configuredWriter',
+    contextKey,
+  );
+  expect(createdContext.status).toBe(201);
+  const contextId = (createdContext.body.context as Record<string, any>).id as string;
+
+  const refusedKey = randomUUID();
+  const refusedTarget = contextTarget(new Uint8Array(32).fill(4), accounts.realTimeWriter, refusedKey);
+  const refusedContext = await call(
+    '/v1/contexts',
+    { labels: { en: 'Real-time clock Context' } },
+    'realTimeWriter',
+    refusedKey,
+  );
+  expect(refusedContext.status).toBe(403);
+  expect(
+    (
+      await admin.query('SELECT 1 FROM semantic.context WHERE route = $1 AND context_id = $2', [
+        refusedTarget.route,
+        refusedTarget.id,
+      ])
+    ).rows,
+  ).toHaveLength(0);
+  expect(
+    (
+      await admin.query('SELECT 1 FROM core.receipt WHERE actor_account_id = $1 AND idempotency_key = $2', [
+        accounts.realTimeWriter,
+        refusedKey,
+      ])
+    ).rows,
+  ).toHaveLength(0);
+
+  const subject = await call(
+    '/v1/subjects',
+    { type: 'schema:Book', labels: { en: 'Community clock subject' } },
+    'configuredWriter',
+  );
+  expect(subject.status).toBe(201);
+  const subjectId = (subject.body.subject as Record<string, any>).id as string;
+  const proposed = await call(
+    `/v1/subjects/${subjectId}/candidates`,
+    {
+      statement: {
+        property: { id: 'schema:inLanguage' },
+        value: { type: 'value', content: 'ja' },
+        references: [
+          {
+            parts: [
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: 'https://example.com/community-clock' },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    'configuredWriter',
+  );
+  expect(proposed.status).toBe(201);
+  const candidate = proposed.body.candidate as string;
+
+  const accepted = await call(
+    `/v1/subjects/${subjectId}/candidates/${candidate}:accept`,
+    { context: contextId, expected_head: null },
+    'configuredWriter',
+  );
+  expect(accepted.status).toBe(200);
+  expect(accepted.body.acceptance).toMatchObject({ context: contextId, candidate, decision: 'accept', head: 1 });
+
+  const adopted = await call(
+    `/v1/subjects/${subjectId}:adopt`,
+    {
+      context: contextId,
+      property: 'schema:inLanguage',
+      mode: 'replace',
+      selection: [{ candidate, rank: 'normal' }],
+      expected_head: 1,
+    },
+    'configuredWriter',
+  );
+  expect(adopted.status).toBe(200);
+  expect(adopted.body.adoption).toMatchObject({
+    context: contextId,
+    property: 'schema:inLanguage',
+    mode: 'replace',
+    selection: [{ candidate, rank: 'normal' }],
+    head: 2,
+  });
+
+  const release = structuredClone(bundledRelease);
+  release.catalogue.version = `clock-${randomUUID()}`;
+  const active = await activeRelease(pool);
+  expect(active).not.toBeNull();
+  const published = await call('/v1/definitions/releases', { release }, 'configuredWriter');
+  expect(published.status).toBe(201);
+  const digest = published.body.digest as string;
+  const activated = await call(
+    `/v1/definitions/releases/${digest}:activate`,
+    { expected_head: active!.head },
+    'configuredWriter',
+  );
+  expect(activated.status).toBe(200);
+  expect(activated.body).toEqual({ digest, head: active!.head + 1 });
 });
 
 test("subject routes run commands at the kernel's configured clock", async () => {
