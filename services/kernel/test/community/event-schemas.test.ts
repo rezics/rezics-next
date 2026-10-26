@@ -11,6 +11,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 
 // The focused acceptance command also runs from the repository root.
 await import('reylo/register');
+const { productionActions } = await import('../support/production-actions.ts');
 const { createPool } = await import('../../src/database/pool.ts');
 const { readAccount } = await import('../../src/access/account-data.ts');
 const { createAccess } = await import('../../src/access/index.ts');
@@ -55,7 +56,6 @@ const mounted = [
   'thread:create',
   'thread:read',
 ];
-const anonymous = new Set(['space:read', 'realm:read', 'context:read', 'subject:read']);
 const seenCommunity = [
   'com.rezics.community.publication.adopted.v1',
   'com.rezics.community.publication.rejected.v1',
@@ -133,7 +133,7 @@ async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Prom
   });
   await auth.internal.registerClient({ clientId: 'community-events', firstParty: true, scopes: mounted });
   const access = createAccess({
-    actions: new Map(mounted.map((action) => [action, { anonymous: anonymous.has(action) }])),
+    actions: productionActions(),
     auth: {
       issuer,
       audience,
@@ -321,7 +321,7 @@ test('community and content commands leave a log readBatch decodes, each emitted
   if (!account) throw new Error('missing account');
   // Realm membership copies the actor, so the request account is the admission evidence.
   const membershipAccess = createPermissionAccess({
-    actions: new Map(mounted.map((action) => [action, { anonymous: anonymous.has(action) }])),
+    actions: productionActions(),
     accountEvidence: (_actor, requestContext) => requestContext.account ?? null,
   });
   const membership = createRealmMembership({ pool, access: membershipAccess });

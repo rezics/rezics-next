@@ -1,3 +1,4 @@
+import { productionActions } from '../support/production-actions.ts';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
@@ -73,12 +74,7 @@ async function fixture(pool: Pool, admin: Pool) {
   });
   await auth.internal.registerClient({ clientId: 'community-test', firstParty: true, scopes: actions });
   const access = createAccess({
-    actions: new Map(
-      actions.map((action) => [
-        action,
-        { anonymous: action === 'space:read' || action === 'realm:read' || action === 'context:read' },
-      ]),
-    ),
+    actions: productionActions(),
     auth: {
       issuer,
       audience: 'https://community.api.test',
