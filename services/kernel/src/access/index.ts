@@ -1,3 +1,4 @@
+import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
@@ -173,6 +174,7 @@ export function createAccess(config: AccessConfig): Access {
       return evidence;
     } catch (error) {
       throwAccessUnavailable(error, context.deadline);
+      throwEvidenceFailure(error);
       return null;
     }
   }
@@ -211,6 +213,7 @@ export function createAccess(config: AccessConfig): Access {
       });
     } catch (error) {
       throwAccessUnavailable(error, facts.deadline);
+      throwEvidenceFailure(error);
       return { allowed: false, explicit: false };
     }
   }

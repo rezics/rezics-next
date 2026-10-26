@@ -16,6 +16,38 @@ For `moderation:takedown`, `moderation:read_reports`, `post:erase`, `media:erase
 
 A command authorized by this Global check writes one row to `access.governance_reach` in the same transaction. The row records the command transaction id, action, requested resource and actor account. Permission proved on a separately released authority connection carries that reach use into the command transaction; authorization denies if the transaction cannot register it. Repeated authorization for the same action, resource and actor in one command registers one write. Replays, denials, rolled-back commands and checks outside a command write nothing.
 
+## Resource evidence failures
+
+Every owning-module resource evidence callback runs through `accessEvidence` in `evidence.ts`.
+A callback failure closes the whole request, including the independent grant branch. The shared
+`throwAccessUnavailable` classifier turns deadline, pool capacity, connection and contention failures into
+`AccessUnavailableError` (HTTP 503). An existing Access unavailability error retains its identity,
+including through command rollback; the command does not retry or reclassify it.
+The module's own denial passes through unchanged. Any other failure uses the caller's existing denial form:
+boolean checks (`accessCheck`, `authorize`, and eligibility preparation/verification) answer `false` for the
+whole check, including the independent grant branch. Commands throw their `denied()` error;
+`GrantDeniedError` applies only to grant commands. The kernel's `console.error` logger records the original failure as
+an error cause; response bodies contain only the denial. No callback failure authorizes an effect, receipt
+or outbox event. Failed creation validation poisons its transaction even if the command catches the error.
+
+The boundary covers eligibility `prepare` and `facts.verify`; shared resource/page/parent anchor `validate`;
+creation-entry `validate` (individual and manifest) and the delegated parent `authorize`; durable-operation
+`readOperation` and restored-step anchor `validate`; workflow-resolution anchor `validate`; Realm role
+`realmRoleReader`; Realm membership `readTerminal` and `readChange`; and standing-parent setup `validate`.
+Enclosing Access catches preserve unavailability and module denials. Unexpected callback failures in boolean
+checks instead leave no usable permission evidence or return a denied decision.
+
+Existing Content denial classes have no shared base type. The boundary retains their closed set of error
+names (`ContentNotFoundError`, `ContentForbiddenError`, `RevisionPreconditionError`, `ReportUnavailableError`),
+Access's `GrantDeniedError`, the caller's specific denial class, and HTTP `ProblemError` client errors.
+Unrecognized error types fail closed as the caller's denial. This changes no module callback, evidence read,
+row count or statement count; it adds only local exception handling to existing calls.
+
+`test/access/evidence-callback-failures.test.ts` injects failures through these callback paths, checks
+unavailability and denial identity, cause logging and rollback, and exercises a real board read through
+the HTTP application. `test/access/unavailable-not-denied.test.ts` retains authentication and native
+permission failure coverage.
+
 ## Accounts
 
 Managing an automated account requires an `account:manage` grant on its operator's account resource.

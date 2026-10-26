@@ -1,3 +1,5 @@
+import { DurableInitiatorUnavailableError } from './durable-initiator.ts';
+import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from './durable-initiator-capture.ts';
@@ -108,7 +110,11 @@ export async function restoreOperationIdentity(
   // callback/JSON mutations can never change the verified receipt binding.
   const record: DurableInitiatorRecord | null = await within(deadline, () =>
     withConnection(pool, async (client) => {
-      const row = await readOperation(deadlineClient(client, deadline), Object.freeze({ ...operation }), time);
+      const row = await accessEvidence(
+        () => readOperation(deadlineClient(client, deadline), Object.freeze({ ...operation }), time),
+        () => new DurableInitiatorUnavailableError(),
+        deadline,
+      );
       return row === null ? null : structuredClone(row);
     }),
   );

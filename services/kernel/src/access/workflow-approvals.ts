@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { createSuspensionCommands } from './suspension.ts';
 import { createSessionRevocationCommands } from './session-revocation.ts';
@@ -460,7 +461,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       withConnection(config.pool, async (client) => {
         const boundedClient = deadlineClient(client, deadline);
         if (
-          !(await anchor(descriptor).validate(boundedClient)) ||
+          !(await accessEvidence(() => anchor(descriptor).validate(boundedClient), denied, deadline)) ||
           !(await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
         )
           return false;
@@ -801,6 +802,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       return result.value;
     } catch (error) {
       throwAccessUnavailable(error, requestDeadline);
+      throwEvidenceFailure(error);
       if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
         throw error;
       throw denied();
@@ -951,6 +953,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         return await resolve(reference, operation, bounded);
       } catch (error) {
         throwAccessUnavailable(error, requestDeadline);
+        throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
         throw denied();
@@ -970,6 +973,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         return await resolve(reference, operation, bounded, caller);
       } catch (error) {
         throwAccessUnavailable(error, requestDeadline);
+        throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
         throw denied();

@@ -1,3 +1,4 @@
+import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { commandAccessContext } from './command-admission.ts';
 import {
@@ -196,7 +197,7 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
         await within(proofDeadline, () =>
           withConnection(pool, async (client) => {
             const bounded = deadlineClient(client, proofDeadline);
-            if (!(await validate(bounded, attempt.time))) throw denied();
+            if (!(await accessEvidence(() => validate(bounded, attempt.time), denied, proofDeadline))) throw denied();
             if (!(await authorize(bounded, actor, action, resource, evidence, attempt.time))) throw denied();
             governanceReach = governanceReachUse(evidence, actor, action, resource);
           }),
@@ -208,6 +209,7 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
         return proof;
       } catch (error) {
         throwAccessUnavailable(error, deadline);
+        throwEvidenceFailure(error);
         // Domain unavailability must not expose a receipt or reach target checkout.
         if (anonymous) throw denied();
         throw error;
