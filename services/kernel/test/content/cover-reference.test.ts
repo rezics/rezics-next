@@ -350,20 +350,33 @@ test('cover claim rejects every unavailable state and wrong purpose inside a nat
 });
 
 test('intentional cover claim batch growth is linear in changed rows and input bytes', async () => {
-  const ids = await Promise.all(Array.from({ length: 16 }, () => available()));
-  const input = claimInput(ids[0]!);
+  const ids: string[] = [];
   const inputBytes: number[] = [];
+  const batchSize = (scale: number) => scale / 2048;
   const report = await checkGrowth(db, {
     name: 'explicit cover claim batch',
-    scales: [1, 4, 16],
+    scales: [2048, 8192, 32768],
     bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
-    async grow(database, scale) {
-      inputBytes.push(Buffer.byteLength(JSON.stringify({ ...input, mediaIds: ids.slice(0, scale) })));
+    async grow(database, scale, previous) {
+      const added = Array.from({ length: scale - previous }, () => newId(route));
+      await database.admin.query(
+        `INSERT INTO content.media
+           (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,
+            actual_byte_count,sha256,state,key,transaction_id,source_url,credit,provenance)
+         SELECT $2,id,$3,$4,id::text,'cover','image/jpeg',256,256,$5,'available',
+           'm/'||id::text||'/original',id,$6,$7,$8
+         FROM unnest($1::uuid[]) AS ids(id)`,
+        [added, route, containerId, uploaderId, digest, request.sourceUrl, request.credit, request.provenance],
+      );
+      ids.push(...added);
+      const mediaIds = ids.slice(0, batchSize(scale));
+      inputBytes.push(Buffer.byteLength(JSON.stringify({ ...claimInput(mediaIds[0]!), mediaIds })));
       await database.admin.query('ANALYZE content.media');
     },
     async operation(database, scale) {
+      const mediaIds = ids.slice(0, batchSize(scale));
       await runCommand(database.pool, commandOptions, async (tx) => {
-        await claimCoverMedia(tx, { ...input, mediaIds: ids.slice(0, scale) });
+        await claimCoverMedia(tx, { ...claimInput(mediaIds[0]!), mediaIds });
         return { value: null, events: [claimEvent] };
       });
     },
@@ -371,8 +384,9 @@ test('intentional cover claim batch growth is linear in changed rows and input b
   expect(inputBytes[2]! - inputBytes[1]!).toBe(4 * (inputBytes[1]! - inputBytes[0]!));
   for (const sample of report.samples) {
     const mediaRows = sample.cost.relations?.['content.media']?.rows;
-    expect(mediaRows).toBeGreaterThanOrEqual(sample.scale);
-    expect(mediaRows).toBeLessThanOrEqual(2 * sample.scale);
+    expect(mediaRows).toBeGreaterThanOrEqual(batchSize(sample.scale));
+    expect(mediaRows).toBeLessThanOrEqual(2 * batchSize(sample.scale));
     expect(sample.cost.blocks).toBeGreaterThan(0);
   }
+  expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
 }, 60000);

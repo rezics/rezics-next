@@ -234,7 +234,7 @@ test('exact revision retains its own bytes and references; takedown never disclo
     [contentRoute, f.post],
   );
   const tombstone = (await readPost(deps(), f.thread, f.post, ctx(viewer(f.author)), f.revision)).value!;
-  expect(tombstone).toMatchObject({ revisionId: f.revision, sha256: old.sha256, availability: 'erased', body: null });
+  expect(tombstone).toMatchObject({ revisionId: f.revision, sha256: null, availability: 'erased', body: null });
   expect((await readPost(deps(), f.thread, f.post, ctx(), f.revision)).value).toBeNull();
 });
 
