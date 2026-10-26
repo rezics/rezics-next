@@ -1,3 +1,4 @@
+export { readPublicViews, type PublicViews } from './public-views.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';

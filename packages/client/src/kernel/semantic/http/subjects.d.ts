@@ -2227,6 +2227,161 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             };
         };
     };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                links: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                            property?: string;
+                            filter?: string;
+                            type?: string;
+                            language?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                links: {
+                                    subject: string;
+                                    property: string;
+                                    statement: string;
+                                    type?: string;
+                                    label?: string;
+                                    summary?: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                }[];
+                                count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
+                                freshness: {
+                                    consistency: "eventual";
+                                    target_seconds: 10;
+                                    caught_up: boolean;
+                                };
+                                next: string | null;
+                            };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../../http/admission.ts").Admission;
@@ -2246,17 +2401,9 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/subjects/:id/links", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/subjects/:id/reactions", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
-    }>;
-    query: import("typebox").TObject<{
-        cursor: import("typebox").TOptional<import("typebox").TString>;
-        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
-        property: import("typebox").TOptional<import("typebox").TString>;
-        filter: import("typebox").TOptional<import("typebox").TString>;
-        type: import("typebox").TOptional<import("typebox").TString>;
-        language: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -2316,72 +2463,17 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }>>>;
         }>;
         200: import("typebox").TObject<{
-            links: import("typebox").TArray<import("typebox").TObject<{
-                subject: import("typebox").TString;
-                property: import("typebox").TString;
-                statement: import("typebox").TString;
-                type: import("typebox").TOptional<import("typebox").TString>;
-                label: import("typebox").TOptional<import("typebox").TString>;
-                summary: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    types: import("typebox").TArray<import("typebox").TString>;
-                    label: import("typebox").TUnion<[import("typebox").TObject<{
-                        value: import("typebox").TString;
-                        language: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    creativeWork: import("typebox").TBoolean;
-                    cover: import("typebox").TUnion<[import("typebox").TObject<{
-                        media: import("typebox").TString;
-                        width: import("typebox").TInteger;
-                        height: import("typebox").TInteger;
-                        placeholder: import("typebox").TObject<{
-                            thumbhash: import("typebox").TString;
-                            color: import("typebox").TString;
-                        }>;
-                        variants: import("typebox").TArray<import("typebox").TObject<{
-                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                            width: import("typebox").TInteger;
-                        }>>;
-                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                            x: import("typebox").TNumber;
-                            y: import("typebox").TNumber;
-                        }>, import("typebox").TNull]>;
-                        credit: import("typebox").TObject<{
-                            rightsHolder: import("typebox").TString;
-                            via: import("typebox").TObject<{
-                                name: import("typebox").TString;
-                                url: import("typebox").TString;
-                            }>;
-                            license: import("typebox").TString;
-                            obligations: import("typebox").TArray<import("typebox").TString>;
-                        }>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TNull]>>;
+            counts: import("typebox").TArray<import("typebox").TObject<{
+                kind: import("typebox").TUnsafe<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">;
+                count: import("typebox").TInteger;
             }>>;
-            count: import("typebox").TOptional<import("typebox").TObject<{
-                value: import("typebox").TInteger;
-                exact: import("typebox").TBoolean;
-            }>>;
-            freshness: import("typebox").TObject<{
-                consistency: import("typebox").TLiteral<"eventual">;
-                target_seconds: import("typebox").TLiteral<10>;
-                caught_up: import("typebox").TBoolean;
-            }>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            watermark: import("typebox").TUnion<[import("typebox").TObject<{
+                epoch: import("typebox").TInteger;
+                position: import("typebox").TString;
+            }>, import("typebox").TNull]>;
         }> & {
             headers: {
                 'cache-control': import("typebox").TLiteral<"no-cache">;
-            };
-        };
-        308: import("typebox").TObject<{
-            redirect: import("typebox").TObject<{
-                from: import("typebox").TString;
-                to: import("typebox").TString;
-            }>;
-        }> & {
-            headers: {
-                readonly location: import("typebox").TString;
             };
         };
     };
@@ -2395,7 +2487,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/subjects/:id/links">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, authorize, admission, job, session, set, request }: {
+}, {}, "/v1/subjects/:id/reactions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -2462,65 +2554,14 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }[];
         };
         200: {
-            links: {
-                subject: string;
-                property: string;
-                statement: string;
-                type?: string;
-                label?: string;
-                summary?: {
-                    id: string;
-                    type: string;
-                    types: string[];
-                    label: {
-                        value: string;
-                        language: string;
-                    } | null;
-                    creativeWork: boolean;
-                    cover: {
-                        media: string;
-                        width: number;
-                        height: number;
-                        placeholder: {
-                            thumbhash: string;
-                            color: string;
-                        };
-                        variants: {
-                            format: "avif" | "webp";
-                            width: number;
-                        }[];
-                        focalPoint: {
-                            x: number;
-                            y: number;
-                        } | null;
-                        credit: {
-                            rightsHolder: string;
-                            via: {
-                                name: string;
-                                url: string;
-                            };
-                            license: string;
-                            obligations: string[];
-                        };
-                    } | null;
-                } | null;
+            counts: {
+                kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                count: number;
             }[];
-            count?: {
-                value: number;
-                exact: boolean;
-            };
-            freshness: {
-                consistency: "eventual";
-                target_seconds: 10;
-                caught_up: boolean;
-            };
-            next: string | null;
-        };
-        308: {
-            redirect: {
-                from: string;
-                to: string;
-            };
+            watermark: {
+                epoch: number;
+                position: string;
+            } | null;
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -2581,78 +2622,19 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }[];
         };
         200: {
-            links: {
-                subject: string;
-                property: string;
-                statement: string;
-                type?: string;
-                label?: string;
-                summary?: {
-                    id: string;
-                    type: string;
-                    types: string[];
-                    label: {
-                        value: string;
-                        language: string;
-                    } | null;
-                    creativeWork: boolean;
-                    cover: {
-                        media: string;
-                        width: number;
-                        height: number;
-                        placeholder: {
-                            thumbhash: string;
-                            color: string;
-                        };
-                        variants: {
-                            format: "avif" | "webp";
-                            width: number;
-                        }[];
-                        focalPoint: {
-                            x: number;
-                            y: number;
-                        } | null;
-                        credit: {
-                            rightsHolder: string;
-                            via: {
-                                name: string;
-                                url: string;
-                            };
-                            license: string;
-                            obligations: string[];
-                        };
-                    } | null;
-                } | null;
+            counts: {
+                kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                count: number;
             }[];
-            count?: {
-                value: number;
-                exact: boolean;
-            };
-            freshness: {
-                consistency: "eventual";
-                target_seconds: 10;
-                caught_up: boolean;
-            };
-            next: string | null;
-        };
-        308: {
-            redirect: {
-                from: string;
-                to: string;
-            };
+            watermark: {
+                epoch: number;
+                position: string;
+            } | null;
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
-        }>;
-        query: import("typebox").TObject<{
-            cursor: import("typebox").TOptional<import("typebox").TString>;
-            limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
-            property: import("typebox").TOptional<import("typebox").TString>;
-            filter: import("typebox").TOptional<import("typebox").TString>;
-            type: import("typebox").TOptional<import("typebox").TString>;
-            language: import("typebox").TOptional<import("typebox").TString>;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -2712,72 +2694,17 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 }>>>;
             }>;
             200: import("typebox").TObject<{
-                links: import("typebox").TArray<import("typebox").TObject<{
-                    subject: import("typebox").TString;
-                    property: import("typebox").TString;
-                    statement: import("typebox").TString;
-                    type: import("typebox").TOptional<import("typebox").TString>;
-                    label: import("typebox").TOptional<import("typebox").TString>;
-                    summary: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        type: import("typebox").TString;
-                        types: import("typebox").TArray<import("typebox").TString>;
-                        label: import("typebox").TUnion<[import("typebox").TObject<{
-                            value: import("typebox").TString;
-                            language: import("typebox").TString;
-                        }>, import("typebox").TNull]>;
-                        creativeWork: import("typebox").TBoolean;
-                        cover: import("typebox").TUnion<[import("typebox").TObject<{
-                            media: import("typebox").TString;
-                            width: import("typebox").TInteger;
-                            height: import("typebox").TInteger;
-                            placeholder: import("typebox").TObject<{
-                                thumbhash: import("typebox").TString;
-                                color: import("typebox").TString;
-                            }>;
-                            variants: import("typebox").TArray<import("typebox").TObject<{
-                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                                width: import("typebox").TInteger;
-                            }>>;
-                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                                x: import("typebox").TNumber;
-                                y: import("typebox").TNumber;
-                            }>, import("typebox").TNull]>;
-                            credit: import("typebox").TObject<{
-                                rightsHolder: import("typebox").TString;
-                                via: import("typebox").TObject<{
-                                    name: import("typebox").TString;
-                                    url: import("typebox").TString;
-                                }>;
-                                license: import("typebox").TString;
-                                obligations: import("typebox").TArray<import("typebox").TString>;
-                            }>;
-                        }>, import("typebox").TNull]>;
-                    }>, import("typebox").TNull]>>;
+                counts: import("typebox").TArray<import("typebox").TObject<{
+                    kind: import("typebox").TUnsafe<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">;
+                    count: import("typebox").TInteger;
                 }>>;
-                count: import("typebox").TOptional<import("typebox").TObject<{
-                    value: import("typebox").TInteger;
-                    exact: import("typebox").TBoolean;
-                }>>;
-                freshness: import("typebox").TObject<{
-                    consistency: import("typebox").TLiteral<"eventual">;
-                    target_seconds: import("typebox").TLiteral<10>;
-                    caught_up: import("typebox").TBoolean;
-                }>;
-                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                watermark: import("typebox").TUnion<[import("typebox").TObject<{
+                    epoch: import("typebox").TInteger;
+                    position: import("typebox").TString;
+                }>, import("typebox").TNull]>;
             }> & {
                 headers: {
                     'cache-control': import("typebox").TLiteral<"no-cache">;
-                };
-            };
-            308: import("typebox").TObject<{
-                redirect: import("typebox").TObject<{
-                    from: import("typebox").TString;
-                    to: import("typebox").TString;
-                }>;
-            }> & {
-                headers: {
-                    readonly location: import("typebox").TString;
                 };
             };
         };
@@ -2791,7 +2718,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 bearerAuth?: never;
             })[];
         };
-    }, {}, "/v1/subjects/:id/links">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/reactions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../../http/admission.ts").Admission;
             readonly job: {
@@ -2813,14 +2740,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     request: Request;
     store: {};
     body: unknown;
-    query: {
-        cursor?: string;
-        limit?: number;
-        property?: string;
-        filter?: string;
-        type?: string;
-        language?: string;
-    };
+    query: Record<string, string | undefined>;
     params: {
         id: string;
     };
@@ -2839,33 +2759,17 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     readonly authorize: (resource: Resource) => Promise<import("../../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    links: import("../links.ts").SubjectLink[];
-    count?: {
-        value: number;
-        exact: boolean;
-    };
-    freshness: {
-        consistency: 'eventual';
-        target_seconds: 10;
-        caught_up: boolean;
-    };
-    next: string | null;
-} | {
-    redirect: {
-        from: string;
-        to: string;
-    };
+    counts: {
+        kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+        count: number;
+    }[];
+    watermark: {
+        epoch: number;
+        position: string;
+    } | null;
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
-    }>;
-    query: import("typebox").TObject<{
-        cursor: import("typebox").TOptional<import("typebox").TString>;
-        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
-        property: import("typebox").TOptional<import("typebox").TString>;
-        filter: import("typebox").TOptional<import("typebox").TString>;
-        type: import("typebox").TOptional<import("typebox").TString>;
-        language: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -2925,72 +2829,17 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }>>>;
         }>;
         200: import("typebox").TObject<{
-            links: import("typebox").TArray<import("typebox").TObject<{
-                subject: import("typebox").TString;
-                property: import("typebox").TString;
-                statement: import("typebox").TString;
-                type: import("typebox").TOptional<import("typebox").TString>;
-                label: import("typebox").TOptional<import("typebox").TString>;
-                summary: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    types: import("typebox").TArray<import("typebox").TString>;
-                    label: import("typebox").TUnion<[import("typebox").TObject<{
-                        value: import("typebox").TString;
-                        language: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    creativeWork: import("typebox").TBoolean;
-                    cover: import("typebox").TUnion<[import("typebox").TObject<{
-                        media: import("typebox").TString;
-                        width: import("typebox").TInteger;
-                        height: import("typebox").TInteger;
-                        placeholder: import("typebox").TObject<{
-                            thumbhash: import("typebox").TString;
-                            color: import("typebox").TString;
-                        }>;
-                        variants: import("typebox").TArray<import("typebox").TObject<{
-                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                            width: import("typebox").TInteger;
-                        }>>;
-                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                            x: import("typebox").TNumber;
-                            y: import("typebox").TNumber;
-                        }>, import("typebox").TNull]>;
-                        credit: import("typebox").TObject<{
-                            rightsHolder: import("typebox").TString;
-                            via: import("typebox").TObject<{
-                                name: import("typebox").TString;
-                                url: import("typebox").TString;
-                            }>;
-                            license: import("typebox").TString;
-                            obligations: import("typebox").TArray<import("typebox").TString>;
-                        }>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TNull]>>;
+            counts: import("typebox").TArray<import("typebox").TObject<{
+                kind: import("typebox").TUnsafe<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">;
+                count: import("typebox").TInteger;
             }>>;
-            count: import("typebox").TOptional<import("typebox").TObject<{
-                value: import("typebox").TInteger;
-                exact: import("typebox").TBoolean;
-            }>>;
-            freshness: import("typebox").TObject<{
-                consistency: import("typebox").TLiteral<"eventual">;
-                target_seconds: import("typebox").TLiteral<10>;
-                caught_up: import("typebox").TBoolean;
-            }>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            watermark: import("typebox").TUnion<[import("typebox").TObject<{
+                epoch: import("typebox").TInteger;
+                position: import("typebox").TString;
+            }>, import("typebox").TNull]>;
         }> & {
             headers: {
                 'cache-control': import("typebox").TLiteral<"no-cache">;
-            };
-        };
-        308: import("typebox").TObject<{
-            redirect: import("typebox").TObject<{
-                from: import("typebox").TString;
-                to: import("typebox").TString;
-            }>;
-        }> & {
-            headers: {
-                readonly location: import("typebox").TString;
             };
         };
     };

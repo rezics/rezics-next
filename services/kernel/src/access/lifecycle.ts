@@ -1,3 +1,5 @@
+import { checkAvatarMedia } from '../content/avatar.ts';
+import { ProblemError } from '../http/problem.ts';
 import { accessClock } from './access-clock.ts';
 import { workflowApprovalBinding } from './workflow-approvals.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
@@ -1419,7 +1421,14 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       context = snapshotRequest(context);
       const route = accountRoute(input.accountId);
       const patch = validatePatch(input.patch);
-      const authorization = await authorize(context, 'account:update', input.accountId);
+      const subject =
+        context.actor.accountId !== input.accountId
+          ? await withConnection(pool, (client) => readAccount(client, route, input.accountId))
+          : null;
+      const operatorId = subject?.kind === 'actor' && subject.state === 'active' ? subject.operatorAccountId : null;
+      const authorization = operatorId
+        ? await authorize(context, 'account:manage', operatorId)
+        : await authorize(context, 'account:update', input.accountId);
       const allowed = authorization.check;
       return execute(
         {
@@ -1433,8 +1442,12 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           authorization,
         },
         async (tx, transactionId) => {
-          await locked(tx, input.accountId);
+          const account = await locked(tx, input.accountId);
+          requireAllowed(operatorId === null || account.operatorAccountId === operatorId);
+          if (Object.hasOwn(patch, 'speakersListed')) requireAllowed(account.kind === 'organization');
           requireAllowed(await allowed(tx));
+          if (typeof patch.avatar === 'string' && !(await checkAvatarMedia(tx, patch.avatar, input.accountId)))
+            throw new ProblemError('invalid_request');
           requireAllowed(
             affected(
               await updateStatement.run(tx, {
@@ -1610,6 +1623,14 @@ function validatePatch(value: unknown): Record<string, unknown> {
   for (const [key, field] of Object.entries(patch)) {
     if (['displayName', 'avatarUrl', 'biography'].includes(key))
       requireAllowed(field === null || (typeof field === 'string' && field.length <= 4096));
+    else if (key === 'avatar') {
+      if (field !== null && (typeof field !== 'string' || routeOf(field) === null))
+        throw new ProblemError('invalid_request');
+    } else if (key === 'publicViews') {
+      requireAllowed(field && typeof field === 'object' && !Array.isArray(field));
+      for (const [view, enabled] of Object.entries(field))
+        requireAllowed(['posts', 'reviews', 'collections'].includes(view) && typeof enabled === 'boolean');
+    } else if (key === 'speakersListed') requireAllowed(typeof field === 'boolean');
     else if (key === 'links') {
       requireAllowed(Array.isArray(field) && field.length <= 5);
       for (const link of field) {

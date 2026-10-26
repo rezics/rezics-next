@@ -102,7 +102,16 @@ test('handle reads the public profile and ids keep their identity projection wit
   expect(await read('handle=PROFILE_HANDLE')).toEqual({
     status: 200,
     body: {
-      accounts: [{ ...identity, bio: 'A biography', links, avatar: null, subject: null }],
+      accounts: [
+        {
+          ...identity,
+          publicViews: { posts: true, reviews: true, collections: true },
+          bio: 'A biography',
+          links,
+          avatar: null,
+          subject: null,
+        },
+      ],
       next: null,
     },
   });

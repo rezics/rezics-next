@@ -1,3 +1,5 @@
+import { type AvatarSummary } from '../content/avatar.ts';
+import type { PublicViews } from './public-views.ts';
 import type { Pool, PoolClient } from 'pg';
 import accountRead from './account-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
@@ -40,31 +42,9 @@ export type AccountLink = {
 export type PublicAccountProfile = PublicIdentity & {
     bio: string | null;
     links: AccountLink[];
-    avatar: {
-        media: string;
-        width: number;
-        height: number;
-        placeholder: {
-            thumbhash: string;
-            color: string;
-        };
-        variants: {
-            format: 'avif' | 'webp';
-            width: number;
-        }[];
-        focalPoint: {
-            x: number;
-            y: number;
-        } | null;
-        credit: {
-            rightsHolder: string;
-            via: {
-                name: string;
-                url: string;
-            };
-            license: string;
-        };
-    } | null;
+    avatar: AvatarSummary | null;
+    publicViews: PublicViews;
+    speakersListed?: boolean;
     subject: {
         id: string;
         label: string;

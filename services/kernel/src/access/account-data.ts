@@ -1,3 +1,5 @@
+import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
+import type { PublicViews } from './public-views.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
@@ -43,15 +45,9 @@ export type AccountLink = { label: string; url: string };
 export type PublicAccountProfile = PublicIdentity & {
   bio: string | null;
   links: AccountLink[];
-  avatar: {
-    media: string;
-    width: number;
-    height: number;
-    placeholder: { thumbhash: string; color: string };
-    variants: { format: 'avif' | 'webp'; width: number }[];
-    focalPoint: { x: number; y: number } | null;
-    credit: { rightsHolder: string; via: { name: string; url: string }; license: string };
-  } | null;
+  avatar: AvatarSummary | null;
+  publicViews: PublicViews;
+  speakersListed?: boolean;
   subject: { id: string; label: string; type: string } | null;
 };
 
@@ -76,7 +72,18 @@ export async function readPublicAccountByHandle(
     operatorId: row.operatorAccountId,
   };
   if (deleted) return [identity];
-  return [{ ...identity, bio: row.biography, links: row.links as AccountLink[], avatar: null, subject: null }];
+  const avatar = row.avatar ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null) : null;
+  return [
+    {
+      ...identity,
+      bio: row.biography,
+      links: row.links as AccountLink[],
+      avatar,
+      publicViews: row.publicViews as PublicViews,
+      ...(row.kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
+      subject: null,
+    },
+  ];
 }
 
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.

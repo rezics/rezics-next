@@ -52,14 +52,7 @@ const coverSummary = t.Object(
       t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
       t.Null(),
     ]),
-    credit: t.Object(
-      {
-        rightsHolder: t.String(),
-        via: t.Object({ name: t.String(), url: t.String() }, closed),
-        license: t.String(),
-      },
-      closed,
-    ),
+    credit: t.Null(),
   },
   closed,
 );
@@ -72,6 +65,8 @@ const publicProfile = t.Object(
       { maxItems: 5 },
     ),
     avatar: t.Union([coverSummary, t.Null()]),
+    publicViews: t.Object({ posts: t.Boolean(), reviews: t.Boolean(), collections: t.Boolean() }, closed),
+    speakersListed: t.Optional(t.Boolean()),
     subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
   },
   closed,

@@ -422,19 +422,47 @@ order) or `handle` (one handle, normalized to lowercase using the claim rules). 
 ### Public profile by handle
 
 - Returns the identity fields above plus `bio` (the stored biography or null), `links` (an array of `{ label, url }`),
-  `avatar` and `subject`. Both `avatar` and `subject` are currently null. The schema reserves `avatar` for the
-  [Content cover summary](../content/README.md#the-cover-summary) and `subject` for `{ id, label, type }`.
+  `avatar`, `publicViews` and `subject`. `avatar` is null or the [Content cover summary](../content/README.md#the-cover-summary)
+  with `credit: null`. `subject` remains null, reserved for `{ id, label, type }`.
   Only an active handle claim resolves: unknown, pending or merely reserved handles return an empty list. Pending
   accounts are absent. A deleted account returns exactly its ids-read identity tombstone, without profile fields.
 - The existing account profile patch accepts `links` alongside `displayName` and `biography`; `[]` clears links.
   There are at most 5 links, with labels of 1–64 characters and absolute `https:` URLs of at most 2048 characters,
-  without credentials. Fencing or deleting an account clears its biography and links in the account update.
+  without credentials.
+- `avatar: <media id> | null` sets or clears the reference. Content's `checkAvatarMedia` checks available avatar media
+  uploaded by that account, by primary key in the account partition, inside the same command. Invalid media answers
+  `invalid_request` and the whole patch writes nothing. Clearing the reference does not erase Content's media object.
+- `publicViews: { posts?: boolean, reviews?: boolean, collections?: boolean }` merges only the supplied flags.
+  All three default to true for actors and organizations. The handle read always returns all three keys. These flags
+  hide only the lists on the agent's subject page; individual items retain their own visibility.
+- An organization's patch also accepts `speakersListed: boolean`, default false. Only organization handle profiles
+  return this field. Principal assignments still determine who speaks for the organization; this flag controls listing.
+- Presentation follows the existing profile authorization: the account itself (including an organization's acting
+  principals) or its operator's managers. Manager authority follows the current operator, rechecked under the account lock.
+  There is no new action. Fencing or deletion clears avatar, biography and links, sets every view off and clears speaker
+  listing. Fenced or inactive profiles expose no public views even if stale presentation values remain stored.
 - Touches: one `handle_claim_pkey(route, normalized_handle)` point read on the handle's route, then one
   `account_pkey(route, account_id)` point read on the account's route. A missing active claim stops after the first read.
-- Bound: constant rows and statements; logarithmic blocks in accounts and handle claims.
+  An avatar adds one `readAvatarSummaries` statement in the account's partition. An avatar patch adds one
+  `checkAvatarMedia` primary key read to the existing patch statements.
+- Bound: constant rows and statements; logarithmic blocks in accounts, handle claims and media.
 - Growth check: `test/access/growth-account-handle-read.test.ts`,
   `public profile by handle stays bounded as accounts and handle claims grow`, uses the shared harness at
-  [256, 1024, 4096], seeding growing accounts and handle claims in `grow` with the default warm-up.
+  [256, 1024, 4096], seeding accounts, claims and media and patching the avatar in `grow`, with the default warm-up.
+
+### Public activity view port
+
+- Access exports `readPublicViews(client, accountIds): Promise<Map<string, PublicViews>>` for Content and Commerce.
+  A batch accepts at most 100 ids; an empty batch returns an empty map without querying. Duplicate ids collapse.
+  Malformed and unknown ids, deleted, fenced and other inactive accounts return all three flags false. Active accounts
+  that never chose return all three true, including organizations.
+- Consumers answer an empty per-account page for a private view unless the viewer is that account or acts for that
+  organization. Access serves only the flags, not the activity lists or their item visibility rules.
+- Touches: one statement per partition among valid ids, with a primary key probe for each id.
+- Bound: at most 100 ids; O(ids) rows, O(partitions among ids) statements, O(ids log N) blocks.
+- Growth check: `test/access/growth-account-public-views.test.ts`,
+  `public view flags for 20 accounts across 4 partitions stay bounded as accounts grow`, uses scales [256, 1024, 4096],
+  seeding in `grow` and using the default warm-up.
 
 ### Organization creation
 
