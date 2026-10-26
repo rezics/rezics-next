@@ -233,7 +233,10 @@ statement that also reads data counts in full.
 Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
 capture runs; loops started outside both are reported as background work. Background statement counts follow measured
 wall time, while rows and blocks per background statement must stay within the default constant-cost slack as data
-grows; a scale with no background statement is skipped for that bound.
+grows when the statement reads an application relation. Statements reading only DBOS system relations remain
+reported, but their row and block growth is not bounded because `grow` does not seed DBOS history; that history's
+growth is a production retention question, not a growth check result. A scale with no applicable background statement
+is skipped for that bound.
 
 Plans are collected only inside a capture: an instrumented connection runs auto_explain just for the statements of a
 measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
