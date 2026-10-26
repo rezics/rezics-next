@@ -254,7 +254,7 @@ export class WorkerStore implements AttemptFence {
   retryStopped(taskId: string, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.db.transaction(() => {
       const task = this.task(taskId);
-      if (!['stopped', 'ready'].includes(task.state)) throw new Error('task is not stopped or released');
+      if (!['stopped', 'ready', 'held'].includes(task.state)) throw new Error('task is not stopped or released');
       const old = this.attempt({ taskId, attempt: task.currentAttempt });
       if (old.state !== 'stopped') throw new Error('current attempt is not stopped');
       old.state = 'exited'; this.saveAttempt(old);
