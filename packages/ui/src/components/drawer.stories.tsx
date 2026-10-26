@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookmarkIcon, CompassIcon, HomeIcon, InboxIcon, LibraryIcon } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed, registered } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Drawer,
@@ -53,7 +54,7 @@ const ShelfDrawer = (props: React.ComponentProps<typeof Drawer>) => (
 
 const openDrawer = async (canvasElement: HTMLElement, name = 'Add to shelf') => {
   await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return settled(await screen.findByRole('dialog'));
+  return registered(await settled(await screen.findByRole('dialog')));
 };
 
 export const Bottom: Story = {

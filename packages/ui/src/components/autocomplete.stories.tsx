@@ -13,6 +13,7 @@ import {
   AutocompleteItem,
   AutocompleteList,
 } from './autocomplete.tsx';
+import { typeIntoPopup } from '../test/waits.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import { InputGroupAddon } from './input-group.tsx';
 
@@ -102,14 +103,6 @@ const Surface = ({ children }: { children: React.ReactNode }) => {
       </div>
     </div>
   );
-};
-
-// storybook/test types faster than a real keyboard; a key typed while the popup is
-// opening can be lost, so wait for the popup after the first character.
-const typeIntoPopup = async (input: HTMLElement, text: string) => {
-  await userEvent.type(input, text.slice(0, 1));
-  await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
-  await userEvent.type(input, text.slice(1));
 };
 
 const meta = {

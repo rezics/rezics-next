@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { ReportDialog } from './report-dialog.tsx';
 

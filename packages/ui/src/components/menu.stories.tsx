@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookmarkIcon, EllipsisIcon, FlagIcon, LinkIcon, LibraryIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import React from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed, highlighted, registered } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
   Menu,
@@ -94,7 +95,7 @@ const PostMenu = (props: React.ComponentProps<typeof Menu> & { moderator?: boole
 
 const openMenu = async (canvasElement: HTMLElement, name: string) => {
   await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return settled(await screen.findByRole('menu'));
+  return registered(await settled(await screen.findByRole('menu')));
 };
 
 export const PostActions: Story = {
@@ -134,17 +135,19 @@ export const CloseWithEscape: Story = {
     await openMenu(canvasElement, 'Post actions');
     await userEvent.keyboard('{Escape}');
     await dismissed('menu');
-    await expect(within(canvasElement).getByRole('button', { name: 'Post actions' })).toHaveFocus();
+    await waitFor(() => expect(within(canvasElement).getByRole('button', { name: 'Post actions' })).toHaveFocus());
   },
 };
 
 export const Submenu: Story = {
   render: (args) => <PostMenu {...args} />,
   async play({ args, canvasElement }) {
-    await openMenu(canvasElement, 'Post actions');
+    const menu = await openMenu(canvasElement, 'Post actions');
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    await highlighted(() => within(menu).getByRole('menuitem', { name: /Add Work to shelf/ }));
     await userEvent.keyboard('{ArrowRight}');
     await settled(await screen.findByRole('menuitem', { name: 'Reading' }));
+    await highlighted(() => screen.getByRole('menuitem', { name: 'Want to read' }));
     await userEvent.keyboard('{ArrowDown}{Enter}');
     await expect(args.onSelect).toHaveBeenCalledWith({ value: 'reading' });
   },

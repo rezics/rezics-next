@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed, highlighted } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { ContentActions } from './content-actions.tsx';
 
 const meta = {
@@ -62,6 +63,7 @@ export const MenuKeyboard: Story = {
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     const menu = await settled(await screen.findByRole('menu'));
+    await highlighted(() => within(menu).getAllByRole('menuitem')[0]!);
     await userEvent.keyboard('{End}{Enter}');
 
     const dialog = await settled(await screen.findByRole('dialog', { name: 'Report this content' }));
@@ -70,7 +72,7 @@ export const MenuKeyboard: Story = {
     await userEvent.click(illegal);
     await expect(within(dialog).getByRole('textbox', { name: 'Additional details' })).toBeRequired();
     await expect(within(dialog).getByRole('group', { name: 'Human verification' })).toBeVisible();
-    await expect(menu).not.toBeInTheDocument();
+    await waitFor(() => expect(menu).not.toBeInTheDocument());
   },
 };
 

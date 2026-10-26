@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InfoIcon } from 'lucide-react';
 import React from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed, registered } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { ToggleTooltip, ToggleTooltipContent, ToggleTooltipTrigger } from './toggle-tooltip.tsx';
 
@@ -62,7 +63,7 @@ export const CloseWithEscape: Story = {
   render: (args) => <ContextHint {...args} />,
   async play({ canvasElement }) {
     await userEvent.click(trigger(canvasElement));
-    await settled(await screen.findByRole('dialog'));
+    await registered(await settled(await screen.findByRole('dialog')));
     await userEvent.keyboard('{Escape}');
     await dismissed('dialog');
   },

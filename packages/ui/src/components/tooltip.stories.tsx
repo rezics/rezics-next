@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowBigDownIcon, ArrowBigUpIcon, BookmarkIcon, Share2Icon } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { dismissed } from '../test/waits.ts';
+import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip.tsx';
 
