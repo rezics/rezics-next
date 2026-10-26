@@ -8,49 +8,166 @@ import { processIdentity, waitForWorkerExit, workerExitPath, type WorkerExit } f
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 
-export type LaunchOptions = { profile: Profile; pool: Pool; worktree: string; prompt: string; logPath: string; readOnly?: boolean; research?: boolean; codex?: Settings['codex'] };
+export type LaunchOptions = {
+  profile: Profile;
+  pool: Pool;
+  worktree: string;
+  prompt: string;
+  logPath: string;
+  readOnly?: boolean;
+  research?: boolean;
+  codex?: Settings['codex'];
+};
 export function launchCommand(options: LaunchOptions): [string, string[]] {
   const { profile, pool, worktree, prompt } = options;
   if (!['codex', 'grok', 'cursor', 'claude'].includes(profile.cli)) throw new Error('unsupported worker CLI');
   if (pool.cli !== profile.cli) throw new Error('profile and pool CLI disagree');
-  if (profile.cli === 'grok') return [pool.command, ['-m', profile.model, '--reasoning-effort', profile.effort,
-    // No --json-schema: with it Grok answers in structured form only and stops using tools, so the parser reads its
-    // status object out of free text instead.
-    '--permission-mode', 'bypassPermissions', '--no-subagents', '--output-format', 'json', '--cwd', worktree, `--single=${prompt}`]];
+  if (profile.cli === 'grok')
+    return [
+      pool.command,
+      [
+        '-m',
+        profile.model,
+        '--reasoning-effort',
+        profile.effort,
+        // No --json-schema: with it Grok answers in structured form only and stops using tools, so the parser reads its
+        // status object out of free text instead.
+        '--permission-mode',
+        'bypassPermissions',
+        '--no-subagents',
+        '--output-format',
+        'json',
+        '--cwd',
+        worktree,
+        `--single=${prompt}`,
+      ],
+    ];
   // Workers share the managers' Claude configuration; its hooks and MCP servers belong to the managers' sessions.
-  if (profile.cli === 'claude') return [pool.command, ['-p', '--model', profile.model, '--effort', profile.effort,
-    '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', '--strict-mcp-config',
-    '--settings', JSON.stringify({ disableAllHooks: true }), '--', prompt]];
-  if (profile.cli === 'cursor') return [pool.command, ['-p', '--model', `${profile.model}-${profile.effort}`, '--force', '--trust',
-    '--sandbox', 'disabled', '--output-format', 'json', '--workspace', worktree, '--', prompt]];
+  if (profile.cli === 'claude')
+    return [
+      pool.command,
+      [
+        '-p',
+        '--model',
+        profile.model,
+        '--effort',
+        profile.effort,
+        '--permission-mode',
+        'bypassPermissions',
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        '--strict-mcp-config',
+        '--settings',
+        JSON.stringify({ disableAllHooks: true }),
+        '--',
+        prompt,
+      ],
+    ];
+  if (profile.cli === 'cursor')
+    return [
+      pool.command,
+      [
+        '-p',
+        '--model',
+        `${profile.model}-${profile.effort}`,
+        '--force',
+        '--trust',
+        '--sandbox',
+        'disabled',
+        '--output-format',
+        'json',
+        '--workspace',
+        worktree,
+        '--',
+        prompt,
+      ],
+    ];
   const codex = options.codex ?? defaults.codex;
   const mcp: string[] = [];
   const config = join(pool.configDirectory, 'config.toml');
   if (existsSync(config)) {
-    const servers = (Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> }).mcp_servers;
+    const servers = (Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> })
+      .mcp_servers;
     // A dotted `-c` path keeps the quotes in the key, defining a new server without a transport; an inline table merges.
-    const disabled = Object.keys(servers ?? {}).map(name => `${JSON.stringify(name)}={enabled=false}`);
+    const disabled = Object.keys(servers ?? {}).map((name) => `${JSON.stringify(name)}={enabled=false}`);
     if (disabled.length) mcp.push('-c', `mcp_servers={${disabled.join(',')}}`);
   }
-  return [pool.command, ['exec', '--json', '-m', profile.model, '-c', `model_reasoning_effort=${profile.effort}`,
-    '-c', `model_auto_compact_token_limit=${profile.model.includes('luna') ? codex.compactTokens.luna : codex.compactTokens.sol}`,
-    '-c', `tool_output_token_limit=${codex.toolOutputTokens}`, '-c', `service_tier=${JSON.stringify(codex.serviceTier)}`,
-    ...(profile.model.includes('sol') ? ['-c', `model_context_window=${codex.solContextWindow}`] : []),
-    '-c', 'features.multi_agent=false', '-c', 'features.multi_agent_v2=false', ...mcp,
-    ...(options.readOnly ? ['-s', 'read-only', '-c', 'approval_policy="never"'] : ['--dangerously-bypass-approvals-and-sandbox']),
-    ...(options.research ? ['-c', 'web_search="live"'] : []), ...(!options.readOnly ? ['--output-schema', join(import.meta.dir, '../worker-result.schema.json')] : []), '-C', worktree, '--', prompt]];
+  return [
+    pool.command,
+    [
+      'exec',
+      '--json',
+      '-m',
+      profile.model,
+      '-c',
+      `model_reasoning_effort=${profile.effort}`,
+      '-c',
+      `model_auto_compact_token_limit=${profile.model.includes('luna') ? codex.compactTokens.luna : codex.compactTokens.sol}`,
+      '-c',
+      `tool_output_token_limit=${codex.toolOutputTokens}`,
+      '-c',
+      `service_tier=${JSON.stringify(codex.serviceTier)}`,
+      ...(profile.model.includes('sol') ? ['-c', `model_context_window=${codex.solContextWindow}`] : []),
+      '-c',
+      'features.multi_agent=false',
+      '-c',
+      'features.multi_agent_v2=false',
+      ...mcp,
+      ...(options.readOnly
+        ? ['-s', 'read-only', '-c', 'approval_policy="never"']
+        : ['--dangerously-bypass-approvals-and-sandbox']),
+      ...(options.research ? ['-c', 'web_search="live"'] : []),
+      ...(!options.readOnly ? ['--output-schema', join(import.meta.dir, '../worker-result.schema.json')] : []),
+      '-C',
+      worktree,
+      '--',
+      prompt,
+    ],
+  ];
 }
-export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export function workerEnvironment(
+  pool: Pool,
+  extra: NodeJS.ProcessEnv = {},
+  parent: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
-  for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
-  const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
+  for (const key of [
+    'GOAL_MANAGER',
+    'CODEX_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'CLAUDE_CODE_SESSION_ID',
+    'CLAUDECODE',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CODEX_HOME',
+    'GROK_HOME',
+    'GROK_CONFIG_DIR',
+    'CURSOR_CONFIG_DIR',
+    'CLAUDE_CONFIG_DIR',
+  ])
+    delete env[key];
+  const key =
+    pool.cli === 'codex'
+      ? 'CODEX_HOME'
+      : pool.cli === 'grok'
+        ? 'GROK_HOME'
+        : pool.cli === 'claude'
+          ? 'CLAUDE_CONFIG_DIR'
+          : 'CURSOR_CONFIG_DIR';
   // With CLAUDE_CONFIG_DIR set, Claude Code looks for .claude.json inside it, not beside the default ~/.claude.
-  if (pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude')) return { ...env, ...NO_COMPILE_CACHE, ...extra };
+  if (pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude'))
+    return { ...env, ...NO_COMPILE_CACHE, ...extra };
   return { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
 }
-export function workerPrompt(task: Task, evidence: string | undefined, consultation: string | undefined, resolutionFiles: readonly string[], mainCheckout: string): string {
-  const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map(file => file.path);
+export function workerPrompt(
+  task: Task,
+  evidence: string | undefined,
+  consultation: string | undefined,
+  resolutionFiles: readonly string[],
+  mainCheckout: string,
+): string {
+  const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}.`,
@@ -59,17 +176,27 @@ export function workerPrompt(task: Task, evidence: string | undefined, consultat
     frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
     'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
     readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
-    task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',
-    'The task contract follows:', task.brief.markdown,
+    task.brief.kind === 'bulk-text'
+      ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.'
+      : '',
+    'The task contract follows:',
+    task.brief.markdown,
     'A failure that also occurs on your base commit is not your blocker: when your acceptance command passes, report success and name it in your summary. A test that passes on your base and fails after your change is yours: fix it, or report scope growth when the fix needs files outside your paths.',
     "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
-    resolutionFiles.length ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.` : '',
-  ].filter(Boolean).join('\n\n');
+    resolutionFiles.length
+      ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 /** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
-export function attemptEnvironment(task: Pick<Task, 'id' | 'base'>, attempt: Pick<Attempt, 'attempt'>): Record<string, string> {
+export function attemptEnvironment(
+  task: Pick<Task, 'id' | 'base'>,
+  attempt: Pick<Attempt, 'attempt'>,
+): Record<string, string> {
   return { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), KERNEL_CHECK_AFFECTED: task.base };
 }
 export type RunningWorker = { child?: ChildProcess; exited: Promise<WorkerExit>; attempt: Attempt };
@@ -102,14 +229,30 @@ except OSError:
 open(exit_path+'.tmp','w').write(json.dumps({'code':code,'signal':sig}))
 os.rename(exit_path+'.tmp',exit_path)
 `;
-export async function launch(store: WorkerStore, task: Task, attempt: Attempt, pool: Pool, prompt: string, codex?: Settings['codex']): Promise<RunningWorker> {
+export async function launch(
+  store: WorkerStore,
+  task: Task,
+  attempt: Attempt,
+  pool: Pool,
+  prompt: string,
+  codex?: Settings['codex'],
+): Promise<RunningWorker> {
   store.assertCurrent(attempt);
   mkdirSync(dirname(attempt.logPath), { recursive: true });
-  const exitPath = workerExitPath(attempt.logPath), pidPath = `${attempt.logPath}.pid`;
+  const exitPath = workerExitPath(attempt.logPath),
+    pidPath = `${attempt.logPath}.pid`;
   for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
-  const out = openSync(attempt.logPath, 'w'), err = openSync(`${attempt.logPath}.err`, 'w');
-  const [program, args] = launchCommand({ profile: attempt.profile, pool, worktree: task.worktree, prompt, logPath: attempt.logPath, ...(codex ? { codex } : {}),
-    ...(task.taskClass === 'research' ? { readOnly: true, research: true } : {}) });
+  const out = openSync(attempt.logPath, 'w'),
+    err = openSync(`${attempt.logPath}.err`, 'w');
+  const [program, args] = launchCommand({
+    profile: attempt.profile,
+    pool,
+    worktree: task.worktree,
+    prompt,
+    logPath: attempt.logPath,
+    ...(codex ? { codex } : {}),
+    ...(task.taskClass === 'research' ? { readOnly: true, research: true } : {}),
+  });
   const env = workerEnvironment(pool, attemptEnvironment(task, attempt));
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
@@ -117,16 +260,30 @@ export async function launch(store: WorkerStore, task: Task, attempt: Attempt, p
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
       // The wrapper cannot report a missing program to the launcher, so refuse it here.
-      if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree })) throw new Error(`Worker CLI not found: ${program}`);
-      const started = spawnSync('python3', ['-c', WRAPPER, exitPath, pidPath, program, ...args], { cwd: task.worktree, stdio: ['ignore', out, err], env });
+      if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree }))
+        throw new Error(`Worker CLI not found: ${program}`);
+      const started = spawnSync('python3', ['-c', WRAPPER, exitPath, pidPath, program, ...args], {
+        cwd: task.worktree,
+        stdio: ['ignore', out, err],
+        env,
+      });
       if (started.error) throw started.error;
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);
       if (started.status !== 0 || !identity) throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
-      store.updateAttempt(attempt, current => { current.driver = driver; current.process = identity; current.state = 'running'; });
-      store.updateTask(attempt, current => { current.state = 'running'; });
+      store.updateAttempt(attempt, (current) => {
+        current.driver = driver;
+        current.process = identity;
+        current.state = 'running';
+      });
+      store.updateTask(attempt, (current) => {
+        current.state = 'running';
+      });
     });
-  } finally { closeSync(out); closeSync(err); }
+  } finally {
+    closeSync(out);
+    closeSync(err);
+  }
   const saved = store.attempt(attempt);
   const exited = waitForWorkerExit(saved.process, attempt.logPath);
   void exited.catch(() => {});
