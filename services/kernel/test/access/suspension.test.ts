@@ -30,6 +30,9 @@ const audience = 'https://suspension.api.test';
 const password = 'native grant routes registration password';
 const routeKey = new Uint8Array(32).fill(71);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
+// Auth provisioning has a 120 s command budget; each of three registrations
+// waits up to 30 s for pending, credential and activation.
+const setupTimeout = 120_000 + 3 * 3 * 30_000;
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let authDatabase: ReturnType<typeof testDatabase>;
 let authPool: Pool;
@@ -116,114 +119,111 @@ const effects = async () =>
   (SELECT count(*)::int FROM access.resource_role_grant) roles`)
   ).rows;
 
-beforeAll(
-  async () => {
-    db = await openGrowthDatabase();
-    db.pool.options.max = 1;
-    const limiter = createWriteRateLimiter({
-      secret: 'suspension-private-write-rate-secret-32bytes',
-      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
-    });
-    kernel = createKernel({
-      pool: db.pool,
-      routeKey,
-      tokens,
-      clock: () => new Date(now),
-      access: (config) => {
-        expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
-        return access;
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  db.pool.options.max = 1;
+  const limiter = createWriteRateLimiter({
+    secret: 'suspension-private-write-rate-secret-32bytes',
+    overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+  });
+  kernel = createKernel({
+    pool: db.pool,
+    routeKey,
+    tokens,
+    clock: () => new Date(now),
+    access: (config) => {
+      expect([...config.actions]).toEqual([...actionCatalogue(kernel)]);
+      return access;
+    },
+    writeRate: {
+      async spend(...args) {
+        spends++;
+        return limiter.spend(...args);
       },
-      writeRate: {
-        async spend(...args) {
-          spends++;
-          return limiter.spend(...args);
-        },
-      },
-    });
-    const actions = actionCatalogue(kernel);
-    scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
-    authDatabase = testDatabase();
-    authPool = new Pool({ connectionString: authDatabase.url });
-    signingKey = {
-      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-      kid: 'suspension',
-    };
-    access = createAccess({
-      actions,
-      auth: {
-        issuer,
-        audience,
-        jwksUrl: `${issuer}/.well-known/jwks.json`,
-        fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-      },
-    });
-    const proofs = createNativeWorkflowProofPorts({ database: authPool });
-    grants = createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' });
-    // Compose the existing native human registration ports directly. The full
-    // account binding also requires unmounted operator-management routes, which
-    // belong to a separate module. No action is added to the mounted catalogue.
-    const registration = createRegistrationProofBindings({ pool: db.pool, referenceKeys: tokens });
-    const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-    const internal = createLifecycleInternals({
-      pool: db.pool,
-      routeKey,
-      provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-      recoveryEvidence: async () => null,
-    });
-    lifecycle = internal;
-    const registrationPorts = {
-      ...internal,
-      async createPending(input: Parameters<typeof internal.createPending>[0]) {
-        const outcome = await internal.createPending(input);
-        const pair = { accountId: input.accountId, reservationId: input.reservationId };
-        if (!(await proofs.pendingReference(pair))) {
-          const reference = await registration.createProvisioningReference({ input, outcome });
-          if (!reference) throw new Error('Missing native registration reference');
-          await proofs.recordPending({ ...pair, reference });
-        }
-        return outcome;
-      },
-      async provisioningReference(input: { accountId: string; reservationId: string }) {
-        const reference = await proofs.pendingReference(input);
-        if (!reference) throw new Error('Missing persisted registration reference');
-        return reference;
-      },
-      provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
-    };
-    host = await createAuthHost({
-      database: authPool,
-      systemDatabasePool: authPool,
+    },
+  });
+  const actions = actionCatalogue(kernel);
+  scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
+  authDatabase = testDatabase();
+  authPool = new Pool({ connectionString: authDatabase.url });
+  signingKey = {
+    ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+    kid: 'suspension',
+  };
+  access = createAccess({
+    actions,
+    auth: {
       issuer,
       audience,
-      secret: 'suspension-auth-persistent-secret-32bytes',
-      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: createAuthBindings({
-        pool: db.pool,
-        ...registration,
-        verifyPendingIdentity: registration.verifyNativePendingIdentity,
-      }),
-      access: registrationPorts,
-      stagingKey: new Uint8Array(32).fill(73),
-      maintenanceSchedule: '0 0 1 1 *',
-      executorId: 'suspension-executor',
-    });
-    service = host.service;
-    await service.internal.registerClient({ clientId: 'suspension-client', firstParty: true, scopes });
-    await host.start();
-    root = await person('grant_root');
-    grantor = await person('grant_grantor');
-    recipient = await person('grant_recipient');
-    const bootstrap = Bun.spawn(['bun', 'scripts/bootstrap-governance.ts', '--account', root.accountId], {
-      env: { ...process.env, DATABASE_URL: db.url },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    expect(await bootstrap.exited).toBe(0);
-    // Auth database provisioning has a 120 s command budget; the three native
-    // registrations each wait up to 30 s for pending, credential and activation.
-  },
-  120_000 + 3 * 3 * 30_000,
-);
+      jwksUrl: `${issuer}/.well-known/jwks.json`,
+      fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+    },
+  });
+  const proofs = createNativeWorkflowProofPorts({ database: authPool });
+  grants = createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' });
+  // Compose the existing native human registration ports directly. The full
+  // account binding also requires unmounted operator-management routes, which
+  // belong to a separate module. No action is added to the mounted catalogue.
+  const registration = createRegistrationProofBindings({ pool: db.pool, referenceKeys: tokens });
+  const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
+  const internal = createLifecycleInternals({
+    pool: db.pool,
+    routeKey,
+    provisioningEvidence: (evidence) => provisioning.resolve(evidence),
+    recoveryEvidence: async () => null,
+  });
+  lifecycle = internal;
+  const registrationPorts = {
+    ...internal,
+    async createPending(input: Parameters<typeof internal.createPending>[0]) {
+      const outcome = await internal.createPending(input);
+      const pair = { accountId: input.accountId, reservationId: input.reservationId };
+      if (!(await proofs.pendingReference(pair))) {
+        const reference = await registration.createProvisioningReference({ input, outcome });
+        if (!reference) throw new Error('Missing native registration reference');
+        await proofs.recordPending({ ...pair, reference });
+      }
+      return outcome;
+    },
+    async provisioningReference(input: { accountId: string; reservationId: string }) {
+      const reference = await proofs.pendingReference(input);
+      if (!reference) throw new Error('Missing persisted registration reference');
+      return reference;
+    },
+    provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
+  };
+  host = await createAuthHost({
+    database: authPool,
+    systemDatabasePool: authPool,
+    issuer,
+    audience,
+    secret: 'suspension-auth-persistent-secret-32bytes',
+    signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
+    trustedAccess: createAuthBindings({
+      pool: db.pool,
+      ...registration,
+      verifyPendingIdentity: registration.verifyNativePendingIdentity,
+    }),
+    access: registrationPorts,
+    stagingKey: new Uint8Array(32).fill(73),
+    maintenanceSchedule: '0 0 1 1 *',
+    executorId: 'suspension-executor',
+  });
+  service = host.service;
+  await service.internal.registerClient({ clientId: 'suspension-client', firstParty: true, scopes });
+  await host.start();
+  root = await person('grant_root');
+  grantor = await person('grant_grantor');
+  recipient = await person('grant_recipient');
+  const bootstrap = Bun.spawn(['bun', 'scripts/bootstrap-governance.ts', '--account', root.accountId], {
+    env: { ...process.env, DATABASE_URL: db.url },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  expect(await bootstrap.exited).toBe(0);
+  // Auth database provisioning has a 120 s command budget; the three native
+  // registrations each wait up to 30 s for pending, credential and activation.
+}, setupTimeout);
 afterAll(async () => {
   await host?.stop();
   authDatabase?.close();

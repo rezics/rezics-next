@@ -305,7 +305,7 @@ test('fenced or missing organization cannot supply a role grant while actor and 
   const access = verifier();
   const jwt = await delegatedToken();
   expect(await run(access, jwt)).toBe(true);
-  const receipt = await fence(organization);
+  await fence(organization);
   expect(await run(access, jwt)).toBe(false);
   // Human credential recovery cannot clear an organization's fence. Restore
   // the seeded organization directly to isolate its contribution to the ACL.
