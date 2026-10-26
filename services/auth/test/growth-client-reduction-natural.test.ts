@@ -193,6 +193,7 @@ test('three scale native growth remains within derived affected-owner bound', as
     const unrelated = () =>
       db.admin
         .query(`
+      SELECT relation, fingerprint FROM (
       SELECT 'consent' AS relation, md5(coalesce(string_agg(to_jsonb(t)::text,'' ORDER BY account_id),'')) AS fingerprint
       FROM auth_consent t WHERE client_id='unrelated'
       UNION ALL SELECT 'session', md5(coalesce(string_agg(to_jsonb(t)::text,'' ORDER BY id),''))
@@ -201,6 +202,7 @@ test('three scale native growth remains within derived affected-owner bound', as
       FROM auth_effect_receipt t WHERE receipt_id LIKE 'history-%'
       UNION ALL SELECT 'progress', md5(coalesce(string_agg(to_jsonb(t)::text,'' ORDER BY operation_id),''))
       FROM auth_client_reduction_progress t WHERE operation_id LIKE 'history-%'
+      ) fingerprints ORDER BY relation, fingerprint
     `)
         .then((result) => result.rows);
     let before: Awaited<ReturnType<typeof unrelated>>;
