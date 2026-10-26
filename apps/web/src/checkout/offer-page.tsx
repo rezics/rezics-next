@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { OfferPageData } from './offer';
+import { PageHeading } from '../shell/page-heading';
 
 type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable' | 'closed';
 
@@ -60,7 +61,7 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
   return (
     <article className="max-w-xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
       <header className="space-y-4">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight text-balance text-foreground">{offer.title}</h1>
+        <PageHeading className="text-foreground">{offer.title}</PageHeading>
         <p className="space-y-1">
           <span className="block text-sm font-medium text-muted-foreground">{m.offer_price()}</span>
           <span className="block font-serif text-3xl text-foreground tabular-nums">{offer.price}</span>

@@ -16,6 +16,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client.ts';
+import { PageHeading } from '../shell/page-heading';
 
 type SearchResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
 type SuggestResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
@@ -316,7 +317,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
 
   return (
     <section className="mx-auto max-w-5xl space-y-6 px-4">
-      <h1 className="font-serif text-3xl">{m.search_heading()}</h1>
+      <PageHeading>{m.search_heading()}</PageHeading>
       <form method="get" action={`/${locale}/search`} className="space-y-5">
         <div className="flex gap-2">
           <label className="sr-only" htmlFor="search-query">

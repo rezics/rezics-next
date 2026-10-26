@@ -26,6 +26,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { use, useEffect, useRef, useState } from 'react';
+import { PageHeading } from './page-heading';
 import { ShellSearch } from '../search/search.tsx';
 import {
   Folders,
@@ -77,6 +78,8 @@ const messages = {
 const destinations = [{ to: '/', message: messages.nav_home, icon: House, phone: true }] as const;
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+const statusControlClass =
+  'h-9 rounded-full px-4 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const accountMenuLinkClass =
   'flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
@@ -428,22 +431,29 @@ export function AppShell({
     </LocaleProvider>
   );
 }
+export function StatusPage({ heading, message }: { heading: string; message: string }) {
+  const locale = getLocale();
+  return (
+    <div className="max-w-prose space-y-4">
+      <PageHeading>{heading}</PageHeading>
+      <p className="leading-7">{message}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild className={statusControlClass}>
+          <a href={`/${locale}`}>{m.status_home()}</a>
+        </Button>
+        <Button asChild variant="outline" className={statusControlClass}>
+          <a href={`/${locale}/search`}>{m.status_search()}</a>
+        </Button>
+      </div>
+    </div>
+  );
+}
 export function HomePage() {
-  return <h1 className="font-serif text-3xl">{m.home_heading()}</h1>;
+  return <PageHeading>{m.home_heading()}</PageHeading>;
 }
 export function NotFoundPage() {
-  return (
-    <>
-      <h1 className="font-serif text-3xl">{m.not_found_heading()}</h1>
-      <p>{m.not_found_message()}</p>
-    </>
-  );
+  return <StatusPage heading={m.not_found_heading()} message={m.not_found_message()} />;
 }
 export function ErrorPage() {
-  return (
-    <>
-      <h1 className="font-serif text-3xl">{m.error_heading()}</h1>
-      <p>{m.error_message()}</p>
-    </>
-  );
+  return <StatusPage heading={m.error_heading()} message={m.error_message()} />;
 }

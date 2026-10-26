@@ -4,6 +4,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
 import { csrfHeaders, draftFetch, PostComposer, SignInPrompt } from '../../threads/composer';
 import { readNewThreadPage } from '../../threads/reads';
+import { PageHeading } from '../../shell/page-heading';
 
 export const Route = createFileRoute('/boards/$id_/new')({
   loader: ({ params }) => readNewThreadPage({ data: { id: params.id } }),
@@ -20,7 +21,7 @@ function NewThreadPage() {
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.thread_new_heading()}</h1>
+        <PageHeading>{m.thread_new_heading()}</PageHeading>
       </header>
       {session === 'signed-in' ? (
         <PostComposer

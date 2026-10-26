@@ -3,6 +3,8 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readBoardPage } from '../../threads/reads';
 import { SignInPrompt } from '../../threads/composer';
+import { ClosedErrorPage } from '../../shell/closed';
+import { PageHeading } from '../../shell/page-heading';
 
 export const Route = createFileRoute('/boards/$id')({
   validateSearch: (search: Record<string, unknown>) =>
@@ -10,6 +12,7 @@ export const Route = createFileRoute('/boards/$id')({
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   loader: ({ params, deps }) => readBoardPage({ data: { id: params.id, cursor: deps.cursor } }),
   head: ({ loaderData }) => ({ meta: [{ title: loaderData?.board.title ?? m.threads_untitled() }] }),
+  errorComponent: ClosedErrorPage,
   component: BoardPage,
 });
 
@@ -21,7 +24,7 @@ function BoardPage() {
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{board.title ?? m.threads_untitled()}</h1>
+        <PageHeading>{board.title ?? m.threads_untitled()}</PageHeading>
         {session === 'signed-in' ? (
           <a
             href={`/${getLocale()}/boards/${id}/new`}

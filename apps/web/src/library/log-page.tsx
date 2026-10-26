@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { removePublishedLog } from './logs-server';
 import type { PublishedLog } from './logs-read';
@@ -65,7 +66,7 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
   return (
     <article className="max-w-4xl space-y-6 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_logs_page_heading()}</h1>
+        <PageHeading>{m.library_logs_page_heading()}</PageHeading>
         <p>{m.library_logs_description()}</p>
       </header>
       <dl className="space-y-3">

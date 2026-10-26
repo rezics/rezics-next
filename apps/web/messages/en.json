@@ -312,6 +312,8 @@
   "shell_theme_dark": "Dark",
   "shell_theme_light": "Light",
   "shell_theme_system": "System",
+  "status_home": "Home",
+  "status_search": "Search",
   "subject_aliases": "Also known as",
   "subject_qualifiers": "Qualifiers",
   "subject_sources": "Sources",

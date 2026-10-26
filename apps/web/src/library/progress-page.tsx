@@ -1,6 +1,7 @@
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
 import { startProgressSession } from './progress-server';
@@ -83,7 +84,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_progress_heading()}</h1>
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
       </header>
       {page.signedIn ? (
         <>

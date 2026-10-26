@@ -312,6 +312,8 @@
   "shell_theme_dark": "어둡게",
   "shell_theme_light": "밝게",
   "shell_theme_system": "시스템 설정",
+  "status_home": "홈",
+  "status_search": "검색",
   "subject_aliases": "다른 이름",
   "subject_qualifiers": "수식어",
   "subject_sources": "출처",

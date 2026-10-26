@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt } from '../threads/composer';
 import type { MineFollow, MineFollowingPage } from './mine-following';
 import { unfollow } from './mine-following-actions';
@@ -60,7 +61,7 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header>
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_following_heading()}</h1>
+        <PageHeading>{m.library_following_heading()}</PageHeading>
       </header>
       {active.length ? (
         <div className="space-y-8">

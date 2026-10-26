@@ -199,7 +199,7 @@ async function headingStyle(path: string) {
   try {
     const heading = page.locator('main').getByRole('heading', { level: 1 });
     expect(await heading.count()).toBe(1);
-    return heading.evaluate((element) => {
+    return await heading.evaluate((element) => {
       const style = getComputedStyle(element);
       return { family: style.fontFamily, size: style.fontSize, weight: style.fontWeight };
     });

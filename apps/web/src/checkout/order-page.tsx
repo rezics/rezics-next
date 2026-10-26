@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { OrderPageData, Settlement } from './order';
+import { PageHeading } from '../shell/page-heading';
 
 const recheckMs = 2_000;
 // The first read is the page loader. Fifteen further reads reach the 16-read cap at 30 seconds.
@@ -67,7 +68,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
 
   return (
     <article className="max-w-xl min-w-0 space-y-6 text-foreground">
-      <h1 className="font-serif text-4xl font-semibold tracking-tight text-balance text-foreground">{heading}</h1>
+      <PageHeading className="text-foreground">{heading}</PageHeading>
       {checkout === 'canceled' && (
         <div className="space-y-3 rounded-xl border border-border bg-muted px-4 py-3">
           <p role="note">{m.order_canceled()}</p>

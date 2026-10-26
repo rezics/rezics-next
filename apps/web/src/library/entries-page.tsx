@@ -10,6 +10,7 @@ import {
   type PersonalLibraryView,
 } from './entries-read';
 import { SubjectRef } from './subject-ref';
+import { PageHeading } from '../shell/page-heading';
 
 function formatUpdated(value: string, locale: string) {
   return new Intl.DateTimeFormat(locale, {
@@ -249,7 +250,7 @@ export function PersonalLibraryPage({ page, locale }: { page: PersonalLibraryVie
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_heading()}</h1>
+        <PageHeading>{m.library_heading()}</PageHeading>
         <LibrarySections locale={locale} />
       </header>
       {page.signedIn ? (

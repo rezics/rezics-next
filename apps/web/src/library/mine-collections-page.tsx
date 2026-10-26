@@ -1,6 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt } from '../threads/composer';
 import { AccountRef } from './account-ref';
 import type { CollectionVisibility } from './reads';
@@ -19,7 +20,7 @@ export function MineCollectionsPageView({ page }: { page: MineCollectionsPage })
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_collections_heading()}</h1>
+        <PageHeading>{m.library_collections_heading()}</PageHeading>
         <a
           href={`/${getLocale()}/collections/new`}
           className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"

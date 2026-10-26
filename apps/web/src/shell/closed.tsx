@@ -1,14 +1,9 @@
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
-import { ErrorPage } from './shell';
+import { ErrorPage, StatusPage } from './shell';
 
 export function ClosedPage() {
-  return (
-    <>
-      <h1 className="font-serif text-3xl">{m.platform_closed_heading()}</h1>
-      <p>{m.platform_closed_message()}</p>
-    </>
-  );
+  return <StatusPage heading={m.platform_closed_heading()} message={m.platform_closed_message()} />;
 }
 
 export function ClosedErrorPage({ error }: { error: unknown }) {

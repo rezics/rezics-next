@@ -1,6 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import {
   parseUnitBatch,
@@ -78,7 +79,7 @@ export function ProgressSessionPage({ page }: { page: ProgressSessionPage }) {
   if (!page.signedIn) {
     return (
       <article className="max-w-4xl space-y-8 text-foreground">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_progress_heading()}</h1>
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
         <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0] ?? location.pathname} />
       </article>
     );
@@ -277,7 +278,7 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_progress_heading()}</h1>
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
         <p className="flex flex-wrap items-baseline gap-2">
           <SubjectRef subject={session.subject} />
         </p>

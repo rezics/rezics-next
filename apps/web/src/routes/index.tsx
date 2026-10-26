@@ -4,6 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { kernelClient } from '../kernel/client';
 import { loadRoutePage, RoutePage, routePageJsonLd } from '../features/pages/route';
+import { PageHeading } from '../shell/page-heading';
 
 const loadHome = createServerFn({ method: 'GET' }).handler(async () => loadRoutePage(kernelClient(), '/'));
 
@@ -22,7 +23,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   const loaded = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
-  if (loaded.kind === 'missing') return <h1 className="font-serif text-3xl">{m.home_heading()}</h1>;
+  if (loaded.kind === 'missing') return <PageHeading>{m.home_heading()}</PageHeading>;
   return (
     <RoutePage
       page={loaded.page}

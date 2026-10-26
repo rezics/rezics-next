@@ -18,6 +18,7 @@ import {
   type CreatedPost,
 } from '../../threads/actions';
 import { csrfHeaders, draftFetch, InlinePostEditor, PostComposer, SignInPrompt } from '../../threads/composer';
+import { PageHeading } from '../../shell/page-heading';
 
 export const Route = createFileRoute('/threads/$id')({
   validateSearch: (search: Record<string, unknown>) =>
@@ -48,7 +49,7 @@ function ThreadPage() {
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{thread.title ?? m.threads_untitled()}</h1>
+        <PageHeading>{thread.title ?? m.threads_untitled()}</PageHeading>
       </header>
       <section className="space-y-6" aria-labelledby="thread-posts-heading">
         <h2 id="thread-posts-heading" className="text-xl font-semibold">

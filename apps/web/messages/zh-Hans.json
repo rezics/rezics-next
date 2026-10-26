@@ -312,6 +312,8 @@
   "shell_theme_dark": "深色",
   "shell_theme_light": "浅色",
   "shell_theme_system": "跟随系统",
+  "status_home": "首页",
+  "status_search": "搜索",
   "subject_aliases": "又名",
   "subject_qualifiers": "限定条件",
   "subject_sources": "来源",

@@ -1,6 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders, SignInPrompt } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy } from './copies-actions';
 import type { CopiesPageData, CopyItem, CopyStatus, SavedCopy } from './copies-read';
@@ -413,7 +414,7 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
   return (
     <div className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_copy_heading()}</h1>
+        <PageHeading>{m.library_copy_heading()}</PageHeading>
         <StatusHints />
         <DateHints />
       </header>

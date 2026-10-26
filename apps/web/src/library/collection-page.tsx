@@ -3,6 +3,7 @@ import { m } from '../paraglide/messages.js';
 import { AccountRef } from './account-ref';
 import type { CollectionPageData, CollectionVisibility } from './reads';
 import { SubjectRef } from './subject-ref';
+import { PageHeading } from '../shell/page-heading';
 
 function visibilityLabel(visibility: CollectionVisibility): string {
   if (visibility === 'public') return m.library_visibility_public();
@@ -14,7 +15,7 @@ export function CollectionPage({ page }: { page: CollectionPageData }) {
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{page.title}</h1>
+        <PageHeading>{page.title}</PageHeading>
         {page.description !== null ? <p className="whitespace-pre-wrap">{page.description}</p> : null}
         <p>
           {m.library_curator()} <AccountRef account={page.curator} />
