@@ -12,9 +12,21 @@ provisional client id (`login`) and scope (`[]`). It uses the shared `src/api.ts
 failures become an unavailable result.
 
 After successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and empty
-parameters and removing every `sig`, `exp` and `prompt`. It keeps `max_age`. Without a remaining query it navigates to
-`/security`. The response body never supplies a navigation target. Recovery links to `/recovery`; sign-up preserves
-the login query.
+parameters and removing every `sig`, `exp`, `prompt` and `return_to`. It keeps `max_age`. Without a remaining query it
+navigates to `/security`, or to the `return_to` path when it is on the fixed list of Auth page paths (now only
+`/security`); it is never forwarded to `/authorize` and never an absolute URL or another origin. The response body never
+supplies a navigation target. Recovery links to `/recovery`; sign-up preserves the login query.
+
+Where the browser has WebAuthn, the page also offers passkeys. `src/passkeys.ts` holds every WebAuthn call, using
+`@simplewebauthn/browser` and the shared `authPost`. A "Sign in with a passkey" button asks `POST /signin/passkey/options`
+with `{}` for discoverable-credential options, prompts, and sends `{ response, client_id: "login", scope: [] }` to
+`POST /signin/passkey`, which answers like `/signin`; success resumes with `signInTarget`. Where the browser supports
+conditional mediation, the email field carries `autocomplete="username webauthn"` and the same ceremony runs in the
+background so the browser can offer passkeys in autofill. Both start from one set of options, which the page shares for
+four minutes, so a sign-in is two Auth calls however it starts. A dismissed prompt (`NotAllowedError`) or a ceremony
+replaced by a newer one is silent; any other failure shows the shared destructive alert, with a passkey-specific
+message for a refused passkey. Without WebAuthn the page shows no passkey control and the email field keeps
+`autocomplete="username"`.
 
 The submit button stays enabled until a request is pending. Submission validates the email and password, marks each
 invalid field with a linked error, and focuses the first invalid field. The password uses the shared in-field show and
@@ -81,24 +93,37 @@ development. Auth's response returns unchanged, without page headers.
 
 ## Security
 
-The security page has Password and Sessions sections in a content column up to 42rem wide. It reads the signed-in
-account from `GET /session` and its sessions from one `GET /sessions`, with at most 64 session rows. The view makes no
-kernel reads. A password change uses three Auth calls and signing out one session uses one. A signed-out response
+The security page has Password, Passkeys and Sessions sections in a content column up to 42rem wide. It reads the
+signed-in account from `GET /session`, its sessions from one `GET /sessions`, with at most 64 session rows, and its
+passkeys from one `GET /passkeys`. The view makes no kernel reads. A password change uses three Auth calls and signing out one session uses one. A signed-out response
 offers a link to `/login`.
 
 Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
 then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as
-success. A `step_up_required` response sends the person to `/step-up` with `/security` as the return target and clears
-the password field; no password is put in the URL.
+success. A `step_up_required` response sends the person to `/step-up?return_to=%2Fsecurity` and clears the password
+field; no password is put in the URL. Step-up brings the person back to `/security`.
 
-Sessions are an item list with separators. A local browser and system map formats recognized user agents as a device;
+Sessions are a list of outlined items spaced by the list's gap, with no separators between them. A local browser and system map formats recognized user agents as a device;
 unrecognized values show a localized unknown-device label, and user agents are never sent elsewhere. The muted
 description contains the app name and signed-in and expiry dates formatted for the page locale and time zone. A
 response `client_display_name` is used when present; `login` maps to the localized REZICS account name,
 `rezics-website` maps to REZICS, and other client ids remain muted monospace. The current session appears first and is
 marked This device. Each row offers Sign out with an accessible name containing its device. Signing out asks for
 confirmation; another session disappears from the list, while signing out the current session clears its cookie and
-sends the person to `/login`. Passkeys are not shown until that feature is available.
+sends the person to `/login`.
+
+Passkeys have their own section with an `h2`. Each passkey is an outlined item with its name, created date and last-used
+date (or "Never used"), formatted for the page locale and time zone, and a Remove button whose accessible name contains
+the passkey's name. The add form has an optional name that defaults to the browser and system. Adding sends
+`POST /passkeys/register/options` with `{}`, runs the browser ceremony, then sends `POST /passkeys/register` with
+`{ response, name? }`; the 201 body `{ id, name, created_at }` becomes the new row without a second list read. Removing
+asks for confirmation and sends `POST /passkeys/remove` with `{ id }`. A 409 means it was the person's last interactive
+credential, so nothing changed and a localized message says so. Registration and removal are credential changes: a 401
+`step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the
+browser has no WebAuthn the section is absent and `GET /passkeys` is not requested; a failed list shows an alert in that
+section only.
+
+The page heading has the same space below it as the sections have between them.
 
 ## Step-up
 
@@ -110,8 +135,15 @@ needed. The form asks for email (`autocomplete="username"`) and password
 `src/step-up.ts` reuses `signIn` and `signInTarget`. Confirmation is one browser `POST /signin` with
 the same `client_id` and `scope` as sign-in. On success, Auth replaces the previous session. The
 browser then resumes at `/authorize` with that query, removing every `sig`, `exp` and `prompt` and
-keeping `max_age`. With no authorization query left, it goes to `/security`. The response body never
-supplies a navigation target. Passkey confirmation comes later.
+keeping `max_age`. With no authorization query left, it goes to the `return_to` path when it is on the fixed list of Auth
+page paths (now only `/security`), and to `/security` otherwise. `return_to` is never forwarded to `/authorize`, and
+an absolute URL or another origin is never followed. The response body never supplies a navigation target. Security
+settings send a person to `/step-up?return_to=%2Fsecurity`, so password and passkey confirmation both return there.
+
+Where the browser has WebAuthn, a "Verify with a passkey" button sits below the password form. It asks
+`POST /signin/passkey/options` for options, prompts, and sends `POST /signin/passkey` with the same `client_id` and
+`scope`; success resumes as above. A dismissed prompt is silent and other failures use the same alert. Without WebAuthn
+the button is absent.
 
 A wrong password, rate limit or outage uses a destructive alert with an icon and title for 401, 429 and 503 and keeps
 the person on the page. Submission validates email and password, links field errors to their inputs and focuses the
@@ -154,6 +186,37 @@ The sign-in page makes no server reads. A sign-in adds one browser `POST /signin
 Recovery makes no kernel reads and adds one Auth request per submit.
 Auth pages make no kernel reads. Step-up is one `POST /signin` per submit.
 Sign-up makes no kernel reads. A successful submit is one browser `POST /signup` and one browser `POST /signin`.
+
+### Passkey sign-in
+
+- **Touches:** `POST /signin/passkey/options` and `POST /signin/passkey`; autofill and the button share one set of options
+- **Bound:** 2 Auth requests and 0 kernel reads, whatever the number of passkeys the person has
+- **Growth check:** `tests/passkeys-cost.test.ts`: a passkey sign-in makes two Auth requests however many passkeys the person has
+
+### Passkey step-up
+
+- **Touches:** the same two requests as a passkey sign-in
+- **Bound:** 2 Auth requests and 0 kernel reads
+- **Growth check:** `tests/passkeys-cost.test.ts`: a passkey step-up makes two Auth requests however many passkeys the person has
+
+### Passkey list
+
+- **Touches:** one `GET /passkeys`, which returns only the signed-in person's passkeys, beside the page's `GET /session`
+  and `GET /sessions`
+- **Bound:** 1 read of at most the person's own passkeys; 0 kernel reads; one row rendered per passkey
+- **Growth check:** `tests/passkeys-cost.test.ts`: listing passkeys is one read however many passkeys the person has
+
+### Adding a passkey
+
+- **Touches:** `POST /passkeys/register/options` and `POST /passkeys/register`; the new row comes from the 201 body
+- **Bound:** 2 Auth requests and 0 kernel reads, with no re-read of the list
+- **Growth check:** `tests/passkeys-cost.test.ts`: adding a passkey makes two Auth requests however many passkeys the person has
+
+### Removing a passkey
+
+- **Touches:** `POST /passkeys/remove`
+- **Bound:** 1 Auth request and 0 kernel reads
+- **Growth check:** `tests/passkeys-cost.test.ts`: removing a passkey makes one Auth request however many passkeys the person has
 
 ## Visual check
 

@@ -2,19 +2,23 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemSeparator, ItemTitle } from '@rezics/ui/item';
+import { Input } from '@rezics/ui/input';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/item';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
+import { addPasskey, passkeysSupported, removePasskey } from '../passkeys';
 import {
   changePassword,
   formatSecurityDate,
   loadSecurity,
   revokeSession,
   securityDevice,
+  type PasskeysLoad,
+  type SecurityPasskey,
   type SecuritySession,
 } from '../security';
 
@@ -23,6 +27,8 @@ export const Route = createFileRoute('/security')({
 });
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
+
+const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
 
 function SecurityPage() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -37,17 +43,26 @@ function SecurityPage() {
   const [sessionPending, setSessionPending] = useState('');
   const [sessionNotice, setSessionNotice] = useState('');
   const [sessionError, setSessionError] = useState('');
+  const [passkeysLoad, setPasskeysLoad] = useState<PasskeysLoad>({ kind: 'hidden' });
+  const [passkeys, setPasskeys] = useState<SecurityPasskey[]>([]);
+  const [passkeyName, setPasskeyName] = useState('');
+  const [passkeyAdding, setPasskeyAdding] = useState(false);
+  const [passkeyRemoving, setPasskeyRemoving] = useState('');
+  const [passkeyNotice, setPasskeyNotice] = useState('');
+  const [passkeyError, setPasskeyError] = useState('');
   const submittingPassword = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
-    void loadSecurity().then((result) => {
+    void loadSecurity(passkeysSupported()).then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
         setAccountId(result.accountId);
         setSessions(result.sessions);
+        setPasskeysLoad(result.passkeys);
+        if (result.passkeys.kind === 'ready') setPasskeys(result.passkeys.passkeys);
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
         setLoadState('signed-out');
@@ -90,10 +105,46 @@ function SecurityPage() {
     }
     if (result.reason === 'step-up') {
       setPassword('');
-      window.location.assign('/step-up?return_to=%2Fsecurity');
+      window.location.assign(STEP_UP_URL);
       return;
     }
     setPasswordError(result.message ?? failureMessage(503, 'unavailable', null));
+  }
+
+  async function submitPasskey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (passkeyAdding || passkeyRemoving) return;
+    setPasskeyAdding(true);
+    setPasskeyNotice('');
+    setPasskeyError('');
+    const result = await addPasskey(passkeyName);
+    setPasskeyAdding(false);
+    if (result.ok) {
+      setPasskeys((current) => [...current, result.passkey]);
+      setPasskeyName('');
+      setPasskeyNotice(m.auth_security_passkey_added());
+    } else if (result.reason === 'step-up') {
+      window.location.assign(STEP_UP_URL);
+    } else if (result.reason === 'failure') {
+      setPasskeyError(result.message);
+    }
+  }
+
+  async function removeOnePasskey(passkey: SecurityPasskey) {
+    if (passkeyAdding || passkeyRemoving || !window.confirm(m.auth_security_passkey_remove_confirmation())) return;
+    setPasskeyRemoving(passkey.id);
+    setPasskeyNotice('');
+    setPasskeyError('');
+    const result = await removePasskey(passkey.id);
+    setPasskeyRemoving('');
+    if (result.ok) {
+      setPasskeys((current) => current.filter((item) => item.id !== passkey.id));
+      setPasskeyNotice(m.auth_security_passkey_removed());
+    } else if (result.reason === 'step-up') {
+      window.location.assign(STEP_UP_URL);
+    } else {
+      setPasskeyError(result.message);
+    }
   }
 
   async function revoke(session: SecuritySession) {
@@ -197,6 +248,95 @@ function SecurityPage() {
               </form>
             </section>
 
+            {passkeysLoad.kind === 'hidden' ? null : (
+              <section aria-labelledby="security-passkeys-heading">
+                <h2 id="security-passkeys-heading">{m.auth_security_passkeys_heading()}</h2>
+                {passkeysLoad.kind === 'failure' ? (
+                  <ErrorAlert>{passkeysLoad.message}</ErrorAlert>
+                ) : (
+                  <>
+                    <p className="auth-security-hint">{m.auth_security_passkeys_description()}</p>
+                    {passkeyNotice ? (
+                      <div className="auth-login-alert" role="status">
+                        {passkeyNotice}
+                      </div>
+                    ) : null}
+                    {passkeyError ? <ErrorAlert>{passkeyError}</ErrorAlert> : null}
+                    {passkeys.length ? (
+                      <ItemGroup aria-label={m.auth_security_passkeys_heading()}>
+                        {passkeys.map((passkey) => (
+                          <Item key={passkey.id} asChild variant="outline">
+                            <li>
+                              <article className="contents">
+                                <ItemContent>
+                                  <ItemTitle asChild>
+                                    <h3>{passkey.name}</h3>
+                                  </ItemTitle>
+                                  <ItemDescription>
+                                    {m.auth_security_created_at()}{' '}
+                                    <time dateTime={passkey.created_at}>
+                                      {formatSecurityDate(passkey.created_at, locale)}
+                                    </time>
+                                    {' · '}
+                                    {passkey.last_used_at ? (
+                                      <>
+                                        {m.auth_security_passkey_last_used()}{' '}
+                                        <time dateTime={passkey.last_used_at}>
+                                          {formatSecurityDate(passkey.last_used_at, locale)}
+                                        </time>
+                                      </>
+                                    ) : (
+                                      m.auth_security_passkey_never_used()
+                                    )}
+                                  </ItemDescription>
+                                </ItemContent>
+                                <ItemActions>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void removeOnePasskey(passkey)}
+                                    disabled={passkeyAdding || Boolean(passkeyRemoving)}
+                                    isLoading={passkeyRemoving === passkey.id}
+                                    aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
+                                  >
+                                    {m.auth_security_passkey_remove()}
+                                  </Button>
+                                </ItemActions>
+                              </article>
+                            </li>
+                          </Item>
+                        ))}
+                      </ItemGroup>
+                    ) : (
+                      <p>{m.auth_security_passkeys_empty()}</p>
+                    )}
+                    <form className="auth-login-form" noValidate onSubmit={submitPasskey}>
+                      <Field>
+                        <FieldLabel htmlFor="security-passkey-name">{m.auth_security_passkey_name()}</FieldLabel>
+                        <Input
+                          id="security-passkey-name"
+                          name="passkey-name"
+                          autoComplete="off"
+                          maxLength={64}
+                          value={passkeyName}
+                          onChange={(event) => setPasskeyName(event.target.value)}
+                          readOnly={passkeyAdding}
+                        />
+                      </Field>
+                      <Button
+                        type="submit"
+                        disabled={passkeyAdding || Boolean(passkeyRemoving)}
+                        isLoading={passkeyAdding}
+                        className="w-full"
+                      >
+                        {m.auth_security_passkey_add()}
+                      </Button>
+                    </form>
+                  </>
+                )}
+              </section>
+            )}
+
             <section aria-labelledby="security-sessions-heading">
               <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
               {sessionNotice ? (
@@ -206,7 +346,7 @@ function SecurityPage() {
               ) : null}
               {sessionError ? <ErrorAlert>{sessionError}</ErrorAlert> : null}
               <ItemGroup aria-label={m.auth_security_sessions_heading()}>
-                {orderedSessions.map((session, index) => {
+                {orderedSessions.map((session) => {
                   const parsedDevice = securityDevice(session.user_agent);
                   const device = parsedDevice ? m.auth_security_device(parsedDevice) : m.auth_security_unknown_device();
                   const clientName =
@@ -219,54 +359,51 @@ function SecurityPage() {
                   const rawClientId =
                     !session.client_display_name?.trim() && !['login', 'rezics-website'].includes(session.client_id);
                   return (
-                    <div className="contents" key={session.id}>
-                      {index > 0 ? <ItemSeparator /> : null}
-                      <Item asChild variant="outline">
-                        <li>
-                          <article className="contents">
-                            <ItemContent>
-                              <ItemTitle asChild>
-                                <h3>
-                                  {device}
-                                  {session.current ? (
-                                    <Badge variant="soft" size="sm">
-                                      {m.auth_security_this_device()}
-                                    </Badge>
-                                  ) : null}
-                                </h3>
-                              </ItemTitle>
-                              <ItemDescription>
-                                <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
+                    <Item key={session.id} asChild variant="outline">
+                      <li>
+                        <article className="contents">
+                          <ItemContent>
+                            <ItemTitle asChild>
+                              <h3>
+                                {device}
+                                {session.current ? (
+                                  <Badge variant="soft" size="sm">
+                                    {m.auth_security_this_device()}
+                                  </Badge>
+                                ) : null}
+                              </h3>
+                            </ItemTitle>
+                            <ItemDescription>
+                              <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
+                              {' · '}
+                              <span>
+                                {m.auth_security_created_at()}{' '}
+                                <time dateTime={session.created_at}>
+                                  {formatSecurityDate(session.created_at, locale)}
+                                </time>
                                 {' · '}
-                                <span>
-                                  {m.auth_security_created_at()}{' '}
-                                  <time dateTime={session.created_at}>
-                                    {formatSecurityDate(session.created_at, locale)}
-                                  </time>
-                                  {' · '}
-                                  {m.auth_security_expires_at()}{' '}
-                                  <time dateTime={session.expires_at}>
-                                    {formatSecurityDate(session.expires_at, locale)}
-                                  </time>
-                                </span>
-                              </ItemDescription>
-                            </ItemContent>
-                            <ItemActions>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => void revoke(session)}
-                                disabled={Boolean(sessionPending)}
-                                isLoading={sessionPending === session.id}
-                                aria-label={m.auth_security_sign_out_session({ device })}
-                              >
-                                {m.auth_security_sign_out()}
-                              </Button>
-                            </ItemActions>
-                          </article>
-                        </li>
-                      </Item>
-                    </div>
+                                {m.auth_security_expires_at()}{' '}
+                                <time dateTime={session.expires_at}>
+                                  {formatSecurityDate(session.expires_at, locale)}
+                                </time>
+                              </span>
+                            </ItemDescription>
+                          </ItemContent>
+                          <ItemActions>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => void revoke(session)}
+                              disabled={Boolean(sessionPending)}
+                              isLoading={sessionPending === session.id}
+                              aria-label={m.auth_security_sign_out_session({ device })}
+                            >
+                              {m.auth_security_sign_out()}
+                            </Button>
+                          </ItemActions>
+                        </article>
+                      </li>
+                    </Item>
                   );
                 })}
               </ItemGroup>

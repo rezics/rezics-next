@@ -2,11 +2,20 @@ import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { WebAuthnAbortService } from '@simplewebauthn/browser';
+import { KeyRound } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
+import {
+  passkeyAutofillSupported,
+  passkeySignInFailure,
+  passkeysSupported,
+  signInWithPasskey,
+  type PasskeySignInResult,
+} from '../passkeys';
 import { signIn, signInTarget } from '../sign-in';
 import { ErrorAlert } from '../alert';
 
@@ -30,6 +39,9 @@ function LoginPage() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [recoveryComplete, setRecoveryComplete] = useState(false);
+  // Passkey controls appear only after the browser reports WebAuthn, so the server render has none.
+  const [passkeySupport, setPasskeySupport] = useState<'none' | 'prompt' | 'autofill'>('none');
+  const [passkeyPending, setPasskeyPending] = useState(false);
   const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
@@ -46,6 +58,55 @@ function LoginPage() {
       setRecoveryComplete(true);
     }
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      if (!passkeysSupported()) return;
+      setPasskeySupport('prompt');
+      if ((await passkeyAutofillSupported()) && active) setPasskeySupport('autofill');
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // The browser offers passkeys in the email field once its autocomplete token is on the page.
+  useEffect(() => {
+    if (passkeySupport !== 'autofill') return;
+    startAutofill();
+    return () => WebAuthnAbortService.cancelCeremony();
+  }, [passkeySupport]);
+
+  function startAutofill() {
+    void signInWithPasskey({ autofill: true }).then(finishPasskey);
+  }
+
+  function finishPasskey(result: PasskeySignInResult) {
+    if (result.ok) {
+      window.location.assign(signInTarget(query, window.location.origin));
+      return;
+    }
+    submitting.current = false;
+    setPending(false);
+    setPasskeyPending(false);
+    if (result.reason === 'cancelled') return;
+    setMessage(passkeySignInFailure(result));
+  }
+
+  async function submitPasskey() {
+    if (submitting.current || pending) return;
+    submitting.current = true;
+    setPending(true);
+    setPasskeyPending(true);
+    setMessage('');
+    setEmailError('');
+    setPasswordError('');
+    const result = await signInWithPasskey();
+    finishPasskey(result);
+    // Showing the prompt replaced the autofill ceremony, so offer autofill again if the person backed out.
+    if (!result.ok && passkeySupport === 'autofill') startAutofill();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,7 +152,7 @@ function LoginPage() {
             id={emailId}
             name="email"
             type="email"
-            autoComplete="username"
+            autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
             value={email}
             onChange={(event) => {
               setEmail(event.target.value);
@@ -138,9 +199,21 @@ function LoginPage() {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} isLoading={pending}>
+        <Button type="submit" disabled={pending} isLoading={pending && !passkeyPending}>
           {m.auth_login_heading()}
         </Button>
+        {passkeySupport === 'none' ? null : (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            isLoading={passkeyPending}
+            onClick={() => void submitPasskey()}
+          >
+            <KeyRound aria-hidden="true" />
+            {m.auth_login_passkey()}
+          </Button>
+        )}
       </form>
       {recoveryComplete ? (
         <div className="auth-login-alert" role="status">

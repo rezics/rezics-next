@@ -103,6 +103,11 @@ body {
   text-align: start;
 }
 
+/* The heading sits one section gap above the first section, like the sections do from each other. */
+.auth-card:has(.auth-security-page) h1 {
+  margin-bottom: 2.25rem;
+}
+
 .auth-security-page h2 {
   margin: 0;
   font-size: 1.25rem;
@@ -111,7 +116,18 @@ body {
 }
 
 .auth-security-page section {
+  display: grid;
+  gap: 1rem;
   min-width: 0;
+}
+
+.auth-security-page section .auth-login-form {
+  margin-top: 0;
+}
+
+.auth-security-hint {
+  margin: 0;
+  color: var(--muted-foreground);
 }
 
 .auth-card h1 {

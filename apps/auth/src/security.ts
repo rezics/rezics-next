@@ -11,8 +11,21 @@ export type SecuritySession = {
   client_display_name?: string;
 };
 
+export type SecurityPasskey = {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+};
+
+// `hidden` when the browser has no WebAuthn, so the page shows no passkey controls and Auth is not asked.
+export type PasskeysLoad =
+  | { kind: 'hidden' }
+  | { kind: 'ready'; passkeys: SecurityPasskey[] }
+  | { kind: 'failure'; message: string };
+
 export type SecurityLoadResult =
-  | { kind: 'ready'; accountId: string; sessions: SecuritySession[] }
+  | { kind: 'ready'; accountId: string; sessions: SecuritySession[]; passkeys: PasskeysLoad }
   | { kind: 'signed-out' }
   | { kind: 'failure'; message: string };
 
@@ -54,7 +67,21 @@ async function authGet<Body>(
   }
 }
 
-export async function loadSecurity(): Promise<SecurityLoadResult> {
+// One read of the person's own passkeys; entries that do not have the documented shape are dropped.
+async function loadPasskeys(): Promise<PasskeysLoad> {
+  const listed = await authGet<{ passkeys?: unknown }>('/passkeys');
+  if (!listed.ok) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
+  if (!Array.isArray(listed.body.passkeys)) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
+  const passkeys = listed.body.passkeys.flatMap((entry: unknown): SecurityPasskey[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const { id, name, created_at: createdAt, last_used_at: lastUsedAt } = entry as Record<string, unknown>;
+    if (typeof id !== 'string' || typeof name !== 'string' || typeof createdAt !== 'string') return [];
+    return [{ id, name, created_at: createdAt, last_used_at: typeof lastUsedAt === 'string' ? lastUsedAt : null }];
+  });
+  return { kind: 'ready', passkeys };
+}
+
+export async function loadSecurity(withPasskeys: boolean): Promise<SecurityLoadResult> {
   const session = await authGet<SessionResponse>('/session');
   if (!session.ok) {
     if (session.status === 401) return { kind: 'signed-out' };
@@ -63,7 +90,10 @@ export async function loadSecurity(): Promise<SecurityLoadResult> {
   if (typeof session.body.account_id !== 'string' || !session.body.account_id)
     return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
 
-  const listed = await authGet<SessionsResponse>('/sessions');
+  const [listed, passkeys] = await Promise.all([
+    authGet<SessionsResponse>('/sessions'),
+    withPasskeys ? loadPasskeys() : Promise.resolve<PasskeysLoad>({ kind: 'hidden' }),
+  ]);
   if (!listed.ok) {
     if (listed.status === 401) return { kind: 'signed-out' };
     const message =
@@ -79,6 +109,7 @@ export async function loadSecurity(): Promise<SecurityLoadResult> {
     kind: 'ready',
     accountId: session.body.account_id,
     sessions: (listed.body.sessions as SecuritySession[]).slice(0, 64),
+    passkeys,
   };
 }
 

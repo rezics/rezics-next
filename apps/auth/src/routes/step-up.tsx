@@ -2,12 +2,14 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { KeyRound } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { FieldError } from '@rezics/ui/field';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
-import { confirmStepUp } from '../step-up';
+import { passkeysSupported } from '../passkeys';
+import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
 import { ErrorAlert } from '../alert';
 
 const emailId = 'step-up-email';
@@ -26,6 +28,9 @@ function StepUpPage() {
   const [message, setMessage] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  // Passkey controls appear only after the browser reports WebAuthn, so the server render has none.
+  const [passkeys, setPasskeys] = useState(false);
+  const [passkeyPending, setPasskeyPending] = useState(false);
   const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
@@ -35,6 +40,27 @@ function StepUpPage() {
     else if (passwordError) document.getElementById(passwordId)?.focus();
     else if (message) alert.current?.focus();
   }, [emailError, passwordError, message]);
+
+  useEffect(() => setPasskeys(passkeysSupported()), []);
+
+  async function submitPasskey() {
+    if (submitting.current || pending) return;
+    submitting.current = true;
+    setPending(true);
+    setPasskeyPending(true);
+    setMessage('');
+    setEmailError('');
+    setPasswordError('');
+    const outcome = await confirmStepUpWithPasskey(window.location.search, window.location.origin);
+    if (outcome.ok) {
+      window.location.assign(outcome.target);
+      return;
+    }
+    submitting.current = false;
+    setPending(false);
+    setPasskeyPending(false);
+    if (outcome.message) setMessage(outcome.message);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,7 +83,7 @@ function StepUpPage() {
     }
     submitting.current = false;
     setPending(false);
-    setMessage(outcome.message);
+    setMessage(outcome.message ?? '');
   }
 
   return (
@@ -118,9 +144,21 @@ function StepUpPage() {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} isLoading={pending}>
+        <Button type="submit" disabled={pending} isLoading={pending && !passkeyPending}>
           {m.auth_step_up_heading()}
         </Button>
+        {passkeys ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            isLoading={passkeyPending}
+            onClick={() => void submitPasskey()}
+          >
+            <KeyRound aria-hidden="true" />
+            {m.auth_step_up_passkey()}
+          </Button>
+        ) : null}
       </form>
     </AuthPage>
   );

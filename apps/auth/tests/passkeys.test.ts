@@ -236,6 +236,20 @@ function site(): Promise<number> {
 
 type Authenticator = { cdp: CDPSession; id: string };
 
+async function addVirtualAuthenticator(cdp: CDPSession): Promise<Authenticator> {
+  const added = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+  return { cdp, id: added.authenticatorId };
+}
+
 // An IP address cannot be a relying party ID, so the pages are opened at localhost.
 async function open(
   path: string,
@@ -262,17 +276,7 @@ async function open(
   if (webauthn) {
     const cdp = await context.newCDPSession(page);
     await cdp.send('WebAuthn.enable');
-    const added = await cdp.send('WebAuthn.addVirtualAuthenticator', {
-      options: {
-        protocol: 'ctap2',
-        transport: 'internal',
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        automaticPresenceSimulation: true,
-      },
-    });
-    authenticator = { cdp, id: added.authenticatorId };
+    authenticator = await addVirtualAuthenticator(cdp);
   } else {
     await page.addInitScript(() => {
       Reflect.deleteProperty(window, 'PublicKeyCredential');
@@ -377,7 +381,7 @@ test(
   'the email field offers passkeys through autofill',
   async () => {
     reset();
-    const { page } = await open('/login', { signedIn: false });
+    const { page, authenticator } = await open(`/login?${authorizationQuery}`, { signedIn: false });
     try {
       const emailField = page.getByLabel('Email', { exact: true });
       await page.waitForFunction(
@@ -390,6 +394,13 @@ test(
       expect(authCalls('/signin/passkey/options')).toHaveLength(1);
       expect(postBody('/signin/passkey/options')).toEqual({});
       expect(authCalls('/signin/passkey')).toHaveLength(0);
+
+      // With a credential for this relying party present, autofill signs in with no click.
+      await addResidentCredential(authenticator!);
+      await Promise.all([page.waitForURL((url) => url.pathname === '/authorize'), page.reload()]);
+      expect(await page.locator('body').innerText()).toContain('Authorization resumed with the session');
+      expect(postBody('/signin/passkey')).toEqual({ response: expect.any(Object), client_id: 'login', scope: [] });
+      expect(authCalls('/signin/passkey')).toHaveLength(1);
     } finally {
       await page.context().close();
     }
@@ -440,7 +451,7 @@ test(
         },
       ],
     });
-    const { page: english } = await open('/security');
+    const { page: english, authenticator } = await open('/security');
     try {
       const section = english.getByRole('region', { name: 'Passkeys', exact: true });
       await section.waitFor({ state: 'visible' });
@@ -466,7 +477,10 @@ test(
       expect(authCalls('/passkeys/register')).toHaveLength(1);
       expect(authCalls('/passkeys')).toHaveLength(1);
 
-      // Left unnamed, the passkey is named for the browser and system.
+      // Left unnamed, the passkey is named for the browser and system. An authenticator that already holds a listed
+      // passkey refuses another one, so the person uses a different authenticator.
+      await authenticator!.cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: authenticator!.id });
+      await addVirtualAuthenticator(authenticator!.cdp);
       await section.getByRole('button', { name: 'Add a passkey', exact: true }).click();
       await rows.nth(2).waitFor({ state: 'visible' });
       expect(postBody('/passkeys/register').name).toMatch(/^(Google Chrome|Chromium) on \w+$/);
@@ -608,6 +622,7 @@ test(
         page.getByRole('button', { name: 'Update password', exact: true }).click(),
       ]);
       expect(new URL(page.url()).searchParams.get('return_to')).toBe('/security');
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
       await page.getByLabel('Email', { exact: true }).fill(email);
       await page.getByLabel('Password', { exact: true }).fill(password);
       await Promise.all([

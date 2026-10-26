@@ -1,7 +1,9 @@
 import { failureMessage } from './api';
+import { passkeySignInFailure, signInWithPasskey } from './passkeys';
 import { signIn, signInTarget, type SignInResult } from './sign-in';
 
-export type StepUpOutcome = { ok: true; target: string } | { ok: false; message: string };
+// A null message is a dismissed passkey prompt, which stays silent.
+export type StepUpOutcome = { ok: true; target: string } | { ok: false; message: string | null };
 
 // 401, 429 and 503 stay on the page. signIn already collapsed the Auth result to these three outcomes.
 export function stepUpFailure(result: Exclude<SignInResult, { ok: true }>): string {
@@ -19,4 +21,11 @@ export async function confirmStepUp(
   const result = await signIn(email, password);
   if (!result.ok) return { ok: false, message: stepUpFailure(result) };
   return { ok: true, target: signInTarget(query, origin) };
+}
+
+export async function confirmStepUpWithPasskey(query: string, origin: string): Promise<StepUpOutcome> {
+  const result = await signInWithPasskey();
+  if (result.ok) return { ok: true, target: signInTarget(query, origin) };
+  if (result.reason === 'cancelled') return { ok: false, message: null };
+  return { ok: false, message: passkeySignInFailure(result) };
 }
