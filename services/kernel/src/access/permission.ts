@@ -290,6 +290,8 @@ export function createAccess(config: PermissionConfig): Access {
       // of these reads holds a connection while another partition is consulted.
       const recorded = await readPermissionTime(context.pool, config.clock);
       if (!recorded?.databaseAt) return evidence;
+      // The wall-clock reading that pairs with databaseAt; a later one would charge preparation time twice.
+      const recordedWall = Date.now();
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
       const attempt = accessCommandAttempt(context);
@@ -448,11 +450,11 @@ export function createAccess(config: PermissionConfig): Access {
       // Short-lived account/assignment/membership observations never survive the
       // request deadline. The final SQL also checks their actual validity ranges
       // at T. The evidence deadline guards elapsed database time: databaseAt plus
-      // the remaining budget, compared only with observed_at. The wall-clock
-      // check above stays local.
+      // the budget left when databaseAt was read, compared only with observed_at.
+      // The wall-clock check above stays local.
       const origin = Date.parse(recorded.databaseAt);
       if (!Number.isFinite(origin)) return evidence;
-      const databaseDeadline = new Date(origin + Math.max(0, deadline - Date.now())).toISOString();
+      const databaseDeadline = new Date(origin + Math.max(0, deadline - recordedWall)).toISOString();
       if (binding !== bind(actor, action, resource, page) || Date.now() >= deadline) return evidence;
       prepared.set(evidence, {
         binding,
