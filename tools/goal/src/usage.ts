@@ -1,4 +1,5 @@
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import type { Pool, PoolReading } from './types.ts';
 
@@ -40,6 +41,7 @@ export function readPool(pool: Pool, now = Date.now()): PoolReading {
         || raw.windows.some(w => !Number.isFinite(w.usedPercent) || w.usedPercent < 0 || w.usedPercent > 100)) throw new Error('invalid quota observation');
       return { ...raw, pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString(), exhausted: raw.exhausted === true || raw.windows.some(w => w.usedPercent >= 100) };
     }
+    if (pool.cli === 'claude') return readClaudeUsage(pool, now);
     const sessions = join(pool.configDirectory, 'sessions');
     if (pool.cli !== 'codex' || !existsSync(sessions)) return unknownReading(pool, now);
     const files = readdirSync(sessions, { recursive: true }).filter((p): p is string => typeof p === 'string' && p.endsWith('.jsonl'))
@@ -52,6 +54,37 @@ export function readPool(pool: Pool, now = Date.now()): PoolReading {
   } catch { return unknownReading(pool, now, 'quota observation unavailable'); }
 }
 export type PoolReader = (pool: Pool) => PoolReading;
+
+/** Parse the plan windows of Claude's OAuth usage endpoint, the one Claude Code's /usage reads. */
+export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): PoolReading {
+  const value = JSON.parse(body) as Record<string, { utilization?: unknown; resets_at?: unknown } | null>;
+  const windows = ([['five_hour', 300], ['seven_day', 10080]] as const).flatMap(([key, minutes]) => {
+    const window = value[key];
+    if (typeof window?.utilization !== 'number' || !Number.isFinite(window.utilization)) return [];
+    const resetsAt = typeof window.resets_at === 'string' ? Date.parse(window.resets_at) : NaN;
+    return [{ usedPercent: Math.min(100, Math.max(0, window.utilization)), resetsAt: Number.isFinite(resetsAt) ? resetsAt : null, minutes }];
+  });
+  if (!windows.length) return unknownReading(pool, now);
+  return { pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString(), observedAt: new Date(now).toISOString(),
+    windows, exhausted: windows.some(w => w.usedPercent >= 100), error: null };
+}
+// Each control-plane process asks at most once a minute. The token goes to curl on stdin, never in its arguments.
+const claudeReadings = new Map<string, PoolReading>();
+function readClaudeUsage(pool: Pool, now: number): PoolReading {
+  const cached = claudeReadings.get(pool.configDirectory);
+  if (cached?.observedAt && now - Date.parse(cached.observedAt) < 60_000)
+    return { ...cached, pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString() };
+  const credentials = JSON.parse(readFileSync(join(pool.configDirectory, '.credentials.json'), 'utf8')) as { claudeAiOauth?: { accessToken?: unknown } };
+  const token = credentials.claudeAiOauth?.accessToken;
+  if (typeof token !== 'string' || !token) return unknownReading(pool, now);
+  const response = spawnSync('curl', ['-sf', '-m', '10', '-H', '@-', '-H', 'anthropic-beta: oauth-2025-04-20',
+    'https://api.anthropic.com/api/oauth/usage'], { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' });
+  if (response.status !== 0) return unknownReading(pool, now, 'quota observation unavailable');
+  const reading = parseClaudeUsage(response.stdout, pool, now);
+  if (reading.observedAt) claudeReadings.set(pool.configDirectory, reading);
+  return reading;
+}
+
 
 // A CLI that reports an exhausted balance, such as Grok's 402, has no usage reader; the control plane remembers the
 // observation so that routing skips the allowance for the pool's maxAgeMs instead of each new task failing on it once.

@@ -1,7 +1,7 @@
 import type { ProcessIdentity } from './process.ts';
 import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts';
 
-export type Cli = 'codex' | 'grok' | 'cursor';
+export type Cli = 'codex' | 'grok' | 'cursor' | 'claude';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type TaskState = 'ready' | 'held' | 'running' | 'landing' | 'integrated' | 'merged' | 'stopped' | 'cancelled';
 export type TaskKind = 'implementation' | 'interface' | 'bulk-text' | 'claim' | 'specification' | 'research' | 'mechanical';
