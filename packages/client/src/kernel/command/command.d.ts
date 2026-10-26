@@ -98,7 +98,7 @@ export type CommandOutcome<T> = {
     replayed: boolean;
 };
 declare const authoritativeTime: unique symbol;
-/** Only runCommand can mint a time. Its value is usable for the live attempt only. */
+/** Opaque authoritative time minted for one live command attempt or one read. */
 export type AuthoritativeTime = {
     readonly [authoritativeTime]: true;
 };
@@ -155,6 +155,8 @@ export declare function registerCommandCallback(tx: CommandTransaction, callback
  * executor attempt is live. The symbol capability is private to this module.
  */
 export declare function hasLiveCommandTransaction(tx: CommandTransaction): boolean;
+/** Mints an authoritative time for a read outside a command, with no command context. */
+export declare function mintReadTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime>;
 export declare class IdempotencyConflictError extends Error {
     readonly partition: number;
     constructor(partition: number);
