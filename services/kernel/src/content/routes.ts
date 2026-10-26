@@ -44,6 +44,7 @@ import {
   listThreadPosts,
   readPost,
   readThread,
+  withReplayedRevision,
   type ItemView,
   type PostEntry,
   type ThreadView,
@@ -255,6 +256,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     postId: string,
     context: ReadContext,
     revisionId: string,
+    replayedRevisionId?: string,
   ): Promise<Anchored<ItemView>>;
   async function exactPost(threadId: string, postId: string, context: ReadContext): Promise<Anchored<PostEntry>>;
   async function exactPost(
@@ -262,9 +264,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     postId: string,
     context: ReadContext,
     revisionId?: string,
+    replayedRevisionId?: string,
   ): Promise<Anchored<PostEntry>> {
     if (revisionId !== undefined && existingId(revisionId) !== existingId(postId)) throw new ProblemError('not_found');
-    const result = await readPost(dependencies, threadId, postId, context, revisionId);
+    if (replayedRevisionId !== undefined && existingId(replayedRevisionId) !== existingId(postId))
+      throw new ProblemError('not_found');
+    const read = () => readPost(dependencies, threadId, postId, context, revisionId);
+    const result =
+      replayedRevisionId === undefined ? await read() : await withReplayedRevision(replayedRevisionId, read);
     if (!result.value) throw new ProblemError('not_found');
     if (revisionId !== undefined && isErasedPlaceholder(result.value))
       throw new Error('An exact post read returned an erased placeholder');
@@ -393,18 +400,22 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const readContext = { actor, deadline: job.deadline };
             const thread = await readThread(dependencies, result.value.threadId, readContext);
             if (!thread.value) throw new ProblemError('not_found');
-            await applyBoardCandidate(dependencies.pool, {
-              id: thread.value.id,
-              boardId: thread.value.boardId,
-              createdAt: thread.value.createdAt,
-              epoch: thread.anchor.epoch,
-              position: thread.anchor.position,
-            });
+            // A replay returns the stored outcome. Projecting again would commit a
+            // candidate event from the later read watermark.
+            if (!result.replayed)
+              await applyBoardCandidate(dependencies.pool, {
+                id: thread.value.id,
+                boardId: thread.value.boardId,
+                createdAt: thread.value.createdAt,
+                epoch: thread.anchor.epoch,
+                position: thread.anchor.position,
+              });
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,
               readContext,
               result.value.revisionId,
+              result.replayed ? result.value.revisionId : undefined,
             );
             session.record(result);
             session.record(sessionComponent(thread.anchor));
@@ -483,6 +494,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               result.value.itemId,
               { actor, deadline: job.deadline },
               result.value.revisionId,
+              result.replayed ? result.value.revisionId : undefined,
             );
             session.record(result);
             session.record(sessionComponent(post.anchor));
@@ -620,6 +632,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               result.value.itemId,
               readContext,
               result.value.revisionId,
+              result.replayed ? result.value.revisionId : undefined,
             );
             session.record(result);
             session.record(sessionComponent(post.anchor));
