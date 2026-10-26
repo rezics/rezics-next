@@ -138,6 +138,16 @@ test('operation identity is routed and records no duplicate native job state', a
       source_partition: null,
       source_position: null,
       source_event_index: null,
+      source_digest: null,
+      original_minimum_authn_epoch: null,
+      original_operator_account_id: null,
+      original_delegation_transaction_id: null,
+      original_delegation_issued_valid: null,
+      creation_command_kind: null,
+      creation_idempotency_key: null,
+      creation_request_digest: null,
+      creation_target_route: null,
+      creation_target_id: null,
     });
     const columns = await client.query(`SELECT column_name FROM information_schema.columns
       WHERE table_schema='content' AND table_name='operation' ORDER BY ordinal_position`);
@@ -149,6 +159,16 @@ test('operation identity is routed and records no duplicate native job state', a
         'source_partition',
         'source_position',
         'source_event_index',
+        'source_digest',
+        'original_minimum_authn_epoch',
+        'original_operator_account_id',
+        'original_delegation_transaction_id',
+        'original_delegation_issued_valid',
+        'creation_command_kind',
+        'creation_idempotency_key',
+        'creation_request_digest',
+        'creation_target_route',
+        'creation_target_id',
       ].sort(),
     );
     expect(
