@@ -12,6 +12,7 @@ import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
 import { searchWorkModule } from '../search/work.ts';
+import { workflowRetentionWorkModule } from './retention.ts';
 
 /** Every action named by a resource role. A missing action drops the whole role. */
 function realmActionCatalogue() {
@@ -72,4 +73,5 @@ export const KERNEL_WORK_MODULES: readonly WorkModule[] = [
   communityWorkModule,
   searchWorkModule,
   registerContent,
+  workflowRetentionWorkModule,
 ];

@@ -102,13 +102,19 @@ test('the retention sweep deletes terminal workflows completed before the cutoff
       [workflowID],
     );
     await database.query(
-      `INSERT INTO dbos.streams (workflow_uuid, key, value, offset, function_id, serialization)
+      `INSERT INTO dbos.streams (workflow_uuid, key, value, "offset", function_id, serialization)
        VALUES ($1, 'retention-test', '"stream"', 0, 1, 'portable_json')`,
       [workflowID],
     );
   }
 
-  await runWorkflowRetentionSweep(30, client);
+  for (const [index, workflowID] of workflowIDs.entries()) {
+    expect(await client.getWorkflow(workflowID)).toMatchObject({
+      status: terminal[index]![1],
+      completedAt: old,
+    });
+  }
+  expect(await runWorkflowRetentionSweep(30, client)).toBe(workflowIDs.length);
 
   for (const workflowID of workflowIDs) {
     for (const table of [
@@ -121,7 +127,8 @@ test('the retention sweep deletes terminal workflows completed before the cutoff
       'notifications',
       'streams',
     ]) {
-      const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${table === 'notifications' ? 'destination_uuid' : 'workflow_uuid'} = $1 LIMIT 1`, [workflowID]);
+      const keyColumn = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
+      const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${keyColumn} = $1 LIMIT 1`, [workflowID]);
       expect(result.rowCount, `${table} still owns a row for ${workflowID}`).toBe(0);
     }
   }
@@ -143,9 +150,10 @@ test('the retention sweep keeps pending, enqueued, delayed and recently complete
   await enqueue(recent);
   await enqueue(onCutoff);
   await enqueue(noCompletedAt);
-  await database.query("UPDATE dbos.workflow_status SET status = 'PENDING', queue_name = NULL WHERE workflow_uuid = $1", [
-    pending,
-  ]);
+  await database.query(
+    "UPDATE dbos.workflow_status SET status = 'PENDING', queue_name = NULL WHERE workflow_uuid = $1",
+    [pending],
+  );
   await setTerminal(recent, 'SUCCESS', cutoff + 1000);
   await setTerminal(onCutoff, 'SUCCESS', cutoff);
   await setTerminal(noCompletedAt, 'ERROR', null);

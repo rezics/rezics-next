@@ -32,9 +32,9 @@ async function seed(db: GrowthDatabase, kind: 'old' | 'recent', amount: number, 
      )
      SELECT $1 || $2 || ':' || item::text,
             'SUCCESS', 'retention.growth.fixture', '[]', 0,
-            $3 - CASE WHEN $4 THEN 400 ELSE 1 END * 86400000 + item,
-            $3 - CASE WHEN $4 THEN 400 ELSE 1 END * 86400000 + item,
-            $3 - CASE WHEN $4 THEN 400 ELSE 1 END * 86400000 + item,
+            $3::bigint - CASE WHEN $4 THEN 400 ELSE 1 END::bigint * 86400000 + item,
+            $3::bigint - CASE WHEN $4 THEN 400 ELSE 1 END::bigint * 86400000 + item,
+            $3::bigint - CASE WHEN $4 THEN 400 ELSE 1 END::bigint * 86400000 + item,
             'rezics-kernel'
        FROM generate_series($5 + 1, $5 + $6) AS item`,
     [prefix, kind, now, old, offset, amount],
@@ -42,9 +42,13 @@ async function seed(db: GrowthDatabase, kind: 'old' | 'recent', amount: number, 
 }
 
 test('one retention batch stays bounded as retained and recent workflow history grow', async () => {
+  // A fixed deep history keeps the planner on the ordered index path while the measured populations grow.
+  await seed(db, 'old', 128_000, 0);
+  await seed(db, 'recent', 128_000, 0);
+
   const report = await checkGrowth(db, {
     name: 'workflow retention batch',
-    scales: [1000, 8000, 64000],
+    scales: [1000, 8000, 64_000],
     repetitions: 1,
     warmups: 0,
     bounds: {
@@ -58,13 +62,18 @@ test('one retention batch stays bounded as retained and recent workflow history 
     },
     async grow(growth, scale, previous) {
       const added = scale - previous;
-      await seed(growth, 'old', added, previous);
-      await seed(growth, 'recent', added, previous);
+      const offset = 128_000 + previous;
+      await seed(growth, 'old', added, offset);
+      await seed(growth, 'recent', added, offset);
     },
-    operation: () => runWorkflowRetentionBatch(30, client),
+    async operation() {
+      expect(await runWorkflowRetentionBatch(30, client)).toBe(1000);
+    },
   });
 
-  expect(report.samples.map((sample) => sample.cost.rows)).toEqual([1000, 1000, 1000]);
+  expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
+  expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
+  expect(report.samples[0]!.cost.rows).toBeGreaterThan(0);
   expect(report.samples[1]!.cost.statements).toBe(report.samples[0]!.cost.statements);
   expect(report.samples[2]!.cost.statements).toBe(report.samples[0]!.cost.statements);
 });

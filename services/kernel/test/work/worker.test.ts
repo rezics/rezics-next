@@ -26,6 +26,7 @@ test('worker configuration names invalid variables without revealing values', ()
     'community',
     'search',
     'content',
+    'retention',
   ]);
   expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
   expect(readWorkerConfig({ DATABASE_URL: databaseUrl })).toMatchObject({ databaseUrl, poolSize: 10 });
