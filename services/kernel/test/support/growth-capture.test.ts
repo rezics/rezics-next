@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 
@@ -126,6 +127,102 @@ test('records nothing outside a capture and refuses overlapping captures', async
   await withConnection(database.pool, (client) => client.query('SELECT 63 AS outside'));
   expect(result.capture.statements).toEqual(['SELECT 62 AS inside']);
   expect(result.capture.plans).toHaveLength(1);
+});
+
+async function explainThreshold(client: Pick<PoolClient, 'query'>): Promise<string> {
+  const result = await client.query<{
+    'auto_explain.log_min_duration': string;
+  }>('SHOW auto_explain.log_min_duration');
+  return result.rows[0]!['auto_explain.log_min_duration'];
+}
+
+test('an instrumented connection explains statements only while a capture is active', async () => {
+  const database = db!;
+  await withConnection(database.pool, async (client) => {
+    expect(await explainThreshold(client)).toBe('-1');
+    const inside = await capture(database, async () => {
+      const threshold = await explainThreshold(client);
+      await client.query('SELECT 81 AS answer');
+      return threshold;
+    });
+    expect(inside.value).toBe('0');
+    expect(inside.capture.statements).toEqual(['SHOW auto_explain.log_min_duration', 'SELECT 81 AS answer']);
+    expect(inside.capture.plans).toHaveLength(1);
+    expect(await explainThreshold(client)).toBe('-1');
+  });
+
+  const libraryPool = database.openPool({ max: 1 });
+  try {
+    expect(await explainThreshold(libraryPool)).toBe('-1');
+    const inside = await capture(database, () => explainThreshold(libraryPool));
+    expect(inside.value).toBe('0');
+  } finally {
+    await libraryPool.end();
+  }
+
+  // A connection first used during a capture starts in the right state, and a capture that ends releases it.
+  const opened = await capture(database, () => withConnection(database.pool, (client) => explainThreshold(client)));
+  expect(opened.value).toBe('0');
+  await withConnection(database.pool, async (client) => expect(await explainThreshold(client)).toBe('-1'));
+});
+
+test("a rolled-back switch is restored before the connection's next statement", async () => {
+  const database = db!;
+
+  // The switch on runs inside a transaction that is rolled back inside the capture.
+  await withConnection(database.pool, async (client) => {
+    await client.query('BEGIN');
+    const inside = await capture(database, async () => {
+      const first = await explainThreshold(client);
+      await client.query('ROLLBACK');
+      const second = await explainThreshold(client);
+      await client.query('SELECT 91 AS answer');
+      return [first, second];
+    });
+    expect(inside.value).toEqual(['0', '0']);
+    expect(inside.capture.plans).toHaveLength(1);
+    expect(await explainThreshold(client)).toBe('-1');
+  });
+
+  // The switch on runs after a savepoint that is rolled back to.
+  await withConnection(database.pool, async (client) => {
+    await client.query('BEGIN');
+    await client.query('SAVEPOINT switch');
+    const inside = await capture(database, async () => {
+      const first = await explainThreshold(client);
+      await client.query('ROLLBACK TO SAVEPOINT switch');
+      const second = await explainThreshold(client);
+      await client.query('SELECT 92 AS answer');
+      return [first, second];
+    });
+    expect(inside.value).toEqual(['0', '0']);
+    expect(inside.capture.plans).toHaveLength(1);
+    await client.query('COMMIT');
+    expect(await explainThreshold(client)).toBe('-1');
+  });
+
+  // The switch off runs inside a transaction opened during the capture and rolled back outside it.
+  await withConnection(database.pool, async (client) => {
+    await capture(database, async () => {
+      await client.query('BEGIN');
+      await client.query('SELECT 93 AS answer');
+    });
+    expect(await explainThreshold(client)).toBe('-1');
+    await client.query('ROLLBACK');
+    expect(await explainThreshold(client)).toBe('-1');
+  });
+
+  // A failed statement aborts the transaction; the rollback that follows undoes the switch.
+  await withConnection(database.pool, async (client) => {
+    await client.query('BEGIN');
+    const inside = await capture(database, async () => {
+      const first = await explainThreshold(client);
+      await expect(client.query('SELECT 1 / 0')).rejects.toThrow();
+      await client.query('ROLLBACK');
+      return [first, await explainThreshold(client)];
+    });
+    expect(inside.value).toEqual(['0', '0']);
+  });
 });
 
 test('fails at open when the database cannot report plans', async () => {
