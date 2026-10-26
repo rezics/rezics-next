@@ -10,6 +10,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { DataType } from '@rezics/definitions';
+import { fromPlainText } from '@rezics/document';
 import { rejectContent } from '../../src/semantic/rules.ts';
 import {
   createSubject,
@@ -299,11 +300,15 @@ test('an unknown or malformed id reads as nothing', async () => {
   expect(await readSubject(pool, randomUUID(), allow)).toBeNull();
 });
 
-test('subject creation rejects document and media contents in statements, qualifiers and references', () => {
+test('subject creation accepts authored documents and rejects media in statements, qualifiers and references', () => {
   for (const property of ['schema:abstract', 'schema:image']) {
     const release = structuredClone(bundledRelease);
     release.properties['schema:author']!.qualifiers.push(property);
-    const statement = { property: { id: property }, value: { type: 'value', content: null } };
+    const content =
+      property === 'schema:abstract'
+        ? { document: fromPlainText('An editor summary.'), licence: 'CC-BY-4.0', language: 'en' }
+        : newId(0x1234);
+    const statement = { property: { id: property }, value: { type: 'value', content } };
     for (const [statements, pointer] of [
       [{ [property]: [statement] }, `/statements/${property}/0/value/content`],
       [
@@ -324,9 +329,9 @@ test('subject creation rejects document and media contents in statements, qualif
       ],
     ] as const) {
       expect(
-        checkSubjectInput({ type: 'schema:Book', labels: { en: 'Example' }, statements }, release, rejectContent)
+        checkSubjectInput({ type: 'schema:Book', labels: { en: 'Example' }, statements }, release, rejectContent, true)
           .violations,
-      ).toEqual([{ pointer, code: 'unsupported' }]);
+      ).toEqual(property === 'schema:abstract' ? [] : [{ pointer, code: 'unsupported' }]);
     }
   }
 });

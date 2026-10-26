@@ -14,9 +14,13 @@ type Mutation = {
     deadline?: number;
     authorization?: CommandAuthorization;
 };
+export type LifecycleReceipt = {
+    key: string;
+    digest: string;
+};
 /** All idempotency digests include the anchor, actual kernel actor/client and
  * requested_by. Core's partition receipt key is explicitly prefixed by route.
  * Responses/events contain identity and coordination facts, never patch bodies.
  */
-export declare function lifecycleExecutor(pool: Pool, clock?: () => Date): <T>(options: Mutation, body: (tx: CommandTransaction, transactionId: string) => Promise<T>) => Promise<CommandOutcome<T>>;
+export declare function lifecycleExecutor(pool: Pool, clock?: () => Date): <T>(options: Mutation, body: (tx: CommandTransaction, transactionId: string, receipt: LifecycleReceipt) => Promise<T>) => Promise<CommandOutcome<T>>;
 export {};

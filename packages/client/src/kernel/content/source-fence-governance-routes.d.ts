@@ -324,6 +324,7 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                     };
                     query: {
                         context?: string;
+                        language?: string;
                     };
                     headers: unknown;
                     response: {
@@ -390,9 +391,73 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     };
                                 }[]>;
                             };
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             related: Record<string, {
                                 labels: Record<string, string>;
                                 redirect?: string;
+                                type?: string;
+                                types?: string[];
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
                             }>;
                         };
                         308: {
@@ -2094,9 +2159,12 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                             id: string;
                         };
                         query: {
-                            limit?: string | number;
                             cursor?: string;
+                            limit?: string | number;
                             property?: string;
+                            filter?: string;
+                            type?: string;
+                            language?: string;
                         };
                         headers: unknown;
                         response: {
@@ -2105,7 +2173,49 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     subject: string;
                                     property: string;
                                     statement: string;
+                                    type?: string;
+                                    label?: string;
+                                    summary?: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                 }[];
+                                count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
                                 freshness: {
                                     consistency: "eventual";
                                     target_seconds: 10;

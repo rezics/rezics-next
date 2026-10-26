@@ -20,6 +20,9 @@ export type MediaImportContext = Readonly<{
     idempotencyKey: string;
     requestId: string;
 }>;
+export type MediaCropTuple = [left: number, top: number, width: number, height: number];
+export declare function mediaCropTuple(fragment?: string): MediaCropTuple | null;
+export declare function mediaCropFragment(crop: readonly (number | null)[] | null): string | undefined;
 /** Reserve in the command transaction. Cover claims remain in their caller's
  * command transaction; this port grants no publication permission.
  */

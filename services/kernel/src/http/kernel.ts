@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import type { Elysia } from 'elysia';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createAccess } from '../access/index.ts';
@@ -208,7 +209,7 @@ export function createKernelAccessResolver(options: {
 }
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
-export function createKernel(dependencies: KernelDependencies) {
+export function createKernel(dependencies: KernelDependencies): Kernel {
   const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
     const instant = sourceClock();
@@ -255,8 +256,8 @@ export function createKernel(dependencies: KernelDependencies) {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
-  const presentation = profileRoutes(app, { ...dependencies, tokens });
-  const payouts = payoutRoutes(app, {
+  profileRoutes(app, { ...dependencies, tokens });
+  payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
@@ -386,23 +387,49 @@ export function createKernel(dependencies: KernelDependencies) {
     }
   }
   assertDeclaredResourceTypes(sourceStatistics);
-  return sourceStatistics as typeof sourceStatistics &
-    typeof ratings &
-    typeof collections &
-    typeof personal &
-    typeof community &
-    typeof exposed &
-    typeof batched &
-    typeof presentation &
-    typeof granted &
-    typeof media &
-    typeof content &
-    typeof searched &
-    typeof payouts &
-    typeof commercial &
-    typeof progress &
-    typeof contextual;
+  return sourceStatistics as Kernel;
 }
 
-/** The app's type is the Eden contract. */
-export type Kernel = ReturnType<typeof createKernel>;
+type KernelComposition = ReturnType<typeof sourceStatisticRoutes> &
+  ReturnType<typeof ratingRoutes> &
+  ReturnType<typeof collectionRoutes> &
+  ReturnType<typeof personalLibraryRoutes> &
+  ReturnType<typeof communityRoutes> &
+  ReturnType<typeof exposureRoutes> &
+  ReturnType<typeof bulkRoutes> &
+  ReturnType<typeof profileRoutes> &
+  ReturnType<typeof accessRoutes> &
+  ReturnType<typeof mediaRoutes> &
+  ReturnType<typeof contentRoutes> &
+  ReturnType<typeof searchRoutes> &
+  ReturnType<typeof payoutRoutes> &
+  ReturnType<typeof commerceRoutes> &
+  ReturnType<typeof progressRoutes> &
+  ReturnType<typeof contextRoutes>;
+
+type Routes = KernelComposition['~Routes'];
+type Subjects = Routes['v1']['subjects'];
+
+/** Subject transports use both parameter names for the same URL position. Eden needs
+ * one key to retain a single subjects({ id }) entry point with all its child routes. */
+type ClientRoutes = Omit<Routes, 'v1'> & {
+  v1: Omit<Routes['v1'], 'subjects'> & {
+    subjects: Omit<Subjects, ':id' | ':subjectId'> & {
+      ':id': Subjects[':id'] & Subjects[':subjectId'];
+    };
+  };
+};
+
+export type Kernel = KernelComposition;
+
+/** The Eden contract uses one parameter name for each URL position. */
+export type ClientKernel = Elysia<
+  KernelComposition['~Prefix'],
+  'local',
+  KernelComposition['~Singleton'],
+  KernelComposition['~Definitions'],
+  KernelComposition['~Metadata'],
+  ClientRoutes,
+  KernelComposition['~Ephemeral'],
+  KernelComposition['~Volatile']
+>;

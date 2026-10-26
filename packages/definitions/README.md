@@ -494,9 +494,12 @@ Structural limits apply to every release: decimal strings have at most 127
 characters and a time's year has at most 16 digits. An oversized value reports
 `out_of_range` at its decimal member or `/time`, without further value checks.
 The release value schemas retain their Wikibase shapes. Document and media
-values are portable. Single-subject writes and single-statement routes still
-reject document and media contents as `unsupported`. A sourced bulk command
-can carry them, because that command has the provenance and rights the values need.
+values are portable. Single-subject writes and single-statement routes accept
+text-only document snapshots as `{ document, licence, language }`. The licence
+must be an SPDX identifier or `LicenseRef-` identifier; language must be BCP 47.
+Content stores the body and licence, and semantic stores `{ language, document: id, digest }`.
+Media contents remain `unsupported` on these routes. Sourced bulk summaries and
+covers retain their separate provenance and rights contracts.
 
 ## Bulk subject writes
 
@@ -796,8 +799,8 @@ unsupported. Field/property compatibility belongs to release validation: summari
 use `document` properties, covers use `media`, and facts use neither. The bulk
 route serves summary and cover through content's hooks. Semantic stores the
 document id and digest, or the media id, and never the summary body, a licence
-of its own, or a fence. Single-subject writes still reject document and media
-contents as `unsupported`.
+of its own, or a fence. Single-subject writes accept authored documents with
+an explicit licence and language; media contents remain `unsupported`.
 
 The launch profiles include books, editions, recipes, television series, albums,
 video games and visual novels. Identifier labels follow their Wikidata properties

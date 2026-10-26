@@ -1,4 +1,5 @@
 export { AccessUnavailableError } from './unavailable.ts';
+export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';
 import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';

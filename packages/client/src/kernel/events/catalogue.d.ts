@@ -1,6 +1,10 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly 'com.rezics.access.rating-counter.changed.v1': Type.TObject<{
+        accountId: Type.TString;
+        at: Type.TString;
+    }>;
     readonly 'com.rezics.access.exposure.opened.v1': Type.TObject<{
         group: Type.TString;
         open: Type.TLiteral<boolean>;
@@ -684,22 +688,35 @@ declare const productEventTypes: {
         securityRevision: Type.TString;
     }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
         threadId: Type.TString;
         itemId: Type.TString;
         revisionId: Type.TString;
         actorId: Type.TString;
     }>;
     readonly 'com.rezics.content.post.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
         threadId: Type.TString;
         itemId: Type.TString;
         revisionId: Type.TString;
         actorId: Type.TString;
     }>;
     readonly 'com.rezics.content.revision.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
         threadId: Type.TString;
         itemId: Type.TString;
         revisionId: Type.TString;
         actorId: Type.TString;
+        previousSubjectIds: Type.TOptional<Type.TArray<Type.TString>>;
     }>;
     readonly 'com.rezics.content.board.created.v1': Type.TObject<{
         boardId: Type.TString;
@@ -713,6 +730,19 @@ declare const productEventTypes: {
         targetId: Type.TString;
         previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
         kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.content.author-item.projected.v1': Type.TObject<{
+        authorAccountId: Type.TString;
+        itemKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        itemId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
+    readonly 'com.rezics.content.subject-thread.projected.v1': Type.TObject<{
+        subjectId: Type.TString;
+        threadId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
     }>;
     readonly 'com.rezics.library.subject.listed.v1': Type.TObject<{
         subjectId: Type.TString;
@@ -755,6 +785,68 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly 'com.rezics.rating.voter-realm.changed.v1': Type.TObject<{
+        voterId: Type.TString;
+        realmId: Type.TString;
+    }>;
+    readonly 'com.rezics.rating.vote.changed.v1': Type.TObject<{
+        voterId: Type.TString;
+        questionId: Type.TString;
+        targetId: Type.TString;
+        previous: Type.TUnion<[Type.TInteger, Type.TNull]>;
+        units: Type.TUnion<[Type.TInteger, Type.TNull]>;
+        revision: Type.TInteger;
+        populations: Type.TArray<Type.TString>;
+    }>;
+    readonly 'com.rezics.rating.aggregate.applied.v1': Type.TObject<{
+        applied: Type.TInteger;
+    }>;
+    readonly 'com.rezics.rating.segment.page.v1': Type.TUnion<[Type.TObject<{
+        voterId: Type.TString;
+        direction: Type.TLiteral<"rekey">;
+        at: Type.TString;
+        allowMissing: Type.TBoolean;
+        votes: Type.TArray<Type.TObject<{
+            questionId: Type.TString;
+            targetId: Type.TString;
+            units: Type.TUnion<[Type.TInteger, Type.TNull]>;
+            revision: Type.TInteger;
+            populations: Type.TArray<Type.TString>;
+            changedAt: Type.TString;
+        }>>;
+    }>, Type.TObject<{
+        voterId: Type.TString;
+        direction: Type.TUnion<[Type.TLiteral<"adding">, Type.TLiteral<"removing">]>;
+        votes: Type.TArray<Type.TObject<{
+            questionId: Type.TString;
+            targetId: Type.TString;
+            units: Type.TUnion<[Type.TInteger, Type.TNull]>;
+            revision: Type.TInteger;
+            populations: Type.TArray<Type.TString>;
+        }>>;
+    }>, Type.TObject<{
+        voterId: Type.TString;
+        realmId: Type.TString;
+        direction: Type.TUnion<[Type.TLiteral<"adding">, Type.TLiteral<"removing">]>;
+        votes: Type.TArray<Type.TObject<{
+            questionId: Type.TString;
+            targetId: Type.TString;
+            units: Type.TUnion<[Type.TInteger, Type.TNull]>;
+            revision: Type.TInteger;
+        }>>;
+    }>]>;
+    readonly 'com.rezics.rating.eligibility.changed.v1': Type.TObject<{
+        voterId: Type.TString;
+    }>;
+    readonly 'com.rezics.rating.population.pending.v1': Type.TObject<{
+        populationId: Type.TString;
+        pendingJobs: Type.TInteger;
+    }>;
+    readonly 'com.rezics.rating.source_statistic.changed.v1': Type.TObject<{
+        subjectId: Type.TString;
+        source: Type.TLiteral<"vndb">;
+        sourceRecordId: Type.TString;
+    }>;
     readonly "com.rezics.subject.merged.v1": Type.TObject<{
         id: Type.TString;
         survivor: Type.TString;
@@ -762,7 +854,7 @@ declare const productEventTypes: {
     readonly "com.rezics.subject.revised.v1": Type.TObject<{
         id: Type.TString;
         revision: Type.TInteger;
-        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">]>;
+        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">, Type.TLiteral<"identity">]>;
     }>;
     readonly "com.rezics.semantic.links.moving.v1": Type.TObject<{
         id: Type.TString;
@@ -805,6 +897,9 @@ declare const productEventTypes: {
             statement: Type.TString;
             target: Type.TString;
             present: Type.TBoolean;
+            source_type: Type.TOptional<Type.TString>;
+            order_key: Type.TOptional<Type.TString>;
+            filter_value: Type.TOptional<Type.TString>;
         }>>;
     }>;
     readonly 'com.rezics.semantic.links.projected.v1': Type.TObject<{

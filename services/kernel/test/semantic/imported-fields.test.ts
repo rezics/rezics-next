@@ -331,10 +331,15 @@ test("a summary proposal stores content's document reference and never the body"
   const book = await createBook('Kokoro');
   const direct = await call('POST', `/v1/subjects/${book.id}/candidates`, {
     token: importer,
-    body: { statement: cited('schema:abstract', { language: 'ja', document: fromPlainText(token) }) },
+    body: {
+      statement: cited('schema:abstract', { language: 'ja', document: fromPlainText(token), licence: 'CC-BY-SA-3.0' }),
+    },
   });
-  expect(direct.response.status).toBe(400);
-  expect(direct.body.errors).toContainEqual({ pointer: '/statement/value/content', code: 'unsupported' });
+  expect(direct.response.status).toBe(201);
+  const authored = await pool.query('SELECT licence, language FROM content.authored_field WHERE candidate = $1', [
+    direct.body.candidate,
+  ]);
+  expect(authored.rows).toEqual([{ licence: 'CC-BY-SA-3.0', language: 'ja' }]);
 
   const proposed = await batch([
     summary(book.externalId, book.id, token, 'summary', 'https://openlibrary.org/works/OL1W'),

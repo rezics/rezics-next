@@ -100,11 +100,14 @@ export type Continuation = {
   operationDigest: string;
   barrierReceiptId: string;
   expiresAt: string;
+  /** Root entries committed with the barrier, followed by every committed page
+   * allowlist chained from it, in commit order (read-only observation). */
   allowed: { step: string; target: string; key: string; digest: string }[];
 };
 export interface NativeAccountWorkflowDriver {
-  /** Independent fixtures, genuine fully allowed original human/client/scopes and
-   * principal-created assignment. Normal self-management uses the SAME formula.
+  /** Independent fixtures, genuine fully allowed original human/client/scopes;
+   * every caller acts through a principal-created assignment except opening,
+   * whose caller acts as the person itself. Normal self-management uses the SAME formula.
    * Organization creation requires the decided documented parent/action; absence
    * is an explicit failure, never an inferred Global grant or skipped scenario.
    * Platform authority uses only the actual approved Global root when decided.

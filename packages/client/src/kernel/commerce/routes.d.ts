@@ -1,3 +1,4 @@
+import { type SubjectSummary } from '../semantic/summaries.ts';
 import type { Pool } from 'pg';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { type Access, type Actor } from '../request/access.ts';
@@ -342,6 +343,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     };
                     query: {
                         context?: string;
+                        language?: string;
                     };
                     headers: unknown;
                     response: {
@@ -408,9 +410,73 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                 }[]>;
                             };
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             related: Record<string, {
                                 labels: Record<string, string>;
                                 redirect?: string;
+                                type?: string;
+                                types?: string[];
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
                             }>;
                         };
                         308: {
@@ -2112,9 +2178,12 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             id: string;
                         };
                         query: {
-                            limit?: string | number;
                             cursor?: string;
+                            limit?: string | number;
                             property?: string;
+                            filter?: string;
+                            type?: string;
+                            language?: string;
                         };
                         headers: unknown;
                         response: {
@@ -2123,7 +2192,49 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     subject: string;
                                     property: string;
                                     statement: string;
+                                    type?: string;
+                                    label?: string;
+                                    summary?: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                 }[];
+                                count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
                                 freshness: {
                                     consistency: "eventual";
                                     target_seconds: 10;
@@ -2572,18 +2683,70 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     params: {
                         offerId: string;
                     };
-                    query: unknown;
+                    query: {
+                        languages?: string;
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             offer: {
                                 id: string;
                                 targetSubjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
                                 title: string;
                                 currency: string;
                                 unitAmountMinor: number;
                                 state: "active" | "delisted";
                             };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
                         };
                         401: {
                             type: unknown;
@@ -2612,6 +2775,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 pointer: string;
                                 code: never;
                             }[];
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: string;
                         };
                         503: {
                             type: unknown;
@@ -2658,12 +2832,49 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             currency: string;
                             unitAmountMinor: number;
                             state: "active" | "delisted";
+                            summary: SubjectSummary | null;
                         };
                     };
                     201: {
                         offer: {
                             id: string;
                             targetSubjectId: string;
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             title: string;
                             currency: string;
                             unitAmountMinor: number;
@@ -2764,6 +2975,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 offer: {
                                     id: string;
                                     targetSubjectId: string;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                     title: string;
                                     currency: string;
                                     unitAmountMinor: number;
@@ -2980,19 +3227,73 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     params: {
                         orderId: string;
                     };
-                    query: unknown;
+                    query: {
+                        languages?: string;
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             order: {
                                 id: string;
                                 offerId: string;
+                                title: string;
+                                targetSubjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
                                 settlement: "failed" | "paid" | "pending" | "unknown";
                                 checkoutUrl: string | null;
                                 checkoutExpiresAt: string | null;
                                 entitlementId: string | null;
                                 createdAt: string;
                             };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
                         };
                         401: {
                             type: unknown;
@@ -3021,6 +3322,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 pointer: string;
                                 code: never;
                             }[];
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: string;
                         };
                         503: {
                             type: unknown;
@@ -3060,6 +3372,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             offerId: string;
                             orderId: string;
                             targetSubjectId: string;
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             grantedAt: string;
                             revokedAt: string | null;
                             revokeReason: "dispute" | "refund" | null;
@@ -3183,6 +3531,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
                 targetSubjectId: import("typebox").TString;
+                summary: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>;
                 grantedAt: import("typebox").TString;
                 revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
@@ -3254,6 +3638,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 offerId: string;
                 orderId: string;
                 targetSubjectId: string;
+                summary: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | null;
                 grantedAt: string;
                 revokedAt: string | null;
                 revokeReason: "dispute" | "refund" | null;
@@ -3310,6 +3730,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 offerId: string;
                 orderId: string;
                 targetSubjectId: string;
+                summary: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | null;
                 grantedAt: string;
                 revokedAt: string | null;
                 revokeReason: "dispute" | "refund" | null;
@@ -3370,6 +3826,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     offerId: import("typebox").TString;
                     orderId: import("typebox").TString;
                     targetSubjectId: import("typebox").TString;
+                    summary: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
+                        types: import("typebox").TArray<import("typebox").TString>;
+                        label: import("typebox").TUnion<[import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>, import("typebox").TNull]>;
+                        creativeWork: import("typebox").TBoolean;
+                        cover: import("typebox").TUnion<[import("typebox").TObject<{
+                            media: import("typebox").TString;
+                            width: import("typebox").TInteger;
+                            height: import("typebox").TInteger;
+                            placeholder: import("typebox").TObject<{
+                                thumbhash: import("typebox").TString;
+                                color: import("typebox").TString;
+                            }>;
+                            variants: import("typebox").TArray<import("typebox").TObject<{
+                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                width: import("typebox").TInteger;
+                            }>>;
+                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                x: import("typebox").TNumber;
+                                y: import("typebox").TNumber;
+                            }>, import("typebox").TNull]>;
+                            credit: import("typebox").TObject<{
+                                rightsHolder: import("typebox").TString;
+                                via: import("typebox").TObject<{
+                                    name: import("typebox").TString;
+                                    url: import("typebox").TString;
+                                }>;
+                                license: import("typebox").TString;
+                                obligations: import("typebox").TArray<import("typebox").TString>;
+                            }>;
+                        }>, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>;
                     grantedAt: import("typebox").TString;
                     revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
@@ -3475,6 +3967,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         revokedAt: string | null;
         revokeReason: import("./model.ts").RevokeReason | null;
         active: boolean;
+        summary: SubjectSummary | null;
     };
 }>, {
     params: import("typebox").TObject<{
@@ -3487,6 +3980,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
                 targetSubjectId: import("typebox").TString;
+                summary: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>;
                 grantedAt: import("typebox").TString;
                 revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;

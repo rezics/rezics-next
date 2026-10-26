@@ -8,6 +8,12 @@ import { readSessionIdentity, type SessionIdentity } from '../session/state';
 export const LIBRARY_PAGE_LIMIT = 100;
 
 export type LibrarySubject = { id: string; type: string; label: string };
+export type LibraryLabel = string | { value: string; language: string } | null;
+
+/** Both subject summaries and collection/space targets present a plain display label. */
+export function libraryLabel(label: LibraryLabel | undefined, fallback: string): string {
+  return typeof label === 'string' ? label : (label?.value ?? fallback);
+}
 export type LibraryAccount = { handle: string | null; displayName: string | null };
 export type CollectionVisibility = 'private' | 'public' | 'unlisted';
 
@@ -32,7 +38,7 @@ export type CollectionPageData = {
 
 type LibraryResult<T> = { data?: T | null; error?: unknown; status?: number };
 type RawAccount = { id?: string; handle: string | null; displayName: string | null };
-type RawSubject = { id: string; type: string; label: string };
+type RawSubject = { id: string; type: string; label: LibraryLabel };
 type RawCollection = {
   id: string;
   curatorAccountId: string;
@@ -107,7 +113,7 @@ function accountOf(account: RawAccount | null | undefined): LibraryAccount | nul
 
 function subjectOf(subject: RawSubject | null | undefined): LibrarySubject | null {
   if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: subject.label };
+  return { id: subject.id, type: subject.type, label: libraryLabel(subject.label, subject.id) };
 }
 
 async function readCollection(client: KernelClient, id: string): Promise<RawCollection> {
