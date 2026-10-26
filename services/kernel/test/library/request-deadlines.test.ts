@@ -21,9 +21,18 @@ test('library code takes every deadline from deadlineFor with one wall-clock wor
     lines.filter((line) => /\bconst WORK_STEP_DEADLINE_MS = [0-9_]+;/.test(line)).map(() => file),
   );
   expect(declarations).toEqual(['command-support.ts']);
-  const users = sources.filter(({ lines }) => lines.some((line) => line.includes('deadlineFor(WORK_STEP_DEADLINE_MS)')));
+  const users = sources.filter(({ lines }) =>
+    lines.some((line) => line.includes('deadlineFor(WORK_STEP_DEADLINE_MS)')),
+  );
   expect(users.map(({ file }) => file).sort()).toEqual(
-    ['collection-reads.ts', 'collections.ts', 'command-support.ts', 'follows.ts', 'subject-anchor.ts', 'views.ts'].sort(),
+    [
+      'collection-reads.ts',
+      'collections.ts',
+      'command-support.ts',
+      'follows.ts',
+      'subject-anchor.ts',
+      'views.ts',
+    ].sort(),
   );
 });
 
