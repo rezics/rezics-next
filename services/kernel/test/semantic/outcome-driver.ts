@@ -95,9 +95,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
 
 /** A caller can abandon a pending call (a hook that timed out), so the next call first lets that setup finish,
  * then closes it. Otherwise its host and database outlive the caller and the next setup collides with them. */
-export function createSemanticDriver(
-  compose: typeof createKernel = createKernel,
-): Promise<SemanticOutcomeDriver> {
+export function createSemanticDriver(compose: typeof createKernel = createKernel): Promise<SemanticOutcomeDriver> {
   const earlier = [...tracked];
   const entry: Tracked = { settled: Promise.resolve(), close: async () => {} };
   const starting = (async () => {
