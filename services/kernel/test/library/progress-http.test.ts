@@ -89,6 +89,20 @@ async function session(id: string) {
   return result.body.progressSession as Record<string, any>;
 }
 
+async function authoritativeProgressRows() {
+  const result = await db.admin.query<{ kind: string; row: Record<string, unknown> }>(
+    `SELECT kind, row FROM (
+       SELECT 'session' AS kind, to_jsonb(session) AS row FROM library.progress_session session
+       UNION ALL
+       SELECT 'unit', to_jsonb(unit) FROM library.progress_unit unit
+       UNION ALL
+       SELECT 'change', to_jsonb(change) FROM library.progress_change change
+     ) AS rows
+     ORDER BY kind, row::text`,
+  );
+  return result.rows;
+}
+
 async function progressPage<T>(
   path: string,
   plural: string,
@@ -182,6 +196,11 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await db.admin.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ('reading_progress', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
+    [randomUUID()],
+  );
 });
 
 afterAll(async () => {
@@ -456,4 +475,19 @@ test('record requests and changes pages use equal statements at three data scale
 
   expect(statementCounts[1]).toEqual(statementCounts[0]);
   expect(statementCounts[2]).toEqual(statementCounts[0]);
+});
+
+test('a record request with one added id and one hundred removed ids answers 400 invalid_request and changes nothing', async () => {
+  const subjectId = await createSubject();
+  const current = await start(subjectId, 'completed_units', 'episode');
+  const removed = Array.from({ length: 100 }, (_, index) => `opaque-unit:${index}`);
+  const before = await authoritativeProgressRows();
+  const result = await request('owner', 'POST', `/v1/progressSessions/${current.id}:record`, {
+    revision: current.revision,
+    add: ['extra'],
+    remove: removed,
+  });
+  expect(result.response.status).toBe(400);
+  expect(result.body.code).toBe('invalid_request');
+  expect(await authoritativeProgressRows()).toEqual(before);
 });

@@ -212,16 +212,24 @@ test('a completed unit set stays sparse and is never turned into a range', () =>
   const removed = Array.from({ length: 100 }, (_, index) => `remove-${index}`);
   expect(accepted(parseRecord('completed_units', { add: added }, chapter))).toEqual({ add: added });
   expect(accepted(parseRecord('completed_units', { remove: removed }, chapter))).toEqual({ remove: removed });
-  expect(accepted(parseRecord('completed_units', { add: added, remove: removed }, chapter))).toEqual({
-    add: added,
-    remove: removed,
-  });
+  rejected(parseRecord('completed_units', { add: added, remove: removed }, chapter), 'remove');
   rejected(parseRecord('completed_units', { add: [...added, 'extra'] }, chapter), 'add');
   rejected(parseRecord('completed_units', { remove: [...removed, 'extra'] }, chapter), 'remove');
 
   expect(nextUnitCount(0, 3, 0)).toEqual({ ok: true, value: 3 });
   expect(nextUnitCount(2, 1, 0)).toEqual({ ok: true, value: 3 });
   expect(nextUnitCount(3, 0, 1)).toEqual({ ok: true, value: 2 });
+});
+
+test('a completed units record whose add and remove lists hold more than one hundred ids together is invalid', () => {
+  const chapter = active('chapter');
+  const removed = Array.from({ length: 100 }, (_, index) => `remove-${index}`);
+  const within = removed.slice(0, 99);
+  expect(accepted(parseRecord('completed_units', { add: ['extra'], remove: within }, chapter))).toEqual({
+    add: ['extra'],
+    remove: within,
+  });
+  rejected(parseRecord('completed_units', { add: ['extra'], remove: removed }, chapter), 'remove');
 });
 
 test('percent stays within 0 to 100 and no amount completes a session by itself', () => {

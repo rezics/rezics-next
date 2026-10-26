@@ -169,6 +169,10 @@ function completedUnits(value: Record<string, unknown>): ProgressOutcome<Complet
   if (!add.ok) return add;
   const remove = unitList(value.remove, 'remove');
   if (!remove.ok) return remove;
+  // One request holds at most 100 ids, counting add and remove together.
+  if ((add.value?.length ?? 0) + (remove.value?.length ?? 0) > MAX_UNIT_IDS) {
+    return invalid(remove.value === null ? 'add' : 'remove');
+  }
   if (add.value !== null && remove.value !== null) {
     const added = new Set(add.value);
     for (const id of remove.value) {
