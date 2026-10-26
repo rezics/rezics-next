@@ -14,8 +14,9 @@ retain the `docker run` fallback.
 ## Development search node
 
 Run `bun run search up` from this workspace to create or start the local OpenSearch node and write `OPENSEARCH_URL`
-to `.env`. Use `bun run search down` to stop it while keeping its volume, or `bun run search reset` to remove and
-recreate it. The check command starts its own disposable OpenSearch node.
+to `.env`. `KERNEL_SEARCH_PREFIX` optionally selects the index prefix and defaults to `rezics-`. Use
+`bun run search down` to stop it while keeping its volume, or `bun run search reset` to remove and recreate it. The
+check command starts its own disposable OpenSearch node.
 
 ## Rebuilding the search index
 
