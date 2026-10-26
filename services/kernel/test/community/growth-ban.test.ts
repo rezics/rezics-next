@@ -536,7 +536,7 @@ test.serial(
     };
     const report = await checkGrowth(db, {
       name: 'Realm ban, unban and list',
-      scales: [2048, 8192, 32768],
+      scales: [256, 1024, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: async (_db, scale, previous) => {
         await seed(db, population, { from: previous, to: scale });
@@ -553,7 +553,7 @@ test.serial(
         expect(page.value).toMatchObject({ items: [{ accountId: listed.accountId }], next: null });
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
     for (const sample of report.samples) {
       expect(Object.keys(sample.cost.relations ?? {}).length).toBeGreaterThan(0);

@@ -13,7 +13,7 @@ const scopes = [...actions];
 const probeRoute = 0x2130;
 const opened = '[2020-01-01 00:00:00+00,)';
 const at = '2026-10-26T00:00:00.000Z';
-const scales = [2048, 8192, 32768] as [number, number, number];
+const scales = [256, 1024, 4096] as [number, number, number];
 
 let db: GrowthDatabase;
 let membership: ReturnType<typeof createRealmMembership>;
