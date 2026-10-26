@@ -6,7 +6,7 @@ import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 
 const url = process.env.DATABASE_URL;
