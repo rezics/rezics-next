@@ -216,6 +216,7 @@ test('accounts registers once before shared launch, schedules one admitted route
     await assert.rejects(composeWork([accountsWorkModule],options),/already composed/);
     await work.shutdown(); await client.close(); await pool.end();
   `;
+  // Two fresh processes each import the kernel work graph. That exceeds 30s once the suite is loaded.
   for (let restart = 0; restart < 2; restart++) {
     const child = Bun.spawn([process.execPath, '-e', program], {
       cwd: import.meta.dir + '/../..',
@@ -223,7 +224,11 @@ test('accounts registers once before shared launch, schedules one admitted route
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    const [code, errors] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-    expect(code, errors).toBe(0);
+    const [code, stdout, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, `${errors}${stdout}`).toBe(0);
   }
-}, 30000);
+}, 300000);
