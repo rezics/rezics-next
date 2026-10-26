@@ -179,7 +179,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
       throw new Error('pool classes required');
     const policy = object(pool.policy, 'pool policy');
-    keys(policy, ['weight', 'reservePercent', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'], 'pool policy');
+    keys(policy, ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'], 'pool policy');
     if (typeof policy.allowUnknown !== 'boolean') throw new Error('allowUnknown must be explicit');
     const reservePercent = positive(policy.reservePercent, 'reservePercent', true);
     if (reservePercent >= 100) throw new Error('reservePercent must be less than 100');
@@ -199,6 +199,9 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
         reservePercent,
         allowUnknown: policy.allowUnknown,
         maxAgeMs: positive(policy.maxAgeMs, 'maxAgeMs'),
+        ...(policy.reservePerHour === undefined
+          ? {}
+          : { reservePerHour: positive(policy.reservePerHour, 'reservePerHour') }),
         ...(policy.maxBurnPerHour === undefined
           ? {}
           : { maxBurnPerHour: positive(policy.maxBurnPerHour, 'maxBurnPerHour') }),

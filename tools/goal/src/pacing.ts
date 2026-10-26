@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { effectiveReserve } from './allowance.ts';
 import type { Pool, PoolReading } from './types.ts';
 
 // Allowances run out on calendars: Claude's week resets on a fixed time and its five-hour window caps how fast it can
@@ -51,6 +52,10 @@ export function refreshCodexSchedule(stateDirectory: string, now = Date.now()): 
   }
 }
 
+function longestOrEmpty(reading: PoolReading): PoolReading['windows'][number] {
+  return longestWindow(reading) ?? { usedPercent: 0, resetsAt: null, minutes: null };
+}
+
 /** The longest window a reading reports, which is the one whose reset loses allowance. */
 function longestWindow(reading: PoolReading): PoolReading['windows'][number] | undefined {
   return [...reading.windows].sort((a, b) => (b.minutes ?? 0) - (a.minutes ?? 0))[0];
@@ -69,7 +74,7 @@ export function pace(reading: PoolReading, pool: Pool, now: number, schedule?: C
   const announced = pool.cli === 'codex' && schedule?.scheduledAt ? Date.parse(schedule.scheduledAt) : NaN;
   if (Number.isFinite(announced) && announced > now && announced < resetAt) resetAt = announced;
   const hoursToReset = Math.max((resetAt - now) / 3_600_000, 0.25);
-  const unusedPercent = Math.max(0, 100 - pool.policy.reservePercent - window.usedPercent);
+  const unusedPercent = Math.max(0, 100 - effectiveReserve(pool, window, now) - window.usedPercent);
   return { allowanceKey: pool.allowanceKey, unusedPercent, hoursToReset, urgency: unusedPercent / hoursToReset };
 }
 
@@ -97,7 +102,8 @@ export function alertUnspentAllowances(
   const schedule = readCodexSchedule(stateDirectory);
   const seen = new Set<string>();
   let count = 0;
-  for (const pool of pools) {
+  // Pools sharing an allowance can keep different reserves; the one that keeps the most is the one work is limited by.
+  for (const pool of [...pools].sort((a, b) => effectiveReserve(b, longestOrEmpty(read(b)), now) - effectiveReserve(a, longestOrEmpty(read(a)), now))) {
     if (seen.has(pool.allowanceKey)) continue;
     seen.add(pool.allowanceKey);
     const current = pace(read(pool), pool, now, schedule);
