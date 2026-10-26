@@ -9,6 +9,7 @@ import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { ACCESS_EVENTS } from '../access/events.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { RATING_EVENTS } from './events.ts';
 import { isRatingEligibilityJob, readRatingEligibilityJob, type RatingEligibilityJob } from './eligibility.ts';
@@ -32,19 +33,34 @@ export const RATING_SEGMENT_PAGE_SIZE = 100;
 const REALM_CHANGED = 'com.rezics.rating.voter-realm.changed.v1';
 const SEGMENT_PAGE = 'com.rezics.rating.segment.page.v1';
 const POPULATION_PENDING = 'com.rezics.rating.population.pending.v1';
+const COUNTER_CHANGED = 'com.rezics.access.rating-counter.changed.v1';
 
 export type SegmentCursor = { questionId: string; targetId: string };
-export type SegmentVote = SegmentCursor & { units: number | null; revision: number; populations: string[] };
+export type SegmentVote = SegmentCursor & {
+  units: number | null;
+  revision: number;
+  populations: string[];
+  changedAt?: string;
+};
 export type RatingRealmSegmentJob = {
   voterId: string;
   realmId: string;
   direction: 'adding' | 'removing';
   transitionId: string;
 };
-export type RatingSegmentJob = RatingRealmSegmentJob | RatingEligibilityJob;
+export type RatingRekeySegmentJob = {
+  voterId: string;
+  direction: 'rekey';
+  transitionId: string;
+  at: string;
+  populations: string[];
+};
+export type RatingSegmentJob = RatingRealmSegmentJob | RatingEligibilityJob | RatingRekeySegmentJob;
 export type SegmentPageEventData = {
   voterId: string;
-  direction: 'adding' | 'removing';
+  direction: 'adding' | 'removing' | 'rekey';
+  at?: string;
+  allowMissing?: boolean;
   votes: SegmentVote[];
 };
 export type SegmentPageResult = {
@@ -69,10 +85,10 @@ type VotePageInput = {
   voterId: string;
   after: SegmentCursor | null;
   limit: number;
-  direction: 'adding' | 'removing';
+  direction: 'adding' | 'removing' | 'rekey';
   limitKey: SegmentCursor | null;
 };
-type StoredSegmentVote = SegmentCursor & { units: number | null; revision: number };
+type StoredSegmentVote = SegmentCursor & { units: number | null; revision: number; changedAt: string };
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 
@@ -90,13 +106,30 @@ function cursorOf(questionId: string | null, targetId: string | null): SegmentCu
   return { questionId, targetId };
 }
 
+function isRatingRekeyJob(job: RatingSegmentJob): job is RatingRekeySegmentJob {
+  return job.direction === 'rekey';
+}
+
 function validateJob(job: RatingSegmentJob): { voterRoute: number } {
   const voterRoute = routeOf(job.voterId);
-  if (voterRoute === null || !validId(job.transitionId) || (job.direction !== 'adding' && job.direction !== 'removing'))
+  if (
+    voterRoute === null ||
+    !validId(job.transitionId) ||
+    (job.direction !== 'adding' && job.direction !== 'removing' && job.direction !== 'rekey')
+  )
     throw new TypeError('Invalid rating segment job');
   if (isRatingEligibilityJob(job)) {
     if (job.populations.length > 101 || job.populations.some((id) => !validId(id)))
       throw new TypeError('Invalid rating eligibility populations');
+  } else if (isRatingRekeyJob(job)) {
+    if (
+      !Number.isFinite(Date.parse(job.at)) ||
+      job.populations.length < 1 ||
+      job.populations.length > 101 ||
+      !job.populations.includes(GLOBAL_CONTEXT.id) ||
+      job.populations.some((id) => !validId(id))
+    )
+      throw new TypeError('Invalid rating re-key populations or time');
   } else if (routeOf(job.realmId) === null) throw new TypeError('Invalid rating segment population');
   return { voterRoute };
 }
@@ -116,7 +149,7 @@ export async function readRatingSegmentVotes(client: Queryable, input: VotePageI
     !Number.isSafeInteger(input.limit) ||
     input.limit < 1 ||
     input.limit > RATING_SEGMENT_PAGE_SIZE ||
-    (input.direction !== 'adding' && input.direction !== 'removing')
+    (input.direction !== 'adding' && input.direction !== 'removing' && input.direction !== 'rekey')
   )
     throw new TypeError('Invalid rating segment vote page');
   validateCursor(input.after);
@@ -137,6 +170,7 @@ export async function readRatingSegmentVotes(client: Queryable, input: VotePageI
     targetId: row.targetId,
     units: row.units === null ? null : Number(row.units),
     revision: Number(row.revision),
+    changedAt: row.changedAt,
   }));
 }
 
@@ -164,7 +198,7 @@ export async function readRatingSegmentJob(
 }
 
 function populationsForJob(job: RatingSegmentJob): string[] {
-  return isRatingEligibilityJob(job) ? job.populations : [job.realmId];
+  return isRatingEligibilityJob(job) || isRatingRekeyJob(job) ? job.populations : [job.realmId];
 }
 
 async function changePopulationPending(pool: Pool, job: RatingSegmentJob, populationId: string, start: boolean) {
@@ -234,11 +268,10 @@ export async function processRatingSegmentPage(
 ): Promise<SegmentPageResult> {
   const { voterRoute } = validateJob(input);
   validateCursor(input.after);
-  const data = (votes: SegmentVote[]): SegmentPageEventData => ({
-    voterId: input.voterId,
-    direction: input.direction,
-    votes,
-  });
+  const data = (votes: SegmentVote[], allowMissing = true): SegmentPageEventData =>
+    isRatingRekeyJob(input)
+      ? { voterId: input.voterId, direction: 'rekey', at: input.at, allowMissing, votes }
+      : { voterId: input.voterId, direction: input.direction, votes };
   const outcome = await runCommand(pool, { partition: partitionOf(voterRoute) }, async (tx, command) => {
     if (isRatingEligibilityJob(input)) {
       const row = await readVoterState.run(tx, { route: voterRoute, voter_id: input.voterId });
@@ -271,7 +304,7 @@ export async function processRatingSegmentPage(
       });
       if (votes.length > 0) {
         const realms = await readCapped.run(tx, { route: voterRoute, voter_id: input.voterId });
-        const page = votes.map((vote) => ({
+        const page = votes.map(({ changedAt: _changedAt, ...vote }) => ({
           ...vote,
           populations: [GLOBAL_CONTEXT.id, ...populationsForVoteKey(vote, realms)],
         }));
@@ -325,6 +358,42 @@ export async function processRatingSegmentPage(
       };
     }
 
+    if (isRatingRekeyJob(input)) {
+      const votes = await readRatingSegmentVotes(tx, {
+        route: voterRoute,
+        voterId: input.voterId,
+        after: input.after,
+        limit: RATING_SEGMENT_PAGE_SIZE,
+        direction: input.direction,
+        limitKey: null,
+      });
+      if (votes.length === 0)
+        return {
+          value: { cursor: input.after, done: true, eventData: data([]), nextJobs: [] },
+          events: [{ type: SEGMENT_PAGE, subject: input.voterId, data: data([]) }],
+        };
+
+      const eligibility = await readVoterState.run(tx, { route: voterRoute, voter_id: input.voterId });
+      const allowMissing = !eligibility || eligibility.state === 'eligible' || eligibility.state === 'returning';
+      const realms = allowMissing ? await readCapped.run(tx, { route: voterRoute, voter_id: input.voterId }) : [];
+      const page = votes.map((vote) => ({
+        ...vote,
+        changedAt: vote.changedAt,
+        populations: allowMissing ? [GLOBAL_CONTEXT.id, ...populationsForVoteKey(vote, realms)] : [],
+      }));
+      const last = votes.at(-1)!;
+      const eventData = data(page, allowMissing);
+      return {
+        value: {
+          cursor: { questionId: last.questionId, targetId: last.targetId },
+          done: false,
+          eventData,
+          nextJobs: [],
+        },
+        events: [{ type: SEGMENT_PAGE, subject: input.voterId, data: eventData }],
+      };
+    }
+
     const row = (await readRealm.run(tx, {
       route: voterRoute,
       voter_id: input.voterId,
@@ -375,7 +444,7 @@ export async function processRatingSegmentPage(
       const eligibility = await readVoterState.run(tx, { route: voterRoute, voter_id: input.voterId });
       const allowAdding = eligibility?.state === 'eligible' || eligibility?.state === 'returning';
       const eventData = data(
-        votes.map((vote) => ({
+        votes.map(({ changedAt: _changedAt, ...vote }) => ({
           ...vote,
           populations: input.direction === 'removing' || allowAdding ? [input.realmId] : [],
         })),
@@ -434,10 +503,24 @@ export async function processRatingSegmentPage(
 export function createRatingSegmentJobEffect(pool: Pool, client: WorkContext['client']): Effect {
   return {
     name: 'rating_segment_job',
-    types: [REALM_CHANGED, 'com.rezics.rating.eligibility.changed.v1'],
+    types: [REALM_CHANGED, 'com.rezics.rating.eligibility.changed.v1', COUNTER_CHANGED],
     async run(event: CloudEvent) {
       let job: RatingSegmentJob | null;
-      if (event.type === REALM_CHANGED && Value.Check(RATING_EVENTS[REALM_CHANGED], event.data)) {
+      if (event.type === COUNTER_CHANGED && Value.Check(ACCESS_EVENTS[COUNTER_CHANGED], event.data)) {
+        const { accountId, at } = event.data as { accountId: string; at: string };
+        const voterRoute = routeOf(accountId);
+        if (voterRoute === null || event.subject !== accountId) throw new TypeError('Invalid rating re-key event');
+        const realms = await withConnection(pool, (connection) =>
+          readCapped.run(connection, { route: voterRoute, voter_id: accountId }),
+        );
+        job = {
+          voterId: accountId,
+          direction: 'rekey',
+          transitionId: event.id,
+          at,
+          populations: [GLOBAL_CONTEXT.id, ...realms.map(({ realmId }) => realmId)],
+        };
+      } else if (event.type === REALM_CHANGED && Value.Check(RATING_EVENTS[REALM_CHANGED], event.data)) {
         const { voterId, realmId } = event.data as { voterId: string; realmId: string };
         job = await readRatingSegmentJob(pool, { voterId, realmId });
       } else if (
@@ -467,7 +550,13 @@ export function createRatingSegmentJobEffect(pool: Pool, client: WorkContext['cl
 export function ratingSegmentWorkflowId(job: RatingSegmentJob): string {
   validateJob(job);
   const key = createHash('sha256')
-    .update(JSON.stringify([job.voterId, isRatingEligibilityJob(job) ? 'eligibility' : job.realmId, job.transitionId]))
+    .update(
+      JSON.stringify([
+        job.voterId,
+        isRatingEligibilityJob(job) ? 'eligibility' : isRatingRekeyJob(job) ? 'rekey' : job.realmId,
+        job.transitionId,
+      ]),
+    )
     .digest('hex');
   return `rating.segment:${key}`;
 }

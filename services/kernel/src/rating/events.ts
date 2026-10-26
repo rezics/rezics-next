@@ -28,6 +28,29 @@ export const RATING_EVENTS = {
     Type.Object(
       {
         voterId: Type.String({ pattern: UUID }),
+        direction: Type.Literal('rekey'),
+        at: Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?[+-]\\d{2}$' }),
+        allowMissing: Type.Boolean(),
+        votes: Type.Array(
+          Type.Object(
+            {
+              questionId: Type.String({ pattern: UUID }),
+              targetId: Type.String({ pattern: UUID }),
+              units,
+              revision: Type.Integer({ minimum: 1 }),
+              populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
+              changedAt: Type.String(),
+            },
+            { additionalProperties: false },
+          ),
+          { maxItems: 100 },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      {
+        voterId: Type.String({ pattern: UUID }),
         direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
         votes: Type.Array(
           Type.Object(

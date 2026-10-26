@@ -97,6 +97,56 @@ const eligibilityPopulation: Population = {
   }),
 };
 
+const rekeyVoters = Array.from({ length: 6 }, () => newId(route));
+const rekeyTransitionIds = rekeyVoters.map((_, index) => id(700001 + index));
+const rekeyRealmId = newId(0x6b09);
+const rekeyAt = '2026-10-27 12:00:00.123456+00';
+const rekeyJob = (index: number): RatingSegmentJob =>
+  ({
+    voterId: rekeyVoters[index]!,
+    direction: 'rekey',
+    transitionId: rekeyTransitionIds[index]!,
+    at: rekeyAt,
+    populations: [GLOBAL_CONTEXT.id, rekeyRealmId],
+  }) as RatingSegmentJob;
+const rekeyPopulation: Population = {
+  name: 'rating rekey voter votes',
+  hotPartition: route >>> 4,
+  hotShare: 1,
+  rows: ({ ordinal }) => {
+    const votes = rekeyVoters.map((voterId, index) => ({
+      route,
+      voter_id: voterId,
+      question_id: STANDARD_QUESTION_ID,
+      target_id: id(20001 + ordinal),
+      units: ordinal % 21,
+      revision: 1,
+      changed_at: rekeyAt,
+      transaction_id: id(300000 + ordinal * 6 + index),
+    }));
+    return {
+      'rating.vote': votes,
+      ...(ordinal === 0
+        ? {
+            'rating.voter_realm': rekeyVoters.map((voterId) => ({
+              route,
+              voter_id: voterId,
+              realm_id: rekeyRealmId,
+              joined_at: rekeyAt,
+              state: 'counted',
+            })),
+          }
+        : {}),
+    };
+  },
+};
+
+async function rekeyPage(db: GrowthDatabase, index: number): Promise<void> {
+  const result = await processRatingSegmentPage(db.pool, { ...rekeyJob(index), after: null });
+  if (result.eventData.direction !== 'rekey') throw new Error('Expected a re-key page');
+  expect(result.eventData.votes).toHaveLength(100);
+}
+
 beforeAll(async () => {
   database = await openGrowthDatabase();
 });
@@ -141,6 +191,21 @@ test('eligibility page has constant rows and statements as voter votes grow', as
         ...eligibilityJob((scale === 256 ? 0 : scale === 1024 ? 1 : 2) + 3),
         after: null,
       }),
+    repetitions: 1,
+    warmups: 1,
+  });
+  expect(result.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+});
+
+test('re-key page has constant rows and statements as voter votes grow', async () => {
+  const result = await checkGrowth(database, {
+    name: 'rating re-key page',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (db, scale, previous) =>
+      seed({ pool: db.pool, admin: db.admin }, rekeyPopulation, { from: previous, to: scale }),
+    operation: async (db, scale) => rekeyPage(db, scale === 256 ? 0 : scale === 1024 ? 1 : 2),
+    warmup: async (db, scale) => rekeyPage(db, (scale === 256 ? 0 : scale === 1024 ? 1 : 2) + 3),
     repetitions: 1,
     warmups: 1,
   });

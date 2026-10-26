@@ -36,6 +36,7 @@ scale's units. Means, Bayesian scores and roll-ups are computed from components 
 - A vote, change or clear updates the Global aggregate and the aggregate of each Realm whose population includes the
   voter, asynchronously and idempotently, by subtracting the previous value and adding the new one. The number of
   Realms a person's votes count in is capped, which bounds the work of one vote.
+- An operator transfer moves an account's votes to its new controller's count through a paged recount.
 - Joining a Realm adds the member's existing votes to that Realm's aggregates; leaving or a ban removes them. This
   runs as a resumable paged job; each page touches a bounded number of votes, and affected aggregates report that
   they are updating until it finishes.
@@ -190,3 +191,10 @@ both votes and Realm memberships for reinstatement.
 - Bound: 100 votes and 101 populations per vote per page.
 - Growth check: `test/rating/growth-segment-job.test.ts`, test "eligibility page has constant rows and statements as
   voter votes grow", at scales `[256, 1024, 4096]`.
+
+### Re-key page
+
+- Touches: at most 100 votes per page, each in at most 101 populations, with the apply's per-population cost.
+- Bound: 100 votes per page.
+- Growth check: `test/rating/growth-segment-job.test.ts`, test "re-key page has constant rows and statements as voter
+  votes grow", at scales `[256, 1024, 4096]`.

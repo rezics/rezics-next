@@ -13,13 +13,15 @@ import readCountedVote from './population-vote-counted-read.sql';
 import readPopulationVotersSql from './population-voters-page.sql';
 import deletePopulationVote from './population-vote-delete.sql';
 import upsertPopulationVote from './population-vote-upsert.sql';
+import readPopulationVoteForRekey from './population-vote-rekey-read.sql';
+import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
 import readQuestionScale from './question-scale-read.sql';
 
 const VOTE_CHANGED = 'com.rezics.rating.vote.changed.v1';
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
 const SEGMENT_PAGE = 'com.rezics.rating.segment.page.v1';
 
-export type RatingChange = {
+type RatingChangeFields = {
   voterId: string;
   countingKey: string;
   questionId: string;
@@ -27,7 +29,19 @@ export type RatingChange = {
   targetId: string;
   revision: number;
   at: string | Date;
-} & ({ units: number | null; remove?: false } | { remove: true; units?: never });
+};
+export type RatingChange = RatingChangeFields &
+  (
+    | { units: number | null; remove?: false; rekey?: never; rekeyAt?: never }
+    | {
+        units: number | null;
+        remove?: false;
+        rekey: true;
+        rekeyAt: string | Date;
+        rekeyAllowMissing: boolean;
+      }
+    | { remove: true; units?: never; rekey?: never; rekeyAt?: never }
+  );
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type QuestionScale = { minimumUnits: number; maximumUnits: number; stepUnits: number };
@@ -61,7 +75,7 @@ function normalizeInstant(value: string | Date): string {
   return at;
 }
 
-function validateChange(change: RatingChange): { route: number; at: string; shard: number } {
+function validateChange(change: RatingChange): { route: number; at: string; appliedAt: string; shard: number } {
   if (
     !change ||
     !validId(change.voterId) ||
@@ -71,6 +85,7 @@ function validateChange(change: RatingChange): { route: number; at: string; shar
     !/^[0-9a-f]{64}$/.test(change.countingKey) ||
     !Number.isSafeInteger(change.revision) ||
     change.revision < 1 ||
+    (change.rekey === true && typeof change.rekeyAllowMissing !== 'boolean') ||
     (!change.remove &&
       change.units !== null &&
       (!Number.isSafeInteger(change.units) || change.units < 0 || change.units > 20))
@@ -78,7 +93,13 @@ function validateChange(change: RatingChange): { route: number; at: string; shar
     throw new TypeError('Invalid rating aggregate change');
   const route = routeOf(change.targetId)!;
   const keyByte = Number.parseInt(change.countingKey.slice(0, 2), 16);
-  return { route, at: normalizeInstant(change.at), shard: keyByte % 16 };
+  const at = normalizeInstant(change.at);
+  return {
+    route,
+    at,
+    appliedAt: change.rekey ? normalizeInstant(change.rekeyAt) : at,
+    shard: keyByte % 16,
+  };
 }
 
 function histogramSize(scale: QuestionScale): number {
@@ -132,13 +153,38 @@ function returnedRows(value: unknown): boolean {
   return value !== null && value !== undefined;
 }
 
+async function applyDelta(
+  tx: Queryable,
+  change: RatingChange,
+  countingKey: string,
+  before: CountedVote | null,
+  after: CountedVote | null,
+  scale: QuestionScale,
+  at: string,
+): Promise<void> {
+  const keyByte = Number.parseInt(countingKey.slice(0, 2), 16);
+  const delta = deltaFor(before, after, scale);
+  const rows = await applyComponent.run(tx, {
+    route: routeOf(change.targetId)!,
+    question_id: change.questionId,
+    population_id: change.populationId,
+    target_id: change.targetId,
+    shard: keyByte % 16,
+    count_delta: delta.count.toString(),
+    sum_delta: delta.sum.toString(),
+    histogram_delta: delta.histogram.map(String),
+    at,
+  });
+  if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
+}
+
 async function applyPartition(pool: Pool, changes: readonly RatingChange[], partition: number): Promise<void> {
   try {
     await runCommand(pool, { partition }, async (tx, command) => {
       const scales = new Map<string, QuestionScale>();
       let applied = 0;
       for (const change of changes) {
-        const { route, at, shard } = validateChange(change);
+        const { route, at, appliedAt, shard } = validateChange(change);
         let scale = scales.get(change.questionId);
         if (!scale) {
           scale = (await readQuestionScale.run(tx, { question_id: change.questionId })) ?? undefined;
@@ -152,6 +198,41 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
           target_id: change.targetId,
           counting_key: change.countingKey,
         };
+
+        if (change.rekey) {
+          const existing = await readPopulationVoteForRekey.run(tx, {
+            ...parameters,
+            voter_id: change.voterId,
+          });
+          if (existing && Number(existing.revision) > change.revision) continue;
+          const oldKey = existing?.countingKey ?? change.countingKey;
+          const newBefore = await readCountedVote.run(tx, parameters);
+          const oldBefore =
+            oldKey === change.countingKey
+              ? newBefore
+              : await readCountedVote.run(tx, { ...parameters, counting_key: oldKey });
+          const wroteVote = returnedRows(
+            await rekeyPopulationVote.run(tx, {
+              ...parameters,
+              voter_id: change.voterId,
+              units: change.units,
+              at,
+              revision: change.revision,
+              allow_missing: change.rekeyAllowMissing,
+            }),
+          );
+          if (!wroteVote) continue;
+          const newAfter = await readCountedVote.run(tx, parameters);
+          if (oldKey !== change.countingKey) {
+            const oldAfter = await readCountedVote.run(tx, { ...parameters, counting_key: oldKey });
+            await applyDelta(tx, change, oldKey, oldBefore, oldAfter, scale, appliedAt);
+            applied += 1;
+          }
+          await applyDelta(tx, change, change.countingKey, newBefore, newAfter, scale, appliedAt);
+          applied += 1;
+          continue;
+        }
+
         const before = await readCountedVote.run(tx, parameters);
         let wroteVote = false;
         if (change.remove) {
@@ -178,7 +259,7 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
           count_delta: delta.count.toString(),
           sum_delta: delta.sum.toString(),
           histogram_delta: delta.histogram.map(String),
-          at,
+          at: appliedAt,
         });
         if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
         applied += 1;
@@ -265,6 +346,20 @@ export async function applyRatingSegmentPageEvent(
   const data = event.data as
     | {
         voterId: string;
+        direction: 'rekey';
+        at: string;
+        allowMissing: boolean;
+        votes: Array<{
+          questionId: string;
+          targetId: string;
+          units: number | null;
+          revision: number;
+          populations: string[];
+          changedAt: string;
+        }>;
+      }
+    | {
+        voterId: string;
         direction: 'adding' | 'removing';
         votes: Array<{
           questionId: string;
@@ -281,6 +376,26 @@ export async function applyRatingSegmentPageEvent(
         votes: Array<{ questionId: string; targetId: string; units: number | null; revision: number }>;
       };
   if (data.votes.length === 0) return;
+  if (data.direction === 'rekey') {
+    const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, data.at));
+    const changes: RatingChange[] = data.votes.flatMap((vote) =>
+      vote.populations.map((populationId) => ({
+        voterId: data.voterId,
+        countingKey,
+        questionId: vote.questionId,
+        populationId,
+        targetId: vote.targetId,
+        units: vote.units,
+        revision: vote.revision,
+        at: vote.changedAt,
+        rekey: true as const,
+        rekeyAt: data.at,
+        rekeyAllowMissing: data.allowMissing,
+      })),
+    );
+    await applyRatingChanges(pool, changes);
+    return;
+  }
   const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, event.time));
   const change = (
     vote: { questionId: string; targetId: string; units: number | null; revision: number },
