@@ -10,7 +10,12 @@ const pool = createPool('postgres://kernel.invalid/custom-method');
 afterAll(() => pool.end());
 
 const Answer = t.Object({ verb: t.String(), id: t.String() }, { additionalProperties: false });
-const detail = (operationId: string) => ({ operationId, 'x-action': 'thing:read', security: [{ bearerAuth: [] }, {}] });
+const detail = (operationId: string) => ({
+  operationId,
+  'x-action': 'thing:read',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }, {}],
+});
 const params = t.Object({ id: t.String() });
 const app = createApp({ pool })
   .get(

@@ -41,12 +41,17 @@ const app = createApp({ pool })
         { name: t.String({ minLength: 1, maxLength: 4 }), count: t.Integer({ minimum: 0 }) },
         { additionalProperties: false },
       ),
+      detail: { 'x-exposure': 'public' },
     },
     ({ body }) => body,
   )
-  .get('/probe/:failure', { params: t.Object({ failure: t.String() }) }, ({ params }) => {
-    throw failures[params.failure]!();
-  });
+  .get(
+    '/probe/:failure',
+    { params: t.Object({ failure: t.String() }), detail: { 'x-exposure': 'public' } },
+    ({ params }) => {
+      throw failures[params.failure]!();
+    },
+  );
 
 const MEMBERS = ['type', 'title', 'status', 'code', 'retryable', 'effect_status', 'request_id'];
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

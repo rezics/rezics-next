@@ -29,8 +29,18 @@ const account: AccountActor = {
   authnEpoch: 1,
 };
 const thing: Resource = { route: 0x1234, id: '019a1b2c-3d4e-7f00-8a00-123400000001' };
-const read = { operationId: 'thing.get', 'x-action': 'thing:read', security: [{ bearerAuth: [] }, {}] };
-const create = { operationId: 'thing.create', 'x-action': 'thing:create', security: [{ bearerAuth: [] }] };
+const read = {
+  operationId: 'thing.get',
+  'x-action': 'thing:read',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }, {}],
+};
+const create = {
+  operationId: 'thing.create',
+  'x-action': 'thing:create',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }],
+};
 
 type Seen = { authenticated: number[]; checks: unknown[][]; prepared: number[] };
 function recorder(seen: Seen, admission: Admission, prepare = false): Access {
