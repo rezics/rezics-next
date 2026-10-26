@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import '../../.storybook/route-root';
 import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
-import { deLocalizeUrl, localizeUrl } from '../paraglide/runtime.js';
+import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
 import searchEmptyRecording from '../kernel/recorded/search-empty.json';

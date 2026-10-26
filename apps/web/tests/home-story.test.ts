@@ -27,5 +27,5 @@ test('the recorded home read replays as the kernel answered it', async () => {
   expect(html).toMatch(/<form[^>]*action="\/ko\/search"/);
   expect(html).toContain('href="/ko/search?type=schema%3ABook"');
   const story = await Bun.file(new URL('../src/stories/home.stories.tsx', import.meta.url)).text();
-  expect(story).toContain('features/pages/route');
+  expect(story).toContain('pagePaths.home');
 });

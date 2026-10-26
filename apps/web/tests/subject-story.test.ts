@@ -33,5 +33,5 @@ test('the subject story renders the real subject page', async () => {
   expect(html).toMatch(/<h1[^>]*>Le Petit Prince<\/h1>/);
   expect(html).toContain('application/ld+json');
   const story = await Bun.file(new URL('../src/stories/subject.stories.tsx', import.meta.url)).text();
-  expect(story).toContain('features/pages/subject');
+  expect(story).toContain('pagePaths.subject');
 });
