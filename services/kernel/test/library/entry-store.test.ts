@@ -395,7 +395,9 @@ test('entry write, entry page and copy page touch the same rows and statements a
   const owner = id(900_000);
   const subjectId = id(900_001);
   const copyId = id(900_002);
-  const scales = [1_000, 8_000, 64_000] as const;
+  const scales = [256, 1_024, 4_096] as const;
+  // A table of a few hundred rows is cheaper to scan than to probe, so pin the planner to the indexes the pages are built on.
+  const planned = database.openPool({ options: '-c enable_seqscan=off' });
   try {
     await database.admin.query(
       `INSERT INTO library.entry
@@ -419,7 +421,7 @@ test('entry write, entry page and copy page touch the same rows and statements a
       await seed(database, population, { from: previous, to: scale });
 
       const written = await measure(database, () =>
-        inTransaction(database.pool, (client) =>
+        inTransaction(planned, (client) =>
           store.updateEntryState(client, route, owner, subjectId, 1, 'paused', context(900_100 + scale, later)),
         ),
       );
@@ -429,7 +431,7 @@ test('entry write, entry page and copy page touch the same rows and statements a
       writeSamples.push({ scale, cost: written.cost });
 
       const entryPage = await measure(database, () =>
-        inTransaction(database.pool, (client) =>
+        inTransaction(planned, (client) =>
           store.pageEntries(client, route, owner, { after: null, state: null, limit: 1 }),
         ),
       );
@@ -439,7 +441,7 @@ test('entry write, entry page and copy page touch the same rows and statements a
       entryPageSamples.push({ scale, cost: entryPage.cost });
 
       const copyPage = await measure(database, () =>
-        inTransaction(database.pool, (client) => store.pageCopies(client, route, owner, { after: null, limit: 1 })),
+        inTransaction(planned, (client) => store.pageCopies(client, route, owner, { after: null, limit: 1 })),
       );
       expect(copyPage.value).toMatchObject([{ id: copyId, accountId: owner }]);
       expect(copyPage.cost.statements).toBe(1);
