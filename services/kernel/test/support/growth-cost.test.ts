@@ -145,6 +145,26 @@ test('shared blocks are attributed once across a join tree', async () => {
   expect(cost.sharedHit + cost.sharedRead).toBe(cost.blocks);
 });
 
+test('a CTE read by several scans counts its blocks once', async () => {
+  const plan = await explain(`
+    WITH probes AS MATERIALIZED (
+      SELECT value FROM growth_cost_test.seq_rows
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM probes WHERE value = 10) AS first,
+      EXISTS (SELECT 1 FROM probes WHERE value = 90) AS second
+  `);
+  const root = rootOf(plan);
+  const cost = costOf({ statements: [], plans: [plan] });
+  const expected = Number(root['Shared Hit Blocks']) + Number(root['Shared Read Blocks']);
+
+  expect(expected).toBeGreaterThan(0);
+  expect(cost.blocks).toBe(expected);
+  expect(cost.sharedHit + cost.sharedRead).toBe(expected);
+  const relationBlocks = Object.values(cost.relations).reduce((sum, relation) => sum + relation.blocks, 0);
+  expect(relationBlocks).toBe(expected);
+});
+
 test('an unreferenced data-modifying CTE contributes its relation rows and blocks', async () => {
   await client.query('BEGIN');
   try {
