@@ -469,6 +469,39 @@ test('signed cursors page one account and stay bound to that account', async () 
   expect(wide.copies.length).toBe(seen.length);
 });
 
+test("a subject filter lists only the account's copies of that subject in creation order and keeps its cursor bound to the filter", async () => {
+  const target = await subject('Filtered copy edition');
+  const unrelated = await subject('Other filtered copy edition');
+
+  tick();
+  const first = (await commands.createCopy(owner, { subjectId: target, status: 'owned', note: 'First' }, key())).value;
+  tick();
+  await commands.createCopy(owner, { subjectId: unrelated, status: 'owned', note: 'Unrelated' }, key());
+  tick();
+  const second = (await commands.createCopy(owner, { subjectId: target, status: 'ordered', note: 'Second' }, key()))
+    .value;
+  tick();
+  const otherAccount = (await commands.createCopy(other, { subjectId: target, status: 'owned' }, key())).value;
+
+  const firstPage = await commands.listCopies(owner, { subjectId: target, limit: 1 });
+  expect(firstPage.copies.map((copy) => copy.id)).toEqual([first.id]);
+  expect(firstPage.next).toBeString();
+  const secondPage = await commands.listCopies(owner, { subjectId: target, limit: 1, cursor: firstPage.next! });
+  expect(secondPage.copies.map((copy) => copy.id)).toEqual([second.id]);
+  expect(secondPage.next).toBeNull();
+  expect(secondPage.copies[0]!.createdAt > firstPage.copies[0]!.createdAt).toBe(true);
+  expect(firstPage.copies.some((copy) => copy.id === otherAccount.id)).toBe(false);
+  await expect(commands.listCopies(owner, { limit: 1, cursor: firstPage.next! })).rejects.toMatchObject({
+    code: 'invalid_cursor',
+  });
+  await expect(
+    commands.listCopies(owner, { subjectId: unrelated, limit: 1, cursor: firstPage.next! }),
+  ).rejects.toMatchObject({
+    code: 'invalid_cursor',
+  });
+  expect((await commands.listCopies(owner, { subjectId: newId(route), limit: 1 })).copies).toEqual([]);
+});
+
 test('events are closed, ID-only, and use the account as their subject in its partition', async () => {
   const updated = EVENT_TYPES[updatedEvent];
   const deleted = EVENT_TYPES[deletedEvent];
@@ -576,4 +609,53 @@ test('statement counts stay equal at three scales of unrelated copies', async ()
   for (const samples of [createSamples, updateSamples, pageSamples]) {
     assertGrowth(samples, { statements: 'constant', rows: 'constant', blocks: 'logarithmic' });
   }
+}, 120_000);
+
+test('subject-filtered copy page keeps statement counts equal at three scales of unrelated copies', async () => {
+  const target = await subject('Copy page growth target');
+  const stable = (await commands.createCopy(owner, { subjectId: target, status: 'owned' }, key())).value;
+  const scales = [1, 8, 64] as const;
+  const samples: GrowthSample[] = [];
+  let previous = 0;
+  for (const scale of scales) {
+    const added = scale - previous;
+    await database.admin.query(
+      `WITH noise AS (
+         SELECT copy_id, $2::uuid AS account_id, subject_id
+         FROM unnest($7::uuid[], $8::uuid[]) AS own(copy_id, subject_id)
+         UNION ALL
+         SELECT copy_id, $3::uuid AS account_id, $4::uuid AS subject_id
+         FROM unnest($9::uuid[]) AS others(copy_id)
+       )
+       INSERT INTO library.copy
+         (route, copy_id, account_id, subject_id, status, location, source, acquired_on, disposed_on, note, revision,
+          created_at, updated_at, transaction_id)
+       SELECT $1, copy_id, account_id, subject_id, 'owned', NULL, NULL, NULL, NULL, NULL, 1, $5, $5, $6
+       FROM noise`,
+      [
+        route,
+        owner.accountId,
+        other.accountId,
+        target,
+        '2020-01-01T00:00:00.000Z',
+        newId(route),
+        Array.from({ length: added }, () => newId(route)),
+        Array.from({ length: added }, () => newId(route)),
+        Array.from({ length: added }, () => newId(route)),
+      ],
+    );
+    const page = await measure(database, () => commands.listCopies(owner, { subjectId: target, limit: 1 }));
+    expect(page.value.copies).toHaveLength(1);
+    expect(page.value.copies[0]!.id).toBe(stable.id);
+    expect(page.cost.statements).toBeGreaterThan(0);
+    expect(page.cost.relations?.['library.copy']?.sequentialScans ?? 0).toBe(0);
+    samples.push({ scale, cost: page.cost });
+    previous = scale;
+  }
+  expect(samples.map((sample) => sample.cost.statements)).toEqual([
+    samples[0]!.cost.statements,
+    samples[0]!.cost.statements,
+    samples[0]!.cost.statements,
+  ]);
+  assertGrowth(samples, { statements: 'constant', rows: 'constant', blocks: 'logarithmic' });
 }, 120_000);

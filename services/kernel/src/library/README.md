@@ -213,6 +213,12 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: `R` `O(s+1)`, or `O(s+2)` with the probe. `B` `O(L(N)+s)`. `S` is 1 or 2, plus the admit and the partition read.
 - Growth check: `test/library/copies.test.ts`: `statement counts stay equal at three scales of unrelated copies` lists with limit 1 and classifies statements and rows as constant and blocks as logarithmic. `test/library/entry-store.test.ts`: `entry write, entry page and copy page touch the same rows and statements at three scales` pages copies at limit 1: one statement, constant rows, logarithmic blocks and no sequential scan at 1000, 8000 and 64000.
 
+### Copy list by subject
+
+- Touches: A snapshot, an admit, a partition-epoch read, and one range of `copy_account_subject_created` for `(route, account_id, subject_id)`. The page fetches at most `limit + 1` rows. At the maximum limit, it uses the same one-row probe as the unfiltered page when the first fetch has no extra row. The stored subject id is matched directly, and the cursor is bound to it.
+- Bound: `O(limit)` rows and statements per page, independent of the account's copies of other subjects and other accounts' copies of the same subject. `B` is `O(L(N)+limit)`. The page uses one statement or two with the maximum-limit probe, plus the admit and the partition read.
+- Growth check: `test/library/copies.test.ts`: `subject-filtered copy page keeps statement counts equal at three scales of unrelated copies` keeps statements and rows constant and blocks logarithmic at 1, 8 and 64, with no sequential scan on `library.copy`.
+
 ### Follow
 
 - Touches: An account admit, then a target resolve. A subject uses `subject:read`. A Collection is one primary-key read and must be active and public, unlisted, or curated by the actor. A Space uses `space:read` and one Space read. The command then upserts one `follow` primary key and reads it back. An unchanged row aborts before the receipt. The event subject is the account id. Follows are not counted in public.

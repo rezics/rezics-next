@@ -37,7 +37,7 @@ type CopyInput = {
   note: string | null;
 };
 type CopyPatch = { revision: number } & Partial<CopyChanges>;
-type PageOptions = { cursor?: string; limit?: number };
+type PageOptions = { cursor?: string; limit?: number; subjectId?: string };
 
 export class CopyInvalidError extends Error {
   constructor(readonly field: string) {
@@ -297,11 +297,15 @@ export function createCopyCommands(config: Dependencies) {
 
   async function listCopies(actor: Actor, options: PageOptions = {}) {
     const owner = requireActor(actor, 'copy:list');
+    const filterSubjectId = options.subjectId === undefined ? null : subjectId(options.subjectId);
     return readOnly(owner, async (client) => {
       const size = options.limit ?? DEFAULT_LIMIT;
       if (!Number.isInteger(size) || size < 1 || size > MAX_LIMIT) throw new CopyInvalidError('limit');
       const accountRoute = requireRoute(owner.accountId);
-      const binding: CursorBinding = { operation: 'copy.list', parameters: { accountId: owner.accountId } };
+      const binding: CursorBinding = {
+        operation: 'copy.list',
+        parameters: { accountId: owner.accountId, subjectId: filterSubjectId },
+      };
       const partition = await readPartition(client, partitionOf(accountRoute));
       let after: { createdAt: string; copyId: string } | null = null;
       if (options.cursor !== undefined) {
@@ -321,18 +325,30 @@ export function createCopyCommands(config: Dependencies) {
         if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
         after = { createdAt, copyId: cursorId };
       }
-      const rows = await store.pageCopies(client, accountRoute, owner.accountId, {
-        after,
-        limit: Math.min(MAX_LIMIT, size + 1),
-      });
+      const rows = await store.pageCopies(
+        client,
+        accountRoute,
+        owner.accountId,
+        {
+          after,
+          limit: Math.min(MAX_LIMIT, size + 1),
+        },
+        filterSubjectId,
+      );
       const copies = rows.slice(0, size);
       const last = copies.at(-1);
       let more = rows.length > size;
       if (!more && size === MAX_LIMIT && last) {
-        const probe = await store.pageCopies(client, accountRoute, owner.accountId, {
-          after: { createdAt: last.createdAt, copyId: last.id },
-          limit: 1,
-        });
+        const probe = await store.pageCopies(
+          client,
+          accountRoute,
+          owner.accountId,
+          {
+            after: { createdAt: last.createdAt, copyId: last.id },
+            limit: 1,
+          },
+          filterSubjectId,
+        );
         more = probe.length > 0;
       }
       return {

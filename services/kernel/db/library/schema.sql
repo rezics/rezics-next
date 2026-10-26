@@ -423,6 +423,13 @@ CREATE INDEX copy_account_created ON library.copy USING btree (route, account_id
 
 
 --
+-- Name: copy_account_subject_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id);
+
+
+--
 -- Name: entry_account_state; Type: INDEX; Schema: library; Owner: -
 --
 

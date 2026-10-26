@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import copyDelete from './entry-store-copy-delete.sql';
 import copyInsert from './entry-store-copy-insert.sql';
 import copyPage from './entry-store-copy-page.sql';
+import copySubjectPage from './entry-store-copy-subject-page.sql';
 import copyRead from './entry-store-copy-read.sql';
 import copyUpdate from './entry-store-copy-update.sql';
 import entryDelete from './entry-store-entry-delete.sql';
@@ -225,14 +226,24 @@ export async function deleteCopy(
   return row ? asCopy(row) : null;
 }
 
-export async function pageCopies(client: Client, route: number, accountId: string, page: CopyPage): Promise<Copy[]> {
+export async function pageCopies(
+  client: Client,
+  route: number,
+  accountId: string,
+  page: CopyPage,
+  subjectId: string | null = null,
+): Promise<Copy[]> {
   assertLimit(page.limit);
-  const rows = await copyPage.run(queryClient(client), {
+  const parameters = {
     route,
     account_id: accountId,
     after_created_at: page.after?.createdAt ?? null,
     after_copy_id: page.after?.copyId ?? null,
     limit: Math.min(MAX_LIBRARY_PAGE_SIZE, page.limit),
-  });
+  };
+  const rows =
+    subjectId === null
+      ? await copyPage.run(queryClient(client), parameters)
+      : await copySubjectPage.run(queryClient(client), { ...parameters, subject_id: subjectId });
   return rows.map((row) => asCopy(row));
 }
