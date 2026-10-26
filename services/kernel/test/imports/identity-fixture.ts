@@ -513,7 +513,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
           overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
         }),
       }) as unknown as Parameters<typeof accessRoutes>[0],
-      { pool: database.pool, access: () => access, clock },
+      { pool: database.pool, access: () => access, clock, tokens: tokenKeys },
     );
     /** The ordinary /token call on the management session. Never run inside a measured operation. */
     async function renewManagement() {
