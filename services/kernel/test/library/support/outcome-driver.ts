@@ -20,7 +20,13 @@ import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
-import { capture, costOf, openGrowthDatabase, withoutCatalogStatements, type GrowthDatabase } from '../../support/growth.ts';
+import {
+  capture,
+  costOf,
+  openGrowthDatabase,
+  withoutCatalogStatements,
+  type GrowthDatabase,
+} from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the

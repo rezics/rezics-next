@@ -1,6 +1,13 @@
 import { assertGrowth, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
 import { capture, type GrowthDatabase } from './growth-capture.ts';
-import { catalogStatementBound, costOf, medianCost, withoutCatalogTexts, type Capture, type Cost } from './growth-cost.ts';
+import {
+  catalogStatementBound,
+  costOf,
+  medianCost,
+  withoutCatalogTexts,
+  type Capture,
+  type Cost,
+} from './growth-cost.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
