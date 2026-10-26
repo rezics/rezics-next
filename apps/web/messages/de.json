@@ -225,6 +225,8 @@
   "library_visibility_public": "Öffentlich",
   "library_visibility_unlisted": "Nicht gelistet",
   "nav_home": "Startseite",
+  "nav_library": "Bibliothek",
+  "nav_search": "Suche",
   "not_found_heading": "Seite nicht gefunden",
   "not_found_message": "Die angeforderte Seite wurde nicht gefunden.",
   "offer_buy": "Kaufen",

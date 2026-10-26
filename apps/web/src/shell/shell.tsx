@@ -37,6 +37,7 @@ import {
   Menu as MenuIcon,
   Monitor,
   Moon,
+  Search,
   ShieldCheck,
   Sun,
   UserRound,
@@ -65,6 +66,8 @@ const messages = {
   shell_theme_light: m.shell_theme_light,
   shell_theme_dark: m.shell_theme_dark,
   nav_home: m.nav_home,
+  nav_library: m.nav_library,
+  nav_search: m.nav_search,
   shell_open_navigation: m.shell_open_navigation,
   shell_close_navigation: m.shell_close_navigation,
   shell_collapse_navigation: m.shell_collapse_navigation,
@@ -75,7 +78,20 @@ const messages = {
   error_heading: m.error_heading,
   error_message: m.error_message,
 };
-const destinations = [{ to: '/', message: messages.nav_home, icon: House, phone: true }] as const;
+const destinations = [
+  { to: '/', message: messages.nav_home, icon: House, phone: true },
+  { to: '/search', message: messages.nav_search, icon: Search, phone: true },
+  { to: '/library', message: messages.nav_library, icon: Library, phone: true, signedIn: true },
+] as const;
+
+function destinationCurrent(pathname: string, to: (typeof destinations)[number]['to']): boolean {
+  if (to === '/library') return pathname === '/library' || pathname.startsWith('/library/');
+  return pathname === to;
+}
+
+function offeredDestinations(session: SessionState) {
+  return destinations.filter((item) => !('signedIn' in item) || session === 'signed-in');
+}
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const statusControlClass =
@@ -113,7 +129,7 @@ function Logo({ locale: _locale, showWordmarkOnMobile = false }: { locale: strin
     </Link>
   );
 }
-function Navigation({ current }: { current: string }) {
+function Navigation({ pathname, session }: { pathname: string; session: SessionState }) {
   const { setOpenMobile, isMobile } = useSidebar();
   return (
     <>
@@ -134,11 +150,15 @@ function Navigation({ current }: { current: string }) {
         <SidebarContent>
           <SidebarGroup>
             <SidebarMenu>
-              {destinations.map((item) => {
+              {offeredDestinations(session).map((item) => {
                 const Icon = item.icon;
                 return (
                   <SidebarMenuItem key={item.to}>
-                    <SidebarMenuButton asChild isActive={current === item.to} tooltip={item.message()}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={destinationCurrent(pathname, item.to)}
+                      tooltip={item.message()}
+                    >
                       <Link to={item.to} onClick={() => setOpenMobile(false)} data-autofocus className="text-primary">
                         <Icon aria-hidden="true" className="size-5" />
                         <span>{item.message()}</span>
@@ -391,7 +411,7 @@ export function AppShell({
             <NavigationToggle collapsed={railCollapsed} onToggle={() => setCollapsed(!railCollapsed)} />
             <Logo locale={locale} />
             <div className="ms-auto flex items-center gap-2">
-              <ShellSearch />
+              {location.pathname !== '/' && location.pathname !== '/search' ? <ShellSearch /> : null}
               <LanguageControl />
               <ThemeControl />
               <SessionControl session={session} csrfToken={csrfToken} />
@@ -400,7 +420,7 @@ export function AppShell({
         </header>
         <div className="flex min-h-[calc(100dvh-4rem)]">
           <Sidebar collapsible="icon" style={{ top: '4rem', bottom: 0, height: 'auto' }}>
-            <Navigation current={location.pathname} />
+            <Navigation pathname={location.pathname} session={session} />
           </Sidebar>
           <SkipNavContent asChild id="main-content" className="min-w-0 flex-1">
             <main className="min-h-[calc(100dvh-4rem)] min-w-0 p-6 pb-24 outline-none md:pb-6">
@@ -410,12 +430,12 @@ export function AppShell({
         </div>
         <BottomNavigation aria-label={m.shell_navigation()} className="md:hidden">
           <BottomNavigationList>
-            {destinations
+            {offeredDestinations(session)
               .filter((item) => item.phone)
               .map((item) => {
                 const Icon = item.icon;
                 return (
-                  <BottomNavigationItem key={item.to} asChild active={location.pathname === item.to}>
+                  <BottomNavigationItem key={item.to} asChild active={destinationCurrent(location.pathname, item.to)}>
                     <Link to={item.to}>
                       <BottomNavigationItemIcon>
                         <Icon />

@@ -225,6 +225,8 @@
   "library_visibility_public": "公开",
   "library_visibility_unlisted": "不公开列出",
   "nav_home": "首页",
+  "nav_library": "资料库",
+  "nav_search": "搜索",
   "not_found_heading": "找不到页面",
   "not_found_message": "找不到您请求的页面。",
   "offer_buy": "购买",

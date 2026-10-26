@@ -225,6 +225,8 @@
   "library_visibility_public": "公開",
   "library_visibility_unlisted": "限定公開",
   "nav_home": "ホーム",
+  "nav_library": "ライブラリ",
+  "nav_search": "検索",
   "not_found_heading": "ページが見つかりません",
   "not_found_message": "お探しのページは見つかりませんでした。",
   "offer_buy": "購入する",

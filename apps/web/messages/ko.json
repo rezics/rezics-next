@@ -225,6 +225,8 @@
   "library_visibility_public": "공개",
   "library_visibility_unlisted": "일부 공개",
   "nav_home": "홈",
+  "nav_library": "라이브러리",
+  "nav_search": "검색",
   "not_found_heading": "페이지를 찾을 수 없습니다",
   "not_found_message": "요청하신 페이지를 찾을 수 없습니다.",
   "offer_buy": "구매",

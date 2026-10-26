@@ -225,6 +225,8 @@
   "library_visibility_public": "公開",
   "library_visibility_unlisted": "不公開列出",
   "nav_home": "首頁",
+  "nav_library": "資料庫",
+  "nav_search": "搜尋",
   "not_found_heading": "找不到頁面",
   "not_found_message": "找不到您要求的頁面。",
   "offer_buy": "購買",
