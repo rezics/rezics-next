@@ -23,7 +23,11 @@ type ActiveCapture = {
   pending: Set<Promise<void>>;
   error?: Error;
 };
-type Attribution = { readonly capture: ActiveCapture; readonly background: boolean };
+type Attribution = {
+  readonly capture: ActiveCapture;
+  readonly background: boolean;
+  readonly parent?: Attribution;
+};
 type CaptureState = { active: ActiveCapture | undefined; setupError?: Error; setupTasks: Set<Promise<void>> };
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
@@ -35,8 +39,8 @@ function isAttribution(value: Attribution | undefined): value is Attribution {
 }
 
 function currentAttribution(state: CaptureState): Attribution | undefined {
-  const current = growing.getStore();
-  if (isAttribution(current) && current.capture === state.active) return current;
+  for (let current = growing.getStore(); isAttribution(current); current = current.parent)
+    if (current.capture === state.active) return current;
   // DBOS executes queued workflows in its runner's async context, after the initiating operation has returned
   // control to the queue. The SDK singleton is shared by kernel and auth workspaces in this test process.
   if (state.active && DBOS.workflowID !== undefined) return { capture: state.active, background: false };
@@ -247,7 +251,12 @@ export async function capture<T>(
   };
   state.active = active;
   try {
-    const value = await growing.run({ capture: active, background: false }, operation);
+    // Captures for separate databases can nest in one operation, such as Kernel calling Auth.
+    const parent = growing.getStore();
+    const value = await growing.run(
+      { capture: active, background: false, ...(isAttribution(parent) ? { parent } : {}) },
+      operation,
+    );
     state.active = undefined;
     await Promise.all([...active.pending]);
     await Promise.all([...state.setupTasks]);
