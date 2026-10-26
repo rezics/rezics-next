@@ -2,8 +2,6 @@ import { createKernelClient, type KernelClient } from '@rezics/client';
 import {
   BATCH_LIMIT,
   FIELD_GROUPS,
-  checkBatchWrite,
-  checkBatchWriteResult,
   type BatchCommand,
   type BatchWriteRequest,
   type BatchWriteResult,
@@ -11,7 +9,6 @@ import {
 } from '@rezics/definitions/bulk';
 import {
   MediaImportAcceptedSchema,
-  checkMediaImportRequest,
   checkMediaImportStatus,
   type MediaImportAccepted,
   type MediaImportRequest,
@@ -19,6 +16,7 @@ import {
 } from '@rezics/definitions/media-import';
 import { isDeepStrictEqual, types } from 'node:util';
 import { Check } from 'typebox/schema';
+import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
 import { createImportFetch, MAX_IMPORT_BODY_BYTES, type ImportHttpOptions } from './import-fetch.ts';
 
 export interface FenceTuple {
@@ -106,12 +104,12 @@ function snapshot(input: unknown, limit: number): unknown {
 
 function requestBody(input: unknown, limit: number): BatchWriteRequest {
   const body = snapshot(input, limit);
-  ensure(checkBatchWrite(body).length === 0);
+  ensure(checkBatch(body).length === 0);
   return body as BatchWriteRequest;
 }
 function mediaBody(input: unknown, limit: number): MediaImportRequest {
   const body = snapshot(input, limit);
-  ensure(checkMediaImportRequest(body).length === 0);
+  ensure(checkRequest(body).length === 0);
   return body as MediaImportRequest;
 }
 function mediaId(id: string): void {
@@ -225,7 +223,7 @@ export function createImportTransport(options: ImportTransportOptions) {
 
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     const reply = await response(() => client.subjects.$batchWrite.post(body, fetchOptions(signal)), 200, signal);
-    ensure(checkBatchWriteResult(reply.body).length === 0);
+    ensure(checkResult(reply.body).length === 0);
     const result = reply.body as BatchWriteResult;
     ensure(result.results.length === body.commands.length);
     result.results.forEach((item, index) => ensure(item.key === body.commands[index]!.key));

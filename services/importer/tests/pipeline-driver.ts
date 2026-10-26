@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import type { Database, Statement } from 'bun:sqlite';
 import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -21,7 +22,42 @@ import { createSourceRegistration } from '../src/source-registry.ts';
 const fixture = JSON.parse(
   readFileSync(join(import.meta.dir, '../../../specs/fixtures/imports/bangumi/subject.json'), 'utf8'),
 );
-const registration = createSourceRegistration('bangumi');
+const nativeRegistration = createSourceRegistration('bangumi');
+/** Machine-independent work counters for the record-cpu-growth specification. */
+export const pipelineWork = { conversions: 0, prepares: 0, statements: 0, transactions: 0 };
+const registration: typeof nativeRegistration = {
+  ...nativeRegistration,
+  convert(input, context) {
+    pipelineWork.conversions++;
+    return nativeRegistration.convert(input, context);
+  },
+};
+function countWork(database: Database): Database {
+  const prepare = database.prepare.bind(database);
+  const count = (sql: string) => {
+    if (/^\s*BEGIN\b/i.test(sql)) pipelineWork.transactions++;
+  };
+  database.prepare = ((sql: string, ...rest: unknown[]) => {
+    pipelineWork.prepares++;
+    count(sql);
+    const statement = (prepare as (sql: string, ...rest: unknown[]) => Statement)(sql, ...rest);
+    for (const method of ['run', 'get', 'all'] as const) {
+      const execute = statement[method].bind(statement) as (...args: unknown[]) => unknown;
+      (statement as unknown as Record<string, unknown>)[method] = (...args: unknown[]) => {
+        pipelineWork.statements++;
+        return execute(...args);
+      };
+    }
+    return statement;
+  }) as Database['prepare'];
+  const exec = database.exec.bind(database);
+  database.exec = ((sql: string, ...rest: unknown[]) => {
+    pipelineWork.statements++;
+    count(sql);
+    return (exec as (sql: string, ...rest: unknown[]) => unknown)(sql, ...rest);
+  }) as Database['exec'];
+  return database;
+}
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const canonical = (value: unknown): unknown =>
   Array.isArray(value)
@@ -215,6 +251,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
   const subjects = new Map<string, string>();
   const jobs = new Map<string, Job>();
   const jobsById = new Map<string, Job>();
+  const jobRecords = new Set<string>();
   const desiredMedia = new Map<string, 'available' | 'rejected' | 'pending'>();
   const coverFences = new Map<string, string>();
   const knownCovers = new Map<string, boolean>();
@@ -341,6 +378,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
     const importerOptions: ImporterOptions = {
       path,
       transport,
+      instrumentDatabase: countWork,
       ...(options.recordConcurrency === undefined ? {} : { recordConcurrency: options.recordConcurrency }),
       ...(options.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: options.mediaDeadlineMs }),
       now: () => scheduler.now,
@@ -434,6 +472,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
                 job = { key, bytes, request, accepted, submittedAt: scheduler.now };
                 jobs.set(key, job);
                 jobsById.set(accepted.media.id, job);
+                jobRecords.add(recordKey);
               } else if (job.bytes !== bytes) duplicateEffects++;
               return { status: 202, body: structuredClone(job.accepted) };
             },
@@ -580,23 +619,26 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
       );
       const recordKeys = [...new Set(rows.map((row) => row.key))].sort();
       const activeRun = importer.session.store.activeRun(registration.source);
+      const coverProposed = new Set<string>();
+      for (const exchange of exchanges) {
+        if (exchange.kind !== 'bulk') continue;
+        if (
+          exchange.request?.commands.some(
+            (command) => command.op === 'propose' && command.source.field_group === 'cover',
+          )
+        )
+          coverProposed.add(exchange.recordKey);
+      }
       const records = recordKeys.map((recordKey) => {
         const state = importer.session.store.key(registration.source, recordKey, activeRun ?? undefined);
-        const coverBatches = exchanges
-          .filter((exchange) => exchange.recordKey === recordKey && exchange.kind === 'bulk')
-          .flatMap((exchange) => exchange.request?.commands ?? [])
-          .filter((command) => command.op === 'propose' && command.source.field_group === 'cover');
-        const rejected = [...jobs.values()].some(
-          (job) =>
-            job.request.provenance.external_id === recordKey &&
-            (desiredMedia.get(recordKey) === 'rejected' || options.media === 'rejected'),
-        );
+        const rejected =
+          jobRecords.has(recordKey) && (desiredMedia.get(recordKey) === 'rejected' || options.media === 'rejected');
         return {
           recordKey,
           acknowledged: state.acknowledged !== null,
           cover: !knownCovers.get(recordKey)
             ? ('none' as const)
-            : coverBatches.length
+            : coverProposed.has(recordKey)
               ? ('proposed' as const)
               : state.coverPending
                 ? ('pending' as const)
