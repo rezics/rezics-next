@@ -79,6 +79,15 @@ export interface ContentSystem {
   close(): Promise<void>;
 }
 
+const governanceCredentialPorts = new WeakMap<ContentSystem, () => Promise<ContentCredential>>();
+
+/** Issue the fixture's real Auth credential for product-level governance setup. */
+export async function contentGovernanceCredential(system: ContentSystem): Promise<ContentCredential> {
+  const port = governanceCredentialPorts.get(system);
+  if (!port) throw new TypeError('Content system was not created by createContentSystem');
+  return port();
+}
+
 type WebsiteTokenSet = {
   access_token: string;
   refresh_token: string;
@@ -273,7 +282,7 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
       scopes: [...native.actions.keys()],
     });
 
-    return {
+    const system: ContentSystem = {
       database: native.database,
       kernel: native.kernel,
       routeKey: native.routeKey,
@@ -286,6 +295,21 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
       transport: native.transport,
       close: native.close,
     };
+    let governanceCredential: Promise<ContentCredential> | undefined;
+    const governance = () =>
+      (governanceCredential ??= native.database.pool
+        .query<{ accountId: string }>('SELECT account_id::text AS "accountId" FROM access.governance_bootstrap')
+        .then((result) => {
+          const accountId = result.rows[0]?.accountId;
+          if (!accountId) throw new Error('Content fixture governance account is missing');
+          return native.auth.issue({
+            accountId,
+            clientId: native.auth.ordinaryClient.id,
+            scopes: native.actors.author.actor.scopes,
+          });
+        }));
+    governanceCredentialPorts.set(system, governance);
+    return system;
   } catch (error) {
     try {
       await native.close();

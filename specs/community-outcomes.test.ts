@@ -411,7 +411,7 @@ test('hot ranks use Realm vote weights after refresh and signed cursors page eac
     await send(
       'PATCH',
       realmPath(c.realm),
-      { votes: { upvote: -2, downvote: 3 } },
+      { votes: { upvote: -1, downvote: 1 } },
       fixture.owner,
       read.headers.get('etag') ?? head,
     ),
@@ -547,7 +547,7 @@ test('suspended account receives 401 on every community write with active positi
     command(
       'PATCH',
       realmPath(c.realm),
-      { title: 'Owner update', votes: { upvote: 2, downvote: -1 } },
+      { title: 'Owner update', votes: { upvote: -1, downvote: 1 } },
       actor,
       read.headers.get('etag')!,
     ),
