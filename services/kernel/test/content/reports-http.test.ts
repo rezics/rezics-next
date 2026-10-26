@@ -301,7 +301,7 @@ describe('real migrated report HTTP and shared admission', () => {
       ),
     );
   }
-  async function create(targetId = board, key: string = randomUUID()) {
+  async function create(targetId = board, key: string = randomUUID(), proofs?: string[]) {
     const proof = remote.mint();
     const before = remote.calls;
     const result = await call('POST', '/v1/reports', { ...input(targetId), botToken: proof }, { key });
@@ -309,7 +309,9 @@ describe('real migrated report HTTP and shared admission', () => {
     expect(Object.keys(result.body)).toEqual(['reportId']);
     expect(result.response.headers.get('location')).toBe(`/v1/reports/${result.body.reportId}`);
     expect(remote.calls - before).toBe(1);
-    expect(JSON.stringify(await effects())).not.toContain(proof);
+    // A population of many reports scans the stored effects once for all of its proofs, not once per report.
+    if (proofs) proofs.push(proof);
+    else expect(JSON.stringify(await effects())).not.toContain(proof);
     return result.body.reportId as string;
   }
   async function permission(path: string, body: unknown) {
@@ -544,6 +546,7 @@ describe('real migrated report HTTP and shared admission', () => {
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         // Setup is unmeasured. Half the rows share the real target's hot route.
+        const proofs: string[] = [];
         for (let ordinal = previous; ordinal < scale; ordinal++) {
           const route = ordinal % 2 ? routeOf(board)! : (ordinal * 31) % 65536;
           const id = newId(route);
@@ -552,8 +555,10 @@ describe('real migrated report HTTP and shared admission', () => {
             [route, id, newId(0x5678), randomUUID()],
           );
           // Populate actual report records/receipts/effects, not synthetic counters.
-          await create(id);
+          await create(id, undefined, proofs);
         }
+        const stored = JSON.stringify(await effects());
+        for (const proof of proofs) expect(stored).not.toContain(proof);
       },
       async operation(database, _scale, repetition) {
         expect(database.pool).toBe(db.pool);

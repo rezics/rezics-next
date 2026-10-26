@@ -518,6 +518,29 @@ test('new-thread reservation stays bounded as other uploaders add same-route med
     scales: [2048, 8192, 32768],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
+      // Neighbouring grants and receipts keep every key index worth its cost to the planner at the smallest scale,
+      // where it would otherwise scan a table of a few dozen rows once per probe.
+      if (previous === 0)
+        for (const neighbourRoute of [r, 0x5678]) {
+          const resources = Array.from({ length: 2048 }, () => newId(neighbourRoute));
+          const transaction = randomUUID();
+          await database.admin.query(
+            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+             SELECT $1,resource_id,$2,'media:read','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
+            [neighbourRoute, otherId, transaction, resources],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+             SELECT $1,resource_id,$2,'content.media.owner','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
+            [neighbourRoute, otherId, transaction, resources],
+          );
+          await database.admin.query(
+            `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+             SELECT $1,'account',$2,'content.media.reserve',key,sha256(convert_to(key,'UTF8')),1,1,$3,'{}'
+             FROM unnest($4::text[]) AS key`,
+            [partitionOf(neighbourRoute), otherId, transaction, resources],
+          );
+        }
       const batchSize = 1000;
       for (let start = previous; start < scale; start += batchSize) {
         const values = Array.from({ length: Math.min(batchSize, scale - start) }, (_, offset) => {
