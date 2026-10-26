@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthCheck, type GrowthDatabase, type GrowthReport } from './growth.ts';
+import {
+  checkGrowth,
+  measure,
+  openGrowthDatabase,
+  type GrowthCheck,
+  type GrowthDatabase,
+  type GrowthReport,
+} from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -154,9 +161,9 @@ async function seed(database: GrowthDatabase): Promise<void> {
 
 function probeCheck(database: GrowthDatabase, warmup?: GrowthCheck['warmup']): Promise<GrowthReport> {
   return checkGrowth(database, {
-    name: warmup ? 'warmed probe read' : 'cold probe read',
+    name: warmup ? 'spare-state warmed probe read' : 'operation-warmed probe read',
     repetitions: 1,
-    ...(warmup ? { warmup } : { warmups: 0 }),
+    ...(warmup ? { warmup } : {}),
     bounds,
     grow: async () => {},
     operation: (growthDb, _scale, repetition) => consume(growthDb, repetition),
@@ -166,31 +173,33 @@ function probeCheck(database: GrowthDatabase, warmup?: GrowthCheck['warmup']): P
 test('a first run that costs more than later runs reaches no sample once each scale is warmed', async () => {
   const database = db!;
   await seed(database);
-  const coldReport = await probeCheck(database);
+  const coldSample = await measure(database, () => consume(database, 0));
+
+  await seed(database);
+  const operationReport = await probeCheck(database);
 
   await seed(database);
   const warmReport = await probeCheck(database, (growthDb, _scale, repetition) =>
     consume(growthDb, spareProbe + repetition),
   );
 
-  expect(coldReport.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-  expect(coldReport.samples.map(({ cost }) => cost.rows)).toEqual([2, 1, 1]);
-  expect(coldReport.samples.map(({ cost }) => cost.statements)).toEqual([2, 1, 1]);
-  const coldBlocks = coldReport.samples[0]!.cost.blocks;
-  const warmBaseline = coldReport.samples[1]!.cost.blocks;
+  expect(coldSample.cost.rows).toBe(2);
+  expect(coldSample.cost.statements).toBe(2);
+  const coldBlocks = coldSample.cost.blocks;
+  const warmBaseline = operationReport.samples[0]!.cost.blocks;
   expect(coldBlocks).toBeGreaterThan(warmBaseline);
-  expect(coldReport.samples[0]!.cost.relations?.[catalog]?.blocks).toBeGreaterThan(0);
-  expect(coldReport.samples[1]!.cost.relations?.[catalog]).toBeUndefined();
-  expect(coldReport.samples[2]!.cost.relations?.[catalog]).toBeUndefined();
+  expect(coldSample.cost.relations?.[catalog]?.blocks).toBeGreaterThan(0);
 
-  expect(warmReport.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-  expect(warmReport.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
-  expect(warmReport.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
-  for (const sample of warmReport.samples) {
-    expect(sample.cost.blocks).toBeGreaterThanOrEqual(warmBaseline - 1);
-    expect(sample.cost.blocks).toBeLessThanOrEqual(warmBaseline + 1);
-    expect(sample.cost.blocks).toBeLessThan(coldBlocks);
-    expect(sample.cost.relations?.[catalog]).toBeUndefined();
-    expect(sample.cost.relations?.[probes]).toMatchObject({ rows: 1, sequentialScans: 0 });
+  for (const report of [operationReport, warmReport]) {
+    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
+    expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+    for (const sample of report.samples) {
+      expect(sample.cost.blocks).toBeGreaterThanOrEqual(warmBaseline - 1);
+      expect(sample.cost.blocks).toBeLessThanOrEqual(warmBaseline + 1);
+      expect(sample.cost.blocks).toBeLessThan(coldBlocks);
+      expect(sample.cost.relations?.[catalog]).toBeUndefined();
+      expect(sample.cost.relations?.[probes]).toMatchObject({ rows: 1, sequentialScans: 0 });
+    }
   }
 }, 60_000);

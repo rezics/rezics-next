@@ -28,7 +28,7 @@ export type GrowthCheck = {
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
   /**
    * Unmeasured runs per scale, after `grow` and before the measured runs, default 1. Calls `warmup` when given,
-   * otherwise `operation`.
+   * otherwise `operation`. Must be a positive safe integer; use the `warmup` hook for consumable state.
    */
   readonly warmups?: number;
   /**
@@ -160,8 +160,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   }
   if (!Number.isSafeInteger(repetitions) || repetitions < 1)
     throw new RangeError('Growth repetitions must be a positive safe integer');
-  if (!Number.isSafeInteger(warmups) || warmups < 0)
-    throw new RangeError('Growth warmups must be a non-negative safe integer');
+  if (!Number.isSafeInteger(warmups) || warmups < 1)
+    throw new RangeError('Growth warmups must be a positive safe integer; use the warmup hook for consumable state');
 
   let previous = 0;
   let repetition = 0;

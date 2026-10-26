@@ -261,7 +261,6 @@ test('Source snapshot stays within its bound as P grows', async () => {
     scales: [8, 64, 512],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
-    warmups: 0,
     grow: (database, scale, previous) => growPopulation(database, 'semantic-search-source-p-growth', scale, previous),
     operation: () => source.read(hotPartition, ids),
   });
@@ -314,7 +313,6 @@ test("Source snapshot stays within its bound as a subject's history grows", asyn
     scales: [8, 64, 512],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
-    warmups: 0,
     grow: async (_database, scale, previous) => {
       for (let ordinal = previous; ordinal < scale; ordinal++) {
         switch (ordinal % 5) {
@@ -395,7 +393,6 @@ test('Source count stays within its bound as P grows', async () => {
     scales: [8, 64, 512],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
-    warmups: 0,
     grow: (database, scale, previous) =>
       growPopulation(database, 'semantic-search-source-count-growth', scale, previous),
     operation: () => source.count(hotPartition),
