@@ -127,14 +127,14 @@ export async function accessCommandAuthorization(
           const selfRead =
             actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read'
               ? await accessCheck(
-            access,
-            actor,
-            'account:read',
-            {
-              route: Number.parseInt(actor.accountId.slice(24, 28), 16),
-              id: actor.accountId,
-            },
-            preparation,
+                  access,
+                  actor,
+                  'account:read',
+                  {
+                    route: Number.parseInt(actor.accountId.slice(24, 28), 16),
+                    id: actor.accountId,
+                  },
+                  preparation,
                 )
               : undefined;
           checks = { check, ...(selfRead ? { selfRead } : {}) };
