@@ -594,6 +594,7 @@ test('checkGrowth measures production initiation and status with fixed Access th
           initiator_account_id: authorId,
           author_account_id: other.accountId,
           thread_id: threadId,
+          anchor_post_id: postId,
           actor_kind: 'account',
           actor_account_id: authorId,
           actor_client_id: actor.clientId,

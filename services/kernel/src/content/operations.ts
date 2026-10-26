@@ -68,7 +68,7 @@ export async function beginAuthorErasure(
   let endpoints: Endpoints | undefined;
   let captured: Awaited<ReturnType<typeof captureDurableInitiator>> | undefined;
   type Check = Awaited<ReturnType<typeof accessCheck>>;
-  type AuthorizationEvidence = { postErase: Check; selfRead?: Check };
+  type AuthorizationEvidence = { postErase: Check; selfRead: Check };
   const authorization: CommandAuthorization = {
     action: 'post:erase',
     resource: {
@@ -103,17 +103,14 @@ export async function beginAuthorErasure(
       if (!endpoints) throw new GrantDeniedError();
       firstPostId = endpoints.post_id;
       const postErase = await accessCheck(deps.access, actor, 'post:erase', { route, id: firstPostId }, preparation);
-      const selfRead =
-        deps.access.replayAuthorization?.('post:erase') === 'self-account-read'
-          ? await accessCheck(
-              deps.access,
-              actor,
-              'account:read',
-              { route: accountRoute, id: actor.accountId },
-              preparation,
-            )
-          : undefined;
-      return { postErase, ...(selfRead === undefined ? {} : { selfRead }) } satisfies AuthorizationEvidence;
+      const selfRead = await accessCheck(
+        deps.access,
+        actor,
+        'account:read',
+        { route: accountRoute, id: actor.accountId },
+        preparation,
+      );
+      return { postErase, selfRead } satisfies AuthorizationEvidence;
     },
     async authorize(tx, attempt, evidence) {
       if (
@@ -126,10 +123,10 @@ export async function beginAuthorErasure(
         throw new GrantDeniedError();
       // Evidence is this attempt's prepared AccessChecks, never request data.
       const checks = evidence as AuthorizationEvidence;
-      if (typeof checks.postErase !== 'function') throw new GrantDeniedError();
-      if (await checks.postErase(tx, attempt.time)) return 'execute';
-      if (checks.selfRead && (await checks.selfRead(tx, attempt.time))) return 'receipt-only';
-      throw new GrantDeniedError();
+      if (typeof checks.postErase !== 'function' || typeof checks.selfRead !== 'function') throw new GrantDeniedError();
+      if (!(await checks.postErase(tx, attempt.time)) || !(await checks.selfRead(tx, attempt.time)))
+        throw new GrantDeniedError();
+      return 'execute';
     },
   };
   const outcome = await runCommand<AuthorErasureReceipt>(

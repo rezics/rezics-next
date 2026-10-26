@@ -745,6 +745,7 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
           initiator_account_id: authorId,
           author_account_id: otherId,
           thread_id: threadId,
+          anchor_post_id: postId,
           actor_kind: 'account',
           actor_account_id: authorId,
           actor_client_id: actor.clientId,
