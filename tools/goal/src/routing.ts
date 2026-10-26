@@ -32,6 +32,12 @@ export function readRouting(file: string): RoutingTable {
   }
   return table;
 }
+/** A retry keeps its attempt's profile while that has quota; otherwise it reroutes as a new task of its class would. */
+export function retryFallbacks(table: RoutingTable, taskClass: TaskClass): Profile[] {
+  if (taskClass === 'mechanical') return [];
+  const route = table.classes[taskClass];
+  return route ? [route.first, ...(route.fallbacks ?? [])] : [];
+}
 export function classifyTask(brief: Brief): TaskClass {
   if (brief.kind === 'mechanical') return 'mechanical';
   if (brief.riskAreas.length || brief.citesSources || brief.hostileInput || brief.kind === 'claim') return 'claim';
