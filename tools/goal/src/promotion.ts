@@ -21,6 +21,9 @@ function isAncestor(cwd: string, older: string, newer: string): boolean {
   try { git(cwd, 'merge-base', '--is-ancestor', older, newer); return true; } catch { return false; }
 }
 function head(cwd: string, branch: string): string { return git(cwd, 'rev-parse', '--verify', ref(branch)); }
+function optionalHead(cwd: string, branch: string): string | undefined {
+  try { return head(cwd, branch); } catch { return undefined; }
+}
 function workingFiles(cwd: string): string[] {
   const tracked = spawnSync('git', ['diff', '--name-only', '-z', 'HEAD', '--'], { cwd, encoding: 'utf8' });
   const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd, encoding: 'utf8' });
@@ -28,10 +31,10 @@ function workingFiles(cwd: string): string[] {
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
 
-async function regenerateDerivedHead(options: PromotionOptions, expected: string): Promise<{ head: string; retry: boolean }> {
+async function regenerateDerivedHead(options: PromotionOptions, expected: string, branch = options.settings.integrationBranch): Promise<{ head: string; retry: boolean }> {
   const settings = options.settings, checkout = settings.mainCheckout;
   const files = (options.derivedFiles ?? defaultDerivedFiles).filter(file => file.stage === 'promotion');
-  if (!files.length) return { head: expected, retry: head(checkout, settings.integrationBranch) !== expected };
+  if (!files.length) return { head: expected, retry: head(checkout, branch) !== expected };
 
   const tree = join(settings.worktreeRoot, `promotion-derived-${randomUUID()}`);
   const logPath = join(settings.stateDirectory, `promotion-derived-${randomUUID()}.log`);
@@ -61,16 +64,16 @@ async function regenerateDerivedHead(options: PromotionOptions, expected: string
       candidate = git(tree, 'rev-parse', 'HEAD');
     }
 
-    if (head(checkout, settings.integrationBranch) !== expected) return { head: head(checkout, settings.integrationBranch), retry: true };
+    if (head(checkout, branch) !== expected) return { head: head(checkout, branch), retry: true };
     if (candidate !== expected) {
-      try { git(checkout, 'update-ref', ref(settings.integrationBranch), candidate, expected); }
+      try { git(checkout, 'update-ref', ref(branch), candidate, expected); }
       catch (error) {
-        const current = head(checkout, settings.integrationBranch);
+        const current = head(checkout, branch);
         if (current !== expected) return { head: current, retry: true };
         throw error;
       }
     }
-    const current = head(checkout, settings.integrationBranch);
+    const current = head(checkout, branch);
     return current === candidate ? { head: candidate, retry: false } : { head: current, retry: true };
   } finally { git(checkout, 'worktree', 'remove', '--force', tree); }
 }
@@ -256,6 +259,31 @@ function narrowedFailure(options: PromotionOptions, run: PromotionRun, failed: P
   return { command: ['bun', 'run', '--cwd', workspace, 'check', ...files], failure: firstFailure(block ?? log) };
 }
 
+function notifySupermanager(options: PromotionOptions, summary: string, evidencePath?: string): void {
+  options.job.inbox.deliver({
+    managerId: options.settings.integration.supermanager,
+    kind: 'environment',
+    summary: summary.replace(/[\r\n]+/g, ' '),
+    ...(evidencePath ? { evidencePath } : {}),
+  });
+}
+
+function blockStabilize(options: PromotionOptions, run: PromotionRun, failed: PromotionGateResult, index: number): void {
+  const logPath = join(options.settings.stateDirectory, `promotion-${run.id}-head-${index}.log`);
+  const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+  const workspaces = /^Failed workspaces:\s*(.+)$/m.exec(log)?.[1]?.trim() ?? 'unknown';
+  const narrowed = narrowedFailure(options, run, failed, 'head', index);
+  const files = narrowed.command.slice(5);
+  const tests = files.length ? `; failing tests: ${files.join(', ')}` : '';
+  run.firstFailure = narrowed.failure;
+  run.failedCommand = narrowed.command;
+  run.phase = 'stabilize-blocked';
+  options.job.tasks.store.savePromotion(run);
+  notifySupermanager(options,
+    `Stabilize candidate ${run.devHead} is blocked; failing workspaces: ${workspaces}${tests}; gate log: ${logPath}`,
+    logPath);
+}
+
 async function saveHeadDecision(options: PromotionOptions, run: PromotionRun, result: PromotionGateResult[]): Promise<PromotionRun> {
   const failed = result.find(item => !item.passed);
   if (!failed) {
@@ -412,7 +440,25 @@ function publishPrefix(options: PromotionOptions, run: PromotionRun, target: str
   return true;
 }
 
-async function publishMain(options: PromotionOptions, run: PromotionRun): Promise<void> {
+function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): boolean {
+  const settings = options.settings, checkout = settings.mainCheckout, target = run.promoteHead!;
+  const stabilize = optionalHead(checkout, settings.stabilizeBranch);
+  if (stabilize === undefined) return false;
+  if (stabilize !== target) return true;
+  const dev = optionalHead(checkout, settings.integrationBranch);
+  if (!dev || !isAncestor(checkout, target, dev)) {
+    notifySupermanager(options,
+      `Published main at ${target}, but dev does not contain main; stabilize remains at ${target}.`);
+    return true;
+  }
+  try { git(checkout, 'update-ref', ref(settings.stabilizeBranch), dev, target); }
+  catch {
+    // A concurrent stabilize update must win over this stale promotion snapshot.
+  }
+  return true;
+}
+
+async function publishMain(options: PromotionOptions, run: PromotionRun): Promise<boolean> {
   const settings = options.settings, store = options.job.tasks.store, checkout = settings.mainCheckout;
   const target = run.promoteHead!;
   if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
@@ -432,7 +478,9 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
     }
   });
   options.job.onPromotionComplete(taskIds, run.id);
+  const stabilized = advanceStabilizeAfterPublish(options, run);
   store.clearPromotion();
+  return stabilized;
 }
 
 // A local switch: while dev is known to be red, gating and bisecting it only spends the machine.
@@ -453,6 +501,10 @@ export async function promote(options: PromotionOptions): Promise<void> {
       const main = head(settings.mainCheckout, settings.mainBranch);
       let dev: string;
       try { dev = head(settings.mainCheckout, settings.integrationBranch); } catch { return; }
+      const stabilize = optionalHead(settings.mainCheckout, settings.stabilizeBranch);
+      const stabilization = stabilize !== undefined;
+      const candidateBranch = stabilization ? settings.stabilizeBranch : settings.integrationBranch;
+      let candidate = stabilize ?? dev;
       let derivedPrepared = false;
       if (run?.phase === 'blocked' && run.blockedOn) {
         const culprit = store.task(run.blockedOn.taskId);
@@ -460,29 +512,34 @@ export async function promote(options: PromotionOptions): Promise<void> {
         if (!moved && culprit.state !== 'cancelled') return;
         store.clearPromotion(); run = undefined;
       }
+      if (run?.phase === 'stabilize-blocked') {
+        if (stabilize === run.devHead) return;
+        store.clearPromotion(); run = undefined;
+        candidate = stabilize ?? dev;
+      }
       if (run?.phase === 'report-environment') {
         if (main === run.mainBase && dev === run.devHead) { reportEnvironment(options, run); return; }
         store.clearPromotion(); run = undefined;
       }
-      if (run?.phase === 'gate-head' && dev !== run.devHead) {
+      if (run?.phase === 'gate-head' && candidate !== run.devHead) {
         store.clearPromotion(); run = undefined;
       }
       if (!run) {
-        if (main === dev || !isAncestor(settings.mainCheckout, main, dev)) return;
-        const prepared = await regenerateDerivedHead(options, dev);
+        if (main === candidate || !isAncestor(settings.mainCheckout, main, candidate)) return;
+        const prepared = await regenerateDerivedHead(options, candidate, candidateBranch);
         if (prepared.retry) continue;
-        dev = prepared.head; derivedPrepared = true;
+        candidate = prepared.head; derivedPrepared = true;
         const currentMain = head(settings.mainCheckout, settings.mainBranch);
-        if (currentMain === dev || !isAncestor(settings.mainCheckout, currentMain, dev)) continue;
-        const tasks = boundaryTasks(options, currentMain, dev);
-        run = createRun(options, currentMain, dev, tasks);
+        if (currentMain === candidate || !isAncestor(settings.mainCheckout, currentMain, candidate)) continue;
+        const tasks = boundaryTasks(options, currentMain, candidate);
+        run = createRun(options, currentMain, candidate, tasks);
         store.savePromotion(run);
       }
       if (run.phase === 'gate-head') {
         if (!derivedPrepared) {
-          const currentDev = head(settings.mainCheckout, settings.integrationBranch);
-          if (currentDev !== run.devHead) { store.clearPromotion(); continue; }
-          const prepared = await regenerateDerivedHead(options, run.devHead);
+          const currentCandidate = head(settings.mainCheckout, candidateBranch);
+          if (currentCandidate !== run.devHead) { store.clearPromotion(); continue; }
+          const prepared = await regenerateDerivedHead(options, run.devHead, candidateBranch);
           if (prepared.retry) { store.clearPromotion(); continue; }
           if (prepared.head !== run.devHead) {
             const currentMain = head(settings.mainCheckout, settings.mainBranch);
@@ -494,8 +551,14 @@ export async function promote(options: PromotionOptions): Promise<void> {
         }
         const tasks = run.taskIds.map(id => store.task(id));
         const checked = await gateAt(options, run, run.devHead, commandsFor(run.rootGate, tasks), 'head', 'headResults');
+        const failed = checked.find(item => !item.passed);
+        if (stabilization && failed) {
+          blockStabilize(options, run, failed, checked.indexOf(failed));
+          return;
+        }
         run = await saveHeadDecision(options, run, checked);
       }
+      if (run.phase === 'stabilize-blocked') return;
       if (run.phase === 'classify-main') run = await resolveMainFailure(options, run);
       if (run.phase === 'classify-prefixes') {
         run = await resolveCulprit(options, run);
@@ -561,7 +624,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         run.promoteHead = promoteHead; run.promoteTaskIds = remaining.map(task => task.id); run.phase = 'publish-main'; store.savePromotion(run);
       }
       if (run.phase === 'publish-main') {
-        await publishMain(options, run);
+        if (await publishMain(options, run)) return;
         // Another integration may have landed while this snapshot was gated. Continue under the same lease.
         continue;
       }
