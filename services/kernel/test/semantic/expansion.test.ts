@@ -1,18 +1,26 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
-import { bundledSources } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledSources } from '@rezics/definitions/bundled';
 import { CatalogueError, compileCatalogue } from '@rezics/definitions/compile';
-import { releaseDigest, validateRelease, type Release } from '@rezics/definitions';
+import { releaseDigest, validateRelease, valueSchema, type Release } from '@rezics/definitions';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT, readRelease } from '../../src/semantic/definitions.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import {
+  checkGrowth,
+  openGrowthDatabase,
+  placement,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { VERTICAL_LOCALES, verticalManifests, verticalProfile } from '../support/manifests.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -327,6 +335,335 @@ test('a vertical added as files only is served end to end with no change to the 
 });
 
 const growthAccount = '019a1b2c-3d4e-7f00-8a00-e0a0510a0002';
+const growthAccountRoute = routeOf(growthAccount);
+if (growthAccountRoute === null) throw new Error('Growth account must be a routed id');
+const expansionHotPartition = partitionOf(growthAccountRoute);
+const ordinalsPerScale = 500;
+const expansionName = 'semantic-expansion-growth';
+
+function positionOf(ordinal: number): number {
+  return (
+    1_000_000_000 + createHash('sha256').update(expansionName).digest().readUIntBE(0, 3) * 2_100_000 + ordinal * 128
+  );
+}
+
+function seededRelease(ordinal: number): Release {
+  return {
+    format: 'https://rezics.com/definitions/release/1',
+    catalogue: { id: 'https://rezics.com/catalogue/test', version: `population-${String(ordinal).padStart(5, '0')}` },
+    generator: { name: 'test', version: '1' },
+    prefixes: { schema: 'http://schema.org/' },
+    types: {
+      'schema:Person': {
+        iri: 'http://schema.org/Person',
+        labels: { en: 'person' },
+        mappings: [],
+        bases: [],
+        properties: ['schema:url'],
+        facets: [],
+      },
+    },
+    properties: {
+      'schema:url': {
+        iri: 'http://schema.org/url',
+        labels: { en: 'URL' },
+        mappings: [],
+        datatype: 'url',
+        multivalued: false,
+        qualifiers: [],
+        value: valueSchema('url'),
+      },
+    },
+  };
+}
+
+function expansionPopulation(): Population {
+  let current: Population;
+  current = {
+    name: expansionName,
+    hotPartition: expansionHotPartition,
+    hotShare: 0.5,
+    // Rows match the subject, access, and definition shapes the operation already reads.
+    // Each ordinal is another subject's neighbourhood: never the growth person, its candidates, or this account's grants.
+    rows: ({ ordinal, route }) => {
+      const id = newId(route);
+      const candidate = newId(route);
+      const slot = newId(route);
+      const accountId = newId(route);
+      const resourceId = newId(route);
+      const transactionId = randomUUID();
+      const facts = itemFacts(id, { labels: { en: `Seed ${ordinal}` } });
+      const statement = { value: { type: 'value', content: 'ja' }, qualifiers: [], references: [] };
+      const position = positionOf(ordinal);
+      const partition = route >>> 4;
+      const releaseBody = seededRelease(ordinal);
+      const definitionDigest = releaseDigest(releaseBody);
+      return {
+        'semantic.subject': [
+          {
+            route,
+            subject_id: id,
+            type: 'schema:Book',
+            recorded_transaction_id: transactionId,
+            visibility: 'visible',
+            security_revision: 0,
+            current_facts: facts.length + 1,
+            current_release: bundledDigest,
+          },
+        ],
+        'semantic.revision': [
+          {
+            route,
+            subject_id: id,
+            revision: 1,
+            kind: 'create',
+            release: bundledDigest,
+            recorded_transaction_id: transactionId,
+          },
+        ],
+        'semantic.candidate': [
+          {
+            route,
+            subject_id: id,
+            candidate_id: candidate,
+            slot_id: slot,
+            property: 'schema:inLanguage',
+            rank: 'normal',
+            statement,
+            release: bundledDigest,
+            revision: 1,
+            origin: 'proposal',
+            view_order: 0,
+          },
+        ],
+        'semantic.acceptance': [
+          {
+            route,
+            subject_id: id,
+            context_id: GLOBAL_CONTEXT,
+            candidate_id: candidate,
+            head: 1,
+            verdict: 'accept',
+            revision: 1,
+          },
+        ],
+        'semantic.adoption': [
+          {
+            route,
+            subject_id: id,
+            slot_id: slot,
+            context_id: GLOBAL_CONTEXT,
+            head: 1,
+            mode: 'replace',
+            selection: [{ candidate, rank: 'normal' }],
+            revision: 1,
+          },
+        ],
+        'semantic.acceptance_current': [
+          {
+            route,
+            subject_id: id,
+            context_id: GLOBAL_CONTEXT,
+            candidate_id: candidate,
+            slot_id: slot,
+            head: 1,
+            verdict: 'accept',
+            revision: 1,
+          },
+        ],
+        'semantic.fact': [
+          ...facts.map((fact) => ({
+            ...fact,
+            route,
+            subject_id: id,
+            recorded_transaction_id: transactionId,
+            release: null,
+          })),
+          {
+            route,
+            subject_id: id,
+            slot_id: slot,
+            log_seq: 1,
+            operation: 'assert',
+            kind: 'statement',
+            language: null,
+            property: 'schema:inLanguage',
+            statement_id: candidate,
+            body: { ...statement, rank: 'normal' },
+            recorded_transaction_id: transactionId,
+            release: bundledDigest,
+          },
+        ],
+        'semantic.hidden_candidate': [
+          {
+            route,
+            subject_id: id,
+            candidate_id: candidate,
+            visibility: 'hidden',
+            security_revision: 1,
+          },
+        ],
+        'semantic.redirect': [
+          {
+            route,
+            subject_id: id,
+            sequence: 1,
+            target: '00000000-0000-0000-0000-000000000000',
+            recorded_transaction_id: transactionId,
+          },
+        ],
+        'semantic.retraction': [
+          {
+            route,
+            subject_id: id,
+            candidate_id: candidate,
+            revision: 1,
+            references: [],
+          },
+        ],
+        'semantic.context': [
+          {
+            route,
+            context_id: newId(route),
+            kind: 'community',
+            labels: { en: `Seed context ${ordinal}` },
+            defaults: {},
+            recorded_transaction_id: transactionId,
+          },
+        ],
+        'semantic.definition_release': [
+          {
+            route: 0,
+            digest: definitionDigest,
+            body: releaseBody,
+            recorded_transaction_id: newId(0),
+          },
+        ],
+        'semantic.definition_activation': [
+          {
+            route: 0,
+            head: ordinal + 2 + Math.floor(ordinal / ordinalsPerScale) * 1_000,
+            digest: definitionDigest,
+            recorded_transaction_id: newId(0),
+          },
+        ],
+        'core.receipt': [
+          {
+            partition_no: partition,
+            principal_kind: 'account',
+            principal_id: accountId,
+            command_kind: 'subject.create',
+            idempotency_key: `${expansionName}-${ordinal}-${randomUUID()}`,
+            request_digest: createHash('sha256').update(`${expansionName}-${ordinal}`).digest(),
+            epoch: 1,
+            position,
+            transaction_id: randomUUID(),
+            response: { id },
+            created_at: new Date('2026-01-01T00:00:00.000Z'),
+          },
+        ],
+        'core.outbox': [
+          {
+            partition_no: partition,
+            position,
+            event_seq: 0,
+            event_count: 1,
+            epoch: 1,
+            id: newId(route),
+            type: 'com.rezics.subject.created.v1',
+            subject: id,
+            data: { id },
+            recorded_at: new Date('2026-01-01T00:00:00.000Z'),
+          },
+        ],
+        'editorial.write_basis': [
+          {
+            partition_no: partition,
+            transaction_id: randomUUID(),
+            epoch: 1,
+            position,
+            principal_kind: 'account',
+            principal_id: accountId,
+            client_id: 'web',
+            requested_by: null,
+            recorded_at: new Date('2026-01-01T00:00:00.000Z'),
+          },
+        ],
+        'access.account': [
+          {
+            route,
+            account_id: accountId,
+            kind: 'actor',
+            state: 'active',
+            transaction_id: transactionId,
+          },
+        ],
+        'access.membership_inverse': [
+          {
+            route,
+            account_id: accountId,
+            kind: 'organization',
+            group_id: newId(route),
+            reservation_id: randomUUID(),
+            transaction_id: transactionId,
+          },
+        ],
+        'access.resource_grant': [
+          {
+            route,
+            resource_id: resourceId,
+            subject_id: accountId,
+            subject_role: '',
+            action: 'subject:read',
+            valid: '(,)',
+            transaction_id: randomUUID(),
+            subject_kind: 'identity',
+          },
+        ],
+        'access.resource_role_grant': [
+          {
+            route,
+            resource_id: resourceId,
+            subject_kind: 'identity',
+            subject_id: accountId,
+            subject_role: '',
+            grant_role: 'subject_reader',
+            valid: '(,)',
+            transaction_id: randomUUID(),
+          },
+        ],
+        'access.resource_denial': [
+          {
+            route,
+            resource_id: resourceId,
+            subject_id: accountId,
+            subject_role: '',
+            action: 'subject:read',
+            reason: 'resource',
+            valid: '(,)',
+            transaction_id: randomUUID(),
+          },
+        ],
+      };
+    },
+    finish: async (admin, range) => {
+      const positions = new Map<number, number>();
+      for (let ordinal = range.from; ordinal < range.to; ordinal++) {
+        const partition = placement(current, ordinal).partition;
+        positions.set(partition, Math.max(positions.get(partition) ?? 0, positionOf(ordinal)));
+      }
+      for (const [partition, position] of positions) {
+        await admin.query('UPDATE core.partition SET position = GREATEST(position, $2) WHERE partition_no = $1', [
+          partition,
+          position,
+        ]);
+      }
+    },
+  };
+  return current;
+}
+
+const expansionRows = expansionPopulation();
 let growth: GrowthDatabase;
 let growthKernel: Kernel;
 let growthToken = '';
@@ -349,8 +686,13 @@ test('subject commands and reads stay within budget at 10 and at 100 vertical ma
   const report = await checkGrowth(growth, {
     name: 'subject commands and reads stay within budget at 10 and at 100 vertical manifests',
     scales: [1, 10, 100],
-    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
-    grow: async (database, scale) => {
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (database, scale, previous) => {
+      // Seed before activation so these heads stay behind the release the measured commands serve.
+      await seed({ pool: database.pool, admin: database.admin }, expansionRows, {
+        from: previous * ordinalsPerScale,
+        to: scale * ordinalsPerScale,
+      });
       const release = await compiledRelease(scale);
       const digest = releaseDigest(release);
       const published = await handle(growthKernel, 'POST', '/v1/definitions/releases', growthToken, {
