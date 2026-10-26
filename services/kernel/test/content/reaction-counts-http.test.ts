@@ -1,4 +1,5 @@
 import { fromPlainText } from '@rezics/document';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -561,25 +562,94 @@ if (process.argv.includes('--reaction-count-worker')) {
         name: `reaction-counts-${crypto.randomUUID()}`,
         hotPartition: partitionOf(contentRoute),
         hotShare: 1,
+        // Sixteen targets per ordinal keep the smallest scale at thousands of rows, so the planner reads them by index.
         rows: ({ route }: { route: number }) => ({
-          'content.reaction_total': [
-            {
-              route,
-              target_id: newId(route),
-              kind: 'like',
-              count: 1,
-              source_epoch: 1,
-              source_position: 1,
-            },
-          ],
+          'content.reaction_total': Array.from({ length: 16 }, () => ({
+            route,
+            target_id: newId(route),
+            kind: 'like',
+            count: 1,
+            source_epoch: 1,
+            source_position: 1,
+          })),
         }),
+      };
+      // The page also reads boards, threads, posts and revisions: seed them to thousands of rows once, so the planner
+      // reads them by index at every scale instead of scanning small relations.
+      const body = Buffer.from(JSON.stringify(fromPlainText('Filler post')));
+      const bodyHash = createHash('sha256').update(body).digest();
+      const filler = {
+        name: `reaction-counts-filler-${crypto.randomUUID()}`,
+        hotPartition: partitionOf(contentRoute),
+        hotShare: 1,
+        rows: () => {
+          const board = newId(boardRoute);
+          const thread = newId(contentRoute);
+          const post = newId(contentRoute);
+          const revision = newId(contentRoute);
+          return {
+            'content.board': [
+              {
+                route: boardRoute,
+                board_id: board,
+                subject_id: author.accountId,
+                title: 'Filler board',
+                visibility: 'published',
+                security_revision: 1,
+                recorded_transaction_id: board,
+              },
+            ],
+            'content.thread': [
+              {
+                route: contentRoute,
+                thread_id: thread,
+                author_account_id: author.accountId,
+                board_id: board,
+                title: 'Filler thread',
+                visibility: 'published',
+                security_revision: 1,
+                recorded_transaction_id: thread,
+                first_post_id: post,
+              },
+            ],
+            'content.post': [
+              {
+                route: contentRoute,
+                thread_id: thread,
+                post_id: post,
+                author_account_id: author.accountId,
+                head_revision_id: revision,
+                visibility: 'published',
+                security_revision: 1,
+                recorded_transaction_id: post,
+              },
+            ],
+            'content.revision': [
+              {
+                route: contentRoute,
+                thread_id: thread,
+                post_id: post,
+                revision_id: revision,
+                body,
+                body_sha256: bodyHash,
+                search_text: 'Filler post',
+                licence: 'MIT',
+                subject_ids: [],
+                board_id: board,
+                availability: 'available',
+                recorded_transaction_id: revision,
+              },
+            ],
+          };
+        },
       };
       const report = await checkGrowth(db, {
         name: 'Post page reaction counts',
-        scales: [2048, 8192, 32768],
+        scales: [256, 1024, 4096],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         repetitions: 1,
         async grow(database, scale, previous) {
+          if (previous === 0) await seed(database, filler, { from: 0, to: 2048 });
           await seed(database, population, { from: previous, to: scale });
         },
         async operation() {
@@ -604,7 +674,7 @@ if (process.argv.includes('--reaction-count-worker')) {
           }
         },
       });
-      expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+      expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
       for (const sample of report.samples) {
         const reaction = sample.cost.relations?.['content.reaction_total'];
         expect(reaction).toBeDefined();

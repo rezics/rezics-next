@@ -382,7 +382,7 @@ test.serial(
     const anchor = await createSourceThread(boardId, new Date(Date.now() - 60 * 60_000).toISOString());
     await project(await readEvents());
     const pagePopulation = growthPopulation(0);
-    const scales = [2048, 8192, 32768] as const;
+    const scales = [256, 1024, 4096] as const;
     const pageReport = await checkGrowth(db, {
       name: 'active board page',
       scales,

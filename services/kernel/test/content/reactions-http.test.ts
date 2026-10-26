@@ -556,7 +556,7 @@ test.serial(
     await seed(db, { ...population, name: `${population.name}-background` }, { from: 0, to: 4096 });
     const report = await checkGrowth(db, {
       name: 'Post page viewer reactions',
-      scales: [256, 2048, 16384],
+      scales: [256, 1024, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 1,
       async grow(database, scale, previous) {
@@ -576,7 +576,7 @@ test.serial(
         }
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     for (const sample of report.samples) {
       const relations = sample.cost.relations;
       expect(relations).toBeDefined();

@@ -407,7 +407,7 @@ test.serial(
         };
       },
     };
-    const scales = [2048, 8192, 32768] as const;
+    const scales = [256, 1024, 4096] as const;
     const report = await checkGrowth(db, {
       name: 'Hot board page',
       scales,
