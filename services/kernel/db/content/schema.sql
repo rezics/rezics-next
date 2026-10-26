@@ -352,47 +352,6 @@ CREATE FUNCTION content.operation_scopes_valid(scopes text[]) RETURNS boolean
 $_$;
 
 
---
--- Name: refresh_board_thread_rank_batch(timestamp with time zone, integer); Type: FUNCTION; Schema: content; Owner: -
---
-
-CREATE FUNCTION content.refresh_board_thread_rank_batch(p_at timestamp with time zone DEFAULT clock_timestamp(), p_limit integer DEFAULT 500) RETURNS integer
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  refreshed integer;
-BEGIN
-  IF NOT isfinite(p_at) OR p_limit < 1 OR p_limit > 500 THEN
-    RAISE EXCEPTION 'Invalid board rank refresh batch';
-  END IF;
-
-  PERFORM set_config('enable_seqscan', 'off', true);
-
-  WITH selected AS MATERIALIZED (
-    SELECT route, board_id, thread_id
-    FROM content.board_thread
-    WHERE active_rank <> 0
-      AND rank_refreshed_at <= p_at - INTERVAL '10 minutes'
-    ORDER BY rank_refreshed_at, route, board_id, thread_id
-    LIMIT p_limit
-    FOR UPDATE SKIP LOCKED
-  ), updated AS (
-    UPDATE content.board_thread AS candidate
-    SET active_rank = content.board_thread_active_rank(candidate.score, candidate.last_activity_at, p_at),
-        rank_refreshed_at = p_at
-    FROM selected
-    WHERE candidate.route = selected.route
-      AND candidate.board_id = selected.board_id
-      AND candidate.thread_id = selected.thread_id
-    RETURNING 1
-  )
-  SELECT count(*)::integer INTO refreshed FROM updated;
-
-  RETURN refreshed;
-END;
-$$;
-
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -436,9 +395,11 @@ CREATE TABLE content.board_thread (
     score integer DEFAULT 0 NOT NULL,
     active_rank double precision DEFAULT 0 NOT NULL,
     rank_refreshed_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    hot_rank double precision DEFAULT 0 NOT NULL,
     CONSTRAINT board_thread_active_rank_finite CHECK (((active_rank >= (0)::double precision) AND (active_rank < 'Infinity'::double precision))),
     CONSTRAINT board_thread_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
     CONSTRAINT board_thread_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT board_thread_hot_rank_finite CHECK (((hot_rank >= (0)::double precision) AND (hot_rank < 'Infinity'::double precision))),
     CONSTRAINT board_thread_last_activity_finite CHECK (isfinite(last_activity_at)),
     CONSTRAINT board_thread_rank_refreshed_finite CHECK (isfinite(rank_refreshed_at)),
     CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1031,6 +992,13 @@ CREATE INDEX board_realm_page ON content.board USING btree (route, realm_id, boa
 --
 
 CREATE INDEX board_thread_active_page_idx ON content.board_thread USING btree (route, board_id, active_rank DESC, thread_id);
+
+
+--
+-- Name: board_thread_hot_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_thread_hot_page_idx ON content.board_thread USING btree (route, board_id, hot_rank DESC, thread_id);
 
 
 --

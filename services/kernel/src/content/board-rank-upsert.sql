@@ -5,10 +5,11 @@ WITH input AS NOT MATERIALIZED (
          :source_revision_id::uuid AS source_revision_id
 )
 INSERT INTO content.board_thread
-  (route, board_id, thread_id, created_at, last_activity_at, score, active_rank, rank_refreshed_at,
+  (route, board_id, thread_id, created_at, last_activity_at, score, active_rank, hot_rank, rank_refreshed_at,
    source_epoch, source_position, source_revision_id)
 SELECT route, board_id, thread_id, created_at, activity_at, 0,
        content.board_thread_active_rank(0, activity_at, statement_timestamp()),
+       content.board_thread_active_rank(0, created_at, statement_timestamp()),
        statement_timestamp(), source_epoch, source_position, source_revision_id
 FROM input
 ON CONFLICT (route, board_id, thread_id) DO UPDATE
@@ -21,6 +22,7 @@ SET source_epoch = EXCLUDED.source_epoch,
       GREATEST(board_thread.last_activity_at, EXCLUDED.last_activity_at),
       statement_timestamp()
     ),
+    hot_rank = content.board_thread_active_rank(board_thread.score, board_thread.created_at, statement_timestamp()),
     rank_refreshed_at = statement_timestamp()
 WHERE (board_thread.source_epoch, board_thread.source_position)
     < (EXCLUDED.source_epoch, EXCLUDED.source_position)

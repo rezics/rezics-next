@@ -82,6 +82,14 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 - **Reaction count change:** Touches one contribution upsert and at most two `content.reaction_total` upserts (`-1` on the previous kind and `+1` on the new kind), in the target partition and one transaction. The source watermark changes only when its contribution row changes. Bound: O(log R) per event; concurrent changes to one target serialize on its total rows, which is acceptable for this asynchronous projection. Growth check: per-event rows and statements stay constant with 2048, 8192 and 32768 prior contributions on the target.
 - **Reaction counts read:** `readReactionCounts` touches one index range of at most seven total rows per target. A page reads at most L x 7 total rows per partition with one statement per partition. Bound: O(L x 7) rows, independent of contributors. Growth check: one target's read and a fixed page's read stay constant as contributors on the target grow to 2048, 8192 and 32768 across source partitions.
 
+### Rank refresh batch
+
+`refreshBoardRankBatch` locks at most 500 due candidates with `SKIP LOCKED`, reads per-thread reaction totals and Realm vote weights, then writes score, active rank and hot rank together. Hot rank uses thread creation time; active rank uses last activity time. New candidates begin at score 0 with both ranks computed from that score.
+
+- **Touches:** One rank-refresh index range of at most 500 candidates, one totals statement per thread partition in the batch, one Realm-votes statement per board partition in the batch, and one batch update.
+- **Bound:** O(B log R) rows with at most 2B + 2 statements for B <= 500; independent of reactions per thread.
+- **Growth check:** One batch stays constant in rows and statements at 2048, 8192 and 32768 candidates, with reaction totals on the batch's threads.
+
 ### Author erasure
 
 Author erasure `steps` counts only logical page steps, including a denied page. `processedPosts` and `erasedRevisions` advance together at each page commit, when its post tombstones make the bodies unreadable. Exact counts visit only that page's revision identities (O(k) rows for k affected revisions); no unrelated history is traversed. Physical cleanup does not change progress counters.

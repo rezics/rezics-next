@@ -123,7 +123,16 @@ async function createReply(thread: SourceThread, createdAt: string): Promise<voi
         (route, thread_id, post_id, reply_to_post_id, author_account_id, head_revision_id, visibility,
          security_revision, recorded_transaction_id, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, 'published', 1, $7, $8)`,
-      [sourceRoute, thread.threadId, postId, thread.itemId, thread.authorId, revisionId, context.transactionId, createdAt],
+      [
+        sourceRoute,
+        thread.threadId,
+        postId,
+        thread.itemId,
+        thread.authorId,
+        revisionId,
+        context.transactionId,
+        createdAt,
+      ],
     );
     await tx.query(
       `INSERT INTO content.revision
@@ -160,7 +169,13 @@ async function appendReaction(targetId: string, kind: 'upvote' | 'downvote'): Pr
   const actorId = newId(sourceRoute);
   await runCommand(db.pool, { partition: partitionOf(sourceRoute) }, async () => ({
     value: null,
-    events: [{ type: changedType, subject: targetId, data: { actorId, targetKind: 'thread', targetId, previousKind: null, kind } }],
+    events: [
+      {
+        type: changedType,
+        subject: targetId,
+        data: { actorId, targetKind: 'thread', targetId, previousKind: null, kind },
+      },
+    ],
   }));
 }
 
@@ -169,7 +184,9 @@ async function eventsForSource(): Promise<CloudEvent[]> {
   const result = await projectBatch(db.pool, {
     consumer: `board_hot_refresh_${randomUUID().replaceAll('-', '')}`,
     partition: partitionOf(sourceRoute),
-    apply: async (envelopes) => events.push(...envelopes.flatMap((envelope) => envelope.events)),
+    apply: async (envelopes) => {
+      events.push(...envelopes.flatMap((envelope) => envelope.events));
+    },
   });
   expect(result.status).toBe('read');
   return events;
@@ -258,13 +275,20 @@ async function createTestRealm(): Promise<string> {
   return realm.value.realmId;
 }
 
-function refreshPopulation(): Population {
-  const at = staleAt;
+function refreshPopulation(baseAt: Date): Population {
   return {
     name: `board-hot-refresh-${randomUUID()}`,
     hotPartition: partitionOf(sourceRoute),
     hotShare: 1,
     rows: ({ ordinal }) => {
+      const rankRefreshedAt =
+        ordinal < 500
+          ? staleAt
+          : ordinal >= 8192 && ordinal < 8692
+            ? new Date(baseAt.getTime() - 38 * 60_000).toISOString()
+            : ordinal >= 2048 && ordinal < 2548
+              ? new Date(baseAt.getTime() - 49 * 60_000).toISOString()
+              : new Date(baseAt.getTime() + 60 * 60_000).toISOString();
       const boardId = newId(boardRoute);
       const threadId = newId(sourceRoute);
       const subjectId = newId(boardRoute);
@@ -279,7 +303,7 @@ function refreshPopulation(): Population {
             visibility: 'published',
             security_revision: 1,
             recorded_transaction_id: transactionId,
-            created_at: at,
+            created_at: staleAt,
             realm_id: null,
           },
         ],
@@ -288,12 +312,12 @@ function refreshPopulation(): Population {
             route: boardRoute,
             board_id: boardId,
             thread_id: threadId,
-            created_at: at,
-            last_activity_at: at,
+            created_at: staleAt,
+            last_activity_at: staleAt,
             score: 0,
             active_rank: 1,
             hot_rank: 1,
-            rank_refreshed_at: at,
+            rank_refreshed_at: rankRefreshedAt,
             source_epoch: 1,
             source_position: ordinal + 1,
             source_revision_id: null,
@@ -317,8 +341,8 @@ function refreshPopulation(): Population {
 test.serial(
   'one refresh batch stays within its bound as candidates and reactions grow',
   async () => {
-    const population = refreshPopulation();
-    const at = new Date(Date.now() + 20 * 60_000);
+    const baseAt = new Date(Date.now() + 20 * 60_000);
+    const population = refreshPopulation(baseAt);
     const report = await checkGrowth(db, {
       name: 'one hot rank refresh batch',
       scales,
@@ -327,7 +351,8 @@ test.serial(
       warmups: 0,
       grow: async (growthDb, scale, previous) =>
         seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale }),
-      operation: async () => {
+      operation: async (_growthDb, _scale, repetition) => {
+        const at = new Date(baseAt.getTime() + repetition * 11 * 60_000);
         const refreshed = await refreshBoardRankBatch(db.pool, at);
         expect(refreshed).toBe(500);
         return refreshed;
@@ -385,7 +410,10 @@ test.serial(
     const refreshed = await refreshBoardRankBatch(db.pool, at);
     expect(refreshed).toBe(3);
 
-    const rows = await rankRows([outsideBoard, realmBoard], [outsideThread.threadId, outsideOtherThread.threadId, realmThread.threadId]);
+    const rows = await rankRows(
+      [outsideBoard, realmBoard],
+      [outsideThread.threadId, outsideOtherThread.threadId, realmThread.threadId],
+    );
     const expectedScores = new Map([
       [outsideThread.threadId, 3],
       [outsideOtherThread.threadId, -2],
@@ -398,7 +426,9 @@ test.serial(
       expect(row.hot_rank).toBeCloseTo(rank(score, row.created_at, at));
       expect(row.rank_refreshed_at.toISOString()).toBe(at.toISOString());
     }
-    expect(rows.get(outsideThread.threadId)!.active_rank).not.toBeCloseTo(rows.get(outsideOtherThread.threadId)!.active_rank);
+    expect(rows.get(outsideThread.threadId)!.active_rank).not.toBeCloseTo(
+      rows.get(outsideOtherThread.threadId)!.active_rank,
+    );
   },
   60_000,
 );
