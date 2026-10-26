@@ -11,7 +11,7 @@ export function readRouting(file: string): RoutingTable {
   const table = JSON.parse(readFileSync(file, 'utf8')) as RoutingTable;
   if (!table.version || !Array.isArray(table.experiments)) throw new Error('invalid routing table');
   const profile = (p: Profile) => {
-    if (!p || !['codex', 'grok', 'cursor'].includes(p.cli) || !p.model || !p.poolClass
+    if (!p || !['codex', 'grok', 'cursor', 'claude'].includes(p.cli) || !p.model || !p.poolClass
       || !['low', 'medium', 'high', 'xhigh', 'max'].includes(p.effort)) throw new Error('invalid routing profile');
     if (p.model.includes('sol') && !['medium', 'high', 'low'].includes(p.effort)) throw new Error('Sol effort exceeds high');
   };

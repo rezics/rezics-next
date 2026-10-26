@@ -19,11 +19,12 @@ function tokens(value: Record<string, unknown>): Tokens {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
   // Anthropic-style usage (Grok) counts cache reads apart from input_tokens; the records count them inside input.
   const cacheRead = num(value.cache_read_input_tokens);
-  return { input: num(value.input_tokens ?? value.inputTokens) + cacheRead, cached: num(value.cached_input_tokens ?? value.cachedInputTokens) + cacheRead,
+  // Claude also reports cache writes apart; they are input the model processed.
+  return { input: num(value.input_tokens ?? value.inputTokens) + cacheRead + num(value.cache_creation_input_tokens), cached: num(value.cached_input_tokens ?? value.cachedInputTokens) + cacheRead,
     output: num(value.output_tokens ?? value.outputTokens) };
 }
 /** A worker CLI's own words for an allowance that is spent, in a stream error or, before any session, on stderr. */
-export const POOL_EXHAUSTED = /usage limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
+export const POOL_EXHAUSTED = /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
 export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
 export function measureLog(text: string, options: { startedAt?: string; endedAt?: string; baseline?: Tokens } = {}): LogMeasurement {
@@ -48,6 +49,11 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
         || POOL_EXHAUSTED.test(result.result) ? 'pool-exhausted' : 'tool';
     }
     if (inside && event.type === 'turn.completed') result.failureKind = null;
+    // Claude Code's stream: a refused rate limit ends the session, and an error result carries its reason as text.
+    if (inside && event.type === 'rate_limit_event' && event.rate_limit_info?.status === 'rejected') result.failureKind = 'pool-exhausted';
+    if (inside && event.type === 'result' && event.is_error === true && result.failureKind !== 'pool-exhausted')
+      result.failureKind = POOL_EXHAUSTED.test(String(event.result ?? '')) ? 'pool-exhausted' : 'tool';
+    if (event.type === 'system' && event.subtype === 'init') result.session = event.session_id ?? result.session;
     if (event.type === 'thread.started') result.session = event.thread_id ?? result.session;
     if (event.type === 'session_meta') result.session = event.payload?.id ?? event.payload?.session_id ?? result.session;
     const payload = event.payload ?? event;
@@ -73,6 +79,13 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
       const name = item.name ?? type;
       const input = item.command ?? item.input ?? item.arguments ?? '';
       result.steps[classifyStep(name, typeof input === 'string' ? input : JSON.stringify(input))]++;
+    }
+    // Claude Code nests its tool calls in the assistant message's content.
+    if (event.type === 'assistant') for (const call of event.message?.content ?? []) {
+      if (call?.type !== 'tool_use' || (call.id && seen.has(call.id))) continue;
+      if (call.id) seen.add(call.id);
+      const input = call.input?.command ?? call.input ?? '';
+      result.steps[classifyStep(call.name ?? 'tool_use', typeof input === 'string' ? input : JSON.stringify(input))]++;
     }
     if (type === 'agent_message') result.result = item.text ?? '';
     if (payload.type === 'message' && payload.role === 'assistant') result.result = (payload.content ?? []).map((c: { text?: string }) => c.text ?? '').join('\n');
