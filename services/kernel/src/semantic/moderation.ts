@@ -5,9 +5,21 @@ import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
-import changePartitionSubjectCountIfLive from './change-partition-subject-count-if-live.sql';
+import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
 import { linkChanges } from './link-changes.ts';
+import moderationBumpSecurity from './moderation-bump-security.sql';
+import moderationDeleteHidden from './moderation-delete-hidden.sql';
+import moderationHasLiveCandidate from './moderation-has-live-candidate.sql';
+import moderationInsertStatement from './moderation-insert-statement.sql';
+import moderationInsertSubject from './moderation-insert-subject.sql';
+import moderationReadHidden from './moderation-read-hidden.sql';
+import moderationReadLiveCandidate from './moderation-read-live-candidate.sql';
+import moderationReadProperties from './moderation-read-properties.sql';
+import moderationReadSubject from './moderation-read-subject.sql';
+import moderationUpdateVisibility from './moderation-update-visibility.sql';
+import moderationUpsertHidden from './moderation-upsert-hidden.sql';
+import readRedirect from './read-redirect.sql';
 import readVisibility from './read-visibility.sql';
 import { expandSlot, slotView } from './slots.ts';
 
@@ -113,30 +125,15 @@ async function readModeratedSubject(
   route: number,
   subject: string,
 ): Promise<ModeratedSubject | null> {
-  const result = await tx.query<ModeratedSubject>(
-    `SELECT s.visibility, s.security_revision::text AS "securityRevision", latest.revision, latest.release
-     FROM semantic.subject s
-     JOIN LATERAL (
-       SELECT revision, release FROM semantic.revision
-       WHERE route = s.route AND subject_id = s.subject_id
-       ORDER BY revision DESC LIMIT 1
-     ) latest ON true
-     WHERE s.route = $1 AND s.subject_id = $2`,
-    [route, subject],
-  );
-  return result.rows[0] ?? null;
+  return (await moderationReadSubject.run(tx, { route, subject_id: subject })) as ModeratedSubject | null;
 }
 
 async function shownFacts(tx: CommandTransaction, subject: string, property?: string): Promise<FactRow[]> {
   const properties = property
     ? [property]
-    : (
-        await tx.query<{ property: string }>(
-          `SELECT DISTINCT property FROM semantic.fact
-           WHERE route = $1 AND subject_id = $2 AND kind = 'statement' AND property IS NOT NULL`,
-          [routeOf(subject), subject],
-        )
-      ).rows.map((row) => row.property);
+    : (await moderationReadProperties.run(tx, { route: routeOf(subject)!, subject_id: subject })).map(
+        (row) => row.property!,
+      );
   const facts: FactRow[] = [];
   for (const name of properties) facts.push(...(await slotView(tx, subject, name)).facts);
   return facts;
@@ -163,31 +160,11 @@ async function moderationLinks(
   };
 }
 
-const LIVE_CANDIDATE = `SELECT property FROM semantic.candidate
-  WHERE route = $1 AND subject_id = $2 AND candidate_id = $3
-  UNION ALL
-  SELECT property FROM semantic.fact f
-  WHERE f.route = $1 AND f.subject_id = $2 AND f.statement_id = $3
-    AND f.kind = 'statement' AND f.operation = 'assert'
-    AND NOT EXISTS (
-      SELECT 1 FROM semantic.fact newer
-      WHERE newer.route = f.route AND newer.subject_id = f.subject_id
-        AND newer.slot_id = f.slot_id AND newer.statement_id = f.statement_id
-        AND newer.log_seq > f.log_seq
-    )
-  LIMIT 1`;
-
 export async function readStatementCandidate(pool: Pool, subject: string, candidate: string): Promise<boolean> {
   const route = routeOf(subject);
   if (route === null || routeOf(candidate) !== route) return false;
   return withConnection(pool, async (client) => {
-    const found = await client.query(
-      `SELECT 1 FROM semantic.subject s
-       WHERE s.route = $1 AND s.subject_id = $2
-         AND EXISTS (${LIVE_CANDIDATE})`,
-      [route, subject, candidate],
-    );
-    return (found.rowCount ?? 0) > 0;
+    return (await moderationHasLiveCandidate.run(client, { route, subject_id: subject, candidate_id: candidate })) !== null;
   });
 }
 
@@ -242,30 +219,25 @@ export async function moderateSubject(
 
       const body = validateModerationBody(options.action, options.body);
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject) : [];
-      const updated = await tx.query<{ security_revision: string }>(
-        `UPDATE semantic.subject
-         SET visibility = $3, security_revision = security_revision + 1
-         WHERE route = $1 AND subject_id = $2 AND visibility = $4 AND security_revision = $5
-         RETURNING security_revision::text AS security_revision`,
-        [route, options.subject, nextVisibility, current.visibility, current.securityRevision],
-      );
-      const revision = updated.rows[0]?.security_revision;
+      const updated = await moderationUpdateVisibility.run(tx, {
+        route,
+        subject_id: options.subject,
+        visibility: nextVisibility,
+        expected_visibility: current.visibility,
+        expected_security_revision: current.securityRevision,
+      });
+      const revision = updated?.security_revision;
       if (revision === undefined) throw new ModerationConflictError();
-      await tx.query(
-        `INSERT INTO semantic.moderation
-         (route, subject_id, security_revision, action, visibility, actor, body, recorded_transaction_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
-        [
-          route,
-          options.subject,
-          revision,
-          options.action,
-          nextVisibility,
-          options.actor.accountId,
-          JSON.stringify(body),
-          transactionId,
-        ],
-      );
+      await moderationInsertSubject.run(tx, {
+        route,
+        subject_id: options.subject,
+        security_revision: revision,
+        action: options.action,
+        visibility: nextVisibility,
+        actor: options.actor.accountId,
+        body: JSON.stringify(body),
+        transaction_id: transactionId,
+      });
       const securityRevision = Number(revision);
       const countDelta =
         current.visibility === 'visible' && nextVisibility !== 'visible'
@@ -273,13 +245,8 @@ export async function moderateSubject(
           : current.visibility !== 'visible' && nextVisibility === 'visible'
             ? 1
             : 0;
-      if (countDelta !== 0)
-        await changePartitionSubjectCountIfLive.run(tx, {
-          partition_no: partitionOf(route),
-          route,
-          subject_id: options.subject,
-          delta: countDelta,
-        });
+      if (countDelta !== 0 && !(await readRedirect.run(tx, { route, subject_id: options.subject })))
+        await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: countDelta });
       const after = nextVisibility === 'visible' ? await shownFacts(tx, options.subject) : [];
       const events: { type: string; subject: string; data: unknown }[] = [
         {
@@ -359,60 +326,56 @@ export async function moderateStatement(
     },
     async (tx, { transactionId }) => {
       const current = await readModeratedSubject(tx, route, options.subject);
-      const located = await tx.query<{ property: string }>(LIVE_CANDIDATE, [route, options.subject, options.candidate]);
-      const property = located.rows[0]?.property;
+      const located = await moderationReadLiveCandidate.run(tx, {
+        route,
+        subject_id: options.subject,
+        candidate_id: options.candidate,
+      });
+      const property = located?.property;
       if (!current || property === undefined) throw new ModerationSubjectNotFoundError();
-      const hidden = await tx.query<{ visibility: 'hidden' | 'taken_down' }>(
-        `SELECT visibility FROM semantic.hidden_candidate
-         WHERE route = $1 AND subject_id = $2 AND candidate_id = $3`,
-        [route, options.subject, options.candidate],
-      );
-      const currentVisibility: SubjectVisibility = hidden.rows[0]?.visibility ?? 'visible';
+      const hidden = await moderationReadHidden.run(tx, {
+        route,
+        subject_id: options.subject,
+        candidate_id: options.candidate,
+      });
+      const currentVisibility: SubjectVisibility = hidden?.visibility ?? 'visible';
       if (!statementTransition(options.action, currentVisibility)) throw new ModerationConflictError();
       const body = validateModerationBody(options.action, options.body);
       const nextVisibility = nextStatementVisibility(options.action);
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
       await expandSlot(tx, options.subject, property, transactionId);
-      const updated = await tx.query<{ security_revision: string }>(
-        `UPDATE semantic.subject
-         SET security_revision = security_revision + 1
-         WHERE route = $1 AND subject_id = $2 AND security_revision = $3
-         RETURNING security_revision::text AS security_revision`,
-        [route, options.subject, current.securityRevision],
-      );
-      const revision = updated.rows[0]?.security_revision;
+      const updated = await moderationBumpSecurity.run(tx, {
+        route,
+        subject_id: options.subject,
+        expected_security_revision: current.securityRevision,
+      });
+      const revision = updated?.security_revision;
       if (revision === undefined) throw new ModerationConflictError();
-      await tx.query(
-        `INSERT INTO semantic.moderation
-         (route, subject_id, security_revision, action, visibility, actor, body, recorded_transaction_id, candidate_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
-        [
-          route,
-          options.subject,
-          revision,
-          options.action,
-          nextVisibility,
-          options.actor.accountId,
-          JSON.stringify(body),
-          transactionId,
-          options.candidate,
-        ],
-      );
+      await moderationInsertStatement.run(tx, {
+        route,
+        subject_id: options.subject,
+        security_revision: revision,
+        action: options.action,
+        visibility: nextVisibility,
+        actor: options.actor.accountId,
+        body: JSON.stringify(body),
+        transaction_id: transactionId,
+        candidate_id: options.candidate,
+      });
       if (nextVisibility === 'visible') {
-        await tx.query(
-          `DELETE FROM semantic.hidden_candidate
-           WHERE route = $1 AND subject_id = $2 AND candidate_id = $3`,
-          [route, options.subject, options.candidate],
-        );
+        await moderationDeleteHidden.run(tx, {
+          route,
+          subject_id: options.subject,
+          candidate_id: options.candidate,
+        });
       } else {
-        await tx.query(
-          `INSERT INTO semantic.hidden_candidate
-           (route, subject_id, candidate_id, visibility, security_revision)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (route, subject_id, candidate_id)
-           DO UPDATE SET visibility = EXCLUDED.visibility, security_revision = EXCLUDED.security_revision`,
-          [route, options.subject, options.candidate, nextVisibility, revision],
-        );
+        await moderationUpsertHidden.run(tx, {
+          route,
+          subject_id: options.subject,
+          candidate_id: options.candidate,
+          visibility: nextVisibility,
+          security_revision: revision,
+        });
       }
       const securityRevision = Number(revision);
       const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
