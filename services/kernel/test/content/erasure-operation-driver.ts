@@ -315,6 +315,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
         }
         const current = { step: name, serial, checks: [] as NativeCheck[] };
         active.set(workflowId, current);
+        let failure: string | null = null;
         try {
           if (captureNextStep && measureStep) {
             captureNextStep = false;
@@ -323,12 +324,14 @@ export async function runOperationWorkerProcess(): Promise<void> {
             return measured.value;
           }
           return await func(name, action);
+        } catch (error) {
+          failure = error instanceof Error ? (error.stack ?? error.message) : String(error);
+          throw error;
         } finally {
-          await barrierPool.query(`UPDATE ${BARRIER_TABLE} SET checks=$3::jsonb WHERE workflow_id=$1 AND serial=$2`, [
-            workflowId,
-            serial,
-            JSON.stringify(current.checks),
-          ]);
+          await barrierPool.query(
+            `UPDATE ${BARRIER_TABLE} SET checks=$3::jsonb, error=$4 WHERE workflow_id=$1 AND serial=$2`,
+            [workflowId, serial, JSON.stringify(current.checks), failure],
+          );
           active.delete(workflowId);
         }
       } catch (error) {
@@ -598,7 +601,6 @@ function takeWorkerLane(): WorkerLane {
   warmWorkerLane();
   const lane = prefetchedLanes.shift();
   if (!lane) throw new Error('Native worker lane was not prepared');
-  warmWorkerLane();
   return lane;
 }
 warmWorkerLane();
@@ -640,7 +642,15 @@ function openNativeWorker() {
         clearTimeout(timer);
         originalResolve(value);
       };
+      waiter.reject = (error) => {
+        clearTimeout(timer);
+        reject(error);
+      };
     });
+  }
+
+  function rejectWaiters(): void {
+    for (const waiter of waiters.splice(0)) waiter.reject(new Error('Native worker stopped'));
   }
 
   function spawnProcess(): void {
@@ -705,6 +715,7 @@ function openNativeWorker() {
     }
     await current.exited;
     await Promise.allSettled([stdoutTask, stderrTask]);
+    rejectWaiters();
   }
 
   async function stop(): Promise<void> {
@@ -732,6 +743,7 @@ function openNativeWorker() {
       } else {
         child = undefined;
         await Promise.allSettled([stdoutTask, stderrTask]);
+        rejectWaiters();
       }
     } catch {
       await kill();
@@ -824,6 +836,8 @@ function openNativeWorker() {
 type NativeWorker = Awaited<ReturnType<ReturnType<typeof openNativeWorker>['activate']>>;
 
 export async function createErasureOperationDriver(): Promise<ErasureOperationDriver> {
+  const started = performance.now();
+  let readyAt: number | undefined;
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated kernel database');
   let ownedResources: FixtureResources | undefined;
@@ -875,6 +889,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
            name text NOT NULL,
            released boolean NOT NULL DEFAULT false,
            checks jsonb,
+           error text,
            PRIMARY KEY (workflow_id, serial)
          )`,
       );
@@ -911,8 +926,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       client: workClient,
       clock: () => new Date(),
     });
-    // Seed issues more than a thousand commands. Recording every statement then
-    // retains their parameters for the whole test and is not used before erase.
+    // Setup statements retain authored parameters and are not part of the
+    // scenario's command trace. Observe only once the scenario starts.
     let observer: SqlObserver | undefined;
     const observeCommands = () => (observer ??= ownedObserver = observeSql(resources.pool));
     const checks: NativeCheck[] = [];
@@ -1068,11 +1083,36 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     }
 
     async function barrierRow(workflowId: string, serial: number) {
-      const result = await readPool.query<{ name: string; serial: number; checks: NativeCheck[] | null }>(
-        `SELECT serial, name, checks FROM ${BARRIER_TABLE} WHERE workflow_id=$1 AND serial=$2`,
-        [workflowId, serial],
-      );
+      const result = await readPool.query<{
+        name: string;
+        serial: number;
+        checks: NativeCheck[] | null;
+        error: string | null;
+      }>(`SELECT serial, name, checks, error FROM ${BARRIER_TABLE} WHERE workflow_id=$1 AND serial=$2`, [
+        workflowId,
+        serial,
+      ]);
       return result.rows[0];
+    }
+
+    async function nativeStepFailure(workflowId: string, serial: number, error: string): Promise<Error> {
+      const status = await readPool.query(
+        `SELECT workflow_uuid,status,error,queue_name,executor_id,application_version,
+                recovery_attempts,created_at,updated_at
+         FROM ${DBOS_SCHEMA}.workflow_status WHERE workflow_uuid=$1`,
+        [workflowId],
+      );
+      const outputs = await readPool.query(
+        `SELECT function_name,error FROM ${DBOS_SCHEMA}.operation_outputs
+         WHERE workflow_uuid=$1 ORDER BY function_id`,
+        [workflowId],
+      );
+      const operation = await readPool.query('SELECT * FROM content.operation WHERE native_workflow_id=$1', [
+        workflowId,
+      ]);
+      return new Error(
+        `Native erasure step ${serial} failed: ${error}; status=${JSON.stringify(status.rows)}; outputs=${JSON.stringify(outputs.rows)}; operation=${JSON.stringify(operation.rows)}; worker=${worker!.diagnostics()}`,
+      );
     }
 
     async function waitForBarrier(workflowId: string, serial: number): Promise<StepEvent> {
@@ -1108,10 +1148,33 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       const deadline = Date.now() + 60_000;
       while (Date.now() < deadline) {
         const row = await barrierRow(workflowId, serial);
+        if (row?.error) throw await nativeStepFailure(workflowId, serial, row.error);
         if (row?.checks) return row.checks;
         await new Promise((resolve) => setTimeout(resolve, 15));
       }
       throw new Error(`Native erasure step ${serial} did not persist actual Access checks`);
+    }
+
+    async function waitForNativeResult(workflowId: string): Promise<void> {
+      let waiting = true;
+      const failure = (async () => {
+        while (waiting) {
+          const rows = await readPool.query<{ serial: number; error: string }>(
+            `SELECT serial,error FROM ${BARRIER_TABLE}
+             WHERE workflow_id=$1 AND error IS NOT NULL ORDER BY serial LIMIT 1`,
+            [workflowId],
+          );
+          const row = rows.rows[0];
+          if (row) throw await nativeStepFailure(workflowId, row.serial, row.error);
+          await new Promise((resolve) => setTimeout(resolve, 15));
+        }
+      })();
+      try {
+        await Promise.race([worker!.waitResult(workflowId), failure]);
+      } finally {
+        waiting = false;
+        await failure.catch(() => undefined);
+      }
     }
 
     async function waitForOperationBarrier(name: string, serial: number): Promise<void> {
@@ -1349,15 +1412,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
            AND subject_role='' AND action='account:read'`,
         [routeOf(data.authorId)!, data.authorId, data.authorId],
       );
-      if (direct.rows.length === 0) {
-        await setupRequest(resources, 'author', 'POST', '/v1/grants', {
-          resource: { route: routeOf(data.authorId)!, id: data.authorId },
-          subject: { kind: 'account', id: data.authorId },
-          actions: ['account:read'],
-          valid: '(,)',
-        });
-        direct.rows.push({ valid: '(,)' });
-      }
+      if (direct.rows.length === 0) throw new Error('Activated author is missing the native self account:read grant');
       accountReadValidity.set(
         data.authorId,
         direct.rows.map((row) => row.valid),
@@ -1379,6 +1434,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
 
     const driver: ErasureOperationDriver = {
       async close() {
+        const closingAt = performance.now();
         const failures: unknown[] = [];
         resources.stopBootstrap();
         for (const close of [
@@ -1400,6 +1456,9 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
             failures.push(error);
           }
         }
+        console.log(
+          `erasure-phases setup=${Math.round((readyAt ?? closingAt) - started)}ms scenario=${Math.round(closingAt - (readyAt ?? closingAt))}ms cleanup=${Math.round(performance.now() - closingAt)}ms`,
+        );
         if (failures.length) throw new AggregateError(failures, 'Native erasure operation fixture cleanup failed');
       },
       async seed(input): Promise<Fixture> {
@@ -1528,7 +1587,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const workflowId = await workflowIdFor(name);
         await worker!.resumeRelays();
         await worker!.resume();
-        await worker!.waitResult(workflowId);
+        await waitForNativeResult(workflowId);
         mark('finish-result');
         const route = routeOf(id);
         if (route === null) throw new TypeError('Invalid operation route');
@@ -1810,6 +1869,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     ]);
     preparedStock.push(stockedFixture);
     mark('stock-ready');
+    readyAt = performance.now();
     return driver;
   } catch (error) {
     const cleanup: Promise<unknown>[] = [];
@@ -1913,12 +1973,10 @@ async function checkGrowthActual(
             operations.set(scale, reply.value);
             await dependencies.waitForOperationBarrier(reply.value.name, 1);
             await worker.captureNextStep();
-            const finished = driver.finish(reply.value.name);
-            const measured = await worker.waitCost();
+            const [measured] = await Promise.all([worker.waitCost(), driver.finish(reply.value.name)]);
             if (measured.serial !== 1)
               throw new Error('Native growth step did not capture the first persisted logical batch');
             stepCosts.set(scale, measured.cost);
-            await finished;
             return;
           }
           const operation = operations.get(scale);

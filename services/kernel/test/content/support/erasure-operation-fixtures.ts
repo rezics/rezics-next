@@ -106,10 +106,7 @@ export async function setupRequest<T>(
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
-  let response = await send(key);
-  // The problem contract marks deadline and overload as retryable. The same
-  // idempotency key replays a commit or repeats a command that did not commit.
-  if (response.status === 503 && method !== 'GET') response = await send(key);
+  const response = await send(key);
   const wire = await response.text();
   if (response.status !== status) throw new Error(`${method} ${path}: ${response.status} ${wire}`);
   if (!wire) return undefined as T;
@@ -212,7 +209,7 @@ export async function createFixtureResources(
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    const piped = (output: typeof bootstrapProcess.stdout): ReadableStream<Uint8Array> => {
+    const piped = (output: NonNullable<typeof bootstrapProcess>['stdout']): ReadableStream<Uint8Array> => {
       if (typeof output === 'number' || output === undefined)
         throw new Error('Governance bootstrap command did not pipe its output');
       return output;
