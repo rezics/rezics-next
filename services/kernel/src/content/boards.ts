@@ -7,12 +7,15 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import { realmReadEligibility } from '../community/realm.ts';
 import {
   decodeBoardCursor,
+  decodeBoardRankCursor,
   encodeBoardCursor,
+  encodeBoardRankCursor,
   normalizeBoardQuery,
   type BoardCursorBinding,
   type BoardCursorSort,
 } from './board-cursor.ts';
 import { pageActiveBoardCandidates, pageBoardCandidates } from './board-projection.ts';
+import boardRankPage from './board-rank-page.sql';
 import match from './match-thread-text.sql';
 import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext } from './model.ts';
 import {
@@ -29,7 +32,7 @@ export type ContentBoardDependencies = ContentReadDependencies & {
   /** Trusted service configuration, independent of authentication's wall clock. */
   cursorNow?: () => number;
 };
-export type BoardPageInput = { cursor?: string; limit?: number; sort?: BoardCursorSort | 'active'; query?: string };
+export type BoardPageInput = { cursor?: string; limit?: number; sort?: BoardCursorSort; query?: string };
 export type BoardThreadPage = Page<ThreadView> & {
   anchors: readonly AnchoredPosition[];
   /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
@@ -45,32 +48,91 @@ function realmBinding(realmId: string, actor: Actor): CursorBinding {
   };
 }
 
-function activeBoardBinding(boardId: string, query: string, actor: Actor): CursorBinding {
-  return {
-    operation: 'board.threads.list',
-    parameters: {
-      boardId,
-      query,
-      sort: 'active',
-      viewer: actor.kind === 'account' ? actor.accountId : null,
-    },
-  };
-}
-
 type BoardPageAfter =
   | { kind: 'created'; createdAt: string; threadId: string }
-  | { kind: 'active'; activeRank: number; threadId: string };
+  | { kind: 'rank'; rank: number; threadId: string };
 type ListedBoardCandidate = {
   id: string;
   createdAt?: string;
-  activeRank?: number;
+  rank?: number;
   rankRefreshedAt?: string;
+};
+type BoardCandidateSelection = {
+  candidates: readonly ListedBoardCandidate[];
+  hasMore: boolean;
+  epoch: number;
+  position: bigint;
+};
+
+type HotRankCandidate = { id: string; rank: number; rankRefreshedAt: string };
+type HotRankCandidatePage = {
+  candidates: readonly HotRankCandidate[];
+  next: { rank: number; threadId: string } | null;
+  epoch: number;
+  position: bigint;
 };
 
 /** Realm and board reads run inside read-only snapshots. Prefer their indexed
  * grant lookups even when a small grant table would make a sequential scan
  * look cheaper to the planner. */
 const indexedAccesses = new WeakSet<Access>();
+
+async function pageHotBoardCandidates(
+  pool: ContentBoardDependencies['pool'],
+  boardId: string,
+  after: { rank: number; threadId: string } | null,
+  limit: number,
+): Promise<HotRankCandidatePage> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new RangeError('Candidate limit must be 1 to 200');
+  const boardRoute = routeOf(boardId);
+  if (boardRoute === null) throw new ContentNotFoundError();
+  if (after && (routeOf(after.threadId) === null || !Number.isFinite(after.rank) || after.rank < 0))
+    throw new RangeError('Invalid hot rank cursor');
+
+  return withConnection(pool, async (connection) => {
+    try {
+      await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const anchor = await readPartition(connection, partitionOf(boardRoute));
+      if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition unavailable');
+      const parameters = {
+        route: boardRoute,
+        board_id: boardId,
+        active_rank: after?.rank ?? 0,
+        thread_id: after?.threadId ?? '00000000-0000-0000-0000-000000000000',
+        has_after: after !== null,
+        limit,
+      };
+      const hotPageSql = boardRankPage.sql.replaceAll('candidate.active_rank', 'candidate.hot_rank');
+      const { rows } = await connection.query<{
+        thread_id: string;
+        hot_rank: number;
+        rank_refreshed_at: string | null;
+      }>(
+        hotPageSql,
+        boardRankPage.params.map((name) => parameters[name as keyof typeof parameters]),
+      );
+      const candidates = rows.map((row) => {
+        if (row.rank_refreshed_at === null) throw new Error('Board rank freshness is missing');
+        return { id: row.thread_id, rank: row.hot_rank, rankRefreshedAt: row.rank_refreshed_at };
+      });
+      await connection.query('COMMIT');
+      const last = candidates.at(-1);
+      return {
+        candidates,
+        next: candidates.length === limit && last ? { rank: last.rank, threadId: last.id } : null,
+        epoch: anchor.epoch,
+        position: anchor.position,
+      };
+    } catch (error) {
+      try {
+        await connection.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(connection, rollbackError as Error);
+      }
+      throw error;
+    }
+  });
+}
 
 function indexedReadAccess(access: Access): Access {
   if (indexedAccesses.has(access)) return access;
@@ -290,37 +352,24 @@ export async function listBoardThreads(
   const sort = input.sort ?? 'newest';
   const query = normalizeBoardQuery(input.query ?? '');
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
-  if (sort !== 'newest' && sort !== 'oldest' && sort !== 'active') throw new TypeError('Invalid content cursor');
+  if (sort !== 'newest' && sort !== 'oldest' && sort !== 'active' && sort !== 'hot')
+    throw new TypeError('Invalid content cursor');
   const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
   const board = await readBoard(readDependencies, boardId, context);
   if (!board.value) throw new ContentNotFoundError();
   const binding: BoardCursorBinding = {
     boardId,
     query,
-    sort: sort === 'active' ? 'newest' : sort,
+    sort,
     viewer: context.actor,
   };
-  const activeBinding = activeBoardBinding(boardId, query, context.actor);
   const now = (dependencies.cursorNow ?? Date.now)();
   let after: BoardPageAfter | null = null;
   if (input.cursor !== undefined) {
-    if (sort === 'active') {
-      const decoded = decodeCursor(dependencies.tokens, activeBinding, input.cursor, now);
-      const rank =
-        decoded.ok && decoded.after.length === 2 && typeof decoded.after[0] === 'string'
-          ? Number(decoded.after[0])
-          : Number.NaN;
-      const threadId = decoded.ok && decoded.after.length === 2 ? decoded.after[1] : undefined;
-      if (
-        !decoded.ok ||
-        decoded.epoch !== board.anchor.epoch ||
-        !Number.isFinite(rank) ||
-        rank < 0 ||
-        typeof threadId !== 'string' ||
-        routeOf(threadId) === null
-      )
-        throw new TypeError('Invalid content cursor');
-      after = { kind: 'active', activeRank: rank, threadId };
+    if (sort === 'active' || sort === 'hot') {
+      const decoded = decodeBoardRankCursor(dependencies.tokens, binding, input.cursor, board.anchor.epoch, now);
+      if (!decoded.ok || routeOf(decoded.after.threadId) === null) throw new TypeError('Invalid content cursor');
+      after = { kind: 'rank', rank: decoded.after.rank, threadId: decoded.after.threadId };
     } else {
       const decoded = decodeBoardCursor(dependencies.tokens, binding, input.cursor, board.anchor.epoch, now);
       if (!decoded.ok) throw new TypeError('Invalid content cursor');
@@ -328,21 +377,52 @@ export async function listBoardThreads(
     }
   }
   // One indexed range, Q <= 200, independent of how many candidates are hidden.
-  const selected =
-    sort === 'active'
-      ? await pageActiveBoardCandidates(
-          dependencies.pool,
-          boardId,
-          after?.kind === 'active' ? { activeRank: after.activeRank, threadId: after.threadId } : null,
-          200,
-        )
-      : await pageBoardCandidates(
-          dependencies.pool,
-          boardId,
-          after?.kind === 'created' ? { createdAt: after.createdAt, id: after.threadId } : null,
-          200,
-          sort === 'oldest' ? 'asc' : 'desc',
-        );
+  let selected: BoardCandidateSelection;
+  if (sort === 'active') {
+    const page = await pageActiveBoardCandidates(
+      dependencies.pool,
+      boardId,
+      after?.kind === 'rank' ? { activeRank: after.rank, threadId: after.threadId } : null,
+      200,
+    );
+    selected = {
+      candidates: page.candidates.map(({ id, activeRank, rankRefreshedAt }) => ({
+        id,
+        rank: activeRank,
+        rankRefreshedAt,
+      })),
+      hasMore: page.next !== null,
+      epoch: page.epoch,
+      position: page.position,
+    };
+  } else if (sort === 'hot') {
+    const page = await pageHotBoardCandidates(
+      dependencies.pool,
+      boardId,
+      after?.kind === 'rank' ? { rank: after.rank, threadId: after.threadId } : null,
+      200,
+    );
+    selected = {
+      candidates: page.candidates,
+      hasMore: page.next !== null,
+      epoch: page.epoch,
+      position: page.position,
+    };
+  } else {
+    const page = await pageBoardCandidates(
+      dependencies.pool,
+      boardId,
+      after?.kind === 'created' ? { createdAt: after.createdAt, id: after.threadId } : null,
+      200,
+      sort === 'oldest' ? 'asc' : 'desc',
+    );
+    selected = {
+      candidates: page.candidates,
+      hasMore: page.next !== null,
+      epoch: page.epoch,
+      position: page.position,
+    };
+  }
   if (selected.epoch !== board.anchor.epoch) throw new TypeError('Invalid content cursor');
   const candidates: readonly ListedBoardCandidate[] = selected.candidates;
   const rankFreshness = new Map<string, string>();
@@ -365,8 +445,8 @@ export async function listBoardThreads(
     );
     for (const [index, candidate] of batch.entries()) {
       lastScanned =
-        sort === 'active'
-          ? { kind: 'active', activeRank: candidate.activeRank!, threadId: candidate.id }
+        sort === 'active' || sort === 'hot'
+          ? { kind: 'rank', rank: candidate.rank!, threadId: candidate.id }
           : { kind: 'created', createdAt: candidate.createdAt!, threadId: candidate.id };
       scanned++;
       const result = disclosed[index]!;
@@ -400,21 +480,14 @@ export async function listBoardThreads(
   if (!parent.value) throw new ContentNotFoundError();
   if (parent.anchor.epoch !== board.anchor.epoch) throw new TypeError('Invalid content cursor');
   anchors.push(parent.anchor);
-  const more = scanned < candidates.length || selected.next !== null;
+  const more = scanned < candidates.length || selected.hasMore;
   const oldest = current.at(-1);
-  const rankRefreshedAt = sort === 'active' && oldest ? (rankFreshness.get(oldest.id) ?? null) : null;
+  const rankRefreshedAt =
+    (sort === 'active' || sort === 'hot') && oldest ? (rankFreshness.get(oldest.id) ?? null) : null;
   let nextCursor: string | null = null;
   if (more && lastScanned) {
-    if (lastScanned.kind === 'active') {
-      nextCursor = encodeCursor(
-        dependencies.tokens,
-        activeBinding,
-        {
-          epoch: parent.anchor.epoch,
-          after: [String(lastScanned.activeRank), lastScanned.threadId],
-        },
-        now,
-      );
+    if (lastScanned.kind === 'rank') {
+      nextCursor = encodeBoardRankCursor(dependencies.tokens, binding, parent.anchor.epoch, lastScanned, now);
     } else {
       nextCursor = encodeBoardCursor(
         dependencies.tokens,

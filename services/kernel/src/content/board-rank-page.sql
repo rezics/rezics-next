@@ -1,3 +1,4 @@
+-- Hot pages use this same bounded seek with candidate.active_rank replaced by candidate.hot_rank.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :board_id::uuid AS board_id,
          :active_rank::double precision AS active_rank, :thread_id::uuid AS thread_id,

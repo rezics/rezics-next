@@ -3308,7 +3308,9 @@
             "schema": {
               "enum": [
                 "newest",
-                "oldest"
+                "oldest",
+                "active",
+                "hot"
               ],
               "type": "string"
             }
@@ -3331,6 +3333,13 @@
                   "additionalProperties": false,
                   "properties": {
                     "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rankRefreshedAt": {
+                      "format": "date-time",
                       "type": [
                         "string",
                         "null"
@@ -3819,7 +3828,8 @@
                   },
                   "required": [
                     "threads",
-                    "next"
+                    "next",
+                    "rankRefreshedAt"
                   ],
                   "type": "object"
                 }

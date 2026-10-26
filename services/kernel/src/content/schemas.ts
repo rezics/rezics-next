@@ -261,13 +261,17 @@ export const MediaImportPollSchema = strictContentSchema(MediaImportStatusSchema
 export const BoardThreadsQuerySchema = t.Object(
   {
     ...ContentPageQuerySchema.properties,
-    sort: t.Optional(t.Union([t.Literal('newest'), t.Literal('oldest')])),
+    sort: t.Optional(t.Union([t.Literal('newest'), t.Literal('oldest'), t.Literal('active'), t.Literal('hot')])),
     query: t.Optional(t.String({ maxLength: 4096 })),
   },
   closed,
 );
 export const BoardThreadsResponseSchema = t.Object(
-  { threads: t.Array(ThreadViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  {
+    threads: t.Array(ThreadViewSchema, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+    rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  },
   closed,
 );
 

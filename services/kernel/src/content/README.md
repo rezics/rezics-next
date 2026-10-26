@@ -28,6 +28,13 @@ Exact-key temporal GiST probes and `WITHOUT OVERLAPS` exclusion checks count as 
 Imported-document and cover hooks consume their caller's existing authorization; their storage reads alone never grant disclosure, and the public caller must separately check current semantic authority and source fences.
 
 Board candidates cap `s` at 200 and collection caps it at 100. Post and revision candidate helpers cap `s` at 200 and fetch `s + 1` identities; public pages return at most 100 results and hydrate at most 200 candidates. Accumulated `p` and `r` remain uncapped; enumerating all history still visits O(r) revisions across pages.
+
+### Hot board page
+
+- **Touches:** One keyset seek of L `board_thread` rows by `(route, board_id, hot_rank DESC, thread_id)`, plus the existing final disclosure per item.
+- **Bound:** O(L × (conditions + chain)), as the active page.
+- **Growth check:** A fixed page with constant rows and statements at 2048, 8192 and 32768 board threads.
+
 `document.ts` and both document tables cap canonical bodies at 2 MiB, with at most 128 subject references and 32 media IDs per revision; document validation, hashing and text extraction are linear in those bounded bytes.
 Images cap input at 20 MiB and decoding at 40 million pixels, generating at most twelve variants; `media_variant_slot_idx` enforces twelve slots even for sub-320 widths.
 

@@ -44403,7 +44403,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         query: {
                             cursor?: string;
                             limit?: string | number;
-                            sort?: "newest" | "oldest";
+                            sort?: "active" | "hot" | "newest" | "oldest";
                             query?: string;
                         };
                         headers: unknown;
@@ -44438,6 +44438,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     };
                                 })[];
                                 next: string | null;
+                                rankRefreshedAt: string | null;
                             };
                             400: {
                                 type: unknown;

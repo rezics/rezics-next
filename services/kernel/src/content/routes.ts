@@ -683,7 +683,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const page = await listBoardThreads(dependencies, id, { actor, deadline: job.deadline }, query);
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             // Board pages hydrate through discloseThreads, which supplies removed slots.
-            return { threads: [...page.entries] as ThreadView[], next: page.nextCursor };
+            return {
+              threads: [...page.entries] as ThreadView[],
+              next: page.nextCursor,
+              rankRefreshedAt: page.rankRefreshedAt,
+            };
           }),
         );
       },
