@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -70,8 +71,15 @@ async function clearInstallation() {
 
 for (const mode of ['first', 'no-op', 'refusal'] as const) {
   test(`checkGrowth 1x/8x/64x ${mode}: native operator command and exact child CLI use bounded seeks`, async () => {
-    await db.admin.query(`TRUNCATE access.governance_bootstrap, access.resource_role_grant, access.resource_grant,
-      access.account, core.receipt, core.outbox, editorial.write_basis`);
+    await resetGrowthTables(db.admin, [
+      'access.governance_bootstrap',
+      'access.resource_role_grant',
+      'access.resource_grant',
+      'access.account',
+      'core.receipt',
+      'core.outbox',
+      'editorial.write_basis',
+    ]);
     await db.admin.query('DELETE FROM semantic.context WHERE route=0 AND context_id<>$1', [PLATFORM_RESOURCE.id]);
     // Starting account facts only; the functional test creates real humans with
     // lifecycle commands and verifies native Auth-issued sessions separately.
