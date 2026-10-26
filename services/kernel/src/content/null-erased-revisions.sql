@@ -1,5 +1,5 @@
 -- Post tombstone is committed cleanup authority. Exact revision index keys;
--- original IDs, digests, licences and media references remain unchanged.
+-- original IDs, licences and media references remain unchanged.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :post_id::uuid AS post_id
 ), page AS MATERIALIZED (
@@ -15,7 +15,7 @@ WITH input AS NOT MATERIALIZED (
   LIMIT 100
 ), cleared AS (
   UPDATE content.revision r
-  SET body = NULL, search_text = NULL, availability = 'erased'
+  SET body = NULL, body_sha256 = NULL, search_text = NULL, availability = 'erased'
   FROM page p CROSS JOIN input i
   WHERE r.route = i.route AND r.post_id = i.post_id
     AND (r.recorded_at, r.revision_id) >= (

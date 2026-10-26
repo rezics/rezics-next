@@ -275,13 +275,19 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'Revision identity must survive erasure' USING ERRCODE = '23514';
   END IF;
-  IF ROW(NEW.route, NEW.thread_id, NEW.post_id, NEW.revision_id, NEW.body_sha256,
+  IF ROW(NEW.route, NEW.thread_id, NEW.post_id, NEW.revision_id,
          NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at, NEW.media_ids)
      IS DISTINCT FROM
-     ROW(OLD.route, OLD.thread_id, OLD.post_id, OLD.revision_id, OLD.body_sha256,
+     ROW(OLD.route, OLD.thread_id, OLD.post_id, OLD.revision_id,
          OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at, OLD.media_ids)
      OR OLD.availability <> 'available' OR NEW.availability <> 'erased'
-     OR NEW.body IS NOT NULL OR NEW.search_text IS NOT NULL THEN
+     OR OLD.body IS NULL OR OLD.body_sha256 IS NULL
+     OR NEW.body IS NOT NULL OR NEW.body_sha256 IS NOT NULL OR NEW.search_text IS NOT NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM content.post p
+       WHERE p.route = OLD.route AND p.thread_id = OLD.thread_id AND p.post_id = OLD.post_id
+         AND p.availability = 'erased'
+     ) THEN
     RAISE EXCEPTION 'Revisions are immutable except explicit erasure' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
@@ -742,7 +748,7 @@ CREATE TABLE content.revision (
     post_id uuid NOT NULL,
     revision_id uuid NOT NULL,
     body bytea,
-    body_sha256 bytea NOT NULL,
+    body_sha256 bytea,
     search_text text,
     licence text NOT NULL,
     subject_ids uuid[] NOT NULL,
@@ -753,7 +759,7 @@ CREATE TABLE content.revision (
     media_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
     CONSTRAINT revision_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
-    CONSTRAINT revision_body_sha256_matches CHECK ((body_sha256 = sha256(body))),
+    CONSTRAINT revision_body_sha256_matches CHECK ((NOT (body_sha256 IS DISTINCT FROM sha256(body)))),
     CONSTRAINT revision_body_size_limit CHECK ((octet_length(body) <= 2097152)),
     CONSTRAINT revision_check CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
     CONSTRAINT revision_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),

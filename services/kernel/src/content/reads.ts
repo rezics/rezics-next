@@ -63,7 +63,7 @@ type Row = {
   subject_ids: string[];
   media_ids: string[];
   body: Buffer | null;
-  sha256: Buffer;
+  sha256: Buffer | null;
 };
 type Chain = { thread: Row; posts: Row[]; revision: Row | null };
 type Key = { at: string; id: string };
@@ -324,6 +324,7 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
     revisionId: revision.id,
   };
   if (erased) return { ...metadata, removed: true, body: null, sha256: null, availability: 'erased' };
+  if (revision.sha256 === null) throw new Error('Live revision is missing its body digest');
   if (revision.availability !== 'available' || !revision.body) return null;
   return {
     ...metadata,
