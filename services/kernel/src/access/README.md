@@ -42,7 +42,14 @@ Reinstatement is the separate governance reversal, `account:reinstate` on the Gl
 stays where the suspension put it, so every token, session and proof issued before the suspension stays refused. The
 person signs in again. From the command's T the account is permitted as any active account. An active, pending or
 deleted account answers 409 and stays unchanged. A deleted account is never reinstated. The command leaves every other
-fence and hold alone, including an operator fence on accounts this account operates.
+fence and hold alone. It commits a continuation root to lift fences raised by this suspension on accounts it still
+operates under the same reservation. Signed pages of at most 100 persist their child allowlist before effects and
+recheck each subject and relation slot under lock. Only the current fence with this suspension's native receipt is
+lifted; deleted, transferred, independently suspended or otherwise fenced accounts stay unchanged. Authentication
+floors never decrease, so credentials can obtain fresh tokens while earlier tokens and sessions stay refused. Each
+page first checks that the operator is still active and that this is its latest suspension; another suspension stops
+that reversal.
+Page and subject receipts make crash recovery and replay idempotent.
 
 ## Operator responsibility pages
 
@@ -310,3 +317,13 @@ The shared executor serializes writes through one `core.partition.position` coun
 - Growth check: `test/access/growth-operator-fencing.test.ts` with `checkGrowth` at [1, 8, 64]: unrelated accounts with
   the operator fixed; completed and pending history with fixed first and late page seeks; and affected accounts with
   P fixed. Per-page rows and statements stay constant and buffers logarithmic; total work is linear in affected accounts.
+
+### Operator reinstatement fanout
+
+- Touches: one continuation root row in the reinstatement transaction; per page, one signed responsibility page read
+  of at most 100 subjects, one anchored point read and lock of each subject and its relation slot, one fence receipt
+  read per subject, and one page receipt.
+- Bound: O(P log R) per page with P <= 100; the whole fanout is O(S log R) for S operated accounts, in pages.
+- Growth check: `test/access/growth-operator-reinstatement.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated
+  accounts and the operator's earlier fence and reinstatement history with the page fixed; constant statements and
+  rows, logarithmic buffers. Seed in `grow` and use the default warm-up.

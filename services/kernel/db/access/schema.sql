@@ -512,6 +512,10 @@ CREATE TABLE access.lifecycle_fence_receipt (
     kind text NOT NULL,
     prior_operator_account_id uuid,
     transaction_id uuid NOT NULL,
+    operator_account_id uuid,
+    operator_reservation_id uuid,
+    operator_continuation_id uuid,
+    CONSTRAINT lifecycle_fence_operator_origin CHECK ((((operator_account_id IS NULL) AND (operator_reservation_id IS NULL) AND (operator_continuation_id IS NULL)) OR ((operator_account_id IS NOT NULL) AND (operator_reservation_id IS NOT NULL) AND (operator_continuation_id IS NOT NULL)))),
     CONSTRAINT lifecycle_fence_receipt_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT lifecycle_fence_receipt_kind_check CHECK ((kind = ANY (ARRAY['fence'::text, 'tombstone'::text]))),
     CONSTRAINT lifecycle_fence_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0))
@@ -1111,6 +1115,20 @@ ALTER TABLE ONLY access.workflow_approval
 
 ALTER TABLE ONLY access.write_rate_counter
     ADD CONSTRAINT write_rate_counter_pkey PRIMARY KEY (route, identity_digest, family);
+
+
+--
+-- Name: committed_continuation_barrier; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX committed_continuation_barrier ON access.committed_continuation USING btree (route, account_id, barrier_receipt_id);
+
+
+--
+-- Name: committed_continuation_operator_latest; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX committed_continuation_operator_latest ON access.committed_continuation USING btree (route, account_id, minimum_authn_epoch DESC) WHERE (allowlist @> '[{"step": "operator-responsibility-page"}]'::jsonb);
 
 
 --

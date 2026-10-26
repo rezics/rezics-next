@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
+import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
@@ -16,6 +17,12 @@ import { createOperatorCommands } from './operator.ts';
 import { createAccess } from './permission.ts';
 import insertPage from './committed-continuation-page-insert.sql';
 import readPage from './committed-continuation-page-read.sql';
+import operatorState from './operator-fence-state.sql';
+import unfenceSubject from './operator-unfence-subject.sql';
+import clearFence from './lifecycle-fence-clear.sql';
+import fenceSubject from './operator-fence-subject.sql';
+import nativeFence from './lifecycle-fence.sql';
+import fenceOrigin from './operator-fence-origin.sql';
 
 const PAGE_SIZE = 100;
 const workflowName = 'accounts.operator-fence-page';
@@ -55,10 +62,24 @@ export function createOperatorFenceRunner(config: {
   async function page(reference: string, cursor?: string, previous?: string) {
     const root = await config.root(reference);
     const pageKey = keyOf(cursor);
+    const source = root.allowlist.find((item) => item.step === 'operator-fence-source');
+    const lifting = source !== undefined;
+    const pageStep = lifting ? 'operator-unfence-page' : 'operator-responsibility-page';
+    // Always recheck, including receipt replay. Only the latest suspension's
+    // fanout governs, even after another suspension has also been reversed.
+    const current = await withConnection(config.pool, (client) =>
+      operatorState.run(client, {
+        route: root.route,
+        account_id: root.accountId,
+        state: lifting ? 'active' : 'suspended',
+        continuation_id: source?.target ?? root.continuationId,
+      }),
+    );
+    if (!current) return { next: null, pageKey };
     const pageEntry = entry(
-      'operator-responsibility-page',
+      pageStep,
       root.accountId,
-      cursor ? `${root.commandKeyPrefix}:page:${pageKey}` : `${root.commandKeyPrefix}:operator-responsibility-page`,
+      cursor ? `${root.commandKeyPrefix}:page:${pageKey}` : `${root.commandKeyPrefix}:${pageStep}`,
     );
     if (cursor) {
       allow(previous && /^[0-9a-f]{64}$/.test(previous));
@@ -81,9 +102,8 @@ export function createOperatorFenceRunner(config: {
         page_key: pageKey,
       }),
     );
-    // Page observation finishes before command checkout. Suspension has already
-    // closed the operator to new reservations; subject transfers are rechecked
-    // under the subject lock when each child executes.
+    // The signed observation finishes before checkout. Each subject's current
+    // relation and reservation are independently rechecked under its own lock.
     const batch = existing
       ? undefined
       : await operators.responsibilityPage({
@@ -95,7 +115,7 @@ export function createOperatorFenceRunner(config: {
       {
         route: root.route,
         id: root.accountId,
-        kind: 'operator.fence-page',
+        kind: lifting ? 'operator.unfence-page' : 'operator.fence-page',
         key: pageEntry.key,
         input: { continuationId: root.continuationId, cursor: cursor ?? null },
       },
@@ -103,15 +123,13 @@ export function createOperatorFenceRunner(config: {
         allow(batch);
         const allowlist = batch.operators.map((subject) =>
           entry(
-            'fence',
+            lifting ? 'unfence' : 'fence',
             `${subject.subjectAccountId}:${subject.reservationId}`,
-            `${root.commandKeyPrefix}:fence:${subject.reservationId}`,
+            `${root.commandKeyPrefix}:${lifting ? 'unfence' : 'fence'}:${subject.reservationId}`,
           ),
         );
         if (batch.next)
-          allowlist.push(
-            entry('operator-responsibility-page', root.accountId, `${root.commandKeyPrefix}:page:${keyOf(batch.next)}`),
-          );
+          allowlist.push(entry(pageStep, root.accountId, `${root.commandKeyPrefix}:page:${keyOf(batch.next)}`));
         await insertPage.run(tx, {
           route: root.route,
           continuation_id: root.continuationId,
@@ -137,15 +155,83 @@ export function createOperatorFenceRunner(config: {
     // All connections used to read and persist the page have been released.
     for (const child of saved.allowlist as ContinuationEntry[]) {
       allow(child.digest === continuationEntryDigest(child));
-      if (child.step !== 'fence') continue;
+      if (child.step !== (lifting ? 'unfence' : 'fence')) continue;
       const [subjectAccountId, reservationId] = child.target.split(':');
       allow(subjectAccountId && reservationId);
-      await operators.fenceOperatedSubject({
-        operatorAccountId: root.accountId,
-        subjectAccountId,
-        reservationId,
-        key: child.key,
-      });
+      if (source) {
+        const route = routeOf(subjectAccountId);
+        allow(route !== null);
+        await execute(
+          {
+            route,
+            id: subjectAccountId,
+            kind: 'operator.subject-unfenced',
+            key: child.key,
+            input: { continuationId: root.continuationId, subjectAccountId, reservationId },
+          },
+          async (tx, transactionId) => {
+            const subject = await unfenceSubject.run(tx, {
+              route,
+              subject_id: subjectAccountId,
+              operator_id: root.accountId,
+              reservation_id: reservationId,
+              source_id: source.target,
+            });
+            if (!subject) return { accountId: subjectAccountId, lifted: false };
+            const cleared = await clearFence.run(tx, {
+              route,
+              account_id: subjectAccountId,
+              receipt_id: subject.fenceReceiptId!,
+              minimum_authn_epoch: subject.minimumAuthnEpoch,
+              authn_epoch: subject.minimumAuthnEpoch,
+              transaction_id: transactionId,
+            });
+            allow(Array.isArray(cleared) ? cleared.length > 0 : cleared);
+            return { accountId: subjectAccountId, lifted: true };
+          },
+        );
+      } else {
+        const route = routeOf(subjectAccountId);
+        allow(route !== null);
+        await execute(
+          {
+            route,
+            id: subjectAccountId,
+            kind: 'operator.subject-fenced',
+            key: child.key,
+            input: { operatorAccountId: root.accountId, subjectAccountId, reservationId, key: child.key },
+          },
+          async (tx, transactionId) => {
+            const related = await fenceSubject.run(tx, {
+              route,
+              subject_id: subjectAccountId,
+              operator_id: root.accountId,
+              reservation_id: reservationId,
+            });
+            if (!related) return { accountId: subjectAccountId, fenced: false, receiptId: null };
+            const receiptId = derivedId('134e9749-1120-8a0c-97d0-71287a629cef', `${transactionId}:fence`, route);
+            const receipt = await nativeFence.run(tx, {
+              route,
+              account_id: subjectAccountId,
+              receipt_id: receiptId,
+              tombstone: false,
+              kind: 'fence',
+              prior_operator_id: '',
+              transaction_id: transactionId,
+            });
+            allow(receipt[0]);
+            await fenceOrigin.run(tx, {
+              route,
+              account_id: subjectAccountId,
+              receipt_id: receiptId,
+              operator_id: root.accountId,
+              reservation_id: reservationId,
+              continuation_id: root.continuationId,
+            });
+            return { accountId: subjectAccountId, fenced: true, receiptId };
+          },
+        );
+      }
     }
     return { next: saved.nextCursor, pageKey };
   }
@@ -203,7 +289,7 @@ export function registerOperatorFenceWork(context: WorkContext, referenceKeys: K
   context.addEffects([
     {
       name: 'operator_fence',
-      types: ['com.rezics.access.account.suspended.v1'],
+      types: ['com.rezics.access.account.suspended.v1', 'com.rezics.access.account.reinstated.v1'],
       async run(event) {
         const data = event.data as { accountId: string; receiptId: string; continuationOperationKey?: string };
         if (!data.continuationOperationKey) return;

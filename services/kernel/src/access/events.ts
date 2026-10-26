@@ -106,6 +106,14 @@ export const ACCESS_EVENTS = {
     { pageKey: digest, count: Type.Integer({ minimum: 0, maximum: 100 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.access.operator.unfence-page.v1': Type.Object(
+    { pageKey: digest, count: Type.Integer({ minimum: 0, maximum: 100 }) },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.operator.subject-unfenced.v1': Type.Object(
+    { accountId: identity, lifted: Type.Boolean() },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.operator.subject-fenced.v1': Type.Object(
     { accountId: identity, fenced: Type.Boolean(), receiptId: Type.Union([identity, Type.Null()]) },
     { additionalProperties: false },
@@ -124,6 +132,7 @@ export const ACCESS_EVENTS = {
     {
       accountId: identity,
       state: Type.Literal('active'),
+      continuationOperationKey: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
       minimumAuthnEpoch: Type.String({ pattern: '^[1-9][0-9]{0,18}$', maxLength: 19 }),
       receiptId: identity,
     },

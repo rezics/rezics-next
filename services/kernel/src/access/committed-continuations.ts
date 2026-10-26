@@ -395,7 +395,11 @@ export function createCommittedContinuations(config: {
       const snapshot = snapshotOf(located.route, stored, allowlist);
       refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
       refused(
-        allowlist.some((entry) => entry.step === 'operator-responsibility-page' && entry.target === stored.accountId),
+        allowlist.some(
+          (entry) =>
+            ['operator-responsibility-page', 'operator-unfence-page'].includes(entry.step) &&
+            entry.target === stored.accountId,
+        ),
       );
       return snapshot;
     },
