@@ -1,6 +1,7 @@
+import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withConnection } from '../database/pool.ts';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -86,7 +87,7 @@ async function linksCaughtUp(
       return pending === null;
     });
     if (covered) return true;
-    if (Date.now() + FRESHNESS_POLL_MS > deadline) return false;
+    if (deadline - Date.now() < FRESHNESS_POLL_MS) return false;
     await sleep(FRESHNESS_POLL_MS);
   }
   return false;
@@ -278,65 +279,53 @@ export async function listSubjectLinks(
     cursor = decoded;
   }
   const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionOf(route));
-      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-        visibility: string;
-      } | null;
-      if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
-        throw new SubjectNotFoundError();
-      const redirect = await redirectOf(client, options.subject);
-      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-      const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
-      const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
-      const rows =
-        options.property === null
-          ? await listInboundLinks.run(client, {
-              route,
-              subject_id: options.subject,
-              after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-              after_source: afterSource,
-              after_statement: afterStatement,
-              page_limit: options.limit + 1,
+  return withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      visibility: string;
+    } | null;
+    if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
+      throw new SubjectNotFoundError();
+    const redirect = await redirectOf(client, options.subject);
+    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
+    const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
+    const rows =
+      options.property === null
+        ? await listInboundLinks.run(client, {
+            route,
+            subject_id: options.subject,
+            after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+            after_source: afterSource,
+            after_statement: afterStatement,
+            page_limit: options.limit + 1,
+          })
+        : await listInboundLinksByProperty.run(client, {
+            route,
+            subject_id: options.subject,
+            property: options.property,
+            after_source: afterSource,
+            after_statement: afterStatement,
+            page_limit: options.limit + 1,
+          });
+    const links = rows.slice(0, options.limit);
+    const last = links.at(-1);
+    return {
+      links,
+      freshness: {
+        consistency: 'eventual',
+        target_seconds: FRESHNESS_TARGET_SECONDS,
+        caught_up: caughtUp,
+      },
+      next:
+        rows.length > options.limit && last
+          ? encodeCursor(ring, binding, {
+              epoch: partition.epoch,
+              after: [last.property, last.subject, last.statement],
             })
-          : await listInboundLinksByProperty.run(client, {
-              route,
-              subject_id: options.subject,
-              property: options.property,
-              after_source: afterSource,
-              after_statement: afterStatement,
-              page_limit: options.limit + 1,
-            });
-      const links = rows.slice(0, options.limit);
-      const last = links.at(-1);
-      await client.query('COMMIT');
-      return {
-        links,
-        freshness: {
-          consistency: 'eventual',
-          target_seconds: FRESHNESS_TARGET_SECONDS,
-          caught_up: caughtUp,
-        },
-        next:
-          rows.length > options.limit && last
-            ? encodeCursor(ring, binding, {
-                epoch: partition.epoch,
-                after: [last.property, last.subject, last.statement],
-              })
-            : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
+          : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
   });
 }

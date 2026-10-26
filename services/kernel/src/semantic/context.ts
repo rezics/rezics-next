@@ -1,7 +1,7 @@
+import { withReadTransaction } from './read.ts';
 import type { Pool } from 'pg';
 import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
@@ -166,39 +166,25 @@ export async function readContext(
   const route = routeOf(id);
   if (route === null) return null;
   const partitionNo = partitionOf(route);
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionNo);
-      if (!partition) {
-        await client.query('COMMIT');
-        return null;
-      }
-      const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
-      if (!row || !(await authorize(client))) {
-        await client.query('COMMIT');
-        return null;
-      }
-      await client.query('COMMIT');
-      return {
-        context: {
-          id: row.id,
-          kind: row.kind,
-          labels: row.labels,
-          settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
-          defaults: row.defaults,
-        },
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        client.release(error as Error);
-      }
-      throw error;
+  return withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionNo);
+    if (!partition) {
+      return null;
     }
+    const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
+    if (!row || !(await authorize(client))) {
+      return null;
+    }
+    return {
+      context: {
+        id: row.id,
+        kind: row.kind,
+        labels: row.labels,
+        settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
+        defaults: row.defaults,
+      },
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
   });
 }
 

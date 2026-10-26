@@ -1,9 +1,9 @@
+import { withReadTransaction } from './read.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -606,30 +606,18 @@ async function page<T>(
     if (!validAfter(decoded.after)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionOf(route));
-      const subject = listed(await readCandidateVisibility.run(client, { route, subject_id: options.subject }))[0];
-      if (!partition || subject?.visibility !== 'visible' || !(await options.authorize(client)))
-        throw new SubjectNotFoundError();
-      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-      const result = await read(client, cursor?.after ?? null);
-      await client.query('COMMIT');
-      return {
-        ...result.value,
-        next: result.after ? encodeCursor(ring, binding, { epoch: partition.epoch, after: result.after }) : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
+  return withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    const subject = listed(await readCandidateVisibility.run(client, { route, subject_id: options.subject }))[0];
+    if (!partition || subject?.visibility !== 'visible' || !(await options.authorize(client)))
+      throw new SubjectNotFoundError();
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const result = await read(client, cursor?.after ?? null);
+    return {
+      ...result.value,
+      next: result.after ? encodeCursor(ring, binding, { epoch: partition.epoch, after: result.after }) : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
   });
 }
 

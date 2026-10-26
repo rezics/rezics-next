@@ -1,10 +1,11 @@
+import { withReadTransaction } from './read.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
@@ -215,15 +216,6 @@ function asFacts(rows: readonly SubjectReadRow[]): FactRow[] {
   );
 }
 
-async function rollback(client: PoolClient, error: unknown): Promise<never> {
-  try {
-    await client.query('ROLLBACK');
-  } catch (rollbackError) {
-    discardConnection(client, rollbackError as Error);
-  }
-  throw error;
-}
-
 async function withoutFencedFacts(
   client: PoolClient,
   routeKey: Uint8Array,
@@ -266,46 +258,37 @@ export async function readSubject(
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) return null;
   const defaults = contextRecord?.defaults ?? {};
-  const snapshot = await withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition) {
-        await client.query('COMMIT');
-        return null;
-      }
-      const rows = (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[];
-      if (!rows.length) {
-        await client.query('COMMIT');
-        return null;
-      }
-      const allowed = await authorize(client);
-      if (allowed && rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
-      const release = await getRelease(client, rows[0]!.release);
-      if (!release) throw new Error('Subject revision release is missing');
-      let statementFacts: FactRow[] = [];
-      const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
-      if (allowed) {
-        for (const property of release.types[rows[0]!.type]!.properties) {
-          const view = await slotView(client, id, property, context, defaults);
-          statementFacts.push(...view.facts);
-          if (view.resolution) resolution[property] = view.resolution;
-        }
-        if (routeKey) statementFacts = await withoutFencedFacts(client, routeKey, route, id, statementFacts);
-      }
-      await client.query('COMMIT');
-      if (!allowed) return null;
-      return {
-        rows,
-        statementFacts,
-        release,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-        resolution,
-      };
-    } catch (error) {
-      return await rollback(client, error);
+  const snapshot = await withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition) {
+      return null;
     }
+    const rows = (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[];
+    if (!rows.length) {
+      return null;
+    }
+    const allowed = await authorize(client);
+    if (allowed && rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
+    const release = await getRelease(client, rows[0]!.release);
+    if (!release) throw new Error('Subject revision release is missing');
+    let statementFacts: FactRow[] = [];
+    const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
+    if (allowed) {
+      for (const property of release.types[rows[0]!.type]!.properties) {
+        const view = await slotView(client, id, property, context, defaults);
+        statementFacts.push(...view.facts);
+        if (view.resolution) resolution[property] = view.resolution;
+      }
+      if (routeKey) statementFacts = await withoutFencedFacts(client, routeKey, route, id, statementFacts);
+    }
+    if (!allowed) return null;
+    return {
+      rows,
+      statementFacts,
+      release,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+      resolution,
+    };
   });
   if (!snapshot) return null;
   const { rows, component, release, statementFacts, resolution } = snapshot;
