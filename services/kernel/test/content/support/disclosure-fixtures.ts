@@ -1,3 +1,10 @@
+import { createAuthConsentReader } from '../../../src/access/auth-consent.ts';
+import { systemClock } from '../../../src/clock.ts';
+import { R2Storage } from '../../../src/content/r2-storage.ts';
+import { createContentWorkAccess } from '../../../src/content/register.ts';
+import { contentEffects } from '../../../src/content/relays.ts';
+import { createContentWork } from '../../../src/content/work.ts';
+import { startWorker } from '../../../src/worker.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { documentText, fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';
@@ -264,4 +271,60 @@ export async function seedDisclosureDistractors(
   await admin.query(
     'ANALYZE content.board, content.board_thread, content.thread, content.post, content.revision, content.media, semantic.subject',
   );
+}
+
+async function runDisclosureWorker(): Promise<void> {
+  const endpoint = process.env.CONTENT_TEST_STORAGE;
+  if (!endpoint) throw new Error('Disclosure worker storage endpoint is missing');
+  const storage = new R2Storage({
+    endpoint,
+    bucket: 'media-test',
+    accessKeyId: 'fixture',
+    secretAccessKey: 'fixture-secret',
+    maxObjectBytes: 20 * 1024 * 1024,
+    fetch,
+  });
+  const worker = await startWorker(
+    {
+      databaseUrl: process.env.DATABASE_URL ?? '',
+      executorId: 'disclosure-test',
+      poolSize: 5,
+    },
+    [
+      {
+        name: 'content',
+        async register(context) {
+          await createContentWork({
+            storage,
+            collectionPartitions: [0],
+            access: createContentWorkAccess(systemClock),
+            readConsent: createAuthConsentReader({
+              url: `${process.env.CONTENT_TEST_CONSENT ?? 'http://127.0.0.1:1'}/internal/v1/consents:read`,
+              serviceTokenId: 'fixture.access',
+              serviceTokenSecret: 'fixture-secret',
+            }),
+            routeKey: Buffer.from(process.env.CONTENT_TEST_ROUTE_KEY ?? '', 'base64url'),
+            fetchConfig: { allowedHosts: ['images.example.org'] },
+          }).register(context);
+          const erasure = contentEffects(context.pool, context.client).filter(
+            (effect) => effect.name === 'content_author_erasure',
+          );
+          if (erasure.length !== 1) throw new Error('Author-erasure effect is missing');
+          context.addEffects(erasure);
+        },
+      },
+    ],
+  );
+  console.log('ready');
+  for await (const line of console) {
+    if (line === 'stop') {
+      await worker.stop();
+      console.log('stopped');
+      break;
+    }
+  }
+}
+
+if (process.argv.includes('--disclosure-worker')) {
+  await runDisclosureWorker();
 }

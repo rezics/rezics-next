@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import {
@@ -12,6 +13,7 @@ import {
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
+import reylo from 'reylo/esbuild';
 import type {
   Board,
   Content,
@@ -26,18 +28,13 @@ import type {
   Target,
 } from '../../../../specs/content-disclosure-driver.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createBoardEffect } from '../../src/content/board-projection.ts';
-import { createContentWorkAccess } from '../../src/content/register.ts';
-import { contentEffects } from '../../src/content/relays.ts';
 import { createReportEffect } from '../../src/content/report-effect.ts';
-import { R2Storage } from '../../src/content/r2-storage.ts';
-import { createContentWork } from '../../src/content/work.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import { projectBatch, type Envelope } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -45,8 +42,6 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
-import { systemClock } from '../../src/clock.ts';
-import { startWorker } from '../../src/worker.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
 import {
   AUDIENCE,
@@ -82,6 +77,48 @@ const OWNER_ACTIONS = {
 } as const;
 const MODERATION_ACTIONS = ['moderation:read_reports', 'moderation:takedown'];
 const MEASURED_ROUTE = 16;
+
+let preparedWorker: Promise<{ path: string; close(): Promise<void> }> | undefined;
+
+/** Compile real SQL modules once, outside scenario timers, rather than on each worker's cold start. */
+export function prepareDisclosureWorker(): Promise<{ path: string; close(): Promise<void> }> {
+  return (preparedWorker ??= (async () => {
+    const temporaryRoot = fileURLToPath(new URL('../../../../.temp/', import.meta.url));
+    await mkdir(temporaryRoot, { recursive: true });
+    const directory = await mkdtemp(`${temporaryRoot}disclosure-worker-`);
+    try {
+      await symlink(fileURLToPath(new URL('../../node_modules/', import.meta.url)), `${directory}/node_modules`);
+      const build = await Bun.build({
+        entrypoints: [fileURLToPath(new URL('./support/disclosure-fixtures.ts', import.meta.url))],
+        outdir: directory,
+        naming: 'worker.mjs',
+        target: 'bun',
+        packages: 'external',
+        plugins: [
+          reylo(),
+          {
+            name: 'preserve-source-locations',
+            setup(builder) {
+              // Production modules resolve non-code assets relative to their source URL.
+              builder.onLoad({ filter: /\.ts$/ }, async ({ path }) => ({
+                loader: 'ts',
+                contents: (await readFile(path, 'utf8')).replaceAll(
+                  'import.meta.url',
+                  JSON.stringify(pathToFileURL(path).href),
+                ),
+              }));
+            },
+          },
+        ],
+      });
+      if (!build.success) throw new AggregateError(build.logs, 'Disclosure worker build failed');
+      return { path: `${directory}/worker.mjs`, close: () => rm(directory, { recursive: true, force: true }) };
+    } catch (error) {
+      await rm(directory, { recursive: true, force: true });
+      throw error;
+    }
+  })());
+}
 
 type RecordedRequest = {
   method: string;
@@ -142,58 +179,6 @@ function namedUrl(databaseUrl: string, name: string): string {
   const url = new URL(databaseUrl);
   url.pathname = `/${name}`;
   return url.href;
-}
-
-async function runDisclosureWorker(): Promise<void> {
-  const endpoint = process.env.CONTENT_TEST_STORAGE;
-  if (!endpoint) throw new Error('Disclosure worker storage endpoint is missing');
-  const storage = new R2Storage({
-    endpoint,
-    bucket: 'media-test',
-    accessKeyId: 'fixture',
-    secretAccessKey: 'fixture-secret',
-    maxObjectBytes: 20 * 1024 * 1024,
-    fetch,
-  });
-  const worker = await startWorker(
-    {
-      databaseUrl: process.env.DATABASE_URL ?? '',
-      executorId: 'disclosure-test',
-      poolSize: 5,
-    },
-    [
-      {
-        name: 'content',
-        async register(context) {
-          await createContentWork({
-            storage,
-            collectionPartitions: [0],
-            access: createContentWorkAccess(systemClock),
-            readConsent: createAuthConsentReader({
-              url: `${process.env.CONTENT_TEST_CONSENT ?? 'http://127.0.0.1:1'}/internal/v1/consents:read`,
-              serviceTokenId: 'fixture.access',
-              serviceTokenSecret: 'fixture-secret',
-            }),
-            routeKey: Buffer.from(process.env.CONTENT_TEST_ROUTE_KEY ?? '', 'base64url'),
-            fetchConfig: { allowedHosts: ['images.example.org'] },
-          }).register(context);
-          const erasure = contentEffects(context.pool, context.client).filter(
-            (effect) => effect.name === 'content_author_erasure',
-          );
-          if (erasure.length !== 1) throw new Error('Author-erasure effect is missing');
-          context.addEffects(erasure);
-        },
-      },
-    ],
-  );
-  console.log('ready');
-  for await (const line of console) {
-    if (line === 'stop') {
-      await worker.stop();
-      console.log('stopped');
-      break;
-    }
-  }
 }
 
 export async function createContentDisclosureDriver(): Promise<ContentDisclosureDriver> {
@@ -999,7 +984,8 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
           return bytes ? new Response(Uint8Array.from(bytes).buffer) : new Response(null, { status: 404 });
         },
       });
-      const child = Bun.spawn([process.execPath, fileURLToPath(import.meta.url), '--disclosure-worker'], {
+      const worker = await prepareDisclosureWorker();
+      const child = Bun.spawn([process.execPath, worker.path, '--disclosure-worker'], {
         env: {
           ...process.env,
           DATABASE_URL: databaseUrl,
@@ -1628,8 +1614,4 @@ export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<
     }
     throw error;
   }
-}
-
-if (process.argv.includes('--disclosure-worker')) {
-  await runDisclosureWorker();
 }

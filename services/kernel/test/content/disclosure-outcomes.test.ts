@@ -1,7 +1,10 @@
-import { test } from 'bun:test';
+import { afterAll, test } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
-import { openMeasuredDisclosure } from './disclosure-driver.ts';
+import { openMeasuredDisclosure, prepareDisclosureWorker } from './disclosure-driver.ts';
+
+const worker = await prepareDisclosureWorker();
+afterAll(() => worker.close());
 
 process.env.CONTENT_DISCLOSURE_DRIVER = fileURLToPath(new URL('./disclosure-driver.ts', import.meta.url));
 
