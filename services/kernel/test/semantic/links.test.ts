@@ -93,10 +93,11 @@ const edition = (title: string, workId: string, statements: Record<string, unkno
     labels: { en: title },
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)], ...statements },
   });
-const linkOf = (source: Record<string, any>, property: string) => ({
+const linkOf = (source: Record<string, any>, property: string, includeLabels = false) => ({
   subject: source.id as string,
   property,
   statement: source.statements[property][0].id as string,
+  ...(includeLabels ? { type: source.type as string, label: source.labels.en as string } : {}),
 });
 const fresh = (caught_up: boolean) => ({ consistency: 'eventual', target_seconds: 10, caught_up });
 async function links(id: string, persona?: string, query = '') {
@@ -223,7 +224,7 @@ test('a Global adoption moves the link to the new work and replaying the whole l
   expect((await inbound(botchan.id)).map((row) => [row.statement_id, row.present])).toEqual([[candidate, true]]);
 });
 
-test('links are filtered by property and paged in property, subject and statement order', async () => {
+test('links are filtered by property and paged in declared order', async () => {
   const soseki = await created({ type: 'schema:Person', labels: { en: 'Natsume Sōseki' } });
   const books: Record<string, any>[] = [];
   for (const title of ['Kokoro', 'Botchan', 'Sanshirō']) {
@@ -233,24 +234,34 @@ test('links are filtered by property and paged in property, subject and statemen
     'schema:translator': [statement('schema:translator', soseki.id)],
   });
   const authored = books
-    .map((book) => linkOf(book, 'schema:author'))
+    .map((book) => linkOf(book, 'schema:author', true))
     .sort((a, b) => (a.subject < b.subject ? -1 : a.subject > b.subject ? 1 : 0));
-  const translation = linkOf(translated, 'schema:translator');
+  const translation = linkOf(translated, 'schema:translator', true);
   expect(await links(soseki.id, 'editor')).toEqual({
-    links: [...authored, translation],
+    links: [...authored, translation].map(({ subject, property, statement }) => ({ subject, property, statement })),
     freshness: fresh(true),
     next: null,
   });
   const first = await links(soseki.id, 'editor', '?property=schema%3Aauthor&limit=2');
-  expect(first.links).toEqual(authored.slice(0, 2));
-  expect(first.next).toEqual(expect.any(String));
+  expect(first).toEqual({
+    links: authored.slice(0, 2),
+    count: { value: 3, exact: true },
+    freshness: fresh(true),
+    next: expect.any(String),
+  });
   const cursor = encodeURIComponent(first.next);
   expect(await links(soseki.id, 'editor', `?property=schema%3Aauthor&limit=2&cursor=${cursor}`)).toEqual({
     links: authored.slice(2),
+    count: { value: 3, exact: true },
     freshness: fresh(true),
     next: null,
   });
-  expect((await links(soseki.id, 'editor', '?property=schema%3Atranslator')).links).toEqual([translation]);
+  expect(await links(soseki.id, 'editor', '?property=schema%3Atranslator')).toEqual({
+    links: [translation],
+    count: { value: 1, exact: true },
+    freshness: fresh(true),
+    next: null,
+  });
   expect((await links(books[0]!.id, 'editor')).links).toEqual([linkOf(translated, 'schema:exampleOfWork')]);
   for (const query of [
     `?property=schema%3Atranslator&cursor=${cursor}`,
