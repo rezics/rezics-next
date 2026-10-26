@@ -49,6 +49,11 @@ const fixtures = {
     candidate: threadId,
     authorId: actorId,
   },
+  'com.rezics.content.authored-field.erased.v1': {
+    id: revisionId,
+    subject: itemId,
+    authorId: actorId,
+  },
   'com.rezics.content.media.reserved.v1': { ...media, actorId },
   'com.rezics.content.media.uploaded.v1': { ...media, actorId },
   'com.rezics.content.media.available.v1': media,

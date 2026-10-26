@@ -181,12 +181,19 @@ An authored field document stores the editor's canonical document body, SPDX lic
 revision, and records the acting account as `author_account_id`. `appendAuthoredField` runs only inside the current
 authorized subject command and returns the document `{ id, digest }` for semantic to store as the statement value.
 The semantic command emits `com.rezics.content.authored-field.created.v1` with the document, subject, candidate and author IDs
-in the same transaction.
+in the same transaction. Append also initializes the `content.authored_field.owner` Access role for the author at that
+command's authorization time; it carries `document:erase`.
 Documents are text-only until subject-field media claims exist; image and media nodes are refused.
 
 `readAuthoredField` is a low-level exact storage read that includes erased tombstones and must never serve as a public
 handler. Disclosure follows the current semantic candidate, as it does for imported documents; a document ID by itself
 does not authorize disclosure.
+
+`eraseAuthoredField` requires account admission and `document:erase` on the document at the command's authorization time.
+It runs in the document's partition, clears the body and marks the row erased, while retaining its identity and digest.
+Only the author receives this owner permission. A repeat succeeds without another erased event. Moderation is separate:
+a harmful field document is handled by retracting its semantic statement, which ends the candidate's disclosure so its
+body is no longer served.
 
 ## Cost
 
@@ -195,6 +202,14 @@ does not authorize disclosure.
 - **Touches:** Validate and hash at most 2 MiB of canonical document bytes; insert one authored-field row by primary key in the subject's partition and emit one event in the caller's command. `readAuthoredField` performs one exact primary-key read, including tombstones.
 - **Bound:** Constant rows and statements; O(log D) blocks in the partition, where D is its authored document count.
 - **Growth check:** `test/content/authored-fields.test.ts`, `authored document append and read` at 64, 512 and 4096 documents in the partition. Rows and statements stay constant.
+
+### Authored document erasure
+
+- **Touches:** Account admission and one `document:erase` Access check at T; one exact-key statement updates the
+  document to a bodyless tombstone and recognizes an existing tombstone; one erased event on the first transition.
+- **Bound:** Constant rows and statements; O(log D) blocks for D authored documents in the partition, plus A and C.
+- **Growth check:** `test/content/authored-field-erasure.test.ts`, `authored document erasure` at 64, 512 and 4096
+  documents in the partition. Rows and statements stay constant.
 
 These are derivations from the implemented adapters and SQL here, checked against `db/content/migrations/` and `db/content/schema.sql`, not measurements or promises about a particular query plan.
 `T` is total threads, `P` rows in an anchor's partition, `p` posts in one thread, `r` revisions of one post, `t` threads in one board, `d` page depth, `s` requested results and `k` changed rows; `u` is one uploader's media history.

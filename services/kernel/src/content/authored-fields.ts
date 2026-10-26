@@ -1,9 +1,23 @@
-import type { PoolClient } from 'pg';
-import { currentCommand, type CommandTransaction } from '../command/command.ts';
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import type { Pool, PoolClient } from 'pg';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  principalCommandIdentity,
+  runCommand,
+  type CommandOutcome,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { ContentNotFoundError } from './commands.ts';
 import { validateContentDocument } from './document.ts';
 import append from './append-authored-field.sql';
 import read from './read-authored-field.sql';
+import initializeAuthoredFieldOwner from '../access/resource-initialization.sql';
+import erase from './erase-authored-field.sql';
+import type { RequestContext } from './model.ts';
 
 export type AuthoredFieldInput = Readonly<{
   subject: string;
@@ -17,6 +31,12 @@ export type AuthoredFieldInput = Readonly<{
 }>;
 
 export type AuthoredFieldResult = Readonly<{ id: string; digest: string }>;
+
+export type AuthoredFieldDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+
+type ErasedAuthoredField = Readonly<{ id: string; subject: string; authorId: string }>;
+
+class Unchanged extends Error {}
 
 export type AuthoredFieldView = AuthoredFieldResult &
   Readonly<{
@@ -91,7 +111,76 @@ export async function appendAuthoredField(
     licence: document.licence,
     language: input.language,
   });
+  // The row's ID is allocated here, after the caller's semantic command has
+  // authorized this exact subject. Its owner role is installed in the same
+  // transaction and becomes effective at the command's authoritative T.
+  const grantRows = await initializeAuthoredFieldOwner.run(tx, {
+    route,
+    resource_id: id,
+    resource_type: 'content.authored_field',
+    creator_id: authorAccountId,
+    at: authoritativeTimeValue(command.time),
+    grants: [{ subject_kind: 'identity', subject_id: authorAccountId, grant_role: 'content.authored_field.owner' }],
+    transaction_id: Bun.randomUUIDv7(),
+  });
+  if (grantRows.length !== 1) throw new TypeError('Authored field owner grant was not initialized');
   return { id, digest: document.sha256 };
+}
+
+/** Erase the author's document in its partition. Access admission and document:erase
+ * are checked for each live command attempt at the same authoritative T.
+ */
+export async function eraseAuthoredField(
+  dependencies: AuthoredFieldDependencies,
+  actor: Actor,
+  id: string,
+  context: RequestContext,
+): Promise<CommandOutcome<ErasedAuthoredField> | null> {
+  if (actor.kind !== 'account') throw new ContentNotFoundError();
+  const route = routeOf(id);
+  if (route === null) throw new ContentNotFoundError();
+  const resource = { route, id };
+  const authorization = await accessCommandAuthorization(
+    dependencies.access,
+    actor,
+    'document:erase',
+    resource,
+    { pool: dependencies.pool, deadline: context.deadline },
+    () => new ContentNotFoundError(),
+  );
+  const identity = principalCommandIdentity(actor);
+  const commandKind = 'content.authored_field.erase';
+  const body = { id };
+  try {
+    return await runCommand(
+      dependencies.pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        deadline: context.deadline,
+        clock: dependencies.clock,
+        authorization,
+        receipt: {
+          kind: commandKind,
+          key: context.idempotencyKey,
+          digest: createHash('sha256').update(canonicalize([identity.principal, commandKind, body])!).digest(),
+        },
+      },
+      async (tx) => {
+        const row = (await erase.run(tx, { route, id, author_id: actor.accountId }))[0];
+        if (!row) throw new ContentNotFoundError();
+        if (!row.changed) throw new Unchanged();
+        const value = { id: row.id, subject: row.subject, authorId: row.author_account_id };
+        return {
+          value,
+          events: [{ type: 'com.rezics.content.authored-field.erased.v1', subject: row.subject, data: value }],
+        };
+      },
+    );
+  } catch (error) {
+    if (error instanceof Unchanged) return null;
+    throw error;
+  }
 }
 
 /** LOW-LEVEL exact storage read, including erased tombstones. Never expose this as a public handler.

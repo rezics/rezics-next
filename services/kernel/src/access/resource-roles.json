@@ -20,6 +20,7 @@
     "content.thread.standing": ["post:create", "media:create", "reaction:set", "report:create"],
     "content.post.owner": ["post:read", "post:revise", "post:erase", "media:create"],
     "content.post.standing": ["reaction:set", "report:create"],
+    "content.authored_field.owner": ["document:erase"],
     "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"],
     "commerce.offer.owner": ["offer:read", "offer:manage", "order:create"],
     "commerce.offer.standing": ["order:create"],
@@ -48,6 +49,10 @@
     "content.post": {
       "owner": "content.post.owner",
       "standing": ["content.post.standing"]
+    },
+    "content.authored_field": {
+      "owner": "content.authored_field.owner",
+      "standing": []
     },
     "content.media": {
       "owner": "content.media.owner",

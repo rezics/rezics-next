@@ -50,6 +50,10 @@ export const CONTENT_EVENTS = {
     { id: UUID, subject: UUID, candidate: UUID, authorId: UUID },
     { additionalProperties: false },
   ),
+  'com.rezics.content.authored-field.erased.v1': Type.Object(
+    { id: UUID, subject: UUID, authorId: UUID },
+    { additionalProperties: false },
+  ),
   ...MEDIA_EVENTS,
   ...MEDIA_IMPORT_EVENTS,
   ...MEDIA_MODERATION_EVENTS,
