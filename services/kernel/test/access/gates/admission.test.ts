@@ -21,6 +21,8 @@ const { createKernel } = await import('../../../src/http/kernel.ts');
 const { defineRateLimit } = await import('../../../src/http/rate-limit.ts');
 const appModule = await import('../../../src/http/app.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
+const { deriveAccess } = await import('../../../src/access/derived-access.ts');
+const { createGrantCommands } = await import('../../../src/access/grant-commands.ts');
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -267,6 +269,40 @@ beforeAll(async () => {
   ]);
   expect({ code, stdout, stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
   await grant(staff.bearer, gated.accountId, groupAction);
+  // The native fixture owns this action; platform governance does not include it.
+  // Seed staff once through the native command, retaining real account admission
+  // and access:grant authorization. Later grants use the ordinary route.
+  const fixtureAccess = deriveAccess(access, {
+    async authorize(client, actor, action, resource, evidence, time) {
+      if (
+        actor.kind === 'account' &&
+        actor.accountId === staff.accountId &&
+        action === operationAction &&
+        resource.route === PLATFORM_RESOURCE.route &&
+        resource.id === PLATFORM_RESOURCE.id
+      )
+        return true;
+      return access.authorize(client, actor, action, resource, evidence, time);
+    },
+  });
+  const context = { pool, deadline: Date.now() + 20_000 };
+  const actor = await access.authenticate(staff.bearer, context);
+  const seeded = await createGrantCommands({ pool, access: fixtureAccess, managementAction: 'access:grant' }).create(
+    { ...context, actor },
+    {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: staff.accountId },
+      actions: [operationAction],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    },
+  );
+  expect(seeded.value).toEqual({
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: staff.accountId },
+    actions: [operationAction],
+    valid: '(,)',
+  });
 }, 90_000);
 
 afterAll(async () => {
