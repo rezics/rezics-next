@@ -12,11 +12,12 @@ const client = createKernelClient('http://kernel.local', {
 });
 const loaded = await loadRoutePage(client, '/');
 if (loaded.kind !== 'page') throw new Error('The recorded home page did not load.');
+const page = loaded.page;
 
 function RecordedHome() {
   return (
     <RoutePage
-      page={loaded.page}
+      page={page}
       locale={getLocale()}
       heading={m.home_heading()}
       messages={{
