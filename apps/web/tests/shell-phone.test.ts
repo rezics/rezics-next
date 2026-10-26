@@ -313,7 +313,7 @@ test.serial(
 );
 
 test.serial(
-  'on a phone the header holds the logo, language, theme and account controls, and the bottom navigation carries every destination',
+  'on a phone the header holds the logo, language, theme and account controls, and the navigation sheet carries every destination',
   async () => {
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
@@ -335,10 +335,13 @@ test.serial(
           const link = header.getByRole('link', { name: own.account_sign_in!, exact: true });
           expect(await link.isVisible(), `${where} sign in`).toBe(true);
         }
-        expect(await visible(page, own.shell_open_navigation!), `${where} toggle`).toBe(false);
+        expect(await visible(page, own.shell_open_navigation!), `${where} toggle`).toBe(true);
+        expect(await visible(page, own.shell_collapse_navigation!), `${where} collapse`).toBe(false);
         expect(await header.locator(`input[aria-label="${own.search_label}"]`).isVisible(), `${where} search`).toBe(
           false,
         );
+        await header.getByRole('button', { name: own.shell_open_navigation!, exact: true }).click();
+        await page.getByRole('dialog').waitFor();
         const bar = page.getByRole('navigation', { name: own.shell_navigation!, exact: true }).locator('a');
         const names = await bar.evaluateAll((anchors) => anchors.map((a) => (a.textContent ?? '').trim()));
         expect(names, where).toEqual(

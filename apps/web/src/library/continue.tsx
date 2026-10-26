@@ -2,7 +2,7 @@ import { pageText } from '../features/pages/data';
 import { m } from '../paraglide/messages.js';
 import type { ContinueEntry } from './continue-read';
 
-const linkClass = 'text-link underline decoration-link/30 underline-offset-4 hover:decoration-current';
+const linkClass = 'underline-offset-4';
 
 /** What the visitor is in the middle of: each subject, and a smaller link to its reading progress. */
 export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
@@ -20,13 +20,13 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
               <a
                 href={`/${locale}/subjects/${entry.subjectId}`}
                 {...(label.lang ? { lang: label.lang } : {})}
-                className={`${linkClass} font-medium break-words${label.text ? '' : ' text-muted-foreground'}`}
+                className={`${linkClass} font-medium break-words ${label.text ? 'text-primary' : 'text-muted-foreground'}`}
               >
                 {label.text || m.subject_value_unlabelled()}
               </a>
               <a
                 href={`/${locale}/library/progress?subjectId=${encodeURIComponent(entry.subjectId)}`}
-                className={`${linkClass} text-sm`}
+                className={`${linkClass} text-sm text-primary`}
               >
                 {m.home_continue_progress()}
               </a>

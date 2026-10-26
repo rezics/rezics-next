@@ -1,34 +1,39 @@
-import { Button } from '@rezics/ui/button';
 import { LocaleProvider } from '@rezics/ui/locale';
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@rezics/ui/menu';
-import { ChoiceSelect } from '@rezics/ui/select';
-import { SkipNavContent, SkipNavLink } from '@rezics/ui/skip-nav';
+import { SkipNavLink } from '@rezics/ui/skip-nav';
+import { cn } from '@rezics/ui/utils';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
-  BottomNavigation,
-  BottomNavigationItem,
-  BottomNavigationItemIcon,
-  BottomNavigationItemLabel,
-  BottomNavigationList,
-} from '@rezics/ui/bottom-navigation';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@rezics/ui/shadcn/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@rezics/ui/shadcn/sheet';
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   useSidebar,
-} from '@rezics/ui/sidebar';
+} from '@rezics/ui/shadcn/sidebar';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
 import { ShellSearch } from '../search/search.tsx';
 import {
   Folders,
+  Globe,
   House,
   Library,
   LogIn,
@@ -42,6 +47,7 @@ import {
   Sun,
   UserRound,
   Users,
+  X,
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import type { SessionState } from '../session/state.ts';
@@ -96,12 +102,22 @@ const headerControlClass =
 const statusControlClass =
   'h-9 rounded-full px-4 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const accountMenuLinkClass =
-  'flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+  'flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
 const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
   return (env as Partial<SessionEnv>).AUTH_ISSUER ?? '';
 });
 let authIssuerPromise: Promise<string> | undefined;
+
+// False on the server and while the page hydrates, true afterwards. Controls that need script stay disabled until then.
+const noSubscription = () => () => {};
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
+}
 
 function Mark() {
   return (
@@ -121,7 +137,7 @@ function Logo() {
 function Navigation({ pathname, session }: { pathname: string; session: SessionState }) {
   const { setOpenMobile } = useSidebar();
   return (
-    <nav aria-label={m.shell_navigation()}>
+    <nav aria-label={m.shell_navigation()} className="flex min-h-0 w-full flex-1 flex-col">
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
@@ -129,11 +145,14 @@ function Navigation({ pathname, session }: { pathname: string; session: SessionS
               const Icon = item.icon;
               return (
                 <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton asChild isActive={destinationCurrent(pathname, item.to)} tooltip={item.message()}>
-                    <Link to={item.to} onClick={() => setOpenMobile(false)} className="text-primary">
-                      <Icon aria-hidden="true" className="size-5" />
-                      <span>{item.message()}</span>
-                    </Link>
+                  <SidebarMenuButton
+                    className="h-10"
+                    isActive={destinationCurrent(pathname, item.to)}
+                    tooltip={item.message()}
+                    render={<Link to={item.to} onClick={() => setOpenMobile(false)} />}
+                  >
+                    <Icon aria-hidden="true" className="text-sidebar-primary" />
+                    <span>{item.message()}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               );
@@ -144,21 +163,98 @@ function Navigation({ pathname, session }: { pathname: string; session: SessionS
     </nav>
   );
 }
-function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+// On a phone the navigation is a sheet the header button opens. Before script runs, and where there is none, the same
+// destinations are a plain list under the header, so the page always has one named primary navigation.
+function PhoneNavigation({ pathname, session }: { pathname: string; session: SessionState }) {
+  const { openMobile, setOpenMobile } = useSidebar();
   return (
-    <Button
-      className={`hidden md:inline-flex ${headerControlClass}`}
-      variant="ghost"
-      size="icon-md"
-      pill
-      aria-label={collapsed ? m.shell_expand_navigation() : m.shell_collapse_navigation()}
-      onClick={onToggle}
-    >
-      <MenuIcon aria-hidden="true" />
-    </Button>
+    <Sheet open={openMobile} onOpenChange={setOpenMobile}>
+      <SheetContent
+        side="left"
+        showCloseButton={false}
+        className="w-72 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-72"
+      >
+        <SheetHeader className="flex-row items-center justify-between border-b border-sidebar-border px-4 py-3">
+          <SheetTitle>{m.shell_navigation()}</SheetTitle>
+          <SheetClose
+            render={
+              <Button variant="ghost" size="icon-lg" className="rounded-full" aria-label={m.shell_close_navigation()} />
+            }
+          >
+            <X aria-hidden="true" />
+          </SheetClose>
+        </SheetHeader>
+        <Navigation pathname={pathname} session={session} />
+      </SheetContent>
+    </Sheet>
+  );
+}
+function NavigationColumn({ pathname, session }: { pathname: string; session: SessionState }) {
+  const { isMobile } = useSidebar();
+  if (isMobile) return <PhoneNavigation pathname={pathname} session={session} />;
+  return (
+    <Sidebar collapsible="icon" className="top-16! h-[calc(100svh-4rem)]!">
+      <Navigation pathname={pathname} session={session} />
+    </Sidebar>
+  );
+}
+function ScriptFreeNavigation({ pathname, session }: { pathname: string; session: SessionState }) {
+  return (
+    <noscript>
+      <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
+        <ul className="flex flex-wrap gap-1">
+          {offeredDestinations(session).map((item) => {
+            const Icon = item.icon;
+            return (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  aria-current={destinationCurrent(pathname, item.to) ? 'page' : undefined}
+                  className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
+                >
+                  <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />
+                  {item.message()}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      <style>{'[data-open-navigation]{display:none!important}'}</style>
+    </noscript>
+  );
+}
+function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const { setOpenMobile } = useSidebar();
+  const hydrated = useHydrated();
+  return (
+    <>
+      <Button
+        className={cn('md:hidden', headerControlClass)}
+        variant="ghost"
+        size="icon-lg"
+        data-open-navigation
+        disabled={!hydrated}
+        aria-label={m.shell_open_navigation()}
+        onClick={() => setOpenMobile(true)}
+      >
+        <MenuIcon aria-hidden="true" />
+      </Button>
+      <Button
+        className={cn('hidden md:inline-flex', headerControlClass)}
+        variant="ghost"
+        size="icon-lg"
+        disabled={!hydrated}
+        aria-label={collapsed ? m.shell_expand_navigation() : m.shell_collapse_navigation()}
+        onClick={onToggle}
+      >
+        <MenuIcon aria-hidden="true" />
+      </Button>
+    </>
   );
 }
 function ThemeControl() {
+  const hydrated = useHydrated();
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() =>
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
       ? 'dark'
@@ -176,48 +272,66 @@ function ThemeControl() {
     document.cookie = `rezics_theme=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <Menu>
-      <MenuTrigger asChild>
-        <Button
-          className={headerControlClass}
-          variant="ghost"
-          size="icon-md"
-          pill
-          aria-label={m.shell_theme()}
-          title={m.shell_theme()}
-        >
-          <Icon aria-hidden="true" className="size-5" />
-        </Button>
-      </MenuTrigger>
-      <MenuContent>
-        <MenuRadioGroup heading={m.shell_theme()} value={theme} onValueChange={(d) => choose(d.value)}>
-          <MenuRadioItem value="system">{m.shell_theme_system()}</MenuRadioItem>
-          <MenuRadioItem value="light">{m.shell_theme_light()}</MenuRadioItem>
-          <MenuRadioItem value="dark">{m.shell_theme_dark()}</MenuRadioItem>
-        </MenuRadioGroup>
-      </MenuContent>
-    </Menu>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            className={headerControlClass}
+            variant="ghost"
+            size="icon-lg"
+            disabled={!hydrated}
+            aria-label={m.shell_theme()}
+            title={m.shell_theme()}
+          />
+        }
+      >
+        <Icon aria-hidden="true" className="size-5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{m.shell_theme()}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={choose}>
+            <DropdownMenuRadioItem value="system">{m.shell_theme_system()}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light">{m.shell_theme_light()}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">{m.shell_theme_dark()}</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 function LanguageControl() {
+  const hydrated = useHydrated();
   const locale = getLocale();
-  const change = async (value: string) => {
+  const change = async (value: string | null) => {
     if (!value || value === locale) return;
     const next = value as typeof locale;
     document.cookie = `rezics_locale=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
     await setLocale(next);
   };
-  const options = locales.map((value) => ({ value, label: names[value], lang: value }));
+  const options = locales.map((value) => ({ value, label: names[value] }));
   return (
     <>
       <div data-language-js>
-        <ChoiceSelect
-          label={m.shell_language()}
-          value={locale}
-          options={options}
-          className={`${headerControlClass} max-w-32 bg-transparent px-3 shadow-none hover:border-border/60 hover:bg-accent/60`}
-          onValueChange={change}
-        />
+        <Select value={locale} onValueChange={change} items={options} disabled={!hydrated}>
+          <SelectTrigger
+            aria-label={m.shell_language()}
+            className={cn(
+              headerControlClass,
+              'max-w-32 bg-transparent px-3 hover:bg-accent/60 max-md:w-9 max-md:justify-center max-md:px-0 max-md:[&>[data-slot=select-value]]:hidden max-md:[&>svg:last-child]:hidden',
+            )}
+          >
+            <Globe aria-hidden="true" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="end" alignItemWithTrigger={false} className="min-w-40">
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value} lang={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <noscript>
         <details>
@@ -235,6 +349,7 @@ function LanguageControl() {
     </>
   );
 }
+// The account menu is a native popover, so it opens, and signing out works, before any script has run.
 function SessionControl({ session, csrfToken }: { session: SessionState; csrfToken: string | null }) {
   const location = useLocation();
   if (session === 'unavailable') return null;
@@ -254,15 +369,14 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
       <>
         <Button
           id="account-menu-button"
-          className={`${headerControlClass} px-3 sm:px-4`}
+          className={cn(headerControlClass, 'px-3 sm:px-4')}
           variant="ghost"
-          size="md"
-          pill
+          size="lg"
           aria-label={m.account_menu()}
           aria-controls="account-menu"
           popoverTarget="account-menu"
         >
-          <UserRound aria-hidden="true" className="size-4" />
+          <UserRound aria-hidden="true" />
           <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
         </Button>
         <div
@@ -270,7 +384,7 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
           popover="auto"
           role="group"
           aria-labelledby="account-menu-button"
-          className="fixed inset-auto end-3 top-[4.5rem] m-0 grid w-64 max-w-[calc(100vw-1.5rem)] gap-1 rounded-2xl border border-border/60 bg-popover p-1.5 text-popover-foreground shadow-(--aura-shadow-float) outline-none"
+          className="fixed inset-auto end-3 top-[4.5rem] m-0 grid w-64 max-w-[calc(100vw-1.5rem)] gap-1 rounded-2xl bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/5 outline-none dark:ring-foreground/10"
         >
           <a href={`/${locale}/library`} className={accountMenuLinkClass}>
             <Library aria-hidden="true" className="size-4" />
@@ -294,12 +408,8 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
           </a>
           <form method="post" action="/auth/sign-out" className="m-0">
             <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-            <Button
-              type="submit"
-              variant="ghost"
-              className="h-9 w-full justify-start rounded-xl px-3 focus-visible:ring-primary focus-visible:ring-offset-0"
-            >
-              <LogOut aria-hidden="true" className="size-4" />
+            <Button type="submit" variant="ghost" size="lg" className="w-full justify-start rounded-xl px-3">
+              <LogOut aria-hidden="true" />
               {m.account_sign_out()}
             </Button>
           </form>
@@ -309,12 +419,14 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
   }
   const returnTo = location.publicHref.split('#')[0]!;
   return (
-    <Button asChild variant="default" className={`${headerControlClass} px-3 sm:px-4`}>
-      <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
-        <LogIn aria-hidden="true" className="size-4" />
-        <span className="sr-only sm:not-sr-only">{m.account_sign_in()}</span>
-      </a>
-    </Button>
+    <a
+      data-slot="button"
+      className={cn(buttonVariants({ size: 'lg' }), headerControlClass, 'px-3 sm:px-4')}
+      href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
+    >
+      <LogIn aria-hidden="true" />
+      <span className="sr-only sm:not-sr-only">{m.account_sign_in()}</span>
+    </a>
   );
 }
 export function AppShell({
@@ -344,7 +456,17 @@ export function AppShell({
   };
   return (
     <LocaleProvider locale={locale}>
-      <SidebarProvider className="flex-col" open={!railCollapsed} onOpenChange={(open) => setCollapsed(!open)}>
+      <SidebarProvider
+        className="flex-col"
+        open={!railCollapsed}
+        onOpenChange={(open) => {
+          setCollapsed(!open);
+          // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
+          setTimeout(() => {
+            document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
+          });
+        }}
+      >
         <SkipNavLink id="main-content">{m.shell_skip_to_content()}</SkipNavLink>
         <link
           rel="preload"
@@ -369,35 +491,13 @@ export function AppShell({
             </div>
           </div>
         </header>
-        <div className="flex min-h-[calc(100dvh-4rem)]">
-          <Sidebar collapsible="icon" style={{ top: '4rem', bottom: 0, height: 'auto' }}>
-            <Navigation pathname={location.pathname} session={session} />
-          </Sidebar>
-          <SkipNavContent asChild id="main-content" className="min-w-0 flex-1">
-            <main className="min-h-[calc(100dvh-4rem)] min-w-0 p-6 pb-24 outline-none md:pb-6">
-              <div className="mx-auto w-full max-w-5xl">{children}</div>
-            </main>
-          </SkipNavContent>
+        <ScriptFreeNavigation pathname={location.pathname} session={session} />
+        <div className="flex flex-1">
+          <NavigationColumn pathname={location.pathname} session={session} />
+          <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+            <div className="mx-auto w-full max-w-5xl">{children}</div>
+          </SidebarInset>
         </div>
-        <BottomNavigation aria-label={m.shell_navigation()} className="md:hidden">
-          <BottomNavigationList>
-            {offeredDestinations(session)
-              .filter((item) => item.phone)
-              .map((item) => {
-                const Icon = item.icon;
-                return (
-                  <BottomNavigationItem key={item.to} asChild active={destinationCurrent(location.pathname, item.to)}>
-                    <Link to={item.to}>
-                      <BottomNavigationItemIcon>
-                        <Icon />
-                      </BottomNavigationItemIcon>
-                      <BottomNavigationItemLabel>{item.message()}</BottomNavigationItemLabel>
-                    </Link>
-                  </BottomNavigationItem>
-                );
-              })}
-          </BottomNavigationList>
-        </BottomNavigation>
       </SidebarProvider>
     </LocaleProvider>
   );
@@ -409,12 +509,16 @@ export function StatusPage({ heading, message }: { heading: string; message: str
       <PageHeading>{heading}</PageHeading>
       <p className="leading-7">{message}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button asChild className={statusControlClass}>
-          <a href={`/${locale}`}>{m.status_home()}</a>
-        </Button>
-        <Button asChild variant="outline" className={statusControlClass}>
-          <a href={`/${locale}/search`}>{m.status_search()}</a>
-        </Button>
+        <a data-slot="button" className={cn(buttonVariants({ size: 'lg' }), statusControlClass)} href={`/${locale}`}>
+          {m.status_home()}
+        </a>
+        <a
+          data-slot="button"
+          className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), statusControlClass)}
+          href={`/${locale}/search`}
+        >
+          {m.status_search()}
+        </a>
       </div>
     </div>
   );

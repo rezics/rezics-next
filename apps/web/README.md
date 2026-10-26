@@ -332,6 +332,14 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   pause
 - **Growth check:** `tests/request-cost.test.ts`: `suggestions stay within their bound as s grows`
 
+### Site shell (navigation column and header)
+
+- **Touches:** The root's existing preferences read (theme and navigation cookies, session state) → three fixed
+  destinations, the header controls and one navigation column; the column's background and the link underlines are CSS
+- **Bound:** 0 added K/D/R/A; at most 3 destinations and 8 locales rendered per page, independent of s, M and t; the
+  navigation column is painted by one stretched element, so a page of any length adds no per-line work
+- **Growth check:** No growth check applies
+
 ### Home page (`/<locale>`)
 
 - **Touches:** Root preferences → D `signedIn` with a valid configured session cookie; one `POST /v1/pages:read`

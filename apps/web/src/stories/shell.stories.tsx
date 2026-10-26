@@ -21,6 +21,28 @@ export const SignedIn: Story = {
 };
 export const SignedOut: Story = {
   name: 'Signed Out',
-  play: pageReady,
+  play: async (context) => {
+    await pageReady(context);
+    // Interface links are plain at rest, whether the underline sits on the link or on text inside it.
+    const links = [...context.canvasElement.querySelectorAll('main a')];
+    await expect(links.length).toBeGreaterThan(0);
+    for (const link of links)
+      for (const element of [link, ...link.querySelectorAll('*')])
+        await expect(getComputedStyle(element).textDecorationLine).not.toContain('underline');
+  },
   render: () => <PageStory visitor="Signed Out" path={pagePaths.shell} />,
+};
+// On a phone the navigation opens as a sheet from the header button; on a desktop it is the column beside the page.
+export const Navigation: Story = {
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      await userEvent.click(await canvas.findByRole('button', { name: m.shell_open_navigation() }));
+      await expect(await within(document.body).findByRole('dialog', { name: m.shell_navigation() })).toBeVisible();
+    } else {
+      await expect(await canvas.findByRole('navigation', { name: m.shell_navigation() })).toBeVisible();
+    }
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.shell} />,
 };

@@ -228,13 +228,29 @@ async function navigationLinks(page: Page, name: string): Promise<FoundLink[]> {
   );
 }
 
+const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
+
+// On a phone the navigation lives in a sheet that the header button opens.
+async function openSheet(page: Page, openName: string): Promise<void> {
+  await page.getByRole('banner').getByRole('button', { name: openName, exact: true }).click();
+  await page.getByRole('dialog').waitFor();
+}
+
+async function closeSheet(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+}
+
 async function expectDestinations(
   page: Page,
   navigationName: string,
   expected: Destination[],
   currentName: string | null,
   where: string,
+  openName?: string,
 ): Promise<void> {
+  const sheet = openName !== undefined && isPhone(page);
+  if (sheet) await openSheet(page, openName);
   const found = await navigationLinks(page, navigationName);
   expect(
     found.map(({ name, href }) => ({ name, href })),
@@ -248,6 +264,7 @@ async function expectDestinations(
     found.map((item) => [item.name, item.current]),
     where,
   ).toEqual(expected.map((item) => [item.name, item.name === currentName ? 'page' : null]));
+  if (sheet) await closeSheet(page);
 }
 
 function headerSearch(page: Page, label: string) {
@@ -315,15 +332,43 @@ test.serial(
             viewport,
             ...(signed ? { storageState: session } : {}),
           });
-          await expectDestinations(page, own.shell_navigation!, expected, home.name, `${where} home`);
+          await expectDestinations(
+            page,
+            own.shell_navigation!,
+            expected,
+            home.name,
+            `${where} home`,
+            own.shell_open_navigation!,
+          );
           await visit(page, `/${locale}/search`);
-          await expectDestinations(page, own.shell_navigation!, expected, search.name, `${where} search`);
+          await expectDestinations(
+            page,
+            own.shell_navigation!,
+            expected,
+            search.name,
+            `${where} search`,
+            own.shell_open_navigation!,
+          );
           await visit(page, `/${locale}/no-such-page`);
-          await expectDestinations(page, own.shell_navigation!, expected, null, `${where} other`);
+          await expectDestinations(
+            page,
+            own.shell_navigation!,
+            expected,
+            null,
+            `${where} other`,
+            own.shell_open_navigation!,
+          );
           if (signed)
             for (const path of [`/${locale}/library`, `/${locale}/library/shelf`]) {
               await visit(page, path);
-              await expectDestinations(page, own.shell_navigation!, expected, library.name, `${where} ${path}`);
+              await expectDestinations(
+                page,
+                own.shell_navigation!,
+                expected,
+                library.name,
+                `${where} ${path}`,
+                own.shell_open_navigation!,
+              );
             }
           await page.context().close();
         }
@@ -353,7 +398,7 @@ test.serial(
 );
 
 test.serial(
-  'the phone bottom navigation offers the same destinations',
+  'the phone navigation sheet offers the same destinations',
   async () => {
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
@@ -374,31 +419,17 @@ test.serial(
           viewport: phone,
           ...(storageState ? { storageState } : {}),
         });
-        const bar = await navigationLinks(narrow, own.shell_navigation!);
+        await openSheet(narrow, own.shell_open_navigation!);
+        const sheet = await navigationLinks(narrow, own.shell_navigation!);
         expect(
-          bar.map(({ name, href }) => ({ name, href })),
+          sheet.map(({ name, href }) => ({ name, href })),
           where,
         ).toEqual(expected);
-        const box = await narrow
-          .getByRole('navigation', { name: own.shell_navigation!, exact: true })
-          .locator('a')
-          .first()
-          .boundingBox();
+        const box = await narrow.getByRole('dialog').boundingBox();
         expect(box, where).not.toBeNull();
-        expect(box!.y, where).toBeGreaterThan(phone.height / 2);
-        expect(box!.y + box!.height, where).toBeLessThanOrEqual(phone.height);
-        await visit(narrow, `/${locale}`);
-        const homeBar = await navigationLinks(narrow, own.shell_navigation!);
-        expect(
-          homeBar.map(({ name, href }) => ({ name, href })),
-          `${where} home`,
-        ).toEqual(rail);
-        const homeBox = await narrow
-          .getByRole('navigation', { name: own.shell_navigation!, exact: true })
-          .locator('a')
-          .first()
-          .boundingBox();
-        expect(homeBox!.y, `${where} home`).toBeGreaterThan(phone.height / 2);
+        expect(box!.x, where).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width, where).toBeLessThanOrEqual(phone.width);
+        expect(box!.height, where).toBeGreaterThanOrEqual(phone.height - 1);
         await narrow.context().close();
       }
     }

@@ -482,8 +482,11 @@ test.serial(
       page.evaluate(() =>
         [...document.querySelectorAll('a')]
           .filter((a) => !a.closest('.rezics-document'))
-          .map((a) => [a.textContent?.trim() ?? '', getComputedStyle(a).textDecorationLine] as const)
-          .filter(([, line]) => line.includes('underline')),
+          // The underline may sit on the link or on text inside it.
+          .filter((a) =>
+            [a, ...a.querySelectorAll('*')].some((e) => getComputedStyle(e).textDecorationLine.includes('underline')),
+          )
+          .map((a) => a.textContent?.trim() ?? ''),
       );
     for (const locale of ['en', 'ja'] as const) {
       const page = await open(board_(locale));

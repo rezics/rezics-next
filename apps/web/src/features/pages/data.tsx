@@ -25,7 +25,8 @@ const PageContext = createContext<{ locale: string; messages: PageMessages; node
   messages: { unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' },
   nodes: new Map(),
 });
-const linkClass = 'text-link underline decoration-link/30 underline-offset-4 hover:decoration-current';
+const linkClass = 'underline-offset-4';
+const linkColor = 'text-primary';
 const listClass = 'space-y-5 in-data-[density=compact]:space-y-3';
 
 export function usePageLocale(): string {
@@ -70,7 +71,7 @@ function webUrl(value: string): boolean {
 
 function ExternalValue({ value }: { value: string }) {
   return webUrl(value) ? (
-    <a className={`${linkClass} break-all`} href={value}>
+    <a className={`${linkClass} ${linkColor} break-all`} href={value}>
       {value}
     </a>
   ) : (
@@ -82,7 +83,7 @@ function itemLink(id: string, labels: unknown, options: Options) {
   const label = pageText(labels, options.locale);
   const Link = options.link;
   return (
-    <span className={label.text ? linkClass : `${linkClass} text-muted-foreground`}>
+    <span className={`${linkClass} ${label.text ? linkColor : 'text-muted-foreground'}`}>
       <Link
         href={`/${encodeURIComponent(options.locale)}/subjects/${encodeURIComponent(id)}`}
         {...(label.lang ? { lang: label.lang } : {})}

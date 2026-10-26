@@ -41,52 +41,27 @@ header [data-slot='input-group-control'] {
   border-radius: 9999px;
 }
 
-header [data-slot='select-trigger'] {
-  height: 36px;
-  border-color: var(--border);
-  border-radius: 9999px;
-  background: transparent;
-  box-shadow: none;
-  outline: none;
+/* The navigation column's background is painted by the sidebar's gap, which stretches the full height of the page, so a
+   full-page capture shows the column down to the last line; the fixed container above it keeps the links in view. */
+[data-slot='sidebar-gap'] {
+  height: 100%;
+  border-inline-end: 1px solid var(--sidebar-border);
+  background-color: var(--sidebar);
 }
 
-header [data-slot='select-trigger']:hover {
-  border-color: var(--border);
+/* Interface links are plain at rest and underline on hover and focus. Controls drawn as buttons keep their own states,
+   and links inside prose keep their underline. These rules are unlayered, so they decide over utilities in components. */
+a:not([data-slot$='button']) {
+  text-decoration-line: none;
 }
 
-header [data-slot='select-trigger']:focus-visible,
-header [data-slot='select-trigger'][data-state='open'] {
-  border-color: var(--primary);
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 20%, transparent);
+a:not([data-slot$='button']):is(:hover, :focus-visible) {
+  text-decoration-line: underline;
 }
 
-header [data-slot='select-trigger']::before {
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  background-color: currentColor;
-  content: '';
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z'/%3E%3C/svg%3E")
-    no-repeat center / contain;
-}
-
-header [data-slot='select-indicator'] {
-  display: none;
-}
-
-@media (max-width: 767px) {
-  header [data-slot='select-trigger'] {
-    width: 36px;
-    max-width: 36px;
-    justify-content: center;
-    padding-inline: 0;
-  }
-
-  header [data-slot='select-trigger'] [data-scope='select'][data-part='value-text'] {
-    display: none;
-  }
+:is(.rezics-document, .prose, [data-slot='field-description'], [data-slot='empty-description'])
+  a:not([data-slot$='button']) {
+  text-decoration-line: underline;
 }
 
 /* Reply starts near five lines and a new thread near ten. Both grow, then scroll inside the viewport. */
