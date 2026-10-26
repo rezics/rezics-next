@@ -173,6 +173,12 @@ test('checkGrowth keeps gate admission bounded as unrelated accounts, grants, an
            SELECT $1,id,id,'member','(,)',id FROM unnest($2::uuid[]) id`,
           [route, unrelated],
         );
+        await database.admin.query(
+          `INSERT INTO access.resource_role_grant
+             (route,resource_id,subject_id,grant_role,valid,transaction_id)
+           SELECT $1,id,id,'owner','(,)',id FROM unnest($2::uuid[]) id`,
+          [route, unrelated],
+        );
       }
       const ids = accountGrowthIds.slice(accountPlannerSeedCount + previous, accountPlannerSeedCount + scale);
       await database.admin.query(
