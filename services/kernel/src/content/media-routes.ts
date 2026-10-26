@@ -84,7 +84,7 @@ async function mutation<T>(work: () => Promise<T>) {
   }
 }
 function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>>) {
-  if (media.purpose !== 'post-image') throw new ProblemError('not_found');
+  if (media.purpose !== 'post-image' && media.purpose !== 'avatar') throw new ProblemError('not_found');
   return {
     id: media.id,
     state: media.erased ? ('erased' as const) : media.state,
@@ -95,6 +95,7 @@ function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>
     uploaderId: media.uploaderId,
     key: media.key,
     reservationRequestId: media.reservationRequestId,
+    ...(media.purpose === 'avatar' ? { purpose: media.purpose } : {}),
   };
 }
 
@@ -125,6 +126,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         mutation(() =>
           admission.run('normal', job, async () => {
             if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+            if (body.purpose === 'avatar' && body.containerId !== actor.accountId) throw new ProblemError('not_found');
             const target =
               'newThread' in body
                 ? {

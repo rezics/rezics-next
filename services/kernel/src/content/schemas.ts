@@ -369,7 +369,6 @@ const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
 const reservationRequestId = t.String({ minLength: 1, maxLength: 255 });
 const mediaReservationFields = {
-  purpose: t.Literal('post-image'),
   mediaType: t.Union([
     t.Literal('image/avif'),
     t.Literal('image/gif'),
@@ -381,10 +380,18 @@ const mediaReservationFields = {
   sha256: t.Optional(mediaDigest),
 };
 export const MediaReservationInputSchema = t.Union([
-  t.Object({ containerId: ContentIdSchema, ...mediaReservationFields }, closed),
+  t.Object(
+    {
+      containerId: ContentIdSchema,
+      purpose: t.Union([t.Literal('post-image'), t.Literal('avatar')]),
+      ...mediaReservationFields,
+    },
+    closed,
+  ),
   t.Object(
     {
       newThread: t.Object({ boardId: ContentIdSchema, idempotencyKey: reservationRequestId }, closed),
+      purpose: t.Literal('post-image'),
       ...mediaReservationFields,
     },
     closed,
@@ -399,28 +406,32 @@ export const MediaCompletionInputSchema = t.Object(
   },
   closed,
 );
+const mediaReservationMetadata = t.Object(
+  {
+    id: ContentIdSchema,
+    state: t.Union([
+      t.Literal('reserved'),
+      t.Literal('uploaded'),
+      t.Literal('available'),
+      t.Literal('rejected'),
+      t.Literal('erased'),
+    ]),
+    byteCount: mediaLength,
+    mediaType: t.String(),
+    sha256: t.Union([mediaDigest, t.Null()]),
+    containerId: ContentIdSchema,
+    uploaderId: ContentIdSchema,
+    key: t.String(),
+    reservationRequestId,
+  },
+  closed,
+);
 export const MediaReservationResponseSchema = t.Object(
   {
-    media: t.Object(
-      {
-        id: ContentIdSchema,
-        state: t.Union([
-          t.Literal('reserved'),
-          t.Literal('uploaded'),
-          t.Literal('available'),
-          t.Literal('rejected'),
-          t.Literal('erased'),
-        ]),
-        byteCount: mediaLength,
-        mediaType: t.String(),
-        sha256: t.Union([mediaDigest, t.Null()]),
-        containerId: ContentIdSchema,
-        uploaderId: ContentIdSchema,
-        key: t.String(),
-        reservationRequestId,
-      },
-      closed,
-    ),
+    media: t.Union([
+      mediaReservationMetadata,
+      t.Object({ ...mediaReservationMetadata.properties, purpose: t.Literal('avatar') }, closed),
+    ]),
   },
   closed,
 );

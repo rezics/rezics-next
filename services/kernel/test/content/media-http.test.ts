@@ -771,8 +771,10 @@ test('cover download inherits its readable subject and current source fence thro
   );
   await db.admin.query(
     `INSERT INTO content.media(route,media_id,container_id,uploader_id,reservation_request_id,purpose,
-      media_type,byte_count,actual_byte_count,sha256,state,key,claimed_at,transaction_id,source_url,credit,provenance)
-     VALUES ($1,$2::uuid,$3,$4,$2::text,'cover','image/png',256,256,$5,'available',$6,NULL,$4,$7,$8,$9)`,
+      media_type,byte_count,actual_byte_count,sha256,state,key,claimed_at,transaction_id,source_url,credit,provenance,
+      width,height,thumbhash,average_color)
+     VALUES ($1,$2::uuid,$3,$4,$2::text,'cover','image/png',256,256,$5,'available',$6,NULL,$4,$7,$8,$9,
+       320,200,decode('010203','hex'),'#123456')`,
     [
       route,
       id,

@@ -128,7 +128,17 @@ so it lives in that account's partition. Only the admitted account using the web
 complete it, with the same image types and upload limits as post images. The image job produces the same
 variants, ThumbHash and average colour. Available avatar variants are public; originals and pending, rejected,
 taken-down, erased or collection-pending avatars are never served. Owners erase avatars with the existing
-`DELETE /v1/media/{id}`. Avatar reservation and completion HTTP routes belong to a separate integration.
+`DELETE /v1/media/{id}`.
+
+Reserve an avatar with `POST /v1/media`, setting `purpose: "avatar"` and `containerId` to the authenticated
+account id. Another account's container returns 404, even with a creation grant; `newThread` remains exclusive
+to post images. The reservation response and `GET /v1/media/{id}` include `purpose: "avatar"` alongside the
+existing reservation metadata. Complete the upload with `POST /v1/media/{id}:complete`, supplying the account
+container, reservation request id, byte count and SHA-256; its response is `{ media: { id, state: "uploaded" } }`.
+Post-image request and response shapes are unchanged.
+
+Avatar reservation uses the existing media reservation work with the account in place of the thread or post
+container. It adds no statement, keeps the same bound and uses the existing media reservation growth check.
 
 Access stores the selected media id on the account and calls `checkAvatarMedia(client, mediaId, accountId)`
 inside its set-avatar command. The port checks availability, purpose and container with one primary-key read
