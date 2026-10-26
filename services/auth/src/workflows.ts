@@ -35,6 +35,7 @@ type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-ac
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { coordinateMembership } from './membership-workflows.ts';
+import { completeDeletedClientReductionOwner } from './account-workflows.ts';
 import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from './turnstile.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
@@ -845,6 +846,26 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const reductionPage = step('client-reduction-page', async (clientId: string, operationId: string, after: string) =>
       auth.internal.clientReductionPage({ clientId, operationId, after, limit: 64 }),
     );
+    const reductionOwnerFence = step(
+      'client-reduction-owner-fence',
+      async (clientId: string, operationId: string, accountId: string) => {
+        const completeDeleted = () =>
+          completeDeletedClientReductionOwner(database, required(access.readAccount), {
+            clientId,
+            operationId,
+            accountId,
+          });
+        if (await completeDeleted()) return null;
+        try {
+          return (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value;
+        } catch (error) {
+          // Deletion may commit after the read and before the native fence.
+          // Only its terminal state can discharge that lifecycle refusal.
+          if (!isLifecycleDenied(error) || !(await completeDeleted())) throw error;
+          return null;
+        }
+      },
+    );
     const revokeReduction = step('revoke-client-reduction-sessions', async (barrier: WorkflowFence) =>
       auth.internal.revokeSessions(barrier.accountId, {
         boundedCleanup: true,
@@ -870,7 +891,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         if (!input.operationId) await beginReduction(input);
         const batch = await reductionPage(input.clientId, operationId, input.after ?? '');
         for (const id of batch.items) {
-          const barrier = await fence(id);
+          const barrier = await reductionOwnerFence(input.clientId, operationId, id);
+          if (!barrier) continue;
           await revokeReduction(barrier);
           await completedOwner(input.clientId, operationId, barrier);
         }
