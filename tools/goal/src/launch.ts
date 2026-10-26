@@ -10,12 +10,16 @@ import type { WorkerStore } from './store.ts';
 export type LaunchOptions = { profile: Profile; pool: Pool; worktree: string; prompt: string; logPath: string; readOnly?: boolean; research?: boolean; codex?: Settings['codex'] };
 export function launchCommand(options: LaunchOptions): [string, string[]] {
   const { profile, pool, worktree, prompt } = options;
-  if (!['codex', 'grok', 'cursor'].includes(profile.cli)) throw new Error('unsupported worker CLI');
+  if (!['codex', 'grok', 'cursor', 'claude'].includes(profile.cli)) throw new Error('unsupported worker CLI');
   if (pool.cli !== profile.cli) throw new Error('profile and pool CLI disagree');
   if (profile.cli === 'grok') return [pool.command, ['-m', profile.model, '--reasoning-effort', profile.effort,
     // No --json-schema: with it Grok answers in structured form only and stops using tools, so the parser reads its
     // status object out of free text instead.
     '--permission-mode', 'bypassPermissions', '--no-subagents', '--output-format', 'json', '--cwd', worktree, `--single=${prompt}`]];
+  // Workers share the managers' Claude configuration; its hooks and MCP servers belong to the managers' sessions.
+  if (profile.cli === 'claude') return [pool.command, ['-p', '--model', profile.model, '--effort', profile.effort,
+    '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', '--strict-mcp-config',
+    '--settings', JSON.stringify({ disableAllHooks: true }), '--', prompt]];
   if (profile.cli === 'cursor') return [pool.command, ['-p', '--model', `${profile.model}-${profile.effort}`, '--force', '--trust',
     '--sandbox', 'disabled', '--output-format', 'json', '--workspace', worktree, '--', prompt]];
   const codex = options.codex ?? defaults.codex;
@@ -38,7 +42,7 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
 export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
-  for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
+  for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
   return { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
 }
