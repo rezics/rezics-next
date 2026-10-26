@@ -22,6 +22,7 @@ import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
 import readOperationEnqueue from './read-operation-enqueue.sql';
+import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
 import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
@@ -333,10 +334,20 @@ export function createContentOperationClient({
             const row = await readOperationEnqueue.run(tx, {
               route,
               operation_id: input.operationId,
-              partition_no: partitionOf(route),
             });
+            const receipt =
+              row &&
+              (await readOperationEnqueueReceipt.run(tx, {
+                partition_no: partitionOf(route),
+                initiator_account_id: row.initiator_account_id,
+                creation_command_kind: row.creation_command_kind,
+                creation_idempotency_key: row.creation_idempotency_key,
+                recorded_transaction_id: row.recorded_transaction_id,
+                creation_request_digest: row.creation_request_digest,
+                operation_id: row.operation_id,
+              }));
             await tx.query('COMMIT');
-            return row;
+            return receipt ? row : null;
           } catch (error) {
             await connection.query('ROLLBACK');
             throw error;

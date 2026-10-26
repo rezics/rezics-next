@@ -3,7 +3,30 @@ import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import type { AccessClient } from '../request/access.ts';
 import readOperation from './read-workflow-erasure-operation.sql';
+import readReceipt from './read-workflow-erasure-receipt.sql';
+
+/** Preserve the source/receipt LEFT JOIN within the caller's transaction snapshot. */
+export async function readWorkflowErasureOperation(
+  client: AccessClient,
+  input: (typeof readOperation)['~reylo']['input'] & { partition_no: number },
+) {
+  const row = await readOperation.run(client, input);
+  if (!row) return null;
+  const receipt = await readReceipt.run(client, {
+    partition_no: input.partition_no,
+    initiator_account_id: row.initiator_account_id,
+    creation_command_kind: row.creation_command_kind,
+    creation_idempotency_key: row.creation_idempotency_key,
+  });
+  return {
+    ...row,
+    receipt_transaction_id: receipt?.receipt_transaction_id ?? null,
+    receipt_request_digest: receipt?.receipt_request_digest ?? null,
+    receipt_commitment: receipt?.receipt_commitment ?? null,
+  };
+}
 
 /** The operation row is its own immutable source. Native workflow identity is a
  * relay binding, never a durable initiator source or authority. Missing original
@@ -16,7 +39,7 @@ export const readErasureInitiator: DurableInitiatorReader = async (client, opera
     routeOf(operation.id) !== operation.route
   )
     return null;
-  const row = await readOperation.run(client, {
+  const row = await readWorkflowErasureOperation(client, {
     partition_no: partitionOf(operation.route),
     route: operation.route,
     operation_id: operation.id,
