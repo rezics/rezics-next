@@ -21,7 +21,7 @@ import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
-import { capture, costOf, openGrowthDatabase } from '../../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, withoutCatalogStatements } from '../../support/growth.ts';
 import { startFakeStripe } from './fake-stripe.ts';
 import { trustedAccessPorts } from '../../support/trusted-access.ts';
 
@@ -740,8 +740,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       await readExposure(db.pool, 'purchases', new Date(), Date.now() + 5000);
       const result = await capture(db, operation);
       // Reylo rechecks table shape every minute. That catalog read is not part of the request and
-      // lands on whichever scale crosses the minute, so the scale comparison does not count it.
-      const statements = result.capture.statements.filter((statement) => !statement.includes(' AS fresh_table,'));
+      // lands on whichever scale crosses the minute; the support classifier removes it.
+      const { statements } = withoutCatalogStatements('commerce outcome', result.capture);
       const cost = costOf(result.capture);
       measurements.push({ seeded, statements, buffers: cost.blocks });
       // Keep the actual SQL available for comparing scales and runs when the

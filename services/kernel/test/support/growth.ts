@@ -1,6 +1,13 @@
 import { assertGrowth, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
 import { capture, type GrowthDatabase } from './growth-capture.ts';
-import { catalogStatementBound, costOf, medianCost, type Cost } from './growth-cost.ts';
+import {
+  catalogStatementBound,
+  costOf,
+  medianCost,
+  withoutCatalogTexts,
+  type Capture,
+  type Cost,
+} from './growth-cost.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
@@ -44,15 +51,25 @@ export type GrowthReport = {
 
 function assertCatalogBound(
   name: string,
-  scale: number,
-  captureResult: Parameters<typeof catalogStatementBound>[0],
+  scale: number | undefined,
+  captureResult: Capture,
   samples: readonly { readonly scale: number; readonly cost: Cost }[],
-): void {
-  const { catalogStatements, allowedStatements, firstCatalogStatement } = catalogStatementBound(captureResult);
-  if (catalogStatements <= allowedStatements) return;
+): ReadonlySet<string> {
+  const { catalogTexts, catalogStatements, allowedStatements, firstCatalogStatement } =
+    catalogStatementBound(captureResult);
+  if (catalogStatements <= allowedStatements) return catalogTexts;
   const error = new GrowthBoundError([], samples);
-  error.message = `${name}: catalog count at scale ${scale} (${catalogStatements}) exceeds allowed count ${allowedStatements}; first catalog statement: ${firstCatalogStatement?.slice(0, 120) ?? '<unknown>'}`;
+  const where = scale === undefined ? '' : ` at scale ${scale}`;
+  error.message = `${name}: catalog count${where} (${catalogStatements}) exceeds allowed count ${allowedStatements}; first catalog statement: ${firstCatalogStatement?.slice(0, 120) ?? '<unknown>'}`;
   throw error;
+}
+
+/**
+ * For a capture taken outside checkGrowth: holds it to the bound checkGrowth enforces, catalog-only statements may not
+ * exceed the distinct non-catalog statement texts, and returns it without them. Throws GrowthBoundError otherwise.
+ */
+export function withoutCatalogStatements(name: string, captureResult: Capture): Capture {
+  return withoutCatalogTexts(captureResult, assertCatalogBound(name, undefined, captureResult, []));
 }
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
