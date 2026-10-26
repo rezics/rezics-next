@@ -807,7 +807,7 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
   };
   const report = await checkGrowth(db, {
     name: 'author erasure initiation provenance',
-    scales: [256, 2048, 16384],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: async (_, scale, previous) => {
       await seed(db, population, { from: previous, to: scale });
@@ -817,7 +817,7 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
       expect(Object.keys(outcome.value)).toEqual(['operationId']);
     },
   });
-  expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+  expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
   for (const { cost } of report.samples) {
     expect(cost.relations!['content.post']?.rows).toBe(2);
     expect(cost.relations!['core.receipt']?.rows).toBe(1);

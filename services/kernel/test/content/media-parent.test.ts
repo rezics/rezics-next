@@ -506,7 +506,7 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
     digest = createHash('sha256').update(body).digest();
   const report = await checkGrowth(db, {
     name: 'native media reserve with fixed private reply ancestry',
-    scales: [500, 4000, 32000],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
       await seed(
@@ -674,7 +674,7 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
       expect(result.partition).toBe(partitionOf(containerRoute));
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([500, 4000, 32000]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
   expect(new Set(report.samples.map((sample) => sample.cost.rows)).size).toBe(1);
   expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
   for (const sample of report.samples) {

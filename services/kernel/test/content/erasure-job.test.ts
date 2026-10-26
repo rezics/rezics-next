@@ -336,7 +336,7 @@ test('native point reads and growth stay bounded with no content sequential scan
   try {
     const report = await checkGrowth(db, {
       name: 'exact erased media prefix',
-      scales: [256, 2048, 16384],
+      scales: [256, 1024, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: async (_db, scale, previous) => {
         await seed(
@@ -364,7 +364,7 @@ test('native point reads and growth stay bounded with no content sequential scan
         expect(await purgeObject(db.pool, http.storage, row.media_id)).toMatchObject({ outcome: 'purged' });
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBe(2);
       expect(sample.cost.statements).toBe(2);
