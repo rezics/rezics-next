@@ -249,7 +249,11 @@ function narrowedFailure(options: PromotionOptions, run: PromotionRun, failed: P
   const workspace = /^Failed workspaces: (\S+)/m.exec(log)?.[1];
   if (!workspace) return fallback;
   const block = log.split(/^(?=Workspace )/m).find(part => part.split('\n', 2)[1]?.trimEnd().endsWith(`(${workspace})`));
-  return { command: ['bun', 'run', '--cwd', workspace, 'check'], failure: firstFailure(block ?? log) };
+  // A check that takes test files as arguments and lists the ones that failed, as the kernel's does, is bisected on
+  // those files: a minute per probe instead of the whole suite's twenty.
+  const listed = /tests failed for \d+ file\(s\):\n((?:\S+\.test\.tsx?\n?)+)/.exec(block ?? '')?.[1]?.trim().split('\n') ?? [];
+  const files = listed.length && listed.length <= 50 ? listed : [];
+  return { command: ['bun', 'run', '--cwd', workspace, 'check', ...files], failure: firstFailure(block ?? log) };
 }
 
 async function saveHeadDecision(options: PromotionOptions, run: PromotionRun, result: PromotionGateResult[]): Promise<PromotionRun> {
