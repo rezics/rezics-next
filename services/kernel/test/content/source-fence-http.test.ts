@@ -228,9 +228,11 @@ test('actual generated sourceFences custom check route requires protected read g
         .slice(begin, tupleIndex)
         .some((row) => row.statement === contextRead.sql || row.statement === permissionRead.sql),
     ).toBe(false);
-    expect(
-      rows.filter((row) => row.statement === fenceRead.sql).map((row) => JSON.parse(row.parameters[0] as string)),
-    ).toEqual([[{ route, source: query.source, external_id: query.externalId, field_group: query.fieldGroup }]]);
+    const fenceReads = rows.filter((row) => row.statement === fenceRead.sql);
+    expect(fenceReads.map((row) => row.parameters[0])).toEqual([partition]);
+    expect(fenceReads.map((row) => JSON.parse(row.parameters[1] as string))).toEqual([
+      [{ route, source: query.source, external_id: query.externalId, field_group: query.fieldGroup }],
+    ]);
     expect(rows.some((row) => /INSERT|UPDATE|core\.receipt|core\.outbox|write_rate/.test(row.statement))).toBe(false);
   }
   refused(await call(noScope), 403);

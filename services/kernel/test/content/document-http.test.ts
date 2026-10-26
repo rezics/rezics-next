@@ -341,6 +341,7 @@ test('the final pass probes the original tuple again after preparation releases 
   try {
     const execution = await barrier.entered;
     expect(execution.parameters).toEqual([
+      partitionOf(home),
       JSON.stringify([{ route: home, source: source.source, external_id: source.external_id, field_group: 'summary' }]),
     ]);
     await fence(true);
