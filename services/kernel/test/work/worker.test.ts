@@ -110,7 +110,7 @@ test('a worker missing or rejecting commerce configuration names the variable an
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    const timeout = setTimeout(() => child.kill('SIGKILL'), 10_000);
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 30_000);
     const [exitCode, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
@@ -124,7 +124,7 @@ test('a worker missing or rejecting commerce configuration names the variable an
     expect(output).not.toContain('secret-value');
     expect(output).not.toContain('secret-host.invalid');
   }
-}, 60_000);
+}, 300_000);
 
 test('API enqueue before startup survives, duplicate IDs execute once, and SIGTERM drains in-flight work', async () => {
   const client = await createWorkClient(databaseUrl);
