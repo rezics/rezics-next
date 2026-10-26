@@ -53,7 +53,7 @@ beforeAll(async () => {
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'library', alg: 'ES256' };
   access = createAccess({
     actions: new Map([
-      ['collection:create', { anonymous: false }],
+      ['collection:create', { anonymous: false, 'x-resource-types': ['library.collection'] }],
       ['collection:read', { anonymous: false }],
       ['collection:update', { anonymous: false }],
       ['collection:delete', { anonymous: false }],

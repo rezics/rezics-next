@@ -25,7 +25,14 @@ const signing = await generateKeyPair('ES256', { extractable: true });
 const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'library', alg: 'ES256' };
 const scopes = ['collection:create', 'collection:read', 'collection:update', 'collection:delete', 'subject:read'];
 const access = createAccess({
-  actions: new Map(scopes.map((action) => [action, { anonymous: action === 'subject:read' }])),
+  actions: new Map(
+    scopes.map((action) => [
+      action,
+      action === 'collection:create'
+        ? { anonymous: false, 'x-resource-types': ['library.collection'] }
+        : { anonymous: action === 'subject:read' },
+    ]),
+  ),
   auth: {
     issuer: 'https://auth.example.test',
     audience: 'https://api.rezics.test',

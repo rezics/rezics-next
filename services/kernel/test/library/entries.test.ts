@@ -383,7 +383,7 @@ test('unknown, unreadable, malformed, foreign, anonymous and suspended requests 
   await expect(commands.deleteEntry(anonymous, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.readEntry(suspended, subjectId)).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.putEntry(suspended, subjectId, { state: 'completed' }, key())).rejects.toBeInstanceOf(
-    LibraryNotFoundError,
+    GrantDeniedError,
   );
   await expect(commands.deleteEntry(suspended, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.readEntry(noScope, subjectId)).rejects.toBeInstanceOf(GrantDeniedError);
