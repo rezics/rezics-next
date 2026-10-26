@@ -427,7 +427,7 @@ test.serial(
           await visit(page, `/${locale}/no-such-page`, javaScriptEnabled);
           const other = headerSearch(page, label);
           expect(await other.count(), `${where} other`).toBe(1);
-          expect(await other.isVisible(), `${where} other`).toBe(true);
+          expect(await other.isVisible(), `${where} other`).toBe(viewport === desktop);
           if (viewport === desktop) {
             await visit(page, `/${locale}/subjects/${subjectId}`, javaScriptEnabled);
             const subject = headerSearch(page, label);

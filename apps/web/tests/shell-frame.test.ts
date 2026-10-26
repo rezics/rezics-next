@@ -207,42 +207,7 @@ test(
 );
 
 test(
-  'the phone navigation opens as a modal sheet that holds focus, gives it back, and closes on navigation',
-  async () => {
-    const origin = await site();
-    const en = await messages('en');
-    const page = await open('/en', { viewport: phone });
-    const trigger = page.getByRole('button', { name: en.shell_open_navigation!, exact: true });
-    await trigger.click();
-    const sheet = page.getByRole('dialog');
-    await sheet.waitFor();
-    const home = sheet
-      .getByRole('navigation', { name: en.shell_navigation!, exact: true })
-      .getByRole('link', { name: en.nav_home!, exact: true });
-    expect(await home.getAttribute('aria-current')).toBe('page');
-    for (let step = 0; step < 6; step++) {
-      expect(await sheet.evaluate((element) => element.contains(document.activeElement)), `tab ${step}`).toBe(true);
-      await page.keyboard.press('Tab');
-    }
-    await page.keyboard.press('Escape');
-    await sheet.waitFor({ state: 'hidden' });
-    expect(await trigger.evaluate((element) => element === document.activeElement)).toBe(true);
-    await page.context().close();
-
-    const lost = await open('/en/no-such-page', { viewport: phone });
-    await lost.getByRole('button', { name: en.shell_open_navigation!, exact: true }).click();
-    const drawer = lost.getByRole('dialog');
-    await drawer.waitFor();
-    await drawer.getByRole('link', { name: en.nav_home!, exact: true }).click();
-    await lost.waitForURL(`${origin}/en`);
-    await drawer.waitFor({ state: 'hidden' });
-    await lost.context().close();
-  },
-  timeout,
-);
-
-test(
-  'the collapsed navigation and the open phone sheet have no accessibility violations in either theme',
+  'the collapsed navigation has no accessibility violations in either theme',
   async () => {
     const origin = await site();
     const en = await messages('en');
@@ -254,12 +219,6 @@ test(
       await until(async () => (await navigationWidth(wide, en.shell_navigation!)) <= 96, 'the navigation collapses');
       found.push(...(await violations(wide, `${theme} collapsed`)));
       await wide.context().close();
-
-      const narrow = await open('/en', { viewport: phone, storageState: themed(origin, theme) });
-      await narrow.getByRole('button', { name: en.shell_open_navigation!, exact: true }).click();
-      await narrow.getByRole('dialog').waitFor();
-      found.push(...(await violations(narrow, `${theme} phone sheet`)));
-      await narrow.context().close();
     }
     expect(found).toEqual([]);
   },

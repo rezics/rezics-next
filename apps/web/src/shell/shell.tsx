@@ -18,6 +18,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  useSidebar,
 } from '@rezics/ui/sidebar';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -117,6 +118,7 @@ function Logo() {
   );
 }
 function Navigation({ pathname, session }: { pathname: string; session: SessionState }) {
+  const { setOpenMobile } = useSidebar();
   return (
     <nav aria-label={m.shell_navigation()}>
       <SidebarContent>
@@ -127,7 +129,7 @@ function Navigation({ pathname, session }: { pathname: string; session: SessionS
               return (
                 <SidebarMenuItem key={item.to}>
                   <SidebarMenuButton asChild isActive={destinationCurrent(pathname, item.to)} tooltip={item.message()}>
-                    <Link to={item.to} className="text-primary">
+                    <Link to={item.to} onClick={() => setOpenMobile(false)} className="text-primary">
                       <Icon aria-hidden="true" className="size-5" />
                       <span>{item.message()}</span>
                     </Link>

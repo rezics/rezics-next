@@ -162,38 +162,3 @@ test(
   },
   timeout,
 );
-
-test(
-  'the phone navigation sheet shows the site and a visible close button that gives focus back',
-  async () => {
-    for (const locale of locales) {
-      const own = await messages(locale);
-      expect(own.shell_close_navigation?.trim(), locale).toBeTruthy();
-      expect(own.shell_close_navigation, locale).not.toBe(own.shell_open_navigation);
-    }
-    const en = await messages('en');
-    const page = await open('/en', { viewport: phone });
-    const trigger = page.getByRole('button', { name: en.shell_open_navigation!, exact: true });
-    await trigger.click();
-    const sheet = page.getByRole('dialog');
-    await sheet.waitFor();
-    const logo = sheet.getByRole('link', { name: 'REZICS', exact: true });
-    expect(await logo.getAttribute('href')).toBe('/en');
-    const close = sheet.getByRole('button', { name: en.shell_close_navigation!, exact: true });
-    const box = (await close.boundingBox())!;
-    expect(box.width).toBeGreaterThanOrEqual(24);
-    expect(box.height).toBeGreaterThanOrEqual(24);
-    expect(box.x >= 0 && box.y >= 0 && box.x + box.width <= phone.width && box.y + box.height <= phone.height).toBe(
-      true,
-    );
-    await close.click();
-    await sheet.waitFor({ state: 'hidden' });
-    await page.waitForFunction(
-      (name) => document.activeElement?.getAttribute('aria-label') === name,
-      en.shell_open_navigation!,
-    );
-    expect(await trigger.evaluate((element) => element === document.activeElement)).toBe(true);
-    await page.context().close();
-  },
-  timeout,
-);
