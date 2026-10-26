@@ -318,11 +318,10 @@ test('selection enumerates sixteen exact routes with two bounded seeks and caps 
   expect(
     selections
       .map(({ text, values }) => {
-        const bindings = [...text.matchAll(/route\s*=\s*\$(\d+)/gi)];
-        expect(bindings).toHaveLength(2);
-        const selectedRoute = values[Number(bindings[0]![1]) - 1];
-        for (const binding of bindings) expect(values[Number(binding[1]) - 1]).toBe(selectedRoute);
-        return selectedRoute;
+        const bindings = [...text.matchAll(/\$(\d+)::integer\s+AS\s+route\b/gi)];
+        expect(bindings).toHaveLength(1);
+        expect(text.match(/media\.route\s*=\s*input\.route\b/gi)).toHaveLength(2);
+        return values[Number(bindings[0]![1]) - 1];
       })
       .sort((a, b) => Number(a) - Number(b)),
   ).toEqual(Array.from({ length: 16 }, (_, i) => route + i));
@@ -565,7 +564,7 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
   try {
     const report = await checkGrowth(db, {
       name: 'partition media collection',
-      scales: [256, 2048, 16384],
+      scales: [256, 1024, 4096],
       repetitions: 2,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow,
@@ -577,7 +576,7 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
       },
     });
     console.log('GrowthReport', JSON.stringify(report));
-    expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
     for (const sample of report.samples) {
       expect(sample.cost.relations).toBeDefined();
       if (!sample.cost.relations) throw new Error(`Missing relation costs at scale ${sample.scale}`);

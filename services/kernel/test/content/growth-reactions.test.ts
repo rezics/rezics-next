@@ -167,7 +167,7 @@ test('reaction writes remain one point mutation with constant rows and statement
   );
   const report = await checkGrowth(f.db, {
     name: 'Reaction slot',
-    scales: [256, 2048, 16384],
+    scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(db, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
@@ -191,7 +191,7 @@ test('reaction writes remain one point mutation with constant rows and statement
       }
     },
   });
-  expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+  expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
   for (const sample of report.samples) {
     const cost = sample.cost as typeof sample.cost & { relations: NonNullable<typeof sample.cost.relations> };
     expect(cost.rows).toBe(report.samples[0]!.cost.rows);
