@@ -5,7 +5,6 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { handleFixture } from './workflow-handle-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 
 let deployment: ReturnType<typeof testDatabase>;
 let fixture: Awaited<ReturnType<typeof handleFixture>>;
@@ -132,11 +131,11 @@ test('DBOS sequences actual member and organization commands and resumes a lost 
   expect(history).toContain('accounts.change-membership');
   expect(history).toContain('accounts.release-membership');
   fixture.approve('member', await token(member));
-  // The committed continuation authorizes cleanup, but cannot disclose a
-  // result through the initiating bearer after its account was deleted.
-  await expect(
-    fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member }),
-  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  // The member's own deletion removes the standing it relied on: the answer is
+  // the workflow's outcome, and the deletion stays committed.
+  expect(
+    await fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member }),
+  ).toEqual({ accountId: member });
   expect(await fixture.read(member)).toMatchObject({ state: 'deleted', fenced: true });
   expect((await fixture.database.query('SELECT id FROM "user" WHERE id=$1', [member])).rows).toEqual([]);
 }, 60000);
@@ -359,17 +358,17 @@ test('successful consent and client reductions invalidate already issued JWTs at
   const old = ((await tokenResponse.json()) as { access_token: string }).access_token;
   expect((await fixture.authenticate(old)).kind).toBe('account');
   fixture.approve('consent-reduction', login.token);
-  // The reduction commits its fence and effect, then current-authority result
-  // disclosure refuses the initiating bearer that the operation just revoked.
-  await expect(
-    fixture.workflows.reduceConsent({
+  // The reduction commits its fence and effect and removes the caller's own
+  // standing: the answer is the workflow's outcome, not a refusal.
+  expect(
+    await fixture.workflows.reduceConsent({
       key: 'native_consent_reduction',
       authorization: 'consent-reduction',
       accountId: actor,
       clientId: 'reduction-client',
       scopes: ['read'],
     }),
-  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  ).toEqual({ accountId: actor });
   await expect(fixture.authenticate(old)).rejects.toThrow();
   expect(
     (
@@ -392,13 +391,13 @@ test('successful consent and client reductions invalidate already issued JWTs at
   const deleted = await person('deleted_reduction_owner');
   const deletedLogin = await operatorLogin(deleted);
   fixture.approve('delete-reduction-owner', deletedLogin.token);
-  await expect(
-    fixture.workflows.deleteAccount({
+  expect(
+    await fixture.workflows.deleteAccount({
       key: 'delete_reduction_owner',
       authorization: 'delete-reduction-owner',
       accountId: deleted,
     }),
-  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  ).toEqual({ accountId: deleted });
   await expect(fixture.authenticate(deletedLogin.token)).rejects.toThrow();
   const deletedAccount = await fixture.read(deleted);
   expect(deletedAccount).toMatchObject({ state: 'deleted' });

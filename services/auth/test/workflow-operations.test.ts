@@ -517,13 +517,14 @@ test('a refusal is recognized by its status, whatever class the binding gives it
 }, 15000);
 
 test('an owner who leaves is released under the committed change and answered from the workflow outcome', async () => {
-  const { authorizeOperation, setMembership, releaseMembershipCoordination } = ports;
+  const { authorizeOperation, setMembership, releaseMembershipCoordination, actorAccountId } = ports;
   let left = false;
   ports.authorizeOperation = async (reference, operation) => {
     // Once the owner has left they no longer hold the right they used.
     if (left) throw Object.assign(new Error('Approval denied'), { status: 403 });
     return authorizeOperation!(reference, operation);
   };
+  ports.actorAccountId = () => 'leaving-owner';
   ports.setMembership = async () => {
     calls.push('set-membership');
     left = true;
@@ -547,7 +548,39 @@ test('an owner who leaves is released under the committed change and answered fr
     ).toEqual({ accountId: 'leaving-owner' });
     expect(calls).toEqual(['set-membership', 'release:leaving-hold']);
   } finally {
-    Object.assign(ports, { authorizeOperation, setMembership, releaseMembershipCoordination });
+    Object.assign(ports, { authorizeOperation, setMembership, releaseMembershipCoordination, actorAccountId });
+  }
+}, 15000);
+
+test('a revocation by anyone else after an operation commits stops the result from being disclosed', async () => {
+  const { authorizeOperation, setMembership, actorAccountId } = ports;
+  let committed = false;
+  ports.authorizeOperation = async (reference, operation) => {
+    // The manager lost the right through someone else's act, not this operation's.
+    if (committed) throw Object.assign(new Error('Approval denied'), { status: 403 });
+    return authorizeOperation!(reference, operation);
+  };
+  ports.actorAccountId = () => 'managing-owner';
+  ports.setMembership = async () => {
+    calls.push('set-membership');
+    committed = true;
+    return { value: {} };
+  };
+  try {
+    calls.length = 0;
+    await expect(
+      workflows.setMembership({
+        key: 'manager-demotes',
+        authorization: 'approved',
+        organizationId: 'revoked-organization',
+        memberAccountId: 'other-member',
+        role: 'member',
+        reservationId: 'demote-hold',
+      }),
+    ).rejects.toThrow();
+    expect(calls).toContain('set-membership');
+  } finally {
+    Object.assign(ports, { authorizeOperation, setMembership, actorAccountId });
   }
 }, 15000);
 

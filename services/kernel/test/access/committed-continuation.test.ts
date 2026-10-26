@@ -309,8 +309,8 @@ test('a plain deletion commits erase and redirect only, and the continuation por
   const outcome = await userResult(
     workflows().deleteAccount({ key, authorization: approval.reference, accountId: human.accountId }),
   );
-  expect(outcome).toEqual({ outcome: 'denied' });
-  expect(outcome).not.toHaveProperty('accountId');
+  // The deletion removes the caller's own standing: the workflow's outcome is the answer.
+  expect(outcome).toEqual({ accountId: human.accountId });
   const view = required(await readyBindings().continuations.read(key, human.accountId), 'Missing continuation');
   expect(view).not.toHaveProperty('response');
   expect(view).not.toHaveProperty('value');

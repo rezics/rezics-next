@@ -1107,8 +1107,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     active();
     requestKey(key);
     if (input.kind === 'transfer-acceptance') denied();
-    if ('authorization' in input) await approved(input);
-    else await access.authorizeUnprotectedOperation?.(input);
+    const context = 'authorization' in input ? await approved(input) : undefined;
+    if (!context) await access.authorizeUnprotectedOperation?.(input);
     const id = workflowId(`operation:${key}`);
     const digest = hash(businessOperation(input));
     const row = (
@@ -1118,10 +1118,32 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       )
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
-    // The approval was resolved once, above, before any effect. The answer is
-    // the workflow's own outcome; the actor is not re-authorized against state
-    // the operation just changed.
-    return (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
+    const result = await (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
+    // The approval above was resolved once, before any effect. An operation that
+    // removes the actor's own standing answers with the workflow's outcome: the
+    // actor is not re-authorized against state the operation itself changed.
+    // Every other result is disclosed only under current authority.
+    if (!(context && removesOwnStanding(input, context))) await discloseUnderCurrentAuthority(input);
+    return result;
+  }
+  async function discloseUnderCurrentAuthority(input: AccountOperation) {
+    if ('authorization' in input) await approved(input);
+    else await access.authorizeUnprotectedOperation?.(input);
+  }
+  /** Operations that end the standing their own approval relied on: the account's
+   * own deletion, own consent reduction and own leaving of an organization. */
+  function removesOwnStanding(input: AccountOperation, context: Context): boolean {
+    const actor = access.actorAccountId?.(context);
+    if (!actor) return false;
+    switch (input.kind) {
+      case 'delete':
+      case 'consent':
+        return input.accountId === actor;
+      case 'membership':
+        return input.role === null && input.memberAccountId === actor;
+      default:
+        return false;
+    }
   }
   async function waitClientReduction(id: string): Promise<{ clientId: string }> {
     const progress = (
@@ -1164,9 +1186,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const failed = required(steps.find((step) => step.error !== null));
       // Official SDK rewind preserves successful Access barriers and reruns
       // only the failed effect under the exact same workflow/command keys.
-      return (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
+      const result = await (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
+      await discloseUnderCurrentAuthority(input);
+      return result;
     }
-    return (await DBOS.resumeWorkflow(id)).getResult();
+    const result = await (await DBOS.resumeWorkflow(id)).getResult();
+    await discloseUnderCurrentAuthority(input);
+    return result;
   }
   const close = async () => {
     await starting;
