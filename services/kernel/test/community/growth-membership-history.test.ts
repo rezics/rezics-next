@@ -87,6 +87,8 @@ test('current membership is one index point read as the same account and Realm a
         },
         { from: previous, to: scale },
       );
+      // Refresh the key-frequency statistics after each population grows.
+      await db.admin.query('ANALYZE community.realm_member');
       const count = await db.admin.query(
         `SELECT count(*)::integer AS count FROM community.realm_member
          WHERE route = $1 AND realm_id = $2 AND account_id = $3 AND NOT upper_inf(valid)`,

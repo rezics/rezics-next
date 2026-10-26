@@ -584,6 +584,13 @@ CREATE INDEX realm_member_reservation ON community.realm_member USING btree (rou
 
 
 --
+-- Name: realm_member_key_mcv; Type: STATISTICS; Schema: community; Owner: -
+--
+
+CREATE STATISTICS community.realm_member_key_mcv (mcv) ON route, realm_id, account_id FROM community.realm_member;
+
+
+--
 -- Name: publication_head publication_head_identity; Type: TRIGGER; Schema: community; Owner: -
 --
 
