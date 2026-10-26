@@ -1079,8 +1079,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     active();
     requestKey(key);
     if (input.kind === 'transfer-acceptance') denied();
-    if ('authorization' in input) await approved(input);
-    else await access.authorizeUnprotectedOperation?.(input);
+    const context = 'authorization' in input ? await approved(input) : undefined;
+    if (!('authorization' in input)) await access.authorizeUnprotectedOperation?.(input);
+    const continuationKey = context === undefined ? undefined : access.approvalBinding?.(context)?.operationKey;
     const id = workflowId(`operation:${key}`);
     const digest = hash(businessOperation(input));
     const row = (
@@ -1091,9 +1092,20 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
     const result = await (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
+    await authorizeResult(input, continuationKey);
+    return result;
+  }
+  async function authorizeResult(input: AccountOperation, continuationKey?: string) {
+    if (input.kind === 'delete' && continuationKey && access.readContinuation) {
+      const root = required(await access.readContinuation(continuationKey, input.accountId));
+      const entry = required(
+        root.allowlist.find((item) => item.step === 'erase-auth-owner' && item.target === input.accountId),
+      );
+      await required(access.authorizeContinuation)(root.reference, entry);
+      return;
+    }
     if ('authorization' in input) await approved(input);
     else await access.authorizeUnprotectedOperation?.(input);
-    return result;
   }
   async function waitClientReduction(id: string): Promise<{ clientId: string }> {
     const progress = (
@@ -1115,7 +1127,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       id = result.nextWorkflowId;
     }
   }
-  async function resumeRequest(id: string, skipInitial = false) {
+  async function resumeRequest(id: string, continuationKey?: string) {
     active();
     const input = required(
       (
@@ -1125,9 +1137,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         )
       ).rows[0],
     ).request;
-    if (!skipInitial) {
-      if ('authorization' in input) await approved(input);
-      else await access.authorizeUnprotectedOperation?.(input);
+    if (continuationKey) {
+      await authorizeResult(input, continuationKey);
+    } else {
+      const context = 'authorization' in input ? await approved(input) : undefined;
+      if (!('authorization' in input)) await access.authorizeUnprotectedOperation?.(input);
+      continuationKey = context === undefined ? undefined : access.approvalBinding?.(context)?.operationKey;
     }
     if (input.kind === 'client-reduction') return waitClientReduction(id);
     const status = await DBOS.getWorkflowStatus(id);
@@ -1137,13 +1152,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       // Official SDK rewind preserves successful Access barriers and reruns
       // only the failed effect under the exact same workflow/command keys.
       const result = await (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
-      if ('authorization' in input) await approved(input);
-      else await access.authorizeUnprotectedOperation?.(input);
+      await authorizeResult(input, continuationKey);
       return result;
     }
     const result = await (await DBOS.resumeWorkflow(id)).getResult();
-    if ('authorization' in input) await approved(input);
-    else await access.authorizeUnprotectedOperation?.(input);
+    await authorizeResult(input, continuationKey);
     return result;
   }
   const close = async () => {
@@ -1407,7 +1420,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           )
         ).rows[0]?.request;
         if (stored?.kind === 'delete' && (await access.readContinuation(operationKey, stored.accountId)))
-          return resumeRequest(id, true);
+          return resumeRequest(id, operationKey);
       }
       return resumeRequest(id);
     },
