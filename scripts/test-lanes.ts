@@ -1,11 +1,14 @@
 // The lane runner behind the kernel and Auth checks: test files run longest first through a fixed pool of lanes,
 // each file in its own `bun test` process on its own database cloned from a migrated template, and every clone is
-// dropped. `service` names the check (`kernel`, `auth`); it prefixes the clone names, the timings directory and the
-// `<SERVICE>_CHECK_*` variables.
+// dropped. With the host lease on, each file takes a stack slot before its clone is made and holds it through the
+// test process and clone drop. A suite inheriting a slot runs one file at a time; with the lease off it uses its full
+// check concurrency. `service` names the check (`kernel`, `auth`); it prefixes the clone names, the timings directory
+// and the `<SERVICE>_CHECK_*` variables.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { acquireStackSlot, type StackSlot } from './stack-lease.ts';
 
 export type TestTiming = { name: string; time: number };
 
@@ -286,9 +289,12 @@ export type LaneSuite = {
 /** Runs `files` in lanes, prints each file's output as it ends, records the timings; failed files are returned. */
 export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]; concurrency: number }> {
   const env = suite.env ?? process.env;
-  const concurrency = laneConcurrency(suite.service, env);
+  const configuredConcurrency = laneConcurrency(suite.service, env);
+  const inheritedSlot = env.REZICS_STACK_LEASE !== 'off' && env.REZICS_STACK_SLOT !== undefined;
+  const concurrency = inheritedSlot ? 1 : configuredConcurrency;
   const reports = mkdtempSync(join(tmpdir(), `${suite.service}-check-`));
   const recorder = createRecorder();
+  const slots = new Map<string, StackSlot>();
   let timingsPath: string | null = null;
   try {
     timingsPath = timingsDirectory(suite.service, suite.directory, env);
@@ -299,18 +305,37 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
   const runner = recorder.wrap<string>(
     {
       // Each file gets a fresh copy so its result cannot depend on writes from another file.
-      create: (_file, database) => suite.createDatabase(database),
+      create: async (file, database) => {
+        const slot = await acquireStackSlot(file, env);
+        slots.set(database, slot);
+        try {
+          await suite.createDatabase(database);
+        } catch (error) {
+          slots.delete(database);
+          await slot.release();
+          throw error;
+        }
+      },
       run: async (file, database) => {
+        const slot = slots.get(database);
         const result = await capture(
           'bun',
           testCommand(file, join(reports, `${database}.xml`)),
-          suite.environment(database),
+          { ...suite.environment(database), ...slot?.env },
           suite.directory,
         );
         if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
         return result.output;
       },
-      drop: (_file, database) => suite.dropDatabase(database),
+      drop: async (_file, database) => {
+        const slot = slots.get(database);
+        try {
+          await suite.dropDatabase(database);
+        } finally {
+          slots.delete(database);
+          await slot?.release();
+        }
+      },
     },
     async (_file, database) => parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
   );

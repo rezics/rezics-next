@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   laneConcurrency,
   orderFiles,
@@ -25,6 +25,35 @@ async function withDirectory(use: (directory: string) => Promise<void>): Promise
 }
 
 const timing = (wall: number): FileTiming => ({ wall, create: 0, drop: 0, outsideTests: 0, result: 'pass', tests: [] });
+
+function laneEnvironment(directory: string, concurrency: number): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    FIXTURE_CHECK_TIMINGS: resolve(directory, 'timings'),
+    FIXTURE_CHECK_CONCURRENCY: String(concurrency),
+    REZICS_STACK_LEASE_DIR: resolve(directory, 'lease'),
+    REZICS_STACK_SLOTS: '1',
+  };
+  delete env.REZICS_STACK_SLOT;
+  delete env.REZICS_STACK_LEASE;
+  return env;
+}
+
+function writeTestFiles(module: string, files: Record<string, string>): void {
+  for (const [file, source] of Object.entries(files)) {
+    const path = resolve(module, file);
+    mkdirSync(resolve(path, '..'), { recursive: true });
+    writeFileSync(path, source);
+  }
+}
+
+function slotIsFree(env: NodeJS.ProcessEnv): boolean {
+  const result = Bun.spawnSync(
+    ['flock', '-n', '-E', '75', join(env.REZICS_STACK_LEASE_DIR!, 'slot-1.lock'), 'true'],
+    { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+  );
+  return result.exitCode === 0;
+}
 
 test('each check names its clones, timings and variables after its service', () => {
   expect(timingsDirectory('auth', import.meta.dir, { AUTH_CHECK_TIMINGS: '/elsewhere' })).toBe('/elsewhere');
@@ -85,6 +114,7 @@ test('${name} sees its own clone', () => {
     writeTimings(timings, { 'test/slow.test.ts': timing(9), 'test/fast.test.ts': timing(1) }, { partial: false });
 
     const events: string[] = [];
+    const env = { ...laneEnvironment(directory, 1), FIXTURE_CHECK_TIMINGS: timings };
     const base = {
       service: 'fixture',
       directory: module,
@@ -92,8 +122,8 @@ test('${name} sees its own clone', () => {
       partial: false,
       createDatabase: async (database: string) => void events.push(`create ${database}`),
       dropDatabase: async (database: string) => void events.push(`drop ${database}`),
-      environment: (database: string) => ({ ...process.env, DATABASE_URL: `postgres://host/${database}` }),
-      env: { FIXTURE_CHECK_TIMINGS: timings, FIXTURE_CHECK_CONCURRENCY: '1' },
+      environment: (database: string) => ({ ...env, DATABASE_URL: `postgres://host/${database}` }),
+      env,
     };
     const originalWrite = process.stdout.write.bind(process.stdout);
     let printed = '';
@@ -140,6 +170,7 @@ test('a suite names the files whose tests failed and still drops their clones', 
       "import { expect, test } from 'bun:test';\ntest('fails', () => expect(1).toBe(2));\n",
     );
     const dropped: string[] = [];
+    const env = laneEnvironment(directory, 1);
     const originalWrite = process.stderr.write.bind(process.stderr);
     process.stderr.write = (() => true) as typeof process.stderr.write;
     try {
@@ -150,14 +181,202 @@ test('a suite names the files whose tests failed and still drops their clones', 
         partial: true,
         createDatabase: async () => undefined,
         dropDatabase: async (database) => void dropped.push(database),
-        environment: () => process.env,
-        env: { FIXTURE_CHECK_TIMINGS: resolve(directory, 'timings') },
+        environment: () => ({ ...env }),
+        env,
       });
       expect(result.failed).toEqual(['test/bad.test.ts']);
       expect(dropped).toEqual(['fixture_test_1']);
       expect(readLatest(resolve(directory, 'timings'))['test/bad.test.ts']!.result).toBe('fail');
+      expect(slotIsFree(env)).toBe(true);
     } finally {
       process.stderr.write = originalWrite;
     }
+  });
+});
+
+test('each test file holds one stack slot from its database copy to its drop', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    writeTestFiles(module, {
+      'test/a.test.ts': "import { test } from 'bun:test'; test('a', () => {});\n",
+      'test/b.test.ts': "import { test } from 'bun:test'; test('b', () => {});\n",
+    });
+    const env = laneEnvironment(directory, 2);
+    const events: string[] = [];
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/a.test.ts', 'test/b.test.ts'],
+      partial: false,
+      createDatabase: async (database) => {
+        events.push('create ' + database);
+        await Bun.sleep(10);
+      },
+      dropDatabase: async (database) => {
+        await Bun.sleep(25);
+        events.push('drop ' + database);
+      },
+      environment: (database) => {
+        events.push('run ' + database);
+        return { ...env, DATABASE_URL: 'postgres://host/' + database };
+      },
+      env,
+    });
+    expect(result).toEqual({ failed: [], concurrency: 2 });
+    expect(events).toHaveLength(6);
+    for (let index = 0; index < events.length; index += 3) {
+      const database = events[index]!.replace('create ', '');
+      expect(events[index]).toBe('create ' + database);
+      expect(events[index + 1]).toBe('run ' + database);
+      expect(events[index + 2]).toBe('drop ' + database);
+    }
+
+    const createEnv = laneEnvironment(resolve(directory, 'create-failure'), 1);
+    const createFailure = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/a.test.ts'],
+      partial: false,
+      createDatabase: async () => {
+        throw new Error('copy failed');
+      },
+      dropDatabase: async () => undefined,
+      environment: () => createEnv,
+      env: createEnv,
+    });
+    expect(createFailure.failed).toEqual(['test/a.test.ts']);
+    expect(slotIsFree(createEnv)).toBe(true);
+
+    const dropEnv = laneEnvironment(resolve(directory, 'drop-failure'), 1);
+    const dropFailure = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/a.test.ts'],
+      partial: false,
+      createDatabase: async () => undefined,
+      dropDatabase: async () => {
+        throw new Error('drop failed');
+      },
+      environment: () => dropEnv,
+      env: dropEnv,
+    });
+    expect(dropFailure.failed).toEqual(['test/a.test.ts']);
+    expect(slotIsFree(dropEnv)).toBe(true);
+  });
+});
+
+test("a file's test process gets its slot in the environment", async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    writeTestFiles(module, {
+      'test/slot.test.ts': [
+        "import { expect, test } from 'bun:test';",
+        "test('inherits its lane slot', () => expect(process.env.REZICS_STACK_SLOT).toBe('1/1'));",
+        '',
+      ].join('\n'),
+    });
+    const env = laneEnvironment(directory, 1);
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/slot.test.ts'],
+      partial: false,
+      createDatabase: async () => undefined,
+      dropDatabase: async () => undefined,
+      environment: (database) => ({ ...env, DATABASE_URL: 'postgres://host/' + database }),
+      env,
+    });
+    expect(result.failed).toEqual([]);
+  });
+});
+
+test('under an inherited slot the files run one at a time in it', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const marker = resolve(directory, 'running-file');
+    const markerJson = JSON.stringify(marker);
+    const source = [
+      "import { expect, test } from 'bun:test';",
+      "import { existsSync, unlinkSync, writeFileSync } from 'node:fs';",
+      "test('uses the parent slot without overlap', async () => {",
+      "  expect(process.env.REZICS_STACK_SLOT).toBe('1/2');",
+      '  expect(existsSync(' + markerJson + ')).toBe(false);',
+      '  writeFileSync(' + markerJson + ", 'running');",
+      '  try { await Bun.sleep(40); } finally { unlinkSync(' + markerJson + '); }',
+      '});',
+      '',
+    ].join('\n');
+    writeTestFiles(module, {
+      'test/a.test.ts': source,
+      'test/b.test.ts': source,
+      'test/c.test.ts': source,
+    });
+    const env = laneEnvironment(directory, 3);
+    env.REZICS_STACK_SLOT = '1/2';
+    const events: string[] = [];
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/a.test.ts', 'test/b.test.ts', 'test/c.test.ts'],
+      partial: false,
+      createDatabase: async (database) => void events.push('create ' + database),
+      dropDatabase: async (database) => void events.push('drop ' + database),
+      environment: (database) => {
+        events.push('run ' + database);
+        return { ...env, DATABASE_URL: 'postgres://host/' + database };
+      },
+      env,
+    });
+    expect(result).toEqual({ failed: [], concurrency: 1 });
+    expect(events).toEqual([
+      'create fixture_test_1',
+      'run fixture_test_1',
+      'drop fixture_test_1',
+      'create fixture_test_2',
+      'run fixture_test_2',
+      'drop fixture_test_2',
+      'create fixture_test_3',
+      'run fixture_test_3',
+      'drop fixture_test_3',
+    ]);
+    expect(existsSync(env.REZICS_STACK_LEASE_DIR!)).toBe(false);
+  });
+});
+
+test('with the lease off the lanes run at full concurrency and take no slot', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const source = [
+      "import { expect, test } from 'bun:test';",
+      "test('does not receive a stack slot', () => expect(process.env.REZICS_STACK_SLOT).toBeUndefined());",
+      '',
+    ].join('\n');
+    writeTestFiles(module, {
+      'test/a.test.ts': source,
+      'test/b.test.ts': source,
+      'test/c.test.ts': source,
+    });
+    const env = laneEnvironment(directory, 2);
+    env.REZICS_STACK_LEASE = 'off';
+    let active = 0;
+    let maximumActive = 0;
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/a.test.ts', 'test/b.test.ts', 'test/c.test.ts'],
+      partial: false,
+      createDatabase: async () => {
+        active++;
+        maximumActive = Math.max(maximumActive, active);
+        await Bun.sleep(30);
+        active--;
+      },
+      dropDatabase: async () => undefined,
+      environment: (database) => ({ ...env, DATABASE_URL: 'postgres://host/' + database }),
+      env,
+    });
+    expect(result).toEqual({ failed: [], concurrency: 2 });
+    expect(maximumActive).toBe(2);
+    expect(existsSync(env.REZICS_STACK_LEASE_DIR!)).toBe(false);
   });
 });
