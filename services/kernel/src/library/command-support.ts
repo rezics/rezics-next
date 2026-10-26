@@ -14,7 +14,10 @@ import {
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+
+export const WORK_STEP_DEADLINE_MS = 5_000;
 
 type CommandContext = { transactionId: string; time: AuthoritativeTime };
 export type LibraryCommandBody<T> = (
@@ -119,7 +122,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       {
         ...identity,
         partition: partitionOf(route),
-        deadline: Date.now() + 5000,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
         clock,
         receipt: {
           kind: request.kind,
@@ -148,7 +151,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       pool,
       {
         partition: partitionOf(route),
-        deadline: Date.now() + 5000,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
         clock,
         receipt: {
           actorAccountId: accountId,

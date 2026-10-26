@@ -6,9 +6,10 @@ import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
+import { createLibraryCommandRunner, LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import type { Follow, FollowPageCursor, FollowTargetType } from './follow-model.ts';
 import { applyFollow, pageFollows, readFollow as readStoredFollow } from './follow-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
@@ -98,7 +99,7 @@ export function createFollowCommands(config: FollowDeps) {
           ...identity,
           eligibility: spaceReadEligibility(identity),
         },
-        { pool, deadline: Date.now() + 5000 },
+        { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
       );
       const allowed = await withConnection(pool, async (client) => {
         if (!(await check(client))) return false;

@@ -348,6 +348,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     });
 
     const app = createKernel({
+      requestDeadlineMs: 30_000,
       pool: db!.pool,
       clock: () => new Date(scenarioNow()),
       writeRate: createWriteRateLimiter({

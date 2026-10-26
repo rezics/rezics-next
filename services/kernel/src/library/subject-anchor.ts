@@ -1,12 +1,13 @@
 import type { Pool } from 'pg';
-import { systemClock, type KernelClock } from '../clock.ts';
+import type { KernelClock } from '../clock.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubject } from '../semantic/subject.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
-const ACCESS_BUDGET_MS = 5_000;
 const MAX_SUBJECT_IDS = 100;
 const MAX_CONCURRENT_SUBJECT_READS = 4;
 
@@ -17,12 +18,6 @@ export type SubjectAnchorDependencies = {
 };
 
 export type ResolvedSubject = { subjectId: string; requestedSubjectId: string | null };
-
-function accessDeadline(clock: KernelClock): number {
-  const now = clock().getTime();
-  if (!Number.isFinite(now)) throw new RangeError('Kernel clock must return a valid date');
-  return now + ACCESS_BUDGET_MS;
-}
 
 /** Resolve a subject on its own anchor using the semantic subject:read policy. */
 export async function resolveSubject(
@@ -36,7 +31,7 @@ export async function resolveSubject(
     const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
     const check = await accessCheck(deps.access, actor, 'subject:read', resource, {
       pool: deps.pool,
-      deadline: accessDeadline(deps.clock ?? systemClock),
+      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
     });
     return readSubject(deps.pool, id, (client) => check(client));
   }

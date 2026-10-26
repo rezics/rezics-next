@@ -5,11 +5,13 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { readableSubjects, resolveSubject } from './subject-anchor.ts';
 import collectionRead from './collection-reads-collection.sql';
 import curatorPage from './collection-reads-curator.sql';
@@ -48,7 +50,6 @@ export type PublicCollectionView = {
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 const MAX_CURSOR_LENGTH = 4096;
-const ACCESS_BUDGET_MS = 5_000;
 const ABSENT_UPDATED_AT = '9999-12-31T23:59:59.999999Z';
 const ABSENT_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const UPDATED_AT_EXACT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
@@ -200,7 +201,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
       { route, id, eligibility: readEligibility(route, id, sink) },
       {
         pool,
-        deadline: Date.now() + ACCESS_BUDGET_MS,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
       },
     );
     return readOnly(pool, async (client) => {
