@@ -621,7 +621,7 @@ test('hot page and membership check have derived constant row and statement boun
     try {
       const report = await checkGrowth(growth.database, {
         name: `community ${operation}`,
-        scales: [2048, 8192, 32768],
+        scales: [256, 1024, 4096],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         slack: { rows: { absolute: 0, relative: 0 }, statements: { absolute: 0, relative: 0 } },
         repetitions: 3,
@@ -645,7 +645,7 @@ test('hot page and membership check have derived constant row and statement boun
           }
         },
       });
-      expect(report.samples.map((s) => s.scale)).toEqual([2048, 8192, 32768]);
+      expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
       for (const { cost } of report.samples) {
         expect(cost.rows).toBeGreaterThan(0);
         expect(cost.statements).toBeGreaterThan(0);

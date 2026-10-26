@@ -31,7 +31,6 @@ import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '
 import { startConsentServer } from './membership-fixture.ts';
 
 const AUDIENCE = 'https://content.test';
-const suiteDrivers = new Set<CommunityDriver>();
 
 type JsonObject = Record<string, unknown>;
 
@@ -129,6 +128,8 @@ async function startWorker(system: ContentSystem): Promise<{
   };
 }
 
+let driverCount = 0;
+
 function parsedKey(value: string): string {
   const [parsed] = parseItem(value);
   if (typeof parsed !== 'string') throw new TypeError('Community command key must be a structured field string');
@@ -148,7 +149,22 @@ function fixtureError(label: string, response: Response): Promise<never> {
     });
 }
 
-export async function createCommunityDriver(): Promise<CommunityDriver> {
+/** What every test of one file shares: one system, one worker and one SQL observer. */
+type SharedCommunity = {
+  system: ContentSystem;
+  kernel: Kernel;
+  worker: Awaited<ReturnType<typeof startWorker>>;
+  work: WorkClient;
+  observer: SqlObserver;
+  provisioned: { fixture: Fixture; governance: Account } | undefined;
+  /** Suspensions end the fixture's accounts for good, so the next test builds a new base. */
+  retired: boolean;
+  closing: Promise<void> | undefined;
+};
+
+let shared: SharedCommunity | undefined;
+
+async function buildShared(): Promise<SharedCommunity> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
   const system = await createContentSystem({ databaseUrl });
@@ -168,55 +184,70 @@ export async function createCommunityDriver(): Promise<CommunityDriver> {
       workClient: work,
       writeRate: createWriteRateLimiter({
         secret: crypto.randomUUID() + crypto.randomUUID(),
-        overrides: '{}',
+        // The tests of a file share one set of accounts, so none of them may spend another's budget.
+        overrides: JSON.stringify(
+          Object.fromEntries(
+            ['anonymous', 'new-account', 'member', 'trusted', 'service'].map((name) => [
+              name,
+              { write: { maximum: 1_000_000, seconds: 86_400 } },
+            ]),
+          ),
+        ),
       }),
       ratePeer: () => '127.0.0.1',
     });
     worker = await startWorker(system);
     observer = observeSql(system.database.pool);
-    const driver = bindDriver(system, kernel, worker, work, observer);
-    let closing: Promise<void> | undefined;
-    const close = driver.close.bind(driver);
-    driver.close = () => {
-      suiteDrivers.delete(driver);
-      return (closing ??= close());
-    };
-    suiteDrivers.add(driver);
-    return driver;
+    return { system, kernel, worker, work, observer, provisioned: undefined, retired: false, closing: undefined };
   } catch (error) {
     const errors: unknown[] = [error];
-    try {
-      await observer?.close();
-    } catch (cleanup) {
-      errors.push(cleanup);
-    }
-    try {
-      await work?.close();
-    } catch (cleanup) {
-      errors.push(cleanup);
-    }
-    try {
-      await worker?.stop();
-    } catch (cleanup) {
-      errors.push(cleanup);
-    }
-    try {
-      await system.close();
-    } catch (cleanup) {
-      errors.push(cleanup);
+    for (const release of [() => observer?.close(), () => work?.close(), () => worker?.stop(), () => system.close()]) {
+      try {
+        await release();
+      } catch (cleanup) {
+        errors.push(cleanup);
+      }
     }
     if (errors.length > 1) throw new AggregateError(errors, 'Community driver construction failed');
     throw error;
   }
 }
 
-function bindDriver(
-  system: ContentSystem,
-  kernel: Kernel,
-  worker: Awaited<ReturnType<typeof startWorker>>,
-  work: WorkClient,
-  observer: SqlObserver,
-): CommunityDriver {
+/** Ends each part of the base exactly once, in the order the parts depend on one another. */
+function closeShared(base: SharedCommunity): Promise<void> {
+  return (base.closing ??= (async () => {
+    if (shared === base) shared = undefined;
+    const errors: unknown[] = [];
+    for (const release of [
+      () => base.observer.close(),
+      () => base.worker.stop(),
+      () => base.work.close(),
+      () => base.system.close(),
+    ]) {
+      try {
+        await release();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Community driver cleanup failed');
+  })());
+}
+
+/** A test file builds its system and worker once; each test gets its own driver state over them. */
+export async function createCommunityDriver(): Promise<CommunityDriver> {
+  if (shared?.retired) await closeShared(shared);
+  const base = (shared ??= await buildShared());
+  return bindDriver(base);
+}
+
+/** Ends the system and worker the file's drivers share. Call it once when the file is done. */
+export async function closeCommunityDrivers(): Promise<void> {
+  if (shared) await closeShared(shared);
+}
+
+function bindDriver(base: SharedCommunity): CommunityDriver {
+  const { system, kernel, worker, work, observer } = base;
   const pending = new Set<string>();
   let fixture: Fixture | undefined;
   let governanceAccount: Account | undefined;
@@ -225,12 +256,16 @@ function bindDriver(
   let growthKernel: Kernel | undefined;
   let growthDatabase: GrowthDatabase | undefined;
   const nextKey = () => JSON.stringify(`driver-${++serial}-${crypto.randomUUID()}`);
+  // The spec numbers its keys from one in every test, but the tests share one database: a key
+  // is scoped to its driver so one test never replays another's receipt.
+  const scope = `t${++driverCount}`;
+  const scopedKey = (key: string) => JSON.stringify(`${scope}-${parsedKey(key)}`);
 
   async function request(command: Command): Promise<Response> {
     const mark = observer.records.length;
     const headers = new Headers();
     if (command.actor) headers.set('authorization', `Bearer ${command.actor.bearer}`);
-    if (command.key !== undefined) headers.set(IDEMPOTENCY_HEADER, command.key);
+    if (command.key !== undefined) headers.set(IDEMPOTENCY_HEADER, scopedKey(command.key));
     if (command.ifMatch !== undefined) headers.set('if-match', command.ifMatch);
     const init: RequestInit = { method: command.method, headers };
     if (command.body !== undefined) {
@@ -298,24 +333,58 @@ function bindDriver(
     return ((await response.clone().json()) as { subject: Subject }).subject;
   }
 
+  /** Removes every Space, Realm, board and thread, and the grants on them. The Context and the platform stay. */
+  async function wipeCommunity(pool: { query: (text: string, values?: unknown[]) => Promise<unknown> }) {
+    await pool.query(`
+          TRUNCATE
+            community.realm_ban,
+            community.realm_member_terminal,
+            community.realm_member,
+            community.realm_revision,
+            community.realm,
+            community.space_revision,
+            community.space,
+            content.reaction_total,
+            content.board_thread,
+            content.revision,
+            content.post,
+            content.thread,
+            content.board
+          CASCADE`);
+    await pool.query('TRUNCATE access.membership_inverse, access.resource_denial');
+    await pool.query(
+      `DELETE FROM access.resource_role_grant
+            WHERE resource_id <> ALL($1::uuid[])`,
+      [[PLATFORM_RESOURCE.id, fixture!.contextId]],
+    );
+    await pool.query(
+      `DELETE FROM access.resource_grant
+            WHERE resource_id <> ALL($1::uuid[])`,
+      [[PLATFORM_RESOURCE.id, fixture!.contextId]],
+    );
+    await pool.query(
+      `DELETE FROM access.resource_initialization
+            WHERE resource_id <> ALL($1::uuid[])`,
+      [[PLATFORM_RESOURCE.id, fixture!.contextId]],
+    );
+  }
+
   const driver: CommunityDriver = {
     async close() {
-      const errors: unknown[] = [];
-      const release = async (operation: () => Promise<unknown>) => {
-        try {
-          await operation();
-        } catch (error) {
-          errors.push(error);
-        }
-      };
-      await release(() => observer.close());
-      if (growthDatabase) await release(() => growthDatabase!.close());
-      await release(() => worker.stop());
-      await release(() => work.close());
-      await release(() => system.close());
-      if (errors.length) throw new AggregateError(errors, 'Community driver cleanup failed');
+      // The growth fixture owns its own pool; the shared base outlives the test unless a suspension retired it.
+      try {
+        if (growthDatabase) await growthDatabase.close();
+      } finally {
+        growthDatabase = undefined;
+        growthKernel = undefined;
+        if (base.retired) await closeShared(base);
+      }
     },
     async provision() {
+      if (base.provisioned) {
+        ({ fixture, governance: governanceAccount } = base.provisioned);
+        return fixture;
+      }
       const owner = accountOf(system.actors.author);
       const member = accountOf(system.actors.other);
       const moderator = accountOf(system.actors.moderator);
@@ -402,6 +471,7 @@ function bindDriver(
         subject: { id: subject.id, candidateId, property: 'schema:author', fallback: 'schema:inLanguage' },
         unknown: { realm: newId(0x7101), board: newId(0x7102), thread: newId(0x7103) },
       };
+      base.provisioned = { fixture, governance: governanceAccount };
       return fixture;
     },
     request,
@@ -425,6 +495,7 @@ function bindDriver(
     },
     async suspend(account) {
       if (!governanceAccount) throw new Error('Community governance credential is missing');
+      base.retired = true;
       return request({
         actor: governanceAccount,
         method: 'POST',
@@ -440,7 +511,7 @@ function bindDriver(
       while ((await refreshBoardRankBatch(system.database.pool, at)) > 0) {}
     },
     async commandEvidence(actor, commandKey) {
-      const storedKey = parsedKey(commandKey);
+      const storedKey = parsedKey(scopedKey(commandKey));
       const receipts = await system.database.pool.query<{
         key: string;
         response: unknown;
@@ -481,6 +552,9 @@ function bindDriver(
     async growthFixture(): Promise<CommunityGrowth> {
       if (!fixture) throw new Error('Community fixture is not provisioned');
       if (growthDatabase) throw new Error('Community growth fixture is already open');
+      // Populations are counted over the whole database, so earlier tests' communities must not be in it.
+      await settle();
+      await wipeCommunity(system.database.pool);
       const owner = fixture.owner;
       const member = fixture.member;
       const spaceResponse = await checked('Growth Space creation', {
@@ -950,38 +1024,7 @@ function bindDriver(
           growthKernel = undefined;
           growthDatabase = undefined;
           try {
-            await database.admin.query(`
-              TRUNCATE
-                community.realm_ban,
-                community.realm_member_terminal,
-                community.realm_member,
-                community.realm_revision,
-                community.realm,
-                community.space_revision,
-                community.space,
-                content.reaction_total,
-                content.board_thread,
-                content.revision,
-                content.post,
-                content.thread,
-                content.board
-              CASCADE`);
-            await database.admin.query('TRUNCATE access.membership_inverse, access.resource_denial');
-            await database.admin.query(
-              `DELETE FROM access.resource_role_grant
-                WHERE resource_id <> ALL($1::uuid[])`,
-              [[PLATFORM_RESOURCE.id, fixture!.contextId]],
-            );
-            await database.admin.query(
-              `DELETE FROM access.resource_grant
-                WHERE resource_id <> ALL($1::uuid[])`,
-              [[PLATFORM_RESOURCE.id, fixture!.contextId]],
-            );
-            await database.admin.query(
-              `DELETE FROM access.resource_initialization
-                WHERE resource_id <> ALL($1::uuid[])`,
-              [[PLATFORM_RESOURCE.id, fixture!.contextId]],
-            );
+            await wipeCommunity(database.admin);
           } finally {
             await database.close();
           }

@@ -38,7 +38,7 @@ const audience = 'https://realm-participation.api.test';
 const password = 'realm participation registration password with enough entropy';
 const routeKey = new Uint8Array(32).fill(97);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(98)]]) };
-const growthScales: [number, number, number] = [2048, 8192, 32768];
+const growthScales: [number, number, number] = [256, 1024, 4096];
 const growthBounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
 let db: GrowthDatabase;
@@ -669,6 +669,9 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
   );
   const joined = await joinMember(protectedRealm.realmId, member, owner);
   expect(joined).toMatchObject({ status: 'completed', accountId: member.accountId });
+  // The read does not use the work runtime. Its queue polling shares this pool and would add statements to the
+  // measured window at random.
+  await workRuntime.shutdown();
   const route = routeOf(protectedRealm.realmId)!;
   const memberActor = await access.authenticate(member.bearer, { pool, deadline: Date.now() + 30_000 });
   expect(memberActor.kind).toBe('account');

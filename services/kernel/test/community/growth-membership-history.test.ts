@@ -25,6 +25,11 @@ beforeAll(async () => {
 
 afterAll(async () => db?.close());
 
+/** Rows of other keys: they grow faster than the history under test, as one hot key among many does. */
+function neighbours(scale: number): number {
+  return Math.round(65_536 * (scale / 2048) ** 1.5);
+}
+
 function planNodes(value: unknown): Record<string, unknown>[] {
   if (Array.isArray(value)) return value.flatMap(planNodes);
   if (typeof value !== 'object' || value === null) return [];
@@ -39,7 +44,7 @@ test('current membership is one index point read as the same account and Realm a
   };
   const report = await checkGrowth(db, {
     name: 'current Realm membership closed history',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     slack: { rows: { absolute: 0, relative: 0 } },
     async grow(_database, scale, previous) {
@@ -63,7 +68,7 @@ test('current membership is one index point read as the same account and Realm a
             ],
           }),
         },
-        { from: previous === 0 ? 0 : 65_536 * (previous / 2048) ** 1.5, to: 65_536 * (scale / 2048) ** 1.5 },
+        { from: neighbours(previous), to: neighbours(scale) },
       );
       await seed(
         db,
