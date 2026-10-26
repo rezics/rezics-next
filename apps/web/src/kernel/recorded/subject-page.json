@@ -1,5 +1,5 @@
 {
-  "subject": "01a17842-2203-76a4-a140-34d8147c116f",
+  "subject": "01a178a7-06ca-75b0-b60b-4671af4ce6b5",
   "profile": "sha256:88921cc5e997e26013530d390f177bc1578f9fa06f5d81b895cdda09f67a73ea",
   "template": { "scope": "base", "key": "schema:CreativeWork" },
   "document": {
@@ -58,36 +58,36 @@
       "status": 200,
       "body": {
         "subject": {
-          "id": "01a17842-2203-76a4-a140-34d8147c116f",
+          "id": "01a178a7-06ca-75b0-b60b-4671af4ce6b5",
           "type": "schema:Book",
           "revision": 1,
           "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
           "context": "00000000-0000-8000-8000-000000000000",
           "resolution": {},
           "labels": {
-            "ko": "어린 왕자",
             "zh-Hant": "小王子",
-            "es": "El Principito",
-            "ja": "星の王子さま",
-            "zh-Hans": "小王子",
-            "en": "The Little Prince",
             "fr": "Le Petit Prince",
-            "de": "Der kleine Prinz"
+            "es": "El Principito",
+            "de": "Der kleine Prinz",
+            "zh-Hans": "小王子",
+            "ko": "어린 왕자",
+            "ja": "星の王子さま",
+            "en": "The Little Prince"
           },
           "descriptions": {
-            "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
-            "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。",
             "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde.",
-            "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential."
+            "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。",
+            "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential.",
+            "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。"
           },
-          "aliases": { "ja": ["星の王子様"], "en": ["Le Petit Prince"] },
+          "aliases": { "en": ["Le Petit Prince"], "ja": ["星の王子様"] },
           "statements": {
             "schema:author": [
               {
-                "id": "85e43755-72ee-8296-8b91-34d879476311",
+                "id": "0e6f9b0e-9e2b-80ab-8e5a-4671e971a03e",
                 "rank": "normal",
                 "property": { "id": "schema:author", "data_type": "wikibase-item" },
-                "value": { "type": "value", "content": "01a17842-2101-727c-abbe-23d0229b84c2" },
+                "value": { "type": "value", "content": "01a178a7-065c-7350-a878-779ede5848c9" },
                 "qualifiers": [],
                 "references": [],
                 "rezics": {
@@ -98,7 +98,7 @@
             ],
             "schema:datePublished": [
               {
-                "id": "0a5e4238-0bc2-883c-ba73-34d85e06c8ec",
+                "id": "37e98a4e-709e-8616-b9bd-4671cfc57eee",
                 "rank": "normal",
                 "property": { "id": "schema:datePublished", "data_type": "time" },
                 "value": {
@@ -119,10 +119,10 @@
             ],
             "schema:genre": [
               {
-                "id": "f274412f-81f2-8d33-9122-34d8f6a45b39",
+                "id": "d32ca35c-fb29-8ea3-8773-4671b56cb472",
                 "rank": "normal",
                 "property": { "id": "schema:genre", "data_type": "wikibase-item" },
-                "value": { "type": "value", "content": "01a17842-21d6-75c3-9991-44e4bf15f77b" },
+                "value": { "type": "value", "content": "01a178a7-06be-77b1-9458-fa3dd622b9ad" },
                 "qualifiers": [],
                 "references": [],
                 "rezics": {
@@ -133,7 +133,7 @@
             ],
             "schema:inLanguage": [
               {
-                "id": "bb040a4e-17cc-8ae7-8393-34d88aae43e1",
+                "id": "58552a79-5259-84c0-9936-467164f57d69",
                 "rank": "normal",
                 "property": { "id": "schema:inLanguage", "data_type": "string" },
                 "value": { "type": "value", "content": "fr" },
@@ -196,7 +196,7 @@
               "zh-Hant": "語言"
             }
           },
-          "01a17842-2101-727c-abbe-23d0229b84c2": {
+          "01a178a7-065c-7350-a878-779ede5848c9": {
             "labels": {
               "de": "Antoine de Saint-Exupéry",
               "en": "Antoine de Saint-Exupéry",
@@ -208,7 +208,7 @@
               "zh-Hant": "安東尼·聖修伯里"
             }
           },
-          "01a17842-21d6-75c3-9991-44e4bf15f77b": {
+          "01a178a7-06be-77b1-9458-fa3dd622b9ad": {
             "labels": {
               "de": "Fabel",
               "en": "Fable",
@@ -228,19 +228,19 @@
       "body": {
         "subjects": [
           {
-            "id": "01a17842-225f-7164-8a81-2377c018e60e",
+            "id": "01a178a7-06ea-77f0-8647-00e57383ff43",
             "type": "bf:Instance",
             "labels": { "en": "Le Petit Prince (Gallimard, 1946)", "fr": "Le Petit Prince (Gallimard, 1946)" }
           },
           {
-            "id": "01a17842-2233-7779-ac0d-dfcc36cc02eb",
+            "id": "01a178a7-06dd-739e-ab3d-b20da5c66404",
             "type": "bf:Instance",
             "labels": { "en": "The Little Prince (Reynal & Hitchcock, 1943)" }
           }
         ],
         "total": { "value": 2, "relation": "exact" },
         "next": null,
-        "as_of": "2026-10-26T12:48:24.669Z"
+        "as_of": "2026-10-26T14:39:17.230Z"
       }
     }
   },

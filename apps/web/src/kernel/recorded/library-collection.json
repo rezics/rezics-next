@@ -1,15 +1,15 @@
 {
   "collection": {
-    "id": "01a17842-8325-73a3-8eb9-481981c12c9b",
-    "curatorAccountId": "01a17840-6c75-77cc-a089-4819cffabdd0",
+    "id": "01a178a7-5999-7636-8a0c-f42080bec1be",
+    "curatorAccountId": "01a178a6-76e9-701c-8f5b-f420dfbe9db5",
     "title": "Books I come back to",
     "description": "Short novels I reread every few years, in the order I would hand them to a friend.",
     "visibility": "public",
     "revision": 1,
     "memberCount": 4,
-    "createdAt": "2026-10-26T12:49:47.307Z",
-    "updatedAt": "2026-10-26T12:49:47.440Z",
-    "curator": { "id": "01a17840-6c75-77cc-a089-4819cffabdd0", "handle": "mira", "displayName": "Mira Okabe" }
+    "createdAt": "2026-10-26T14:39:55.808Z",
+    "updatedAt": "2026-10-26T14:39:55.912Z",
+    "curator": { "id": "01a178a6-76e9-701c-8f5b-f420dfbe9db5", "handle": "mira", "displayName": "Mira Okabe" }
   },
   "status": 200
 }
