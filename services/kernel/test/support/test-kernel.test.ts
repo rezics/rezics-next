@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import type { AuthService } from '@rezics/auth';
 import { createPool } from '../../src/database/pool.ts';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
@@ -16,9 +17,13 @@ import {
   testKernel,
   testRouteKey,
   testTokens,
+  writeTestReceipt,
 } from './test-kernel.ts';
 
-const pool = createPool('postgres://kernel.invalid/test-kernel');
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+afterAll(() => pool.end());
 const allowWrites: WriteRateLimiter = {
   async spend() {
     return { allowed: true };
@@ -128,4 +133,75 @@ test('named overrides preserve the mounted composition and client registration d
   await registerTestClient(service, { clientId: 'test-client', firstParty: true });
   const scopes = (registrations[0] as { scopes: string[] }).scopes;
   expect(scopes).toEqual([...actionCatalogue(production).keys()].sort());
+});
+
+test('receipt writer uses current principals and optionally records the production write basis', async () => {
+  const accountId = randomUUID();
+  const account = await writeTestReceipt({
+    pool,
+    partitionNo: 0,
+    principal: { kind: 'account', id: accountId, clientId: 'test-client', requestedBy: 'test-requester' },
+    writeBasis: true,
+  });
+  const anonymous = await writeTestReceipt({
+    pool,
+    partitionNo: 0,
+    principal: { kind: 'anonymous' },
+    position: 2,
+  });
+
+  expect(
+    (
+      await pool.query(
+        `SELECT principal_kind,principal_id,actor_account_id,command_kind,epoch,position::integer,response,
+          octet_length(request_digest) AS digest_length,created_at IS NOT NULL AS timestamped
+        FROM core.receipt WHERE partition_no=$1 AND transaction_id=ANY($2::uuid[]) ORDER BY position`,
+        [0, [account.transactionId, anonymous.transactionId]],
+      )
+    ).rows,
+  ).toEqual([
+    {
+      principal_kind: 'account',
+      principal_id: accountId,
+      actor_account_id: accountId,
+      command_kind: 'test.fixture',
+      epoch: 1,
+      position: 1,
+      response: {},
+      digest_length: 32,
+      timestamped: true,
+    },
+    {
+      principal_kind: 'anonymous',
+      principal_id: '00000000-0000-0000-0000-000000000000',
+      actor_account_id: null,
+      command_kind: 'test.fixture',
+      epoch: 1,
+      position: 2,
+      response: {},
+      digest_length: 32,
+      timestamped: true,
+    },
+  ]);
+  expect(
+    (
+      await pool.query(
+        `SELECT principal_kind,principal_id,actor_account_id,client_id,requested_by,epoch,position::integer,
+          recorded_at IS NOT NULL AS timestamped
+        FROM editorial.write_basis WHERE partition_no=$1 AND transaction_id=ANY($2::uuid[])`,
+        [0, [account.transactionId, anonymous.transactionId]],
+      )
+    ).rows,
+  ).toEqual([
+    {
+      principal_kind: 'account',
+      principal_id: accountId,
+      actor_account_id: accountId,
+      client_id: 'test-client',
+      requested_by: 'test-requester',
+      epoch: 1,
+      position: 1,
+      timestamped: true,
+    },
+  ]);
 });

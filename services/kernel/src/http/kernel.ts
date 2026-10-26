@@ -3,11 +3,8 @@ import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createAccess } from '../access/index.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import {
-  assertDeclaredResourceTypes,
-  installResourceRoleCatalogue,
-  resourceRoleCatalogue,
-} from '../access/resource-roles.ts';
+import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
@@ -61,7 +58,6 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   workClient?: WorkClient;
 };
 
-<<<<<<< HEAD
 type ContentReadAssociation = Readonly<{ found: boolean; realmId: string | null }>;
 type ContentReadProof = Readonly<{
   actor: Actor;

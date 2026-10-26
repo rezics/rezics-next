@@ -1,4 +1,5 @@
 import type { AuthService } from '@rezics/auth';
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { AccessConfig } from '../../src/access/index.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
@@ -205,4 +206,80 @@ export async function registerTestClient(
     scopes: [...scopes],
     ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
   });
+}
+
+type TestReceiptPrincipal =
+  | { kind: 'account'; id: string; clientId: string; requestedBy?: string | null }
+  | { kind: 'anonymous' };
+
+export type TestReceiptOptions = {
+  pool: Pick<Pool, 'query'>;
+  partitionNo: number;
+  principal: TestReceiptPrincipal;
+  commandKind?: string;
+  idempotencyKey?: string;
+  requestDigest?: Uint8Array;
+  epoch?: number;
+  position?: number;
+  transactionId?: string;
+  response?: unknown;
+  writeBasis?: boolean;
+};
+
+/** Inserts a production-shaped receipt and, when requested, its write basis. */
+export async function writeTestReceipt(options: TestReceiptOptions) {
+  const transactionId = options.transactionId ?? randomUUID();
+  const principalId =
+    options.principal.kind === 'account' ? options.principal.id : '00000000-0000-0000-0000-000000000000';
+  const commandKind = options.commandKind ?? 'test.fixture';
+  const idempotencyKey = options.idempotencyKey ?? randomUUID();
+  const requestDigest = options.requestDigest ?? new Uint8Array(32);
+  const epoch = options.epoch ?? 1;
+  const position = options.position ?? 1;
+  const response = options.response ?? {};
+  const clientId = options.principal.kind === 'account' ? options.principal.clientId : null;
+  const requestedBy = options.principal.kind === 'account' ? (options.principal.requestedBy ?? null) : null;
+  await options.pool.query(
+    `WITH inserted_receipt AS (
+      INSERT INTO core.receipt
+        (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING partition_no,principal_kind,principal_id,epoch,position,transaction_id
+    ), inserted_basis AS (
+      INSERT INTO editorial.write_basis
+        (partition_no,transaction_id,epoch,position,principal_kind,principal_id,client_id,requested_by)
+      SELECT partition_no,transaction_id,epoch,position,principal_kind,principal_id,$11,$12
+      FROM inserted_receipt
+      WHERE $13::boolean
+      RETURNING 1
+    )
+    SELECT (SELECT count(*) FROM inserted_receipt), (SELECT count(*) FROM inserted_basis)`,
+    [
+      options.partitionNo,
+      options.principal.kind,
+      principalId,
+      commandKind,
+      idempotencyKey,
+      requestDigest,
+      epoch,
+      position,
+      transactionId,
+      response,
+      clientId,
+      requestedBy,
+      options.writeBasis ?? false,
+    ],
+  );
+  return {
+    partitionNo: options.partitionNo,
+    principalKind: options.principal.kind,
+    principalId,
+    commandKind,
+    idempotencyKey,
+    requestDigest,
+    epoch,
+    position,
+    transactionId,
+    response,
+  };
 }

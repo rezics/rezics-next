@@ -181,6 +181,7 @@ and fixed route key. `testApp` mounts the same app stage and builds Access from 
 production Access constructor, Realm role reader, resource roles and resource-type binding. Pass a named override such
 as `clock`, `actions` or `writeRate` only when a test needs to vary that contract. Use `registerTestClient` to register a
 client from the mounted production scope set, with a named `scopes` override for tests that exercise narrower consent.
+Use `writeTestReceipt` for production-shaped receipt and optional write-basis fixture rows.
 When a task changes a kernel-wide contract, run the full kernel check and fix every test the change turns red.
 
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
