@@ -72,7 +72,7 @@ async function create(d: DurableInitiatorDriver, mode: SeedMode = 'delegated') {
   });
   expect(state.creationReceipt!.id.length).toBeGreaterThan(0);
   const points = await d.points(op);
-  expect(points.filter((p) => p.kind === 'step').length).toBeGreaterThanOrEqual(2);
+  expect(points.filter((p) => p.kind === 'step').length).toBeGreaterThanOrEqual(1);
   expect(points.some((p) => p.kind === 'result')).toBe(true);
   expect(points.some((p) => p.kind === 'cached-result')).toBe(true);
   expect(new Set(points.map((p) => p.id)).size).toBe(points.length);
@@ -157,9 +157,57 @@ async function denies(d: DurableInitiatorDriver, op: Anchor, point: Point, attac
   return attempt;
 }
 
+// Only the baseline's kinds are shared with fresh operations of the same fixture
+// shape. Every checkpoint ID still comes from that operation's native registry.
+const sequences = new WeakMap<DurableInitiatorDriver, Point['kind'][]>();
+
+async function sequence(d: DurableInitiatorDriver, op: Anchor) {
+  let points = await d.points(op);
+  let steps = points.filter((p) => p.kind === 'step');
+  for (let index = 0; index < steps.length; index++) {
+    const point = steps[index]!;
+    await d.park(op, point.id);
+    await allowed(d, op, point);
+    points = await d.points(op);
+    const reached = points.filter((p) => p.kind === 'step');
+    expect(reached.slice(0, steps.length)).toEqual(steps);
+    steps = reached;
+  }
+  expect(steps.length).toBeGreaterThanOrEqual(2);
+  expect(points.some((p) => p.kind === 'result')).toBe(true);
+  expect(points.some((p) => p.kind === 'cached-result')).toBe(true);
+  expect(new Set(points.map((p) => p.id)).size).toBe(points.length);
+  const kinds: Point['kind'][] = [...steps.map((p) => p.kind), 'result', 'cached-result'];
+  sequences.set(d, kinds);
+  return kinds;
+}
+
+async function pointAt(d: DurableInitiatorDriver, op: Anchor, index: number) {
+  const kind = index === 0 ? 'step' : sequences.get(d)?.[index];
+  expect(kind).toBeDefined();
+  let points = await d.points(op);
+  if (kind !== 'step') {
+    const point = points.find((p) => p.kind === kind);
+    expect(point).toBeDefined();
+    return point!;
+  }
+  let steps = points.filter((p) => p.kind === 'step');
+  while (index >= steps.length) {
+    const last = steps[steps.length - 1]!;
+    await d.park(op, last.id);
+    await allowed(d, op, last);
+    points = await d.points(op);
+    const reached = points.filter((p) => p.kind === 'step');
+    expect(reached.slice(0, steps.length)).toEqual(steps);
+    expect(reached.length).toBeGreaterThan(steps.length);
+    steps = reached;
+  }
+  return steps[index]!;
+}
+
 async function positive(d: DurableInitiatorDriver, index: number, mode: SeedMode = 'delegated') {
   const c = await create(d, mode);
-  const point = c.points[index]!;
+  const point = await pointAt(d, c.op, index);
   expect(point).toBeDefined();
   await d.park(c.op, point.id);
   await allowed(d, c.op, point);
@@ -198,11 +246,14 @@ async function changed(d: DurableInitiatorDriver, f: Fixture, axis: Mutation) {
 
 test('durable committed initiator survives bearer expiry without persisting a token', async () => {
   const d = await setup();
-  const { f, op, points } = await create(d);
+  const baseline = await create(d);
+  const kinds = await sequence(d, baseline.op);
+  const { f, op } = await create(d);
   const original = (await d.inspect(op)).operation;
   await d.passOriginalExpiry(f);
   await d.restart();
-  for (const point of points) {
+  for (let index = 0; index < kinds.length; index++) {
+    const point = await pointAt(d, op, index);
     await d.park(op, point.id);
     const attempt = await allowed(d, op, point);
     expect(Date.parse(attempt.at)).toBeGreaterThan(Date.parse(f.expiresAt));
@@ -223,11 +274,12 @@ test('durable committed initiator survives bearer expiry without persisting a to
 test('each later step and result rechecks current three-operand formula and recorded ceilings', async () => {
   const d = await setup();
   const baseline = await create(d);
-  for (let index = 0; index < baseline.points.length; index++) {
+  const kinds = await sequence(d, baseline.op);
+  for (let index = 0; index < kinds.length; index++) {
     for (const axis of ['actor-grant', 'principal-grant', 'consent-reduced'] as const) {
       await positive(d, index);
-      const { f, op, points } = await create(d);
-      const point = points[index]!;
+      const { f, op } = await create(d);
+      const point = await pointAt(d, op, index);
       await d.park(op, point.id);
       const at = await changed(d, f, axis);
       const attempt = await denies(d, op, point);
@@ -258,6 +310,7 @@ test('each later step and result rechecks current three-operand formula and reco
 test('suspension fence epoch consent delegation revocations deny independently', async () => {
   const d = await setup();
   const baseline = await create(d);
+  const kinds = await sequence(d, baseline.op);
   const axes: Mutation[] = [
     'suspended',
     'tombstoned',
@@ -274,10 +327,10 @@ test('suspension fence epoch consent delegation revocations deny independently',
     'delegation-revoked',
   ];
   for (const axis of axes) {
-    for (let index = 0; index < baseline.points.length; index++) {
+    for (let index = 0; index < kinds.length; index++) {
       await positive(d, index);
-      const { f, op, points } = await create(d);
-      const point = points[index]!;
+      const { f, op } = await create(d);
+      const point = await pointAt(d, op, index);
       await d.park(op, point.id);
       await changed(d, f, axis);
       await d.restart();
@@ -339,13 +392,15 @@ test('current organization membership, Realm membership and the Realm ban retain
     ['realm', ['realm-membership', 'realm-block']],
   ] as const) {
     const baseline = await create(d, mode);
+    const kinds = await sequence(d, baseline.op);
     for (const axis of axes) {
-      for (let index = 0; index < baseline.points.length; index++) {
+      for (let index = 0; index < kinds.length; index++) {
         await positive(d, index, mode);
-        const { f, op, points } = await create(d, mode);
-        await d.park(op, points[index]!.id);
+        const { f, op } = await create(d, mode);
+        const point = await pointAt(d, op, index);
+        await d.park(op, point.id);
         await changed(d, f, axis);
-        await denies(d, op, points[index]!);
+        await denies(d, op, point);
       }
     }
   }
@@ -353,8 +408,11 @@ test('current organization membership, Realm membership and the Realm ban retain
 
 test('native public floor and direct initiator retain existing scope and grant semantics', async () => {
   const d = await setup();
+  const baseline = await create(d, 'direct');
+  const kinds = await sequence(d, baseline.op);
   const direct = await create(d, 'direct');
-  for (const point of direct.points) {
+  for (let index = 0; index < kinds.length; index++) {
+    const point = await pointAt(d, direct.op, index);
     await d.park(direct.op, point.id);
     await allowed(d, direct.op, point);
   }

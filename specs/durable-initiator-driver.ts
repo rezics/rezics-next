@@ -172,13 +172,17 @@ export interface DurableInitiatorDriver {
    * Park the actual native worker before its first protected step. */
   create(fixture: Fixture): Promise<Denied | { outcome: 'committed'; operation: Anchor }>;
   inspect(operation: Anchor): Promise<Snapshot>;
-  /** Actual native checkpoint registry: all protected batches plus live and cached
-   * result disclosures. No manufactured checkpoints or alternate scheduler. */
+  /** Actual native checkpoints registered so far, in workflow order: reached
+   * protected batches, then live and cached result disclosures. A protected batch
+   * appears once the workflow has read its page. No manufactured checkpoints or
+   * alternate scheduler. */
   points(operation: Anchor): Promise<Point[]>;
   /** Advance earlier steps under unchanged authority, then park immediately BEFORE
    * this protected boundary; cached-result first materializes the native result. */
   park(operation: Anchor, pointId: string): Promise<void>;
-  /** Only exact operation locator and native checkpoint ID enter the worker. It
+  /** Run exactly this point, then let the worker run its unprotected steps and
+   * stop before the next protected boundary, which it has then registered.
+   * Only exact operation locator and native checkpoint ID enter the worker. It
    * obtains server T itself and re-reads committed identity. No Fixture/caller
    * Actor/token/time/approval is passed here, including via DBOS context. */
   advance(operation: Anchor, pointId: string): Promise<Attempt>;
