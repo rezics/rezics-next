@@ -706,10 +706,12 @@ async function makeFixture(
       otherSession: other.session,
     });
   }
-  // Auth session openings consume the personal human session proof, which has no assignment.
-  const principalAssignment = family === 'opening' ? null : await selfDelegate(callerPerson);
-  const requestedBy = principalAssignment?.requestedBy ?? null;
-  const caller = principalAssignment?.bearer ?? callerPerson.bearer;
+  // Workflow approvals use the same current principal assignment for every
+  // human caller. Auth session openings still consume the personal session
+  // proof directly, without carrying that assignment into session issuance.
+  const principalAssignment = await selfDelegate(callerPerson);
+  const requestedBy = principalAssignment.requestedBy;
+  const caller = principalAssignment.bearer;
   const otherClientCaller = callerPerson.otherBearer;
   const authenticatedCaller = await required(accessPort, 'Access is not composed').authenticate(caller, context());
   const identity = identityOf(callerPerson, requestedBy, String(authenticatedCaller.authnEpoch));
@@ -1455,6 +1457,9 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         afterStep = previous;
         activeStepName = undefined;
       }
+      // Keep the product host available to the rest of the scenario. Tests that
+      // need to observe durable recovery still call restart explicitly.
+      await driver.restart();
     },
     async restart() {
       await fenceClient?.close();
