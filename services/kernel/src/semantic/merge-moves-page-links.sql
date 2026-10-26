@@ -5,11 +5,9 @@ WITH input AS NOT MATERIALIZED (
 )
 SELECT link.property, link.source_subject_id::text, link.statement_id::text, link.source_revision,
        link.source_security_revision::text, link.present, link.source_type, link.order_key,
-       link.filter_value::text, agent.receipt_id, agent.account_id::text AS account_id
+       link.filter_value::text
 FROM input
 JOIN semantic.inbound_link AS link ON link.route = input.route AND link.subject_id = input.subject_id
-LEFT JOIN semantic.account_agent AS agent
-  ON agent.route = input.route AND agent.agent_id = input.subject_id AND agent.verified
 WHERE link.present
 AND (link.property, link.source_subject_id, link.statement_id, link.filter_value) >
     (input.after_property, input.after_source, input.after_statement, input.after_filter)

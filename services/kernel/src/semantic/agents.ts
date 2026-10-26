@@ -1,6 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
-import readAgent from './account-agent-read.sql';
 import readAgentsBySubject from './account-agent-subjects-read.sql';
 
 const ACCOUNT_AGENT_NAMESPACE = 'fb3a9d35-804c-4d22-b317-260c05382a41';
@@ -61,19 +60,6 @@ function accountIdOf(account: string | { accountId: string }): string {
 export function accountAgentId(account: string | { accountId: string }): string {
   const id = accountIdOf(account);
   return derivedId(ACCOUNT_AGENT_NAMESPACE, id, routeOf(id)!);
-}
-
-export async function accountAgentForAccount(
-  client: Pool | Queryable,
-  account: string | { accountId: string },
-): Promise<AccountAgentLink | null> {
-  const rows = listed(
-    (await readAgent.run(client as PoolClient, { route: routeOf(accountIdOf(account))!, account_id: accountIdOf(account) })) as
-      | AccountAgentLink[]
-      | AccountAgentLink
-      | null,
-  );
-  return rows[0] ?? null;
 }
 
 export async function accountAgentsForSubjects(

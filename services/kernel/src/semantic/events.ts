@@ -2,6 +2,10 @@ import { Type } from 'typebox';
 
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const revision = Type.Integer({ minimum: 1 });
+const verification = Type.Object(
+  { account: UUID, receipt: Type.String({ minLength: 1, maxLength: 255 }) },
+  { additionalProperties: false },
+);
 const linkChange = Type.Object(
   {
     property: Type.String({ minLength: 1 }),
@@ -45,7 +49,12 @@ export const SEMANTIC_EVENTS = {
     { additionalProperties: false },
   ),
   [LINKS_MOVING]: Type.Object(
-    { id: UUID, survivor: UUID, cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])) },
+    {
+      id: UUID,
+      survivor: UUID,
+      cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])),
+      verification: Type.Optional(verification),
+    },
     { additionalProperties: false },
   ),
   'com.rezics.statement.retracted.v1': Type.Object({ candidate: UUID, revision }, { additionalProperties: false }),

@@ -1,10 +1,4 @@
-export {
-  AccountAgentAccessDeniedError,
-  accountAgents,
-  ensureAccountAgent,
-  setAgentName,
-  verifyAccountAgent,
-} from './account-agents.ts';
+export { ensureAccountAgent, verifyAccountAgent } from './account-agents.ts';
 export {
   AccountAgentLabelEditError,
   AccountAgentScopeGrowthError,

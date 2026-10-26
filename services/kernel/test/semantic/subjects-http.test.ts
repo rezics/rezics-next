@@ -151,6 +151,7 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(read.response.status).toBe(200);
   expect(read.response.headers.get('etag')).toBe('"1"');
   expect(read.body.subject).toEqual(created.body.subject);
+  expect(read.body.account).toBeNull();
   expect(read.body.related).toEqual({
     'schema:author': { labels: bundledRelease.properties['schema:author']!.labels },
     'schema:url': { labels: bundledRelease.properties['schema:url']!.labels },

@@ -102,23 +102,6 @@ CREATE TABLE semantic.acceptance_current (
 
 
 --
--- Name: account_agent; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.account_agent (
-    account_id uuid NOT NULL,
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    agent_id uuid NOT NULL,
-    verified boolean DEFAULT false NOT NULL,
-    receipt_id text,
-    CONSTRAINT account_agent_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT account_agent_agent_route_check CHECK ((route = ((get_byte(uuid_send(agent_id), 10) * 256) + get_byte(uuid_send(agent_id), 11)))),
-    CONSTRAINT account_agent_verification_receipt_check CHECK (((verified AND (receipt_id IS NOT NULL) AND ((length(receipt_id) >= 1) AND (length(receipt_id) <= 255))) OR ((NOT verified) AND (receipt_id IS NULL))))
-);
-
-
---
 -- Name: account_agent_moved_link; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -505,14 +488,6 @@ ALTER TABLE ONLY semantic.acceptance
 
 
 --
--- Name: account_agent account_agent_agent_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.account_agent
-    ADD CONSTRAINT account_agent_agent_id_key UNIQUE (route, agent_id);
-
-
---
 -- Name: account_agent_moved_link account_agent_moved_link_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -521,11 +496,19 @@ ALTER TABLE ONLY semantic.account_agent_moved_link
 
 
 --
--- Name: account_agent account_agent_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+-- Name: account_agent_subject account_agent_subject_account_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
-ALTER TABLE ONLY semantic.account_agent
-    ADD CONSTRAINT account_agent_pkey PRIMARY KEY (route, account_id);
+ALTER TABLE ONLY semantic.account_agent_subject
+    ADD CONSTRAINT account_agent_subject_account_id_key UNIQUE (account_id);
+
+
+--
+-- Name: account_agent_subject account_agent_subject_agent_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.account_agent_subject
+    ADD CONSTRAINT account_agent_subject_agent_id_key UNIQUE (agent_id);
 
 
 --
@@ -534,14 +517,6 @@ ALTER TABLE ONLY semantic.account_agent
 
 ALTER TABLE ONLY semantic.account_agent_subject
     ADD CONSTRAINT account_agent_subject_pkey PRIMARY KEY (route, subject_id);
-
-
---
--- Name: account_agent_subject account_agent_subject_route_account_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.account_agent_subject
-    ADD CONSTRAINT account_agent_subject_route_account_id_key UNIQUE (route, account_id);
 
 
 --

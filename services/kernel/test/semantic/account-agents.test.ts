@@ -1,15 +1,25 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import pg, { type PoolClient } from 'pg';
+import { createHash, randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { deadlineFor } from '../../src/request/deadline.ts';
+import { runCommand, type CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../../src/command/command.ts';
-import { accessCheck, type AccountActor } from '../../src/request/access.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import { accessCheck, type AccountActor, type Resource } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { accountAgents, ensureAccountAgent, setAgentName } from '../../src/semantic/index.ts';
+import {
+  AccountAgentLabelEditError,
+  AccountAgentWriteDeniedError,
+  accountAgentId,
+  ensureAccountAgent,
+  verifyAccountAgent,
+} from '../../src/semantic/index.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
+import { AGENT_LINKED } from '../../src/semantic/events.ts';
 import { listSubjectLinks, linkProjection } from '../../src/semantic/links.ts';
+import { EditorialConflictError, proposeStatement } from '../../src/semantic/candidates.ts';
+import { mergeSubjectsInCommand, SubjectRedirectError } from '../../src/semantic/merges.ts';
+import { createSubject, readSubject, updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -17,40 +27,38 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const owner: AccountActor = {
-  kind: 'account',
-  accountId: newId(0x2345),
-  clientId: 'account-agent-test',
-  scopes: ['subject:create'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const realAccess = await createRealAccess(admin, { owner: owner.accountId }, ['subject:create']);
-const access = realAccess.access({ actions: new Map([['subject:create', { anonymous: false }]]) });
+const route = 0x2345;
+const catalogueRoute = route + 32;
+const bookRoute = route + 16;
+const ownerAccount = newId(route);
+const otherAccount = newId(route);
+let owner!: AccountActor;
+let other!: AccountActor;
+const realAccess = await createRealAccess(admin, { owner: ownerAccount, other: otherAccount }, [
+  'subject:create',
+  'statement:propose',
+]);
+const access = realAccess.access({
+  actions: new Map([
+    ['subject:create', { anonymous: false }],
+    ['statement:propose', { anonymous: false }],
+  ]),
+});
 const projection = linkProjection(pool);
+const release = { digest: bundledDigest, release: bundledRelease };
 const keyRing: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
-let agentId = '';
+const globalResource = { route: 0, id: GLOBAL_CONTEXT };
 
-beforeAll(async () => {
-  await bootstrapRelease(pool, bundledRelease);
-  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
-});
+function digest(value: string): Uint8Array {
+  return createHash('sha256').update(value).digest();
+}
 
-afterAll(async () => {
-  await pool.end();
-  await admin.end();
-});
-
-async function accountCommand<T>(body: (tx: CommandTransaction) => Promise<T>) {
-  const route = routeOf(owner.accountId)!;
-  const resource = { route: 0, id: GLOBAL_CONTEXT };
-  const check = await accessCheck(access, owner, 'subject:create', resource, {
-    pool: admin,
-    deadline: deadlineFor(5_000),
-  });
-  const denied = () => new Error('Account agent test authorization denied');
-  const authorization: CommandAuthorization = {
-    action: 'subject:create',
+async function authorization(actor: AccountActor, action: string, resource: Resource): Promise<CommandAuthorization> {
+  const deadline = deadlineFor(5_000);
+  const check = await accessCheck(access, actor, action, resource, { pool: admin, deadline });
+  const denied = () => new Error(`Real Access denied ${action}`);
+  return {
+    action,
     resource,
     denied,
     async authorize(tx, attempt) {
@@ -58,69 +66,45 @@ async function accountCommand<T>(body: (tx: CommandTransaction) => Promise<T>) {
       return 'execute';
     },
   };
-  return runCommand(
-    pool,
-    {
-      partition: partitionOf(route),
-      principal: { kind: 'account', id: owner.accountId },
-      basis: { clientId: owner.clientId, requestedBy: owner.requestedBy },
-      authorization,
-    },
-    async (tx) => ({
-      value: await body(tx),
-      events: [
-        {
-          type: 'com.rezics.access.account-updated.v1',
-          subject: owner.accountId,
-          data: { accountId: owner.accountId },
-        },
-      ],
-    }),
-  );
 }
 
-test('an account has exactly one agent subject, created once', async () => {
-  const first = await accountCommand((tx) =>
-    ensureAccountAgent(tx, { account: owner.accountId, kind: 'person', name: 'Account Agent', language: 'en' }),
-  );
-  const second = await accountCommand((tx) =>
-    ensureAccountAgent(tx, { account: owner.accountId, kind: 'person', name: 'Ignored Name', language: 'en' }),
-  );
-  agentId = first.value.subject.id;
-  expect(second.value.subject.id).toBe(agentId);
-  expect(first.value.subject).toMatchObject({ type: 'schema:Person', labels: { en: 'Account Agent' } });
-  const mappings = await admin.query(
-    'SELECT subject_id::text AS subject FROM semantic.account_agent WHERE account_id = $1::uuid',
-    [owner.accountId],
-  );
-  const subjects = await admin.query('SELECT subject_id FROM semantic.subject WHERE subject_id = $1::uuid', [agentId]);
-  expect(mappings.rows).toEqual([{ subject: agentId }]);
-  expect(subjects.rowCount).toBe(1);
-});
-
-test("facts reference an account's agent like any other subject", async () => {
-  const route = 0x2346;
-  const target = { route, id: newId(route) };
-  const book = await createSubject(pool, {
-    actor: owner,
+async function createAs(actor: AccountActor, target: Resource, item: unknown) {
+  const idempotencyKey = randomUUID();
+  return createSubject(pool, {
+    actor,
     target,
-    idempotencyKey: `account-agent-book-${crypto.randomUUID()}`,
-    digest: new Uint8Array(32).fill(24),
-    item: {
+    idempotencyKey,
+    digest: digest(idempotencyKey),
+    item,
+    release,
+    authorization: await authorization(actor, 'subject:create', globalResource),
+  });
+}
+
+async function person(actor: AccountActor, name: string, id = newId(catalogueRoute)) {
+  if (routeOf(id) !== catalogueRoute) throw new TypeError('Catalogue id is outside its route');
+  return createAs(actor, { route: catalogueRoute, id }, { type: 'schema:Person', labels: { en: name } });
+}
+
+async function authorBook(actor: AccountActor, agent: string, name: string) {
+  return createAs(
+    actor,
+    { route: bookRoute, id: newId(bookRoute) },
+    {
       type: 'schema:Book',
-      labels: { en: 'Agent author book' },
+      labels: { en: name },
       statements: {
         'schema:author': [
           {
             property: { id: 'schema:author' },
-            value: { type: 'value', content: agentId },
+            value: { type: 'value', content: agent },
             qualifiers: [],
             references: [
               {
                 parts: [
                   {
                     property: { id: 'schema:url' },
-                    value: { type: 'value', content: 'https://example.test/account-agent-book' },
+                    value: { type: 'value', content: `https://example.test/${encodeURIComponent(name)}` },
                   },
                 ],
               },
@@ -129,15 +113,172 @@ test("facts reference an account's agent like any other subject", async () => {
         ],
       },
     },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+  );
+}
+
+async function proposeOn(subject: string, actor: AccountActor) {
+  const resource = { route: routeOf(subject)!, id: subject };
+  const idempotencyKey = randomUUID();
+  return proposeStatement(pool, {
+    subject,
+    statement: {
+      property: { id: 'schema:sameAs' },
+      value: { type: 'value', content: `https://example.test/${idempotencyKey}` },
+      qualifiers: [],
+      references: [
+        {
+          parts: [
+            {
+              property: { id: 'schema:url' },
+              value: { type: 'value', content: 'https://example.test/source' },
+            },
+          ],
+        },
+      ],
+    },
+    actor,
+    idempotencyKey,
+    digest: digest(idempotencyKey),
+    release,
+    authorization: await authorization(actor, 'statement:propose', resource),
+    deadline: deadlineFor(5_000),
   });
-  const partition = partitionOf(route);
-  for (;;) {
+}
+
+async function grantProposal(subject: string, persona: 'owner' | 'other') {
+  const route = routeOf(subject)!;
+  await realAccess.grant({ route, id: subject }, persona, 'statement:propose');
+}
+
+async function drain(partition: number): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt++) {
     const result = await projection.run(partition);
-    if (result.status !== 'read' || result.envelopes === 0) break;
+    if (result.status !== 'read' || result.envelopes === 0) return;
   }
-  const page = await listSubjectLinks(pool, keyRing, {
+  throw new Error(`Semantic link projection did not drain partition ${partition}`);
+}
+
+async function ordinaryMerge(survivor: string, redirected: string): Promise<void> {
+  await runCommand(pool, { partition: partitionOf(routeOf(redirected)!) }, async (tx, { transactionId }) =>
+    mergeSubjectsInCommand(tx, transactionId, { survivor, redirected, release }),
+  );
+}
+
+function catalogueIdBefore(subject: string): string {
+  const routeHex = catalogueRoute.toString(16).padStart(4, '0');
+  const id = `00000000-0000-8000-8000-${routeHex}00000000`;
+  if (routeOf(id) !== catalogueRoute || id >= subject)
+    throw new Error('Could not derive a catalogue id before the account agent');
+  return id;
+}
+
+function catalogueIdAfter(subject: string): string {
+  const routeHex = catalogueRoute.toString(16).padStart(4, '0');
+  const id = `ffffffff-ffff-8fff-bfff-${routeHex}ffffffff`;
+  if (routeOf(id) !== catalogueRoute || id <= subject)
+    throw new Error('Could not derive a catalogue id after the account agent');
+  return id;
+}
+
+beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
+  await realAccess.grant(globalResource, 'owner', 'subject:create');
+  await realAccess.grant(globalResource, 'other', 'subject:create');
+  const context = { pool: admin, deadline: deadlineFor(30_000) };
+  owner = await access.authenticate(realAccess.bearer('owner'), context);
+  other = await access.authenticate(realAccess.bearer('other'), context);
+});
+
+afterAll(async () => {
+  await Promise.all([pool.end(), admin.end()]);
+});
+
+test("an account's agent has a derived id in the account's partition and is created once", async () => {
+  const agentId = accountAgentId(owner.accountId);
+  expect(routeOf(agentId)).toBe(routeOf(owner.accountId));
+  expect(agentId[14]).toBe('8');
+
+  const first = await ensureAccountAgent(pool, {
+    account: owner.accountId,
+    kind: 'person',
+    name: 'Account display name',
+    language: 'en',
+  });
+  const second = await ensureAccountAgent(pool, {
+    account: owner.accountId,
+    kind: 'person',
+    name: 'Account display name',
+    language: 'en',
+  });
+  expect(first.created).toBe(true);
+  expect(second.created).toBe(false);
+  expect(first.subject.id).toBe(agentId);
+  expect(second.subject.id).toBe(agentId);
+  expect(first.subject.type).toBe('schema:Person');
+  const rows = await admin.query(
+    `SELECT route, account_route, subject_id::text AS subject, account_id::text AS account,
+            agent_id::text AS agent_id, verified, receipt_id
+     FROM semantic.account_agent_subject WHERE route = $1 AND subject_id = $2::uuid`,
+    [routeOf(agentId), agentId],
+  );
+  expect(rows.rows).toEqual([
+    {
+      route: routeOf(agentId),
+      account_route: routeOf(owner.accountId),
+      subject: agentId,
+      account: owner.accountId,
+      agent_id: agentId,
+      verified: false,
+      receipt_id: null,
+    },
+  ]);
+});
+
+test("an account's agent label follows its display name and nobody else edits it", async () => {
+  const agentId = accountAgentId(owner.accountId);
+  await ensureAccountAgent(pool, {
+    account: owner.accountId,
+    kind: 'person',
+    name: 'Account display name',
+    language: 'en',
+  });
+  const changed = await ensureAccountAgent(pool, {
+    account: owner.accountId,
+    kind: 'person',
+    name: 'Renamed display name',
+    language: 'ja',
+  });
+  expect(changed.subject.labels).toEqual({ ja: 'Renamed display name' });
+  const editError = await updateSubjectIdentity(pool, {
+    subject: agentId,
+    labels: { en: 'Edited outside Access' },
+    release,
+    authorize: async () => true,
+  }).catch((error: unknown) => error);
+  expect(editError).toBeInstanceOf(AccountAgentLabelEditError);
+  expect(editError).toMatchObject({ field: 'labels' });
+  expect((await readSubject(pool, agentId, async () => true))?.subject.labels).toEqual({ ja: 'Renamed display name' });
+});
+
+test('only the account itself states facts about or pointing at its unverified agent', async () => {
+  const agentId = accountAgentId(owner.accountId);
+  await ensureAccountAgent(pool, {
+    account: owner.accountId,
+    kind: 'person',
+    name: 'Private account agent',
+    language: 'en',
+  });
+  await grantProposal(agentId, 'owner');
+  await grantProposal(agentId, 'other');
+
+  const book = await authorBook(owner, agentId, 'Owner authored book');
+  const revision = await admin.query(
+    'SELECT source FROM semantic.revision WHERE subject_id = $1::uuid ORDER BY revision DESC LIMIT 1',
+    [book.subject.id],
+  );
+  expect(revision.rows[0]?.source).toEqual({ kind: 'agent', subject: agentId });
+  await drain(partitionOf(bookRoute));
+  const inverse = await listSubjectLinks(pool, keyRing, {
     subject: agentId,
     property: 'schema:author',
     limit: 10,
@@ -145,42 +286,112 @@ test("facts reference an account's agent like any other subject", async () => {
     seen: [book.component],
     caughtUp: true,
   });
-  expect(page.links.map((link) => link.subject)).toContain(book.subject.id);
-});
+  expect(inverse.links.map((link) => link.subject)).toContain(book.subject.id);
 
-test("an agent's display name is its own statement, controlled by its account", async () => {
-  const changed = await accountCommand((tx) =>
-    setAgentName(tx, { account: owner.accountId, name: 'Updated Agent Name', language: 'en' }),
+  await expect(authorBook(other, agentId, 'Other account authored book')).rejects.toBeInstanceOf(
+    AccountAgentWriteDeniedError,
   );
-  expect(changed.value.subject).toMatchObject({ id: agentId, labels: { en: 'Updated Agent Name' } });
-  const revision = await admin.query(
-    `SELECT source FROM semantic.revision
-     WHERE subject_id = $1::uuid ORDER BY revision DESC LIMIT 1`,
+  await proposeOn(agentId, owner);
+  const ownStatement = await admin.query(
+    'SELECT source FROM semantic.revision WHERE subject_id = $1::uuid ORDER BY revision DESC LIMIT 1',
     [agentId],
   );
-  expect(revision.rows[0]?.source).toEqual({ kind: 'agent', subject: agentId });
+  expect(ownStatement.rows[0]?.source).toEqual({ kind: 'agent', subject: agentId });
+  await expect(proposeOn(agentId, other)).rejects.toBeInstanceOf(AccountAgentWriteDeniedError);
 });
 
-test('account agents are looked up in batches', async () => {
-  for (const size of [1, 64, 256]) {
-    const ids = [owner.accountId, ...Array.from({ length: size - 1 }, (_, index) => newId((index + 1) * 16))];
-    const client = await admin.connect();
-    let statements = 0;
-    const originalQuery = client.query.bind(client);
-    const observed = {
-      query: ((...args: Parameters<PoolClient['query']>) => {
-        statements += 1;
-        return originalQuery(...args);
-      }) as PoolClient['query'],
-    } as Pick<PoolClient, 'query'>;
-    try {
-      const found = await accountAgents(observed, ids);
-      const expectedPartitions = new Set(ids.map((id) => partitionOf(routeOf(id)!)));
-      expect(found.size).toBe(size);
-      expect(found.get(owner.accountId)).toBe(agentId);
-      expect(statements).toBe(expectedPartitions.size);
-    } finally {
-      client.release();
-    }
-  }
+test("verification merges the account's agent into the catalogue agent, which survives and links back", async () => {
+  const firstAccount = owner.accountId;
+  const firstAgent = accountAgentId(firstAccount);
+  await ensureAccountAgent(pool, { account: firstAccount, kind: 'person', name: 'Private name', language: 'en' });
+  const book = await authorBook(owner, firstAgent, 'Book by verified account');
+  await drain(partitionOf(bookRoute));
+  const firstCatalogue = await person(other, 'Catalogue name', catalogueIdBefore(firstAgent));
+  const firstReceipt = randomUUID();
+  const first = await verifyAccountAgent(pool, {
+    account: firstAccount,
+    catalogue: firstCatalogue.subject.id,
+    receipt: firstReceipt,
+  });
+  expect(firstCatalogue.subject.id < firstAgent).toBe(true);
+  expect(first.survivor).toBe(firstCatalogue.subject.id);
+  expect(first.redirected).toBe(firstAgent);
+  await expect(readSubject(pool, firstAgent, async () => true)).rejects.toBeInstanceOf(SubjectRedirectError);
+  const firstRead = await readSubject(pool, firstCatalogue.subject.id, async () => true);
+  expect(firstRead?.account).toEqual({ id: firstAccount });
+  expect(firstRead?.subject.labels).toEqual({ en: 'Catalogue name' });
+
+  const ensured = await ensureAccountAgent(pool, {
+    account: firstAccount,
+    kind: 'person',
+    name: 'Later account display name',
+    language: 'fr',
+  });
+  expect(ensured.created).toBe(false);
+  expect(ensured.subject.id).toBe(firstCatalogue.subject.id);
+  expect(ensured.subject.labels).toEqual({ en: 'Catalogue name' });
+  const repeated = await verifyAccountAgent(pool, {
+    account: firstAccount,
+    catalogue: firstCatalogue.subject.id,
+    receipt: firstReceipt,
+  });
+  expect(repeated.survivor).toBe(firstCatalogue.subject.id);
+  const mergeRevision = await admin.query(
+    'SELECT verification_receipt_id FROM semantic.revision WHERE subject_id = $1::uuid ORDER BY revision DESC LIMIT 1',
+    [firstAgent],
+  );
+  expect(mergeRevision.rows[0]?.verification_receipt_id).toBe(firstReceipt);
+
+  await drain(partitionOf(routeOf(firstAgent)!));
+  const moved = await admin.query(
+    `SELECT survivor::text, moved_from::text, statement_id::text
+     FROM semantic.account_agent_moved_link WHERE receipt_id = $1::text`,
+    [firstReceipt],
+  );
+  const authorStatement = book.subject.statements['schema:author']?.[0]?.id;
+  expect(moved.rows).toContainEqual({
+    survivor: firstCatalogue.subject.id,
+    moved_from: firstAgent,
+    statement_id: authorStatement,
+  });
+  const events = await admin.query(
+    `SELECT data->>'subject' AS subject FROM core.outbox
+     WHERE type = $1 AND data->>'account' = $2 ORDER BY position, event_seq`,
+    [AGENT_LINKED, firstAccount],
+  );
+  expect(events.rows).toEqual([{ subject: firstAgent }, { subject: firstCatalogue.subject.id }]);
+
+  const secondAccount = newId(route);
+  const secondAgent = accountAgentId(secondAccount);
+  await ensureAccountAgent(pool, { account: secondAccount, kind: 'person', name: 'Second name', language: 'en' });
+  const secondCatalogue = await person(other, 'High catalogue id', catalogueIdAfter(secondAgent));
+  const second = await verifyAccountAgent(pool, {
+    account: secondAccount,
+    catalogue: secondCatalogue.subject.id,
+    receipt: randomUUID(),
+  });
+  expect(secondCatalogue.subject.id > secondAgent).toBe(true);
+  expect(second.survivor).toBe(secondCatalogue.subject.id);
+  expect(second.redirected).toBe(secondAgent);
+  expect((await readSubject(pool, secondCatalogue.subject.id, async () => true))?.account).toEqual({
+    id: secondAccount,
+  });
+});
+
+test('an ordinary merge refuses account agents and subjects linked to an account', async () => {
+  const linkedAccount = newId(route);
+  const agentId = accountAgentId(linkedAccount);
+  await ensureAccountAgent(pool, { account: linkedAccount, kind: 'person', name: 'Account agent', language: 'en' });
+  const catalogue = await person(other, 'Unlinked catalogue agent');
+  await expect(ordinaryMerge(catalogue.subject.id, agentId)).rejects.toBeInstanceOf(EditorialConflictError);
+
+  await verifyAccountAgent(pool, {
+    account: linkedAccount,
+    catalogue: catalogue.subject.id,
+    receipt: randomUUID(),
+  });
+  const anotherCatalogue = await person(other, 'Another catalogue agent');
+  await expect(ordinaryMerge(anotherCatalogue.subject.id, catalogue.subject.id)).rejects.toBeInstanceOf(
+    EditorialConflictError,
+  );
 });

@@ -6,25 +6,16 @@ import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
 import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
-import {
-  accountAgentId,
-  accountAgentForAccount,
-  type AccountAgentLink,
-} from './agents.ts';
-import { AccountAgentLabelEditError, AccountAgentScopeGrowthError, AccountAgentVerificationError } from './agents.ts';
+import { accountAgentId, accountAgentsForSubjects, type AccountAgentLink } from './agents.ts';
+import { AccountAgentScopeGrowthError, AccountAgentVerificationError } from './agents.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
 import { SUBJECT_REVISED, AGENT_LINKED } from './events.ts';
-import accountAgentInsert from './account-agent-insert.sql';
 import accountAgentSubject from './account-agent-subject.sql';
 import insertAccountAgentSubject from './account-agent-subject-insert.sql';
 import verifyAccountAgentSubject from './account-agent-subject-verify.sql';
-import accountAgentVerify from './account-agent-verify.sql';
 import syncLabel from './account-agent-sync-label.sql';
-import accountAgentsRead from './account-agents-read.sql';
 import { writeSubject } from './subject.ts';
 import { mergeSubjectsInCommand } from './merges.ts';
-
-const BATCH_LIMIT = 256;
 
 type Queryable = Pick<PoolClient, 'query'>;
 type Account = string | Pick<AccountActor, 'accountId'>;
@@ -46,13 +37,6 @@ function listed<T>(result: T[] | T | null): T[] {
   return Array.isArray(result) ? result : [result];
 }
 
-export class AccountAgentAccessDeniedError extends Error {
-  constructor() {
-    super('Account agent maintenance is only available as platform work');
-    this.name = 'AccountAgentAccessDeniedError';
-  }
-}
-
 class NoAgentChange extends Error {
   constructor(readonly value: { subject: Item; created: boolean }) {
     super('Account agent is already current');
@@ -69,11 +53,6 @@ function accountIdOf(account: Account): string {
   const id = typeof account === 'string' ? account : account?.accountId;
   if (typeof id !== 'string' || routeOf(id) === null) throw new TypeError('Account id must be a routed UUID');
   return id;
-}
-
-function assertPlatform(tx: CommandTransaction): void {
-  const basis = currentCommand(tx).basis;
-  if (basis !== null) throw new AccountAgentAccessDeniedError();
 }
 
 function agentFacts(labels: Record<string, string>): FactRow[] {
@@ -99,18 +78,12 @@ async function readAgentSubject(tx: Queryable, subjectId: string): Promise<Agent
   return rows[0] ?? null;
 }
 
-async function createAccountAgentMapping(
+async function createAccountAgentBackLink(
   tx: Queryable,
   account: string,
   route: number,
   subject: string,
 ): Promise<void> {
-  await accountAgentInsert.run(tx as PoolClient, {
-    account_id: account,
-    route,
-    subject_id: subject,
-    agent_id: subject,
-  });
   await insertAccountAgentSubject.run(tx as PoolClient, {
     route,
     account_route: route,
@@ -118,6 +91,14 @@ async function createAccountAgentMapping(
     account_id: account,
     agent_id: subject,
   });
+}
+
+async function accountAgentForNode(client: Queryable, agentId: string): Promise<AccountAgentLink | null> {
+  const node = await readAgentSubject(client, agentId);
+  if (!node) return null;
+  const current = node.redirect ? await currentSubject(client, node.id) : null;
+  const subject = current?.row.id ?? agentId;
+  return (await accountAgentsForSubjects(client, [subject])).get(subject) ?? null;
 }
 
 async function subjectFromRow(tx: Queryable, row: AgentSubjectRow): Promise<Item> {
@@ -244,7 +225,6 @@ async function ensureInTransaction(
   changed: boolean;
 }> {
   const account = accountIdOf(options.account);
-  assertPlatform(tx);
   if (!['person', 'organization', 'software'].includes(options.kind)) throw new TypeError('Invalid account agent kind');
   const agentId = accountAgentId(account);
   const agentRoute = routeOf(agentId)!;
@@ -270,7 +250,7 @@ async function ensureInTransaction(
       item: { type, labels: { [language]: options.name } },
       release: active,
     });
-    await createAccountAgentMapping(tx, account, agentRoute, agentId);
+    await createAccountAgentBackLink(tx, account, agentRoute, agentId);
     return {
       value: { subject: created.value, created: true },
       events: [...created.events, { type: AGENT_LINKED, subject: agentId, data: { account, subject: agentId } }],
@@ -297,32 +277,20 @@ async function ensureInTransaction(
   };
 }
 
-function isPool(value: Pool | CommandTransaction): value is Pool {
-  return typeof (value as Pool).connect === 'function';
-}
-
 /** Ensure one account graph agent at its deterministic account-partition id. */
 export async function ensureAccountAgent(
   pool: Pool,
   options: { account: Account; kind: AgentKind; name: string; language?: string },
 ): Promise<{ subject: Item; created: boolean }>;
-/** @deprecated Retained for source compatibility; account agents must use the platform pool command. */
 export async function ensureAccountAgent(
-  tx: CommandTransaction,
-  options: { account: Account; kind: AgentKind; name: string; language?: string },
-): Promise<{ subject: Item; created: boolean }>;
-export async function ensureAccountAgent(
-  db: Pool | CommandTransaction,
+  pool: Pool,
   options: { account: Account; kind: AgentKind; name: string; language?: string },
 ): Promise<{ subject: Item; created: boolean }> {
-  if (!isPool(db)) {
-    throw new AccountAgentAccessDeniedError();
-  }
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
   const agentRoute = routeOf(agentId)!;
   try {
-    const outcome = await runCommand(db, { partition: partitionOf(agentRoute) }, async (tx, { transactionId }) => {
+    const outcome = await runCommand(pool, { partition: partitionOf(agentRoute) }, async (tx, { transactionId }) => {
       const result = await ensureInTransaction(tx, transactionId, options);
       if (!result.changed) throw new NoAgentChange(result.value);
       return { value: result.value, events: result.events };
@@ -332,15 +300,6 @@ export async function ensureAccountAgent(
     if (error instanceof NoAgentChange) return error.value;
     throw error;
   }
-}
-
-/** @deprecated Retained for source compatibility; label changes are owned by ensureAccountAgent. */
-export async function setAgentName(
-  tx: CommandTransaction,
-  _options: { account: Account; name: string; language: string },
-): Promise<{ subject: Item }> {
-  void tx;
-  throw new AccountAgentLabelEditError();
 }
 
 /** Link a verified catalogue agent to the account's existing graph node. */
@@ -358,10 +317,10 @@ export async function verifyAccountAgent(
   const agentId = accountAgentId(account);
   const nodeRoute = routeOf(agentId)!;
   const catalogueRoute = routeOf(options.catalogue);
-  if (!catalogueRoute || options.catalogue === agentId) throw new AccountAgentVerificationError();
+  if (catalogueRoute === null || options.catalogue === agentId) throw new AccountAgentVerificationError();
   if (typeof options.receipt !== 'string' || !options.receipt.length || options.receipt.length > 255)
     throw new TypeError('Verification receipt id must contain 1 to 255 characters');
-  const before = await accountAgentForAccount(pool, account);
+  const before = await accountAgentForNode(pool, agentId);
   if (before?.verified) {
     if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
       throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
@@ -373,19 +332,27 @@ export async function verifyAccountAgent(
     const command = await runCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
       if (currentCommand(tx).basis !== null)
         throw new AccountAgentVerificationError('Verification requires platform work');
-      const mapping = await accountAgentForAccount(tx, account);
-      if (mapping?.verified) {
-        if (mapping.subject === options.catalogue && mapping.receipt_id === options.receipt)
-          throw new AlreadyVerified(mapping);
-        throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
-      }
-      if (!mapping || mapping.agent_id !== agentId || mapping.subject !== agentId)
+      const node = await readAgentSubject(tx, agentId);
+      if (!node)
         throw new AccountAgentVerificationError(
           'The account must have one unverified derived agent before verification',
         );
-      const node = await readAgentSubject(tx, agentId);
-      if (!node || node.redirect)
+      if (node.redirect) {
+        const mapping = await accountAgentForNode(tx, agentId);
+        if (mapping?.verified) {
+          if (mapping.subject === options.catalogue && mapping.receipt_id === options.receipt)
+            throw new AlreadyVerified(mapping);
+          throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
+        }
         throw new AccountAgentVerificationError('The account agent is missing, hidden, or already merged');
+      }
+      const mapping = (await accountAgentsForSubjects(tx, [agentId])).get(agentId);
+      if (!mapping || mapping.account !== account || mapping.agent_id !== agentId || mapping.subject !== agentId)
+        throw new AccountAgentVerificationError(
+          'The account must have one unverified derived agent before verification',
+        );
+      if (mapping.verified)
+        throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
       let merged: Awaited<ReturnType<typeof mergeSubjectsInCommand>>;
       try {
         merged = await mergeSubjectsInCommand(tx, transactionId, {
@@ -400,17 +367,6 @@ export async function verifyAccountAgent(
           throw new AccountAgentVerificationError('The catalogue agent must be visible and not already merged');
         throw error;
       }
-      const updated = listed(
-        (await accountAgentVerify.run(tx as PoolClient, {
-          account_id: account,
-          account_route: routeOf(account)!,
-          agent_id: agentId,
-          subject_id: options.catalogue,
-          receipt_id: options.receipt,
-        })) as AgentMapping[] | AgentMapping | null,
-      );
-      if (!updated.length)
-        throw new AccountAgentVerificationError('The account agent link changed during verification');
       const backLink = listed(
         (await verifyAccountAgentSubject.run(tx as PoolClient, {
           account_id: account,
@@ -472,45 +428,11 @@ function isAccountAgentConstraintViolation(error: unknown): boolean {
   return (
     record.code === '23505' &&
     [
-      'account_agent_agent_id_key',
-      'account_agent_subject_id_key',
-      'account_agent_route_subject_id_key',
       'account_agent_subject_pkey',
-      'account_agent_subject_route_account_id_key',
-    ].includes(
-      String(record.constraint),
-    )
+      'account_agent_subject_account_id_key',
+      'account_agent_subject_agent_id_key',
+    ].includes(String(record.constraint))
   );
 }
 
 /** Read account agent ids in one SQL statement per requested account partition. */
-export async function accountAgents(
-  client: Pool | Queryable,
-  accountIds: readonly string[],
-): Promise<Map<string, string | null>> {
-  if (!Array.isArray(accountIds) || accountIds.length < 1 || accountIds.length > BATCH_LIMIT)
-    throw new TypeError('An account agent batch accepts 1 to 256 account ids');
-  const groups = new Map<number, { accounts: string[]; routes: number[] }>();
-  const result = new Map<string, string | null>();
-  for (const account of accountIds) {
-    const route = routeOf(account);
-    if (route === null) throw new TypeError('Account id must be a routed UUID');
-    const partition = partitionOf(route);
-    const group = groups.get(partition) ?? { accounts: [], routes: [] };
-    group.accounts.push(account);
-    group.routes.push(route);
-    groups.set(partition, group);
-    result.set(account, null);
-  }
-  for (const [partition, group] of groups) {
-    const rows = listed(
-      (await accountAgentsRead.run(client as PoolClient, {
-        partition_no: partition,
-        account_ids: group.accounts,
-        routes: group.routes,
-      })) as { account: string; subject: string | null }[] | { account: string; subject: string | null } | null,
-    );
-    for (const row of rows) result.set(row.account, row.subject);
-  }
-  return result;
-}

@@ -15,6 +15,7 @@ import upsertInboundLinks from './upsert-inbound-links.sql';
 import recordMovedAgentLinks from './account-agent-record-moved-links.sql';
 
 type Move = { phase: 'links' | 'members' | 'done'; cursor: string[] };
+type Verification = { account: string; receipt: string };
 type Link = {
   property: string;
   source_subject_id: string;
@@ -25,15 +26,13 @@ type Link = {
   source_type: string;
   order_key: string;
   filter_value: string;
-  receipt_id: string | null;
-  account_id: string | null;
 };
 const projected = (id: string) => ({ type: LINKS_PROJECTED, data: { subjects: [id] } });
 const NIL = '00000000-0000-0000-0000-000000000000';
-const moving = (id: string, survivor: string, state: Move) => ({
+const moving = (id: string, survivor: string, state: Move, verification?: Verification) => ({
   type: LINKS_MOVING,
   subject: survivor,
-  data: { id, survivor, cursor: [state.phase, ...state.cursor] },
+  data: { id, survivor, cursor: [state.phase, ...state.cursor], ...(verification ? { verification } : {}) },
 });
 
 /** Register before repointing: a concurrent merge must find the member in its own partition. */
@@ -42,6 +41,7 @@ async function register(
   id: string,
   survivor: string,
   initial: Move = { phase: 'links', cursor: [] },
+  verification?: Verification,
 ): Promise<{ survivor: string; state: Move }> {
   for (;;) {
     const route = routeOf(survivor)!;
@@ -64,7 +64,8 @@ async function register(
         const state = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
         return {
           value: { redirect: null, state },
-          events: inserted && state.phase !== 'done' ? [moving(id, survivor, state)] : [projected(survivor)],
+          events:
+            inserted && state.phase !== 'done' ? [moving(id, survivor, state, verification)] : [projected(survivor)],
         };
       },
     );
@@ -105,8 +106,9 @@ export async function moveMergePage(
   id: string,
   target: string,
   expected?: readonly string[],
+  verification?: Verification,
 ): Promise<boolean> {
-  const registered = await register(pool, id, target);
+  const registered = await register(pool, id, target, undefined, verification);
   const { survivor, state } = registered;
   if (state.phase === 'done') return false;
   if (expected && survivor === target && JSON.stringify(expected) !== JSON.stringify([state.phase, ...state.cursor]))
@@ -165,18 +167,16 @@ export async function moveMergePage(
         transaction_id: transactionId,
         changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
       });
-    const verification = page.value.links.filter((link) => link.receipt_id && link.account_id);
-    if (verification.length) {
-      const first = verification[0]!;
+    if (verification && page.value.links.length) {
       await recordMovedAgentLinks.run(tx as PoolClient, {
         route,
-        receipt_id: first.receipt_id,
-        account_id: first.account_id,
+        receipt_id: verification.receipt,
+        account_id: verification.account,
         survivor,
         moved_from: id,
-        links: verification.map((link) => ({
-          receipt_id: link.receipt_id,
-          account_id: link.account_id,
+        links: page.value.links.map((link) => ({
+          receipt_id: verification.receipt,
+          account_id: verification.account,
           statement_id: link.statement_id,
         })),
       });
@@ -190,9 +190,12 @@ export async function moveMergePage(
     });
     return {
       value: null,
-      events: page.value.next.phase === 'done' ? [projected(survivor)] : [moving(id, survivor, page.value.next)],
+      events:
+        page.value.next.phase === 'done'
+          ? [projected(survivor)]
+          : [moving(id, survivor, page.value.next, verification)],
     };
   });
-  if (applied.value) return moveMergePage(pool, id, applied.value);
+  if (applied.value) return moveMergePage(pool, id, applied.value, undefined, verification);
   return true;
 }
