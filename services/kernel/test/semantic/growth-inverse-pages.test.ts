@@ -48,7 +48,7 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
     let cursor: string | undefined;
     const report = await checkGrowth(db, {
       name: `Inverse ${middle ? 'middle' : 'first'} page`,
-      scales: [100, 1000, 10000],
+      scales: [64, 512, 4096],
       bounds: { rows: 'constant' as const, blocks: 'constant' as const, statements: 'constant' as const },
       grow: async (_: GrowthDatabase, scale: number, previous: number) => {
         await db.admin.query(
@@ -102,7 +102,13 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
 }, 60_000);
 
 test('links projection work grows with changed links and stays flat in in-degree', async () => {
-  // Keep unrelated command history large enough to exercise indexed probes at every scale.
+  // Keep the projection's input relations large enough to exercise indexed probes at every scale.
+  await db.admin.query(
+    `INSERT INTO semantic.inbound_link(route,subject_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key)
+    SELECT $1,$2,'fixture:link',$3,md5(n::text)::uuid,1,true,gen_random_uuid(),'schema:Book',lpad(n::text,8,'0')
+    FROM generate_series(1,8000) n`,
+    [route, anchor, holder],
+  );
   await db.admin.query(`INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,data)
     SELECT 4095,n,0,1,1,gen_random_uuid(),'fixture.baseline','{}'::jsonb FROM generate_series(1,4000) n`);
   await db.admin.query(`INSERT INTO core.consumer_checkpoint(partition_no,consumer)
@@ -121,7 +127,7 @@ test('links projection work grows with changed links and stays flat in in-degree
   for (const growingLinks of [true, false]) {
     const check = {
       name: growingLinks ? 'Changed outbound links' : 'Projection at growing in-degree',
-      scales: [100, 1000, 10000] as const,
+      scales: [64, 512, 4096] as const,
       repetitions: 3,
       bounds: growingLinks
         ? { rows: 'linear' as const, blocks: 'linear' as const, statements: 'linear' as const }
