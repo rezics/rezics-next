@@ -59,7 +59,6 @@ test('subject thread page stays within its bound as the subject thread index gro
     name: 'Subject thread page',
     scales: [256, 1024, 4096],
     repetitions: 1,
-    warmups: 0,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => seed(database, population, { from: previous, to: scale }),
     async operation() {

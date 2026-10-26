@@ -310,7 +310,6 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
     scales: [20, 160, 1280],
     bounds: growthBounds,
     repetitions: 1,
-    warmups: 0,
     async grow(database, scale, previous) {
       await seed(database, growthPopulation, { from: previous, to: scale });
     },

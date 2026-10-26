@@ -8,6 +8,7 @@ const db = await openGrowthDatabase();
 afterAll(() => db.close());
 const route = 0x1234;
 const otherRoute = 0x5678;
+const warmupRoute = 0x2345;
 const scales = [256, 1024, 4096] as const;
 
 test('one partition refresh has flat rows and buffers as other partitions grow', async () => {
@@ -17,6 +18,8 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
   const freshAt = new Date(at.getTime() + 24 * 3_600_000).toISOString();
   const boardId = newId(route);
   const dueIds = Array.from({ length: 8 }, () => newId(route));
+  const warmupBoardId = newId(warmupRoute);
+  const warmupDueIds = Array.from({ length: 8 }, () => newId(warmupRoute));
   const freshId = newId(route);
   const zeroId = newId(route);
   const population: Population = {
@@ -70,7 +73,6 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
     scales,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     repetitions: 1,
-    warmups: 0,
     grow: async (growthDb, scale, previous) => {
       if (previous === 0) {
         await growthDb.admin.query(
@@ -88,8 +90,33 @@ test('one partition refresh has flat rows and buffers as other partitions grow',
            FROM unnest($8::uuid[]) AS item(id)`,
           [route, boardId, createdAt, staleAt, freshAt, zeroId, freshId, [...dueIds, freshId, zeroId]],
         );
+        await growthDb.admin.query(
+          `INSERT INTO content.board
+            (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+           VALUES ($1, $2, $3, 'Warmup partition', 'published', 1, $4)`,
+          [warmupRoute, warmupBoardId, newId(warmupRoute), randomUUID()],
+        );
+        await growthDb.admin.query(
+          `INSERT INTO content.board_thread
+            (route, board_id, thread_id, created_at, last_activity_at, active_rank, hot_rank,
+             rank_refreshed_at, source_epoch, source_position)
+           SELECT $1, $2, item.id, $3, $3, 1, 1, $4::timestamptz, 1, 1
+           FROM unnest($5::uuid[]) AS item(id)`,
+          [warmupRoute, warmupBoardId, createdAt, staleAt, warmupDueIds],
+        );
       }
+      await growthDb.admin.query(
+        `UPDATE content.board_thread SET rank_refreshed_at = $3::timestamptz
+         WHERE route = $1 AND board_id = $2 AND thread_id = ANY($4::uuid[])`,
+        [warmupRoute, warmupBoardId, staleAt, warmupDueIds],
+      );
       await seed(growthDb, population, { from: previous, to: scale });
+    },
+    warmup: async (_growthDb, _scale, repetition) => {
+      const refreshed = await refreshBoardRankBatch(db.pool, new Date(at.getTime() + repetition * 11 * 60_000), [
+        partitionOf(warmupRoute),
+      ]);
+      expect(refreshed).toBe(warmupDueIds.length);
     },
     operation: async (_growthDb, _scale, repetition) => {
       const refreshed = await refreshBoardRankBatch(db.pool, new Date(at.getTime() + repetition * 11 * 60_000), [
