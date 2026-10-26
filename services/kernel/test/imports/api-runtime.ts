@@ -176,6 +176,10 @@ export async function openApiRuntime(options: DriverOptions) {
       }),
     );
     ownedIdentity = identity;
+    // Request the registered client's complete import scopes through the native account-key flow.
+    const bulk = await time('importer account-key sign-in', () =>
+      identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),
+    );
     const database = identity.database;
     const auth = identity.accessConfig.auth!;
     // The application resolves resource declarations from its complete mounted
@@ -210,7 +214,7 @@ export async function openApiRuntime(options: DriverOptions) {
     work = await time('work client', () => createWorkClient(database.url, database.openPool()));
     const secret = randomUUID();
     const context = { pool: database.pool, deadline: Date.now() + 10000 };
-    const actor = await access.authenticate(identity.bulk.bearer, context);
+    const actor = await access.authenticate(bulk.bearer, context);
     const importerClass = rateIdentity({ ...context, actor }, secret).rateClass;
     let overrides = JSON.stringify({
       [importerClass]: { upload: RATE_LIMIT_V1.service.upload, write: RATE_LIMIT_V1.service.write },
@@ -286,8 +290,7 @@ export async function openApiRuntime(options: DriverOptions) {
 
     const transport = createImportTransport({
       origin,
-      tokenProvider: async () =>
-        current?.controls.as === 'ordinary' ? identity.ordinary.bearer : identity.bulk.bearer,
+      tokenProvider: async () => (current?.controls.as === 'ordinary' ? identity.ordinary.bearer : bulk.bearer),
       now: Date.now,
       sleep: async (ms) => {
         current?.result.waits.push({ startedAtMs: Date.now(), durationMs: ms });
@@ -488,6 +491,7 @@ export async function openApiRuntime(options: DriverOptions) {
     recordPhase('runtime setup total', started);
     return {
       identity,
+      bulk,
       database,
       mediaBoundary,
       measurement,

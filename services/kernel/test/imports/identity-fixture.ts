@@ -420,7 +420,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     await options.afterStage?.('grants');
     const governance = await issue(human.accountId, importerScopes);
     const ordinary = await issue(comparison.accountId, COMMON_ACTIONS);
-    const bulk = await issue(robot.accountId, [...importerScopes, 'statement:propose', 'media:read_reservation']);
+    const bulk = await issue(robot.accountId, importerScopes);
     let bulkEnabled = true;
     const result: ImportIdentity = {
       database,

@@ -90,11 +90,7 @@ export async function openImportApiFixture(options: DriverOptions): Promise<Impo
         const response = await runtime.request(
           `/v1/sourceFences:check?${new URLSearchParams({ source, externalId, fieldGroup })}`,
           undefined,
-          as === 'bulk'
-            ? runtime.identity.bulk.bearer
-            : as === 'ordinary'
-              ? runtime.identity.ordinary.bearer
-              : undefined,
+          as === 'bulk' ? runtime.bulk.bearer : as === 'ordinary' ? runtime.identity.ordinary.bearer : undefined,
         );
         return { status: response.status, headers: response.headers, body: await response.json() };
       },

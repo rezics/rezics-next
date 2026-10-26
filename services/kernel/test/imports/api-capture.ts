@@ -3,7 +3,7 @@ import { partitionOf } from '../../src/route/route.ts';
 import type { Counters, PhaseCounters } from '../../../../specs/imports-api-driver.ts';
 import type { GrowingRelation, SqliteStatement } from '../../../../specs/imports-growth-driver.ts';
 import type { SqliteEvidence } from '../../../importer/tests/support/sqlite-growth.ts';
-import { capture, type GrowthDatabase, type Capture } from '../support/growth.ts';
+import { capture, withoutCatalogStatements, type GrowthDatabase, type Capture } from '../support/growth.ts';
 
 const empty = (): Counters => ({
   statements: 0,
@@ -79,8 +79,10 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     };
   }
 
-  function merge(raw: Capture) {
+  function merge(captured: Capture) {
     if (!active) return;
+    // Shared plan-based accounting bounds catalog freshness probes separately from request work.
+    const raw = withoutCatalogStatements('import API', captured);
     function visit(value: unknown): void {
       if (Array.isArray(value)) {
         for (const child of value) visit(child);
