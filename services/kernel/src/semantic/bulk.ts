@@ -24,6 +24,15 @@ import { SubjectInputError } from './item.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { writeSubject, type SubjectComponent } from './subject.ts';
 import updateSubjectRelease from './update-subject-release.sql';
+import deleteSourceCandidate from './bulk-delete-source-candidate.sql';
+import insertClaim from './bulk-insert-claim.sql';
+import insertRetractRevision from './bulk-insert-retract-revision.sql';
+import insertRetraction from './bulk-insert-retraction.sql';
+import insertSourceCandidate from './bulk-insert-source-candidate.sql';
+import readClaim from './bulk-read-claim.sql';
+import readCompactCandidate from './bulk-read-compact-candidate.sql';
+import readProposedSource from './bulk-read-proposed-source.sql';
+import readSourceCandidate from './bulk-read-source-candidate.sql';
 
 export type BulkValue =
   | { id: string; revision: number }
@@ -193,11 +202,12 @@ export async function batchCommand(
           };
           const source = command.source;
           if (command.op === 'create') {
-            const claim = await tx.query<{ subject_id: string }>(
-              `SELECT subject_id FROM semantic.external_claim WHERE route = $1 AND source = $2 AND external_id = $3`,
-              [route, source.source, source.external_id],
-            );
-            const id = claim.rows[0]?.subject_id;
+            const claim = await readClaim.run(tx, {
+              route,
+              source: source.source,
+              external_id: source.external_id,
+            });
+            const id = claim?.subject_id;
             if (id) {
               const subject = await visibleSubject(tx, route, id);
               if (subject.type !== command.subject.type) throw new EditorialConflictError();
@@ -210,25 +220,29 @@ export async function batchCommand(
               release: options.release,
               source,
             });
-            await tx.query(
-              `INSERT INTO semantic.external_claim (route, source, external_id, subject_id, recorded_transaction_id)
-             VALUES ($1, $2, $3, $4, $5)`,
-              [route, source.source, source.external_id, target.id, transactionId],
-            );
+            await insertClaim.run(tx, {
+              route,
+              source: source.source,
+              external_id: source.external_id,
+              subject_id: target.id,
+              transaction_id: transactionId,
+            });
             return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
           }
           const subject = await visibleSubject(tx, route, command.subject);
           if (command.op === 'propose') {
             const imported = source.field_group === 'summary' || source.field_group === 'cover';
             const hash = importedStatementDigest(command.statement, source.field_group);
-            const key = [route, command.subject, source.source, source.external_id, source.field_group, hash];
-            const existing = await tx.query<{ candidate_id: string }>(
-              `SELECT candidate_id FROM semantic.source_candidate
-             WHERE route = $1 AND subject_id = $2 AND source = $3 AND external_id = $4 AND field_group = $5 AND statement_digest = $6`,
-              key,
-            );
-            if (existing.rows[0])
-              return resolve({ candidate: existing.rows[0].candidate_id, revision: subject.revision });
+            const key = {
+              route,
+              subject_id: command.subject,
+              source: source.source,
+              external_id: source.external_id,
+              field_group: source.field_group,
+              statement_digest: hash,
+            };
+            const existing = await readSourceCandidate.run(tx, key);
+            if (existing) return resolve({ candidate: existing.candidate_id, revision: subject.revision });
             let written: Awaited<ReturnType<typeof writeProposal>>;
             const proposal = {
               subject: command.subject,
@@ -299,32 +313,26 @@ export async function batchCommand(
                 throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);
               throw error;
             }
-            await tx.query(
-              `INSERT INTO semantic.source_candidate
-             (route, subject_id, source, external_id, field_group, statement_digest, candidate_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-              [...key, written.value.candidate],
-            );
+            await insertSourceCandidate.run(tx, { ...key, candidate_id: written.value.candidate });
             return { value: { status: 201, value: written.value }, events: written.events };
           }
-          const proposed = await tx.query<{ source: Source | null }>(
-            `SELECT r.source FROM semantic.candidate c JOIN semantic.revision r
-           ON r.route = c.route AND r.subject_id = c.subject_id AND r.revision = c.revision
-           WHERE c.route = $1 AND c.subject_id = $2 AND c.candidate_id = $3`,
-            [route, command.subject, command.candidate],
-          );
-          if (!proposed.rows[0]) {
+          const proposed = await readProposedSource.run(tx, {
+            route,
+            subject_id: command.subject,
+            candidate_id: command.candidate,
+          });
+          if (!proposed) {
             // Compact single-route candidates exist virtually before slot expansion.
             // Their proposing revision has no imported source, so they cannot be retracted here.
-            const compact = await tx.query(
-              `SELECT 1 FROM semantic.fact WHERE route = $1 AND subject_id = $2 AND statement_id = $3
-             AND kind = 'statement' AND operation = 'assert' AND statement_id IS NOT NULL LIMIT 1`,
-              [route, command.subject, command.candidate],
-            );
-            if (compact.rows.length) throw new EditorialConflictError();
+            const compact = await readCompactCandidate.run(tx, {
+              route,
+              subject_id: command.subject,
+              candidate_id: command.candidate,
+            });
+            if (compact) throw new EditorialConflictError();
             throw new SubjectNotFoundError();
           }
-          const origin = proposed.rows[0].source;
+          const origin = proposed.source as Source | null;
           if (
             !origin ||
             origin.source !== source.source ||
@@ -333,25 +341,34 @@ export async function batchCommand(
           )
             throw new EditorialConflictError();
           const revision = subject.revision + 1;
-          await tx.query(
-            `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id, source)
-           VALUES ($1, $2, $3, 'retract', $4, $5, $6)`,
-            [route, command.subject, revision, options.release.digest, transactionId, source],
-          );
+          await insertRetractRevision.run(tx, {
+            route,
+            subject_id: command.subject,
+            revision,
+            release: options.release.digest,
+            transaction_id: transactionId,
+            source,
+          });
           await updateSubjectRelease.run(tx, {
             route,
             subject_id: command.subject,
             release: options.release.digest,
           });
-          await tx.query(
-            `INSERT INTO semantic.retraction (route, subject_id, candidate_id, revision, "references") VALUES ($1, $2, $3, $4, $5)`,
-            [route, command.subject, command.candidate, revision, JSON.stringify(command.references)],
-          );
-          await tx.query(
-            `DELETE FROM semantic.source_candidate WHERE route = $1 AND subject_id = $2 AND source = $3
-           AND external_id = $4 AND field_group = $5 AND candidate_id = $6`,
-            [route, command.subject, source.source, source.external_id, source.field_group, command.candidate],
-          );
+          await insertRetraction.run(tx, {
+            route,
+            subject_id: command.subject,
+            candidate_id: command.candidate,
+            revision,
+            references: command.references,
+          });
+          await deleteSourceCandidate.run(tx, {
+            route,
+            subject_id: command.subject,
+            source: source.source,
+            external_id: source.external_id,
+            field_group: source.field_group,
+            candidate_id: command.candidate,
+          });
           return {
             value: { status: 200, value: { revision } },
             events: [
