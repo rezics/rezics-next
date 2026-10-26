@@ -9,6 +9,7 @@ import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import { createBoardEffect } from './board-projection.ts';
 import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
+import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
 import { createReportEffect } from './report-effect.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
@@ -18,6 +19,7 @@ import {
   contentWorkQueueOptions,
   contentWorkSource,
   contentWorkWorkflowId,
+  subjectReactionMergeWorkflowId,
 } from './work-contract.ts';
 
 const authorRequested = 'com.rezics.content.author-erasure.requested.v1';
@@ -148,6 +150,38 @@ function enqueueEffect(pool: Pool, client: WorkClient, name: string, types: stri
   };
 }
 
+function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effect {
+  return {
+    name: 'content_subject_reaction_merge',
+    types: [SUBJECT_MERGED],
+    async run(event) {
+      if (event.type !== SUBJECT_MERGED || !Value.Check(SEMANTIC_EVENTS[SUBJECT_MERGED], event.data))
+        throw new TypeError('Invalid subject merge work event');
+      const data = event.data as { id: string; survivor: string };
+      if (event.subject !== data.id) throw new TypeError('Subject merge event identity does not match its subject');
+      const source = sourceIdentity(event, data.id);
+      const { index, workflowID } = await withConnection(pool, async (connection) => {
+        const index = await eventIndex(connection, source, event);
+        return {
+          index,
+          workflowID: subjectReactionMergeWorkflowId({ ...source, position: source.position }, index, data.id),
+        };
+      });
+      await client.enqueue(
+        {
+          applicationName: WORK_APPLICATION,
+          workflowName: CONTENT_WORKFLOWS.subjectReactionMerge,
+          queueName: CONTENT_QUEUES.subjectReactionMerge,
+          workflowID,
+          workflowIDReusePolicy: 'return-existing',
+          queuePartitionKey: String(source.partition),
+        },
+        { id: data.id, survivor: data.survivor, source: contentWorkSource(source, index) },
+      );
+    },
+  };
+}
+
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
 export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
@@ -158,5 +192,6 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
     enqueueEffect(pool, client, 'content_media_purge', [...MEDIA_WORK_EVENTS.purge], 'purge'),
     enqueueEffect(pool, client, 'content_author_erasure', [authorRequested], 'authorErase'),
     enqueueEffect(pool, client, 'content_url_import', [importRequested], 'importFromUrl'),
+    enqueueSubjectReactionMergeEffect(pool, client),
   ];
 }

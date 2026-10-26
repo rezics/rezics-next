@@ -7,9 +7,11 @@ import {
   contentWorkQueueOptions,
   contentWorkSource,
   contentWorkWorkflowId,
+  subjectReactionMergeWorkflowId,
   type ContentWorkInput,
   type AuthorEraseWorkInput,
   type ImportFromUrlWorkInput,
+  type SubjectReactionMergeWorkInput,
 } from '../../src/content/work-contract.ts';
 import type { Envelope } from '../../src/events/log.ts';
 
@@ -20,6 +22,7 @@ test('content media work names and queues match the DBOS application contract', 
     collect: 'content.collect',
     authorErase: 'content.authorErase',
     importFromUrl: 'content.importFromUrl',
+    subjectReactionMerge: 'content.subjectReactionMerge',
   });
   expect(CONTENT_QUEUES).toEqual({
     image: 'effects',
@@ -27,6 +30,7 @@ test('content media work names and queues match the DBOS application contract', 
     collect: 'maintenance',
     authorErase: 'governance',
     importFromUrl: 'import',
+    subjectReactionMerge: 'effects',
   });
   expect(MEDIA_WORK_EVENTS).toEqual({
     image: 'com.rezics.content.media.uploaded.v1',
@@ -63,6 +67,12 @@ test('work identity uses source position and event index, separating work kinds 
   expect(contentWorkWorkflowId(envelope, 2, 'importFromUrl', 'media-a')).toBe(
     contentWorkWorkflowId(envelope, 2, 'importFromUrl', 'media-a'),
   );
+  expect(subjectReactionMergeWorkflowId(envelope, 2, 'subject-a')).toBe(
+    effectWorkflowId(envelope, 2, 'content_subject_reaction_merge_subject-a'),
+  );
+  expect(subjectReactionMergeWorkflowId(envelope, 2, 'subject-a')).not.toBe(
+    subjectReactionMergeWorkflowId(envelope, 2, 'subject-b'),
+  );
 });
 
 test('workflow inputs carry only media ID and source envelope identity', () => {
@@ -85,6 +95,11 @@ test('new durable requests carry only IDs and the actual source envelope identit
     mediaId: 'media-1',
     source: contentWorkSource(envelope, 4),
   };
+  const subjectReactionMerge: SubjectReactionMergeWorkInput = {
+    id: 'subject-1',
+    survivor: 'subject-0',
+    source: contentWorkSource(envelope, 5),
+  };
 
   expect(authorErase).toEqual({
     operationId: 'operation-1',
@@ -94,10 +109,17 @@ test('new durable requests carry only IDs and the actual source envelope identit
     mediaId: 'media-1',
     source: { epoch: 8, partition: 51, position: '9007199254740994', eventIndex: 4 },
   });
+  expect(subjectReactionMerge).toEqual({
+    id: 'subject-1',
+    survivor: 'subject-0',
+    source: { epoch: 8, partition: 51, position: '9007199254740994', eventIndex: 5 },
+  });
   expect(Object.keys(authorErase)).toEqual(['operationId', 'source']);
   expect(Object.keys(importFromUrl)).toEqual(['mediaId', 'source']);
+  expect(Object.keys(subjectReactionMerge)).toEqual(['id', 'survivor', 'source']);
   expect(Object.keys(authorErase.source)).toEqual(['epoch', 'partition', 'position', 'eventIndex']);
   expect(Object.keys(importFromUrl.source)).toEqual(['epoch', 'partition', 'position', 'eventIndex']);
+  expect(Object.keys(subjectReactionMerge.source)).toEqual(['epoch', 'partition', 'position', 'eventIndex']);
 });
 
 test('image enqueue uses the source partition as immutable queue options, outside the job payload', () => {

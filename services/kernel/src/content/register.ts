@@ -20,7 +20,7 @@ export function createContentWorkAccess(clock: KernelClock) {
     actions: new Map(
       Object.values(resourceRoles.roles)
         .flat()
-        .map((action) => [action, { anonymous: false }]),
+        .map((action) => [action, { anonymous: action === 'subject:read' }]),
     ),
     clock,
   });

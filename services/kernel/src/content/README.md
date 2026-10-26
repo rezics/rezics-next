@@ -87,6 +87,28 @@ the existing per-kind counts and total in the subject's partition. It also maint
 per reacting account in that same partition and transaction. Clearing a reaction or erasing an account removes the
 reactor row through the relay.
 
+A `com.rezics.subject.merged.v1` event starts one idempotent DBOS job for the merged subject. The job reads its
+`content.subject_reactor` rows in actor ID keyset order from that subject's partition, up to 100 IDs per page. For
+each actor it runs one command in the actor's partition and resolves the current final survivor with `resolveSubject`
+at that command's T, so a later chained merge is followed. A source slot moves with its kind when the actor has no
+survivor slot. When both slots exist, the source slot is cleared and the survivor slot stays. Every slot change emits
+the ordinary reaction change event; the relay updates counts and reactor rows, and the merge job never writes counts.
+
+The last actor ID in a page is the cursor. Each page step stores its result in the DBOS job state, so a restarted job
+continues after the last completed page. Re-running an uncheckpointed page is safe: an actor whose slot already moved
+has no source slot and produces no second change event. A final empty cursor check follows an exact multiple of 100.
+
+### Cost
+
+#### Subject reaction merge page
+
+- **Touches:** At most 100 reactor IDs in the merged subject's partition; at most 100 actor commands, each with a
+  constant number of statements in one actor partition; at most two reaction change events per actor.
+- **Bound:** O(100) commands and rows per page; `ceil(R / 100)` actor pages for R reactors, plus an empty cursor check
+  when R is an exact multiple of 100. Page work is independent of R.
+- **Growth check:** `test/content/subject-reaction-merge.test.ts`, `one merge page`, at 256, 1024 and 4096 reactors on
+  the merged subject. Rows and statements per page stay constant.
+
 ### Cost
 
 #### Subject reaction slot

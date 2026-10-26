@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
+import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
@@ -24,6 +25,7 @@ export async function resolveSubject(
   deps: SubjectAnchorDependencies,
   actor: Actor,
   subjectId: string,
+  at?: AuthoritativeTime,
 ): Promise<ResolvedSubject | null> {
   async function readAnchor(id: string) {
     const route = routeOf(id);
@@ -33,26 +35,26 @@ export async function resolveSubject(
       pool: deps.pool,
       deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
     });
-    return readSubject(deps.pool, id, (client) => check(client));
+    return readSubject(deps.pool, id, (client) => check(client, at));
   }
 
-  try {
-    const result = await readAnchor(subjectId);
-    return result ? { subjectId, requestedSubjectId: null } : null;
-  } catch (error) {
-    if (!(error instanceof SubjectRedirectError)) throw error;
-    if (error.from !== subjectId) return null;
+  const visited = new Set<string>();
+  let current = subjectId;
+  while (!visited.has(current)) {
+    visited.add(current);
     try {
-      const survivor = await readAnchor(error.to);
-      return survivor ? { subjectId: error.to, requestedSubjectId: subjectId } : null;
-    } catch (survivorError) {
-      if (survivorError instanceof SubjectRedirectError) return null;
-      throw survivorError;
+      const result = await readAnchor(current);
+      return result ? { subjectId: current, requestedSubjectId: current === subjectId ? null : subjectId } : null;
+    } catch (error) {
+      if (!(error instanceof SubjectRedirectError)) throw error;
+      if (error.from !== current) return null;
+      current = error.to;
     }
   }
+  return null;
 }
 
-/** Keep stored IDs that resolve in one hop, preserving page identity and bounds. */
+/** Keep stored IDs that resolve, preserving page identity and bounds. */
 export async function readableSubjects(
   deps: SubjectAnchorDependencies,
   actor: Actor,

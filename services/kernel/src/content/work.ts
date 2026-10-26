@@ -31,6 +31,7 @@ import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
 import { createAuthorItemEffect } from './author-item-index.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
+import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
   CONTENT_QUEUES,
@@ -38,6 +39,7 @@ import {
   contentWorkWorkflowId,
   type ContentWorkInput,
   type AuthorEraseWorkInput,
+  type SubjectReactionMergeWorkInput,
 } from './work-contract.ts';
 
 export const CONTENT_OPERATION_PROGRESS = 'content.authorErasure.progress';
@@ -205,6 +207,28 @@ async function registerWork(
       );
     },
     { name: CONTENT_WORKFLOWS.authorErase },
+  );
+
+  const subjectReactionMergePage = DBOS.registerStep(
+    async (input: SubjectReactionMergeWorkInput, cursor: string | null) => {
+      validateInput({ mediaId: input.id, source: input.source });
+      if (routeOf(input.survivor) === null || input.id === input.survivor)
+        throw new TypeError('Invalid subject reaction merge work input');
+      return processSubjectReactionMergePage(
+        { pool: context.pool, access: options.access },
+        { id: input.id, survivor: input.survivor, cursor },
+      );
+    },
+    { name: 'content.subjectReactionMerge.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (input: SubjectReactionMergeWorkInput) => {
+      validateInput({ mediaId: input.id, source: input.source });
+      if (routeOf(input.survivor) === null || input.id === input.survivor)
+        throw new TypeError('Invalid subject reaction merge work input');
+      return runSubjectReactionMerge(input, (cursor) => subjectReactionMergePage(input, cursor));
+    },
+    { name: CONTENT_WORKFLOWS.subjectReactionMerge },
   );
 
   const collect = DBOS.registerStep(
