@@ -1,8 +1,18 @@
 import type { Pool } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access, type Actor, type Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Anchored, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
+export type RealmDisclosureScope = {
+    realmId?: string | null;
+    realmResource?: Resource;
+    realmEvidence?: unknown;
+    realmEvidencePrepared?: boolean;
+    associationCheck?: Promise<boolean>;
+    accessCheck?: Promise<boolean>;
+};
+/** Share one containing-Realm proof across the thread and post checks in a disclosure. */
+export declare function currentRealmDisclosureScope(): RealmDisclosureScope | undefined;
 /** One exact command replay. GET reads stay outside this scope, so owner roles
  * and the public floor still cannot authorize erased metadata. */
 export declare function withReplayedRevision<T>(revisionId: string, read: () => Promise<T>): Promise<T>;
