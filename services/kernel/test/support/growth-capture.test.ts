@@ -152,13 +152,9 @@ test('an instrumented connection explains statements only while a capture is act
   });
 
   const libraryPool = database.openPool({ max: 1 });
-  try {
-    expect(await explainThreshold(libraryPool)).toBe('-1');
-    const inside = await capture(database, () => explainThreshold(libraryPool));
-    expect(inside.value).toBe('0');
-  } finally {
-    await libraryPool.end();
-  }
+  expect(await explainThreshold(libraryPool)).toBe('-1');
+  const library = await capture(database, () => explainThreshold(libraryPool));
+  expect(library.value).toBe('0');
 
   // A connection first used during a capture starts in the right state, and a capture that ends releases it.
   const opened = await capture(database, () => withConnection(database.pool, (client) => explainThreshold(client)));

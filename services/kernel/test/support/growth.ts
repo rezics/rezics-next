@@ -1,5 +1,7 @@
+import { appendFileSync } from 'node:fs';
+import { relative } from 'node:path';
 import { assertGrowth, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
-import { capture, type GrowthDatabase } from './growth-capture.ts';
+import { capture, trackGrow, type GrowthDatabase } from './growth-capture.ts';
 import {
   catalogStatementBound,
   costOf,
@@ -43,11 +45,38 @@ export type GrowthCheck = {
   warmup?(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
 };
 
+/** What growing the data to a scale cost: the statements and written rows of `grow`, and the time of `grow` and of the vacuum after it. */
+export type SeedingCost = {
+  readonly statements: number;
+  readonly rowsWritten: number;
+  readonly growMs: number;
+  readonly vacuumMs: number;
+};
+
+export type ReportSample = { readonly scale: number; readonly cost: Cost; readonly seeding: SeedingCost };
+
 export type GrowthReport = {
   readonly name: string;
   readonly bounds: Readonly<Record<Metric, Bound>>;
-  readonly samples: readonly { readonly scale: number; readonly cost: Cost }[];
+  readonly samples: readonly ReportSample[];
 };
+
+let profileWarned = false;
+
+/** Appends one line per check to the file named by GROWTH_PROFILE; a failure warns once and never fails the check. */
+function appendProfile(name: string, scales: readonly number[], samples: readonly ReportSample[]): void {
+  const path = process.env.GROWTH_PROFILE;
+  if (!path) return;
+  try {
+    const file = relative(process.cwd(), Bun.main);
+    const line = JSON.stringify({ file, check: name, scales, seeding: samples.map(({ seeding }) => seeding) });
+    appendFileSync(path, `${line}\n`);
+  } catch (error) {
+    if (profileWarned) return;
+    profileWarned = true;
+    console.warn(`GROWTH_PROFILE ${path} was not written: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 function assertCatalogBound(
   name: string,
@@ -96,10 +125,14 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
 
   let previous = 0;
   let repetition = 0;
-  const samples: Array<{ readonly scale: number; readonly cost: Cost }> = [];
+  const samples: ReportSample[] = [];
   for (const scale of scales) {
-    await check.grow(db, scale, previous);
+    const growStart = performance.now();
+    const grown = await trackGrow(db, () => check.grow(db, scale, previous));
+    const vacuumStart = performance.now();
     await db.admin.query('VACUUM (ANALYZE)');
+    const vacuumMs = performance.now() - vacuumStart;
+    const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs };
     for (let warmup = 0; warmup < warmups; warmup++) {
       if (check.warmup) await check.warmup(db, scale, repetition);
       else await check.operation(db, scale, repetition);
@@ -114,10 +147,11 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       costs.push(cost);
       repetition++;
     }
-    samples.push({ scale, cost: medianCost(costs) });
+    samples.push({ scale, cost: medianCost(costs), seeding });
     previous = scale;
   }
 
+  appendProfile(check.name, scales, samples);
   try {
     assertGrowth(samples, check.bounds, check.slack);
   } catch (error) {

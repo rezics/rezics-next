@@ -230,6 +230,12 @@ API from `test/support/growth.ts`.
 Catalog-only statements are counted apart, with at most one allowed per distinct query text in a measured run; a
 statement that also reads data counts in full.
 
+Plans are collected only inside a capture: an instrumented connection runs auto_explain just for the statements of a
+measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
+`grow` (every pool, `admin` included) with the time of `grow` and of the vacuum after it; when `GROWTH_PROFILE` names a
+file, `checkGrowth` appends one JSON line per check with the test file, check name, scales and each scale's `seeding`.
+`seed` skips its own vacuum inside `grow`, since `checkGrowth` vacuums right after.
+
 Seed every relation the operation reads, including receipts, outbox, write basis and the Access rows its authorization
 reads, to thousands of rows at the smallest scale; for example, use 500 x scale bulk rows of the production shape per
 relation. Otherwise, the planner scans small relations and the check fails on rows that production would reach through

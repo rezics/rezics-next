@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import type { Capture } from './growth-cost.ts';
@@ -6,22 +7,31 @@ export type GrowthDatabase = {
   readonly url: string;
   /** createPool(url) from src/database/pool.ts with every connection instrumented; pass it to the code under test. */
   readonly pool: Pool;
-  /** A plain pg.Pool (max 2), not instrumented, for seeding, VACUUM/ANALYZE and assertions. */
+  /** A plain pg.Pool (max 2), never explained, for seeding, VACUUM/ANALYZE and assertions. */
   readonly admin: pg.Pool;
   /** A plain pg.Pool for a library that takes its own pool; instrumented like `pool` and recorded in the same captures. */
   openPool(config?: Omit<pg.PoolConfig, 'connectionString'>): pg.Pool;
   close(): Promise<void>;
 };
 
+export type SeedingCount = { statements: number; rowsWritten: number };
+
 type ActiveCapture = { statements: string[]; plans: unknown[]; error?: Error };
-type CaptureState = { active: ActiveCapture | undefined; setupError?: Error; setupTasks: Set<Promise<void>> };
+type CaptureState = {
+  active: ActiveCapture | undefined;
+  seeding: SeedingCount | undefined;
+  setupError?: Error;
+  setupTasks: Set<Promise<void>>;
+};
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
+const growing = new AsyncLocalStorage<pg.Pool>();
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
+// A connection starts with explaining off; it is switched on for the statements of a capture.
 const setupStatements = [
   "LOAD 'auto_explain'",
-  'SET auto_explain.log_min_duration = 0',
+  'SET auto_explain.log_min_duration = -1',
   'SET auto_explain.log_analyze = on',
   'SET auto_explain.log_buffers = on',
   'SET auto_explain.log_timing = off',
@@ -44,8 +54,79 @@ function statementText(query: unknown): string | undefined {
   return typeof query.text === 'string' ? query.text : undefined;
 }
 
-function instrument(client: PoolClient, state: CaptureState): void {
+const WRITE_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'COPY']);
+const ENDS_TRANSACTION = /^\s*(?:ROLLBACK|ABORT|COMMIT|END)\b/i;
+const UNDOES_SETTINGS = /^\s*(?:ROLLBACK|ABORT)\b/i;
+const IN_FAILED_TRANSACTION = '25P02';
+
+function countWrites(counter: SeedingCount | undefined, result: unknown): void {
+  if (!counter) return;
+  for (const item of Array.isArray(result) ? result : [result]) {
+    if (typeof item !== 'object' || item === null || !('command' in item) || !('rowCount' in item)) continue;
+    if (typeof item.command === 'string' && WRITE_COMMANDS.has(item.command) && typeof item.rowCount === 'number')
+      counter.rowsWritten += item.rowCount;
+  }
+}
+
+/**
+ * Records the client's statements and the rows they write, and, when `explain` is set, turns auto_explain on for the
+ * statements of a capture and off otherwise. The switch is an ordinary SET sent ahead of the statement on the
+ * client's own queue and never counted. A rolled-back transaction or a failed statement can undo it, so the next
+ * statement sends it again; a statement that ends a transaction sends none, since a failed transaction refuses it.
+ */
+function intercept(client: PoolClient, state: CaptureState, explain: boolean): void {
   const query = client.query.bind(client) as PoolClient['query'];
+  // Whether auto_explain is on for this connection; undefined when a rollback or a failure may have undone it.
+  let explaining: boolean | undefined = false;
+
+  const switchTo = (wanted: boolean): void => {
+    explaining = wanted;
+    const task = Promise.resolve(query(`SET auto_explain.log_min_duration = ${wanted ? 0 : -1}`)).then(
+      () => {},
+      (error: unknown) => {
+        explaining = undefined;
+        if ((error as { code?: unknown } | null)?.code !== IN_FAILED_TRANSACTION) state.setupError ??= asError(error);
+      },
+    );
+    state.setupTasks.add(task);
+    void task.then(() => state.setupTasks.delete(task));
+  };
+
+  client.query = ((...args: Parameters<PoolClient['query']>) => {
+    const text = statementText(args[0]);
+    if (text !== undefined) state.active?.statements.push(text);
+    if (state.seeding) state.seeding.statements++;
+    if (explain) {
+      if (text === undefined || !ENDS_TRANSACTION.test(text)) {
+        const wanted = state.active !== undefined;
+        if (explaining !== wanted) switchTo(wanted);
+      }
+      if (text !== undefined && UNDOES_SETTINGS.test(text)) explaining = undefined;
+    }
+
+    const done = (failed: boolean, result?: unknown): void => {
+      if (!failed) countWrites(state.seeding, result);
+      else if (explain) explaining = undefined;
+    };
+    const callback = args.at(-1);
+    if (typeof callback === 'function') {
+      const wrapped = (error: unknown, result?: unknown, ...rest: unknown[]): unknown => {
+        done(Boolean(error), result);
+        return callback(error, result, ...rest);
+      };
+      return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
+    }
+    const outcome = (query as (...values: unknown[]) => unknown)(...args);
+    if (outcome instanceof Promise)
+      outcome.then(
+        (result) => done(false, result),
+        () => done(true),
+      );
+    return outcome;
+  }) as PoolClient['query'];
+}
+
+function instrument(client: PoolClient, state: CaptureState): void {
   client.on('notice', (notice) => {
     const active = state.active;
     const message = notice.message;
@@ -59,6 +140,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
     }
   });
 
+  const query = client.query.bind(client) as PoolClient['query'];
   const setupQueries = setupStatements.map((statement) => query(statement));
   const setupTask = Promise.allSettled(setupQueries).then((results) => {
     const failed = results.find((result) => result.status === 'rejected');
@@ -67,11 +149,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
   state.setupTasks.add(setupTask);
   void setupTask.then(() => state.setupTasks.delete(setupTask));
 
-  client.query = ((...args: Parameters<PoolClient['query']>) => {
-    const text = statementText(args[0]);
-    if (text !== undefined) state.active?.statements.push(text);
-    return query(...args);
-  }) as PoolClient['query'];
+  intercept(client, state, true);
 }
 
 function instrumentPool(pool: Pool, state: CaptureState): void {
@@ -84,7 +162,8 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
   const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const libraryPools = new Set<pg.Pool>();
-  const state: CaptureState = { active: undefined, setupTasks: new Set() };
+  const state: CaptureState = { active: undefined, seeding: undefined, setupTasks: new Set() };
+  admin.on('connect', (client) => intercept(client, state, false));
   const database: GrowthDatabase = {
     url,
     pool,
@@ -136,4 +215,31 @@ export async function capture<T>(
   } finally {
     state.active = undefined;
   }
+}
+
+/**
+ * Runs `grow` for checkGrowth: counts the statements and written rows of every pool the database hands out, and lets
+ * `seed` see that its caller vacuums afterwards.
+ */
+export async function trackGrow<T>(
+  database: GrowthDatabase,
+  grow: () => Promise<T>,
+): Promise<{ value: T; seeding: SeedingCount }> {
+  const state = states.get(database);
+  if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
+  if (state.seeding) throw new Error('A growth is already running for this database');
+
+  const seeding: SeedingCount = { statements: 0, rowsWritten: 0 };
+  state.seeding = seeding;
+  try {
+    const value = await growing.run(database.admin, grow);
+    return { value, seeding: { ...seeding } };
+  } finally {
+    state.seeding = undefined;
+  }
+}
+
+/** Whether `admin` belongs to a database whose checkGrowth is inside `grow`, and vacuums when `grow` returns. */
+export function vacuumFollows(admin: pg.Pool): boolean {
+  return growing.getStore() === admin;
 }
