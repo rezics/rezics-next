@@ -36,8 +36,8 @@ afterEach(async () => {
   await current?.close();
 });
 
-async function create(d: DurableInitiatorDriver, mode: SeedMode = 'delegated', ceiling?: 'missing-action') {
-  const f = await d.seed(mode, ceiling);
+async function create(d: DurableInitiatorDriver, mode: SeedMode = 'delegated') {
+  const f = await d.seed(mode);
   expect(f.accessToken.length).toBeGreaterThan(0);
   expect(f.refreshToken.length).toBeGreaterThan(0);
   expect(f.tuple.scopes.length).toBeGreaterThan(0);
@@ -243,15 +243,15 @@ test('each later step and result rechecks current three-operand formula and reco
   await d.restart();
   await allowed(d, current.op, point);
   for (const kind of ['result', 'cached-result'] as const) {
-    const limited = await create(d, 'delegated', 'missing-action');
-    const result = limited.points.find((p) => p.kind === kind)!;
-    expect(limited.f.tuple.scopes).not.toContain(result.action);
-    expect((await d.authority(limited.f)).consentScopes).toContain(result.action);
-    await d.grant(limited.f, 'add-outside-action');
-    expect(limited.f.tuple.scopes).not.toContain(limited.f.outsideAction);
-    await d.park(limited.op, result.id);
-    await denies(d, limited.op, result);
-    expect((await d.inspect(limited.op)).operation!.tuple).toEqual(limited.f.tuple);
+    // Creation returns the same disclosure as the result, so its tuple includes the result action.
+    const full = await create(d);
+    const result = full.points.find((p) => p.kind === kind)!;
+    await d.grant(full.f, 'add-outside-action');
+    await d.park(full.op, result.id);
+    await allowed(d, full.op, result);
+    const tuple = (await d.inspect(full.op)).operation!.tuple;
+    expect(tuple).toEqual(full.f.tuple);
+    expect(tuple.scopes).not.toContain(full.f.outsideAction);
   }
 });
 

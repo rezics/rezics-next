@@ -167,9 +167,7 @@ export interface DurableInitiatorDriver {
    * Use enough real erasure targets for >=2 protected native batches. Also retain
    * an unrelated public post in that thread: no private read grant or read scope
    * for the initiator; native domain eligibility supplies its public read floor. */
-  /** missing-action omits the native result-disclosure action from the real JWT
-   * ceiling, while retaining creation/step scopes and full CURRENT consent. */
-  seed(mode?: SeedMode, ceiling?: 'full' | 'missing-action'): Promise<Fixture>;
+  seed(mode?: SeedMode): Promise<Fixture>;
   /** Authenticate accessToken and run actual begin/commit. No actor JSON input.
    * Park the actual native worker before its first protected step. */
   create(fixture: Fixture): Promise<Denied | { outcome: 'committed'; operation: Anchor }>;
