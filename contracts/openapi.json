@@ -34004,7 +34004,7 @@
         "x-action": "media:complete",
         "x-exposure": "public",
         "x-rate-limit": {
-          "family": "upload",
+          "family": "write",
           "units": 1
         }
       }

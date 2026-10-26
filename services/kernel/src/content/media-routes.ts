@@ -183,7 +183,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
           operationId: 'media.complete',
           'x-exposure': 'public',
           'x-action': 'media:complete',
-          'x-rate-limit': upload,
+          'x-rate-limit': write,
           security: secured,
         },
       },
