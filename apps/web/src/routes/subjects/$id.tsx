@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, Link, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import type { ReactNode } from 'react';
@@ -55,6 +55,7 @@ function SubjectLink({ href, lang, children }: { href: string; lang?: string; ch
 
 function SubjectRoute() {
   const page = Route.useLoaderData();
+  const nonce = useRouter().options.ssr?.nonce;
   return (
     <SubjectPage
       page={page}
@@ -68,6 +69,7 @@ function SubjectRoute() {
         search: m.search_submit(),
       }}
       link={SubjectLink}
+      {...(nonce !== undefined ? { nonce } : {})}
     />
   );
 }

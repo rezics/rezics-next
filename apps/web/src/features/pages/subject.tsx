@@ -75,12 +75,14 @@ export function SubjectPage({
   messages,
   link,
   actions,
+  nonce,
 }: {
   page: SubjectPageData;
   locale: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
   actions?: (subject: SubjectActionsInput) => ReactNode;
+  nonce?: string;
 }) {
   const read = subjectBody(page);
   const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
@@ -113,7 +115,9 @@ export function SubjectPage({
           />
         </PageData>
       </PageHost>
-      {jsonLd !== undefined && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />}
+      {jsonLd !== undefined && (
+        <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: jsonLd }} />
+      )}
     </>
   );
 }

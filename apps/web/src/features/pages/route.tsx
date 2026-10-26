@@ -48,18 +48,23 @@ export async function loadRoutePage(client: KernelClient, route: string): Promis
 export function RoutePage({
   page,
   locale,
+  heading,
   messages,
   link,
+  nonce,
 }: {
   page: RoutePageData;
   locale: string;
+  heading: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
+  nonce?: string;
 }) {
   const jsonLd = page.route === '/' ? serializeJsonLd(homeJsonLd({ origin: 'https://rezics.com', locale })) : undefined;
   return (
     <>
       <PageHost>
+        <h1 className="sr-only">{heading}</h1>
         <PageData
           locale={locale}
           subject={page.subject ?? null}
@@ -76,7 +81,9 @@ export function RoutePage({
           />
         </PageData>
       </PageHost>
-      {jsonLd !== undefined && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />}
+      {jsonLd !== undefined && (
+        <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: jsonLd }} />
+      )}
     </>
   );
 }

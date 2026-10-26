@@ -239,6 +239,13 @@ const fake = Bun.serve({
       url.pathname === `/v1/threads/${threadId}/posts` ||
       url.pathname === '/v1/subjects:search' ||
       url.pathname === `/v1/offers/${offerId}`;
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/v1/pages:read' &&
+      closedReads &&
+      body?.target?.subject === subjectId
+    )
+      return problemResponse('platform_closed');
     if (request.method === 'GET' && closedReadPath && closedReads) return problemResponse('platform_closed');
 
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}`)
