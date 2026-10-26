@@ -229,12 +229,20 @@ type Decision = {
   status: 'existing' | 'proposed' | 'omitted';
   term?: string;
   inverse?: true;
+  canonicalByReverse?: Record<string, { term: string }>;
   on?: string;
   qualifies?: string;
   wikidata?: string;
   meaning?: string;
   reason?: string;
   sources?: string[];
+  recordCheck?: {
+    subject: number;
+    related: number;
+    forward: number;
+    reverse: number | null;
+    observation: string;
+  };
   licence?: { id: string; url: string };
   qualifiers?: Record<string, Decision>;
   value?: Decision;
@@ -253,6 +261,162 @@ type Inventory = {
 
 const inventory = () =>
   Bun.YAML.parse(readFileSync(new URL('../sources/bangumi.yaml', import.meta.url), 'utf8')) as Inventory;
+
+const subjectRelations = () =>
+  inventory().enumerations.filter(({ id }) => ['relation.1', 'relation.2', 'relation.4'].includes(id));
+const relationsDocument = `https://github.com/bangumi/common/blob/${snapshot.commonCommit}/subject_relations.yml`;
+const archiveAsset = `https://github.com/bangumi/Archive/releases/download/archive/${snapshot.asset}`;
+
+// Independently checked subject-relations.jsonlines rows in the SHA-256-pinned asset.
+// Code, subject_id, related_subject_id, reciprocal code, canonical property, related holder.
+// Parent Story uses the reciprocal's more specific property so that both rows store one fact.
+const checkedRelations: Record<string, [number, number, number, number | null, string, boolean?][]> = {
+  'relation.1': [
+    [1, 1, 296317, 1, 'rezics:crossMediaCounterpart'],
+    [1002, 26, 499, 1003, 'wdt:P179'],
+    [1003, 495, 90, 1002, 'wdt:P179', true],
+    [1004, 10, 497, 1004, 'rezics:artbookCounterpart'],
+    [1005, 31, 30, 1006, 'wdt:P155'],
+    [1006, 30, 31, 1005, 'wdt:P155', true],
+    [1007, 49, 51234, 1008, 'rezics:sideStoryOf', true],
+    [1008, 1236, 7791, 1007, 'rezics:sideStoryOf'],
+    [1010, 29, 326025, 1010, 'rezics:editionCounterpart'],
+    [1011, 335, 41336, 1011, 'rezics:sameCharacters'],
+    [1012, 76, 77, 1012, 'rezics:sameSetting'],
+    [1013, 505, 17326, 1013, 'rezics:alternativeSetting'],
+    [1014, 1674, 147362, 1014, 'rezics:collaborationWith'],
+    [1015, 5110, 132876, 1015, 'rezics:alternativeVersion'],
+    [1099, 11, 497, 1099, 'rezics:bangumiRelatedTo'],
+  ],
+  'relation.2': [
+    [1, 12, 497, 1, 'rezics:crossMediaCounterpart'],
+    [2, 8, 793, 3, 'wdt:P155'],
+    [3, 51, 876, 2, 'wdt:P155', true],
+    [4, 8, 99952, 5, 'rezics:summaryOf', true],
+    [5, 1999, 975, 4, 'rezics:summaryOf'],
+    [6, 8, 35866, 12, 'rezics:sideStoryOf', true],
+    [7, 12, 2478, 7, 'rezics:sameCharacters'],
+    [8, 50, 985, 8, 'rezics:sameSetting'],
+    [9, 8, 199228, 9, 'rezics:alternativeSetting'],
+    [10, 8, 199229, 10, 'rezics:alternativeVersion'],
+    [11, 50, 106834, 12, 'rezics:spinOffOf', true],
+    [12, 314, 24274, 6, 'rezics:sideStoryOf'],
+    [14, 47, 515, 7, 'rezics:collaborationWith'],
+    [99, 150, 458009, 99, 'rezics:bangumiRelatedTo'],
+  ],
+  'relation.4': [
+    [1, 13, 51, 1, 'rezics:crossMediaCounterpart'],
+    [4002, 4, 9944, 4003, 'wdt:P155'],
+    [4003, 9, 20482, 4002, 'wdt:P155', true],
+    [4006, 13, 3660, 4012, 'rezics:sideStoryOf', true],
+    [4007, 13, 1172, 4007, 'rezics:sameCharacters'],
+    [4008, 40, 43, 4008, 'rezics:sameSetting'],
+    [4009, 143, 329302, 4009, 'rezics:alternativeSetting'],
+    [4010, 40, 41, 4010, 'rezics:alternativeVersion'],
+    [4012, 123, 300296, 4006, 'rezics:sideStoryOf'],
+    [4013, 122686, 563561, 4013, 'rezics:bangumiLegacyVersion'],
+    [4014, 6, 20810, 4014, 'rezics:collaborationWith'],
+    [4015, 171, 30448, 4015, 'rezics:expansionCounterpart'],
+    [4016, 40, 492287, 4017, 'schema:exampleOfWork', true],
+    [4017, 124, 84156, 4016, 'schema:exampleOfWork'],
+    [4018, 6, 108488, 4019, 'wdt:P361'],
+    [4019, 3681, 608727, 4018, 'wdt:P361', true],
+    [4099, 52, 472985, 4099, 'rezics:bangumiRelatedTo'],
+  ],
+};
+
+test('every Bangumi subject relation type maps to a directed or symmetric release property', () => {
+  for (const group of subjectRelations()) {
+    for (const entry of group.values) {
+      const mapping = entry.mapping;
+      if (group.id === 'relation.1' && entry.id === 1003) {
+        expect(mapping.status).toBe('omitted');
+        expect(mapping.reason).toContain("member's part-of-the-series statement");
+        continue;
+      }
+      expect(mapping.status).not.toBe('omitted');
+      const property = bundledRelease.properties[mapping.term ?? ''];
+      expect(property?.datatype).toBe('wikibase-item');
+      expect(property?.relation).toBeDefined();
+      expect(property!.relation!.inverse).not.toBe('none');
+      expect(property!.relation!.symmetric || property!.relation!.inverse).toBeTruthy();
+      if (mapping.inverse) expect(property!.relation!.symmetric).not.toBe(true);
+    }
+  }
+});
+
+test('each mapped Bangumi relation direction is checked against a cited record', () => {
+  for (const group of subjectRelations()) {
+    exactIds(
+      group.values,
+      checkedRelations[group.id]!.map(([code]) => code),
+    );
+    for (const entry of group.values) {
+      const mapping = entry.mapping;
+      expect(mapping.sources).toContain(relationsDocument);
+      const check = mapping.recordCheck;
+      expect(check).toBeDefined();
+      expect(check!.subject).toBeGreaterThan(0);
+      expect(check!.related).toBeGreaterThan(0);
+      expect(check!.subject).not.toBe(check!.related);
+      expect(check!.forward).toBe(Number(entry.id));
+      expect(check!.reverse === null || Number.isInteger(check!.reverse)).toBe(true);
+      expect(check!.observation.trim().length).toBeGreaterThan(40);
+      const [code, subject, related, reverse, term, inverse = false] = checkedRelations[group.id]!.find(
+        ([code]) => code === entry.id,
+      )!;
+      expect(check).toMatchObject({ subject, related, forward: code, reverse });
+      expect(mapping.sources).toContain(
+        `${archiveAsset}#subject-relations.jsonlines/${check!.subject}/${check!.related}`,
+      );
+      if (mapping.status === 'omitted') continue;
+      const canonical = mapping.canonicalByReverse?.[String(reverse)] ?? mapping;
+      expect(canonical.term).toBe(term);
+      expect(mapping.inverse ?? false).toBe(inverse);
+    }
+  }
+});
+
+test('reciprocal parent-story codes resolve to one specific canonical statement', () => {
+  const mappings = subjectRelations().flatMap(({ values }) => values);
+  for (const code of [12, 1008, 4012]) {
+    const mapping = mappings.find(({ id }) => id === code)!.mapping;
+    expect(mapping.term).toBe('wdt:P361');
+    expect(mapping.inverse).toBeUndefined();
+    expect(mapping.canonicalByReverse).toEqual({
+      6: { term: 'rezics:sideStoryOf' },
+      1007: { term: 'rezics:sideStoryOf' },
+      4006: { term: 'rezics:sideStoryOf' },
+      11: { term: 'rezics:spinOffOf' },
+    });
+    for (const [reverse, canonical] of Object.entries(mapping.canonicalByReverse!)) {
+      const reciprocal = mappings.find(({ id }) => id === Number(reverse))!.mapping;
+      expect(reciprocal).toMatchObject({ term: canonical.term, inverse: true });
+    }
+  }
+});
+
+test('source distinctions remain readable on all work profiles in every locale', () => {
+  const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
+  for (const group of subjectRelations()) {
+    for (const { mapping } of group.values) {
+      if (mapping.status === 'omitted') continue;
+      const property = bundledRelease.properties[mapping.term!]!;
+      expect(Object.keys(property.labels).sort()).toEqual(locales);
+      if (mapping.term!.startsWith('rezics:')) {
+        expect(property.targets).toContain('schema:CreativeWork');
+        for (const type of Object.values(bundledRelease.types)) {
+          if (type.bases.includes('schema:CreativeWork')) expect(type.properties).toContain(mapping.term!);
+        }
+      }
+    }
+  }
+  for (const term of ['rezics:sameSetting', 'rezics:alternativeVersion', 'rezics:sameCharacters'])
+    expect(bundledRelease.properties[term]?.relation).toMatchObject({ symmetric: true, group: 'world' });
+  for (const term of ['rezics:summaryOf', 'rezics:sideStoryOf'])
+    expect(bundledRelease.properties[term]?.relation?.acyclic).toBe(true);
+  expect(bundledRelease.properties['rezics:bangumiRelatedTo']?.labels.en).toBe('Related (Bangumi)');
+});
 
 function exactIds(entries: { id: string | number }[], expected: (string | number)[]) {
   const ids = entries.map(({ id }) => String(id));
@@ -350,8 +514,11 @@ const primaryTerms: Record<string, string[]> = {
   'wdt:P179': ['wd:P179'],
   'wdt:P1853': ['wd:P1853'],
   'wdt:P1932': ['wd:P1932'],
+  'wdt:P2512': ['wd:P2512'],
   'wdt:P2635': ['wd:P2635'],
   'wdt:P287': ['wd:P287'],
+  'wdt:P361': ['wd:P361'],
+  'wdt:P527': ['wd:P527'],
   'wdt:P31': ['wd:P31'],
   'wdt:P3831': ['wd:P3831'],
   'wdt:P408': ['wd:P408'],
@@ -376,7 +543,6 @@ function validate(mapping: Decision) {
     return;
   }
   expect(mapping.meaning?.trim().length).toBeGreaterThan(10);
-  expect(mapping.wikidata).toMatch(/^wd:[PQ][1-9][0-9]*$/);
   let sourceTerm = mapping.term ?? '';
   if (mapping.inverse !== undefined) {
     expect(mapping.inverse).toBe(true);
@@ -387,6 +553,18 @@ function validate(mapping: Decision) {
     expect(mapping.qualifies).toBeUndefined();
     sourceTerm = property!.relation!.inverse!;
   }
+  if (mapping.term?.startsWith('rezics:') && mapping.wikidata === undefined) {
+    expect(mapping.status).toBe('existing');
+    const property = bundledRelease.properties[mapping.term];
+    expect(property?.datatype).toBe('wikibase-item');
+    expect(property?.relation).toBeDefined();
+    expect(property?.relation?.inverse).not.toBe('none');
+    expect(bundledRelease.types[mapping.on ?? '']?.properties).toContain(mapping.term);
+    expect(Object.keys(property!.labels).sort()).toEqual(['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']);
+    expect(mapping.sources).toContain(relationsDocument);
+    return;
+  }
+  expect(mapping.wikidata).toMatch(/^wd:[PQ][1-9][0-9]*$/);
   expect(primaryTerms[sourceTerm]).toContain(mapping.wikidata);
   if (mapping.status === 'existing') {
     const type = bundledRelease.types[mapping.on ?? ''];

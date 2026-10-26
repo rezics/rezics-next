@@ -38,8 +38,8 @@ classes:
 slots:
   partOfWork:
     slot_uri: wdt:P361
-    description: A related work in whose set, series or shared setting this visual novel belongs.
-    range: VisualNovel
+    description: The larger work of which this work forms a part, including its parent story or collection.
+    range: CreativeWork
     multivalued: true
     exact_mappings:
       - wd:P361
@@ -77,10 +77,11 @@ slots:
   spinOffOf:
     slot_uri: rezics:spinOffOf
     description: The original work from which this spin-off was derived.
-    range: VisualNovel
+    range: CreativeWork
     multivalued: true
     annotations:
       datatype: wikibase-item
       relation_group: derivation
       inverse: wdt:P2512
       relation_order: name
+      acyclic: true

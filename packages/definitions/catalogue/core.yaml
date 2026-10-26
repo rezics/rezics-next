@@ -34,6 +34,22 @@ classes:
       - genre
       - keywords
       - partOfSeries
+      - follows
+      - partOfWork
+      - spinOffOf
+      - crossMediaCounterpart
+      - summaryOf
+      - sideStoryOf
+      - sameCharacters
+      - sameSetting
+      - alternativeSetting
+      - alternativeVersion
+      - collaborationWith
+      - bangumiRelatedTo
+      - artbookCounterpart
+      - editionCounterpart
+      - bangumiLegacyVersion
+      - expansionCounterpart
     annotations:
       cover_ratio: 2:3
   Character:
@@ -72,6 +88,153 @@ classes:
     exact_mappings:
       - wd:Q43229
 slots:
+  crossMediaCounterpart:
+    slot_uri: rezics:crossMediaCounterpart
+    description: >-
+      A work in the same franchise in another medium. This does not assert which work adapts the other;
+      Bangumi's Adaptation code is used on both records, including a game and its anime adaptation.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
+  summaryOf:
+    slot_uri: rezics:summaryOf
+    description: The full narrative work condensed by this recap or summary work.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:summaryVersion
+      relation_group: derivation
+      relation_order: name
+      acyclic: true
+  sideStoryOf:
+    slot_uri: rezics:sideStoryOf
+    description: The main narrative work to which this supplementary side story belongs.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:sideStory
+      relation_group: order
+      relation_order: name
+      acyclic: true
+  sameCharacters:
+    slot_uri: rezics:sameCharacters
+    description: A work sharing characters with this work but telling an unrelated story.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  sameSetting:
+    slot_uri: rezics:sameSetting
+    description: A work in the same world or timeline, with a different principal cast.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  alternativeSetting:
+    slot_uri: rezics:alternativeSetting
+    description: A work with the same principal characters in a different world or timeline.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  alternativeVersion:
+    slot_uri: rezics:alternativeVersion
+    description: A different telling with the same setting and characters.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  collaborationWith:
+    slot_uri: rezics:collaborationWith
+    description: >-
+      A work connected by a character crossover collaboration. One or both works feature characters from the
+      other; this relation does not identify the guest character or which work hosts the crossover.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  bangumiRelatedTo:
+    slot_uri: rezics:bangumiRelatedTo
+    description: >-
+      Bangumi explicitly links this work to the value work with its Other subject relation, without stating a
+      kind. Only Bangumi's catch-all assertion is expressed; other sources cannot use it for generic relatedness.
+      The source record holds the statement even when the archive has no reciprocal record.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:bangumiRelatedFrom
+      relation_group: association
+      relation_order: name
+  artbookCounterpart:
+    slot_uri: rezics:artbookCounterpart
+    description: >-
+      A work and its companion artbook, linked without asserting which endpoint is the artbook.
+      Bangumi's Album subject relation appears on both records, including the illustrated work's record.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: association
+      relation_order: name
+  editionCounterpart:
+    slot_uri: rezics:editionCounterpart
+    description: Another book version or edition, without asserting an original or a work-to-edition direction.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
+  bangumiLegacyVersion:
+    slot_uri: rezics:bangumiLegacyVersion
+    description: >-
+      A pair linked by Bangumi's retired game Main Version code 4013. The pinned document comments out this code;
+      the archive uses it reciprocally for an original and a revised version, so it asserts no holder direction.
+      This preserves the retired assertion separately from the directed Version and Main Version codes 4016/4017.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
+  expansionCounterpart:
+    slot_uri: rezics:expansionCounterpart
+    description: >-
+      A base game and an expansion linked without identifying which endpoint expands the other.
+      Bangumi's DLC code is used on both records. An independently identified add-on can additionally name its
+      base game through expansionOf when the source establishes that direction.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
   alternateName:
     slot_uri: schema:alternateName
     description: An alternate name or alias, preserving its source language and spelling.
