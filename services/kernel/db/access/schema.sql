@@ -413,7 +413,7 @@ CREATE TABLE access.credential_floor_receipt (
     CONSTRAINT credential_floor_receipt_check CHECK ((minimum_authn_epoch = (previous_floor + 1))),
     CONSTRAINT credential_floor_receipt_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT credential_floor_receipt_previous_floor_check CHECK ((previous_floor > 0)),
-    CONSTRAINT credential_floor_receipt_purpose_check CHECK ((purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'remove-key'::text])))
+    CONSTRAINT credential_floor_receipt_purpose_check CHECK ((purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'remove-key'::text, 'remove-passkey'::text])))
 );
 
 
