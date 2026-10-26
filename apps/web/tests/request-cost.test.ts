@@ -16,6 +16,7 @@ const clientJwk = { ...(await exportJWK(keyPair.privateKey)), alg: 'ES256', kid:
 const subjectId = (fixtures.subjects[0] as { id: string }).id;
 const fakeKernel = createFakeKernelFetch(fixtures);
 const kernelCalls: string[] = [];
+const kernelAuthorizations: (string | null)[] = [];
 const authCalls: string[] = [];
 let subjectSize = 1;
 let searchSize = 1;
@@ -59,6 +60,10 @@ const post = (n: number) => ({
   availability: 'available',
   body: documentBody(n),
 });
+function recordKernelCall(request: Request, url: URL, includeQuery = true) {
+  kernelCalls.push(`${request.method} ${url.pathname}${includeQuery ? url.search : ''}`);
+  kernelAuthorizations.push(request.headers.get('authorization'));
+}
 /** Inflate the page read's embedded subject and its reads. The page still makes one kernel call. */
 function growPageRead(body: Record<string, any>, size: number) {
   const each = Math.max(1, Math.floor(size / 4));
@@ -135,13 +140,13 @@ const kernel = Bun.serve({
       return new Response(null, { status: 200 });
     }
     if (url.pathname === `/v1/boards/${boardId}`) {
-      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      recordKernelCall(request, url);
       return Response.json({
         board: { ...pageMetadata, id: boardId, title: 'Cost board', availability: 'available' },
       });
     }
     if (url.pathname === `/v1/boards/${boardId}/threads`) {
-      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      recordKernelCall(request, url);
       return Response.json({
         threads: Array.from({ length: boardSize }, (_, n) => ({
           ...pageMetadata,
@@ -158,7 +163,7 @@ const kernel = Bun.serve({
       });
     }
     if (url.pathname === `/v1/threads/${threadId}`) {
-      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      recordKernelCall(request, url);
       return Response.json({
         thread: {
           ...pageMetadata,
@@ -174,12 +179,12 @@ const kernel = Bun.serve({
       });
     }
     if (url.pathname === `/v1/threads/${threadId}/posts`) {
-      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      recordKernelCall(request, url);
       return Response.json({ posts: Array.from({ length: postSize }, (_, n) => post(n)), next: null });
     }
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
       const body = (await request.json()) as { limit: number };
-      kernelCalls.push(`${request.method} ${url.pathname}`);
+      recordKernelCall(request, url, false);
       return Response.json({
         subjects: Array.from({ length: Math.min(searchSize, body.limit) }, (_, i) => ({
           id: `${subjectId}-${i}`,
@@ -192,7 +197,7 @@ const kernel = Bun.serve({
       });
     }
     if (url.pathname === '/v1/subjects:suggest' && request.method === 'GET') {
-      kernelCalls.push(`${request.method} ${url.pathname}`);
+      recordKernelCall(request, url, false);
       return Response.json({
         subjects: Array.from({ length: Math.min(searchSize, Number(url.searchParams.get('limit')) || 8) }, (_, i) => ({
           id: `${subjectId}-${i}`,
@@ -202,15 +207,19 @@ const kernel = Bun.serve({
         as_of: new Date(0).toISOString(),
       });
     }
+    if (url.pathname === `/v1/subjects/${subjectId}/collections` && request.method === 'GET') {
+      recordKernelCall(request, url);
+      return Response.json({ collections: [], next: null });
+    }
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
-      kernelCalls.push(`${request.method} ${url.pathname}`);
+      recordKernelCall(request, url, false);
       const response = await fakeKernel(request);
       const body = (await response.json()) as Record<string, any>;
       if (response.status === 200 && body.subject === subjectId && body.reads && typeof body.reads === 'object')
         growPageRead(body, subjectSize);
       return Response.json(body, { status: response.status });
     }
-    kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+    recordKernelCall(request, url);
     return fakeKernel(request);
   },
 });
@@ -300,9 +309,14 @@ test('subject page stays within its bound as s grows', async () => {
   for (const s of [1, 8, 64]) {
     subjectSize = s;
     kernelCalls.length = 0;
+    kernelAuthorizations.length = 0;
     const response = await fetch(`${origin}/en/subjects/${subjectId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual(['POST /v1/pages:read']);
+    expect(kernelCalls).toHaveLength(2);
+    expect(kernelCalls).toEqual(
+      expect.arrayContaining(['POST /v1/pages:read', `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`]),
+    );
+    expect(kernelAuthorizations).toEqual([null, null]);
   }
 }, 300_000);
 test('board page stays within its bound as s grows', async () => {
