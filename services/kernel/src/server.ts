@@ -295,7 +295,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         return pool.options.max;
       },
       get idleTimeoutMillis() {
-        return pool.options.idleTimeoutMillis;
+        return pool.options.idleTimeoutMillis ?? 30_000;
       },
     }),
     stop() {
