@@ -63,8 +63,15 @@ export type Snapshot = {
     digest: string;
     operation: Anchor;
   };
-  /** Complete native protected writes, stably ordered, including stored replies.
-   * Exclude DBOS scheduling/terminal-denial bookkeeping, not domain effects. */
+  /** Native writes that physically complete logical erasures already committed:
+   * cleanup command receipts, their events and outbox rows, and the bodies/media
+   * they change, stably ordered. Classify them by native receipt kind, never by
+   * adapter policy. */
+  cleanup: unknown[];
+  /** Writes of protected points, each committed under the restored initiator at
+   * its own authoritative T, excluding cleanup. Complete native writes, stably
+   * ordered, including stored replies. Exclude DBOS scheduling/terminal-denial
+   * bookkeeping, not domain effects. */
   protected: { receipts: unknown[]; effects: unknown[]; outbox: unknown[]; resources: unknown[] };
   /** Complete persisted operation, DBOS inputs/checkpoints/results, receipts/events.
    * No adapter redaction or hand-counted credential/authority summaries. */

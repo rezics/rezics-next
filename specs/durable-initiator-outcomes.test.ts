@@ -147,6 +147,7 @@ async function allowed(d: DurableInitiatorDriver, op: Anchor, point: Point) {
 
 async function denies(d: DurableInitiatorDriver, op: Anchor, point: Point, attack?: Attack, input?: unknown) {
   const before = await d.inspect(op);
+  const firstStep = point.kind === 'step' ? (await d.points(op)).find((p) => p.kind === 'step') : undefined;
   const attempt = attack ? await d.attack(op, point.id, attack, input) : await d.advance(op, point.id);
   // Exact shape excludes cached value, operation content, receipt and replay flag.
   expect(attempt.result).toEqual({ outcome: 'denied' });
@@ -154,6 +155,8 @@ async function denies(d: DurableInitiatorDriver, op: Anchor, point: Point, attac
   expect(after.operation).toEqual(before.operation);
   expect(after.protected).toEqual(before.protected);
   expect(after.creationReceipt).toEqual(before.creationReceipt);
+  // Cleanup may finish erasures committed by earlier protected batches after denial.
+  if (firstStep?.id === point.id) expect(after.cleanup).toEqual(before.cleanup);
   return attempt;
 }
 
