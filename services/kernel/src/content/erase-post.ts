@@ -159,7 +159,7 @@ async function prepareAuthorizedPoint(
       const rows = await withConnection(deps.pool, (connection) =>
         deadlineClient(connection, context.deadline).query<Scope>(readScope.sql, args(readScope, true)),
       );
-      const realmId = rows.rows.length === 1 ? rows.rows[0]?.realm_id ?? null : null;
+      const realmId = rows.rows.length === 1 ? (rows.rows[0]?.realm_id ?? null) : null;
       if (realmId === null) return { targetProof };
 
       const realm = await ordinaryAdmission(actor, { route: routeOf(realmId)!, id: realmId }).catch(() => undefined);
