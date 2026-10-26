@@ -1,14 +1,12 @@
-import { createAuthHost, type AuthService } from '@rezics/auth';
 import { releaseDigest } from '@rezics/definitions';
 import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
-import { exportJWK, generateKeyPair } from 'jose';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { appendFileSync } from 'node:fs';
+import { loadavg } from 'node:os';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
-import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
@@ -24,14 +22,13 @@ import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
+import { sharedAuth } from './outcome-auth.ts';
 
 type Account = { accountId: string; bearer: string };
-type AuthHost = Awaited<ReturnType<typeof createAuthHost>>;
 
 const password = 'semantic outcome registration password with enough entropy';
 const clientId = 'semantic-outcomes';
 const kernelRoot = resolve(import.meta.dir, '../..');
-const authMigrations = fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url));
 
 function required<T>(value: T | null | undefined, message: string): T {
   if (value == null) throw new Error(message);
@@ -53,69 +50,107 @@ async function jsonResponse(response: Response): Promise<HttpResponse> {
   };
 }
 
-export async function createSemanticDriver(): Promise<SemanticDriver> {
+type Tracked = { settled: Promise<void>; close(): Promise<void> };
+/** Every driver whose setup has begun and that nobody has closed yet. */
+const tracked = new Set<Tracked>();
+let started = 0;
+
+/** With SEMANTIC_DRIVER_TIMINGS naming a file, each driver appends one line of per-phase wall time. */
+function phaseTimer() {
+  const phases = new Map<string, number>();
+  let last = performance.now();
+  return {
+    mark(name: string) {
+      const now = performance.now();
+      phases.set(name, (phases.get(name) ?? 0) + now - last);
+      last = now;
+    },
+    report(number: number) {
+      const file = process.env.SEMANTIC_DRIVER_TIMINGS;
+      if (!file) return;
+      const line = [...phases].map(([name, ms]) => `${name} ${Math.round(ms)}ms`).join(', ');
+      appendFileSync(file, `driver ${number}: ${line}, load ${loadavg()[0]!.toFixed(1)}\n`);
+    },
+    closed(number: number) {
+      const file = process.env.SEMANTIC_DRIVER_TIMINGS;
+      if (file) appendFileSync(file, `driver ${number}: closed in ${Math.round(performance.now() - last)}ms\n`);
+    },
+  };
+}
+
+/** A caller can abandon a pending call (a hook that timed out), so the next call first lets that setup finish,
+ * then closes it. Otherwise its host and database outlive the caller and the next setup collides with them. */
+export function createSemanticDriver(): Promise<SemanticDriver> {
+  const earlier = [...tracked];
+  const entry: Tracked = { settled: Promise.resolve(), close: async () => {} };
+  const starting = (async () => {
+    await Promise.all(earlier.map((previous) => previous.settled));
+    for (const previous of earlier) {
+      await previous.close();
+      tracked.delete(previous);
+    }
+    return startDriver(entry);
+  })();
+  entry.settled = starting.then(
+    () => {},
+    () => {},
+  );
+  tracked.add(entry);
+  return starting;
+}
+
+async function startDriver(entry: Tracked): Promise<SemanticDriver> {
+  const timer = phaseTimer();
+  const number = ++started;
   const source = new URL(required(process.env.DATABASE_URL, 'DATABASE_URL must name the migrated test database'));
   const template = decodeURIComponent(source.pathname.slice(1));
   if (!/^[A-Za-z0-9_]+$/.test(template)) throw new Error('Unsafe template database name');
 
   const suffix = randomUUID().replaceAll('-', '');
   const kernelName = `semantic_${suffix}`;
-  const authName = `semantic_auth_${suffix}`;
   const owner = new Pool({ connectionString: databaseUrl(source, 'postgres'), max: 1 });
   const owned: string[] = [];
   let pool: Pool | undefined;
-  let authPool: Pool | undefined;
-  let authServer: ReturnType<typeof Bun.serve> | undefined;
-  let host: AuthHost | undefined;
+  let release: (() => void) | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
   let closed = false;
 
   const close = async () => {
     if (closed) return;
     closed = true;
+    timer.mark('rest');
     try {
+      release?.();
       await relays?.stop().catch(() => {});
-      await host?.stop().catch(() => {});
-      await authServer?.stop(true).catch(() => {});
-      await authPool?.end().catch(() => {});
       await pool?.end().catch(() => {});
       for (const name of owned.reverse()) {
         await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
       }
     } finally {
       await owner.end().catch(() => {});
+      timer.closed(number);
+    }
+  };
+  entry.close = async () => {
+    try {
+      await close();
+    } finally {
+      tracked.delete(entry);
     }
   };
 
   try {
     await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     owned.push(kernelName);
-    await owner.query(`CREATE DATABASE "${authName}"`);
-    owned.push(authName);
-
     const kernelUrl = databaseUrl(source, kernelName);
-    const authUrl = databaseUrl(source, authName);
-    migrateAuth(authUrl, authMigrations);
     pool = createPool(kernelUrl);
-    authPool = new Pool({ connectionString: authUrl, max: 10 });
-    authPool.on('error', () => {});
-    authPool.on('connect', (client) => client.on('error', () => {}));
+    timer.mark('kernel database');
+
+    const auth = await sharedAuth(source);
+    const { issuer, audience, service, host, database: authPool } = auth;
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
-    const signingKey = {
-      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-      kid: `semantic-${suffix}`,
-      alg: 'ES256',
-    };
-    let service!: AuthService;
-    authServer = Bun.serve({
-      hostname: '127.0.0.1',
-      port: 0,
-      fetch: (request) => service.handler(request),
-    });
-    const issuer = `http://127.0.0.1:${authServer.port}`;
-    const audience = 'https://semantic.api.rezics.test';
     let access!: ReturnType<typeof createAccess>;
     const app = createKernel({
       pool,
@@ -145,26 +180,16 @@ export async function createSemanticDriver(): Promise<SemanticDriver> {
       routeKey,
       referenceKeys: sessionKeys,
     });
-    host = await createAuthHost({
-      database: authPool,
-      systemDatabasePool: authPool,
-      issuer,
-      audience,
-      secret: 'semantic-outcome-auth-secret-with-at-least-32-bytes',
-      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
+    release = auth.bind({
       trustedAccess: createAuthBindings({
         pool,
         ...registration,
         verifyPendingIdentity: registration.verifyNativePendingIdentity,
       }),
       access: registrationPorts,
-      stagingKey: randomBytes(32),
-      maintenanceSchedule: '0 0 1 1 *',
-      executorId: `semantic-${suffix}`,
     });
-    service = host.service;
-    await service.internal.registerClient({ clientId, firstParty: true, scopes });
-    await host.start();
+    await auth.registerClient(clientId, scopes);
+    timer.mark('auth side');
 
     async function issue(email: string): Promise<string> {
       const signed = await service.handler(
@@ -192,7 +217,7 @@ export async function createSemanticDriver(): Promise<SemanticDriver> {
 
     async function person(name: string): Promise<Account> {
       const email = `${name}-${suffix}@semantic.test`;
-      const result = await host!.workflows.register({
+      const result = await host.workflows.register({
         key: `${name}-${suffix}`,
         handle: `${name}_${suffix}`,
         email,
@@ -201,13 +226,10 @@ export async function createSemanticDriver(): Promise<SemanticDriver> {
       return { accountId: result.accountId, bearer: await issue(email) };
     }
 
-    const governor = await person('governor');
-    const accounts = {
-      editor: await person('editor'),
-      acceptor: await person('acceptor'),
-      steward: await person('steward'),
-      suspended: await person('suspended'),
-    } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
+    const [governor, editor, acceptor, steward, suspended] = await Promise.all(
+      ['governor', 'editor', 'acceptor', 'steward', 'suspended'].map(person),
+    );
+    const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
 
     await setupSemantic(pool, bundledRelease);
     await setupPresentation(pool);
@@ -353,8 +375,10 @@ export async function createSemanticDriver(): Promise<SemanticDriver> {
           }));
         },
       },
-      close,
+      close: () => entry.close(),
     };
+    timer.mark('rest');
+    timer.report(number);
     return driver;
   } catch (error) {
     await close();
