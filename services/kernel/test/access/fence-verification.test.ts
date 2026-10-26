@@ -181,15 +181,11 @@ beforeAll(async () => {
 }, timeout);
 
 beforeEach(async () => {
-  for (const table of [
-    'resource_grant',
-    'resource_denial',
-    'principal_assignment',
-    'organization_member',
-    'membership_inverse',
-    'account',
-  ])
-    await pool.query(`DELETE FROM access.${table}`);
+  // Reset this isolated fixture without pretending inverse cleanup has a
+  // terminal compensation proof. Production DELETE remains guarded.
+  await pool.query(`TRUNCATE access.resource_grant, access.resource_denial,
+    access.principal_assignment, access.organization_member, access.membership_inverse,
+    access.account CASCADE`);
   for (const id of [person, principal, organization]) await account(id);
   await assignments.create({ principalId: principal, requestId, assignedActorId: person, valid: '(,)' });
   await grant(person);
@@ -311,7 +307,12 @@ test('fenced or missing organization cannot supply a role grant while actor and 
   expect(await run(access, jwt)).toBe(true);
   const receipt = await fence(organization);
   expect(await run(access, jwt)).toBe(false);
-  await restore(receipt.value);
+  // Human credential recovery cannot clear an organization's fence. Restore
+  // the seeded organization directly to isolate its contribution to the ACL.
+  await pool.query('UPDATE access.account SET authn_fenced=false WHERE route=$1 AND account_id=$2', [
+    routeOf(organization),
+    organization,
+  ]);
   expect(await run(access, jwt)).toBe(true);
   await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [
     routeOf(organization),
