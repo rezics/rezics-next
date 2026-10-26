@@ -138,6 +138,16 @@ export function catalogStatementBound(capture: Capture): CatalogClassification {
   return classifyCatalogStatements(capture);
 }
 
+/** The capture without the statements in `catalogTexts` and the plan documents that explain only those statements. */
+export function withoutCatalogTexts(capture: Capture, catalogTexts: ReadonlySet<string>): Capture {
+  return {
+    statements: capture.statements.filter((statement) => !catalogTexts.has(statement)),
+    plans: capture.plans.filter((document) =>
+      documentEntries(document).some(({ queryText }) => queryText === undefined || !catalogTexts.has(queryText)),
+    ),
+  };
+}
+
 function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableRelationCost>): NodeTotals {
   const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
   const actualRows = requiredNumber(node, 'Actual Rows');

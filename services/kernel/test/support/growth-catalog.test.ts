@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthCheck, type GrowthDatabase } from './growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  withoutCatalogStatements,
+  type GrowthCheck,
+  type GrowthDatabase,
+} from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -91,4 +98,35 @@ test('a catalog read per row fails the check', async () => {
     name: 'GrowthBoundError',
     message: expect.stringContaining('catalog count'),
   });
+}, 60_000);
+
+test('a capture outside checkGrowth is held to the same catalog bound', async () => {
+  const database = db!;
+  await reset(database);
+  await seed(database, 1, 0);
+  const columns = `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`;
+
+  const bounded = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      await client.query(`SELECT payload FROM ${table} WHERE id = $1`, [1]);
+      await client.query(columns, [schema, 'records']);
+    }),
+  );
+  expect(bounded.capture.statements).toHaveLength(2);
+  const kept = withoutCatalogStatements('catalog capture', bounded.capture);
+  expect(kept.statements).toEqual([`SELECT payload FROM ${table} WHERE id = $1`]);
+  expect(kept.plans).toHaveLength(1);
+
+  const perRow = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      const result = await client.query<{ id: number }>(`SELECT id FROM ${table} WHERE id <= $1`, [3]);
+      for (const _row of result.rows) await client.query(columns, [schema, 'records']);
+    }),
+  );
+  expect(() => withoutCatalogStatements('catalog capture', perRow.capture)).toThrow(
+    expect.objectContaining({
+      name: 'GrowthBoundError',
+      message: expect.stringMatching(/catalog capture: catalog count \(\d+\) exceeds allowed count 1;/),
+    }),
+  );
 }, 60_000);

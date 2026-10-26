@@ -20,7 +20,7 @@ import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
-import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, withoutCatalogStatements, type GrowthDatabase } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
@@ -48,34 +48,6 @@ type SavedMeasurement = { scale: number; index: number; statements: string[]; bu
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 type ConnectCallback = (error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => void;
 type ConnectPrototype = { connect: (...args: unknown[]) => unknown };
-
-const reyloFreshnessQueryPrefix =
-  'SELECT r.name AS fresh_table, a.attname::text AS fresh_column, pg_catalog.format_type(a.atttypid, a.atttypmod) AS fresh_type, ' +
-  "(a.attnotnull OR (t.typtype = 'd' AND t.typnotnull))::text AS fresh_not_null, " +
-  "(a.atthasdef OR a.attidentity <> '' OR (t.typtype = 'd' AND t.typdefault IS NOT NULL))::text AS fresh_default " +
-  'FROM pg_catalog.unnest(ARRAY[';
-const reyloFreshnessQuerySuffix =
-  ']::text[]) AS r(name) JOIN pg_catalog.pg_attribute a ON a.attrelid = pg_catalog.to_regclass(r.name) ' +
-  'AND a.attnum > 0 AND NOT a.attisdropped JOIN pg_catalog.pg_type t ON t.oid = a.atttypid ORDER BY 1, 2';
-
-/** The exact catalog query Reylo runs for generated statement freshness, with only its relation list variable. */
-function isReyloFreshnessQuery(text: string): boolean {
-  if (!text.startsWith(reyloFreshnessQueryPrefix) || !text.endsWith(reyloFreshnessQuerySuffix)) return false;
-  const relations = text.slice(reyloFreshnessQueryPrefix.length, -reyloFreshnessQuerySuffix.length);
-  return /^'"(?:[^\"]|"")*"\."(?:[^\"]|"")*"'(?:, '"(?:[^\"]|"")*"\."(?:[^\"]|"")*"')*$/.test(relations);
-}
-
-function isReyloFreshnessPlan(document: unknown): boolean {
-  const entries = Array.isArray(document) ? document : [document];
-  return (
-    entries.length > 0 &&
-    entries.every((entry) => {
-      if (typeof entry !== 'object' || entry === null) return false;
-      const query = (entry as Record<string, unknown>)['Query Text'];
-      return typeof query === 'string' && isReyloFreshnessQuery(query);
-    })
-  );
-}
 
 function queryText(query: unknown): string | undefined {
   if (typeof query === 'string') return query;
@@ -1201,17 +1173,15 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
         const result = await capture(db!, operation).finally(() => {
           activeInternalCapture = undefined;
         });
-        const raw = {
-          statements: [...result.capture.statements, ...internal.statements].filter(
-            (statement) => !isReyloFreshnessQuery(statement),
-          ),
-          plans: [...result.capture.plans, ...internal.plans].filter((plan) => !isReyloFreshnessPlan(plan)),
-        };
+        const raw = withoutCatalogStatements('library outcome', {
+          statements: [...result.capture.statements, ...internal.statements],
+          plans: [...result.capture.plans, ...internal.plans],
+        });
         const cost = costOf(raw);
         const saved = {
           scale: measurementScale,
           index: measurementIndex++,
-          statements: raw.statements,
+          statements: [...raw.statements],
           buffers: cost.blocks,
         };
         savedMeasurements.push(saved);
