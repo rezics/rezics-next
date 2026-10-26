@@ -3,7 +3,12 @@ import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  type CommandAttempt,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAuthorization,
@@ -114,6 +119,17 @@ export type AuthenticationBarrierCommand = LifecycleCommand & {
   /** The operator opening of the session that reduces an automated account's consent. */
   openingReceiptId?: string;
 };
+/** Whether the human of an operator opening still manages the operator: decided with the shared permission
+ * evaluator on the opening's recorded principal, before the account lock at the attempt's T, then checked
+ * again under the lock. The barrier holds no formula of its own.
+ */
+export type OpeningManagement = {
+  prepare(
+    attempt: CommandAttempt,
+    opening: { operatorAccountId: string; subjectAccountId: string; action: string; principal: AccountActor },
+  ): Promise<object>;
+  authorize(tx: AccessClient, attempt: CommandAttempt, proof: object): Promise<void>;
+};
 export type HandleTransition = LifecycleCommand & {
   handle: string;
   reservationId: string;
@@ -213,6 +229,7 @@ export type LifecycleFenceReceipt = {
   kind: string;
   priorOperatorAccountId: string | null;
 };
+type PreparedOpening = { row: NonNullable<Awaited<ReturnType<typeof openingRead.run>>>; proof: object };
 type TransactionAccount = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
 async function locked(tx: AccessClient, accountId: string): Promise<TransactionAccount> {
   const account = await accountRead.run(tx, { route: accountRoute(accountId), account_id: accountId });
@@ -1048,7 +1065,11 @@ export function createLifecycleInternals(
      * attempt, including receipt replay; floor comparison holds the account lock.
      * A later floor can never authorize an earlier operation's receipt.
      */
-    async advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>) {
+    async advanceAuthenticationFloor(
+      value: AuthenticationBarrierCommand,
+      verifyAtAttempt: () => Promise<boolean>,
+      management?: OpeningManagement,
+    ) {
       const input = { ...value };
       const route = accountRoute(input.accountId);
       requireAllowed(
@@ -1062,6 +1083,32 @@ export function createLifecycleInternals(
             (input.purpose === 'consent-reduction' && routeOf(input.openingReceiptId) !== null)) &&
           typeof verifyAtAttempt === 'function',
       );
+      const openingRow = (client: AccessClient) =>
+        openingRead.run(client, {
+          route,
+          subject_id: input.accountId,
+          receipt_id: input.openingReceiptId!,
+          previous_floor: String(input.expectedMinimumAuthnEpoch),
+        });
+      async function readOpening(attempt: CommandAttempt): Promise<PreparedOpening> {
+        requireAllowed(management);
+        const row = await openingRow(pool);
+        requireAllowed(row && row.scopes.every((scope): scope is string => scope !== null));
+        const proof = await management.prepare(attempt, {
+          operatorAccountId: row.operatorId,
+          subjectAccountId: input.accountId,
+          action: row.action,
+          principal: Object.freeze({
+            kind: 'account',
+            accountId: row.humanId,
+            clientId: row.clientId,
+            scopes: Object.freeze([...row.scopes]),
+            requestedBy: row.requestedBy,
+            authnEpoch: Number(row.humanEpoch),
+          }),
+        });
+        return { row, proof };
+      }
       return execute(
         {
           route,
@@ -1072,13 +1119,23 @@ export function createLifecycleInternals(
           authorization: {
             action: 'authentication-floor-advance',
             resource: { route, id: input.accountId },
-            prepare: () => verifyAtAttempt(),
-            async authorize(tx, attempt, verified) {
+            async prepare(attempt) {
+              const verified = await verifyAtAttempt();
+              // The management decision precedes the account lock. An exact replay of a committed
+              // advance never needs it, so a refusal here is only held until the lock shows the floor.
+              const opening =
+                input.openingReceiptId === undefined ? undefined : await readOpening(attempt).catch(() => undefined);
+              return { verified, opening };
+            },
+            async authorize(tx, attempt, prepared: { verified: boolean; opening?: PreparedOpening }) {
               requireAllowed(
-                verified === true &&
+                prepared.verified === true &&
                   Date.parse(input.proofExpiresAt) > Date.parse(authoritativeTimeValue(attempt.time)),
               );
-              const account = await locked(tx, input.accountId);
+              const { opening } = prepared;
+              // Route then id order, the operator's account included, as every lock of the pair.
+              const accounts = await lockAccounts(tx, [input.accountId, ...(opening ? [opening.row.operatorId] : [])]);
+              const account = accounts.get(input.accountId)!;
               // Only a consent reduction reaches an automated account, and only through its opening.
               const automated = account.operatorAccountId !== null;
               requireAllowed(
@@ -1093,18 +1150,16 @@ export function createLifecycleInternals(
                   floor === BigInt(input.expectedMinimumAuthnEpoch + 1),
               );
               if (floor !== BigInt(input.expectedMinimumAuthnEpoch)) return 'receipt-only';
-              if (automated)
+              if (automated) {
+                requireAllowed(management && opening);
+                const current = await openingRow(tx);
                 requireAllowed(
-                  await openingRead.run(tx, {
-                    route: accountRoute(account.operatorAccountId!),
-                    operator_id: account.operatorAccountId!,
-                    receipt_id: input.openingReceiptId!,
-                    subject_id: input.accountId,
-                    reservation_id: account.operatorReservationId!,
-                    previous_floor: String(input.expectedMinimumAuthnEpoch),
-                    at: authoritativeTimeValue(attempt.time),
-                  }),
+                  current &&
+                    account.operatorAccountId === current.operatorId &&
+                    JSON.stringify(current) === JSON.stringify(opening.row),
                 );
+                await management.authorize(tx, attempt, opening.proof);
+              }
               return 'execute';
             },
             denied: () => new LifecycleDeniedError(),

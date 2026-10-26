@@ -14,6 +14,7 @@ import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
+import { openingManagement } from './operator.ts';
 
 type Lifecycle = Pick<
   ReturnType<typeof createLifecycleInternals>,
@@ -110,6 +111,8 @@ export function createAuthBarrierCapabilities({
           current.expiresAt === bound.expiresAt
         );
       },
+      // The operator commands built on this Access decide whether the opening's human still manages the operator.
+      openingReceiptId === undefined || !access ? undefined : openingManagement(access),
     );
     // Read committed native identity and state, never synthesize a receipt from
     // expected numbers. Supersession after COMMIT denies this Auth effect.

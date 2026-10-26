@@ -8,6 +8,7 @@ import { unseal } from '../../src/tokens/seal.ts';
 // The focused acceptance command also runs from the repository root.
 await import('reylo/register');
 const { readAccount } = await import('../../src/access/account-data.ts');
+const { openingManagement } = await import('../../src/access/operator.ts');
 const { createKernel } = await import('../../src/http/kernel.ts');
 const { cookies, nativeFixture, password, scopes } = await import('./native-account-bindings-fixture.ts');
 
@@ -163,6 +164,7 @@ function advance(input: {
       ...(input.openingReceiptId === undefined ? {} : { openingReceiptId: input.openingReceiptId }),
     },
     async () => true,
+    openingManagement(f.access),
   );
 }
 
@@ -298,6 +300,79 @@ test("the reduction is refused once the acting human's own floor advanced after 
   expect((await state(manager.accountId)).floor).toBe(human.floor + 1n);
   expect((await reduce(headers)).status).toBeGreaterThanOrEqual(400);
   expect(await state(subject)).toEqual(before);
+});
+
+test("the reduction is refused once the acting human's consent no longer covers the managing scope", async () => {
+  const manager = await person('scope');
+  await membership(manager, 'owner');
+  const subject = await automated();
+  const { headers } = await open(manager, subject);
+  const before = await state(subject);
+
+  // The opening recorded the client's scopes; the human's consent for the client now excludes account:manage.
+  expect((await reduce(manager.headers, ['read'])).status).toBe(200);
+  expect((await reduce(headers)).status).toBeGreaterThanOrEqual(400);
+  expect(await state(subject)).toEqual(before);
+});
+
+const operator = (set: string) =>
+  pool.query(`UPDATE access.account SET ${set} WHERE route=$1 AND account_id=$2`, [
+    routeOf(organizationId),
+    organizationId,
+  ]);
+const denial = (insert: boolean) =>
+  insert
+    ? pool.query(
+        `INSERT INTO access.resource_denial (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+         VALUES ($1,$2,$3,'','account:manage','resource','(,)',$2)`,
+        [routeOf(organizationId), organizationId, owner.accountId],
+      )
+    : pool.query('DELETE FROM access.resource_denial WHERE route=$1 AND resource_id=$2', [
+        routeOf(organizationId),
+        organizationId,
+      ]);
+
+// Operands the barrier no longer reads itself: each comes from the shared evaluator or the operator's own state.
+for (const [name, apply, undo] of [
+  ['a denial of account:manage on the operator', () => denial(true), () => denial(false)],
+  ['a gated operator', () => operator('authn_fenced=true'), () => operator('authn_fenced=false')],
+  ['a suspended operator', () => operator("state='suspended'"), () => operator("state='active'")],
+] as const)
+  test(`${name} refuses the reduction with nothing advanced, and lifting it restores the reduction`, async () => {
+    const subject = await automated();
+    const { headers } = await open(owner, subject);
+    const before = await state(subject);
+
+    await apply();
+    try {
+      expect((await reduce(headers)).status).toBeGreaterThanOrEqual(400);
+      expect(await state(subject)).toEqual(before);
+    } finally {
+      await undo();
+    }
+    expect((await reduce(headers)).status).toBe(200);
+    expect(await state(subject)).toEqual({
+      floor: before.floor + 1n,
+      receipts: before.receipts + 1,
+      scopes: sessionScope,
+    });
+  });
+
+test('no SQL on the barrier path reads resource grants, denials, memberships or roles itself', async () => {
+  const directory = new URL('../../src/access/', import.meta.url);
+  for (const name of [
+    'auth-barriers-opening-read.sql',
+    'auth-barriers-advance.sql',
+    'auth-barriers-credential-read.sql',
+    'auth-barriers-credential-advance.sql',
+  ]) {
+    const text = (await Bun.file(new URL(name, directory)).text()).replace(/^--.*$/gm, '');
+    expect(text).not.toMatch(/resource_grant|resource_denial|resource_role|organization_member|account:manage/);
+  }
+  // The decision comes from the opening's own evidence and final check, never a copy of them.
+  const lifecycle = await Bun.file(new URL('lifecycle.ts', directory)).text();
+  expect(lifecycle).not.toMatch(/organization_member|resource_grant|resource_denial/);
+  expect(openingManagement(f.access)).toBeDefined();
 });
 
 test('Access accepts only the opening that created the reducing session', async () => {

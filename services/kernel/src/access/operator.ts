@@ -23,13 +23,16 @@ import {
   accessCheck,
   type Access,
   type AccessClient,
+  type AccessContext,
   type AccountActor,
   type ActionCatalogue,
 } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
-import type { Account } from './account-data.ts';
+import { readAccount, type Account } from './account-data.ts';
 import { actingCommandAccount, commandAccessContext } from './command-admission.ts';
-import type { LifecycleRequest } from './lifecycle.ts';
+import type { LifecycleRequest, OpeningManagement } from './lifecycle.ts';
+import { createAccess as createPermissionAccess } from './permission.ts';
+import { resourceRoleCatalogue } from './resource-roles.ts';
 import accountRead from './operator-account.sql';
 import reservationRead from './operator-reservation.sql';
 import reserve from './operator-reserve.sql';
@@ -70,6 +73,10 @@ function route(id: string): number {
 function version(value: string) {
   requireAllowed(typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value));
 }
+function roleDigest(catalogue: NonNullable<ReturnType<typeof resourceRoleCatalogue>>) {
+  const byKey = (left: [string, unknown], right: [string, unknown]) => (left[0] < right[0] ? -1 : 1);
+  return canonicalize([[...catalogue.roles].sort(byKey), [...catalogue.types].sort(byKey)]);
+}
 function eligible(account: AccountRow | null): account is AccountRow {
   return !!account && account.state === 'active' && !account.fenced && account.operatorAccountId === null;
 }
@@ -87,6 +94,16 @@ function human(account: Account | null | undefined, actor: AccountActor): accoun
   );
 }
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
+/** Who decides that the human is still current and whether that human manages the operator. */
+type Evaluation = {
+  access: Access;
+  admit(actor: AccountActor, context: AccessContext): Promise<Account | null>;
+};
+const managements = new WeakMap<Access, OpeningManagement>();
+/** The management decision installed with the operator commands built on this Access, if any. */
+export function openingManagement(access: Access): OpeningManagement | undefined {
+  return managements.get(access);
+}
 export type OperatorPurpose = 'session' | 'credential-management';
 export type OperatorResponsibility = { operatorAccountId: string; subjectAccountId: string; reservationId: string };
 export type OperatorRelation = OperatorResponsibility & { version: string };
@@ -216,6 +233,10 @@ export function createOperatorCommands(config: OperatorConfig) {
   const clock = accessClock(access);
   const execute = executor(pool, clock);
   const read = (id: string) => withConnection(pool, (client) => account(client, id));
+  const authenticated: Evaluation = {
+    access,
+    admit: (actor, context) => actingCommandAccount(access, actor, context),
+  };
   async function reservation(input: OperatorResponsibility) {
     return withConnection(pool, (client) =>
       reservationRead.run(client, {
@@ -229,6 +250,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     context: LifecycleRequest,
     input: { operatorAccountId: string; subjectAccountId: string; purpose: OperatorPurpose },
     attempt: CommandAttempt,
+    evaluation: Evaluation = authenticated,
   ) {
     requireAllowed(input.purpose === 'session' || input.purpose === 'credential-management');
     const deadline = Math.min(context.deadline, Date.now() + EVIDENCE_TTL_MS);
@@ -237,7 +259,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       // supplied request evidence is required; consumption additionally refreshes
       // the human so a durable receipt never preserves a stale login observation.
       const preparation = commandAccessContext({ ...context, pool }, attempt);
-      const actualHuman = await actingCommandAccount(access, context.actor, preparation);
+      const actualHuman = await evaluation.admit(context.actor, preparation);
       requireAllowed(human(actualHuman, context.actor));
       const operator = await read(input.operatorAccountId);
       requireAllowed(eligible(operator));
@@ -267,7 +289,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       }
       const permissionContext = Object.assign(preparation, { account: actualHuman });
       const allowed = await accessCheck(
-        access,
+        evaluation.access,
         context.actor,
         managementAction,
         { route: route(input.operatorAccountId), id: input.operatorAccountId },
@@ -308,6 +330,57 @@ export function createOperatorCommands(config: OperatorConfig) {
     requireAllowed(human(facts.actualHuman, context.actor) && (await facts.allowed(tx)));
     live(facts.deadline);
   }
+  // A bearer is not at hand when an opened session reduces its own consent. The opening recorded its principal,
+  // so the same evidence and the same final check run with the shared permission evaluator over the mounted
+  // action catalogue and that principal's account row. Realm group roles have no reader here and deny.
+  let restored: Evaluation | undefined;
+  function restoredEvaluation(): Evaluation {
+    if (restored) return restored;
+    const native = createPermissionAccess({
+      actions: new Map([...config.actions, ['gate:any', { anonymous: false }]]),
+      accountEvidence: (_actor, context) => context.account,
+      clock,
+    });
+    // A role catalogue that differs from the mounted one would decide differently, so it decides nothing.
+    const mounted = resourceRoleCatalogue(access);
+    const own = resourceRoleCatalogue(native);
+    requireAllowed(!mounted || (own && roleDigest(mounted) === roleDigest(own)));
+    return (restored = {
+      access: native,
+      admit: (actor) => readAccount(pool, route(actor.accountId), actor.accountId),
+    });
+  }
+  const proofs = new WeakMap<
+    object,
+    {
+      attempt: CommandAttempt;
+      context: LifecycleRequest;
+      input: { operatorAccountId: string; subjectAccountId: string };
+      facts: OpeningEvidence;
+    }
+  >();
+  const management: OpeningManagement = {
+    async prepare(attempt, opening) {
+      requireAllowed(opening.action === managementAction);
+      const context = { actor: opening.principal, deadline: Date.now() + EVIDENCE_TTL_MS };
+      const input = {
+        operatorAccountId: opening.operatorAccountId,
+        subjectAccountId: opening.subjectAccountId,
+        purpose: 'session' as const,
+      };
+      const facts = await openingEvidence(context, input, attempt, restoredEvaluation());
+      const proof = Object.freeze({});
+      proofs.set(proof, { attempt, context, input, facts });
+      return proof;
+    },
+    async authorize(tx, attempt, proof) {
+      const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (typeof proof === 'object' && proof !== null) proofs.delete(proof);
+      requireAllowed(prepared && prepared.attempt === attempt);
+      await finalOpening(tx, prepared.context, prepared.input, prepared.facts);
+    },
+  };
+  managements.set(access, management);
   return {
     /** Committed mechanical work only. Lock relation and slot with the account,
      * then use the native fence mutation in that same subject transaction. */

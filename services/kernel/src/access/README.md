@@ -132,12 +132,27 @@ widens it.
 Auth also lets an operator-opened session of an automated account reduce that account's consent for a client through the same barrier and receipt.
 Only `consent-reduction` advances an automated account's floor; `recovery` still requires an account without an operator.
 Auth sends `openingReceiptId` exactly for such a reduction and binds it into the consent proof, so Access accepts only the
-opening Auth committed for that session. Before advancing, the account lock reads that opening once, anchored on the
-operator: it must be consumed, of purpose `session`, for this subject, operator and reservation, and recorded at the
-subject's previous floor. Its acting human must be active, have no operator, still hold the floor recorded at the opening
-(`human_epoch_floor`), and manage the operator at authoritative T: the operator is the human, or the human is a current
-member holding a live `account:manage` grant on the organization. An exact replay of a committed floor advance returns
-its receipt without this read.
+opening Auth committed for that session. The anchored read of that opening (`auth-barriers-opening-read.sql`) checks
+the receipt and floors only: it must be consumed, of purpose `session`, for this subject, operator and reservation, and
+recorded at the subject's previous floor; the acting human must be active, have no operator and still hold the floor
+recorded at the opening (`human_epoch_floor`); the operator must be active and unfenced. It returns the principal the
+opening recorded (acting human, `client_id`, `scopes`, `requested_by`, human epoch) and reads no membership, grant,
+denial or role.
+
+Whether that human still manages the operator is the shared permission evaluator's decision, the one the opening itself
+makes. Before the account lock the barrier reads the opening once, restores the recorded principal and runs the
+opening's evidence at the attempt's T (`OpeningManagement` in `lifecycle.ts`, built by `createOperatorCommands` and found
+with `openingManagement(access)`): the human's current account, the operator and subject, the membership read the opening
+uses, and `account:manage` on the operator through the evaluator over the mounted action catalogue. Every operand of the
+formula therefore applies: the recorded client scopes, grants by identity, role or all active accounts, resource roles,
+denials, the delegating principal, suspension and governance reach. The evaluator for a restored principal is built
+with the mounted catalogue and refuses to decide when its resource roles differ from the Access's own; it has no Realm
+role reader, so a Realm-group grant denies. Under the lock the same anchored read runs again and the opening's final check
+verifies the evidence, locking the subject and the operator in route-then-id order. A missing management decision or any
+refusal advances nothing. An exact replay of a committed floor advance returns its receipt without this decision.
+
+Cost: the decision is the opening's own evidence, one human, operator, subject and membership point read plus the
+evaluator's anchored reads, O(log R) with R = N + U*t + M, and one locked account read for the operator.
 
 Consent preserves `authn_fenced`: an unfenced human can sign in again at the new floor, while an existing fence
 stays raised. Recovery retains its fence even when Auth credential/session work fails. Only existing `clearFence`
