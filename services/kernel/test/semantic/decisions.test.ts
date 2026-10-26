@@ -5,7 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -14,9 +14,6 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
-});
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -31,54 +28,39 @@ const ACTIONS = [
   'context:adopt',
   'context:read',
 ];
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
+  acceptor: '019a1b2c-3d4e-7f00-8a00-acce97000002',
+  outsider: '019a1b2c-3d4e-7f00-8a00-0075de000003',
+};
+const originalWriteRateOverrides = process.env.KERNEL_WRITE_RATE_OVERRIDES;
+process.env.KERNEL_WRITE_RATE_OVERRIDES = '{"new-account":{"write":{"maximum":1000,"seconds":60}}}';
+const realAccess = await createRealAccess(admin, accounts, ACTIONS);
+if (originalWriteRateOverrides === undefined) delete process.env.KERNEL_WRITE_RATE_OVERRIDES;
+else process.env.KERNEL_WRITE_RATE_OVERRIDES = originalWriteRateOverrides;
+beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
-const actors: Record<string, AccountActor> = {
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000001'),
-  acceptor: account('019a1b2c-3d4e-7f00-8a00-acce97000002'),
-  outsider: account('019a1b2c-3d4e-7f00-8a00-0075de000003'),
-};
-const grants = new Set<string>();
-const grant = (who: string, action: string, resource: string) =>
-  grants.add(`${actors[who]!.accountId} ${action} ${resource}`);
-grant('editor', 'subject:create', GLOBAL_CONTEXT);
-grant('editor', 'statement:propose', GLOBAL_CONTEXT);
-grant('acceptor', 'context:accept', GLOBAL_CONTEXT);
-grant('acceptor', 'context:adopt', GLOBAL_CONTEXT);
-const checks: { action: string; route: number; id: string }[] = [];
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    if (action === 'subject:read' || action === 'context:read') return true;
-    checks.push({ action, route: resource.route, id: resource.id });
-    return actor.kind === 'account' && grants.has(`${actor.accountId} ${action} ${resource.id}`);
-  },
-};
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const credential = Object.hasOwn(accounts, options.token)
+      ? realAccess.bearer(options.token as keyof typeof accounts)
+      : options.token;
+    headers.authorization = `Bearer ${credential}`;
+  }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
@@ -169,7 +151,11 @@ async function community(near: string, granted = true): Promise<string> {
     id,
     { en: 'Literature readers' },
   ]);
-  if (granted) for (const action of ['context:accept', 'context:adopt']) grant('acceptor', action, id);
+  if (granted) {
+    const route = routeOf(id);
+    if (route === null) throw new Error('Community Context id must carry its route');
+    for (const action of ['context:accept', 'context:adopt']) await realAccess.grant({ route, id }, 'acceptor', action);
+  }
   return id;
 }
 
@@ -190,7 +176,11 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
     acceptance: { context: GLOBAL_CONTEXT, candidate, decision: 'accept', head: 1 },
     revision: 3,
   });
-  expect(checks.at(-1)).toEqual({ action: 'context:accept', route: 0, id: GLOBAL_CONTEXT });
+  expect(realAccess.checks.at(-1)).toEqual({
+    persona: 'acceptor',
+    action: 'context:accept',
+    resource: { route: 0, id: GLOBAL_CONTEXT },
+  });
   expect((await decide(book.id, candidate, 'accept', GLOBAL_CONTEXT, null, { key: token })).body).toEqual(
     accepted.body,
   );
@@ -208,7 +198,11 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
     adoption: { context: GLOBAL_CONTEXT, property: 'schema:author', mode: 'replace', selection, head: 2 },
     revision: 4,
   });
-  expect(checks.at(-1)).toEqual({ action: 'context:adopt', route: 0, id: GLOBAL_CONTEXT });
+  expect(realAccess.checks.at(-1)).toEqual({
+    persona: 'acceptor',
+    action: 'context:adopt',
+    resource: { route: 0, id: GLOBAL_CONTEXT },
+  });
   const shown = await view(book.id);
   expect(shown.subject.revision).toBe(4);
   expect(shown.subject.statements['schema:author'].map((s: any) => [s.id, s.rank, s.rezics.revision])).toEqual([
@@ -438,7 +432,11 @@ test('a community Context inherits, rejects, suppresses and replaces without cha
   expect(rejected.body.acceptance).toEqual({ context, candidate: original.id, decision: 'reject', head: 1 });
   const contextRoute = routeOf(context);
   if (contextRoute === null) throw new Error('Community Context id must carry its route');
-  expect(checks.at(-1)).toEqual({ action: 'context:accept', route: contextRoute, id: context });
+  expect(realAccess.checks.at(-1)).toEqual({
+    persona: 'acceptor',
+    action: 'context:accept',
+    resource: { route: contextRoute, id: context },
+  });
   expect((await listed(book.id, 'schema:author', `&context=${context}`)).candidates).toMatchObject([
     { id: original.id, decision: 'rejected', head: 1, rank: null },
   ]);

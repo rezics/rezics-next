@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { createRealAccess } from './real-access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT, StaleEditorialHeadError } from '../../src/semantic/definitions.ts';
 import { insertAcceptance, insertAdoption, slotId } from '../../src/semantic/slots.ts';
@@ -10,31 +12,23 @@ import { insertAcceptance, insertAdoption, slotId } from '../../src/semantic/slo
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
-beforeAll(() => bootstrapRelease(pool, bundledRelease));
-afterAll(() => pool.end());
+const admin = new pg.Pool({ connectionString: url, max: 2 });
+const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
+const realAccess = await createRealAccess(admin, accounts, ['subject:create', 'statement:propose', 'subject:read']);
+beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await bootstrapRelease(pool, bundledRelease);
+});
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
+});
 const kernel = createKernel({
   pool,
   routeKey: new Uint8Array(32).fill(7),
-  access: {
-    async authenticate() {
-      return {
-        kind: 'account',
-        accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
-        clientId: 'web',
-        scopes: ['subject:create', 'statement:propose', 'subject:read'],
-        requestedBy: null,
-        authnEpoch: 1,
-      };
-    },
-    async authorize() {
-      return true;
-    },
-  },
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  access: realAccess.access,
+  writeRate: realAccess.writeRate,
 });
 const property = 'schema:inLanguage';
 const statement = {
@@ -50,7 +44,7 @@ async function call(path: string, body?: unknown) {
     new Request(`http://kernel.test${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       headers: {
-        authorization: 'Bearer editor',
+        authorization: `Bearer ${realAccess.bearer('editor')}`,
         'content-type': 'application/json',
         'idempotency-key': `"${randomUUID()}"`,
       },
