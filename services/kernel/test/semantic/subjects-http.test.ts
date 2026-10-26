@@ -152,8 +152,8 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(read.response.headers.get('etag')).toBe('"1"');
   expect(read.body.subject).toEqual(created.body.subject);
   expect(read.body.related).toEqual({
-    'schema:author': { labels: { en: 'author', ja: '著者', 'zh-Hant': '作者' } },
-    'schema:url': { labels: { en: 'URL', ja: 'URL', 'zh-Hant': 'URL' } },
+    'schema:author': { labels: bundledRelease.properties['schema:author']!.labels },
+    'schema:url': { labels: bundledRelease.properties['schema:url']!.labels },
     [soseki]: { labels: { en: 'Natsume Sōseki' } },
   });
   expect(decodeSession(tokens, 'anonymous', read.response.headers.get(SESSION_HEADER)!)).toHaveLength(1);
@@ -206,5 +206,5 @@ test('the kernel contract documents both subject operations with their actions a
     'x-action': 'subject:read',
     security: [{ bearerAuth: [] }, {}],
   });
-  expect(Object.keys(read.responses!).sort()).toEqual(['200', '401', '404', '503']);
+  expect(Object.keys(read.responses!).sort()).toEqual(['200', '308', '401', '404', '503']);
 });

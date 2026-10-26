@@ -150,12 +150,12 @@ test('a work, its edition and a recipe are subjects of release types with no cod
   });
   expect(subject.statements['schema:exampleOfWork'][0].property.data_type).toBe('wikibase-item');
   expect(read.body.related).toEqual({
-    'schema:datePublished': { labels: { en: 'publication date', ja: '出版日', 'zh-Hant': '出版日期' } },
-    'schema:exampleOfWork': { labels: { en: 'edition of', ja: '原作品', 'zh-Hant': '原作品' } },
-    'schema:isbn': { labels: { en: 'ISBN-13', ja: 'ISBN-13', 'zh-Hant': 'ISBN-13' } },
-    'schema:numberOfPages': { labels: { en: 'number of pages', ja: 'ページ数', 'zh-Hant': '頁數' } },
-    'schema:publisher': { labels: { en: 'publisher', ja: '出版社', 'zh-Hant': '出版者' } },
-    'schema:url': { labels: { en: 'URL', ja: 'URL', 'zh-Hant': 'URL' } },
+    'schema:datePublished': { labels: bundledRelease.properties['schema:datePublished']!.labels },
+    'schema:exampleOfWork': { labels: bundledRelease.properties['schema:exampleOfWork']!.labels },
+    'schema:isbn': { labels: bundledRelease.properties['schema:isbn']!.labels },
+    'schema:numberOfPages': { labels: bundledRelease.properties['schema:numberOfPages']!.labels },
+    'schema:publisher': { labels: bundledRelease.properties['schema:publisher']!.labels },
+    'schema:url': { labels: bundledRelease.properties['schema:url']!.labels },
     [work]: { labels: { en: 'Kokoro', ja: 'こゝろ' } },
     [shinchosha]: { labels: { ja: '新潮社' } },
   });
@@ -207,7 +207,7 @@ test('a type, property, qualifier, rank or count the release does not allow is r
   const soseki = await created({ type: 'schema:Person', labels: { en: 'Natsume Sōseki' } });
   const work = await created({ type: 'schema:Book', labels: { en: 'Kokoro' } });
   const book = (statements: Record<string, unknown>) => ({ type: 'schema:Book', labels: { en: 'Kokoro' }, statements });
-  expect(await errors({ type: 'schema:Movie', labels: { en: 'Kokoro (1955)' } })).toEqual([
+  expect(await errors({ type: 'schema:NotInRelease', labels: { en: 'Kokoro (1955)' } })).toEqual([
     { pointer: '/type', code: 'unsupported' },
   ]);
   expect(await errors(book({ 'schema:isbn': [statement('schema:isbn', '978-4-10-101013-7')] }))).toEqual([
