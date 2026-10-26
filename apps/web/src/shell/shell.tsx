@@ -175,7 +175,11 @@ function PhoneNavigation({ pathname, session }: { pathname: string; session: Ses
         className="w-72 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-72"
       >
         <SheetHeader className="flex-row items-center justify-between border-b border-sidebar-border px-4 py-3">
-          <SheetTitle>{m.shell_navigation()}</SheetTitle>
+          <div className="flex items-center gap-2.5 px-1.5">
+            <Mark />
+            <span className="font-extrabold text-[15px] text-foreground tracking-[0.28em]">REZICS</span>
+          </div>
+          <SheetTitle className="sr-only">{m.shell_navigation()}</SheetTitle>
           <SheetClose
             render={
               <Button variant="ghost" size="icon-lg" className="rounded-full" aria-label={m.shell_close_navigation()} />
