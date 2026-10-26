@@ -30,6 +30,7 @@ let admin: Pool;
 let pool: Pool;
 let authPool: Pool;
 let consent: ConsentServer;
+const authConnectionsClosed: Promise<void>[] = [];
 let authDatabaseName = '';
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -194,12 +195,13 @@ async function createRealm(spaceId: string, visibility: 'public' | 'protected', 
   return { realmId: realm.realmId, spaceId };
 }
 
+// Counts the membership workflows only: the worker's own background refreshes enqueue workflows at any moment.
 async function footprint(): Promise<Footprint> {
   const result = await admin.query<Footprint>(`SELECT
     (SELECT count(*)::int FROM community.realm_member) AS members,
     (SELECT count(*)::int FROM community.realm_member_terminal) AS terminals,
     (SELECT count(*)::int FROM library.follow) AS follows,
-    (SELECT count(*)::int FROM dbos.workflow_status) AS workflows`);
+    (SELECT count(*)::int FROM dbos.workflow_status WHERE name LIKE 'community.%' OR name LIKE 'accounts.%') AS workflows`);
   const row = result.rows[0]!;
   return { members: row.members, terminals: row.terminals, follows: row.follows, workflows: row.workflows };
 }
@@ -236,6 +238,9 @@ beforeAll(async () => {
   authUrl.pathname = `/${authDatabaseName}`;
   migrateAuth(authUrl.href);
   authPool = new Pool({ connectionString: authUrl.href });
+  authPool.on('connect', (client) => {
+    authConnectionsClosed.push(new Promise<void>((resolve) => client.connection.stream.once('close', () => resolve())));
+  });
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'realm-join',
@@ -328,8 +333,11 @@ afterAll(async () => {
   await consent?.close();
   await work?.close();
   await host?.stop();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   if (!host) await authPool?.end();
+  // pg.Pool.end resolves before idle sockets finish closing. Let Auth disconnect
+  // before dropping its database so those sockets cannot receive a forced-close error.
+  await Promise.all(authConnectionsClosed);
+  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await pool?.end();
   await admin?.end();
 });
