@@ -30,9 +30,9 @@ test("a subject's type and properties must be in the release", () => {
   expect(check({ type: 'schema:Person', labels: { en: 'Natsume Sōseki' } })).toEqual({ violations: [], items: [] });
   expect(violations({ labels: { en: 'Kokoro' } })).toEqual([{ pointer: '/type', code: 'required' }]);
   expect(violations({ type: 7 })).toEqual([{ pointer: '/type', code: 'invalid_type' }]);
-  expect(violations({ type: 'schema:Movie', statements: { 'schema:isbn': [snak('schema:isbn', 'x')] } })).toEqual([
-    { pointer: '/type', code: 'unsupported' },
-  ]);
+  expect(
+    violations({ type: 'schema:NotInRelease', statements: { 'schema:isbn': [snak('schema:isbn', 'x')] } }),
+  ).toEqual([{ pointer: '/type', code: 'unsupported' }]);
   expect(
     violations(
       book({
@@ -180,6 +180,7 @@ test('quantity bounds compare exact decimals and dates must exist at their preci
 });
 
 test('item values are collected with their target types for the caller to check', () => {
+  const targets = (property: string) => bundledRelease.properties[property]!.targets!;
   const statements = {
     'schema:exampleOfWork': [snak('schema:exampleOfWork', KOKORO)],
     'schema:publisher': [
@@ -190,12 +191,20 @@ test('item values are collected with their target types for the caller to check'
   expect(check(edition(statements))).toEqual({
     violations: [{ pointer: '/statements/schema:translator/0/value/content', code: 'invalid_format' }],
     items: [
-      { pointer: '/statements/schema:exampleOfWork/0/value/content', id: KOKORO, targets: ['schema:Book'] },
-      { pointer: '/statements/schema:publisher/0/value/content', id: SHINCHOSHA, targets: ['schema:Organization'] },
+      {
+        pointer: '/statements/schema:exampleOfWork/0/value/content',
+        id: KOKORO,
+        targets: targets('schema:exampleOfWork'),
+      },
+      {
+        pointer: '/statements/schema:publisher/0/value/content',
+        id: SHINCHOSHA,
+        targets: targets('schema:publisher'),
+      },
       {
         pointer: '/statements/schema:publisher/0/references/0/parts/0/value/content',
         id: SHINCHOSHA,
-        targets: ['schema:Organization'],
+        targets: targets('schema:publisher'),
       },
     ],
   });
@@ -204,7 +213,7 @@ test('item values are collected with their target types for the caller to check'
     {
       pointer: '/statements/schema:author/0/value/content',
       id: SOSEKI,
-      targets: ['schema:Organization', 'schema:Person'],
+      targets: targets('schema:author'),
     },
   ]);
 });

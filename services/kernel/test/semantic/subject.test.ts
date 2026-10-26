@@ -7,8 +7,10 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { itemFacts, resolveItem as resolve, SubjectInputError } from '../../src/semantic/item.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { checkSubjectInput } from '@rezics/definitions/validate';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { DataType } from '@rezics/definitions';
+import { rejectContent } from '../../src/semantic/rules.ts';
 import {
   createSubject,
   readLabels,
@@ -141,6 +143,9 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
 test('each value is one compact fact row in its slot log, written under the command write basis', async () => {
   await seedAuthor();
   const { subject, component } = await create(book);
+  const translatorStatement = subject.statements['schema:translator']!.find(
+    (statement) => statement.value.type === 'value' && statement.value.content === soseki,
+  )!;
   const route = routeOf(subject.id)!;
   const { rows: key } = await admin.query(
     `SELECT array_agg(a.attname ORDER BY k.ordinality)::text[] AS columns
@@ -181,7 +186,25 @@ test('each value is one compact fact row in its slot log, written under the comm
     [component.partition, String(component.position)],
   );
   expect(events).toEqual([
-    { event_count: 1, type: 'com.rezics.subject.created.v1', subject: subject.id, data: { id: subject.id } },
+    { event_count: 2, type: 'com.rezics.subject.created.v1', subject: subject.id, data: { id: subject.id } },
+    {
+      event_count: 2,
+      type: 'com.rezics.semantic.links.changed.v1',
+      subject: subject.id,
+      data: {
+        subject: subject.id,
+        revision: 1,
+        security_revision: 0,
+        changes: [
+          {
+            property: 'schema:translator',
+            statement: translatorStatement.id,
+            target: soseki,
+            present: true,
+          },
+        ],
+      },
+    },
   ]);
 });
 
@@ -202,15 +225,19 @@ test('invalid input is refused before anything is written', async () => {
   const partition = partitionOf(anchorRoute(routeKey, `${actor.accountId}\nsubject.create\n${key}`));
   const before = await partitionPosition(partition);
   let checks = 0;
-  const error = await create({ type: 'bf:Instance', labels: { en: 'x' }, statements: { 'schema:author': [] } }, key, {
-    authorize: async () => {
-      checks++;
-      return true;
+  const error = await create(
+    { type: 'bf:Instance', labels: { en: 'x' }, statements: { 'schema:notInRelease': [] } },
+    key,
+    {
+      authorize: async () => {
+        checks++;
+        return true;
+      },
     },
-  }).catch((caught: unknown) => caught);
+  ).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(SubjectInputError);
   expect((error as SubjectInputError).violations).toEqual([
-    { pointer: '/statements/schema:author', code: 'unsupported' },
+    { pointer: '/statements/schema:notInRelease', code: 'unsupported' },
   ]);
   expect(checks).toBe(0);
   expect(await partitionPosition(partition)).toBe(before);
@@ -258,8 +285,10 @@ test('an unknown or malformed id reads as nothing', async () => {
   expect(await readSubject(pool, randomUUID(), allow)).toBeNull();
 });
 
-test('subject creation rejects document and media contents until content hooks are wired', () => {
+test('subject creation rejects document and media contents in statements, qualifiers and references', () => {
   for (const property of ['schema:abstract', 'schema:image']) {
+    const release = structuredClone(bundledRelease);
+    release.properties['schema:author']!.qualifiers.push(property);
     const statement = { property: { id: property }, value: { type: 'value', content: null } };
     for (const [statements, pointer] of [
       [{ [property]: [statement] }, `/statements/${property}/0/value/content`],
@@ -280,13 +309,10 @@ test('subject creation rejects document and media contents until content hooks a
         '/statements/schema:author/0/references/0/parts/0/value/content',
       ],
     ] as const) {
-      try {
-        itemFacts(soseki, { labels: { en: 'Example' }, statements });
-        throw new Error('Expected rejection before content storage');
-      } catch (error) {
-        expect(error).toBeInstanceOf(SubjectInputError);
-        expect((error as SubjectInputError).violations).toEqual([{ pointer, code: 'unsupported' }]);
-      }
+      expect(
+        checkSubjectInput({ type: 'schema:Book', labels: { en: 'Example' }, statements }, release, rejectContent)
+          .violations,
+      ).toEqual([{ pointer, code: 'unsupported' }]);
     }
   }
 });

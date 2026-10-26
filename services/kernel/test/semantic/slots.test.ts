@@ -54,13 +54,14 @@ test('expansion preserves multiple compact revisions, view order, provenance and
     for (const [index, row] of statements.entries()) {
       await client.query(
         `INSERT INTO semantic.fact
-         (route, subject_id, slot_id, log_seq, operation, kind, property, statement_id, body, recorded_transaction_id)
-         VALUES ($1, $2, $3, $4, 'assert', 'statement', $5, $6, $7, $8)`,
+         (route, subject_id, slot_id, log_seq, operation, kind, release, property, statement_id, body, recorded_transaction_id)
+         VALUES ($1, $2, $3, $4, 'assert', 'statement', $5, $6, $7, $8, $9)`,
         [
           route,
           subject,
           row.slot_id,
           row.log_seq,
+          bundledDigest,
           property,
           row.statement_id,
           JSON.stringify(row.body),
