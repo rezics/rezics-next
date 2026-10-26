@@ -14,6 +14,7 @@ import {
   createReport,
   listTargetReports,
   readReport,
+  ReportProofRequiredError,
   ReportUnavailableError,
   type ReportDependencies,
   type ReportTarget,
@@ -65,6 +66,7 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
   try {
     return await operation();
   } catch (error) {
+    if (error instanceof ReportProofRequiredError) throw new ProblemError('forbidden');
     if (error instanceof ReportUnavailableError) throw new ProblemError('not_found');
     if (error instanceof GrantDeniedError) throw new ProblemError(inspection ? 'not_found' : 'forbidden');
     if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)

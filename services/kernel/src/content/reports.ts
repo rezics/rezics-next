@@ -5,6 +5,7 @@ import { createResourceAnonymousEligibility } from '../access/eligibility.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import {
   authoritativeTimeValue,
+  CommandUnavailableError,
   normalizeCommandKey,
   principalCommandIdentity,
   runCommand,
@@ -87,6 +88,13 @@ export class ReportUnavailableError extends Error {
   }
 }
 
+export class ReportProofRequiredError extends Error {
+  constructor() {
+    super('A valid Turnstile proof is required');
+    this.name = 'ReportProofRequiredError';
+  }
+}
+
 function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new TypeError('Invalid routed identity');
@@ -118,8 +126,11 @@ async function snapshot<T>(
       const client = deadlineClient(connection, deadline);
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(route(id)));
-        if (!partition || partition.writeState === 'moved') throw new ReportUnavailableError();
+        const partitionNo = partitionOf(route(id));
+        const partition = await readPartition(client, partitionNo);
+        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
         const value = await work(client);
         await client.query('COMMIT');
         return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
@@ -263,13 +274,20 @@ export async function createReport(
     }
   }
   let observed: TargetFacts | undefined;
+  if (actor.kind === 'anonymous') {
+    // Establish the caller's current disclosure before reporting a proof error.
+    // An unreadable target remains concealed, while a readable target can tell
+    // the caller that Turnstile proof is missing or invalid.
+    observed = await discloseTarget(dependencies, target, { actor, deadline: context.deadline });
+    if (proof?.ok !== true) throw new ReportProofRequiredError();
+  }
   let validRevision = false;
   const resource = { route: route(target.id), id: target.id };
   const eligibility = createResourceAnonymousEligibility({
     resource,
     action: createAction,
     async prepare() {
-      observed = await discloseTarget(dependencies, target, { actor, deadline: context.deadline });
+      observed ??= await discloseTarget(dependencies, target, { actor, deadline: context.deadline });
       return observed;
     },
     async verify({ client, evidence }) {
