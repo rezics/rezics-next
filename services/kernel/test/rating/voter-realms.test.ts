@@ -324,17 +324,29 @@ test('membership join and promotion cost constant rows and statements as other v
   const voterId = newId(route),
     leaving = newId(route),
     waiting = newId(route);
+  const warmupVoterId = newId(route),
+    warmupLeaving = newId(route),
+    warmupWaiting = newId(route);
   const result = await checkGrowth(database, {
     name: 'voter Realm membership',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
-    warmups: 0,
     grow: async (db, scale, previous) => {
       await seed({ pool: db.pool, admin: db.admin }, population, { from: previous, to: scale });
-      await db.admin.query('DELETE FROM rating.voter_realm WHERE route = $1 AND voter_id = $2', [route, voterId]);
-      await addRow(voterId, leaving, 'adding');
-      await addRow(voterId, waiting, 'uncounted');
+      for (const [probeVoter, probeLeaving, probeWaiting] of [
+        [voterId, leaving, waiting],
+        [warmupVoterId, warmupLeaving, warmupWaiting],
+      ] as const) {
+        await db.admin.query('DELETE FROM rating.voter_realm WHERE route = $1 AND voter_id = $2', [route, probeVoter]);
+        await addRow(probeVoter, probeLeaving, 'adding');
+        await addRow(probeVoter, probeWaiting, 'uncounted');
+      }
+    },
+    warmup: async (_db, _scale, _repetition) => {
+      await effect.run(membership(warmupVoterId, warmupLeaving, null));
+      await effect.run(membership(warmupVoterId, newId(route), 'member'));
+      expect(await row(warmupVoterId, warmupWaiting)).toMatchObject({ state: 'adding' });
     },
     operation: async () => {
       await effect.run(membership(voterId, leaving, null));

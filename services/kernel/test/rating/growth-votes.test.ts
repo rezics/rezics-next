@@ -31,6 +31,26 @@ function id(ordinal: number): string {
   return `00000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}${ordinal.toString(16).padStart(8, '0')}`;
 }
 
+async function createGrowthTarget(label: string): Promise<string> {
+  const key = randomUUID();
+  const subject = await createSubject(database.pool, {
+    actor,
+    target: subjectTarget(routeKey, actorId, key),
+    idempotencyKey: key,
+    digest: createHash('sha256').update(key).digest(),
+    item: { type: 'schema:Book', labels: { en: label } },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: async () => true,
+  });
+  return subject.subject.id;
+}
+
+async function createWarmupTargets(name: string): Promise<Map<number, string>> {
+  const targets = new Map<number, string>();
+  for (const scale of [64, 512, 4096]) targets.set(scale, await createGrowthTarget(`${name} ${scale}`));
+  return targets;
+}
+
 const population: Population = {
   name: 'rating votes',
   hotPartition: route >>> 4,
@@ -66,17 +86,7 @@ beforeAll(async () => {
     accountEvidence: () => account,
   });
   commands = createVoteCommands({ pool: database.pool, access });
-  const key = randomUUID();
-  const subject = await createSubject(database.pool, {
-    actor,
-    target: subjectTarget(routeKey, actorId, key),
-    idempotencyKey: key,
-    digest: createHash('sha256').update(key).digest(),
-    item: { type: 'schema:Book', labels: { en: 'Growth rating target' } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  subjectId = subject.subject.id;
+  subjectId = await createGrowthTarget('Growth rating target');
 });
 
 afterAll(async () => {
@@ -84,12 +94,23 @@ afterAll(async () => {
 });
 
 test('putting a vote has constant rows and statements as same-partition votes grow', async () => {
+  const warmupTargets = await createWarmupTargets('Vote write warmup');
   const result = await checkGrowth(database, {
     name: 'rating vote write',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (growthDatabase, scale, previous) =>
       seed({ pool: growthDatabase.pool, admin: growthDatabase.admin }, population, { from: previous, to: scale }),
+    warmup: async (_growthDatabase, scale, repetition) =>
+      commands.putVote(
+        actor,
+        {
+          questionId: STANDARD_QUESTION_ID,
+          targetId: warmupTargets.get(scale)!,
+          units: (scale + repetition) % 21,
+        },
+        randomUUID(),
+      ),
     operation: async (_growthDatabase, scale, repetition) => {
       nextUnits = (nextUnits + 1) % 21;
       return commands.putVote(
@@ -99,7 +120,6 @@ test('putting a vote has constant rows and statements as same-partition votes gr
       );
     },
     repetitions: 1,
-    warmups: 0,
   });
   expect(result.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   expect(routeOf(actorId)).toBe(route);
@@ -136,12 +156,23 @@ test('putting a vote reads only the capped memberships as other voters and waiti
     }),
   };
   let units = 0;
+  const warmupTargets = await createWarmupTargets('Membership vote warmup');
   const result = await checkGrowth(database, {
     name: 'rating vote capped memberships',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (db, scale, previous) =>
       seed({ pool: db.pool, admin: db.admin }, memberships, { from: previous, to: scale }),
+    warmup: async (_db, scale, repetition) =>
+      commands.putVote(
+        actor,
+        {
+          questionId: STANDARD_QUESTION_ID,
+          targetId: warmupTargets.get(scale)!,
+          units: (scale + repetition) % 21,
+        },
+        randomUUID(),
+      ),
     operation: async () => {
       await commands.putVote(
         actor,
@@ -150,7 +181,6 @@ test('putting a vote reads only the capped memberships as other voters and waiti
       );
     },
     repetitions: 1,
-    warmups: 0,
   });
   expect(result.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   const event = (

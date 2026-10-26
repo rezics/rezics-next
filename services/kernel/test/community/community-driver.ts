@@ -68,6 +68,7 @@ async function startWorker(system: ContentSystem): Promise<{
       KERNEL_SESSION_KEYS: sessionKeys,
       KERNEL_EXECUTOR_ID: `community-${crypto.randomUUID()}`,
       KERNEL_WORKER_POOL_SIZE: '6',
+      KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
       AUTH_ISSUER: 'https://community-worker.auth.test',
       AUTH_AUDIENCE: AUDIENCE,
       AUTH_JWKS_URL: 'https://community-worker.auth.test/.well-known/jwks.json',
