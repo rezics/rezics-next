@@ -1,4 +1,6 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import type { Pool, PoolReading } from './types.ts';
@@ -68,21 +70,55 @@ export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): Po
   return { pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString(), observedAt: new Date(now).toISOString(),
     windows, exhausted: windows.some(w => w.usedPercent >= 100), error: null };
 }
-// Each control-plane process asks at most once a minute. The token goes to curl on stdin, never in its arguments.
-const claudeReadings = new Map<string, PoolReading>();
+// The endpoint rate-limits its callers, so all control-plane processes share one cached reading: it is refreshed at
+// most every two minutes, and a refused refresh keeps the last good reading for up to twenty minutes. The token goes
+// to curl on stdin, never in its arguments.
+const CLAUDE_REFRESH_MS = 120_000, CLAUDE_STALE_MS = 1_200_000;
+function claudeCache(pool: Pool): string {
+  return join(tmpdir(), `goal-claude-usage-${createHash('sha256').update(pool.configDirectory).digest('hex').slice(0, 16)}.json`);
+}
+/** Claude Code streams the plan's windows in its rate_limit_event; a finished worker's log refreshes the shared reading. */
+export function recordClaudeRateLimit(pool: Pool, log: string, now = Date.now()): void {
+  let info: { unifiedWindows?: Record<string, { utilization?: number; resetsAt?: number }> } | undefined;
+  for (const line of log.split('\n')) {
+    if (!line.includes('"rate_limit_event"')) continue;
+    try { info = JSON.parse(line).rate_limit_info ?? info; } catch { /* Not an event line. */ }
+  }
+  const windows = info?.unifiedWindows;
+  if (!windows) return;
+  const body = Object.fromEntries(Object.entries(windows).map(([key, window]) => [key, {
+    utilization: typeof window.utilization === 'number' ? window.utilization * 100 : undefined,
+    resets_at: typeof window.resetsAt === 'number' ? new Date(window.resetsAt * 1000).toISOString() : undefined,
+  }]));
+  const reading = parseClaudeUsage(JSON.stringify(body), pool, now);
+  if (!reading.observedAt) return;
+  const cache = claudeCache(pool);
+  writeFileSync(`${cache}.${process.pid}`, JSON.stringify(reading), { mode: 0o600 });
+  renameSync(`${cache}.${process.pid}`, cache);
+}
 function readClaudeUsage(pool: Pool, now: number): PoolReading {
-  const cached = claudeReadings.get(pool.configDirectory);
-  if (cached?.observedAt && now - Date.parse(cached.observedAt) < 60_000)
-    return { ...cached, pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString() };
-  const credentials = JSON.parse(readFileSync(join(pool.configDirectory, '.credentials.json'), 'utf8')) as { claudeAiOauth?: { accessToken?: unknown } };
-  const token = credentials.claudeAiOauth?.accessToken;
-  if (typeof token !== 'string' || !token) return unknownReading(pool, now);
-  const response = spawnSync('curl', ['-sf', '-m', '10', '-H', '@-', '-H', 'anthropic-beta: oauth-2025-04-20',
-    'https://api.anthropic.com/api/oauth/usage'], { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' });
-  if (response.status !== 0) return unknownReading(pool, now, 'quota observation unavailable');
-  const reading = parseClaudeUsage(response.stdout, pool, now);
-  if (reading.observedAt) claudeReadings.set(pool.configDirectory, reading);
-  return reading;
+  const cache = claudeCache(pool);
+  let cached: PoolReading | undefined;
+  try { cached = JSON.parse(readFileSync(cache, 'utf8')) as PoolReading; } catch { /* No reading yet. */ }
+  const age = cached?.observedAt ? now - Date.parse(cached.observedAt) : Infinity;
+  const reuse = (reading: PoolReading) => ({ ...reading, pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString() });
+  if (cached && age < CLAUDE_REFRESH_MS) return reuse(cached);
+  const token = (() => {
+    try {
+      return (JSON.parse(readFileSync(join(pool.configDirectory, '.credentials.json'), 'utf8')) as { claudeAiOauth?: { accessToken?: unknown } })
+        .claudeAiOauth?.accessToken;
+    } catch { return undefined; }
+  })();
+  const response = typeof token === 'string' && token ? spawnSync('curl', ['-sf', '-m', '10', '-H', '@-', '-H', 'anthropic-beta: oauth-2025-04-20',
+    'https://api.anthropic.com/api/oauth/usage'], { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' }) : undefined;
+  const reading = response?.status === 0 ? parseClaudeUsage(response.stdout, pool, now) : undefined;
+  if (reading?.observedAt) {
+    writeFileSync(`${cache}.${process.pid}`, JSON.stringify(reading), { mode: 0o600 });
+    renameSync(`${cache}.${process.pid}`, cache);
+    return reading;
+  }
+  if (cached && age < CLAUDE_STALE_MS) return reuse(cached);
+  return unknownReading(pool, now, 'quota observation unavailable');
 }
 
 
