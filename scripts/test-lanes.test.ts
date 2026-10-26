@@ -48,10 +48,11 @@ function writeTestFiles(module: string, files: Record<string, string>): void {
 }
 
 function slotIsFree(env: NodeJS.ProcessEnv): boolean {
-  const result = Bun.spawnSync(
-    ['flock', '-n', '-E', '75', join(env.REZICS_STACK_LEASE_DIR!, 'slot-1.lock'), 'true'],
-    { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
-  );
+  const result = Bun.spawnSync(['flock', '-n', '-E', '75', join(env.REZICS_STACK_LEASE_DIR!, 'slot-1.lock'), 'true'], {
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
   return result.exitCode === 0;
 }
 
