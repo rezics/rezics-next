@@ -7,7 +7,6 @@ import {
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
-import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { createNativeAccountBindings } from '../../../src/access/native-account-bindings.ts';
@@ -15,6 +14,8 @@ import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
+import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
@@ -76,7 +77,7 @@ export async function createNativeContentSystem(options: ContentSystemOptions): 
       await release(() => pool.end());
       // Only these randomly named databases were created by this invocation.
       // Do not terminate sessions or remove any caller-owned namespace.
-      if (authCreated) await release(() => authAdmin.query(`DROP DATABASE ${authName}`));
+      if (authCreated) await release(() => dropTestDatabase(authAdmin, authName));
       if (appCreated) await release(() => admin.query(`DROP DATABASE ${appName}`));
       await release(() => authAdmin.end());
       await release(() => admin.end());
@@ -96,9 +97,8 @@ export async function createNativeContentSystem(options: ContentSystemOptions): 
     const quotedTemplate = `"${template.replaceAll('"', '""')}"`;
     await admin.query(`CREATE DATABASE ${appName} TEMPLATE ${quotedTemplate}`);
     appCreated = true;
-    await authAdmin.query(`CREATE DATABASE ${authName} TEMPLATE template0`);
+    await createAuthDatabase(source.href, authName);
     authCreated = true;
-    migrateAuth(connection(authName));
 
     const issuer = `https://${namespace.replaceAll('_', '-')}.auth.test`;
     const audience = 'https://content.test';
@@ -122,7 +122,10 @@ export async function createNativeContentSystem(options: ContentSystemOptions): 
       clock,
       content: { cursorNow: () => clock().getTime() },
       access: () => access,
-      writeRate: createWriteRateLimiter({ secret: crypto.randomUUID() + crypto.randomUUID(), overrides: '{}' }),
+      writeRate: createWriteRateLimiter({
+        secret: crypto.randomUUID() + crypto.randomUUID(),
+        overrides: options.writeRateOverrides ?? '{}',
+      }),
       ratePeer: () => '127.0.0.1',
     });
     const actions = actionCatalogue(kernel);

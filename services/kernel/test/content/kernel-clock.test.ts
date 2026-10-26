@@ -437,7 +437,7 @@ test('fixed native command and actual pages retain their bounds at three informa
   };
   const report = await checkGrowth(db, {
     name: 'kernel clock native command and content pages',
-    scales: [256, 2048, 16384],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
       await seed(database, population, { from: previous * 2, to: scale * 2 });

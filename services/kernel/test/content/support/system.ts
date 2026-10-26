@@ -35,6 +35,8 @@ export interface ContentSystemOptions {
   readonly databaseUrl: string;
   /** Optional isolated database namespace for deterministic fixture assertions. */
   readonly namespace?: string;
+  /** Optional fixture-only kernel write-rate override for suites that share a system across cases. */
+  readonly writeRateOverrides?: string;
 }
 
 export interface ContentSystem {

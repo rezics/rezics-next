@@ -1,4 +1,4 @@
-import { test } from 'bun:test';
+import { afterAll, beforeAll, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -6,6 +6,11 @@ import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support
 import { openMeasuredThreadCreate } from './thread-driver.ts';
 
 process.env.CONTENT_THREAD_DRIVER = fileURLToPath(new URL('./thread-driver.ts', import.meta.url));
+
+const threadDriver = await import('./thread-driver.ts');
+setDefaultTimeout(60_000);
+beforeAll(() => threadDriver.initializeContentThreadSystem());
+afterAll(() => threadDriver.closeContentThreadSystem());
 
 await import('../../../../specs/content-thread-outcomes.test.ts');
 

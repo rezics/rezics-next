@@ -15,7 +15,9 @@ import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { seedReportGrowth, type ReportGrowthBoard, type ReportGrowthRow } from './support/report-growth.ts';
 
 const routeKey = new Uint8Array(32).fill(47);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(48)]]) };
@@ -134,12 +136,8 @@ describe('real migrated report HTTP and shared admission', () => {
 
   beforeAll(async () => {
     db = await openGrowthDatabase();
-    await db.admin.query(`CREATE DATABASE ${authDatabase}`);
-    const authUrl = new URL(db.url);
-    authUrl.pathname = `/${authDatabase}`;
-    const { migrate } = await import(new URL('../../../auth/scripts/database.ts', import.meta.url).href);
-    migrate(authUrl.toString());
-    authPool = new Pool({ connectionString: authUrl.toString() });
+    const authUrl = await createAuthDatabase(db.url, authDatabase);
+    authPool = new Pool({ connectionString: authUrl });
     const signingKey = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
       kid: 'report-http',
@@ -302,7 +300,7 @@ describe('real migrated report HTTP and shared admission', () => {
       ),
     );
   }
-  async function create(targetId = board, key: string = randomUUID(), proofs?: string[]) {
+  async function create(targetId = board, key: string = randomUUID()) {
     const proof = remote.mint();
     const before = remote.calls;
     const result = await call('POST', '/v1/reports', { ...input(targetId), botToken: proof }, { key });
@@ -310,9 +308,7 @@ describe('real migrated report HTTP and shared admission', () => {
     expect(Object.keys(result.body)).toEqual(['reportId']);
     expect(result.response.headers.get('location')).toBe(`/v1/reports/${result.body.reportId}`);
     expect(remote.calls - before).toBe(1);
-    // A population of many reports scans the stored effects once for all of its proofs, not once per report.
-    if (proofs) proofs.push(proof);
-    else expect(JSON.stringify(await effects())).not.toContain(proof);
+    expect(JSON.stringify(await effects())).not.toContain(proof);
     return result.body.reportId as string;
   }
   async function permission(path: string, body: unknown) {
@@ -546,30 +542,41 @@ describe('real migrated report HTTP and shared admission', () => {
       scales: [32, 256, 2048],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
-        // Setup is unmeasured. Half the rows share the real target's hot route.
-        const proofs: string[] = [];
+        // Setup is unmeasured. Half the targets share the real target's route.
+        const rows: ReportGrowthRow[] = [];
+        const distractorBoards: ReportGrowthBoard[] = [];
         for (let ordinal = previous; ordinal < scale; ordinal++) {
           const route = ordinal % 2 ? routeOf(board)! : (ordinal * 31) % 65536;
           const id = newId(route);
-          await database.admin.query(
-            `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id) VALUES ($1,$2,$3,'Distractor','published',1,$4)`,
-            [route, id, newId(0x5678), randomUUID()],
-          );
-          // Populate actual report records/receipts/effects, not synthetic counters.
-          await create(id, undefined, proofs);
+          distractorBoards.push({ id, route, subjectId: newId(0x5678), transactionId: randomUUID() });
+          const reportRoute = (ordinal * 31) % 65536;
+          rows.push({
+            reportId: newId(reportRoute),
+            reportRoute,
+            targetKind: 'board',
+            targetId: id,
+            targetRoute: route,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            transactionId: randomUUID(),
+            idempotencyKey: randomUUID(),
+          });
         }
-        const stored = JSON.stringify(await effects());
-        for (const proof of proofs) expect(stored).not.toContain(proof);
+        await seedReportGrowth(database.admin, rows, distractorBoards, {
+          projectTargets: false,
+          commandEvents: { principalId: '00000000-0000-0000-0000-000000000000', principalKind: 'anonymous' },
+        });
       },
       async operation(database, _scale, repetition) {
         expect(database.pool).toBe(db.pool);
+        const proof = remote.mint();
         const result = await call(
           'POST',
           '/v1/reports',
-          { ...input(), botToken: remote.mint() },
+          { ...input(), botToken: proof },
           { key: `00000000-0000-4000-8000-${String(repetition + 1).padStart(12, '0')}` },
         );
         expect(result.response.status).toBe(201);
+        expect(JSON.stringify(await effects())).not.toContain(proof);
       },
     });
     expect(report.samples).toHaveLength(3);

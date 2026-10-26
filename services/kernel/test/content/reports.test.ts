@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
@@ -23,6 +23,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { seedReportGrowth, type ReportGrowthRow } from './support/report-growth.ts';
 
 let system: NativeContentSystem;
 let permissionKernel: ReturnType<typeof createKernel>;
@@ -68,8 +69,14 @@ async function accountActor(bearer: string) {
   return actor;
 }
 
-beforeEach(async () => {
-  system = await createNativeContentSystem({ databaseUrl });
+beforeAll(async () => {
+  system = await createNativeContentSystem({
+    databaseUrl,
+    writeRateOverrides: JSON.stringify({
+      'new-account': { write: { maximum: 10_000, seconds: 86_400 } },
+      member: { write: { maximum: 10_000, seconds: 86_400 } },
+    }),
+  });
   // Unmeasured growth setup uses public grants with a budget sized for its fixed background.
   permissionKernel = createKernel({
     pool: system.database.pool,
@@ -108,8 +115,10 @@ beforeEach(async () => {
   schemeId = scheme.id;
   conceptId = concept.id;
 }, 30_000);
-afterEach(async () => {
+afterAll(async () => {
   await system?.close();
+});
+beforeEach(() => {
   grantRanges.clear();
 });
 
@@ -477,37 +486,50 @@ test('moderator inspection resolves anchored records without joining partitions'
 test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
   const f = await fixture();
   const db = await openGrowthDatabase(system.database.pool.options.connectionString);
-  const governance = await accountActor(governanceBearer);
   const renew = (actor: typeof f.author) =>
     system.auth.issue({ accountId: actor.accountId, clientId: actor.clientId, scopes: [...actor.scopes] });
   let authorBearer: string;
   let moderatorBearer: string;
   const grow = async (_db: { admin: Pool }, scale: number, previous: number) => {
     if (previous === 0) {
-      // Fixed background at the smallest scale gives the native planner realistic
-      // grant statistics. These unrelated resources grant nothing on the target.
-      for (let index = 0; index < 4096; index++) {
-        if (index % 256 === 0) governanceBearer = (await renew(governance)).bearer;
-        await grant(
-          { kind: 'post', id: newId(routeOf(f.target.id)!) },
-          f.moderator.accountId,
-          'moderation:read_reports',
-        );
-      }
+      // Fixed unrelated grant rows give the planner realistic statistics. The
+      // actual report and moderator grants above still use public governance routes.
+      const route = routeOf(f.target.id)!;
+      const resources = Array.from({ length: 4096 }, () => newId(route));
+      const transactions = resources.map(() => randomUUID());
+      await _db.admin.query(
+        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+         SELECT $1,resource_id,$2,'moderation:read_reports','(,)'::tstzrange,transaction_id
+         FROM unnest($3::uuid[],$4::uuid[]) AS row(resource_id,transaction_id)`,
+        [route, f.moderator.accountId, resources, transactions],
+      );
       await _db.admin.query('ANALYZE access.resource_grant');
     }
-    // Setup is outside capture. Same-target distractors exercise the hot reverse-index prefix.
-    // An authenticated actor is usable until its authentication deadline, so re-authenticate by elapsed time.
-    let author = f.author;
-    let authenticatedAt = 0;
-    for (let index = previous; index < scale; index++) {
-      if (Date.now() - authenticatedAt > 5_000) {
-        author = await accountActor((await renew(f.author)).bearer);
-        authenticatedAt = Date.now();
-      }
-      const distractor = await createReport(deps(), author, { ...f.input, evidence: `Distractor ${index}` }, context());
-      await reportEvent(distractor.value.reportId);
-    }
+    // Bulk rows retain the same target prefix and actual report projection
+    // shape while keeping the measured API operation and its bounds unchanged.
+    const targetRoute = routeOf(f.target.id)!;
+    const rows: ReportGrowthRow[] = Array.from({ length: scale - previous }, (_, offset) => {
+      const index = previous + offset;
+      const reportRoute = (index * 31) % 65_536;
+      return {
+        reportId: newId(reportRoute),
+        reportRoute,
+        targetKind: 'post',
+        targetId: f.target.id,
+        targetRoute,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        transactionId: randomUUID(),
+        idempotencyKey: `growth-${randomUUID()}`,
+        reporterAccountId: f.author.accountId,
+      };
+    });
+    await seedReportGrowth(_db.admin, rows, [], {
+      commandEvents: {
+        principalId: f.author.accountId,
+        principalKind: 'account',
+        clientId: f.author.clientId,
+      },
+    });
     // Native tokens expire after five minutes; renew outside every measured scale.
     authorBearer = (await renew(f.author)).bearer;
     moderatorBearer = (await renew(f.moderator)).bearer;
