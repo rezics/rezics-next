@@ -20,6 +20,7 @@ const subjectRoute = 0x7890;
 const otherRoute = 0x8b40;
 const routes = [sourceRoute, subjectRoute, otherRoute];
 const at = '2026-10-27T04:00:00.000Z';
+const historyPrefix = 'listing-growth-history:';
 let db: GrowthDatabase;
 let client: WorkClient;
 let worker: Awaited<ReturnType<typeof composeWork>>;
@@ -56,6 +57,9 @@ afterEach(async () => {
   // This file owns its test database. Keep the two checks' growing populations independent.
   await db?.admin.query(`TRUNCATE library.collection_member, library.collection,
     library.subject_collection, library.subject_listing, core.receipt, core.outbox, editorial.write_basis`);
+  // DBOS retains input, output and operation rows independently of workflow_status.
+  for (const relation of ['operation_outputs', 'workflow_input', 'workflow_output', 'workflow_status'])
+    await db?.admin.query(`DELETE FROM dbos.${relation} WHERE workflow_uuid LIKE $1`, [`${historyPrefix}%`]);
 });
 
 afterAll(async () => {
@@ -142,6 +146,31 @@ async function grow(scale: number, previous: number, subjects: string[]) {
      SELECT r >> 4, transaction_id, 1, n, 'account', curator_id, 'web', $5::timestamptz FROM source
      WHERE cardinality($4::uuid[]) > 0`,
     parameters,
+  );
+  // Completed history makes DBOS point lookups choose indexes under the same statistics as production.
+  // Seed every history relation used by the effect and durable page step before the harness vacuums.
+  await db.admin.query(
+    `WITH history AS (
+       SELECT n, $1 || n::text AS workflow_uuid
+       FROM generate_series($2::int, $3::int) n
+     ), inserted AS (
+       INSERT INTO dbos.workflow_status
+         (workflow_uuid, status, name, queue_name, authenticated_user, assumed_role, authenticated_roles,
+          executor_id, application_id, created_at, updated_at, completed_at, recovery_attempts, inputs,
+          queue_partition_key, serialization)
+       SELECT workflow_uuid, 'SUCCESS', 'effect', 'effects', '', '', '[]', '', 'rezics-kernel',
+         $4::bigint, $4::bigint, $4::bigint, 0, '[]', $5, 'JSON' FROM history
+       RETURNING workflow_uuid
+     ), inputs AS (
+       INSERT INTO dbos.workflow_input (workflow_uuid, inputs)
+       SELECT workflow_uuid, '[]' FROM inserted
+     ), outputs AS (
+       INSERT INTO dbos.workflow_output (workflow_uuid, output, error)
+       SELECT workflow_uuid, 'null', '' FROM inserted
+     )
+     INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output, error)
+     SELECT workflow_uuid, 1, 'effect.run', 'null', '' FROM inserted`,
+    [historyPrefix, previous * 500 + 1, scale * 500, Date.parse(at), String(partitionOf(sourceRoute))],
   );
 }
 
