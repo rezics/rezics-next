@@ -258,6 +258,8 @@ export function PostComposer<T>({
   }
 
   const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_body_label();
+  const editorSize = titleRequired ? 'thread-opening-editor' : 'thread-reply-editor';
+  const fallbackSize = titleRequired ? 'thread-opening-fallback' : 'thread-reply-fallback';
   return (
     <div className="rounded-xl border border-border/70 bg-card p-5">
       <form id={formId} onSubmit={submit}>
@@ -280,26 +282,29 @@ export function PostComposer<T>({
       <div className="space-y-2" onInputCapture={captureEditorInput}>
         <p className="text-sm font-medium">{bodyLabel}</p>
         <div ref={editorHost}>
-          <div className={plainEditorVisible ? 'hidden' : undefined} aria-hidden={plainEditorVisible}>
-            <RichTextEditor
-              value={body}
-              onChange={updateBody}
-              label={bodyLabel}
-              labels={labels}
-              className="thread-post-editor"
-              {...(upload ? { upload, onUploadState: handleUploadState } : {})}
-            />
-          </div>
           {plainEditorVisible ? (
             <div
               aria-label={bodyLabel}
               aria-multiline="true"
-              className="min-h-[50dvh] rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6"
+              className={`${fallbackSize} rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6`}
               contentEditable
               role="textbox"
               suppressContentEditableWarning
             />
           ) : null}
+          <RichTextEditor
+            value={body}
+            onChange={updateBody}
+            label={bodyLabel}
+            labels={labels}
+            className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
+            actions={
+              <Button type="submit" form={formId} disabled={!ready || submitting || pendingUploads > 0}>
+                {m.thread_write_send()}
+              </Button>
+            }
+            {...(upload ? { upload, onUploadState: handleUploadState } : {})}
+          />
         </div>
       </div>
       {failure ? (
@@ -315,9 +320,6 @@ export function PostComposer<T>({
           {uploadNotice}
         </p>
       ) : null}
-      <Button className="mt-5" type="submit" form={formId} disabled={!ready || submitting || pendingUploads > 0}>
-        {m.thread_write_send()}
-      </Button>
     </div>
   );
 }

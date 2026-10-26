@@ -88,3 +88,48 @@ header [data-slot='select-indicator'] {
     display: none;
   }
 }
+
+/* Reply starts near five lines and a new thread near ten. Both grow, then scroll inside the viewport. */
+.thread-reply-editor [data-slot='rich-text-editor'],
+.thread-opening-editor [data-slot='rich-text-editor'] {
+  display: flex;
+  max-height: 100dvh;
+  flex-direction: column;
+}
+
+.thread-reply-editor.thread-editor-pending [data-slot='rich-text-editor'],
+.thread-opening-editor.thread-editor-pending [data-slot='rich-text-editor'] {
+  display: none;
+}
+
+.thread-reply-editor [data-slot='rich-text-editor'] > div,
+.thread-opening-editor [data-slot='rich-text-editor'] > div {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.thread-reply-editor .document-editor .tiptap {
+  min-height: 5lh;
+}
+
+.thread-opening-editor .document-editor .tiptap {
+  min-height: 10lh;
+}
+
+.thread-reply-fallback,
+.thread-opening-fallback {
+  box-sizing: border-box;
+  max-height: 100dvh;
+  overflow-y: auto;
+  font-family: var(--font-work-serif);
+  font-size: 1.125rem;
+  line-height: 1.8;
+}
+
+.thread-reply-fallback {
+  min-height: calc(5lh + 1.5rem);
+}
+
+.thread-opening-fallback {
+  min-height: calc(10lh + 1.5rem);
+}

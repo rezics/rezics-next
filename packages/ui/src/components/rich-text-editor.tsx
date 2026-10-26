@@ -10,7 +10,8 @@ import {
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
 import { useEditor } from '@tiptap/react';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { ImageIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from '../utils.ts';
 import { EditorSurface, editorAttributes, editorExtensions, sanitizePastedHTML } from './editor-surface.ts';
 import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.ts';
@@ -45,6 +46,8 @@ export interface RichTextEditorProps {
   maxLength?: number;
   upload?: ImageUploader;
   onUploadState?: (state: UploadState, count: number) => void;
+  /** Rendered at the end of the row that starts with the image control. */
+  actions?: ReactNode;
   onBlur?: () => void;
   onFocus?: () => void;
   onSave?: () => void;
@@ -136,6 +139,7 @@ export function RichTextEditor({
   maxLength,
   upload,
   onUploadState,
+  actions,
   onBlur,
   onFocus,
   onSave,
@@ -383,6 +387,18 @@ export function RichTextEditor({
   const editorFocused = useEditorFocus(editor);
   const touchBarVisible =
     editable && toolbar !== 'never' && (toolbar === 'always' || (coarsePointer && editorFocused) || touchSheetOpen);
+  const imageControl =
+    editor && editable && upload && availableCommands([imageCommand], editor).length > 0 ? (
+      <Button
+        type="button"
+        variant="outline"
+        className="shrink-0 max-md:px-2.5"
+        onClick={() => imageCommand.run(editor, openLink, () => setImagePosition(editor.state.selection.from))}
+      >
+        <ImageIcon aria-hidden="true" />
+        <span className="max-md:sr-only">{resolvedLabels.image}</span>
+      </Button>
+    ) : null;
 
   return (
     <div ref={menuContainer} className={cn('relative min-w-0', className)}>
@@ -396,16 +412,14 @@ export function RichTextEditor({
         onKeyDown={handleKeyDown}
         onCompositionEnd={handleCompositionEnd}
       />
+      {imageControl || actions ? (
+        <div className="mt-3 flex w-full min-w-0 flex-nowrap items-center gap-2">
+          {imageControl}
+          {actions ? <div className="ms-auto flex shrink-0">{actions}</div> : null}
+        </div>
+      ) : null}
       {editor && editable ? (
         <>
-          {upload && availableCommands([imageCommand], editor).length ? (
-            <Button
-              type="button"
-              onClick={() => imageCommand.run(editor, openLink, () => setImagePosition(editor.state.selection.from))}
-            >
-              {resolvedLabels.image}
-            </Button>
-          ) : null}
           {upload && editor.schema.nodes.image && imagePosition !== null ? (
             <ImageInsert
               editor={editor}

@@ -2,6 +2,7 @@ import { checkDocument, fromPlainText, type DocumentSnapshot } from '@rezics/doc
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { Button } from './button.tsx';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
 
@@ -36,11 +37,13 @@ function demo(profile: 'blocks' | 'text' = 'blocks', delayed = false) {
               states.push({ state, count });
               setState(state);
             }}
+            actions={
+              <Button type="button" disabled={state !== 'ready'}>
+                Send
+              </Button>
+            }
           />
         ) : null}
-        <button type="button" disabled={state !== 'ready'}>
-          Send
-        </button>
         <button type="button" onClick={() => setShown(false)}>
           Remove editor
         </button>
