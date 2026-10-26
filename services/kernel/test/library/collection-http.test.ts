@@ -96,23 +96,54 @@ const members = (id: string) => `${path(id)}/members`;
 async function add(id: string, extras: { after?: string | null; note?: string } = {}) {
   return (await json<{ member: MemberView }>(await request('POST', members(id), { subjectId, ...extras }), 201)).member;
 }
-async function page<T>(url: string, plural: string, as: Persona = 'owner') {
+type SubjectCollectionCount = { value: number; exact: true };
+type CollectionPage<T> = { items: T[]; next: string | null; count?: SubjectCollectionCount };
+async function page<T>(
+  url: string,
+  plural: string,
+  as: Persona = 'owner',
+  extraKeys: readonly string[] = [],
+): Promise<CollectionPage<T>> {
   const result = await json<Record<string, unknown>>(await request('GET', url, undefined, as));
-  expect(Object.keys(result).sort()).toEqual([plural, 'next'].sort());
-  return { items: result[plural] as T[], next: result.next as string | null };
+  expect(Object.keys(result).sort()).toEqual([plural, 'next', ...extraKeys].sort());
+  let count: Record<string, unknown> | undefined;
+  if (extraKeys.includes('count')) {
+    expect(result.count).not.toBeNull();
+    expect(result.count).toBeDefined();
+    count = result.count as Record<string, unknown>;
+    expect(count.exact).toBe(true);
+    expect(Number.isInteger(count.value) && (count.value as number) >= 0).toBe(true);
+  }
+  return {
+    items: result[plural] as T[],
+    next: result.next as string | null,
+    ...(count ? { count: count as SubjectCollectionCount } : {}),
+  };
 }
-async function all<T>(url: string, plural: string, as: Persona = 'owner') {
+async function all<T>(
+  url: string,
+  plural: string,
+  as: Persona = 'owner',
+  options: { extraKeys?: readonly string[]; countMatchesItems?: boolean } = {},
+) {
   const items: T[] = [];
+  let count: SubjectCollectionCount | undefined;
   let cursor: string | null = null;
   do {
-    const result: { items: T[]; next: string | null } = await page<T>(
+    const result: CollectionPage<T> = await page<T>(
       `${url}${url.includes('?') ? '&' : '?'}limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
       plural,
       as,
+      options.extraKeys,
     );
+    if (result.count) {
+      if (count) expect(result.count).toEqual(count);
+      count = result.count;
+    }
     items.push(...result.items);
     cursor = result.next;
   } while (cursor);
+  if (options.countMatchesItems) expect(count?.value).toBe(items.length);
   return items;
 }
 
@@ -424,9 +455,16 @@ test('the anonymous subject page exposes only current public Collections with mu
   await add(shelf.id);
   await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
   const expected = { id: shelf.id, curatorAccountId: owner, title: shelf.title, multiplicity: 2 };
-  expect(await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous')).toContainEqual(expected);
+  expect(
+    await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', {
+      extraKeys: ['count'],
+      countMatchesItems: true,
+    }),
+  ).toContainEqual(expected);
   await json(await request('PATCH', path(shelf.id), { revision: shelf.revision, visibility: 'private' }));
-  expect(await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous')).not.toContainEqual(expected);
+  expect(
+    await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', { extraKeys: ['count'] }),
+  ).not.toContainEqual(expected);
   await problem(await request('GET', `/v1/subjects/${unknown}/collections`, undefined, 'anonymous'), 404, 'not_found');
 });
 

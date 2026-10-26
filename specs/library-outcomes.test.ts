@@ -73,22 +73,55 @@ async function hidden(path: string, unknown: string, as: Persona) {
 function pagePath(path: string, limit: number, cursor?: string) {
   return `${path}${path.includes('?') ? '&' : '?'}limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
 }
-async function page<T>(path: string, plural: string, as: Persona = 'owner') {
+type SubjectCollectionCount = { value: number; exact: true };
+type LibraryPage<T> = { items: T[]; next: string | null; count?: SubjectCollectionCount };
+async function page<T>(
+  path: string,
+  plural: string,
+  as: Persona = 'owner',
+  extraKeys: readonly string[] = [],
+): Promise<LibraryPage<T>> {
   const result = await body<Record<string, unknown>>(await get(path, as));
-  expect(Object.keys(result).sort()).toEqual([plural, 'next'].sort());
+  expect(Object.keys(result).sort()).toEqual([plural, 'next', ...extraKeys].sort());
   expect(Array.isArray(result[plural])).toBe(true);
   expect(result.next === null || typeof result.next === 'string').toBe(true);
-  return { items: result[plural] as T[], next: result.next as string | null };
+  let count: Record<string, unknown> | undefined;
+  if (extraKeys.includes('count')) {
+    expect(result.count).not.toBeNull();
+    expect(result.count).toBeDefined();
+    count = result.count as Record<string, unknown>;
+    expect(count.exact).toBe(true);
+    expect(Number.isInteger(count.value) && (count.value as number) >= 0).toBe(true);
+  }
+  return {
+    items: result[plural] as T[],
+    next: result.next as string | null,
+    ...(count ? { count: count as SubjectCollectionCount } : {}),
+  };
 }
-async function all<T>(path: string, plural: string, as: Persona = 'owner', limit = 2) {
+async function all<T>(
+  path: string,
+  plural: string,
+  as: Persona = 'owner',
+  limit = 2,
+  options: { extraKeys?: readonly string[]; countMatchesItems?: boolean } = {},
+) {
   const result: T[] = [];
   const seen = new Set<string>();
+  let currentCount: SubjectCollectionCount | undefined;
   let cursor: string | undefined;
-  for (let count = 0; count < 3000; count++) {
-    const current = await page<T>(pagePath(path, limit, cursor), plural, as);
+  for (let pageNumber = 0; pageNumber < 3000; pageNumber++) {
+    const current: LibraryPage<T> = await page<T>(pagePath(path, limit, cursor), plural, as, options.extraKeys);
+    if (current.count) {
+      if (currentCount) expect(current.count).toEqual(currentCount);
+      currentCount = current.count;
+    }
     expect(current.items.length).toBeLessThanOrEqual(limit);
     result.push(...current.items);
-    if (current.next === null) return result;
+    if (current.next === null) {
+      if (options.countMatchesItems) expect(currentCount?.value).toBe(result.length);
+      return result;
+    }
     expect(current.items.length).toBeGreaterThan(0);
     expect(seen.has(current.next)).toBe(false);
     seen.add(current.next);
@@ -234,7 +267,10 @@ async function follow(targetId: string) {
   return (await body<{ follow: FollowView }>(await get(`/v1/follows/${targetId}`))).follow;
 }
 async function publicCollections(subjectId: string) {
-  return all<PublicCollectionView>(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous');
+  return all<PublicCollectionView>(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', 2, {
+    extraKeys: ['count'],
+    countMatchesItems: true,
+  });
 }
 async function publish(sessionId: string) {
   return (
