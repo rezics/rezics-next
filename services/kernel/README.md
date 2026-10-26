@@ -209,7 +209,9 @@ an index.
 Every scale is measured warm. Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
 backend's first. `warmups: 0` measures a cold first sample: a false failure under `logarithmic` and `linear` bounds,
-and a hidden growth under `constant` ones.
+and a hidden growth under `constant` ones. `checkGrowth` runs `VACUUM (ANALYZE)` on the test database after each scale's
+`grow`, so statistics and the visibility map never depend on autovacuum; do not analyze or vacuum the checked database
+by hand in `grow`.
 
 ## HTTP contract
 

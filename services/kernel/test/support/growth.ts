@@ -22,7 +22,10 @@ export type GrowthCheck = {
    * otherwise `operation`.
    */
   readonly warmups?: number;
-  /** Grows the data from the previous scale (0 before the first) to this one, normally with seed(). */
+  /**
+   * Grows the data from the previous scale (0 before the first) to this one, normally with seed(). After each call,
+   * checkGrowth runs database-wide `VACUUM (ANALYZE)` before the scale's first unmeasured run.
+   */
   grow(db: GrowthDatabase, scale: number, previous: number): Promise<void>;
   /**
    * One measured run of the operation. `repetition` counts from 0 across all scales and unmeasured runs, shared
@@ -66,6 +69,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const samples: GrowthSample[] = [];
   for (const scale of scales) {
     await check.grow(db, scale, previous);
+    await db.admin.query('VACUUM (ANALYZE)');
     for (let warmup = 0; warmup < warmups; warmup++) {
       if (check.warmup) await check.warmup(db, scale, repetition);
       else await check.operation(db, scale, repetition);
