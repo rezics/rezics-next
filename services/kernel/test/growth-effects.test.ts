@@ -107,19 +107,39 @@ function isQueuePoll(statement: string): boolean {
   return QUEUE_POLL_PATTERNS.some((pattern) => pattern.test(statement));
 }
 
+type Measured = { rows: number; blocks: number; statements: number };
+
+const lowerMedian = (values: number[]) => [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
+
+// With `settled`, mirrors checkGrowth: database-wide VACUUM (ANALYZE) after the history grows, one unmeasured run, then
+// the median of five measured runs per scale, so a statement of another actor on the shared queue cannot decide a
+// sample. Otherwise each scale takes a single measured run.
 async function runGrowthCheck(
   db: GrowthDatabase,
   name: string,
   history: (scale: number, previous: number) => Promise<void>,
-  operation: (repetition: number) => Promise<{ rows: number; blocks: number; statements: number }>,
+  operation: (repetition: number) => Promise<Measured>,
+  settled = false,
 ): Promise<void> {
   let previous = 0;
   let repetition = 0;
   const samples = [];
   for (const scale of GROWTH_SCALES) {
     await history(scale, previous);
-    const cost = await operation(repetition++);
-    samples.push({ scale, cost });
+    if (settled) {
+      await db.admin.query('VACUUM (ANALYZE)');
+      await operation(repetition++);
+    }
+    const costs: Measured[] = [];
+    for (let run = 0; run < (settled ? 5 : 1); run++) costs.push(await operation(repetition++));
+    samples.push({
+      scale,
+      cost: {
+        rows: lowerMedian(costs.map((cost) => cost.rows)),
+        blocks: lowerMedian(costs.map((cost) => cost.blocks)),
+        statements: lowerMedian(costs.map((cost) => cost.statements)),
+      },
+    });
     previous = scale;
   }
   try {
@@ -130,12 +150,13 @@ async function runGrowthCheck(
   }
 }
 
-async function measuredPersistence(
-  db: GrowthDatabase,
-  item: Envelope,
-): Promise<{ rows: number; blocks: number; statements: number }> {
+async function measuredPersistence(db: GrowthDatabase, item: Envelope): Promise<Measured> {
   const result = await capture(db, () => enqueueAndWait(item));
-  const statements = result.capture.statements.filter((statement) => !isQueuePoll(statement)).length;
+  // BEGIN and COMMIT around each poll tick are control statements, not operation statements.
+  const { statements } = costOf({
+    statements: result.capture.statements.filter((statement) => !isQueuePoll(statement)),
+    plans: result.capture.plans,
+  });
   const plans = result.capture.plans.map((plan) => costOf({ statements: [], plans: [plan] }));
   return {
     statements,
@@ -144,16 +165,9 @@ async function measuredPersistence(
   };
 }
 
-async function measuredEnqueue(item: Envelope): Promise<{ rows: number; blocks: number; statements: number }> {
+async function measuredEnqueue(item: Envelope): Promise<Measured> {
   const result = await capture(growth, () => effects.enqueue([item]));
-  const nonPollPlans = result.capture.plans.filter((_plan, index) => {
-    const statement = result.capture.statements[index];
-    return statement === undefined || !isQueuePoll(statement);
-  });
-  const cost = costOf({
-    statements: result.capture.statements.filter((statement) => !isQueuePoll(statement)),
-    plans: nonPollPlans,
-  });
+  const cost = costOf(result.capture);
   await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult();
   return { rows: cost.rows, blocks: cost.blocks, statements: cost.statements };
 }
@@ -194,6 +208,7 @@ test('Effect enqueue stays within its bound as N grows', async () => {
       const partition = freshPartition();
       return measuredEnqueue(envelope(partition, BigInt(repetition + 1), `measured-enqueue-${partition}`));
     },
+    true,
   );
 }, 120_000);
 
