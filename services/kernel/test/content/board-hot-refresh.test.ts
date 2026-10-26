@@ -6,7 +6,9 @@ import { installResourceRoleCatalogue, resolveResourceRoles } from '../../src/ac
 import { readAccount } from '../../src/access/account-data.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createRealm } from '../../src/community/realm.ts';
+import { createRealm, updateRealm } from '../../src/community/realm.ts';
+import { readRealmVotes } from '../../src/community/realm-votes.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { createSpace } from '../../src/community/space.ts';
 import type { Access, AccountActor } from '../../src/request/access.ts';
 import { runCommand } from '../../src/command/command.ts';
@@ -247,7 +249,7 @@ const roleActions = [
   'context:read',
 ];
 
-async function createTestRealm(): Promise<string> {
+async function createTestRealm() {
   const accountId = newId(sourceRoute);
   const route = routeOf(accountId)!;
   await db.admin.query(
@@ -301,7 +303,19 @@ async function createTestRealm(): Promise<string> {
     },
     { idempotencyKey: randomUUID(), deadline: Date.now() + 20_000 },
   );
-  return realm.value.realmId;
+  let headRevisionId = realm.value.revisionId;
+  return {
+    realmId: realm.value.realmId,
+    async updateVotes(votes: { upvote: -1; downvote: 1 }) {
+      const updated = await updateRealm(
+        dependencies,
+        actor,
+        { realmId: realm.value.realmId, expectedHead: headRevisionId, votes },
+        { idempotencyKey: randomUUID(), deadline: Date.now() + 20_000 },
+      );
+      headRevisionId = updated.value.revisionId;
+    },
+  };
 }
 
 // Every scale step needs 1000 due candidates (two batches of 500), so each ordinal carries several candidates.
@@ -427,7 +441,7 @@ test.serial('a new board candidate starts with both ranks at score 0', async () 
 test.serial(
   'one refresh sets Realm weighted scores and recomputes active and hot ranks',
   async () => {
-    const realmId = await createTestRealm();
+    const { realmId } = await createTestRealm();
     const outsideBoard = await createBoard();
     const realmBoard = await createBoard(realmId);
     const createdAt = new Date(Date.now() - 36 * 60 * 60_000).toISOString();
@@ -476,6 +490,55 @@ test.serial(
     expect(rows.get(outsideThread.threadId)!.active_rank).not.toBeCloseTo(
       rows.get(outsideOtherThread.threadId)!.active_rank,
     );
+  },
+  60_000,
+);
+
+test.serial(
+  'the first refresh at least one interval later uses current Realm vote weights for hot rank',
+  async () => {
+    const realm = await createTestRealm();
+    const boardId = await createBoard(realm.realmId);
+    const createdAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    const upvoted = await createSourceThread(boardId, createdAt);
+    const downvoted = await createSourceThread(boardId, createdAt);
+    await projectThreads(await eventsForSource());
+    await appendReaction(upvoted.threadId, 'upvote');
+    await appendReaction(downvoted.threadId, 'downvote');
+    await projectReactions(await eventsForSource());
+
+    const initialAt = new Date(Date.now() + 20 * 60_000);
+    const partition = partitionOf(routeOf(boardId)!);
+    expect(await refreshBoardRankBatch(db.pool, initialAt, [partition])).toBe(2);
+    const initialRows = await rankRows([boardId], [upvoted.threadId, downvoted.threadId]);
+    const initialOrder = [upvoted.threadId, downvoted.threadId].sort(
+      (left, right) => initialRows.get(right)!.hot_rank - initialRows.get(left)!.hot_rank,
+    );
+
+    await realm.updateVotes({ upvote: -1, downvote: 1 });
+    const observedWeights = await withConnection(db.pool, (client) => readRealmVotes(client, [realm.realmId]));
+    const refreshAt = new Date(initialAt.getTime() + 10 * 60_000);
+    const refreshed = await refreshBoardRankBatch(db.pool, refreshAt, [partition]);
+    const rows = await rankRows([boardId], [upvoted.threadId, downvoted.threadId]);
+    const refreshedOrder = [upvoted.threadId, downvoted.threadId].sort(
+      (left, right) => rows.get(right)!.hot_rank - rows.get(left)!.hot_rank,
+    );
+
+    expect({
+      currentWeightsFromRefreshReader: observedWeights.get(realm.realmId),
+      refreshedRows: refreshed,
+      scoresWritten: [rows.get(upvoted.threadId)!.score, rows.get(downvoted.threadId)!.score],
+      initialOrder,
+      refreshedOrder,
+      refreshedAt: [rows.get(upvoted.threadId)!.rank_refreshed_at, rows.get(downvoted.threadId)!.rank_refreshed_at],
+    }).toEqual({
+      currentWeightsFromRefreshReader: { upvote: -1, downvote: 1 },
+      refreshedRows: 2,
+      scoresWritten: [-1, 1],
+      initialOrder: [upvoted.threadId, downvoted.threadId],
+      refreshedOrder: [downvoted.threadId, upvoted.threadId],
+      refreshedAt: [refreshAt, refreshAt],
+    });
   },
   60_000,
 );
