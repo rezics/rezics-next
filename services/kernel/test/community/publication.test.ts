@@ -33,6 +33,10 @@ async function fixture(pool: Pool, admin: Pool) {
   url.pathname = `/${database}`;
   migrateAuth(url.href);
   const authPool = new Pool({ connectionString: url.href });
+  const authConnectionsClosed: Promise<void>[] = [];
+  authPool.on('connect', (client) => {
+    authConnectionsClosed.push(new Promise<void>((resolve) => client.connection.stream.once('close', () => resolve())));
+  });
   const issuer = 'https://community.auth.test';
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -133,6 +137,8 @@ async function fixture(pool: Pool, admin: Pool) {
     grant,
     async close() {
       await authPool.end();
+      // pg.Pool.end resolves before its sockets finish closing; the forced drop must not reach one.
+      await Promise.all(authConnectionsClosed);
       await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
     },
   };
