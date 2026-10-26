@@ -139,7 +139,7 @@ test('board metadata and listing mount once with the actual read action and plur
   expect(Object.keys(detail.body.board).sort()).toEqual(
     ['id', 'route', 'title', 'visibility', 'securityRevision', 'availability', 'createdAt'].sort(),
   );
-  expect((await get(path(id))).body).toEqual({ threads: [], next: null });
+  expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
   for (const values of [{ limit: '0' }, { limit: '101' }, { limit: '1.5' }, { sort: 'popular' }])
     await invalid(path(id, values));
 });
@@ -211,7 +211,7 @@ test('every returned candidate passes current thread root and board disclosure w
   ] as const) {
     for (const visibility of ['protected', 'taken_down']) {
       await state(kind, target, visibility);
-      expect((await get(path(id))).body).toEqual({ threads: [], next: null });
+      expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
     }
     await state(kind, target, 'published');
   }
@@ -320,7 +320,7 @@ test('query matches only current authorized revision text and never erased text 
   for (const query of ['erasuresentinel', 'replacementtoken']) {
     const result = await get(path(id, { query }));
     expect(result.response.status).toBe(200);
-    expect(result.body).toEqual({ threads: [], next: null });
+    expect(result.body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
     expect(JSON.stringify(result.body)).not.toContain(query);
   }
 });

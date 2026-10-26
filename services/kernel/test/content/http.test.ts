@@ -222,7 +222,10 @@ describe('content HTTP with native database adapters', () => {
   test('native thread post reply and revisions retain exact stored metadata and body-only defaults', async () => {
     const thread = await create();
     expect((await call('GET', `/v1/boards/${boardId}`, undefined, undefined, false)).body.board.id).toBe(boardId);
-    expect((await call('GET', `/v1/threads/${thread.id}`, undefined, undefined, false)).body.thread).toEqual(thread);
+    expect((await call('GET', `/v1/threads/${thread.id}`, undefined, undefined, false)).body.thread).toEqual({
+      ...thread,
+      reactions: {},
+    });
     const postInput = { body: snapshot('Post bytes'), licence: 'MIT', subjectIds: [], boardId };
     const postResult = await call('POST', `/v1/threads/${thread.id}/posts`, postInput);
     expect(postResult.response.status).toBe(201);
