@@ -212,6 +212,4 @@ export interface ContentDisclosureDriver {
   verifiedBotToken(): Promise<string>;
   inspectReports(persona: Persona, target: Target): Promise<Reply<Report[]>>;
   observe(target: Target): Promise<Observation>;
-  /** Real search/projection API; drain is an explicit bounded worker barrier. */
-  search(persona: Persona, query: string): Promise<Reply<Page>>;
 }

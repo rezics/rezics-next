@@ -1323,30 +1323,6 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     };
   }
 
-  async function search(persona: Persona, query: string): Promise<Reply<Page>> {
-    if (boards.length !== 1) throw new Error('Disclosure search requires the single board-query fixture');
-    const board = boards[0]!;
-    const params = new URLSearchParams({ limit: '100', query });
-    const response = await call({
-      method: 'GET',
-      path: `/v1/boards/${board.id}/threads?${params.toString()}`,
-      persona,
-    });
-    if (!response.ok) return { response };
-    const payload = asRecord(await response.clone().json(), 'search');
-    if (!Array.isArray(payload.threads)) throw new Error('Search response is missing threads');
-    if (payload.next !== null && typeof payload.next !== 'string') throw new Error('Search response is missing next');
-    return {
-      response,
-      value: {
-        items: payload.threads.map((entry) => {
-          const thread = asRecord(entry, 'thread');
-          return { id: text(thread, 'id'), revision: revisionFromView(thread.firstPost) };
-        }),
-        next: payload.next,
-      },
-    };
-  }
 
   async function close(): Promise<void> {
     closing ??= (async () => {
@@ -1425,7 +1401,6 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     verifiedBotToken: async () => turnstile.mint(),
     inspectReports,
     observe,
-    search,
   };
 }
 

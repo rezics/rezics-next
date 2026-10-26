@@ -186,7 +186,7 @@ export async function seedDisclosureDistractors(
   const postIds: string[] = [];
   const revisionIds: string[] = [];
   const mediaIds: string[] = [];
-  const containerIds: string[] = [];
+  const subjectIds: string[] = [];
   const transactionIds: string[] = [];
   const reservationIds: string[] = [];
   for (let index = 0; index < count; index++) {
@@ -194,7 +194,7 @@ export async function seedDisclosureDistractors(
     postIds.push(newId(route));
     revisionIds.push(newId(route));
     mediaIds.push(newId(route));
-    containerIds.push(newId(route));
+    subjectIds.push(newId(route));
     transactionIds.push(crypto.randomUUID());
     reservationIds.push(`disclosure-growth-${crypto.randomUUID()}`);
   }
@@ -237,6 +237,22 @@ export async function seedDisclosureDistractors(
        FROM unnest($3::uuid[], $4::uuid[]) AS row(thread_id, revision_id)`,
       [route, distractorBoardId, threadIds, revisionIds],
     );
+    await client.query(
+      `INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id)
+       SELECT $1, subject_id, 'schema:Book', transaction_id
+       FROM unnest($2::uuid[], $3::uuid[]) AS row(subject_id, transaction_id)`,
+      [route, subjectIds, transactionIds],
+    );
+    await client.query(
+      `INSERT INTO content.media
+         (route, media_id, container_id, uploader_id, reservation_request_id, purpose, media_type, byte_count,
+          state, key, transaction_id)
+       SELECT $1, media_id, thread_id, $2, reservation_id, 'post-image', 'image/png', 1, 'reserved',
+              'm/' || media_id::text || '/original', transaction_id
+       FROM unnest($3::uuid[], $4::uuid[], $5::text[], $6::uuid[])
+         AS row(media_id, thread_id, reservation_id, transaction_id)`,
+      [route, authorId, mediaIds, threadIds, reservationIds, transactionIds],
+    );
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -244,29 +260,7 @@ export async function seedDisclosureDistractors(
   } finally {
     client.release();
   }
-  // Reserved media is same-partition volume only. A schema mismatch must not discard the content rows.
-  const media = await admin.connect();
-  try {
-    await media.query('BEGIN');
-    try {
-      await media.query(
-        `INSERT INTO content.media
-           (route, media_id, container_id, uploader_id, reservation_request_id, purpose, media_type, byte_count,
-            state, key, transaction_id)
-         SELECT $1, media_id, container_id, $2, reservation_id, 'post-image', 'image/png', 1, 'reserved',
-                'm/' || media_id::text || '/original', transaction_id
-         FROM unnest($3::uuid[], $4::uuid[], $5::text[], $6::uuid[])
-           AS row(media_id, container_id, reservation_id, transaction_id)`,
-        [route, authorId, mediaIds, containerIds, reservationIds, transactionIds],
-      );
-      await media.query('COMMIT');
-    } catch {
-      await media.query('ROLLBACK');
-    }
-  } finally {
-    media.release();
-  }
   await admin.query(
-    'ANALYZE content.board, content.board_thread, content.thread, content.post, content.revision, content.media',
+    'ANALYZE content.board, content.board_thread, content.thread, content.post, content.revision, content.media, semantic.subject',
   );
 }
