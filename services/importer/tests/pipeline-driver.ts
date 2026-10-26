@@ -3,11 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
-import type {
-  MediaImportAccepted,
-  MediaImportRequest,
-  MediaImportStatus,
-} from '@rezics/definitions/media-import';
+import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import type {
   CreateImportPipelineDriver,
   Exchange,
@@ -31,7 +27,11 @@ const canonical = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(canonical)
     : value && typeof value === 'object'
-      ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical((value as Record<string, unknown>)[key])]))
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+        )
       : value;
 const uuid = (value: string) => {
   const text = hash(value);
@@ -129,9 +129,7 @@ class Scheduler {
       }
       this.events.sort(
         (a, b) =>
-          a.at - b.at ||
-          (this.reverse ? compare(b.key, a.key) : compare(a.key, b.key)) ||
-          a.sequence - b.sequence,
+          a.at - b.at || (this.reverse ? compare(b.key, a.key) : compare(a.key, b.key)) || a.sequence - b.sequence,
       );
       const event = this.events.shift()!;
       this.now = Math.max(this.now, event.at);
@@ -254,9 +252,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
 
   const fenceReply = (key: string, group: string) => {
     const revision = group === 'cover' ? coverFences.get(key) : undefined;
-    return revision
-      ? { fenced: true, securityRevision: revision }
-      : { fenced: false, securityRevision: null };
+    return revision ? { fenced: true, securityRevision: revision } : { fenced: false, securityRevision: null };
   };
 
   const applyCommand = (command: BatchCommand, bytes: string): BatchWriteResult['results'][number] => {
@@ -310,9 +306,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
       const bootstrap = request.commands.every((command) => command.op === 'create');
       const metadata =
         !bootstrap &&
-        request.commands.some(
-          (command) => command.op === 'propose' && command.source.field_group !== 'cover',
-        );
+        request.commands.some((command) => command.op === 'propose' && command.source.field_group !== 'cover');
       return scheduler.request(
         {
           recordKey: key,
@@ -381,8 +375,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
         },
         onPageRetained(recordPhase, rows) {
           retained = new Map(rows.map((row) => [row.recordKey, row.bytes]));
-          if (recordPhase === 'staged')
-            memory.stagedPageRecords = Math.max(memory.stagedPageRecords, rows.length);
+          if (recordPhase === 'staged') memory.stagedPageRecords = Math.max(memory.stagedPageRecords, rows.length);
           sampleMemory();
         },
         onAcknowledged(recordKey) {
@@ -505,7 +498,10 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
               importer.session.bindings.observeMedia(
                 input.owner,
                 key,
-                mediaStatus({ key, bytes: JSON.stringify(request), request, accepted, submittedAt: scheduler.now }, 'available'),
+                mediaStatus(
+                  { key, bytes: JSON.stringify(request), request, accepted, submittedAt: scheduler.now },
+                  'available',
+                ),
               );
             }
           }

@@ -324,9 +324,7 @@ export class RunStore<Projection = BatchStatement[]> {
         omissions_json TEXT NOT NULL DEFAULT '[]', pending INTEGER NOT NULL DEFAULT 0,
         remaining INTEGER NOT NULL DEFAULT 0, cover_pending INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
-      const entryColumns = this.database
-        .query('PRAGMA table_info(run_entries)')
-        .all() as { name: string }[];
+      const entryColumns = this.database.query('PRAGMA table_info(run_entries)').all() as { name: string }[];
       if (!entryColumns.some((column) => column.name === 'cover_pending'))
         this.database.exec('ALTER TABLE run_entries ADD COLUMN cover_pending INTEGER NOT NULL DEFAULT 0');
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_pending ON run_entries(source,run_id,pending,record_key)`);
@@ -937,11 +935,7 @@ export class RunStore<Projection = BatchStatement[]> {
       kind: entry.kind,
     }));
   }
-  resolveDeferredCover(
-    run: Run,
-    key: string,
-    input: { omission?: Omission } = {},
-  ): { resolved: boolean; kind: Kind } {
+  resolveDeferredCover(run: Run, key: string, input: { omission?: Omission } = {}): { resolved: boolean; kind: Kind } {
     validateRun(run);
     keyId(key);
     exact(input, [], ['omission']);

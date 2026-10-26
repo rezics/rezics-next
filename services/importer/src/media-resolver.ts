@@ -200,11 +200,7 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
           submitted = true;
         }
         let status = journal.status;
-        if (
-          status?.media.state !== 'rejected' &&
-          status?.media.state !== 'available' &&
-          !(deferPending && submitted)
-        ) {
+        if (status?.media.state !== 'rejected' && status?.media.state !== 'available' && !(deferPending && submitted)) {
           signal.throwIfAborted();
           const response = await port.importStatus(accepted.media.id, signal);
           ensure(ownValue(response, 'status') === 200);

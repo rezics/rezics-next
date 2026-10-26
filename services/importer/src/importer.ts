@@ -590,8 +590,7 @@ export class Importer {
     }
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
     for (const intent of intents)
-      if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
-        return { outcome: 'failed', kind: deferred.kind };
+      if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? '')) return { outcome: 'failed', kind: deferred.kind };
     omissions = await this.fences(owner, signal);
     const freshCoverOmission = omissions.find((omission) => omission.field_group === 'cover');
     if (freshCoverOmission) {
