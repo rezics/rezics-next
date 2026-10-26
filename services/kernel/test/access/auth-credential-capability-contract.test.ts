@@ -20,7 +20,11 @@ import type {
   CredentialOpeningLocator,
 } from '../../src/access/auth-credential-capability.ts';
 import type { createOperatorCommands } from '../../src/access/operator.ts';
-import type { CredentialPurpose as ContractCredentialPurpose } from '@rezics/auth-contract';
+import type {
+  CredentialPurpose as ContractCredentialPurpose,
+  PasskeyPurpose as ContractPasskeyPurpose,
+  CredentialFloorPurpose as ContractCredentialFloorPurpose,
+} from '@rezics/auth-contract';
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 
 type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
@@ -197,8 +201,10 @@ test('passkey purposes are own-human types outside the frozen credential effect 
   expectTypeOf<ContractCredentialPurpose>().toEqualTypeOf<CredentialPurpose>();
   expectTypeOf<Extract<CredentialEffect, { kind: 'passkey' }>>().toEqualTypeOf<never>();
   expectTypeOf<PasskeyPurpose>().toEqualTypeOf<'add-passkey' | 'remove-passkey'>();
+  expectTypeOf<ContractPasskeyPurpose>().toEqualTypeOf<PasskeyPurpose>();
   expectTypeOf<KernelPasskeyPurpose>().toEqualTypeOf<PasskeyPurpose>();
   expectTypeOf<CredentialFloorPurpose>().toEqualTypeOf<CredentialPurpose | PasskeyPurpose>();
+  expectTypeOf<ContractCredentialFloorPurpose>().toEqualTypeOf<CredentialFloorPurpose>();
   expectTypeOf<KernelCredentialFloorPurpose>().toEqualTypeOf<CredentialFloorPurpose>();
   expectTypeOf<CredentialFloorReceipt['purpose']>().toEqualTypeOf<CredentialFloorPurpose>();
   expectTypeOf<CredentialFloorBinding['purpose']>().toEqualTypeOf<CredentialFloorPurpose>();
