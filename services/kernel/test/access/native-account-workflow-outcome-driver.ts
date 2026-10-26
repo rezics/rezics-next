@@ -110,7 +110,10 @@ let activeStepName: string | undefined;
 let activeHook: { before: Step; boundary?: 'step' | 'attempt-T'; run(): Promise<void>; used: boolean } | undefined;
 let restoreEvidenceReader: (() => void) | undefined;
 const pendingWorkflows = new Map<string, PendingWorkflow>();
-const preparedApprovals = new Map<string, { caller: string; reference: string; expiresAt: string; signature: string }>();
+const preparedApprovals = new Map<
+  string,
+  { caller: string; reference: string; expiresAt: string; signature: string }
+>();
 const originalRegisterStep = DBOS.registerStep.bind(DBOS);
 DBOS.registerStep = (<This, Args extends unknown[], Return>(
   func: (this: This, ...args: Args) => Promise<Return>,
@@ -390,10 +393,7 @@ function identityOf(
 }
 
 async function grantActions(resourceId: string, subjectId: string, acts: string[], issuerBearer: string, key: string) {
-  const actor = await required(accessPort, 'Access is not composed').authenticate(
-    issuerBearer,
-    context(),
-  );
+  const actor = await required(accessPort, 'Access is not composed').authenticate(issuerBearer, context());
   const command = createGrantCommands({
     pool: kernel,
     access: required(accessPort, 'Access is not composed'),
@@ -585,7 +585,11 @@ async function makeFixture(
     );
     if (!reduced.ok) throw new Error(`Auth epoch setup failed: ${reduced.status} ${await reduced.text()}`);
     const current = await login(callerPerson.email, appClient);
-    const other = await login(callerPerson.email, otherClient, scopes.filter((scope) => scope !== 'client:manage'));
+    const other = await login(
+      callerPerson.email,
+      otherClient,
+      scopes.filter((scope) => scope !== 'client:manage'),
+    );
     callerPerson.bearer = current.bearer;
     callerPerson.session = current.session;
     callerPerson.otherBearer = other.bearer;
@@ -622,12 +626,7 @@ async function makeFixture(
     );
     const operation = { kind: 'organization' as const, authorization: 'native-approval-request', handle: handleValue };
     const approval = await approvalFor(owner.bearer, { operationKey, operation });
-    const resolved = await approvals().resolveForCaller(
-      owner.bearer,
-      approval.reference,
-      operation,
-      context(),
-    );
+    const resolved = await approvals().resolveForCaller(owner.bearer, approval.reference, operation, context());
     const organizationKey = native().workflowPorts.stableCommandKey!(resolved, 'organization-id');
     organizationId = native().workflowPorts.registrationTarget(organizationKey);
     organizationApproval = {
@@ -808,11 +807,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
     fixture: makeFixture,
     async approve(caller, work) {
       const prepared = preparedApprovals.get(work.operationKey);
-      if (
-        prepared &&
-        prepared.caller === caller &&
-        JSON.stringify(work.operation) === prepared.signature
-      ) {
+      if (prepared && prepared.caller === caller && JSON.stringify(work.operation) === prepared.signature) {
         preparedApprovals.delete(work.operationKey);
         return { outcome: 'approved', reference: prepared.reference, expiresAt: prepared.expiresAt };
       }
