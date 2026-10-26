@@ -207,12 +207,14 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
         const found = new Map(rows.map((row) => [row.id, row]));
         const present = rows.map(({ id, route }) => ({ id, route }));
         const factRows = (await readFacts.run(client, {
+          partition_no: partition,
           routes: present.map(({ route }) => route),
           subject_ids: present.map(({ id }) => id),
         })) as FactRow[];
         const expanded = factRows.filter((row) => row.entry_kind === 'expanded');
         const adoptions = expanded.length
           ? ((await readAdoptions.run(client, {
+              partition_no: partition,
               routes: expanded.map(({ route }) => route),
               subject_ids: expanded.map(({ id }) => id),
               slot_ids: expanded.map(({ slot_id }) => slot_id),
@@ -267,13 +269,16 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
 
         const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
         const statements = visible.length
-          ? ((await readStatements.run(client, { entries: visible })) as StatementRow[])
+          ? ((await readStatements.run(client, { partition_no: partition, entries: visible })) as StatementRow[])
           : [];
         const digests = new Set<string>();
         for (const row of rows) if (row.currentRelease) digests.add(row.currentRelease);
         for (const row of statements) digests.add(row.release);
         const releaseRows = digests.size
-          ? ((await readReleases.run(client, { digests: [...digests] })) as { digest: string; body: Release }[])
+          ? ((await readReleases.run(client, { route: 0, digests: [...digests] })) as {
+              digest: string;
+              body: Release;
+            }[])
           : [];
         const releases = new Map(releaseRows.map((row) => [row.digest, row.body]));
 
