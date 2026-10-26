@@ -145,28 +145,30 @@ afterAll(async () => {
   }
 });
 
-async function fixture(owner = author, count = 1) {
-  const board = newId(0x6b31),
-    thread = newId(route),
+async function fixture(owner = author, count = 1, parent?: { board: string; thread: string; post: string }) {
+  const board = parent?.board ?? newId(0x6b31),
+    thread = parent?.thread ?? newId(route),
     post = newId(route),
     revision = newId(route);
   const client = await db.admin.connect();
   try {
     await client.query('BEGIN');
+    if (!parent) {
+      await client.query(
+        `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+        VALUES ($1,$2,$3,'Board','published',1,$2)`,
+        [routeOf(board), board, newId(route)],
+      );
+      await client.query(
+        `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id)
+        VALUES ($1,$2,$3,$4,'Opening title','published',1,$2,$5)`,
+        [route, thread, owner, board, post],
+      );
+    }
     await client.query(
-      `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-      VALUES ($1,$2,$3,'Board','published',1,$2)`,
-      [routeOf(board), board, newId(route)],
-    );
-    await client.query(
-      `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id)
-      VALUES ($1,$2,$3,$4,'Opening title','published',1,$2,$5)`,
-      [route, thread, owner, board, post],
-    );
-    await client.query(
-      `INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
-      VALUES ($1,$2,$3,$4,$5,'published',1,$5)`,
-      [route, thread, post, owner, revision],
+      `INSERT INTO content.post(route,thread_id,post_id,reply_to_post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+      VALUES ($1,$2,$3,$4,$5,$6,'published',1,$6)`,
+      [route, thread, post, parent?.post ?? null, owner, revision],
     );
     await client.query(
       `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
@@ -493,9 +495,9 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
     repetitions: 1,
     async grow(_database, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
-      probe = await fixture(author, 205);
-      warmupProbe = await fixture(author, 205);
-      const erased = await fixture(author, 205);
+      probe = await fixture(author, 205, neighbour);
+      warmupProbe = await fixture(author, 205, neighbour);
+      const erased = await fixture(author, 205, neighbour);
       expect((await request(`/posts/${erased.post}`, 'DELETE', author)).status).toBe(204);
       await db.admin.query('VACUUM (ANALYZE) content.post, content.revision');
       const page = await capture(db, () => cleanup(erased.post));
