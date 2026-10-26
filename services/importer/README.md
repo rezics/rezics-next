@@ -43,13 +43,13 @@ Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/im
 
 - Touches: one key file read at start; per renewal, one `POST /signin/key` and one `/token`.
 - Bound: at most ceil(T / 240 s) renewals over a run of duration T, plus one per 401. Nothing per record.
-- Growth check: the specification's long-run scenario on a virtual clock, which counts sign-ins across three token lifetimes.
+- Growth check: `../../specs/imports-cli-credentials.test.ts`, test `a long import renews before expiry within the sign-in bound and every batch write succeeds`, on a virtual clock across three token lifetimes, counting sign-ins.
 
 ### Import run
 
 - Touches: per record, the same requests as today, plus one batch for a cover whose media was pending. Per run, one pending-cover pass.
 - Bound: run time about ceil(N / K) x the record's request path x request latency, plus the media tail capped by `mediaDeadlineMs`. In-flight records at most K. Live state O(K) plus one page of 100 staged rows, independent of N and of history.
-- Growth check: the specification's throughput scenario, at N = 64, 256 and 1024 on a virtual clock.
+- Growth check: `../../specs/imports-pipeline.test.ts`, test `virtual throughput at sixty four two hundred fifty six and one thousand twenty four keeps bounded live state`, at N = 64, 256 and 1024 on a virtual clock.
 
 ### Import run (processor)
 
