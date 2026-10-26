@@ -88,10 +88,13 @@ export declare function accessCheck(access: Access, actor: Actor, action: string
 /** Resolve the installed port through derived adapters; never infer explicit
  * authority from an adapter's ordinary boolean decision. */
 export declare function accessExplicitCheck(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<AccessExplicitCheck>;
-/** Recheck command admission on every live attempt before resource checkout.
- * Each attempt prepares fresh action and self-read evidence at its own T, with
- * its own evidence budget capped by the original request deadline and JWT expiry.
- * A retry never renews those caps. Self-read permits receipt lookup only, never a body.
+/** Recheck command admission and prepare fresh evidence on every live attempt
+ * before resource checkout. The stable check wrapper always uses the current
+ * attempt's evidence, including body checks captured before execution. A retry
+ * does not renew the request: each attempt's context copies the fixed request
+ * deadline, and its evidence budget is capped by it and by JWT expiry, so no
+ * attempt's evidence outlives the request. Self-read permits receipt lookup
+ * only, never a body.
  */
 export declare function accessCommandAuthorization(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext, denied: () => Error): Promise<AccessCommandAuthorization>;
 export declare class AuthenticationError extends Error {

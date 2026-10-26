@@ -367,6 +367,24 @@ CREATE TABLE access.account (
 
 
 --
+-- Name: account_preferences; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account_preferences (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    spoiler_level integer NOT NULL,
+    suitability text NOT NULL,
+    version integer NOT NULL,
+    CONSTRAINT account_preferences_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_preferences_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT account_preferences_spoiler_level_check CHECK (((spoiler_level >= 0) AND (spoiler_level <= 2))),
+    CONSTRAINT account_preferences_suitability_check CHECK ((suitability = ANY (ARRAY['blur'::text, 'show'::text]))),
+    CONSTRAINT account_preferences_version_check CHECK ((version > 0))
+);
+
+
+--
 -- Name: committed_continuation; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -936,6 +954,14 @@ CREATE UNLOGGED TABLE access.write_rate_counter (
 
 ALTER TABLE ONLY access.account
     ADD CONSTRAINT account_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: account_preferences account_preferences_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_preferences
+    ADD CONSTRAINT account_preferences_pkey PRIMARY KEY (route, account_id);
 
 
 --

@@ -1,4 +1,4 @@
-import type { Access, AccessContext, AccountActor } from '../request/access.ts';
+import { type Access, type AccessContext, type AccountActor } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import approvalRead from './workflow-approvals-read.sql';
 export declare class ApprovalIdentityDeniedError extends Error {

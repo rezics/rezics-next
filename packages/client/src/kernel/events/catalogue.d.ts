@@ -15,6 +15,14 @@ declare const productEventTypes: {
         pageKey: Type.TString;
         count: Type.TInteger;
     }>;
+    readonly 'com.rezics.access.operator.unfence-page.v1': Type.TObject<{
+        pageKey: Type.TString;
+        count: Type.TInteger;
+    }>;
+    readonly 'com.rezics.access.operator.subject-unfenced.v1': Type.TObject<{
+        accountId: Type.TString;
+        lifted: Type.TBoolean;
+    }>;
     readonly 'com.rezics.access.operator.subject-fenced.v1': Type.TObject<{
         accountId: Type.TString;
         fenced: Type.TBoolean;
@@ -30,6 +38,7 @@ declare const productEventTypes: {
     readonly 'com.rezics.access.account.reinstated.v1': Type.TObject<{
         accountId: Type.TString;
         state: Type.TLiteral<"active">;
+        continuationOperationKey: Type.TOptional<Type.TString>;
         minimumAuthnEpoch: Type.TString;
         receiptId: Type.TString;
     }>;

@@ -422,3 +422,11 @@ export {
   type ContinuationEntry,
   type ContinuationView,
 } from './committed-continuations.ts';
+
+export {
+  createPreferenceCommands,
+  readAccountPreferences,
+  DEFAULT_ACCOUNT_PREFERENCES,
+  type AccountPreferences,
+  type PreferenceChange,
+} from './preferences.ts';

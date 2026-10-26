@@ -3,12 +3,14 @@ import type { Pool } from 'pg';
 import { type CommandOutcome } from '../command/command.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type Access, type ActionCatalogue } from '../request/access.ts';
-import type { LifecycleRequest } from './lifecycle.ts';
+import type { LifecycleRequest, OpeningManagement } from './lifecycle.ts';
 export declare const OPERATOR_RECEIPT_TTL_MS = 60000;
 export declare class OperatorDeniedError extends Error {
     readonly status = 403;
     constructor();
 }
+/** The management decision installed with the operator commands built on this Access, if any. */
+export declare function openingManagement(access: Access): OpeningManagement | undefined;
 export type OperatorPurpose = 'session' | 'credential-management';
 export type OperatorResponsibility = {
     operatorAccountId: string;

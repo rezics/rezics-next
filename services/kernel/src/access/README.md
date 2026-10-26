@@ -525,3 +525,36 @@ including when preparation has already taken more than one second. The final SQL
 continues to check evidence validity at the authoritative command time. The database
 deadline uses the remaining budget when its clock was observed, so later preparation
 does not subtract elapsed time twice.
+
+## Viewer preferences
+
+Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
+`{ "spoilerLevel": 0, "suitability": "blur", "version": 0 }`. Anonymous viewers use these defaults locally.
+
+- `spoilerLevel` is the highest `rezics:spoilerLevel` displayed without a reveal control: 0 (none), 1 (minor), or
+  2 (major). Summaries remain spoiler-safe regardless of this setting.
+- `suitability` is `blur` (default) or `show`. With `blur`, covers and images withheld for suitability appear blurred
+  behind a label and reveal control. `show` opts into displaying them. Content and semantic own classification;
+  the web owns applying these values to Cover, relations and character displays.
+
+`GET /v1/accounts/{accountId}/preferences` returns both settings and `version`. `PATCH` accepts `expectedVersion`
+(required, a nonnegative integer) and either or both settings. Omitted settings keep their current values. Both routes
+require the acting account to equal the path account, with `account:read` and `account:update` respectively. Grants to
+another account do not bypass this equality check. An operator-opened session acts as its automated account and changes
+that account's settings; the operator's own bearer cannot change them directly. Responses are private and not cached.
+
+PATCH uses the structured-field `Idempotency-Key` header, the shared write-rate stage (one write unit), and `runCommand`.
+A changed value increments the version once. Unchanged values preserve the version and write no preference row;
+setting the initial defaults therefore leaves storage absent. Returning to the defaults after a change keeps the row
+and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
+Replaying a successful key returns its original values/version after current authorization, even if later commands
+changed the preferences. Every successful response includes both settings and the version, and PATCH carries the
+session token for its command receipt. Each successful command emits the existing `account-updated` event with only
+the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
+
+Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, with logarithmic
+blocks in accounts.
+Set cost: one preference row and the command envelope's receipt, with constant rows and statements. Authentication and
+native authorization retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored
+preferences at scales 256, 1024 and 4096 (16 accounts per scale unit, to avoid tiny-table scans) using the shared
+harness and default warmups.

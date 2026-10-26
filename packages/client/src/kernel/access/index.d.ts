@@ -1,4 +1,5 @@
 export { AccessUnavailableError } from './unavailable.ts';
+export { accessClock } from './access-clock.ts';
 import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';
@@ -31,3 +32,4 @@ export type { ResourceRoleCatalogue } from './resource-roles.ts';
 export { createWorkflowApprovals, sweepWorkflowApprovals, workflowApprovalBinding, MAX_WORKFLOW_APPROVAL_LIFETIME_MS, WorkflowApprovalUnavailableError, type WorkflowApproval, type WorkflowApprovalConfig, type WorkflowApprovalRequest, type WorkflowApprovalBinding, } from './workflow-approvals.ts';
 export { createCredentialCapability, type CredentialCapability, type CredentialCapabilityConfig, type CredentialOpeningLocator, } from './auth-credential-capability.ts';
 export { createCommittedContinuations, deletionAllowlist, COMMITTED_CONTINUATION_ACTIONS, COMMITTED_CONTINUATION_PURPOSE, COMMITTED_CONTINUATION_TTL_MS, ContinuationDeniedError, type CommittedContinuations, type ContinuationBinding, type ContinuationEntry, type ContinuationView, } from './committed-continuations.ts';
+export { createPreferenceCommands, readAccountPreferences, DEFAULT_ACCOUNT_PREFERENCES, type AccountPreferences, type PreferenceChange, } from './preferences.ts';

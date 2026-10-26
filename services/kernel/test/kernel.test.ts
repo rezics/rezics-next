@@ -70,6 +70,8 @@ const typed = [
   'POST /v1/accounts/:accountId/$reinstate',
   'POST /v1/accounts/:accountId/$setRateTier',
   'GET /v1/accounts',
+  'GET /v1/accounts/:accountId/preferences',
+  'PATCH /v1/accounts/:accountId/preferences',
   'POST /v1/platform/exposure/:group/$close',
   'POST /v1/platform/exposure/:group/$open',
   'PATCH /v1/spaces/:spaceId',

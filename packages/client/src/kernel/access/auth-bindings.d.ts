@@ -1,13 +1,14 @@
-import type { AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, TrustedAccessPorts } from '@rezics/auth-contract';
+import type { Access } from '../request/access.ts';
+import type { AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import type { OperatorOpening } from './operator.ts';
-type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
+type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0] | PasskeyAuthorizationInput;
 type InvalidateInput = Parameters<NonNullable<TrustedAccessPorts['invalidateAccount']>>[0];
 type RecoveryInput = Parameters<NonNullable<TrustedAccessPorts['authorizeRecovery']>>[0];
 export type AuthProvisioningReceipt = Awaited<ReturnType<ReturnType<typeof createLifecycleInternals>['createPending']>>['value'];
-export type AuthAuthorizationReceipt = {
-    authorization: EffectAuthorization;
+export type AuthAuthorizationReceipt<Purpose extends CredentialFloorPurpose = CredentialPurpose> = {
+    authorization: EffectAuthorization | CredentialEffectAuthorization<Purpose>;
     /** Required for automation; a broad native credential purpose never replaces the exact Auth purpose. */
     operatorOpening: OperatorOpening | null;
 };
@@ -25,10 +26,11 @@ export type AuthBindingCapabilities = {
         receipt: ProvisioningReceiptMetadata;
     }) | null>;
     verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
-    consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt | null>;
+    consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt<CredentialFloorPurpose> | null>;
     invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
     authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
     completeRecovery?: TrustedAccessPorts['completeRecovery'];
+    confirmBarrier?: TrustedAccessPorts['confirmBarrier'];
 };
 export declare class AuthBindingUnavailableError extends Error {
     constructor(capability: keyof AuthBindingCapabilities);
@@ -43,5 +45,6 @@ export declare class AuthBindingDeniedError extends Error {
  */
 export declare function createAuthBindings(config: {
     pool: Pool;
-} & AuthBindingCapabilities): TrustedAccessPorts;
+    access?: Access;
+} & AuthBindingCapabilities): PasskeyTrustedAccessPorts;
 export {};

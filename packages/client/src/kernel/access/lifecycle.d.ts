@@ -1,6 +1,7 @@
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import type { Pool } from 'pg';
-import { type Access, type AccountActor, type ActionCatalogue } from '../request/access.ts';
+import { type CommandAttempt } from '../command/command.ts';
+import { type Access, type AccountActor, type AccessClient, type ActionCatalogue } from '../request/access.ts';
 import type { PermissionContext } from './permission.ts';
 import { type ContinuationBinding } from './committed-continuations.ts';
 /** Authoritative application-clock policy: registration lasts 30 minutes and an
@@ -15,6 +16,13 @@ type Boundary = {
     pool: Pool;
     clock?: () => Date;
 };
+export type AuthenticationBarrierReceipt = {
+    accountId: string;
+    purpose: AuthenticationBarrierCommand['purpose'];
+    operationKey: string;
+    receiptId: string;
+    minimumAuthnEpoch: number;
+};
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & {
     actor: AccountActor;
 };
@@ -28,6 +36,21 @@ export type AuthenticationBarrierCommand = LifecycleCommand & {
     proofReference: string;
     proofDigest: string;
     proofExpiresAt: string;
+    /** The operator opening of the session that reduces an automated account's consent. */
+    openingReceiptId?: string;
+};
+/** Whether the human of an operator opening still manages the operator: decided with the shared permission
+ * evaluator on the opening's recorded principal, before the account lock at the attempt's T, then checked
+ * again under the lock. The barrier holds no formula of its own.
+ */
+export type OpeningManagement = {
+    prepare(attempt: CommandAttempt, opening: {
+        operatorAccountId: string;
+        subjectAccountId: string;
+        action: string;
+        principal: AccountActor;
+    }): Promise<object>;
+    authorize(tx: AccessClient, attempt: CommandAttempt, proof: object): Promise<void>;
 };
 export type HandleTransition = LifecycleCommand & {
     handle: string;
@@ -292,7 +315,7 @@ export declare function createLifecycleInternals(config: Boundary & {
      * attempt, including receipt replay; floor comparison holds the account lock.
      * A later floor can never authorize an earlier operation's receipt.
      */
-    advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>): Promise<import("../command/command.ts").CommandOutcome<{
+    advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>, management?: OpeningManagement): Promise<import("../command/command.ts").CommandOutcome<{
         receiptId: string;
         accountId: string;
         minimumAuthnEpoch: string;
@@ -300,12 +323,22 @@ export declare function createLifecycleInternals(config: Boundary & {
         priorOperatorAccountId: string | null;
     }>>;
     raiseFence(input: LifecycleCommand): Promise<import("../command/command.ts").CommandOutcome<LifecycleFenceReceipt>>;
+    confirmBarrier: (value: AuthenticationBarrierReceipt) => Promise<boolean>;
     readFenceReceipt(accountId: string, receiptId: string): Promise<LifecycleFenceReceipt | null>;
     readFenceState(accountId: string): Promise<{
         fenced: boolean;
         receiptId: string | null;
         minimumAuthnEpoch: string;
     } | null>;
+    /** Trusted Auth composition only, after the consent reduction and its session revocation committed.
+     * Clears the fence that exact consent barrier raised. A fence the barrier did not raise, or one a later floor
+     * moved past, stays and the completion still commits; a recovery fence needs its establishment evidence.
+     */
+    completeConsentBarrier(value: AuthenticationBarrierReceipt): Promise<import("../command/command.ts").CommandOutcome<{
+        accountId: string;
+        receiptId: string;
+        minimumAuthnEpoch: string;
+    }>>;
     clearFence(input: LifecycleCommand & {
         evidence: unknown;
     }): Promise<import("../command/command.ts").CommandOutcome<{

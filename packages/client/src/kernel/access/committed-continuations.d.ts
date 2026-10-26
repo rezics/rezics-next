@@ -74,6 +74,20 @@ export declare function insertDeletionContinuation(tx: CommandTransaction, input
     transactionId: string;
     allowlist?: ContinuationEntry[];
 }): Promise<void>;
+export declare function isFenceContinuation(root: ContinuationSnapshot): boolean;
+export declare function isDeletionContinuation(root: ContinuationSnapshot): boolean;
+/** The one completion path. Every step of a continuation, listed on the root or
+ * proven by the runner against an immutable page, passes the digest and the stored
+ * expiry at the command's T before its completion row is written, in the effect's
+ * own transaction. The receipt is derived from the step, so replay writes nothing. */
+export declare function recordCompletion(tx: CommandTransaction, located: {
+    route: number;
+    continuationId: string;
+    digest: string;
+}, presented: ContinuationEntry, listed: boolean): Promise<{
+    continuationId: string;
+    receiptId: string;
+}>;
 export type CommittedContinuations = {
     /** Trusted kernel recovery port. Each iteration commits one bounded page. */
     continueCommitted(reference: string): Promise<void>;

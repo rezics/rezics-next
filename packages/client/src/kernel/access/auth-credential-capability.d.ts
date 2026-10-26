@@ -1,5 +1,5 @@
 import { type Account } from './account-data.ts';
-import type { AuthSessionPort, CredentialAuthorizationInput, CredentialEffectAuthorization, CredentialEffectBinding, CredentialEffectVerifier, CredentialFloorPort, TrustedAccessPorts } from '@rezics/auth-contract';
+import type { AuthSessionPort, CredentialApprovalPorts, CredentialFloorAuthorizationInput, CredentialEffectBinding as OperatorCredentialBinding, CredentialFloorPurpose, CredentialEffectAuthorization, CredentialFloorBinding, CredentialEffectExpectation, CredentialFloorPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -10,10 +10,11 @@ import { type createWorkflowApprovals } from './workflow-approvals.ts';
  * References are locators only, never proof of current authority. Own-human and
  * automated paths use their real native owners; never fake a self-operator row.
  */
-export type CredentialOpeningLocator = Pick<CredentialEffectBinding, 'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'> & ({
+type OpeningBinding<Binding> = Pick<Binding & CredentialFloorBinding, 'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'>;
+export type CredentialOpeningLocator = (OpeningBinding<CredentialFloorBinding> & {
     kind: 'workflow-approval';
     reference: string;
-} | {
+}) | (OpeningBinding<OperatorCredentialBinding> & {
     kind: 'operator-opening';
     operatorAccountId: string;
     receiptId: string;
@@ -33,24 +34,26 @@ export type CredentialCapabilityConfig = {
     workflowApprovals: ReturnType<typeof createWorkflowApprovals>;
     referenceKeys: KeyRing;
     accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
-    verifyCredentialEffect: CredentialEffectVerifier;
+    verifyCredentialEffect(reference: string, expected: CredentialEffectExpectation<CredentialFloorPurpose>): Promise<CredentialFloorBinding>;
 };
 type CredentialRevalidationInput = Parameters<NonNullable<TrustedAccessPorts['revalidateCredentialEffect']>>[0] & {
     /** Auth's saved committing opening identity; required for result disclosure. */
     committedOpeningReceiptId?: string;
 };
-export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCredentialEffect'>> & {
+export type CredentialCapability = Required<Pick<CredentialApprovalPorts<CredentialFloorPurpose>, 'approveCredentialEffect'>> & {
     revalidateCredentialEffect(input: CredentialRevalidationInput): Promise<void>;
     /** Seal only a verified native exact opening locator; no caller approval minting.
      */
     createOpeningReference(opening: CredentialOpeningLocator): string;
-    /** Credential-only consumer. Require one exact credential purpose and reject
-     * session/device approval or broad credential-management alone. Auth verifies
-     * the committed stage; purpose/key/reference/digest/subject must match the
-     * narrowed native row and returned CredentialEffectAuthorization before Auth writes.
+    /** Credential-only consumer. Reject legacy unbound input, session/device approval
+     * and broad credential-management alone. Auth verifies the committed stage; the
+     * exact purpose/key/reference/digest/subject must match the narrowed native row
+     * and returned CredentialEffectAuthorization before Auth writes.
      */
-    consumeAuthAuthorization(input: CredentialAuthorizationInput): Promise<AuthAuthorizationReceipt & {
-        authorization: CredentialEffectAuthorization;
+    consumeAuthAuthorization<Purpose extends CredentialFloorPurpose>(input: Omit<CredentialFloorAuthorizationInput, 'purpose'> & {
+        purpose: Purpose;
+    }): Promise<Omit<AuthAuthorizationReceipt, 'authorization'> & {
+        authorization: CredentialEffectAuthorization<Purpose>;
     }>;
     /** Credential-only committed floor hook; never consent/recovery relabelling.
      */
@@ -96,6 +99,7 @@ export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCre
  * at creation; temporary artifacts use worktree-relative .temp/ only.
  */
 export declare function createCredentialCapability(config: CredentialCapabilityConfig): CredentialCapability;
+export type { PasskeyPurpose, CredentialFloorPurpose } from '@rezics/auth-contract';
 declare const floorIdentity: unique symbol;
 export type CredentialFloorIdentity = {
     readonly [floorIdentity]: true;
@@ -108,4 +112,3 @@ export declare function credentialFloorIdentityClaims(proof: CredentialFloorIden
     account: Account;
     pool: Pool;
 } | undefined;
-export {};
