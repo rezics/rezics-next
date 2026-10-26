@@ -63,6 +63,7 @@ let service: ReturnType<typeof createSearchService> | undefined;
 let kernel: ReturnType<typeof createKernel> | undefined;
 let probe: Probe | undefined;
 let authorIds: string[] = [];
+let bookIds: string[] = [];
 
 async function addSubject(route: number, item: unknown): Promise<string> {
   if (!db) throw new Error('Growth database is not open');
@@ -137,7 +138,7 @@ function unrelatedPopulation(name: string): Population {
       const slot = newId(route);
       const candidate = newId(route);
       const transactionId = randomUUID();
-      const releaseDigest = `sha256:${createHash('sha256').update(`facet-release-${ordinal}`).digest('hex')}`;
+      const releaseDigest = `sha256:${createHash('sha256').update(`facet-release-${ordinal}-${id}`).digest('hex')}`;
       const term = itemFacts(id, { labels: { en: `Unrelated ${ordinal}` } })[0]!;
       const body = { value: { type: 'value', content: 'ja' }, qualifiers: [], references: [] };
       return {
@@ -345,6 +346,8 @@ beforeAll(async () => {
     }),
   ];
 
+  bookIds = books;
+
   await createSubjectIndex(engine, prefix, 1);
   const byPartition = new Map<number, string[]>();
   for (const id of [...authorIds, ...books]) {
@@ -444,6 +447,70 @@ test('Facet counts stays within its bound as N grows', async () => {
         const ids = probe.reads.flatMap(({ ids: readIds }) => readIds);
         expect(new Set(ids).size).toBeLessThanOrEqual(320);
         expect(new Set(ids)).toEqual(new Set(authorIds));
+      } finally {
+        probe = undefined;
+      }
+    },
+  });
+  expect(report.samples).toHaveLength(3);
+  for (const sample of report.samples) {
+    const scans = Object.entries(sample.cost.relations ?? {}).filter(
+      ([relation, cost]) => relation.startsWith('semantic.') && (cost.sequentialScans ?? 0) > 0,
+    );
+    expect(scans).toEqual([]);
+  }
+}, 90_000);
+
+test('Search hit facts stay within their bound as N grows', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  const selectedPartitions = new Set(authorIds.map(subjectPartition));
+  const allowedIds = new Set([...bookIds, ...authorIds]);
+  const authorsByBook = [[0], [0, 1], [0], [1]];
+  const report = await checkGrowth(db, {
+    name: 'Search hit facts',
+    scales: [1, 8, 64],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    grow: growPopulation,
+    operation: async () => {
+      probe = { aggregations: 0, reads: [] };
+      try {
+        const response = await kernel!.handle(
+          new Request('http://kernel.test/v1/subjects:search', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              filter: { type: { in: ['schema:Book'] } },
+              sort: 'name',
+              properties: ['schema:author'],
+              languages: ['en'],
+            }),
+          }),
+        );
+        expect(response.status).toBe(200);
+        const answer = (await response.json()) as {
+          subjects: { id: string; facts: Record<string, unknown[]> }[];
+          total: { value: number; relation: string };
+        };
+        expect(answer.total).toEqual({ value: 4, relation: 'exact' });
+        expect(answer.subjects.map(({ id }) => id)).toEqual([bookIds[3]!, bookIds[0]!, bookIds[2]!, bookIds[1]!]);
+        for (const hit of answer.subjects) {
+          const authors = authorsByBook[bookIds.indexOf(hit.id)]!;
+          expect(hit.facts['schema:author']).toEqual(
+            authors.map((index) => ({
+              kind: 'item',
+              id: authorIds[index]!,
+              labels: { en: index === 0 ? 'Author A' : 'Author B' },
+            })),
+          );
+        }
+        const authorReads = probe.reads.filter(({ ids }) => ids.some((id) => authorIds.includes(id)));
+        expect(authorReads.map(({ partition }) => partition).sort((a, b) => a - b)).toEqual(
+          [...selectedPartitions].sort((a, b) => a - b),
+        );
+        expect(authorReads.flatMap(({ ids }) => ids).sort()).toEqual([...authorIds].sort());
+        for (const { ids } of probe.reads) for (const id of ids) expect(allowedIds.has(id)).toBe(true);
       } finally {
         probe = undefined;
       }
