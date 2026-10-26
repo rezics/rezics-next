@@ -6,6 +6,7 @@ import {
   createProvisioningEvidenceVerifier,
   type AuthService,
 } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool, type Pool as PgPool } from 'pg';
@@ -28,15 +29,8 @@ import permissionRead from '../../src/access/permission-check.sql';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
-import { initializeResourceGrants, parentCreationAuthorization } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { platformRootAnchor } from '../../src/commerce/catalogue.ts';
-import {
-  CommandUnavailableError,
-  principalCommandIdentity,
-  runCommand,
-  type CommandTransaction,
-} from '../../src/command/command.ts';
+import { CommandUnavailableError } from '../../src/command/command.ts';
 import fenceStatement from '../../src/command/fence.sql';
 import readReceipt from '../../src/command/read-receipt.sql';
 import insertPost from '../../src/content/create-post.sql';
@@ -46,7 +40,8 @@ import { threadTarget } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
 import type { AccountActor } from '../../src/request/access.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 import { observeSql, type SqlObserver } from './support/sql-observer.ts';
@@ -208,6 +203,94 @@ function namedUrl(databaseUrl: string, name: string): string {
   return url.href;
 }
 
+async function boardCommand<T>(
+  kernel: ReturnType<typeof createKernel>,
+  actor: Credential,
+  method: 'POST' | 'PUT',
+  path: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+): Promise<T> {
+  const response = await kernel.handle(
+    new Request(`${AUDIENCE}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${actor.bearer}`,
+        'content-type': 'application/json',
+        [IDEMPOTENCY_HEADER]: JSON.stringify(crypto.randomUUID()),
+        ...headers,
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (!response.ok) {
+    throw new Error(`Board fixture ${method} ${path} failed (${response.status}): ${await response.text()}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function provisionBoard(
+  kernel: ReturnType<typeof createKernel>,
+  creator: Credential,
+  subjectCreator: Credential,
+  visibility: 'published' | 'protected',
+  label: string,
+): Promise<{ id: string; route: number }> {
+  const { space } = await boardCommand<{ space: { spaceId: string } }>(kernel, creator, 'POST', '/v1/spaces', {
+    title: `${label} space`,
+    summary: `${label} board fixture`,
+  });
+  const { realm } = await boardCommand<{ realm: { realmId: string; headRevisionId: string } }>(
+    kernel,
+    creator,
+    'POST',
+    '/v1/realms',
+    {
+      spaceId: space.spaceId,
+      title: `${label} realm`,
+      summary: `${label} board fixture`,
+      visibility: 'public',
+      contextId: GLOBAL_CONTEXT,
+    },
+  );
+  const { subject: scheme } = await boardCommand<{ subject: { id: string } }>(
+    kernel,
+    subjectCreator,
+    'POST',
+    '/v1/subjects',
+    { type: 'skos:ConceptScheme', labels: { en: `${label} scheme` } },
+  );
+  const { subject: concept } = await boardCommand<{ subject: { id: string } }>(
+    kernel,
+    subjectCreator,
+    'POST',
+    '/v1/subjects',
+    {
+      type: 'skos:Concept',
+      labels: { en: `${label} concept` },
+      statements: {
+        'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.id } }],
+      },
+    },
+  );
+  await boardCommand(
+    kernel,
+    creator,
+    'PUT',
+    `/v1/realms/${realm.realmId}/boardScheme`,
+    { schemeId: scheme.id },
+    { 'if-match': JSON.stringify(realm.headRevisionId) },
+  );
+  const { board } = await boardCommand<{ board: { id: string; route: number } }>(
+    kernel,
+    creator,
+    'POST',
+    `/v1/realms/${realm.realmId}/boards`,
+    { conceptId: concept.id, title: `${label} board`, visibility },
+  );
+  return { id: board.id, route: board.route };
+}
+
 /** The measured kernel must use the already-open growth pool. Cloning that database
  * would require disconnecting the observer that records the request. */
 export async function openMeasuredThreadCreate(database: { url: string; pool: PgPool; admin: PgPool }): Promise<{
@@ -351,6 +434,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
     };
     const governance = await person('governance');
     await bootstrapGovernance(database.pool, governance.actor.accountId);
+    await bootstrapRelease(database.pool, bundledRelease);
     const author = await person('author');
     const grant = await kernel.handle(
       new Request(`${AUDIENCE}/v1/grants`, {
@@ -363,70 +447,14 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
         body: JSON.stringify({
           resource: PLATFORM_RESOURCE,
           subject: { kind: 'account', id: author.actor.accountId },
-          actions: ['subject:create'],
+          actions: ['space:create', 'realm:create'],
           valid: '(,)',
         }),
       }),
     );
     if (grant.status !== 201) throw new Error(`Measured parent grant failed (${grant.status}): ${await grant.text()}`);
 
-    const boardRoute = 16;
-    const board = { route: boardRoute, id: newId(boardRoute) };
-    const subjectId = newId(boardRoute);
-    const inserted = new WeakMap<CommandTransaction, string>();
-    const deadline = Date.now() + 20_000;
-    await runCommand(
-      database.pool,
-      {
-        ...principalCommandIdentity(author.actor),
-        partition: partitionOf(board.route),
-        deadline,
-        authorization: parentCreationAuthorization({
-          access,
-          actor: author.actor,
-          action: 'subject:create',
-          parent: platformRootAnchor,
-          context: {
-            pool: database.pool,
-            deadline,
-            resource: board,
-            creation: {
-              async validate(tx, target) {
-                const transactionId = inserted.get(tx);
-                if (!transactionId) return false;
-                const result = await tx.query<{ inserted_here: boolean; transaction_id: string }>(
-                  `SELECT xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here,
-                          recorded_transaction_id::text AS transaction_id
-                   FROM content.board WHERE route = $1 AND board_id = $2`,
-                  [target.route, target.id],
-                );
-                const row = result.rows[0];
-                return row?.inserted_here === true && row.transaction_id === transactionId;
-              },
-            },
-          },
-        }),
-        receipt: {
-          kind: 'content.board.provision',
-          key: crypto.randomUUID(),
-          digest: createHash('sha256').update(board.id).digest(),
-        },
-      },
-      async (tx, command) => {
-        inserted.set(tx, command.transactionId);
-        await tx.query(
-          `INSERT INTO content.board
-             (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-           VALUES ($1, $2, $3, 'Measured board', 'published', 1, $4)`,
-          [board.route, board.id, subjectId, command.transactionId],
-        );
-        await initializeResourceGrants(tx, { resource: board, type: 'content.board', creator: author.actor.accountId });
-        return {
-          value: { boardId: board.id },
-          events: [{ type: 'com.rezics.fixture.board.recorded.v1', data: { boardId: board.id } }],
-        };
-      },
-    );
+    const board = await provisionBoard(kernel, author, governance, 'published', 'Measured');
 
     const keys: string[] = [];
     let hotRoute = -1;
@@ -561,7 +589,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
   const observer: SqlObserver = observeSql(system.database.pool);
   const pool = system.database.pool;
   let mark = 0;
-  let boardRoute = 32;
+  let fixtureSemanticIds = new Set<string>();
   const owner = personaOf(system.actors.author);
   const other = personaOf(system.actors.other);
   const moderator = personaOf(system.actors.moderator);
@@ -598,80 +626,14 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
   async function createBoard(
     creator: Credential,
     visibility: 'published' | 'protected',
-  ): Promise<{
-    id: string;
-    route: number;
-  }> {
-    const route = boardRoute;
-    boardRoute += 16;
-    const resource = { route, id: newId(route) };
-    const subjectId = newId(route);
-    const inserted = new WeakMap<CommandTransaction, string>();
-    const deadline = Date.now() + 20_000;
-    await runCommand(
-      pool,
-      {
-        ...principalCommandIdentity(creator.actor),
-        partition: partitionOf(route),
-        deadline,
-        authorization: parentCreationAuthorization({
-          access: system.access,
-          actor: creator.actor,
-          action: 'subject:create',
-          parent: platformRootAnchor,
-          context: {
-            pool,
-            deadline,
-            resource,
-            creation: {
-              async validate(tx, target) {
-                const transactionId = inserted.get(tx);
-                if (!transactionId) return false;
-                const result = await tx.query<{ inserted_here: boolean; transaction_id: string }>(
-                  `SELECT xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here,
-                          recorded_transaction_id::text AS transaction_id
-                   FROM content.board WHERE route = $1 AND board_id = $2`,
-                  [target.route, target.id],
-                );
-                const row = result.rows[0];
-                return row?.inserted_here === true && row.transaction_id === transactionId;
-              },
-            },
-          },
-        }),
-        receipt: {
-          kind: 'content.board.provision',
-          key: crypto.randomUUID(),
-          digest: createHash('sha256').update(`${resource.id}\n${visibility}`).digest(),
-        },
-      },
-      async (tx, command) => {
-        inserted.set(tx, command.transactionId);
-        await tx.query(
-          `INSERT INTO content.board
-             (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-           VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-          [
-            route,
-            resource.id,
-            subjectId,
-            visibility === 'published' ? 'Public board' : 'Private board',
-            visibility,
-            command.transactionId,
-          ],
-        );
-        await initializeResourceGrants(tx, {
-          resource,
-          type: 'content.board',
-          creator: creator.actor.accountId,
-        });
-        return {
-          value: { boardId: resource.id },
-          events: [{ type: 'com.rezics.fixture.board.recorded.v1', data: { boardId: resource.id } }],
-        };
-      },
+  ): Promise<{ id: string; route: number }> {
+    return provisionBoard(
+      system.kernel,
+      creator,
+      creator,
+      visibility,
+      visibility === 'published' ? 'Public thread fixture' : 'Protected thread fixture',
     );
-    return resource;
   }
 
   const driver: ContentThreadDriver = {
@@ -680,8 +642,11 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
       await system.close();
     },
     async provision() {
+      await bootstrapRelease(pool, bundledRelease);
       const board = await createBoard(system.actors.author, 'published');
       const privateBoard = await createBoard(system.actors.author, 'protected');
+      const semantic = await pool.query<{ id: string }>('SELECT subject_id::text AS id FROM semantic.subject');
+      fixtureSemanticIds = new Set(semantic.rows.map((row) => row.id));
       const subjectIds = [newId(9), newId(10), newId(11)];
       const home = threadTarget(system.routeKey, owner.id, 'create').route;
       let foreignKey = '';
@@ -924,7 +889,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
             },
           })),
           claims: claims.rows,
-          semanticRows: semantic.rows.map((row) => row.id),
+          semanticRows: semantic.rows.map((row) => row.id).filter((id) => !fixtureSemanticIds.has(id)),
         };
         return evidence;
       } finally {
