@@ -1,4 +1,4 @@
-import { assertGrowth, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
+import { assertGrowth, DEFAULT_SLACK, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
 import { capture, type GrowthDatabase } from './growth-capture.ts';
 import {
   catalogStatementBound,
@@ -64,6 +64,43 @@ function assertCatalogBound(
   throw error;
 }
 
+function assertBackgroundBound(
+  name: string,
+  samples: readonly { readonly scale: number; readonly cost: Cost }[],
+): void {
+  const statements = new Set(samples.flatMap(({ cost }) => Object.keys(cost.backgroundCosts ?? {})));
+  const failures: { statement: string; rows: number; metric: 'rows' | 'blocks'; values: number[]; allowed: number }[] =
+    [];
+  for (const statement of statements) {
+    const observed: { scale: number; rows: number; blocks: number }[] = [];
+    for (const sample of samples) {
+      const cost = sample.cost.backgroundCosts?.[statement];
+      if (cost) observed.push({ scale: sample.scale, rows: cost.rows, blocks: cost.blocks });
+    }
+    if (observed.length < 2) continue;
+    for (const metric of ['rows', 'blocks'] as const) {
+      const first = observed[0]![metric];
+      const last = observed.at(-1)![metric];
+      const tolerance = DEFAULT_SLACK[metric];
+      const allowed = Math.max(tolerance.absolute, tolerance.relative * first);
+      if (last - first > allowed)
+        failures.push({
+          statement,
+          rows: observed.at(-1)!.rows,
+          metric,
+          values: observed.map((item) => item[metric]),
+          allowed,
+        });
+    }
+  }
+  if (failures.length === 0) return;
+  failures.sort((left, right) => right.rows - left.rows);
+  const largest = failures[0]!;
+  const error = new GrowthBoundError([], samples);
+  error.message = `${name}: background statement with largest rows: ${largest.statement.slice(0, 160)}; ${largest.metric} per statement grows from ${largest.values[0]} to ${largest.values.at(-1)} beyond default slack ${largest.allowed}`;
+  throw error;
+}
+
 /**
  * For a capture taken outside checkGrowth: holds it to the bound checkGrowth enforces, catalog-only statements may not
  * exceed the distinct non-catalog statement texts, and returns it without them. Throws GrowthBoundError otherwise.
@@ -118,6 +155,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     previous = scale;
   }
 
+  assertBackgroundBound(check.name, samples);
   try {
     assertGrowth(samples, check.bounds, check.slack);
   } catch (error) {
