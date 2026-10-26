@@ -102,6 +102,19 @@ CREATE TABLE semantic.acceptance_current (
 
 
 --
+-- Name: account_agent; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.account_agent (
+    account_id uuid NOT NULL,
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    CONSTRAINT account_agent_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT account_agent_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+);
+
+
+--
 -- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -453,6 +466,22 @@ ALTER TABLE ONLY semantic.acceptance_current
 
 ALTER TABLE ONLY semantic.acceptance
     ADD CONSTRAINT acceptance_pkey PRIMARY KEY (route, subject_id, context_id, candidate_id, head);
+
+
+--
+-- Name: account_agent account_agent_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.account_agent
+    ADD CONSTRAINT account_agent_pkey PRIMARY KEY (account_id);
+
+
+--
+-- Name: account_agent account_agent_route_subject_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.account_agent
+    ADD CONSTRAINT account_agent_route_subject_id_key UNIQUE (route, subject_id);
 
 
 --

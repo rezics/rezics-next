@@ -49,7 +49,9 @@ export async function readRelease(pool: Pool | CommandTransaction, digest: strin
   return release;
 }
 
-export async function activeRelease(pool: Pool): Promise<{ digest: string; head: number; release: Release } | null> {
+export async function activeRelease(
+  pool: Pool | CommandTransaction,
+): Promise<{ digest: string; head: number; release: Release } | null> {
   const active = await pointer.run(pool, { route: resource.route });
   if (!active) return null;
   const release = releases.get(active.digest) ?? (await readRelease(pool, active.digest));

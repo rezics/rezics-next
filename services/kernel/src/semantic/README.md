@@ -26,6 +26,14 @@ Semantic writes use the route action and authority below. When the authority and
 | Definition activation              | `definitions:activate` | Global Context                             |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
 
+## Agents
+
+An account has one Global subject, stored in `semantic.account_agent`. `ensureAccountAgent` inserts the mapping and creates a `schema:Person` or `schema:Organization` with the ordinary subject writer in the caller's command transaction. The caller must be the account being initialized. Repeated calls return the mapped subject without creating another one. The initial display name is a label in the requested language and its revision records the agent as its source.
+
+`setAgentName` appends a label revision for one language, with the agent as the revision source. It preserves labels in other languages and uses the caller's transaction. It is restricted to the account's own command; sourced facts such as credits and affiliations remain under ordinary statement editing and review.
+
+`accountAgents` accepts 1–256 routed account IDs and returns an entry for each input account, with a subject ID or `null`. It groups the IDs by account partition and makes one indexed query per touched partition. Account IDs and their agent subjects share the same route, so the mapping never puts an agent in a Realm or Zone.
+
 ## Relations
 
 A relation is a statement whose property is an item property and whose value is another subject. Subject-to-subject relations, credits and character appearances all use this one shape; none has a table, endpoint or read path of its own.
@@ -120,6 +128,11 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 - Touches: `createSubject`: insert 1 `semantic.subject` via `subject_pkey`; one `insert-facts.sql` inserts F `semantic.fact` rows via `fact_pkey` and F subject FK probes; receipt stores the resolved item, fence emits 1 event. Grow total N; fix F, partition and command history size.
 - Bound: Rows O(1 + F), blocks O((1 + F)L + C), two body statements, ten including receipted command; F <= 512 in `writeFacts` before any insert.
 - Growth check: `test/semantic/growth-subjects.test.ts`: `Subject creation stays within its bound as N grows`
+
+### Account agents
+
+- Touches: `ensureAccountAgent` first inserts the account mapping by `account_agent_pkey`; the winning caller then creates one Global subject and its label facts in the same command transaction. Repeated and concurrent calls read the existing mapping and do not create another subject. `setAgentName` appends one label fact and one identity revision by the subject and revision keys. `accountAgents` probes each requested account by primary key in one statement per nonempty account partition. Grow total subjects and accounts; fix the requested batch size and label languages.
+- Bound: Agent creation is O(1) rows plus the initial label fact and uses the ordinary subject creation path. Name changes are O(1) rows. A lookup returns at most 256 rows, uses O(i log N) index work and exactly one semantic statement per touched partition.
 
 ### Anchored subject read
 

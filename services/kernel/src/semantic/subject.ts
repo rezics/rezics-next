@@ -59,6 +59,7 @@ export class SubjectAccessDeniedError extends Error {
 
 export type SubjectComponent = { partition: number; epoch: number; position: bigint };
 export type CreateSubjectResult = { subject: Item; component: SubjectComponent; replayed: boolean };
+export type AgentSelfSource = { kind: 'agent'; subject: string };
 
 export async function createSubject(
   pool: Pool,
@@ -127,7 +128,9 @@ export async function createSubject(
 export async function writeSubject(
   tx: CommandTransaction,
   transactionId: string,
-  options: Pick<Parameters<typeof createSubject>[1], 'target' | 'item' | 'release'> & { source?: Source },
+  options: Pick<Parameters<typeof createSubject>[1], 'target' | 'item' | 'release'> & {
+    source?: Source | AgentSelfSource;
+  },
 ) {
   const { route, id: subjectId } = options.target;
   const input = options.item as Record<string, unknown>;
@@ -536,6 +539,7 @@ export async function updateSubjectIdentity(
         release: options.release.digest,
         revision,
         transaction_id: transactionId,
+        source: null,
         labels: facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
       });
       const after = await holderFacts(tx, options.subject, options.release.release);
