@@ -77,8 +77,9 @@ when the new visibility is protected, in the same transaction as `realm.updated`
 `banAccount` requires `realm:ban` on that Realm. Owners and moderators carry that action.
 An existing member is removed by Accounts' native leave workflow: publish closes the
 Realm interval before release clears the account's inverse slot. The workflow is keyed
-by the ban and carries a sealed authorization restricted to `realm:ban` on that exact
-Realm, member and reservation. A non-member starts no workflow. Retrying a receipted
+by the ban. Its operation commits the moderator as initiator (see Durable initiators
+below), and each step needs that moderator's own `realm:ban` on the Realm; the member's
+permission is irrelevant. A non-member starts no workflow. Retrying a receipted
 ban resumes enqueueing with the same durable key.
 
 `DELETE /v1/realms/{realmId}/bans/{accountId}` requires the same action and ends both
@@ -174,6 +175,27 @@ reservation has no member row, so an unpublished reservation can be closed and a
 published one cannot. Terminal rows are immutable. `readTerminal` and `readChange`
 are exact point reads of committed evidence. The role reader returns the owner
 and member proofs, using the current temporal key and the next lower-bound seek.
+
+### Durable initiators
+
+Accepting a join, leave, add-member or ban removal runs one native command on the Realm's
+partition with the authenticated actor. It authorizes the action, captures the actor, original
+floor, operator and delegation through `captureDurableInitiator`, and commits one immutable
+`realm_membership_operation` row with its creation receipt. The receipt's `durableInitiator`
+commits the whole record, so a copied row or receipt never restores. Only then does it enqueue.
+The sealed workflow reference names that operation and repeats the request's facts; it carries no
+actor and no scopes.
+
+Every workflow step calls `restoreInitiator` inside the command's `prepare`, at the attempt's T,
+over that committed operation and Auth's current consent, and authorizes with the actor it returns.
+A revoked grant, withdrawn or reduced consent, suspended or fenced account, or a changed floor
+denies the step with no effect. The initiator is the person who asked: the member for a join or
+leave, the manager for add-member, the moderator for a ban removal. `createRealmMembership`
+takes the restorer; without one, a sealed step fails closed. A reference that is not sealed
+authenticates through Access, and `publish` authorizes with that authenticated actor object itself,
+never a copy: production admission knows no other object. The kernel's worker composes both from
+the one Auth consent configuration (`CONTENT_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID`,
+`CF_ACCESS_CLIENT_SECRET`); with the group absent, restoration is unavailable.
 A missing Realm, or one that is not yet active at T, has no proof.
 
 | Operation               | Touches                                                                                                               | Bound                                                                                                         | Growth check                                                                                                                                                 |
@@ -197,20 +219,20 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 ### Join a Realm
 
-- Touches: The membership workflow's own bounded reserve and publish steps, then one follow point upsert on the member's account partition.
-- Bound: O(1) rows and statements per step, plus Access; O(log R) blocks. No scan of members.
+- Touches: One acceptance command (admission, one Realm point read, one operation insert, the creation receipt), then the membership workflow's own bounded reserve and publish steps, each adding one initiator restoration, then one follow point upsert on the member's account partition.
+- Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
 - Growth check: `join.test.ts` is a fixed probe of one public join. It does not populate 2048, 8192 or 32768 members.
 
 ### Leave a Realm
 
-- Touches: The membership workflow's own bounded reserve, publish and release steps. Leave writes no follow and never unfollows.
-- Bound: O(1) rows and statements per step, plus Access; O(log R) blocks. No scan of members.
+- Touches: One acceptance command as for join, then the membership workflow's own bounded reserve, publish and release steps. Leave writes no follow and never unfollows.
+- Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
 - Growth check: `join.test.ts` is a fixed probe of one leave. It does not populate 2048, 8192 or 32768 members.
 
 ### Add a Realm member
 
-- Touches: The same membership workflow as join, one idempotent member-group grant when the Realm is protected, and one follow point upsert.
-- Bound: O(1) rows and statements per step, plus Access; O(log R) blocks. No scan of members.
+- Touches: The same acceptance command and membership workflow as join, one idempotent member-group grant when the Realm is protected, and one follow point upsert.
+- Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
 - Growth check: `join.test.ts` is a fixed probe of one added member. It does not populate 2048, 8192 or 32768 members.
 
 ### Read own Realm membership
@@ -227,7 +249,7 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 ### Ban an account
 
-- Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, plus a member interval point read and, when present, one native leave workflow keyed by the ban.
+- Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, plus a member interval point read and, when present, one removal acceptance command (one operation insert) and one native leave workflow keyed by the ban.
 - Bound: O(1) rows and statements in the ban command, plus Access and one leave workflow; O(log R) blocks. No scan of members, bans or content.
 - Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.
 

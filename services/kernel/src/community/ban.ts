@@ -141,15 +141,24 @@ export async function banAccount(
     reservationId === null
       ? null
       : (
-          await enqueueRealmRemoval(await deps.workClient(), {
-            tokens: deps.tokens,
-            actor,
-            realmId: input.realmId,
-            spaceId,
-            memberAccountId: input.accountId,
-            reservationId,
-            banId: transactionId,
-          })
+          await enqueueRealmRemoval(
+            {
+              pool: deps.pool,
+              access: deps.access,
+              ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+              tokens: deps.tokens,
+              client: await deps.workClient(),
+            },
+            {
+              actor,
+              realmId: input.realmId,
+              spaceId,
+              memberAccountId: input.accountId,
+              reservationId,
+              banId: transactionId,
+              deadline: context.deadline,
+            },
+          )
         ).workflowId;
   return { ...result, value: { ...record, workflowId } satisfies Ban };
 }

@@ -39,7 +39,13 @@ import {
 } from './realm.ts';
 import { setBoardScheme } from './board-scheme.ts';
 import { createRealmParticipationCheck } from './participation.ts';
-import { enqueueRealmJoin, enqueueRealmLeave, readOwnRealmMembership, RealmMembershipConflictError } from './join.ts';
+import {
+  enqueueRealmJoin,
+  enqueueRealmLeave,
+  readOwnRealmMembership,
+  RealmMembershipConflictError,
+  type MembershipDependencies,
+} from './join.ts';
 import { banAccount, unbanAccount, listBans, RealmBanInputError } from './ban.ts';
 import { readRealmMembershipInterval } from './membership.ts';
 import {
@@ -343,6 +349,13 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     ...realmDependencies(),
     tokens: dependencies.tokens,
     workClient: dependencies.workClient,
+  });
+  const membershipDependencies = async (): Promise<MembershipDependencies> => ({
+    pool: dependencies.pool,
+    access: dependencies.access(),
+    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    tokens: dependencies.tokens,
+    client: await dependencies.workClient(),
   });
   const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
 
@@ -1003,13 +1016,13 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             const allowed = await authorize({ route, id: realmId });
             if (!(await withConnection(dependencies.pool, (client) => allowed(client))))
               throw new ProblemError('forbidden');
-            const result = await enqueueRealmJoin(await dependencies.workClient(), {
-              tokens: dependencies.tokens,
+            const result = await enqueueRealmJoin(await membershipDependencies(), {
               actor,
               realmId,
               spaceId: current.spaceId,
               memberAccountId: actor.accountId,
               idempotencyKey: key,
+              deadline: job.deadline,
             });
             set.status = 202;
             return result;
@@ -1046,12 +1059,12 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             if (!interval) throw new ProblemError('not_found');
             const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!current) throw new ProblemError('not_found');
-            const result = await enqueueRealmLeave(await dependencies.workClient(), {
-              tokens: dependencies.tokens,
+            const result = await enqueueRealmLeave(await membershipDependencies(), {
               actor,
               realmId,
               spaceId: current.spaceId,
               reservationId: interval.reservationId,
+              deadline: job.deadline,
             });
             set.status = 202;
             return result;
@@ -1092,13 +1105,13 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               throw new ProblemError('forbidden');
             }
             if (!current) throw new ProblemError('not_found');
-            const result = await enqueueRealmJoin(await dependencies.workClient(), {
-              tokens: dependencies.tokens,
+            const result = await enqueueRealmJoin(await membershipDependencies(), {
               actor,
               realmId,
               spaceId: current.spaceId,
               memberAccountId: body.accountId,
               idempotencyKey: key,
+              deadline: job.deadline,
             });
             set.status = 202;
             return result;

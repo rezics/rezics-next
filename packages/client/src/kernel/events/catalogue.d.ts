@@ -546,6 +546,14 @@ declare const productEventTypes: {
         at: Type.TString;
         transactionId: Type.TString;
     }>;
+    readonly 'com.rezics.community.realm.membership.requested.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        operationId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"join">, Type.TLiteral<"leave">, Type.TLiteral<"removal">]>;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
     readonly 'com.rezics.community.realm.membership.terminalized.v1': Type.TObject<{
         realmId: Type.TString;
         accountId: Type.TString;

@@ -14,6 +14,7 @@ import type {
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import readReceipt from '../../src/command/read-receipt.sql';
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
+import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
@@ -27,6 +28,7 @@ import {
 } from '../content/support/system.ts';
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { startConsentServer } from './membership-fixture.ts';
 
 const AUDIENCE = 'https://content.test';
 const suiteDrivers = new Set<CommunityDriver>();
@@ -53,6 +55,11 @@ async function startWorker(system: ContentSystem): Promise<{
   const sessionKeys = [...system.tokenKeys.keys]
     .map(([id, value]) => `${id}:${Buffer.from(value).toString('base64url')}`)
     .join(',');
+  // Auth's current consent over HTTPS from this process: the worker restores initiators from it.
+  const consentReader = createCurrentConsentReader({ database: system.database.authPool });
+  const consent = await startConsentServer(
+    async (input) => (await consentReader.readCurrentConsent(input))?.scopes ?? null,
+  );
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     env: {
@@ -74,9 +81,7 @@ async function startWorker(system: ContentSystem): Promise<{
       CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
       CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://community-worker.auth.test/internal/v1/consents:read',
-      CF_ACCESS_CLIENT_ID: 'community-outcomes.access',
-      CF_ACCESS_CLIENT_SECRET: 'community-outcomes-access-secret',
+      ...consent.env,
       OPENSEARCH_URL: '',
     },
     stdin: 'ignore',
@@ -98,12 +103,14 @@ async function startWorker(system: ContentSystem): Promise<{
   while (!output.includes('Worker ready')) {
     if (child.exitCode !== null) {
       await diagnostics;
+      await consent.close();
       throw new Error(`Kernel worker exited ${child.exitCode}: ${output}`);
     }
     if (Date.now() >= deadline) {
       child.kill();
       await child.exited;
       await diagnostics;
+      await consent.close();
       throw new Error(`Kernel worker did not become ready: ${output}`);
     }
     await Bun.sleep(20);
@@ -117,6 +124,7 @@ async function startWorker(system: ContentSystem): Promise<{
         if (child.exitCode === null) child.kill();
         await child.exited;
         await diagnostics;
+        await consent.close();
       })()),
   };
 }
