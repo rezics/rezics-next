@@ -6,6 +6,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import {
   authoritativeTimeValue,
+  CommandUnavailableError,
   IdempotencyConflictError,
   principalCommandIdentity,
   runCommand,
@@ -14,6 +15,7 @@ import {
 } from '../command/command.ts';
 import { accessCommandAuthorization, type Actor } from '../request/access.ts';
 import type { Access } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
 import type { CheckoutSession, CheckoutSnapshot, Offer } from './model.ts';
@@ -31,6 +33,7 @@ export class OfferUnavailableError extends Error {
 }
 class Unchanged extends Error {}
 const unchanged = { changed: false } as const;
+const WORK_STEP_DEADLINE_MS = 5_000;
 export type CheckoutOutcome = { session: CheckoutSession } | { kind: 'failed' | 'unknown' };
 export type OfferInput = Pick<Offer, 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'taxCode'>;
 
@@ -88,13 +91,13 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       },
     };
   }
-  const context = () => ({ pool, deadline: Date.now() + 5000 });
+  const context = () => ({ pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) });
   function options(actor: Actor, r: number, kind: string, requestKey: string, input: unknown) {
     const identity = principalCommandIdentity(account(actor));
     return {
       ...identity,
       partition: partitionOf(r),
-      deadline: Date.now() + 5000,
+      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
       receipt: { kind, key: key(requestKey), digest: digest([identity, kind, input]) },
     };
   }
@@ -273,7 +276,8 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     const prefix = `order:${id}:checkout:`;
     // A competing outcome can win this numbered receipt. Re-read its sequence
     // after a digest conflict; runCommand itself handles serialization retries.
-    const deadline = Date.now() + 5000;
+    // Stripe has already created or refused the session, so recording uses a fresh work budget.
+    const deadline = Date.now() + WORK_STEP_DEADLINE_MS;
     while (Date.now() < deadline) {
       const order = await store.readOrder(pool, r, id);
       if (!order || order.checkoutSessionId !== null || order.settlement === 'failed' || order.settlement === 'paid')
@@ -340,7 +344,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         if (!(error instanceof IdempotencyConflictError)) throw error;
       }
     }
-    throw new Error('Checkout outcome recording deadline exceeded');
+    throw new CommandUnavailableError('deadline', partitionOf(r));
   }
   async function applyCheckoutSnapshot(body: CheckoutSnapshot, workflowId: string) {
     assertTransactionBound(body.transactions);
