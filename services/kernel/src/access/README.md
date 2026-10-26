@@ -356,6 +356,8 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Workflow approvals
 
+Approval creation, reads and consumption use the kernel clock configured on Access (including derived Access adapters). On this T timeline, expiry is `min(T + TTL, JWT expiry)`: TTL is 60 seconds for a credential approval and 300 seconds otherwise. Reads and consumption require T strictly before both the approval expiry and bearer expiry. The fence-operator suspension uses that same clock. Evidence deadlines remain on the database clock plus the remaining evidence budget and are never compared with T; request deadlines remain on real time.
+
 `client:manage` authorizes Auth client scope reductions on the Global Context through the ordinary Access formula; the approval binds the exact client, first-party flag and scopes.
 
 Touches: `workflow-approvals.ts` verifies the real JWT/JWKS, reads the exact actor and native logical-binding/create receipts, and inserts one immutable `workflow_approval` row on the actor anchor. Separate resource authority is released before storage checkout. Resolve reads one exact approval and its native creation receipt, current actor/assignment/principal facts, then the installed actor-side formula with original scopes. No token, context, history/ACL scan or receipt-response search. Sweep seeks expiry keys by route and deletes at most B<=1000 exact rows.

@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { NativeCredentialEffectDriver } from '../../../../specs/native-credential-effect-driver.ts';
 import { createNativeCredentialEffectDriver } from './credential-effect-outcome-driver.ts';
 
-let driver: NativeCredentialEffectDriver;
+let driver: Awaited<ReturnType<typeof createNativeCredentialEffectDriver>>;
 beforeAll(async () => {
   driver = await createNativeCredentialEffectDriver();
 });
@@ -22,7 +21,7 @@ for (const mode of ['human-operator', 'own-human'] as const) {
     expect(approval.response.status).toBe(200);
     const binding = await driver.binding(approval.value!.reference);
     expect(Date.parse(binding.expiresAt) - Date.parse(binding.createdAt)).toBe(60_000);
-    await Bun.sleep(3000);
+    driver.advanceClock(3000);
     const applied = await driver.apply(fixture.caller, approval.value!.reference, operation.value!);
     expect(applied.response.status).toBe(200);
     expect(applied.value?.replayed).toBe(false);

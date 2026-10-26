@@ -77,7 +77,14 @@ async function successful<T>(response: Response, command: string): Promise<T> {
 /** Only credentials and caller handles live in this harness. Approval provenance,
  * policy, narrowing, consumption, floor advancement and effects belong to product.
  */
-export async function createNativeCredentialEffectDriver(): Promise<NativeCredentialEffectDriver> {
+export async function createNativeCredentialEffectDriver(): Promise<
+  NativeCredentialEffectDriver & { advanceClock(milliseconds: number): void }
+> {
+  let clockOffset = 0;
+  const clock = () => new Date(Date.now() + clockOffset);
+  const advanceClock = (milliseconds: number) => {
+    clockOffset += milliseconds;
+  };
   const source = new URL(
     required(process.env.DATABASE_URL, 'DATABASE_URL must name a migrated isolated kernel database'),
   );
@@ -178,6 +185,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     authPool = new Pool({ connectionString: connection(authName) });
     kernelHttp = testKernel({
       pool: kernel(),
+      clock,
       actions,
       tokens: referenceKeys,
       auth: {
@@ -192,6 +200,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
     const proofs = createNativeWorkflowProofPorts({ database: auth() });
     bindings = createNativeAccountBindings({
       pool: kernel(),
+      clock,
       access,
       actions,
       routeKey,
@@ -432,6 +441,8 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
 
   return {
     async seed(mode, sessions = 1) {
+      // Each independent fixture starts alongside Auth's real-time proof budgets.
+      clockOffset = 0;
       const root = await governance();
       clientId = `credential-${randomUUID()}`;
       await registerTestClient(service, { clientId, firstParty: false, actions, scopes });
@@ -767,10 +778,10 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       } else if (fact === 'human-floor' || fact === 'subject-floor' || fact === 'operator-floor') {
         if (fact === 'operator-floor' && f.operatorId === f.organizationId) {
           // Organizations have no Auth credentials; suspension advances their native floor.
-          await createSuspensionCommands({ pool: kernel(), access, clock: () => new Date() }).suspend(
-            await context(gov.caller),
-            { accountId: f.organizationId, key: randomUUID() },
-          );
+          await createSuspensionCommands({ pool: kernel(), access, clock }).suspend(await context(gov.caller), {
+            accountId: f.organizationId,
+            key: randomUUID(),
+          });
           return;
         }
         const subjectId =
@@ -789,10 +800,10 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         );
         for (const caller of callers.values()) if (caller.email === subject.email) caller.password = password;
       } else if (fact === 'human-suspended') {
-        await createSuspensionCommands({ pool: kernel(), access, clock: () => new Date() }).suspend(
-          await context(gov.caller),
-          { accountId: f.humanId, key: randomUUID() },
-        );
+        await createSuspensionCommands({ pool: kernel(), access, clock }).suspend(await context(gov.caller), {
+          accountId: f.humanId,
+          key: randomUUID(),
+        });
       } else if (fact === 'organization-membership') {
         const organization = required(organizationFixtures.get(f.organizationId), 'Missing organization owner');
         await bindings.lifecycle.setMembership(await context(organization.owner), {
@@ -845,10 +856,10 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       const caller = required(callers.get(f.caller), 'Missing human login');
       return login(caller.email, caller.password, caller.clientId, caller.scopes);
     },
+    advanceClock,
     async awaitExpiry(reference) {
       const binding = await nativeBinding(reference);
-      while (Date.now() <= Date.parse(binding.expiresAt))
-        await Bun.sleep(Math.min(1000, Date.parse(binding.expiresAt) - Date.now() + 10));
+      advanceClock(Math.max(0, Date.parse(binding.expiresAt) + 1 - clock().getTime()));
     },
     async loseAcknowledgement(f, approval, operation, at) {
       const lost = new Error(`Dropped native ${at} acknowledgement`);

@@ -6,6 +6,7 @@ import { unseal, type KeyRing } from '../tokens/seal.ts';
 import receiptRead from '../command/read-receipt.sql';
 import approvalRead from './workflow-approvals-read.sql';
 import { accessRoot } from './derived-access.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 
 export class ApprovalIdentityDeniedError extends Error {
   readonly status = 403;
@@ -33,10 +34,17 @@ type Claims = { actor: AccountActor; expires: number; scope: object; pool: Acces
 const proofs = new WeakMap<ApprovedIdentity, Claims>();
 type Bridge = {
   scope: object;
+  clock?: KernelClock;
   expiry(actor: AccountActor, context: AccessContext): number | undefined;
   restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
 };
 const bridges = new WeakMap<Access, Bridge>();
+
+/** The factory supplies its root clock with the identity bridge. Keeping this
+ * lookup here avoids importing the factory and its standalone Access during setup. */
+export function approvalClock(access: Access): KernelClock {
+  return bridges.get(accessRoot(access))?.clock ?? systemClock;
+}
 
 /** Factory composition only; no actor JSON registration or public bearer port. */
 export function installApprovalIdentityBridge(access: Access, bridge: Bridge): void {
@@ -57,7 +65,7 @@ export function verifiedBearerExpiry(access: Access, actor: AccountActor, contex
   const bridge = bridges.get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   const expires = bridge.expiry(actor, context);
-  if (expires === undefined || Date.now() >= expires) throw new ApprovalIdentityDeniedError();
+  if (expires === undefined || approvalClock(access)().getTime() >= expires) throw new ApprovalIdentityDeniedError();
   return expires;
 }
 /** Bind every immutable column, including original scope ceiling and JWT expiry. */
@@ -88,10 +96,15 @@ export async function readApprovedIdentity(
     typeof locator.binding !== 'string'
   )
     throw new ApprovalIdentityDeniedError();
-  const row = await approvalRead.run(context.pool, { route: locator.route as number, approval_id: locator.id });
+  const at = approvalClock(access)();
+  const row = await approvalRead.run(context.pool, {
+    route: locator.route as number,
+    approval_id: locator.id,
+    at: at.toISOString(),
+  });
   if (!row || approvalRowDigest(row) !== locator.binding) throw new ApprovalIdentityDeniedError();
   const expires = Math.min(Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
-  if (!Number.isFinite(expires) || Date.now() >= expires) throw new ApprovalIdentityDeniedError();
+  if (!Number.isFinite(expires) || at.getTime() >= expires) throw new ApprovalIdentityDeniedError();
   // A row-shaped fixture, restored dump fragment or caller JSON is insufficient:
   // approve must have committed this exact row and reference through core.
   const receipt = await receiptRead.run(context.pool, {

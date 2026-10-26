@@ -21,6 +21,7 @@ import { readAccount } from './account-data.ts';
 import {
   APPROVAL_REFERENCE_PURPOSE,
   approvalRowDigest,
+  approvalClock,
   readApprovedIdentity,
   ApprovalIdentityUnavailableError,
   verifiedBearerExpiry,
@@ -505,7 +506,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                 await createSuspensionCommands({
                   pool: config.pool,
                   access: config.access,
-                  clock: () => new Date(),
+                  clock: approvalClock(config.access),
                 }).suspend(
                   { actor, pool: config.pool, deadline },
                   {
@@ -611,6 +612,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(route),
+          clock: approvalClock(config.access),
           deadline,
           basis,
           authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
@@ -632,6 +634,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(route),
+          clock: approvalClock(config.access),
           deadline,
           basis,
           authorization: authorization(
@@ -784,6 +787,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(row.route),
+          clock: approvalClock(config.access),
           deadline: bounded.deadline,
           basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
           authorization: authorization(actor, descriptor, bounded),

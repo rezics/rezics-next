@@ -2,6 +2,7 @@ import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAttempt,
@@ -60,6 +61,12 @@ type PlatformGateCheck = (
   context: AccessContext,
   at: string,
 ) => Promise<boolean>;
+const clocks = new WeakMap<Access, KernelClock>();
+/** Internal Access composition only; derived adapters share their root's clock. */
+export function accessClock(access: Access): KernelClock {
+  return clocks.get(accessRoot(access)) ?? systemClock;
+}
+
 const platformGateChecks = new WeakMap<Access, PlatformGateCheck>();
 const gateActionPattern = /^gate:([a-z][a-z_]{0,62})$/;
 const reservedGateNames = new Set(['any', 'open', 'close']);
@@ -238,6 +245,7 @@ export function createAccess(config: AccessConfig): Access {
       ).allowed;
     },
   };
+  clocks.set(access, config.clock ?? systemClock);
 
   platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
     requireAccessDeadline(context.deadline);
@@ -312,6 +320,7 @@ export function createAccess(config: AccessConfig): Access {
     discard: authentication.discardDurable,
   });
   installApprovalIdentityBridge(access, {
+    clock: accessClock(access),
     scope: authentication.approvalScope,
     expiry(actor, context) {
       const identity = authentication.identity(actor);
