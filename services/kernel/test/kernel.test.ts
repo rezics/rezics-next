@@ -227,7 +227,7 @@ test('semantic editorial listings document their default page size', () => {
   }
 });
 
-test('subject HTTP rejects document and media values before attempting storage', async () => {
+test('subject HTTP refuses an unlicensed document and any media value before attempting storage', async () => {
   const kernel = createKernel({
     pool,
     routeKey: new Uint8Array(32),
@@ -252,7 +252,7 @@ test('subject HTTP rejects document and media values before attempting storage',
       },
     },
   });
-  for (const [property, content] of [
+  for (const [property, content, expectedError] of [
     [
       'schema:abstract',
       {
@@ -263,8 +263,13 @@ test('subject HTTP rejects document and media values before attempting storage',
           doc: { type: 'doc', content: [{ type: 'paragraph' }] },
         },
       },
+      { pointer: '/statements/schema:abstract/0/value/content/licence', code: 'required' },
     ],
-    ['schema:image', '019a1b2c-3d4e-7f00-8a00-3ed1a0000062'],
+    [
+      'schema:image',
+      '019a1b2c-3d4e-7f00-8a00-3ed1a0000062',
+      { pointer: '/statements/schema:image/0/value/content', code: 'unsupported' },
+    ],
   ] as const) {
     const response = await kernel.handle(
       new Request('http://kernel.test/v1/subjects', {
@@ -286,7 +291,7 @@ test('subject HTTP rejects document and media values before attempting storage',
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
       code: 'invalid_request',
-      errors: [{ pointer: `/statements/${property}/0/value/content`, code: 'unsupported' }],
+      errors: [expectedError],
     });
   }
 });
