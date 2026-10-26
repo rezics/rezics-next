@@ -21,9 +21,12 @@ const id = t.String({ format: 'uuid' });
 const publicIdentity = t.Object(
   {
     id,
+    kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
     handle: t.Union([t.String(), t.Null()]),
     displayName: t.Union([t.String(), t.Null()]),
     state: t.Union([t.Literal('active'), t.Literal('deleted')]),
+    automated: t.Boolean(),
+    operatorId: t.Union([id, t.Null()]),
   },
   closed,
 );

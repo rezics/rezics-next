@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import accountRead from './account-read.sql';
-import publicPage from './account-public-page.sql';
+import publicPage from './public-identity-page.sql';
 import publicRead from './account-public-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 
@@ -28,9 +28,12 @@ export type PublicAccount =
 
 export type PublicIdentity = {
   id: string;
+  kind: 'actor' | 'organization';
   handle: string | null;
   displayName: string | null;
   state: 'active' | 'deleted';
+  automated: boolean;
+  operatorId: string | null;
 };
 
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
@@ -70,7 +73,11 @@ export async function readPublicIdentities(
   accountIds: readonly string[],
 ): Promise<PublicIdentity[]> {
   const rows = await publicPage.run(client, { routes: [...routes], account_ids: [...accountIds] });
-  return rows.map((row) => ({ ...row, state: row.state === 'deleted' ? 'deleted' : 'active' }));
+  return rows.map((row) => ({
+    ...row,
+    kind: row.kind === 'organization' ? 'organization' : 'actor',
+    state: row.state === 'deleted' ? 'deleted' : 'active',
+  }));
 }
 
 /** Reads a single member's role at the caller's authoritative request time on the organization anchor. */

@@ -41,7 +41,15 @@ const access: Access = {
 };
 const kernel = createKernel({ pool, access, routeKey: new Uint8Array(32).fill(13) });
 
-type Identity = { id: string; handle: string | null; displayName: string | null; state: 'active' | 'deleted' };
+type Identity = {
+  id: string;
+  kind: 'actor' | 'organization';
+  handle: string | null;
+  displayName: string | null;
+  state: 'active' | 'deleted';
+  automated: boolean;
+  operatorId: string | null;
+};
 type Body = { accounts: Identity[]; code?: string };
 
 async function seed(): Promise<void> {
@@ -186,15 +194,103 @@ test('the public batch returns visible identities in first-request order and hid
   const { response, body } = await request(identities(requested));
   expect(response.status).toBe(200);
   expect(body.accounts).toEqual([
-    { id: identity.second, handle: 'second', displayName: 'Second Person', state: 'active' },
-    { id: identity.deleted, handle: null, displayName: null, state: 'deleted' },
-    { id: identity.first, handle: 'first', displayName: 'First Person', state: 'active' },
-    { id: identity.suspended, handle: 'suspended', displayName: 'Suspended Person', state: 'active' },
-    { id: identity.organization, handle: 'open_group', displayName: 'Open Group', state: 'active' },
-    { id: identity.automation, handle: 'helper_bot', displayName: 'Helper Bot', state: 'active' },
+    {
+      id: identity.second,
+      kind: 'actor',
+      handle: 'second',
+      displayName: 'Second Person',
+      state: 'active',
+      automated: false,
+      operatorId: null,
+    },
+    {
+      id: identity.deleted,
+      kind: 'actor',
+      handle: null,
+      displayName: null,
+      state: 'deleted',
+      automated: false,
+      operatorId: null,
+    },
+    {
+      id: identity.first,
+      kind: 'actor',
+      handle: 'first',
+      displayName: 'First Person',
+      state: 'active',
+      automated: false,
+      operatorId: null,
+    },
+    {
+      id: identity.suspended,
+      kind: 'actor',
+      handle: 'suspended',
+      displayName: 'Suspended Person',
+      state: 'active',
+      automated: false,
+      operatorId: null,
+    },
+    {
+      id: identity.organization,
+      kind: 'organization',
+      handle: 'open_group',
+      displayName: 'Open Group',
+      state: 'active',
+      automated: false,
+      operatorId: null,
+    },
+    {
+      id: identity.automation,
+      kind: 'actor',
+      handle: 'helper_bot',
+      displayName: 'Helper Bot',
+      state: 'active',
+      automated: true,
+      operatorId: identity.operator,
+    },
   ]);
   expect(response.headers.get('cache-control')).toBe('no-cache');
   expect(response.headers.get('etag')).toMatch(/^"[A-Za-z0-9_-]+"$/);
+});
+
+test('the public identity names no private field for any kind and hides the operator of a deleted account', async () => {
+  const { body } = await request(
+    identities([identity.first, identity.organization, identity.automation, identity.deleted]),
+  );
+  for (const account of body.accounts)
+    expect(Object.keys(account).sort()).toEqual([
+      'automated',
+      'displayName',
+      'handle',
+      'id',
+      'kind',
+      'operatorId',
+      'state',
+    ]);
+
+  const operated = newId(route);
+  await admin.query(
+    `INSERT INTO access.account(route, account_id, kind, handle, display_name, state, operator_account_id, transaction_id)
+     VALUES ($1, $2, 'actor', 'doomed_bot', 'Doomed Bot', 'active', $3, $2)`,
+    [route, operated, identity.operator],
+  );
+  await admin.query(
+    `UPDATE access.account SET state = 'deleted', handle = NULL, display_name = NULL
+     WHERE route = $1 AND account_id = $2`,
+    [route, operated],
+  );
+  const { body: tombstone } = await request(identities([operated]));
+  expect(tombstone.accounts).toEqual([
+    {
+      id: operated,
+      kind: 'actor',
+      handle: null,
+      displayName: null,
+      state: 'deleted',
+      automated: false,
+      operatorId: null,
+    },
+  ]);
 });
 
 test('anonymous and authenticated callers receive the same public identity', async () => {
@@ -211,7 +307,15 @@ test('the next read sees a handle and display name change', async () => {
   const path = identities([identity.renamed]);
   const before = await request(path);
   expect(before.body.accounts).toEqual([
-    { id: identity.renamed, handle: 'before_rename', displayName: 'Before Rename', state: 'active' },
+    {
+      id: identity.renamed,
+      kind: 'actor',
+      handle: 'before_rename',
+      displayName: 'Before Rename',
+      state: 'active',
+      automated: false,
+      operatorId: null,
+    },
   ]);
   await admin.query(
     `UPDATE access.account SET handle = 'after_rename', display_name = 'After Rename'
@@ -220,7 +324,15 @@ test('the next read sees a handle and display name change', async () => {
   );
   const after = await request(path);
   expect(after.body.accounts).toEqual([
-    { id: identity.renamed, handle: 'after_rename', displayName: 'After Rename', state: 'active' },
+    {
+      id: identity.renamed,
+      kind: 'actor',
+      handle: 'after_rename',
+      displayName: 'After Rename',
+      state: 'active',
+      automated: false,
+      operatorId: null,
+    },
   ]);
   expect(after.response.headers.get('etag')).not.toBe(before.response.headers.get('etag'));
 });
