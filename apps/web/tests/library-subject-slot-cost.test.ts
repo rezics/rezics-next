@@ -86,9 +86,11 @@ test('subject library slot stays within its bound as its collections grow', asyn
       counts.R = 0;
       counts.A = 0;
       const stub = {
-        async signedIn() {
+        async credential() {
           counts.D += 1;
-          return { signedIn: scenario.signedIn, subject: 'owner', csrfToken: 'csrf-token' };
+          return scenario.signedIn
+            ? { status: 'active', subject: 'owner', accessToken: 'access-token', csrfToken: 'csrf-token' }
+            : { status: 'absent' };
         },
       };
       const sessions = {

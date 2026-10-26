@@ -448,10 +448,12 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Subject library slot
 
-- **Touches:** In parallel with the subject page, read the viewer's FULL library entry when signed in and the first FULL
-  public-collections page; load the viewer's first 100 FULL collections only when the add menu opens
-- **Bound:** Initial slot read is 2 K and 1 D signed in, or 1 K and 0 D signed out; opening the add menu adds 1 K and
-  at most 1 D. 0 R/A. Each list is one page of at most 100 entries, independent of account and subject history
+- **Touches:** In parallel with the subject page, read one session credential, the viewer's FULL library entry when
+  signed in and the first FULL public-collections page; load the viewer's first 100 FULL collections only when the add
+  menu opens
+- **Bound:** Initial slot read is 2 K and 1 D signed in with a fresh credential, or 1 K and 0 D signed out; opening
+  the add menu adds 1 K and at most 1 D. 0 R/A with a fresh credential. Each list is one page of at most 100 entries,
+  independent of account and subject history
 - **Growth check:** `tests/library-subject-slot-cost.test.ts`: `subject library slot stays within its bound as its collections grow`
 
 ### Credential resolution (media prelude)
