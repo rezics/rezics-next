@@ -18,6 +18,7 @@ import {
 import { enqueueRealmJoin, enqueueRealmLeave, enqueueRealmRemoval } from '../../src/community/join.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { accessCheck, type Access, type AccountActor } from '../../src/request/access.ts';
+import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -232,6 +233,30 @@ test('Realm authorization resolves identity and current self-join or management 
     installed.memberId,
   ]);
   await expect(membership.authorize(input.authorization, input)).rejects.toBeInstanceOf(GrantDeniedError);
+});
+
+test('Realm authorization and publication share the enclosing request deadline', async () => {
+  const installed = await install();
+  const input = {
+    kind: 'membership' as const,
+    principal: { kind: 'realm' as const, id: installed.realmId },
+    memberAccountId: installed.memberId,
+    role: 'member' as const,
+    authorization: await reference(installed.memberId),
+  };
+  const requestDeadline = Date.now() + 1000;
+  const request = await withRequestDeadline(requestDeadline, () => membership.authorize(input.authorization, input));
+  expect(request.deadline).toBe(requestDeadline);
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, requestDeadline - Date.now() + 5)));
+
+  const reservation = {
+    accountId: installed.memberId,
+    principal: input.principal,
+    reservationId: newId(routeOf(installed.memberId)!),
+  };
+  await expect(
+    membership.publish(request, input, reservation, `expired-${crypto.randomUUID()}`),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
 });
 
 test("accounts' membership workflow with the community Realm adapter joins an account to a Realm, and the role reader proves membership from T with a valid range", async () => {

@@ -16,6 +16,7 @@ import {
 import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readThreadTarget from './read-new-thread-target.sql';
@@ -679,7 +680,7 @@ export function decideDownload(
     mediaId,
     actor,
     variant,
-    dependencies.downloadContext ?? { deadline: Date.now() + 2000 },
+    dependencies.downloadContext ?? { deadline: deadlineFor(2000) },
   );
 }
 export async function readMediaState(pool: Pool, mediaId: MediaId): Promise<MediaState | null> {

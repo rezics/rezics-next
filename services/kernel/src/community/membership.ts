@@ -33,6 +33,7 @@ import {
   type AccessClient,
 } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
 import realmActive from './membership-realm.sql';
@@ -278,7 +279,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     const keys = config.referenceKeys;
     const payload = keys ? unseal(keys, REALM_MEMBERSHIP_SEAL_SCOPE, reference) : undefined;
     if (payload !== undefined) return authorizeSealed(payload, input);
-    const context = { pool, deadline: Date.now() + 30_000 };
+    const context = { pool, deadline: deadlineFor(30_000) };
     const actor = await access.authenticate(reference, context);
     const accountRoute = routeOf(actor.accountId);
     denyUnless(accountRoute !== null);
@@ -422,7 +423,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     const request: LifecycleRequest = {
       // The committed snapshot, frozen for the carrier's type only. Access never authenticated it.
       actor: Object.freeze({ ...loaded.record.actor, scopes: Object.freeze([...loaded.record.actor.scopes]) }),
-      deadline: Date.now() + AUTHORIZE_DEADLINE_MS,
+      deadline: deadlineFor(AUTHORIZE_DEADLINE_MS),
     };
     operations.set(request, {
       anchor,
