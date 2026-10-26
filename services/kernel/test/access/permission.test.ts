@@ -244,7 +244,6 @@ test('grant ranges use exact inclusive start and exclusive end at the final data
       floor: false,
       at: null,
       roles: '[]',
-      evidence_valid: '(,)',
       deadline: 'infinity',
     };
     const values = statement.params.map((key) => parameters[key as keyof typeof parameters]);
