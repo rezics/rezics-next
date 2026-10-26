@@ -2877,6 +2877,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                     200: {
                         space: {
                             spaceId: string;
+                            realmId: string | null;
                             state: 'active';
                             headRevisionId: string;
                             createdAt: string;
@@ -2892,6 +2893,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                     201: {
                         space: {
                             spaceId: string;
+                            realmId: string | null;
                             state: "active";
                             headRevisionId: string;
                             createdAt: string;
@@ -3036,6 +3038,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         200: {
                             space: {
                                 spaceId: string;
+                                realmId: string | null;
                                 state: "active";
                                 headRevisionId: string;
                                 createdAt: string;
@@ -3145,6 +3148,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             200: {
                                 space: {
                                     spaceId: string;
+                                    realmId: string | null;
                                     state: "active";
                                     headRevisionId: string;
                                     createdAt: string;
@@ -3416,6 +3420,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         200: {
                             space: {
                                 spaceId: string;
+                                realmId: string | null;
                                 state: "active";
                                 headRevisionId: string;
                                 createdAt: string;

@@ -419,6 +419,39 @@ order) or `handle` (one handle, normalized to lowercase using the claim rules). 
   the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,
   logarithmic buffers.
 
+### Organization speakers page
+
+`GET /v1/accounts/:accountId/speakers` is public and uses `account:read_public_identity`. It accepts an opaque
+`cursor` and `limit` from 1 to 100 (default 20), returning `{ speakers: [...], next: string | null }`.
+Each speaker is exactly the ids read's public identity item. Only active, unfenced accounts with a principal
+assignment current at the request's kernel-clock T appear, once per account regardless of assignment count.
+Membership history is not a substitute for a current principal assignment.
+
+An organization must be active, unfenced and have `speakersListed: true`. Otherwise, including actor and unknown ids,
+every caller receives `{ speakers: [], next: null }`. This gate precedes cursor decoding, so an old cursor cannot
+reveal a hidden organization's speakers. Revoked assignments, expired or future validity, and inactive or fenced
+speakers do not appear.
+
+Pages order by assigned actor UUID. `next` and `cursor` use `tokens/cursor.ts` signed keyset tokens, bound to this
+operation, organization and ordering, with format epoch 1 and the shared 15-minute lifetime. The cursor records the
+last scanned actor, so filtering hidden identities may yield a short or empty page with a non-null `next`; clients
+continue until `next` is null. This avoids an unbounded search to fill a page. Each request evaluates live facts at
+its own T; a cursor does not freeze assignments or public identity state.
+
+- Touches: one organization `account_pkey(route, account_id)` point read; one bounded distinct-actor range on the
+  principal's own partition via the partial `principal_assignment_speakers` index; one statement projecting public
+  identities for at most `limit` account keys. The assignment query seeks past each actor's remaining assignments,
+  admits at most `limit + 1` distinct current actors, excludes revoked rows from the index, and constrains validity's
+  lower bound in the index. Public identities are read together, with each account's route and key, independently of
+  the organization's partition.
+- Cost: rows O(limit + E), constant statements (three for a listed organization, one otherwise), blocks
+  O(limit + E + log N) for the capped page size. E is this organization's expired but unrevoked assignments inside
+  the scanned range, this read's one unbounded term; other organizations' assignments and revoked assignments do
+  not add scanned rows. Distinct-actor seeks also skip duplicate current assignments.
+- Growth check: `test/access/growth-organization-speakers.test.ts`,
+  `organization speakers page stays bounded as unrelated and revoked assignments grow`, scales `[256, 1024, 4096]`,
+  page size 20 and one warm-up per scale. It also grows duplicate current assignments for one listed speaker.
+
 ### Public profile by handle
 
 - Returns the identity fields above plus `bio` (the stored biography or null), `links` (an array of `{ label, url }`),

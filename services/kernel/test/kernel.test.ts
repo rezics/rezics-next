@@ -70,6 +70,7 @@ const typed = [
   'POST /v1/accounts/:accountId/$reinstate',
   'POST /v1/accounts/:accountId/$setRateTier',
   'GET /v1/accounts',
+  'GET /v1/accounts/:accountId/speakers',
   'GET /v1/accounts/:accountId/preferences',
   'PATCH /v1/accounts/:accountId/preferences',
   'GET /v1/me/realms',

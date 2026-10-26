@@ -126,6 +126,11 @@ export declare const CONTENT_EVENTS: {
         candidate: Type.TString;
         authorId: Type.TString;
     }>;
+    readonly 'com.rezics.content.authored-field.erased.v1': Type.TObject<{
+        id: Type.TString;
+        subject: Type.TString;
+        authorId: Type.TString;
+    }>;
     readonly 'com.rezics.content.reaction.changed.v1': Type.TObject<{
         actorId: Type.TString;
         targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;

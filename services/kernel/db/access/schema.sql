@@ -1324,6 +1324,13 @@ CREATE INDEX organization_member_owner_probe ON access.organization_member USING
 
 
 --
+-- Name: principal_assignment_speakers; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX principal_assignment_speakers ON access.principal_assignment USING btree (route, principal_id, assigned_actor_id, COALESCE(lower(valid), '-infinity'::timestamp with time zone)) INCLUDE (valid) WHERE (revoked_at IS NULL);
+
+
+--
 -- Name: resource_denial_open; Type: INDEX; Schema: access; Owner: -
 --
 

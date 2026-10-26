@@ -24,6 +24,8 @@ import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
 import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
 import { createSuspensionCommands } from './suspension.ts';
+import { readOrganizationSpeakers, type OrganizationSpeakersPage } from './organization-speakers.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -198,7 +200,7 @@ function denied(error: unknown): never {
 
 export function accessRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; access: () => Access; clock: () => Date },
+  dependencies: { pool: Pool; access: () => Access; clock: () => Date; tokens: KeyRing },
 ) {
   let resolved: ReturnType<typeof createGrantCommands> | undefined;
   const commands = () =>
@@ -346,6 +348,46 @@ export function accessRoutes(
         set.headers.etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
         set.headers['cache-control'] = 'no-cache';
         return body;
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/speakers',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<OrganizationSpeakersPage>(
+            t.Object(
+              {
+                speakers: t.Array(publicIdentity),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              closed,
+            ),
+          ),
+          ...publicReadFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.list_speakers',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, admission, job, set }) => {
+        const at = dependencies.clock();
+        const page = await admission.run('normal', job, () =>
+          readOrganizationSpeakers(dependencies.pool, dependencies.tokens, at, { ...params, ...query }),
+        );
+        set.headers['cache-control'] = 'no-cache';
+        return page;
       },
     )
     .post(
