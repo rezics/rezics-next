@@ -40,7 +40,7 @@ already closed is a no-op catalogue change.
 
 - Touches: One point read and at most one write in `access.exposure_opening`, plus the native command receipt and event.
 - Bound: One catalogue row and at most one catalogue write; no scan.
-- Growth check: `catalogue.test.ts` exercises open, close, and their no-op cases through the native command routes.
+- Growth check: `services/kernel/test/access/gates/admission.test.ts`: "opening is public from T, close restores denial, and gate:any admits platform staff" runs open, close and their no-op repeats through the native command routes; `services/kernel/test/access/gates/catalogue.test.ts`: "the exposure catalogue enforces valid groups and temporal non-overlap and reads half-open openings at T" covers the catalogue rows they write.
 
 ### visibleOperations and served OpenAPI
 

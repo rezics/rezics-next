@@ -12,6 +12,35 @@ export class PlatformClosedError extends Error {
   }
 }
 
+/** Group-level rule shared by route admission and in-process entries: an open
+ * group admits everyone, a closed one only an account holding `gate:<group>` or
+ * `gate:any` on the Global Context. `clientAction` is the scope operand borrowed
+ * for the check. */
+export async function admitGroup(input: {
+  pool: Pool;
+  access: Access;
+  actor: Actor;
+  group: string;
+  clientAction: string;
+  deadline: number;
+  clock: () => Date;
+}): Promise<void> {
+  const state = await readExposure(input.pool, input.group, input.clock(), input.deadline);
+  if (state.open) return;
+  if (input.actor.kind !== 'account') throw new PlatformClosedError();
+
+  const allowed = await authorizePlatformGate(
+    input.access,
+    input.actor,
+    [`gate:${input.group}`, 'gate:any'],
+    input.clientAction,
+    GLOBAL_CONTEXT,
+    { pool: input.pool, deadline: input.deadline },
+    state.at,
+  );
+  if (!allowed) throw new PlatformClosedError();
+}
+
 export async function admitExposure(input: {
   pool: Pool;
   access: Access;
@@ -27,18 +56,13 @@ export async function admitExposure(input: {
   const exposure = parseExposure(detail);
   if (exposure.kind === 'public') return;
 
-  const state = await readExposure(input.pool, exposure.group, input.clock(), input.deadline);
-  if (state.open) return;
-  if (input.actor.kind !== 'account') throw new PlatformClosedError();
-
-  const allowed = await authorizePlatformGate(
-    input.access,
-    input.actor,
-    [`gate:${exposure.group}`, 'gate:any'],
-    actionLabelOfMountedRoute(route),
-    GLOBAL_CONTEXT,
-    { pool: input.pool, deadline: input.deadline },
-    state.at,
-  );
-  if (!allowed) throw new PlatformClosedError();
+  await admitGroup({
+    pool: input.pool,
+    access: input.access,
+    actor: input.actor,
+    group: exposure.group,
+    clientAction: actionLabelOfMountedRoute(route),
+    deadline: input.deadline,
+    clock: input.clock,
+  });
 }
