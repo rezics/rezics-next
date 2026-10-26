@@ -7,6 +7,7 @@ import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
 const repository = resolve(import.meta.dir, '..');
 const kernel = join(repository, 'services/kernel');
 const remoteCheck = join(repository, 'scripts/remote-check.ts');
+const checkHost = join(repository, 'scripts/check-host');
 const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
 
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
@@ -31,6 +32,10 @@ if (script.includes('MemAvailable')) {
   console.log('AVAILABLE ' + config.available);
 } else if (script.includes('flock')) {
   if (count('slot') < (config.busy ?? 0)) {
+    log({ kind: 'slot', granted: false });
+    process.exit(75);
+  }
+  if (config.grantOnly !== undefined && count('granted') >= config.grantOnly) {
     log({ kind: 'slot', granted: false });
     process.exit(75);
   }
@@ -79,6 +84,8 @@ type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
   available?: number;
   busy?: number;
+  grantOnly?: number;
+  slots?: number;
   down?: boolean;
   exit?: number;
   stdout?: string;
@@ -122,7 +129,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         identity: `/keys/${name}`,
         memoryMaxGiB: 16,
         cpuQuotaPercent: 800,
-        slots: 2,
+        slots: hosts[name].slots ?? 2,
       })),
     }),
   );
@@ -329,6 +336,95 @@ test('containers started on a check host run under its capped cgroup slice', () 
     if (previous === undefined) delete process.env.KERNEL_CHECK_ON_REMOTE;
     else process.env.KERNEL_CHECK_ON_REMOTE = previous;
   }
+});
+
+test('a remote run holds the requested number of slots on one host and releases them all', async () => {
+  // b has the most free memory but too few slots, and c has a single free slot; a has all it needs.
+  const { env, events } = scenario({
+    a: { available: 4e9, slots: 3 },
+    b: { available: 40e9, slots: 1 },
+    c: { available: 30e9, slots: 3, grantOnly: 1 },
+  });
+  const result = await remote(env, workspace(), ['bun', 'test'], ['--slots', '2']);
+  expect(result.code).toBe(0);
+
+  const seen = events();
+  const on = (host: string) => seen.filter((event) => event.address === `ops@${host}.test`);
+  // b is never asked for a slot; c grants one, refuses the second and gives the first back at once.
+  expect(on('b').filter((event) => event.kind === 'slot')).toEqual([]);
+  expect(on('c').map((event) => event.kind)).toEqual(['probe', 'slot', 'slot', 'release']);
+  expect(
+    on('c')
+      .filter((event) => event.kind === 'slot')
+      .map((event) => event.granted),
+  ).toEqual([true, false]);
+  // a holds two slots for the whole run and drops both after the run directory is removed.
+  const kinds = on('a').map((event) => event.kind);
+  expect(kinds.filter((kind) => kind === 'slot')).toHaveLength(2);
+  expect(
+    on('a')
+      .filter((event) => event.kind === 'slot')
+      .every((event) => event.granted),
+  ).toBe(true);
+  expect(kinds.indexOf('run')).toBeGreaterThan(kinds.lastIndexOf('slot'));
+  expect(kinds.slice(-3)).toEqual(['cleanup', 'release', 'release']);
+  expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
+
+  // Without the flag a run holds one slot, and a count no host can serve is refused rather than waited for.
+  const single = scenario({ a: { available: 4e9 } });
+  expect((await remote(single.env, workspace())).code).toBe(0);
+  expect(single.events().filter((event) => event.kind === 'slot')).toHaveLength(1);
+  const tooMany = scenario({ a: { available: 4e9 } });
+  const refused = await remote(tooMany.env, workspace(), ['bun', 'test'], ['--slots', '3']);
+  expect(refused.code).toBe(1);
+  expect(refused.stderr).toContain('3 slots');
+  expect(tooMany.events()).toEqual([]);
+});
+
+test('every container a check host run starts is in the check slice', () => {
+  const { env, events } = scenario({ a: { available: 4e9 } });
+  const wrapper = join(checkHost, 'docker');
+  const docker = (...args: string[]) =>
+    spawnSync(wrapper, args, { env: { ...env, PATH: `${checkHost}:${env.PATH}` }, encoding: 'utf8' });
+
+  for (const args of [
+    ['run', '-d', '--name', 'database', 'postgres:18'],
+    ['create', '--name', 'database', 'postgres:18'],
+    ['container', 'run', '--rm', 'postgres:18', 'run', 'create'],
+    ['container', 'create', 'postgres:18'],
+  ]) {
+    // The fake behind it exits 99, which passes through along with its arguments.
+    expect(docker(...args).status).toBe(99);
+  }
+  for (const args of [
+    ['ps', '-aq'],
+    ['rm', '-f', 'run'],
+    ['port', 'create', '5432/tcp'],
+    ['volume', 'create', 'run'],
+  ])
+    docker(...args);
+
+  const calls = events()
+    .filter((event) => event.kind === 'docker')
+    .map((event) => event.args as string[]);
+  expect(calls).toEqual([
+    ['run', '--cgroup-parent=rezics-check.slice', '-d', '--name', 'database', 'postgres:18'],
+    ['create', '--cgroup-parent=rezics-check.slice', '--name', 'database', 'postgres:18'],
+    ['container', 'run', '--cgroup-parent=rezics-check.slice', '--rm', 'postgres:18', 'run', 'create'],
+    ['container', 'create', '--cgroup-parent=rezics-check.slice', 'postgres:18'],
+    ['ps', '-aq'],
+    ['rm', '-f', 'run'],
+    ['port', 'create', '5432/tcp'],
+    ['volume', 'create', 'run'],
+  ]);
+});
+
+test('a remote run puts the docker wrapper first on the path', async () => {
+  const { env, events } = scenario({ a: { available: 4e9 } });
+  await remote(env, workspace());
+  const script = events().find((event) => event.kind === 'run')!.script as string;
+  const path = script.match(/export PATH=(\S+)/)![1];
+  expect(path).toMatch(/^\/srv\/rezics-check\/runs\/[a-z0-9-]+\/scripts\/check-host:/);
 });
 
 test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', async () => {
