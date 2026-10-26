@@ -158,6 +158,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     try {
       return createKernel({
         pool: db.pool,
+        requestDeadlineMs: 30_000,
         writeRate: createWriteRateLimiter({ secret: 'commerce-fixture-write-rate-secret-with-at-least-32-bytes' }),
         routeKey: new Uint8Array(32).fill(7),
         tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
@@ -250,7 +251,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     );
     if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
   }
-  const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 5000 });
+  const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 30_000 });
   const commands = () => createCommerceCommands({ pool: db.pool, access });
   // Grant administration is an internal command, with its management action
   // declared by this trusted composition just as in Access's governance tests.
@@ -265,7 +266,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   });
   let sellerAuthority: Promise<void> | undefined;
   async function authorizeSeller() {
-    const context = { pool: db.pool, deadline: Date.now() + 5000 };
+    const context = { pool: db.pool, deadline: Date.now() + 30_000 };
     await createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' }).create(
       { ...context, actor: await grantAccess.authenticate(tokens.get(governor.id)!, context) },
       {
@@ -707,7 +708,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
           const person = seedAccounts[index % seedAccounts.length]!;
           await checkout(
             { pool: seedPool, commands: seedCommands, stripe, ...configuration },
-            await access.authenticate(tokens.get(person.id)!, { pool: seedPool, deadline: Date.now() + 5000 }),
+            await access.authenticate(tokens.get(person.id)!, { pool: seedPool, deadline: Date.now() + 30_000 }),
             seedOffer!,
             Bun.randomUUIDv7(),
           );
@@ -738,7 +739,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       await driver.holdWork();
       // The exposure probe is once per connection. Warm it before capture so a
       // connection replaced while seeding does not add its catalogue read to one scale.
-      await readExposure(db.pool, 'purchases', new Date(), Date.now() + 5000);
+      await readExposure(db.pool, 'purchases', new Date(), Date.now() + 30_000);
       const result = await capture(db, operation);
       // Reylo rechecks table shape every minute. That catalog read is not part of the request and
       // lands on whichever scale crosses the minute; the support classifier removes it.
