@@ -13,7 +13,7 @@ import {
 import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
-import { acquireDirectoryLeaseWaiting } from './lease.ts';
+import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
 import { choosePoolWithFallback } from './allowance.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
@@ -256,6 +256,16 @@ export class WorkerTasks {
     return worker;
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
+    // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
+    // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    try {
+      return await this.startReleasedTask(taskId);
+    } finally {
+      lease.release();
+    }
+  }
+  private async startReleasedTask(taskId: string): Promise<RunningWorker> {
     let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
     this.commitRetryLeftovers(task, task.currentAttempt);
@@ -281,7 +291,7 @@ export class WorkerTasks {
           .filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort']);
-        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts });
+        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts }, true);
         if (!worker) throw new Error('released task was unexpectedly held again');
         return worker;
       }
@@ -296,12 +306,13 @@ export class WorkerTasks {
       });
     }
     installWorktreeDependencies(task.worktree);
-    const worker = await this.retryTask(taskId, {});
+    const worker = await this.retryTask(taskId, {}, true);
     if (!worker) throw new Error('released task was unexpectedly held again');
     return worker;
   }
-  private async retryTask(taskId: string, options: RetryOptions): Promise<RunningWorker | null> {
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+  /** `leased` when the caller already holds the task's lease. */
+  private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
+    const lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
@@ -502,7 +513,7 @@ export class WorkerTasks {
         throw error;
       }
     } finally {
-      lease.release();
+      lease?.release();
     }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
