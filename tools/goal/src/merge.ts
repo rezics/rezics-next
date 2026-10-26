@@ -85,9 +85,8 @@ export function gateRunner(timeoutMs = 600_000, stateDirectory?: string): GateRu
 
 /** Extract assertion content, ignoring reporter ordering, source locations and timing decoration. */
 export function firstFailure(output: string): FirstFailure {
-  const lines = output
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .split(/\r?\n/)
+  const raw = output.replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/);
+  const lines = raw
     .map((line) =>
       line
         .replace(/(?:[A-Za-z]:)?(?:[./\\\w@-]+[/\\])+[^\s:()]+(?::\d+(?::\d+)?)?/g, '<path>')
@@ -107,10 +106,19 @@ export function firstFailure(output: string): FirstFailure {
   );
   const canonical = [...new Set(assertions.length ? assertions : lines)].sort();
   const assertion = canonical.join('\n') || 'Gate exited unsuccessfully';
+  // The assertion is masked so a repeated failure keeps its fingerprint; the worker needs the real file and line. The
+  // excerpt leads with the failing lines as printed, then the end of the output, where a failing check stops.
+  const failing = raw.filter(
+    (line) =>
+      /error|assert|expect|received|actual|fail|panic|not ok/i.test(line) &&
+      !/^\s*\d+ (?:pass|fail)|^\s*(?:test suites|test files|tests|snapshots|duration|time|ran \d)/i.test(line),
+  );
+  const head = [...new Set(failing.map((line) => line.trim()))].slice(0, 60).join('\n').slice(0, 4000);
+  const tail = output.slice(-(8000 - head.length - 5));
   return {
     fingerprint: createHash('sha256').update(assertion).digest('hex'),
     assertion,
-    excerpt: output.slice(0, 8000),
+    excerpt: head ? `${head}\n...\n${tail}` : output.slice(-8000),
   };
 }
 

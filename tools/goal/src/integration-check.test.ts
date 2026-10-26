@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { newErrorLines } from './merge-train.ts';
+import { firstFailure } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
 type IntegrationCheck = { paths: string[]; command: string[] };
@@ -257,4 +258,14 @@ test('a branch whose only change is its frozen acceptance files is refused as ha
   } finally {
     h.dispose();
   }
+});
+
+test("a failure's excerpt shows the failing line with its real file even after long install output", () => {
+  const install = Array.from({ length: 400 }, (_, i) => `installed package-${i}@1.0.0 into node_modules/.store`).join('\n');
+  const output = `${install}\n$ tsc --noEmit -p tsconfig.json\nsrc/community/publication.ts(74,11): error TS2554: Expected 2 arguments, but got 1.\nerror: script "check" exited with code 2\n`;
+  const failure = firstFailure(output);
+  expect(failure.assertion).toContain('<path>');
+  expect(failure.excerpt.length).toBeLessThanOrEqual(8000);
+  expect(failure.excerpt.startsWith('src/community/publication.ts(74,11): error TS2554')).toBe(true);
+  expect(failure.excerpt.endsWith('exited with code 2\n')).toBe(true);
 });
