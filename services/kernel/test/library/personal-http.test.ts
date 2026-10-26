@@ -11,7 +11,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
@@ -264,6 +264,39 @@ test('copies remain independent and conceal missing and foreign rows before revi
   ).toHaveLength(1);
   expect((await request('DELETE', `/v1/copies/${a.id}`)).status).toBe(204);
   await problem(await request('GET', `/v1/copies/${a.id}`), 404, 'not_found');
+});
+
+test("copy list filters by subject without exposing another account's copies", async () => {
+  const subjectId = await subject();
+  const otherSubjectId = await subject();
+  const viewerCopy = await copy(subjectId);
+  const unrelatedCopy = await copy(otherSubjectId);
+  const otherCopy = (await json(await request('POST', '/v1/copies', { subjectId, status: 'owned' }, 'other'), 201))
+    .copy;
+
+  const filtered = await json(await request('GET', `/v1/copies?subjectId=${subjectId}`));
+  expect(filtered.copies.map((item: { id: string }) => item.id)).toEqual([viewerCopy.id]);
+  expect(filtered.copies.some((item: { id: string }) => item.id === otherCopy.id)).toBe(false);
+
+  const unfiltered = await json(await request('GET', '/v1/copies?limit=1'));
+  expect(unfiltered.next).toBeString();
+  await problem(
+    await request('GET', `/v1/copies?subjectId=${subjectId}&limit=1&cursor=${encodeURIComponent(unfiltered.next)}`),
+    400,
+    'invalid_cursor',
+  );
+
+  const malformed = await capture(db, () => request('GET', '/v1/copies?subjectId=not-a-uuid'));
+  await problem(malformed.value, 400, 'invalid_request');
+  expect(malformed.capture.statements.some((statement) => /FROM library\.copy\b/i.test(statement))).toBe(false);
+
+  expect((await request('DELETE', `/v1/copies/${viewerCopy.id}?revision=${viewerCopy.revision}`)).status).toBe(204);
+  expect((await request('DELETE', `/v1/copies/${unrelatedCopy.id}?revision=${unrelatedCopy.revision}`)).status).toBe(
+    204,
+  );
+  expect(
+    (await request('DELETE', `/v1/copies/${otherCopy.id}?revision=${otherCopy.revision}`, undefined, 'other')).status,
+  ).toBe(204);
 });
 
 test('inferred subject and Collection follows return either state but list only following', async () => {

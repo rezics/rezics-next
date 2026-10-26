@@ -236,7 +236,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .get(
       '/v1/copies',
       {
-        query: t.Object(pageQuery, closed),
+        query: t.Object({ ...pageQuery, subjectId: t.Optional(t.String({ format: 'uuid' })) }, closed),
         response: {
           200: t.Object({ copies: t.Array(embedded(copySchema, subjectFields)), next: nullable }, closed),
           ...failures,

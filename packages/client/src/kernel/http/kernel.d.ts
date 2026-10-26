@@ -7852,6 +7852,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     view?: "BASIC" | "FULL";
                     cursor?: string;
                     limit?: number;
+                    subjectId?: string;
                 };
                 headers: unknown;
                 response: {
