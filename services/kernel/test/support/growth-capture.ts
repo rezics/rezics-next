@@ -1,4 +1,5 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import type { Capture } from './growth-cost.ts';
@@ -35,7 +36,11 @@ function isAttribution(value: Attribution | undefined): value is Attribution {
 
 function currentAttribution(state: CaptureState): Attribution | undefined {
   const current = growing.getStore();
-  return isAttribution(current) && current.capture === state.active ? current : undefined;
+  if (isAttribution(current) && current.capture === state.active) return current;
+  // DBOS executes queued workflows in its runner's async context, after the initiating operation has returned
+  // control to the queue. The SDK singleton is shared by kernel and auth workspaces in this test process.
+  if (state.active && DBOS.workflowID !== undefined) return { capture: state.active, background: false };
+  return undefined;
 }
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.

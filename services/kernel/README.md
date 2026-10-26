@@ -216,10 +216,10 @@ API from `test/support/growth.ts`.
 Catalog-only statements are counted apart, with at most one allowed per distinct query text in a measured run; a
 statement that also reads data counts in full.
 
-Statements in the operation's async context count toward its cost; loops started outside it are reported separately as
-background work. Background statement counts follow the measured wall time, while rows and blocks per background
-statement must stay within the default constant-cost slack as data grows; a scale with no background statement is
-skipped for that bound.
+Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
+capture runs; loops started outside both are reported as background work. Background statement counts follow measured
+wall time, while rows and blocks per background statement must stay within the default constant-cost slack as data
+grows; a scale with no background statement is skipped for that bound.
 
 Seed every relation the operation reads, including receipts, outbox, write basis and the Access rows its authorization
 reads, to thousands of rows at the smallest scale; for example, use 500 x scale bulk rows of the production shape per
