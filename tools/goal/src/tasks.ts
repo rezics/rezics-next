@@ -1,5 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -21,9 +30,13 @@ type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
   return (task as FrozenTask).frozenFiles ?? [];
 }
-function commitFrozenFiles(worktree: string, files: readonly FrozenFile[], previous: readonly Pick<FrozenFile, 'path' | 'hash'>[] = []): void {
-  const current = new Map(files.map(file => [file.path, file]));
-  const touched = new Set([...previous.map(file => file.path), ...current.keys()]);
+function commitFrozenFiles(
+  worktree: string,
+  files: readonly FrozenFile[],
+  previous: readonly Pick<FrozenFile, 'path' | 'hash'>[] = [],
+): void {
+  const current = new Map(files.map((file) => [file.path, file]));
+  const touched = new Set([...previous.map((file) => file.path), ...current.keys()]);
   for (const path of touched) {
     const target = resolve(worktree, path);
     const fromRoot = relative(resolve(worktree), target);
@@ -32,8 +45,12 @@ function commitFrozenFiles(worktree: string, files: readonly FrozenFile[], previ
     let component = resolve(worktree);
     for (const part of path.split('/')) {
       component = join(component, part);
-      try { if (lstatSync(component).isSymbolicLink()) throw new Error(`frozen file path crosses a symbolic link: ${path}`); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; break; }
+      try {
+        if (lstatSync(component).isSymbolicLink()) throw new Error(`frozen file path crosses a symbolic link: ${path}`);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        break;
+      }
     }
     const file = current.get(path);
     if (file) {
@@ -44,7 +61,7 @@ function commitFrozenFiles(worktree: string, files: readonly FrozenFile[], previ
   if (!touched.size) return;
   const existing = [...current.keys()];
   if (existing.length) git(worktree, ['add', '-A', '--', ...existing]);
-  const removed = previous.map(file => file.path).filter(path => !current.has(path));
+  const removed = previous.map((file) => file.path).filter((path) => !current.has(path));
   if (removed.length) git(worktree, ['add', '-u', '--', ...removed]);
   const status = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: worktree });
   if (status.status === 0) return;
@@ -58,14 +75,23 @@ export function git(cwd: string, args: string[]): string {
 }
 function installWorktreeDependencies(worktree: string): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
-  const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: worktree, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(`Dependency install failed in ${worktree}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`);
-  const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as { workspaces?: string[] | { packages?: string[] } };
-  const patterns = Array.isArray(manifest.workspaces) ? manifest.workspaces : manifest.workspaces?.packages ?? [];
+  const result = spawnSync('bun', ['install', '--frozen-lockfile'], {
+    cwd: worktree,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.status !== 0)
+    throw new Error(
+      `Dependency install failed in ${worktree}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`,
+    );
+  const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as {
+    workspaces?: string[] | { packages?: string[] };
+  };
+  const patterns = Array.isArray(manifest.workspaces) ? manifest.workspaces : (manifest.workspaces?.packages ?? []);
   for (const pattern of patterns) {
     const wildcard = pattern.indexOf('*');
     const parent = wildcard < 0 ? pattern : pattern.slice(0, wildcard).replace(/\/$/, '');
-    const candidates = wildcard < 0 ? [parent] : readdirSync(join(worktree, parent)).map(name => join(parent, name));
+    const candidates = wildcard < 0 ? [parent] : readdirSync(join(worktree, parent)).map((name) => join(parent, name));
     for (const relative of candidates) {
       const packageFile = join(worktree, relative, 'package.json');
       if (!existsSync(packageFile)) continue;
@@ -78,26 +104,51 @@ function installWorktreeDependencies(worktree: string): void {
     }
   }
 }
-export type RetryOptions = { brief?: string; profile?: Profile; fixRound?: number; consulted?: boolean; escalation?: string; evidence?: string; consultation?: string; excludePools?: string[]; conflictFiles?: string[] };
+export type RetryOptions = {
+  brief?: string;
+  profile?: Profile;
+  fixRound?: number;
+  consulted?: boolean;
+  escalation?: string;
+  evidence?: string;
+  consultation?: string;
+  excludePools?: string[];
+  conflictFiles?: string[];
+};
 export class HeldTaskConflictError extends Error {
-  constructor(readonly detail: string) { super(detail); this.name = 'HeldTaskConflictError'; }
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'HeldTaskConflictError';
+  }
 }
 export class TaskHeldForDependenciesError extends Error {
-  constructor() { super('task held until its dependencies merge'); this.name = 'TaskHeldForDependenciesError'; }
+  constructor() {
+    super('task held until its dependencies merge');
+    this.name = 'TaskHeldForDependenciesError';
+  }
 }
 export class WorkerTasks {
-  constructor(readonly settings: Settings, readonly store: WorkerStore, readonly reader: PoolReader = readPool,
-    readonly launcher: typeof launch = launch) {}
+  constructor(
+    readonly settings: Settings,
+    readonly store: WorkerStore,
+    readonly reader: PoolReader = readPool,
+    readonly launcher: typeof launch = launch,
+  ) {}
   private branchHead(branch: string, createFromMain: boolean): string {
     const reference = `refs/heads/${branch}`;
-    try { return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]); }
-    catch {
+    try {
+      return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]);
+    } catch {
       if (!createFromMain) throw new Error(`stabilize branch ${branch} does not exist`);
       const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
-      try { git(this.settings.mainCheckout, ['branch', '--', branch, main]); }
-      catch (error) {
-        try { return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]); }
-        catch { throw error; }
+      try {
+        git(this.settings.mainCheckout, ['branch', '--', branch, main]);
+      } catch (error) {
+        try {
+          return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]);
+        } catch {
+          throw error;
+        }
       }
       return main;
     }
@@ -114,23 +165,33 @@ export class WorkerTasks {
   private commitRetryLeftovers(task: Task, attempt: number): void {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
     // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
-    for (const [state, operation] of [['rebase-merge', 'rebase'], ['rebase-apply', 'rebase'], ['MERGE_HEAD', 'merge']] as const) {
-      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) git(task.worktree, [operation, '--abort']);
+    for (const [state, operation] of [
+      ['rebase-merge', 'rebase'],
+      ['rebase-apply', 'rebase'],
+      ['MERGE_HEAD', 'merge'],
+    ] as const) {
+      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state]))))
+        git(task.worktree, [operation, '--abort']);
     }
     const branch = git(task.worktree, ['branch', '--show-current']);
-    if (branch !== task.branch) throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
+    if (branch !== task.branch)
+      throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return;
     git(task.worktree, ['add', '-A']);
     git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`]);
   }
-  private validateBrief(briefFile: string, excludingTask?: string): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
+  private validateBrief(
+    briefFile: string,
+    excludingTask?: string,
+  ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
     const taskClass = classifyTask(brief);
     if (taskClass === 'mechanical') throw new Error('run mechanical commands directly without a worker');
-    const existingTasks = this.store.tasks().filter(task => task.id !== excludingTask);
-    const known = new Set(existingTasks.map(task => task.id));
-    for (const dependency of brief.after) if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
+    const existingTasks = this.store.tasks().filter((task) => task.id !== excludingTask);
+    const known = new Set(existingTasks.map((task) => task.id));
+    for (const dependency of brief.after)
+      if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
     return { brief, taskClass };
   }
   dispatch(briefFile: string): Task {
@@ -150,11 +211,13 @@ export class WorkerTasks {
       installWorktreeDependencies(worktree);
       commitFrozenFiles(worktree, files);
       this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
-      this.store.updateTask({ taskId: id, attempt: 0 }, current => {
+      this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
         (current as FrozenTask).frozenFiles = files.map(({ path, hash }) => ({ path, hash }));
       });
       return this.store.task(id);
-    } finally { lease.release(); }
+    } finally {
+      lease.release();
+    }
   }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
     const worker = await this.retryTask(taskId, options);
@@ -168,17 +231,23 @@ export class WorkerTasks {
     const integration = this.taskBaseHead(task.brief);
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
     const branch = git(task.worktree, ['branch', '--show-current']);
-    if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
+    if (branch !== task.branch)
+      throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
       const common = git(task.worktree, ['merge-base', task.base, integration]);
       const branchName = task.brief.target === 'stabilize' ? 'stabilize branch' : 'integration branch';
-      if (common !== task.base) throw new HeldTaskConflictError(`held task base is not an ancestor of the current ${branchName}`);
+      if (common !== task.base)
+        throw new HeldTaskConflictError(`held task base is not an ancestor of the current ${branchName}`);
       const currentAttempt = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
-      const logPath = currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
+      const logPath =
+        currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
       mkdirSync(dirname(logPath), { recursive: true });
-      try { rebaseOnto(task.worktree, integration, task.base, `${logPath}.rebase`); }
-      catch (error) {
-        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+      try {
+        rebaseOnto(task.worktree, integration, task.base, `${logPath}.rebase`);
+      } catch (error) {
+        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'])
+          .split('\0')
+          .filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort']);
         const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts });
@@ -187,78 +256,134 @@ export class WorkerTasks {
       }
     } else git(task.worktree, ['reset', '--hard', integration]);
     if (task.currentAttempt) {
-      task = this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => { current.base = integration; });
+      task = this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
+        current.base = integration;
+      });
     } else {
-      task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = integration; });
+      task = this.store.updateTask({ taskId, attempt: 0 }, (current) => {
+        current.base = integration;
+      });
     }
     installWorktreeDependencies(task.worktree);
     const worker = await this.retryTask(taskId, {});
     if (!worker) throw new Error('released task was unexpectedly held again');
     return worker;
-
   }
   private async retryTask(taskId: string, options: RetryOptions): Promise<RunningWorker | null> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
-      if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
+      if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
+        throw new Error(`cannot retry ${task.state} task`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
         throw new Error('a reshaped brief must keep the same goal and manager');
       const nextBrief = reshaped?.brief ?? task.brief;
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
-      if (!nextBrief.acceptance.command.length) throw new Error('Imported attempts need a dispatchable contract before retry');
-      const byId = new Map(this.store.tasks().map(candidate => [candidate.id, candidate]));
-      if (reshaped && nextBrief.after.some(id => !['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))) {
+      if (!nextBrief.acceptance.command.length)
+        throw new Error('Imported attempts need a dispatchable contract before retry');
+      const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
+      if (reshaped && nextBrief.after.some((id) => !['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
-        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => {
-          current.brief = nextBrief; current.briefPath = briefPath; current.taskClass = nextTaskClass; current.state = 'held';
+        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
+          current.brief = nextBrief;
+          current.briefPath = briefPath;
+          current.taskClass = nextTaskClass;
+          current.state = 'held';
         });
         return null;
       }
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
-      const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;
-      const route = old ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
+      const oldConfigDirectory = old
+        ? this.settings.pools.find((candidate) => candidate.name === old.pool)?.configDirectory
+        : undefined;
+      const route = old
+        ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
         : routeTask(nextBrief, task.sequence, readRouting(this.settings.routingFile));
-      const readings = this.settings.pools.map(pool => withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory));
-      const history = this.store.attempts().flatMap(a => [a.before, a.after]).filter(r => r !== null);
-      const fallbacks = options.profile || nextTaskClass === 'mechanical' ? []
-        : readRouting(this.settings.routingFile).classes[nextTaskClass]?.fallbacks ?? [];
-      const { profile, pool } = choosePoolWithFallback(options.profile ?? route.profile, fallbacks, this.settings.pools, readings,
-        { history, ...(old ? { preferred: old.pool } : {}), ...(options.excludePools ? { exclude: options.excludePools } : {}) });
+      const readings = this.settings.pools.map((pool) =>
+        withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory),
+      );
+      const history = this.store
+        .attempts()
+        .flatMap((a) => [a.before, a.after])
+        .filter((r) => r !== null);
+      const fallbacks =
+        options.profile || nextTaskClass === 'mechanical'
+          ? []
+          : (readRouting(this.settings.routingFile).classes[nextTaskClass]?.fallbacks ?? []);
+      const { profile, pool } = choosePoolWithFallback(
+        options.profile ?? route.profile,
+        fallbacks,
+        this.settings.pools,
+        readings,
+        {
+          history,
+          ...(old ? { preferred: old.pool } : {}),
+          ...(options.excludePools ? { exclude: options.excludePools } : {}),
+        },
+      );
       const make = (n: number): Attempt => ({
-        taskId, attempt: n, state: 'pending', profile, pool: pool.name, tableVersion: route.tableVersion, experiment: route.experiment,
-        startedAt: new Date().toISOString(), endedAt: null, process: null, driver: null,
+        taskId,
+        attempt: n,
+        state: 'pending',
+        profile,
+        pool: pool.name,
+        tableVersion: route.tableVersion,
+        experiment: route.experiment,
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+        process: null,
+        driver: null,
         logPath: join(this.settings.stateDirectory, 'runs', taskId, `${n}.jsonl`),
         evidencePath: join(this.settings.stateDirectory, 'evidence', taskId, String(n)),
-        auxiliaryProcesses: [], session: null, fixRound: options.fixRound ?? old?.fixRound ?? 0, consulted: options.consulted ?? old?.consulted ?? false,
-        previousFailure: ['environment', 'pool-exhausted'].includes(options.escalation ?? '') ? old?.previousFailure ?? null
-          : old?.failure?.fingerprint ?? old?.previousFailure ?? null, failure: null,
-        escalation: options.escalation ?? null, before: readings.find(r => r.pool === pool.name) ?? null, after: null,
-        exitCode: null, result: '', blocker: null, approaches: old?.approaches ?? [],
+        auxiliaryProcesses: [],
+        session: null,
+        fixRound: options.fixRound ?? old?.fixRound ?? 0,
+        consulted: options.consulted ?? old?.consulted ?? false,
+        previousFailure: ['environment', 'pool-exhausted'].includes(options.escalation ?? '')
+          ? (old?.previousFailure ?? null)
+          : (old?.failure?.fingerprint ?? old?.previousFailure ?? null),
+        failure: null,
+        escalation: options.escalation ?? null,
+        before: readings.find((r) => r.pool === pool.name) ?? null,
+        after: null,
+        exitCode: null,
+        result: '',
+        blocker: null,
+        approaches: old?.approaches ?? [],
       });
-      const next = task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
-        ? this.store.retryStopped(taskId, make, oldConfigDirectory)
-        : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
+      const next =
+        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
+          ? this.store.retryStopped(taskId, make, oldConfigDirectory)
+          : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
       // Include older groups after a controller crash between superseding and termination.
-      for (const previous of this.store.attempts(taskId).filter(a => a.attempt < next.attempt && !a.supersededFinalized)) {
+      for (const previous of this.store
+        .attempts(taskId)
+        .filter((a) => a.attempt < next.attempt && !a.supersededFinalized)) {
         await terminateProcessGroup(previous.process, this.settings.terminationGraceMs);
-        for (const process of previous.auxiliaryProcesses) await terminateProcessGroup(process, this.settings.terminationGraceMs);
+        for (const process of previous.auxiliaryProcesses)
+          await terminateProcessGroup(process, this.settings.terminationGraceMs);
       }
       this.store.assertCurrent(next);
-      this.store.finalizeSuperseded(next, previous => {
-        const previousPool = this.settings.pools.find(p => p.name === previous.pool);
-        return previousPool ? this.reader(previousPool) : null;
-      }, previous => this.settings.pools.find(p => p.name === previous.pool)?.configDirectory);
+      this.store.finalizeSuperseded(
+        next,
+        (previous) => {
+          const previousPool = this.settings.pools.find((p) => p.name === previous.pool);
+          return previousPool ? this.reader(previousPool) : null;
+        },
+        (previous) => this.settings.pools.find((p) => p.name === previous.pool)?.configDirectory,
+      );
       if (reshaped) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-${next.attempt}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
-        task = this.store.updateTask({ taskId, attempt: next.attempt }, current => {
-          current.brief = reshaped.brief; current.briefPath = briefPath; current.taskClass = nextTaskClass;
+        task = this.store.updateTask({ taskId, attempt: next.attempt }, (current) => {
+          current.brief = reshaped.brief;
+          current.briefPath = briefPath;
+          current.taskClass = nextTaskClass;
         });
       } else task = this.store.task(taskId);
       let setupStep = 'checking worktree leftovers';
@@ -269,7 +394,7 @@ export class WorkerTasks {
         const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
         const priorFiles = frozenFiles(task);
         commitFrozenFiles(task.worktree, frozenBlocks, priorFiles);
-        task = this.store.updateTask(next, current => {
+        task = this.store.updateTask(next, (current) => {
           (current as FrozenTask).frozenFiles = frozenBlocks.map(({ path, hash }) => ({ path, hash }));
         });
         setupStep = `rebasing onto current ${task.brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.settings.integrationBranch}`;
@@ -283,14 +408,17 @@ export class WorkerTasks {
           changedBase = true;
           const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`]));
           if (commits > 0) {
-            try { rebaseOnto(task.worktree, integration, task.base, rebaseLog); }
-            catch (error) {
+            try {
+              rebaseOnto(task.worktree, integration, task.base, rebaseLog);
+            } catch (error) {
               files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
               if (!files.length) throw error;
             }
           } else git(task.worktree, ['reset', '--hard', integration]);
         }
-        task = this.store.updateTask(next, current => { current.base = integration; });
+        task = this.store.updateTask(next, (current) => {
+          current.base = integration;
+        });
         if (!files.length && (changedBase || options.escalation === 'rebase-conflict')) {
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree);
@@ -299,51 +427,94 @@ export class WorkerTasks {
         const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
         retryPrepared = true;
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex);
-      }
-      catch (error) {
-        const failed = this.store.updateAttempt(next, a => {
-          a.state = 'exited'; a.endedAt = new Date().toISOString(); a.result = String(error); a.exitCode = -1; a.failureKind = 'tool'; a.after = this.reader(pool);
+      } catch (error) {
+        const failed = this.store.updateAttempt(next, (a) => {
+          a.state = 'exited';
+          a.endedAt = new Date().toISOString();
+          a.result = String(error);
+          a.exitCode = -1;
+          a.failureKind = 'tool';
+          a.after = this.reader(pool);
         });
-        this.store.putRecord(makeRecord(this.store.task(taskId), failed, readMeasurement(failed, { configDirectory: pool.configDirectory }), 'stopped'));
+        this.store.putRecord(
+          makeRecord(
+            this.store.task(taskId),
+            failed,
+            readMeasurement(failed, { configDirectory: pool.configDirectory }),
+            'stopped',
+          ),
+        );
         this.store.event(next, 'launch-failed', { error: String(error) });
-        this.store.updateTask(next, t => { t.state = 'stopped'; });
+        this.store.updateTask(next, (t) => {
+          t.state = 'stopped';
+        });
         if (!retryPrepared) {
-          const detail = String(error).replace(/[\r\n]+/g, ' ').slice(0, 800);
-          const event = { managerId: this.store.task(taskId).brief.manager, taskId, kind: 'environment' as const,
-            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000) };
+          const detail = String(error)
+            .replace(/[\r\n]+/g, ' ')
+            .slice(0, 800);
+          const event = {
+            managerId: this.store.task(taskId).brief.manager,
+            taskId,
+            kind: 'environment' as const,
+            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000),
+          };
           new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory).deliver(event);
         }
         throw error;
       }
-    } finally { lease.release(); }
+    } finally {
+      lease.release();
+    }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };
-      if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot stop ${task.state} task`);
-      if (!task.currentAttempt) { this.store.updateTask(ref, t => { t.state = cancelled ? 'cancelled' : 'stopped'; }); return; }
+      if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled')
+        throw new Error(`cannot stop ${task.state} task`);
+      if (!task.currentAttempt) {
+        this.store.updateTask(ref, (t) => {
+          t.state = cancelled ? 'cancelled' : 'stopped';
+        });
+        return;
+      }
       const attempt = this.store.attempt(ref);
       if (attempt.state === 'stopped') {
         if (cancelled) this.store.cancelStopped(ref);
         return;
       }
       this.store.write(ref, () => {
-        if (['integrated', 'merged'].includes(this.store.task(taskId).state)) throw new Error('cannot stop integrated task');
+        if (['integrated', 'merged'].includes(this.store.task(taskId).state))
+          throw new Error('cannot stop integrated task');
         if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
-          const pool = this.settings.pools.find(p => p.name === attempt.pool);
-          const ended = this.store.updateAttempt(ref, a => { a.endedAt = new Date().toISOString(); a.after = pool ? this.reader(pool) : null; });
-          this.store.putRecord(makeRecord(task, ended, readMeasurement(ended, { configDirectory: pool?.configDirectory }), cancelled ? 'cancelled' : 'stopped'));
+          const pool = this.settings.pools.find((p) => p.name === attempt.pool);
+          const ended = this.store.updateAttempt(ref, (a) => {
+            a.endedAt = new Date().toISOString();
+            a.after = pool ? this.reader(pool) : null;
+          });
+          this.store.putRecord(
+            makeRecord(
+              task,
+              ended,
+              readMeasurement(ended, { configDirectory: pool?.configDirectory }),
+              cancelled ? 'cancelled' : 'stopped',
+            ),
+          );
           this.store.event(ref, cancelled ? 'cancelled' : 'stopped', {});
           this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
         }
       });
       await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
-      for (const process of attempt.auxiliaryProcesses) await terminateProcessGroup(process, this.settings.terminationGraceMs);
-    } finally { lease.release(); }
+      for (const process of attempt.auxiliaryProcesses)
+        await terminateProcessGroup(process, this.settings.terminationGraceMs);
+    } finally {
+      lease.release();
+    }
   }
-  async cancel(taskId: string): Promise<void> { return this.stop(taskId, true); }
+  async cancel(taskId: string): Promise<void> {
+    return this.stop(taskId, true);
+  }
   /** Later integration follows the stabilize branch. A running attempt is left alone. */
   retarget(taskId: string, target: string): Task {
     if (target !== 'stabilize') throw new Error('retarget only accepts stabilize');
@@ -352,8 +523,11 @@ export class WorkerTasks {
       throw new Error(`cannot retarget ${task.state} task`);
     const head = this.branchHead(this.settings.stabilizeBranch, false);
     if (!task.base) throw new Error('task has no recorded base commit');
-    try { git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head]); }
-    catch { throw new Error('recorded base commit is not an ancestor of the stabilize head'); }
+    try {
+      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head]);
+    } catch {
+      throw new Error('recorded base commit is not an ancestor of the stabilize head');
+    }
     const markdown = withStabilizeTarget(task.brief.markdown);
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
     const ref = { taskId, attempt: task.currentAttempt };
@@ -361,13 +535,17 @@ export class WorkerTasks {
       writeFileSync(current.briefPath, markdown);
       current.brief = brief;
     };
-    try { return this.store.updateTask(ref, apply); }
-    catch (error) {
+    try {
+      return this.store.updateTask(ref, apply);
+    } catch (error) {
       if (error instanceof StaleAttemptError) return this.store.updateHeldRetryTask(ref, apply);
       throw error;
     }
   }
   completionScope(goal: string): string[] {
-    return this.store.tasks().filter(task => task.brief.goal === goal && task.state !== 'cancelled').map(task => task.id);
+    return this.store
+      .tasks()
+      .filter((task) => task.brief.goal === goal && task.state !== 'cancelled')
+      .map((task) => task.id);
   }
 }
