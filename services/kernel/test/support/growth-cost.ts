@@ -25,7 +25,9 @@ export type Cost = {
   readonly backgroundStatements?: number;
   readonly backgroundRows?: number;
   readonly backgroundBlocks?: number;
-  readonly backgroundCosts?: Readonly<Record<string, { readonly rows: number; readonly blocks: number }>>;
+  readonly backgroundCosts?: Readonly<
+    Record<string, { readonly rows: number; readonly blocks: number; readonly bounded: boolean }>
+  >;
 };
 
 type PlanNode = Record<string, unknown>;
@@ -262,7 +264,7 @@ export function costOf(capture: Capture): Cost {
     }
   }
 
-  const backgroundCosts = new Map<string, { rows: number; blocks: number }>();
+  const backgroundCosts = new Map<string, { rows: number; blocks: number; bounded: boolean }>();
   let backgroundRows = 0;
   let backgroundBlocks = 0;
   for (const document of capture.backgroundPlans ?? []) {
@@ -274,10 +276,13 @@ export function costOf(capture: Capture): Cost {
       });
       backgroundRows += planCost.rows;
       backgroundBlocks += planCost.blocks;
-      const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0 };
+      const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0, bounded: true };
       backgroundCosts.set(key, {
         rows: Math.max(prior.rows, planCost.rows),
         blocks: Math.max(prior.blocks, planCost.blocks),
+        // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
+        bounded:
+          prior.bounded && Object.keys(planCost.relations).some((relation) => !/^(?:dbos|auth_dbos)\./.test(relation)),
       });
     }
   }
@@ -341,6 +346,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
               {
                 rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
                 blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
+                bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
               },
             ]),
           ),

@@ -68,7 +68,13 @@ function assertBackgroundBound(
   name: string,
   samples: readonly { readonly scale: number; readonly cost: Cost }[],
 ): void {
-  const statements = new Set(samples.flatMap(({ cost }) => Object.keys(cost.backgroundCosts ?? {})));
+  const statements = new Set(
+    samples.flatMap(({ cost }) =>
+      Object.entries(cost.backgroundCosts ?? {})
+        .filter(([, value]) => value.bounded)
+        .map(([statement]) => statement),
+    ),
+  );
   const failures: { statement: string; rows: number; metric: 'rows' | 'blocks'; values: number[]; allowed: number }[] =
     [];
   for (const statement of statements) {
