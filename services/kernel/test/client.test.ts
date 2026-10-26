@@ -5,6 +5,9 @@ import { assertNoServiceImports, clientDeclarations, committedDeclarations } fro
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
 const timeout = 60_000;
+// The real kernel also constructs SQL types, checks the source and emits the declaration graph. Budget each phase
+// separately while six test files and the other workspace gates share the host.
+const kernelDeclarationTimeout = 3 * timeout;
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
 
@@ -27,7 +30,7 @@ test(
     if (JSON.stringify([...committedDeclarations()]) !== JSON.stringify([...emitted]))
       throw new Error('packages/client/src/kernel is stale; run `bun run --cwd services/kernel client`');
   },
-  timeout,
+  kernelDeclarationTimeout,
 );
 
 test(
