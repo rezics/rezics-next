@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import {
   createAuthHost,
   createBarrierProofVerifier,
@@ -7,7 +8,7 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -20,6 +21,7 @@ let service: AuthService;
 let bindings: ReturnType<typeof createNativeAccountBindings>;
 let accountId: string;
 let authDatabase: Pool;
+let fixturePool: Pool;
 let token = '';
 let delivered: (() => void) | undefined;
 let serial = 0;
@@ -34,6 +36,12 @@ const request = (path: string, body: unknown) =>
     }),
   );
 async function recover() {
+  // Prepare a fresh delivery without changing any authoritative recovery,
+  // credential, barrier or completion history measured by this series.
+  const mailKey = createHmac('sha256', 'native-growth-recovery-persistent-secret-32-bytes')
+    .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+    .digest('hex');
+  await fixturePool.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
   await bindings.internalLifecycle.raiseFence({ accountId, key: `growth-fence-${serial++}` });
   const delivery = new Promise<void>((resolve) => {
     delivered = resolve;
@@ -53,6 +61,7 @@ async function unrelated(index: number) {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   fixture = testDatabase();
+  fixturePool = new Pool({ connectionString: fixture.url });
   const database = db.openPool();
   authDatabase = database;
   const system = db.openPool();
@@ -115,6 +124,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await host?.stop();
   await db?.close();
+  await fixturePool?.end();
   fixture?.close();
 });
 
