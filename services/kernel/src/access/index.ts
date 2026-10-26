@@ -1,4 +1,5 @@
 export { AccessUnavailableError } from './unavailable.ts';
+export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
 import { installAccessClock } from './access-clock.ts';

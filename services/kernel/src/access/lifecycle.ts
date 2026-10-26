@@ -326,6 +326,7 @@ async function fence(
   const kind = tombstone ? 'tombstone' : 'fence';
   const priorOperatorAccountId = tombstone ? account.operatorAccountId : null;
   const rows = await fenceStatement.run(tx, {
+    at: authoritativeTimeValue(currentCommand(tx).time),
     route,
     account_id: account.accountId,
     receipt_id: receiptId,

@@ -563,3 +563,46 @@ Set cost: one preference row and the command envelope's receipt, with constant r
 native authorization retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored
 preferences at scales 256, 1024 and 4096 (16 accounts per scale unit, to avoid tiny-table scans) using the shared
 harness and default warmups.
+
+## Rating counting key
+
+Trusted kernel composition constructs `const ratingCounter = createRatingCounter({ secret })` (exported from
+Access), supplying a private `Uint8Array` of at least 32 random bytes. Use the same stable secret across kernel
+processes and restarts; changing it requires re-keying stored rating populations. There is no default secret.
+
+The internal port has signature `ratingCounter(client, accountId, at): Promise<string>`. `client` is the caller's
+PostgreSQL query client; `at` is a `Date` or PostgreSQL timestamp string on the authoritative T timeline. Keep event
+T strings intact to preserve microseconds. A missing account rejects. The result is the lowercase hexadecimal
+HMAC-SHA256 of `access.rating-counter.v1` followed by a NUL and the canonical controller UUID. An automated account's
+controller is its operator at T; every other account controls itself. The separate private `controller_id` account
+field is not this rating relation. Only key equality has meaning to rating. The key is never an account ID and must
+never be returned by a route, put in an event or log, or interpreted as authority. Rating may store it privately in
+its vote population; choosing the latest vote per key belongs to rating.
+
+`rating-counter.sql` reads one controller version through
+`rating_counter_controller_pkey(route, account_id, effective_at)`, seeking the latest version at or before T with
+`LIMIT 1`. This private account relation projection retains prior controllers so delayed vote events and paged
+recounts remain correct after later transfers. Account insertion and migration establish the baseline relation;
+pre-migration history is unavailable. Relation recording and native account deletion write their exact command T,
+inclusive at the boundary. Removing the operator relation records the account's own controller; direct removals use
+database transaction time.
+
+Each successful `recordOperatorRelation`, including initial automation, appends exactly one
+`com.rezics.access.rating-counter.changed.v1` event alongside its existing relation event in the same native command
+transaction and outbox envelope. Failed commands publish none; command receipt replay publishes no additional row.
+The event's `subject` is the affected account's UUID string. Its data has exactly these fields:
+
+- `accountId: string`: the affected automated account's canonical UUID, whose votes need re-keying.
+- `at: string`: the transfer transaction's authoritative T as PostgreSQL ISO `timestamptz::text`, preserving up to
+  six fractional digits and the time zone offset (for example `2026-10-26 12:00:00.123456+00`). This is the inclusive
+  instant from which `ratingCounter(client, accountId, at)` returns the new controller's key.
+
+The guarantee is one durable counter-change row per committed relation transfer, atomically with that transfer.
+Outbox consumers may retry delivery and must deduplicate by the event ID or their existing checkpoint; delivery is
+not an exactly-once invocation guarantee. Rating handles it with its paged recount. Neither the controller nor either
+counting key appears in this event. Account erasure continues to use its existing lifecycle events.
+
+Cost: one statement returning one account relation version plus one HMAC per vote; rows and statements are constant,
+with logarithmic index blocks in accounts and relation history. A transfer adds one fixed controller-version write
+and one outbox row; it never enumerates votes or responsibilities. `test/access/growth-rating-counter.test.ts` uses
+the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts in `grow` with default warmups.

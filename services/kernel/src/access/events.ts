@@ -100,6 +100,14 @@ const exposure = (open: boolean) =>
 
 /** Exact public command return values; command keys, credentials and opening context stay private. */
 export const ACCESS_EVENTS = {
+  'com.rezics.access.rating-counter.changed.v1': Type.Object(
+    {
+      accountId: identity,
+      // Preserve the transaction's PostgreSQL T, including microseconds.
+      at: Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?[+-]\\d{2}$' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.exposure.opened.v1': exposure(true),
   'com.rezics.access.exposure.closed.v1': exposure(false),
   'com.rezics.access.operator.fence-page.v1': Type.Object(

@@ -3,7 +3,7 @@ import { systemClock } from '../clock.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import type { CommandTransaction } from '../command/command.ts';
+import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -228,6 +228,7 @@ export function createOperatorFenceRunner(config: {
             await config.record(tx, root, child, related ? receiptId : transactionId, businessReceipt);
             if (!related) return { accountId: subjectAccountId, fenced: false, receiptId: null };
             const receipt = await nativeFence.run(tx, {
+              at: authoritativeTimeValue(currentCommand(tx).time),
               route,
               account_id: subjectAccountId,
               receipt_id: receiptId,
