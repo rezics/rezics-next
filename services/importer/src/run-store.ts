@@ -1,15 +1,14 @@
-import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { Database, type SQLQueryBindings, type Statement } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
 import type { SourceId } from '@rezics/conversion';
 import {
   BatchStatementSchema,
-  checkBatchWrite,
-  checkBatchWriteResult,
   FIELD_GROUPS,
   type BatchCommand,
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
+import { checkBatch, checkResult } from './accepted-checks.ts';
 import type { ImportBatchRequest, ImportBatchResult } from './import-contract.ts';
 import type { RecordRow } from './record-store.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
@@ -289,6 +288,8 @@ const rowBytes = (row: RecordRow) =>
 export class RunStore<Projection = BatchStatement[]> {
   readonly database: Database;
   private closed = false;
+  private readonly statements = new Map<string, Statement>();
+  private preparer: unknown;
   private readonly projectionMode: 'source-record' | undefined;
   constructor(
     path: string | Database,
@@ -360,35 +361,36 @@ export class RunStore<Projection = BatchStatement[]> {
       throw error;
     }
   }
+  /**
+   * Every SQL text is a literal, so the cache holds one statement per call site. Replacing the
+   * connection's prepare entry point (instrumentation installed or removed) starts a new cache.
+   */
   private query(sql: string) {
     if (this.closed) throw new Error('Run store is closed');
-    return this.database.prepare(sql);
+    if (this.database.prepare !== this.preparer) {
+      for (const cached of this.statements.values()) cached.finalize();
+      this.statements.clear();
+      this.preparer = this.database.prepare;
+    }
+    let statement = this.statements.get(sql);
+    if (!statement) {
+      statement = this.database.prepare(sql);
+      this.statements.set(sql, statement);
+    }
+    return statement;
   }
   private get<T>(sql: string, ...args: SQLQueryBindings[]): T | null {
-    const statement = this.query(sql);
-    try {
-      return statement.get(...args) as T | null;
-    } finally {
-      statement.finalize();
-    }
+    return this.query(sql).get(...args) as T | null;
   }
   private all<T>(sql: string, ...args: SQLQueryBindings[]): T[] {
-    const statement = this.query(sql);
-    try {
-      return statement.all(...args) as T[];
-    } finally {
-      statement.finalize();
-    }
+    return this.query(sql).all(...args) as T[];
   }
   private write(sql: string, ...args: SQLQueryBindings[]) {
-    const statement = this.query(sql);
-    try {
-      return statement.run(...args);
-    } finally {
-      statement.finalize();
-    }
+    return this.query(sql).run(...args);
   }
   private transaction<T>(fn: () => T): T {
+    // Inside ImportSession.atomic the enclosing transaction owns the commit.
+    if (this.database.inTransaction) return fn();
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const value = fn();
@@ -708,7 +710,7 @@ export class RunStore<Projection = BatchStatement[]> {
     const flush = () => {
       if (!parts.length) return;
       const body = `{"commands":[${parts.join(',')}]}`;
-      if (checkBatchWrite(JSON.parse(body)).length) fail();
+      if (checkBatch(JSON.parse(body)).length) fail();
       envelopes.push({ bytes: body, keys });
       parts = [];
       keys = [];
@@ -1102,11 +1104,7 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   acknowledge(run: Run, result: ImportBatchResult, scope?: { recordKey: string }): void {
     boundedJson(result);
-    if (
-      checkBatchWriteResult(result).length ||
-      new Set(result.results.map((r) => r.key)).size !== result.results.length
-    )
-      fail();
+    if (checkResult(result).length || new Set(result.results.map((r) => r.key)).size !== result.results.length) fail();
     if (scope !== undefined) {
       exact(scope, ['recordKey']);
       keyId(scope.recordKey);
@@ -1251,6 +1249,7 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   close(): void {
     if (!this.closed) {
+      this.statements.clear();
       this.database.close();
       this.closed = true;
     }

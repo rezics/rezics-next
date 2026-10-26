@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 import {
-  checkMediaImportRequest,
   type MediaImportAccepted,
   type MediaImportRequest,
   type MediaImportStatus,
 } from '@rezics/definitions/media-import';
+import { checkRequest } from './accepted-checks.ts';
 import type { Owner, RecordBindings } from './record-bindings.ts';
 
 /** Public JSON operations; the caller supplies authorization and bounded HTTP transport. */
@@ -151,7 +151,7 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
       // Validate every asset before any fence or media call. Each has its own 64KiB budget.
       const assets = Array.from({ length }, (_, index) => {
         const request = snapshot(ownValue(supplied, String(index))) as MediaImportRequest;
-        ensure(checkMediaImportRequest(request).length === 0);
+        ensure(checkRequest(request).length === 0);
         ensure(
           request.containerId === containerId &&
             request.provenance.source === owner.source &&

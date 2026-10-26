@@ -1,22 +1,15 @@
 import type { Database, SQLQueryBindings, Statement } from 'bun:sqlite';
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual, types } from 'node:util';
+import { FIELD_GROUPS, type BatchWriteRequest, type BatchWriteResult, type FieldGroup } from '@rezics/definitions/bulk';
 import {
-  checkBatchWrite,
-  checkBatchWriteResult,
-  FIELD_GROUPS,
-  type BatchWriteRequest,
-  type BatchWriteResult,
-  type FieldGroup,
-} from '@rezics/definitions/bulk';
-import {
-  checkMediaImportRequest,
   checkMediaImportStatus,
   MediaImportAcceptedSchema,
   type MediaImportAccepted,
   type MediaImportRequest,
   type MediaImportStatus,
 } from '@rezics/definitions/media-import';
+import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
 
 const { Errors } = createRequire(import.meta.resolve('@rezics/definitions/media-import'))('typebox/schema') as {
   Errors(schema: unknown, input: unknown): [unknown, Iterable<unknown>];
@@ -266,7 +259,7 @@ export class RecordBindings {
     const o = ownerInput(input);
     text(signature, 128);
     const { value, bytes } = snapshot(request);
-    ensure(checkBatchWrite(value).length === 0 && value.commands.length === 1);
+    ensure(checkBatch(value).length === 0 && value.commands.length === 1);
     const command = value.commands[0]!;
     requestKey(o, command.key);
     ensure(command.source.source === o.source && command.source.external_id === o.external_id);
@@ -342,7 +335,7 @@ export class RecordBindings {
     const o = ownerInput(input);
     requestKey(o, key);
     const { value, bytes } = snapshot(result);
-    ensure(checkBatchWriteResult(value).length === 0 && value.results.length === 1);
+    ensure(checkResult(value).length === 0 && value.results.length === 1);
     const response = value.results[0]!;
     ensure(response.key === key && (response.status === 200 || response.status === 201) && 'value' in response);
     const returned = response.value;
@@ -450,7 +443,7 @@ export class RecordBindings {
     requestKey(o, key);
     text(signature, 128);
     const { value, bytes } = snapshot(request);
-    ensure(checkMediaImportRequest(value).length === 0);
+    ensure(checkRequest(value).length === 0);
     ensure(value.provenance.source === o.source && value.provenance.external_id === o.external_id);
     return this.atomic(() => {
       const binding = this.bound(o);

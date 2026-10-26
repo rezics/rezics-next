@@ -8,6 +8,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import {
+  checkCoverIntent,
   commandKey,
   safeSourceUrl,
   sourceDigest,
@@ -242,7 +243,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     coverAssets.push(asset);
     if (context.subjectId !== undefined) {
       const intent = { containerId: context.subjectId, ...asset };
-      if (checkMediaImportRequest(intent).length) invalid('', 'invalid_media_import_context');
+      if ((typeof context.subjectId === 'string' ? checkCoverIntent : checkMediaImportRequest)(intent).length)
+        invalid('', 'invalid_media_import_context');
       mediaImportIntents.push(intent);
       const media = context.mediaIds?.[sourceUrl];
       if (media !== undefined)

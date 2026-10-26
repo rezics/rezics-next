@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { FIELD_GROUPS, SourceSchema, type FieldGroup, type Source } from '@rezics/definitions/bulk';
+import { checkMediaImportRequest } from '@rezics/definitions/media-import';
 import { documentVersion, normalizeDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 
 /** Immutable caller configuration; resolutions and media IDs confer no authority. */
@@ -136,23 +137,21 @@ function jsonSnapshot(input: unknown): unknown {
     if (value.length > recordBytes) throw new RangeError('Source string exceeds 2 MiB');
     return Buffer.byteLength(JSON.stringify(value), 'utf8');
   };
-  type Work = { value: unknown; put: (value: unknown) => void } | { leave: object };
+  // A work item names the slot a copied value fills, so no closure is allocated per node.
+  type Work = { value: unknown; into: Record<string, unknown> | undefined; key: string } | { leave: object };
   const ancestors = new Set<object>();
-  const stack: Work[] = [
-    {
-      value: input,
-      put: (value) => {
-        result = value;
-      },
-    },
-  ];
+  const stack: Work[] = [{ value: input, into: undefined, key: '' }];
   while (stack.length) {
     const work = stack.pop()!;
     if ('leave' in work) {
       ancestors.delete(work.leave);
       continue;
     }
-    const { value, put } = work;
+    const { value, into, key: slot } = work;
+    const put = (copy: unknown) => {
+      if (into) into[slot] = copy;
+      else result = copy;
+    };
     if (value === null || typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number') {
       if (typeof value === 'number' && !Number.isFinite(value)) throw new TypeError('Nonfinite JSON number');
       charge(typeof value === 'string' ? stringBytes(value) : JSON.stringify(value).length);
@@ -184,12 +183,7 @@ function jsonSnapshot(input: unknown): unknown {
         if (!Number.isInteger(index) || index < 0 || index >= length || String(index) !== key)
           throw new TypeError('Extended JSON array');
       } else charge(stringBytes(key) + 1);
-      stack.push({
-        value: descriptor.value,
-        put: (child) => {
-          copy[key] = child;
-        },
-      });
+      stack.push({ value: descriptor.value, into: copy, key });
     }
   }
   return result;
@@ -200,6 +194,53 @@ export function sourceDigest(normalizedProjection: unknown): string {
   const text = canonicalize(jsonSnapshot(normalizedProjection));
   if (text === undefined) throw new TypeError('Expected a JSON projection');
   return hash(text);
+}
+
+/**
+ * A pure validator over JSON data that skips bodies it already accepted. Only acceptances are
+ * remembered, keyed by the body's canonical JSON text (so member order never matters); callers
+ * pass JSON-clean values, and a text budget bounds the memory. A value without JSON text is
+ * always checked.
+ */
+export function rememberAccepted<V>(
+  check: (value: V) => readonly unknown[],
+  capacity = 64,
+  maxTextLength = 8192,
+): (value: V) => readonly unknown[] {
+  const accepted = new Set<string>();
+  return (value) => {
+    let key: string | undefined;
+    try {
+      key = canonicalize(value);
+    } catch {
+      return check(value);
+    }
+    if (key === undefined || key.length > maxTextLength) return check(value);
+    if (accepted.has(key)) return [];
+    const violations = check(value);
+    if (violations.length === 0) {
+      if (accepted.size >= capacity) accepted.delete(accepted.values().next().value!);
+      accepted.add(key);
+    }
+    return violations;
+  };
+}
+
+/**
+ * A record's cover intent crosses its converter, the media resolver and the journal, in two passes
+ * with up to a page of records between them; they share this one memory.
+ */
+export const checkCoverIntent = rememberAccepted(checkMediaImportRequest, 256);
+
+const patterns = new Map<string, RegExp>();
+/** The schema's pattern set is fixed, so each pattern compiles once. */
+function compiled(pattern: string): RegExp {
+  let expression = patterns.get(pattern);
+  if (!expression) {
+    expression = new RegExp(pattern, 'u');
+    patterns.set(pattern, expression);
+  }
+  return expression;
 }
 
 export function sourceEnvelope(
@@ -228,7 +269,7 @@ export function sourceEnvelope(
       typeof value !== 'string' ||
       value.length < (rule.minLength ?? 0) ||
       value.length > (rule.maxLength ?? Infinity) ||
-      (rule.pattern !== undefined && new RegExp(rule.pattern, 'u').exec(value)?.[0] !== value)
+      (rule.pattern !== undefined && compiled(rule.pattern).exec(value)?.[0] !== value)
     )
       throw new TypeError(`Invalid source ${key}`);
   }
@@ -271,8 +312,23 @@ export function safeSourceUrl(url: unknown, hosts: readonly string[]): string {
   return parsed.href;
 }
 
-/** A literal paragraph preserves CR/LF and Markdown syntax without interpreting either. */
+const documents = new Map<string, DocumentSnapshot>();
+const documentCapacity = 64;
+
+/**
+ * A literal paragraph preserves CR/LF and Markdown syntax without interpreting either. Snapshots
+ * are deeply frozen, so a record's repeated conversions share one normalized document.
+ */
 export function textDocument(text: string): DocumentSnapshot {
+  const known = typeof text === 'string' ? documents.get(text) : undefined;
+  if (known) return known;
+  const snapshot = buildTextDocument(text);
+  if (documents.size >= documentCapacity) documents.delete(documents.keys().next().value!);
+  documents.set(text, snapshot);
+  return snapshot;
+}
+
+function buildTextDocument(text: string): DocumentSnapshot {
   if (typeof text !== 'string' || !text.isWellFormed()) throw new TypeError('Expected valid Unicode text');
   if (Buffer.byteLength(text, 'utf8') > documentBytes) throw new RangeError('Text exceeds 32 KiB');
   const snapshot = normalizeDocument({

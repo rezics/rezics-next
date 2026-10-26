@@ -3,14 +3,13 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { SourceRecord } from '@rezics/conversion';
 import {
-  checkBatchWrite,
-  checkBatchWriteResult,
   FIELD_GROUPS,
   type BatchCommand,
   type BatchWriteRequest,
   type BatchWriteResult,
 } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
+import { checkBatch, checkResult } from './accepted-checks.ts';
 import type {
   ImportConversion,
   ImportTransport,
@@ -205,7 +204,7 @@ export class Importer {
   }
 
   private validateResult(request: BatchWriteRequest, result: BatchWriteResult): void {
-    if (checkBatchWriteResult(result).length || result.results.length !== request.commands.length)
+    if (checkResult(result).length || result.results.length !== request.commands.length)
       throw new Error('Invalid bulk response');
     const expected = new Map(request.commands.map((command) => [command.key, command]));
     const seen = new Set<string>();
@@ -226,8 +225,8 @@ export class Importer {
 
   private async send(request: BatchWriteRequest, signal: AbortSignal): Promise<BatchWriteResult> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
-    if (checkBatchWrite(request).length || Buffer.byteLength(JSON.stringify(request)) > 65536)
-      throw new Error('Invalid public envelope');
+    const text = JSON.stringify(request);
+    if (checkBatch(request).length || Buffer.byteLength(text) > 65536) throw new Error('Invalid public envelope');
     const response = await this.options.transport.batchWrite(request);
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     this.validateResult(request, response);
@@ -312,6 +311,14 @@ export class Importer {
     return results;
   }
 
+  /**
+   * One durable commit for a group of writes: RunStore and RecordBindings operations inside it join
+   * this transaction instead of committing (and syncing) each on its own.
+   */
+  private atomic<T>(operation: () => T): T {
+    return this.session.store.database.transaction(operation).immediate();
+  }
+
   private acknowledged(recordKey: string): void {
     this.options.observer?.onAcknowledged?.(recordKey);
   }
@@ -384,13 +391,16 @@ export class Importer {
     );
     if (!commands.length) return true;
     const request = { commands };
-    for (const command of commands) {
-      this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
-    }
+    this.atomic(() => {
+      for (const command of commands)
+        this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
+    });
     const result = await this.send(request, signal);
     // Returned identities must be durable before RunStore can resolve a record.
-    this.acknowledge(owner, request, result);
-    this.session.store.acknowledge(run, result, { recordKey: pending.recordKey });
+    this.atomic(() => {
+      this.acknowledge(owner, request, result);
+      this.session.store.acknowledge(run, result, { recordKey: pending.recordKey });
+    });
     if (this.session.store.key(run.source, pending.recordKey, run).acknowledged) this.acknowledged(pending.recordKey);
     return result.results.every(success);
   }
@@ -561,13 +571,16 @@ export class Importer {
     }
     const claim = this.session.bindings.claim(owner);
     if (claim?.state !== 'bound') return { outcome: 'failed', kind: deferred.kind };
-    let conversion = this.convert(registration, deferred);
-    const resolvedReferences = await this.options.identifierLookup?.resolve({ owner, conversion, signal });
+    // The context-free conversion exists only as input to identifier lookup.
+    const lookup = this.options.identifierLookup;
+    const resolvedReferences = lookup
+      ? await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal })
+      : undefined;
     const context = {
       subjectId: claim.subject,
       ...(resolvedReferences ? { resolvedReferences } : {}),
     };
-    conversion = this.convert(registration, deferred, context);
+    let conversion = this.convert(registration, deferred, context);
     const intents = 'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as MediaImportRequest[]) : [];
     if (!intents.length) {
       const result = this.session.store.resolveDeferredCover(run, row.recordKey);
@@ -627,8 +640,10 @@ export class Importer {
     }
     if (commands.length) {
       const request = { commands };
-      for (const command of commands)
-        this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
+      this.atomic(() => {
+        for (const command of commands)
+          this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
+      });
       const result = await this.send(request, signal);
       this.acknowledge(owner, request, result);
       if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
@@ -760,6 +775,24 @@ export class Importer {
         if (next === 'busy') return finish('busy', 'Source has active durable work');
         run = next;
         try {
+          // Staged rows need no durability before the seal, so a page of them shares one commit. The
+          // result equals staging one by one: the rows before a failure and its invalid mark persist.
+          const buffered: Staged<SourceProjection>[] = [];
+          const flush = () => {
+            const page = buffered.splice(0);
+            let failure: unknown;
+            this.atomic(() => {
+              for (const staged of page) {
+                try {
+                  store.stage(next, staged);
+                } catch (error) {
+                  failure = error;
+                  return;
+                }
+              }
+            });
+            if (failure !== undefined) throw failure;
+          };
           for await (const record of records) {
             if (signal.aborted) throw new Interrupted('Import was interrupted');
             if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
@@ -767,7 +800,7 @@ export class Importer {
               { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
               { source: registration.source },
             );
-            store.stage(run, {
+            buffered.push({
               row: {
                 source: registration.source,
                 recordKey: record.key,
@@ -778,7 +811,9 @@ export class Importer {
               },
               projection: { sourceKind: registration.sourceKind, normalizedRecord: conversion.normalized },
             });
+            if (buffered.length >= 100) flush();
           }
+          flush();
         } catch (error) {
           store.seal(run, { complete: false, reason: 'malformed' });
           return finish(
