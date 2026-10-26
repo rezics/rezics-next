@@ -32,6 +32,7 @@ function RecordedSubject() {
           unlabelled: m.subject_value_unlabelled(),
           sources: m.subject_sources(),
           aliases: m.subject_aliases(),
+          search: m.search_submit(),
         }}
       />
     </article>
