@@ -135,53 +135,57 @@ afterAll(async () => {
   fixture?.close();
 });
 
-test('native completion growth independent of receipt history', async () => {
-  const report = await checkGrowth(db, {
-    name: 'native recovery completion with all Auth and Access queries',
-    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    // The native DBOS supervisor can overlap a capture with a bounded wake.
-    slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
-    repetitions,
-    warmups: 1,
-    async grow(_db, scale, previous) {
-      // Native baseline history belongs to growth setup, before warm-up and capture.
-      if (previous === 0) {
-        for (let i = 0; i < baselineHistory; i++) {
-          await recover();
-          await unrelated(i);
+test(
+  'native completion growth independent of receipt history',
+  async () => {
+    const report = await checkGrowth(db, {
+      name: 'native recovery completion with all Auth and Access queries',
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      // The native DBOS supervisor can overlap a capture with a bounded wake.
+      slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
+      repetitions,
+      warmups: 1,
+      async grow(_db, scale, previous) {
+        // Native baseline history belongs to growth setup, before warm-up and capture.
+        if (previous === 0) {
+          for (let i = 0; i < baselineHistory; i++) {
+            await recover();
+            await unrelated(i);
+          }
         }
-      }
-      for (let i = previous * historyPerScale; i < scale * historyPerScale; i++) {
+        for (let i = previous * historyPerScale; i < scale * historyPerScale; i++) {
+          await recover();
+          await unrelated(baselineHistory + i);
+        }
+        for (const table of ['access.account', 'access.lifecycle_fence_receipt', 'core.receipt'])
+          await db.admin.query(`VACUUM (ANALYZE) ${table}`);
+        for (const table of [
+          'auth_recovery',
+          'auth_barrier_proof',
+          'auth_recovery_establishment',
+          'auth_effect_receipt',
+          'account',
+        ])
+          await authDatabase.query(`VACUUM (ANALYZE) ${table}`);
+      },
+      async operation() {
         await recover();
-        await unrelated(baselineHistory + i);
-      }
-      for (const table of ['access.account', 'access.lifecycle_fence_receipt', 'core.receipt'])
-        await db.admin.query(`VACUUM (ANALYZE) ${table}`);
+      },
+    });
+    expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
+    for (const sample of report.samples) {
       for (const table of [
-        'auth_recovery',
-        'auth_barrier_proof',
-        'auth_recovery_establishment',
-        'auth_effect_receipt',
-        'account',
+        'public.auth_recovery_establishment',
+        'public.auth_barrier_proof',
+        'public.auth_recovery',
+        'public.auth_effect_receipt',
+        'public.account',
+        'access.account',
+        'access.lifecycle_fence_receipt',
+        'core.receipt',
       ])
-        await authDatabase.query(`VACUUM (ANALYZE) ${table}`);
-    },
-    async operation() {
-      await recover();
-    },
-  });
-  expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
-  for (const sample of report.samples) {
-    for (const table of [
-      'public.auth_recovery_establishment',
-      'public.auth_barrier_proof',
-      'public.auth_recovery',
-      'public.auth_effect_receipt',
-      'public.account',
-      'access.account',
-      'access.lifecycle_fence_receipt',
-      'core.receipt',
-    ])
-      expect(sample.cost.relations?.[table]).toBeDefined();
-  }
-}, growthTimeout);
+        expect(sample.cost.relations?.[table]).toBeDefined();
+    }
+  },
+  growthTimeout,
+);
