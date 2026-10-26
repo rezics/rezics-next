@@ -120,8 +120,14 @@ async function community(label = 'Literature readers') {
   const body = { labels: { en: label } };
   const response = await write('editor', 'POST', '/v1/contexts', body, token);
   expect(response.status).toBe(201);
-  const context = response.body.context as { id: string; kind: string; labels: Record<string, string> };
-  expect(context).toEqual({ id: expect.any(String), kind: 'community', labels: { en: label } });
+  const context = response.body.context as {
+    id: string;
+    kind: string;
+    labels: Record<string, string>;
+    settings: null;
+    defaults: Record<string, unknown>;
+  };
+  expect(context).toEqual({ id: expect.any(String), kind: 'community', labels: { en: label }, settings: null, defaults: {} });
   const replay = await write('editor', 'POST', '/v1/contexts', body, token);
   expect(replay.status).toBe(201);
   expect(replay.body).toEqual(response.body);
@@ -550,7 +556,7 @@ test('Persona denials and invalid proposals append no revisions and leave public
   }
   expect(await driver.inspect.revisions(other.id)).toHaveLength(1);
   for (const path of ['/v1/definitions/active', `/v1/definitions/releases/${(await active()).digest}`,
-    subjectPath(book.id), `${subjectPath(book.id)}/revisions`, `${subjectPath(book.id)}/candidates`,
+    subjectPath(book.id), `${subjectPath(book.id)}/revisions`, `${subjectPath(book.id)}/candidates?property=schema:author`,
     `${subjectPath(book.id)}/links`, `/v1/contexts/${driver.globalContext}`]) {
     problem(await get(path, 'suspended'), 401, 'invalid_credentials', false);
   }
