@@ -495,6 +495,16 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
   }
+  async function operatorOpening(session: { id: string; userId: string; authMethods: string }) {
+    if (session.authMethods !== 'operator') throw new Denied();
+    const opening = (
+      await database.query<{ acting_human_id: string }>(
+        'SELECT acting_human_id FROM auth_session_opening WHERE session_id=$1 AND subject_account_id=$2',
+        [session.id, session.userId],
+      )
+    ).rows[0];
+    if (!opening || (await activeActor(opening.acting_human_id)).automated) throw new Denied();
+  }
   function freshAuthentication(human: SessionProof) {
     if (Math.floor(Date.now() / 1000) - human.auth_time > 600) throw new StepUpRequired();
   }
@@ -1934,7 +1944,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             if (!native) throw new Denied();
             const session = native.session;
             const account = await activeActor(session.userId);
-            if (account.automated) throw new Denied();
+            // An automated account is reduced only from a session its operator's manager opened for it.
+            const operated = account.automated;
+            if (operated) await operatorOpening(session);
             const client = await clientFor(clientId);
             if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
             return withConsent(account.accountId, clientId, async (connection) => {
@@ -1948,7 +1960,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   [account.accountId, clientId],
                 )
               ).rows[0];
+              if (operated && (!previous || granted.some((scope) => !previous.scopes.includes(scope))))
+                throw new Denied();
               if (!previous?.scopes.some((scope) => !granted.includes(scope))) {
+                if (operated) throw new Denied();
                 // Only a current native human session can supersede a pending
                 // request. A first-party materialization never clears it.
                 await humanProof(request.headers);
@@ -1978,7 +1993,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               ];
               const operationKey = digestOf(['auth-consent-v1', evidence]);
               const resuming = session.authnEpoch < account.authnEpoch || previous.pending_reference !== null;
-              if (!resuming) {
+              if (!resuming && !operated) {
                 const human = await humanProof(request.headers);
                 if (human.account_id !== account.accountId || human.authn_epoch !== account.authnEpoch)
                   throw new Denied();

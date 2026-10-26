@@ -110,6 +110,8 @@ compares the floor again, advances once and inserts one persistent native receip
 Concurrent exact retries return that receipt; other operations at the old floor and later supersession deny.
 Committed receipt and current account state are read back before returning to Auth.
 
+Auth also lets an operator-opened session of an automated account reduce that account's consent for a client through the same barrier and receipt; it never grants or widens an automated account's consent.
+
 Consent preserves `authn_fenced`: an unfenced human can sign in again at the new floor, while an existing fence
 stays raised. Recovery retains its fence even when Auth credential/session work fails. Only existing `clearFence`
 with trusted new establishment evidence bound to the exact account, receipt and current floor can clear it.
