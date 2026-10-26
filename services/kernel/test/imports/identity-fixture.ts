@@ -122,7 +122,9 @@ export type IdentitySupport = {
   issue(accountId: string, scopes: readonly string[]): Promise<ImportCredential>;
   request(path: string, body: unknown, headers?: Headers): Promise<Response>;
   managementHeaders: Headers;
-  managementBearer: string;
+  /** Current management bearer; call `renewManagement` first when the run may have outlasted 300 s. */
+  readonly managementBearer: string;
+  renewManagement(): Promise<void>;
   approveOpening(key: string): Promise<string>;
   seedBaseline(count: number): Promise<void>;
   grow(index: number): Promise<void>;
@@ -283,7 +285,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const bootstrapPosition = String(bootstrapEvents.rows[0]!.position);
     await options.afterStage?.('bootstrap');
     const managementHeaders = await login(human.email, managementClient, managementScopes);
-    const management = await token(human.accountId, managementHeaders);
+    // Access tokens live 300 s, so the bearer is replaced by `renewManagement` between steps.
+    let management = await token(human.accountId, managementHeaders);
     const approval = createWorkflowApprovals({
       pool: database.pool,
       access,
@@ -374,6 +377,17 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
       }),
     });
+    /** The ordinary /token call on the management session. Never run inside a measured operation. */
+    async function renewManagement() {
+      try {
+        management = await token(human.accountId, managementHeaders);
+      } catch (error) {
+        throw new Error(
+          'Management session no longer issues tokens; its lifetime (the Better Auth default, 7 days) ended during the run',
+          { cause: error },
+        );
+      }
+    }
     async function grant(path: string, accountId: string, actions: readonly string[]) {
       const response = await app.handle(
         new Request(`https://kernel.identity.test${path}`, {
@@ -447,7 +461,10 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       issue,
       request,
       managementHeaders,
-      managementBearer: management.bearer,
+      get managementBearer() {
+        return management.bearer;
+      },
+      renewManagement,
       async approveOpening(key) {
         const operation = {
           kind: 'opening' as const,
@@ -486,8 +503,10 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         // so every measured issuance performs the same real eviction path.
         for (let index = 0; index < 64; index++) await issue(robot.accountId, COMMON_ACTIONS);
         await host!.workflows.close();
+        await renewManagement();
       },
       async grow(index) {
+        await renewManagement();
         await host!.workflows.start();
         await person(`history_${index}`);
         // Grow real Auth keys/effect history and native consumed openings on

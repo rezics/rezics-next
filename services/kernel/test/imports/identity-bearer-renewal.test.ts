@@ -28,6 +28,7 @@ test('grant changes keep working after the management access token’s lifetime'
       expect(await bulkPermitted(f)).toBe(true);
       try {
         setSystemTime(new Date(Date.now() + (lifetime + 1) * 1000));
+        await identitySupport(f).renewManagement();
         await f.setBulkPermission(false);
         expect(await granted(f)).toBe(false);
         expect(await bulkPermitted(f)).toBe(false);
