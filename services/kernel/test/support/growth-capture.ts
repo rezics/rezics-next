@@ -1,4 +1,5 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import type { Capture } from './growth-cost.ts';
@@ -38,6 +39,15 @@ const clientAttribution = new WeakMap<PoolClient, Attribution>();
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
   return typeof value === 'object' && value !== null && 'capture' in value && 'background' in value;
+}
+
+function currentAttribution(state: CaptureState): Attribution | undefined {
+  const current = growing.getStore();
+  if (isAttribution(current) && current.capture === state.active) return current;
+  // DBOS executes queued workflows in its runner's async context, after the initiating operation has returned
+  // control to the queue. The SDK singleton is shared by kernel and auth workspaces in this test process.
+  if (state.active && DBOS.workflowID !== undefined) return { capture: state.active, background: false };
+  return undefined;
 }
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
@@ -109,8 +119,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
 
   client.query = ((...args: Parameters<PoolClient['query']>) => {
     const text = statementText(args[0]);
-    let attribution = growing.getStore();
-    if (!isAttribution(attribution) || attribution.capture !== state.active) attribution = undefined;
+    let attribution = currentAttribution(state);
     if (!attribution && state.active) attribution = { capture: state.active, background: true };
     if (explain && text !== undefined && attribution) {
       (attribution.background ? attribution.capture.backgroundStatements : attribution.capture.statements).push(text);
@@ -206,23 +215,15 @@ function instrumentPool(pool: Pool, state: CaptureState): void {
   pool.on('connect', (client) => instrument(client, state));
   const query = pool.query.bind(pool) as Pool['query'];
   (pool as Pool & { query: Pool['query'] }).query = ((...args: Parameters<Pool['query']>) => {
-    const current = growing.getStore();
-    const attribution = isAttribution(current)
-      ? current
-      : state.active
-        ? { capture: state.active, background: true }
-        : undefined;
+    const attribution =
+      currentAttribution(state) ?? (state.active ? { capture: state.active, background: true } : undefined);
     return attribution ? growing.run(attribution, () => query(...args)) : query(...args);
   }) as Pool['query'];
 
   const connect = pool.connect.bind(pool) as Pool['connect'];
   (pool as Pool & { connect: Pool['connect'] }).connect = ((callback?: Parameters<Pool['connect']>[0]) => {
-    const current = growing.getStore();
-    const attribution = isAttribution(current)
-      ? current
-      : state.active
-        ? { capture: state.active, background: true }
-        : undefined;
+    const attribution =
+      currentAttribution(state) ?? (state.active ? { capture: state.active, background: true } : undefined);
     const bind = <T extends (...args: never[]) => unknown>(fn: T): T => {
       const resource = new AsyncResource('growth-pool-checkout');
       return resource.bind((...args: Parameters<T>) =>

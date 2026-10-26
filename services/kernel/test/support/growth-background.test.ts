@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import pg from 'pg';
 import type { Pool } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
@@ -9,17 +11,42 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const schema = 'growth_background_test';
 const table = `${schema}.records`;
 let db: GrowthDatabase | undefined;
+let workflowPool: pg.Pool | undefined;
+let queuedWorkflow: (() => Promise<number>) | undefined;
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
   await db.admin.query(`CREATE SCHEMA ${schema}`);
   await db.admin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY)`);
+  workflowPool = new pg.Pool({ connectionString: databaseUrl });
+  queuedWorkflow = DBOS.registerWorkflow(
+    async () => {
+      const result = await db!.pool.query('SELECT 1');
+      return result.rowCount ?? 0;
+    },
+    { name: 'growth.background.workflow' },
+  );
+  DBOS.setConfig({
+    name: 'growth-background-test',
+    systemDatabaseUrl: databaseUrl,
+    systemDatabaseSchemaName: 'dbos',
+    systemDatabasePool: workflowPool,
+    runMigrations: false,
+    logLevel: 'warn',
+  });
+  await DBOS.launch();
+  DBOS.registerQueue('growth-background', { workerConcurrency: 1, minPollingIntervalMs: 10 });
 });
 
 afterAll(async () => {
   if (!db) return;
-  await db.admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-  await db.close();
+  try {
+    if (DBOS.isInitialized()) await DBOS.shutdown({ workflowCompletionTimeoutMS: 5000 });
+  } finally {
+    await workflowPool?.end();
+    await db.admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await db.close();
+  }
 });
 
 async function runWithPoller(pool: Pool, statement: string, work: () => Promise<void>): Promise<void> {
@@ -95,3 +122,21 @@ test('a statement the operation issues keeps its attribution when the pool hands
     expect((result.samples.at(-1)?.cost as { backgroundStatements?: number }).backgroundStatements).toBeGreaterThan(0);
   });
 }, 60_000);
+
+test("a workflow the operation starts runs on the queue runner and stays the operation's", async () => {
+  const database = db!;
+  await database.admin.query(`TRUNCATE ${table}`);
+  const result = await checkGrowth(database, {
+    name: 'queued workflow attribution',
+    scales: [1, 8, 64],
+    repetitions: 1,
+    warmups: 0,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async (growthDb, scale, previous) => {
+      await growthDb.admin.query(`INSERT INTO ${table} SELECT generate_series($1 + 1, $2)`, [previous, scale]);
+    },
+    operation: async () =>
+      (await DBOS.startWorkflow(queuedWorkflow!, { queueName: 'growth-background' })()).getResult(),
+  });
+  expect(result.samples.every(({ cost }) => cost.statements === 1)).toBe(true);
+});
