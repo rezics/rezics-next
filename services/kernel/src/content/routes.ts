@@ -402,7 +402,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             if (!thread.value) throw new ProblemError('not_found');
             // A replay returns the stored outcome. Projecting again would commit a
             // candidate event from the later read watermark.
-            if (!result.replayed)
+            if (!result.replayed) {
               await applyBoardCandidate(dependencies.pool, {
                 id: thread.value.id,
                 boardId: thread.value.boardId,
@@ -410,6 +410,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
                 epoch: thread.anchor.epoch,
                 position: thread.anchor.position,
               });
+            }
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,
