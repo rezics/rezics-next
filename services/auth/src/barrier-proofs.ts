@@ -3,24 +3,6 @@ export type { BarrierProof, BarrierProofExpectation } from '@rezics/auth-contrac
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 
-/** A committed Access barrier receipt, named by the account, purpose and operation it was committed for. */
-export type BarrierReceipt = {
-  accountId: string;
-  purpose: BarrierProof['purpose'];
-  operationKey: string;
-  receiptId: string;
-  minimumAuthnEpoch: number;
-};
-/** Optional ports of the trusted Access object, supplied by the production barrier composition.
- * confirmBarrier is true only for a receipt Access committed for exactly this account, purpose, operation and floor.
- * completeBarrier clears the fence a consent reduction raised once its Auth effects are done.
- * Isolated trusted-port fixtures may omit them.
- */
-export type BarrierReceiptPorts = {
-  confirmBarrier?(input: BarrierReceipt): Promise<boolean>;
-  completeBarrier?(input: BarrierReceipt): Promise<void>;
-};
-
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const bounded = (value: unknown, size: number): value is string =>

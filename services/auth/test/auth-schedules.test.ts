@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -27,11 +28,11 @@ const access: AccountWorkflowPorts = {
   raiseFence: unused,
   readAccount: unused,
 };
-const trustedAccess: AuthServiceOptions['trustedAccess'] = {
+const trustedAccess: AuthServiceOptions['trustedAccess'] = trustedAccessPorts({
   readAccount: unused,
   readFencedAccount: unused,
   authorizeProvisioning: unused,
-};
+});
 
 // Each replica has a real independent SDK registry, pool and executor identity.
 if (process.argv.includes('--schedule-child')) {

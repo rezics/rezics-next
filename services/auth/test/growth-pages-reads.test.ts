@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -36,7 +37,7 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
         audience: 'https://growth.pages.api.test',
         secret: 'growth-pages-secret-with-at-least-32-bytes',
         signing: { activeKid: signingKid, privateKeys: [signingKey] },
-        trustedAccess: {
+        trustedAccess: trustedAccessPorts({
           async readFencedAccount(id) {
             return this.readAccount(id);
           },
@@ -46,7 +47,7 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
           async authorizeProvisioning(accountId) {
             return { accountId };
           },
-        },
+        }),
       });
       await service.internal.provisionPassword({
         authorization: person.accountId,

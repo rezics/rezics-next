@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { Pool } from 'pg';
@@ -201,7 +202,7 @@ export async function passkeyFixture(supplied?: { pool: Pool; kernelPool: Pool; 
     audience: 'https://api.rezics.com',
     secret: 'passkey-fixture-persistent-secret-32-bytes',
     signing: { activeKid: signing.kid, privateKeys: [signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       ...createAuthBindings({
         pool: kernelPool,
         consumeAuthAuthorization: (input) => capability.consumeAuthAuthorization(input as CredentialAuthorizationInput),
@@ -228,7 +229,7 @@ export async function passkeyFixture(supplied?: { pool: Pool; kernelPool: Pool; 
       approveCredentialEffect: capability.approveCredentialEffect,
       revalidateCredentialEffect: capability.revalidateCredentialEffect,
       advanceCredentialFloor: capability.advanceCredentialFloor,
-    },
+    }),
   };
   service = await createAuthService(options);
   const handle = credentialEffectTransport(service, (r) => service.handler(r), options);

@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
@@ -79,7 +80,7 @@ async function fixture() {
     const advance = barriers.trustedAccess.invalidateAccount!;
     let onInvalidate: ((input: Parameters<Invalidate>[0], advance: Invalidate) => ReturnType<Invalidate>) | undefined;
     let onConsume: ((proof: SessionProof) => Promise<void>) | undefined;
-    const ports: TrustedAccessPorts = {
+    const ports: TrustedAccessPorts = trustedAccessPorts({
       ...bindings,
       // Auth confirms each barrier receipt with Access and completes the barrier it fenced.
       ...barriers.trustedAccess,
@@ -116,7 +117,7 @@ async function fixture() {
       async revalidateCredentialEffect() {
         throw new Error('Credential revalidation is unavailable');
       },
-    };
+    });
     const key = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
       kid: 'native',

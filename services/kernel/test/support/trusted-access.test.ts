@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { Pool } from 'pg';
-import type { AccessAccount } from '@rezics/auth-contract';
+import type { AccessAccount, BarrierReceipt } from '@rezics/auth-contract';
 import { readAccount } from '../../src/access/account-data.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { trustedAccessPorts } from './trusted-access.ts';
@@ -65,4 +65,52 @@ test('the real binding reads only a fenced account through readFencedAccount', a
   expect(await ports.readFencedAccount(person)).toMatchObject({ accountId: person, fenced: true });
   expect(await ports.readAccount(person)).toBeNull();
   expect(await readAccount(pool, routeOf(person)!, person)).toMatchObject({ fenced: true });
+});
+
+test('a stub supplies confirmation and preserves an explicit denial', async () => {
+  const receipt = {
+    accountId: person,
+    purpose: 'recovery' as const,
+    operationKey: 'recover-person',
+    receiptId: 'receipt',
+    minimumAuthnEpoch: 3,
+  };
+  const stub = {
+    readAccount: async () => fixture,
+    authorizeProvisioning: async (accountId: string) => ({ accountId }),
+  };
+  expect(await trustedAccessPorts(stub).confirmBarrier(receipt)).toBe(true);
+  const confirmed: BarrierReceipt[] = [];
+  const ports = trustedAccessPorts({
+    ...stub,
+    async confirmBarrier(input) {
+      confirmed.push(input);
+      return false;
+    },
+  });
+  expect(await ports.confirmBarrier(receipt)).toBe(false);
+  expect(confirmed).toEqual([receipt]);
+});
+
+test('the real binding forwards confirmation and refuses an uninstalled capability', async () => {
+  const receipt: BarrierReceipt = {
+    accountId: person,
+    purpose: 'recovery',
+    operationKey: 'recover-person',
+    receiptId: 'receipt',
+    minimumAuthnEpoch: 3,
+  };
+  const confirmed: BarrierReceipt[] = [];
+  const ports = trustedAccessPorts({
+    pool,
+    async confirmBarrier(input) {
+      confirmed.push(input);
+      return false;
+    },
+  });
+  expect(await ports.confirmBarrier(receipt)).toBe(false);
+  expect(confirmed).toEqual([receipt]);
+  await expect(trustedAccessPorts({ pool }).confirmBarrier(receipt)).rejects.toThrow(
+    'Auth binding capability unavailable: confirmBarrier',
+  );
 });

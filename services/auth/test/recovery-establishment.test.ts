@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -126,7 +127,7 @@ beforeAll(async () => {
     audience: 'https://api.test',
     secret: 'persistent-native-recovery-secret-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
       },
@@ -174,7 +175,7 @@ beforeAll(async () => {
           minimumAuthnEpoch: epoch,
         };
       },
-    },
+    }),
     recoveryDelivery: {
       async deliver(value) {
         token = value.token;

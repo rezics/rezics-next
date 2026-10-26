@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
@@ -101,7 +102,7 @@ test('native account erasure preserves authorization, invalidation order and unr
           delivered.set(input.accountId, input.token);
         },
       },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
         },
@@ -184,7 +185,7 @@ test('native account erasure preserves authorization, invalidation order and unr
           if (!opening || JSON.stringify(opening.stage) !== JSON.stringify(stage))
             throw new Error('Credential opening mismatch');
         },
-      },
+      }),
     });
     const request = (path: string, body?: unknown, cookie = '') =>
       service.handler(

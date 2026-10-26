@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
@@ -81,7 +82,7 @@ beforeAll(async () => {
     audience: 'https://api.reduction.test',
     secret: 'reduction-only-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
       },
@@ -103,7 +104,7 @@ beforeAll(async () => {
         return receipt;
       },
       authorizeProvisioning: async (accountId) => ({ accountId }),
-    },
+    }),
   });
   const ports: AccountWorkflowPorts = {
     registrationTarget: (key) => key,

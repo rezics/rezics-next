@@ -54,6 +54,7 @@ export type AuthBindingCapabilities = {
   invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
   authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
   completeRecovery?: TrustedAccessPorts['completeRecovery'];
+  confirmBarrier?: TrustedAccessPorts['confirmBarrier'];
 };
 export class AuthBindingUnavailableError extends Error {
   constructor(capability: keyof AuthBindingCapabilities) {
@@ -302,6 +303,10 @@ export function createAuthBindings(
   return {
     passkeys: true,
     ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
+    async confirmBarrier(input) {
+      if (!config.confirmBarrier) throw new AuthBindingUnavailableError('confirmBarrier');
+      return config.confirmBarrier(input);
+    },
     readAccount: (id) => read(id),
     readErasureAccount: async (id) => {
       try {

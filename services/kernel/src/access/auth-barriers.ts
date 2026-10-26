@@ -13,7 +13,7 @@ import credentialAdvance from './auth-barriers-credential-advance.sql';
 import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
-import type { AuthenticationBarrierReceipt, createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
+import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import { openingManagement } from './operator.ts';
 
 type Lifecycle = Pick<
@@ -22,14 +22,9 @@ type Lifecycle = Pick<
 >;
 type Proofs = Pick<BarrierProofPort, 'verify'>;
 type Capabilities = Required<Pick<AuthBindingCapabilities, 'invalidateAccount' | 'authorizeRecovery'>>;
-/** Auth's own check of an Access barrier receipt, before it applies any effect, and the completion that clears
- * the fence a consent reduction raised. Auth reads them as optional ports of its trusted access object.
- */
-export type BarrierReceiptPorts = {
-  confirmBarrier(input: AuthenticationBarrierReceipt): Promise<boolean>;
-  completeBarrier(input: AuthenticationBarrierReceipt): Promise<void>;
-};
-type Ports = Required<Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery'>> & BarrierReceiptPorts;
+type Ports = Required<
+  Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery' | 'confirmBarrier' | 'completeBarrier'>
+>;
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }

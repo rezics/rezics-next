@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createRequire } from 'node:module';
@@ -77,7 +78,7 @@ beforeAll(async () => {
     audience: 'https://fenced-cleanup.api.test',
     secret: 'fenced-cleanup-only-secret-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: bindings,
+    trustedAccess: trustedAccessPorts(bindings),
   });
   await service.internal.registerClient({ clientId: 'target', firstParty: false, scopes: ['read', 'write'] });
   for (let ready = false; !ready;) {

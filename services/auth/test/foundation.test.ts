@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -27,7 +28,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: 'fixture-signing-key', privateKeys: [privateJwk] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
@@ -52,7 +53,7 @@ beforeAll(async () => {
         approvals.delete(reference);
         return { accountId };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ['read', 'write'] });

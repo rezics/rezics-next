@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
@@ -245,14 +246,14 @@ beforeAll(async () => {
       activeKid: 'operations',
       privateKeys: [{ ...(await exportJWK(signing.privateKey)), kid: 'operations', alg: 'ES256' }],
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
       },
       readAccount: async (id) => accounts.get(id) ?? null,
       readRecoveryAccount: async (id) => accounts.get(id) ?? null,
       authorizeProvisioning: async (accountId) => ({ accountId }),
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'operation-web', firstParty: true, scopes: ['read'] });
   options = {

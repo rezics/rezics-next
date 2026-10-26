@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -180,7 +181,7 @@ async function nativeDriver(
   let hold = true;
   const paused = signal<Evidence>();
   const release = signal<'resume' | 'restart'>();
-  const trustedAccess: TrustedAccessPorts = {
+  const trustedAccess: TrustedAccessPorts = trustedAccessPorts({
     ...bindings,
     async authorizeProvisioning(reference) {
       // The host composes the native registration receipt with Auth's provisioning metadata.
@@ -227,7 +228,7 @@ async function nativeDriver(
       }
       return receipt;
     },
-  };
+  });
   const options: AuthServiceOptions = {
     database,
     issuer,

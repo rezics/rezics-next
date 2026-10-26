@@ -161,6 +161,15 @@ export type AssignmentProof =
   | { kind: 'none' | 'unresolved' }
   | { kind: 'resolved'; principalId: string; assignedActorId: string; requestId: string; valid: string };
 
+/** A committed Access barrier receipt bound to its account, purpose, operation and floor. */
+export type BarrierReceipt = {
+  accountId: string;
+  purpose: BarrierProof['purpose'];
+  operationKey: string;
+  receiptId: string;
+  minimumAuthnEpoch: number;
+};
+
 /** Internal application ports. Never construct these results from HTTP fields. */
 interface SharedAccessPorts {
   readAccount(accountId: string): Promise<AccessAccount | null>;
@@ -196,6 +205,10 @@ interface SharedAccessPorts {
   readRecoveryAccount?(accountId: string): Promise<AccessAccount | null>;
   /** Cleanup after a barrier reads every account the barrier fenced, of either kind, with its fence flag and floor. */
   readFencedAccount(accountId: string): Promise<AccessAccount | null>;
+  /** Confirm the exact committed receipt before Auth applies any barrier effect. */
+  confirmBarrier(input: BarrierReceipt): Promise<boolean>;
+  /** Clear the fence a consent reduction raised after its Auth effects complete. */
+  completeBarrier?(input: BarrierReceipt): Promise<void>;
   /** Reject a stale proof; commit an invalidation barrier without clearing any fence. */
   authorizeRecovery?(input: {
     accountId: string;

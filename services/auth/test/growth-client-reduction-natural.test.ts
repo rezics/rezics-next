@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -56,7 +57,7 @@ async function service(db: GrowthDatabase) {
     audience: 'https://api.natural.test',
     secret: 'natural-reduction-secret-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
@@ -71,7 +72,7 @@ async function service(db: GrowthDatabase) {
       authorizeProvisioning: async () => {
         throw new Error('Unused');
       },
-    },
+    }),
   });
 }
 const reduction = (clientId: string) => ({

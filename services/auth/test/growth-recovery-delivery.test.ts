@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -45,7 +46,7 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
         audience: 'https://api.test',
         secret: 'persistent-growth-delivery-secret-32-bytes',
         signing: { activeKid: key.kid, privateKeys: [key] },
-        trustedAccess: {
+        trustedAccess: trustedAccessPorts({
           async readFencedAccount(id) {
             return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
           },
@@ -61,7 +62,7 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
           async authorizeRecovery() {
             throw new Error('Failed delivery cannot change Access');
           },
-        },
+        }),
         recoveryDelivery: {
           async deliver(value) {
             proofHash = createHash('sha256').update(value.token).digest('hex');

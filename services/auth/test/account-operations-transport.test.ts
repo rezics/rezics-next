@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -254,7 +255,7 @@ beforeAll(async () => {
     audience,
     secret: randomBytes(48).toString('base64url'),
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: bindings.trustedAccess,
+    trustedAccess: trustedAccessPorts(bindings.trustedAccess),
     access: bindings.workflowPorts,
     accountOperations,
     stagingKey: randomBytes(32),

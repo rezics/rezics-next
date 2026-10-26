@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -125,7 +126,7 @@ async function setup(name: string, axes: readonly Axis[]) {
       audience: 'https://growth.api.test',
       secret,
       signing: { activeKid: signingKid, privateKeys: [{ ...privateJwk, kid: signingKid }] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
         },
@@ -244,7 +245,7 @@ async function setup(name: string, axes: readonly Axis[]) {
             fenced: !!subject.fenced,
           };
         },
-      },
+      }),
       recoveryDelivery: {
         async deliver({ token }) {
           recoveryToken = token;

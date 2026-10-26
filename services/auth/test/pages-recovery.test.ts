@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -123,7 +124,7 @@ beforeAll(async () => {
         await blocked;
       },
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
       },
@@ -158,7 +159,7 @@ beforeAll(async () => {
         )
           throw new Error('Invalid completion');
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'login', firstParty: true, scopes: [] });

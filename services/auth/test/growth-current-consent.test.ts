@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
@@ -129,7 +130,7 @@ test('durable consent point reader honors native pending reduction ceiling befor
       audience: 'https://current-consent.api.test',
       secret: 'current-consent-native-test-secret-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         ...bindings,
         async authorizeProvisioning(reference: string) {
           const approval = await bindings.authorizeProvisioning(reference);
@@ -147,7 +148,7 @@ test('durable consent point reader honors native pending reduction ceiling befor
           };
         },
         ...barriers.trustedAccess,
-      },
+      }),
     };
     let auth = await createAuthService(options);
     const request = (path: string, body: unknown, cookie = '') =>

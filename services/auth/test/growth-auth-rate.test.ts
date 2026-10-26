@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -59,7 +60,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       secret,
       audience: 'https://api.growth.test',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id: string) {
           return id === account.accountId ? account : null;
         },
@@ -78,7 +79,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
         async completeRecovery() {
           throw new Error('Invalid proofs must not complete recovery');
         },
-      },
+      }),
       recoveryDelivery: {
         async deliver() {
           delivered++;

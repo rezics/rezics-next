@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
@@ -75,7 +76,7 @@ beforeAll(async () => {
     audience,
     secret: 'pages-signin-better-auth-secret-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
@@ -86,7 +87,7 @@ beforeAll(async () => {
         if (!approvals.delete(accountId)) throw new Error('Missing trusted provisioning approval');
         return { accountId };
       },
-    },
+    }),
   };
 }, 30000);
 
@@ -159,7 +160,11 @@ test('host start registers the login client once and leaves an existing login un
       audience: 'https://api.rezics.test',
       secret: 'pages-host-better-auth-secret-at-least-32-bytes',
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: { readAccount: unused, readFencedAccount: unused, authorizeProvisioning: unused },
+      trustedAccess: trustedAccessPorts({
+        readAccount: unused,
+        readFencedAccount: unused,
+        authorizeProvisioning: unused,
+      }),
       access,
       stagingKey: randomBytes(32),
       maintenanceSchedule: '0 0 0 1 1 *',

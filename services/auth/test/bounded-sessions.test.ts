@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { betterAuth } from 'better-auth';
@@ -141,7 +142,7 @@ if (process.env.NODE_ENV !== 'production') {
       audience: 'https://bounded.api.test',
       secret,
       signing: { activeKid: jwk.kid, privateKeys: [jwk] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return this.readAccount(id);
         },
@@ -159,7 +160,7 @@ if (process.env.NODE_ENV !== 'production') {
           account.authnEpoch++;
           return { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `floor-${accountId}` };
         },
-      },
+      }),
     };
     const first = await createAuthService(options);
     const second = await createAuthService({ ...options, database: other });
@@ -379,7 +380,7 @@ if (process.env.NODE_ENV !== 'production') {
           delivered.push(token);
         },
       },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
         },
@@ -490,7 +491,7 @@ if (process.env.NODE_ENV !== 'production') {
             fenced: !!accounts.get(stage.subjectAccountId)!.fenced,
           };
         },
-      },
+      }),
     };
     const service = await createAuthService(options);
     const second = await createAuthService({ ...options, database: other });

@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -50,7 +51,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
     audience: 'https://credential.api.test',
     secret: 'credential-effect-test-persistent-secret-32-bytes',
     signing: { activeKid: signing.kid, privateKeys: [signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAccount,
       readFencedAccount: readAccount,
       authorizeProvisioning: async (accountId: string) => ({ accountId }),
@@ -118,7 +119,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
           fenced: false,
         };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ['account:manage'] });
@@ -438,11 +439,11 @@ test('Auth host transports only closed credential commands and redacts every den
     expect(await result.json()).toEqual({ receiptId: expect.any(String), replayed: false });
     const unavailable = await createAuthService({
       ...f.options,
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         readFencedAccount: f.options.trustedAccess.readFencedAccount,
         readAccount: f.options.trustedAccess.readAccount,
         authorizeProvisioning: f.options.trustedAccess.authorizeProvisioning,
-      },
+      }),
     });
     await expect(
       unavailable.internal.approveCredentialEffect({ ...op, subjectAccountId: 'robot', headers: f.headers }),

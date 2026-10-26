@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -64,7 +65,11 @@ async function runGrowth() {
     audience: 'https://api.test',
     secret: randomBytes(48).toString('hex'),
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: { readAccount: unused, readFencedAccount: unused, authorizeProvisioning: unused },
+    trustedAccess: trustedAccessPorts({
+      readAccount: unused,
+      readFencedAccount: unused,
+      authorizeProvisioning: unused,
+    }),
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   const workflows = createAccountWorkflows({

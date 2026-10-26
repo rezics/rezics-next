@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
@@ -101,7 +102,7 @@ test('native failed mail deletes only its newly committed verification and proof
       audience: 'https://api.test',
       secret: 'persistent-recovery-delivery-secret-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
         },
@@ -131,7 +132,7 @@ test('native failed mail deletes only its newly committed verification and proof
           )
             throw new Error('Invalid completion');
         },
-      },
+      }),
       recoveryDelivery: {
         async deliver(value) {
           const source = (await database.query('SELECT * FROM auth_recovery WHERE proof_hash=$1', [hash(value.token)]))

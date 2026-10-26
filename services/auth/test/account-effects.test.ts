@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -235,7 +236,7 @@ beforeAll(async () => {
         deliveries.set(input.accountId, input.token);
       },
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
       },
@@ -402,7 +403,7 @@ beforeAll(async () => {
         };
         return recoveryReceipt;
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'effects-web', firstParty: true, scopes: ['read', 'write'] });
@@ -576,11 +577,11 @@ test('approved credential effects toggle independent automated signin and enforc
   expect((await pool.query('SELECT id FROM "user" WHERE id=$1', ['effects-org'])).rows).toEqual([]);
   const noPorts = await createAuthService({
     ...options,
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readFencedAccount: options.trustedAccess.readFencedAccount,
       readAccount: options.trustedAccess.readAccount,
       authorizeProvisioning: options.trustedAccess.authorizeProvisioning,
-    },
+    }),
   });
   await expect(
     noPorts.internal.openAutomatedSession({ subjectAccountId: 'effects-agent', authorization: 'unused', headers }),
@@ -673,7 +674,7 @@ test('consent reductions invalidate already-issued signed authority through Acce
   expect(accounts.get('effects-human')!.authnEpoch).toBe(before);
   const noInvalidation = await createAuthService({
     ...options,
-    trustedAccess: { ...options.trustedAccess, invalidateAccount: undefined },
+    trustedAccess: trustedAccessPorts({ ...options.trustedAccess, invalidateAccount: undefined }),
   });
   expect(
     (await request('/consent', { client_id: 'effects-external', scope: ['read'] }, human, noInvalidation)).status,

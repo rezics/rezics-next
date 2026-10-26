@@ -20,5 +20,5 @@ export function trustedAccessPorts(source: BindingSource): PasskeyTrustedAccessP
 export function trustedAccessPorts(stub: StubAccessPorts): PlainPorts;
 export function trustedAccessPorts(source: BindingSource | StubAccessPorts): PasskeyTrustedAccessPorts | PlainPorts {
   if ('pool' in source) return createAuthBindings(source);
-  return { readFencedAccount: (id) => source.readAccount(id), ...source };
+  return { confirmBarrier: async () => true, readFencedAccount: (id) => source.readAccount(id), ...source };
 }

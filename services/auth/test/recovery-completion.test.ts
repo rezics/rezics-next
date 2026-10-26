@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -79,7 +80,7 @@ beforeAll(async () => {
         token = value.token;
       },
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
       },
@@ -124,7 +125,7 @@ beforeAll(async () => {
         current.fenced = false;
         lastReference = reference;
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.provisionPassword({ authorization: 'pending', email: 'human@completion.test', password });

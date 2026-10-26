@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify } from 'jose';
@@ -135,7 +136,7 @@ beforeAll(async () => {
     audience,
     secret: 'automated-consent-better-auth-secret-with-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
@@ -173,7 +174,7 @@ beforeAll(async () => {
           minimumAuthnEpoch: subject.authnEpoch,
         };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'automated-web', firstParty: true, scopes: ['read', 'write'] });
@@ -274,7 +275,7 @@ test('a reduction waits for Access: without the barrier port nothing changes', a
   const floor = accounts.get('agent')!.authnEpoch;
   const closed = await createAuthService({
     ...options,
-    trustedAccess: { ...options.trustedAccess, invalidateAccount: undefined },
+    trustedAccess: trustedAccessPorts({ ...options.trustedAccess, invalidateAccount: undefined }),
   });
   expect((await reduce(session, ['read'], 'automated-ext', closed)).status).toBeGreaterThanOrEqual(400);
   expect(await consentOf('agent')).toEqual({ scopes: ['read', 'write'], pending_scopes: null });

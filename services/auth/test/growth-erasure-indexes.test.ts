@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -154,7 +155,7 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
       audience: 'https://erasure-growth.api.test',
       secret: 'native-erasure-growth-secret-at-least-32-bytes',
       signing: { activeKid: jwk.kid, privateKeys: [jwk] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return this.readAccount(id);
         },
@@ -165,7 +166,7 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
         async authorizeProvisioning() {
           throw new Error('Not a provisioning experiment');
         },
-      },
+      }),
     });
     const population = {
       name: 'native-erasure-references',

@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -19,7 +20,7 @@ test('signing loading and refreshed JWKS stay bounded as retired history and unr
       audience: 'https://api.growth.test',
       secret: 'growth-signing-test-secret-with-at-least-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readFencedAccount(id) {
           return this.readAccount(id);
         },
@@ -29,7 +30,7 @@ test('signing loading and refreshed JWKS stay bounded as retired history and unr
         async authorizeProvisioning() {
           throw new Error('unused');
         },
-      },
+      }),
     };
     const initial = await createAuthService(options);
     const hasArchive = (await db.admin.query("SELECT to_regclass('auth_signing_key_archive') AS name")).rows[0].name;

@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -56,7 +57,7 @@ beforeAll(async () => {
     audience: 'https://pages.api.test',
     secret: 'pages-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: prefix, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
@@ -66,7 +67,7 @@ beforeAll(async () => {
       async authorizeProvisioning(accountId) {
         return { accountId };
       },
-    },
+    }),
   });
   await service.internal.registerClient({ clientId: web, firstParty: true, scopes: ['read'] });
   await service.internal.registerClient({

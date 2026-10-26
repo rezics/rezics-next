@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -52,7 +53,7 @@ beforeAll(async () => {
     audience: 'https://growth.api.test',
     secret: 'native-provisioning-growth-secret-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
@@ -62,7 +63,7 @@ beforeAll(async () => {
         if (!result) throw new Error('No trusted pending authorization');
         return structuredClone(result);
       },
-    },
+    }),
   });
   verifier = createProvisioningEvidenceVerifier({ database: db.pool });
   pending('hot');
@@ -258,11 +259,11 @@ function erasureOptions() {
     audience: 'https://growth.api.test',
     secret: 'native-provisioning-growth-secret-at-least-32-bytes',
     signing: signingKeys,
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAccount: async (id: string) => accounts.get(id) ?? null,
       readFencedAccount: async (id: string) => accounts.get(id) ?? null,
       authorizeProvisioning: async (id: string) => approvals.get(id)!,
-    },
+    }),
   };
 }
 let signingKeys: AuthServiceSigning;

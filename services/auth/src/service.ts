@@ -19,7 +19,7 @@ import { attemptStatement, nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { clientAuthority } from './account-workflows.ts';
-import { createBarrierProofVerifier, type BarrierProof, type BarrierReceiptPorts } from './barrier-proofs.ts';
+import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
 import { recoveryDelivery } from './recovery-delivery.ts';
 import type { PoolClient } from 'pg';
@@ -40,7 +40,6 @@ import type {
   InvalidationReceipt,
   SessionAuthorizationInput,
   SessionProof,
-  TrustedAccessPorts,
 } from './index.ts';
 
 export { WEBSITE_CLIENT_ID } from './website.ts';
@@ -136,8 +135,6 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
   const { trustedAccess } = options;
-  const barrierAccess = trustedAccess as TrustedAccessPorts &
-    BarrierReceiptPorts & { readFencedAccount?(accountId: string): Promise<AccessAccount | null> };
   const authority = clientAuthority(
     options.database,
     trustedAccess,
@@ -225,7 +222,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function activeActor(accountId: string, barrier = false): Promise<AccessAccount> {
     const account =
       (await trustedAccess.readAccount(accountId)) ??
-      (barrier ? await barrierAccess.readFencedAccount?.(accountId) : null);
+      (barrier ? await trustedAccess.readFencedAccount(accountId) : null);
     if (
       !account ||
       account.accountId !== accountId ||
@@ -574,8 +571,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
   // Nothing is applied for a receipt Access does not confirm for this account, purpose, operation and floor.
   async function confirmReceipt(receipt: InvalidationReceipt, purpose: BarrierProof['purpose'], operationKey: string) {
-    if (!barrierAccess.confirmBarrier) return;
-    const confirmed = await barrierAccess.confirmBarrier({
+    const confirmed = await trustedAccess.confirmBarrier({
       accountId: receipt.accountId,
       purpose,
       operationKey,
@@ -2102,7 +2098,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               }),
             );
             await (await getContext()).internalAdapter.deleteUserSessions(proof.accountId);
-            await barrierAccess.completeBarrier?.({
+            await trustedAccess.completeBarrier?.({
               accountId: proof.accountId,
               purpose: 'consent-reduction',
               operationKey: proof.operationKey,
