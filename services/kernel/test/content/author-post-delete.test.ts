@@ -27,6 +27,7 @@ import {
   type Population,
 } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { setupRequest } from './support/setup-retry.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const route = 0x6b21;
@@ -45,6 +46,7 @@ const bearers = new Map<string, string>();
 const authDatabase = `author_delete_auth_${process.pid}`;
 
 beforeAll(async () => {
+  const deadline = Date.now() + 60_000;
   db = await openGrowthDatabase();
   observer = observeSql(db.pool);
   const authUrl = new URL(db.url);
@@ -98,24 +100,28 @@ beforeAll(async () => {
       routeOf(id),
       id,
     ]);
-    const signed = await auth.handler(
+    const signed = await setupRequest(
+      (request) => auth.handler(request),
       new Request(`${issuer}/signin`, {
         method: 'POST',
         headers: { origin: issuer, 'content-type': 'application/json' },
         body: JSON.stringify({ email: `${id}@example.test`, password, client_id: 'web', scope: actions }),
       }),
+      { deadline, status: 200 },
     );
     expect(signed.status).toBe(200);
     const cookie = signed.headers
       .getSetCookie()
       .map((value) => value.split(';')[0])
       .join('; ');
-    const issued = await auth.handler(
+    const issued = await setupRequest(
+      (request) => auth.handler(request),
       new Request(`${issuer}/token`, {
         method: 'POST',
         headers: { origin: issuer, 'content-type': 'application/json', cookie },
         body: '{}',
       }),
+      { deadline, status: 200 },
     );
     expect(issued.status).toBe(200);
     bearers.set(id, ((await issued.json()) as { access_token: string }).access_token);
@@ -238,6 +244,7 @@ async function cleanup(post: string, after = { at: '-infinity', id: post }) {
 }
 
 test('an author deletes their own post: removed slots preserve replies and cleanup clears every revision', async () => {
+  const deadline = Date.now() + 60_000;
   const f = await fixture(author, 205);
   const reply = newId(route),
     replyRevision = newId(route);
@@ -253,7 +260,13 @@ test('an author deletes their own post: removed slots preserve replies and clean
     [route, f.thread, reply, replyRevision, body, f.board],
   );
   await db.admin.query('COMMIT');
-  const before = await (await request(`/threads/${f.thread}/posts`)).json();
+  const before = await (
+    await setupRequest(
+      (request) => app.handle(request),
+      new Request(`http://kernel.test/v1/threads/${f.thread}/posts`),
+      { deadline, status: 200 },
+    )
+  ).json();
   const start = observer.records.length;
   const deleted = await request(`/posts/${f.post}`, 'DELETE', author);
   expect(deleted.status).toBe(204);
