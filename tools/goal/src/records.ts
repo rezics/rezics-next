@@ -22,6 +22,8 @@ function tokens(value: Record<string, unknown>): Tokens {
   return { input: num(value.input_tokens ?? value.inputTokens) + cacheRead, cached: num(value.cached_input_tokens ?? value.cachedInputTokens) + cacheRead,
     output: num(value.output_tokens ?? value.outputTokens) };
 }
+/** A worker CLI's own words for an allowance that is spent, in a stream error or, before any session, on stderr. */
+export const POOL_EXHAUSTED = /usage limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
 export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
 export function measureLog(text: string, options: { startedAt?: string; endedAt?: string; baseline?: Tokens } = {}): LogMeasurement {
@@ -43,7 +45,7 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
       result.result = event.error?.message ?? event.message ?? result.result;
       const code = event.error?.code ?? event.code;
       result.failureKind = ['usage_limit_exceeded', 'rate_limit_exceeded', 'insufficient_quota'].includes(code)
-        || /usage limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i.test(result.result) ? 'pool-exhausted' : 'tool';
+        || POOL_EXHAUSTED.test(result.result) ? 'pool-exhausted' : 'tool';
     }
     if (inside && event.type === 'turn.completed') result.failureKind = null;
     if (event.type === 'thread.started') result.session = event.thread_id ?? result.session;
