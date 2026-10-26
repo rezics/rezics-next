@@ -106,6 +106,12 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   } catch { /* Historical human-readable handoffs remain importable. */ }
   return result;
 }
+/** Whether a worker's final answer reports success: its status object, or the older RESULT line. */
+export function reportsSuccess(result: string): boolean {
+  if (/^RESULT:\s*success\b/im.test(result)) return true;
+  const exit = (() => { try { return JSON.parse(result); } catch { return lastStatusObject(result); } })() as { status?: unknown } | null;
+  return exit?.status === 'success';
+}
 function lastStatusObject(text: string): unknown {
   for (let end = text.lastIndexOf('}'); end >= 0; end = text.lastIndexOf('}', end - 1)) {
     for (let start = text.lastIndexOf('{', end); start >= 0; start = text.lastIndexOf('{', start - 1)) {

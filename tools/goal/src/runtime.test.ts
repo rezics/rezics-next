@@ -151,6 +151,7 @@ test('native quota failure switches allowed pools on the same profile before ask
 import {writeFileSync} from 'node:fs'; import {spawnSync} from 'node:child_process';
 if(process.env.GOAL_ATTEMPT==='1'){console.log(JSON.stringify({type:'turn.failed',error:{code:'usage_limit_exceeded',message:'Allowance unavailable'}})); process.exit(1)}
 writeFileSync('result.txt','accepted');spawnSync('git',['add','result.txt']);spawnSync('git',['commit','-m','Complete result']);
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
 `); h.settings.gate = ['true']; simpleBrief(h.briefFile);
   h.settings.pools.push({ ...h.settings.pools[0]!, name: 'alternate', allowanceKey: 'alternate' });

@@ -100,3 +100,24 @@ test('a successful attempt lands its whole worktree, committing what the worker 
     expect(git(task.worktree, 'status', '--porcelain')).toBe('');
   } finally { h.dispose(); }
 });
+
+// A worker killed mid-work: it opened a session and edited files, but never gave its final answer.
+const killedCli = `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+writeFileSync('half.txt', 'half done');
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture'}));
+process.kill(process.pid, 'SIGKILL');
+`;
+
+test('a worker that ends without a success report is not landed and its half-done worktree is not committed', async () => {
+  const h = harness(killedCli), landings: LandingRequest[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    await job.start(task.id); await job.drain();
+    expect(landings).toEqual([]);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBe('tool');
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).result).toContain('without a success report');
+    expect(git(task.worktree, 'log', '--format=%s', '-1')).not.toContain('left uncommitted');
+  } finally { h.dispose(); }
+});

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { integrationHarness, harness } from './test-support.ts';
 import { git, WorkerTasks } from './tasks.ts';
@@ -42,6 +42,9 @@ describe('frozen acceptance files', () => {
       writeFileSync(h.briefFile, briefWith([block], ['result.txt', 'tests/acceptance.test.ts']));
       // Dispatch a task whose worker can pass its normal acceptance command.
       const real = h.tasks.dispatch(h.briefFile);
+      // The fixture worker writes the file its plan names, as h.dispatch would arrange.
+      mkdirSync(join(real.worktree, '.temp'), { recursive: true });
+      writeFileSync(join(real.worktree, '.temp/worker-plan.json'), JSON.stringify({ file: 'result.txt', content: 'result\n' }));
       const idleJob = new WorkerJob(h.tasks, h.queue, { deliver: event => h.inbox.push(event) }, undefined, async () => {});
       await idleJob.start(real.id); await idleJob.drain();
       writeFileSync(join(real.worktree, 'tests/acceptance.test.ts'), 'worker changed the acceptance test\n');
