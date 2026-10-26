@@ -17,13 +17,13 @@ WITH input AS NOT MATERIALIZED (
          sum(CASE WHEN kind IN ('refund', 'refund_reversal') THEN -gross_minor ELSE 0 END) AS refunds,
          sum(CASE WHEN kind IN ('dispute', 'dispute_reversal') THEN -gross_minor ELSE 0 END) AS chargebacks,
          sum(net_receipts_minor) AS net, sum(net_receipts_minor::numeric * royalty_basis_points) AS weighted
-  FROM inserted GROUP BY route, statement_id, creator_account_id, period, currency
+  FROM inserted GROUP BY route, statement_id, creator_account_id, period, currency ORDER BY currency
 ), statements AS (
   INSERT INTO commerce.payout_statement AS s
     (route, statement_id, creator_account_id, period, currency, gross_minor, tax_minor, fee_minor,
      dispute_fee_minor, refunds_minor, chargebacks_minor, net_receipts_minor, weighted_net_minor)
   SELECT input.route, statement_id, creator_account_id, period, currency, gross, tax, fee, dispute_fee,
-         refunds, chargebacks, net, weighted FROM input, totals ORDER BY currency
+         refunds, chargebacks, net, weighted FROM input, totals
   ON CONFLICT (route, creator_account_id, period, currency) DO UPDATE SET
     gross_minor = s.gross_minor + EXCLUDED.gross_minor,
     tax_minor = s.tax_minor + EXCLUDED.tax_minor,
@@ -38,8 +38,8 @@ WITH input AS NOT MATERIALIZED (
 ), grants AS (
   -- Accounting reads are granted on the creator account anchor, with the same hard owner filter as the pages.
   INSERT INTO access.resource_role_grant(route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
-  SELECT DISTINCT input.route, creator_account_id, 'identity', creator_account_id, '', 'commerce.payout.owner', '(,)'::tstzrange, :transaction_id::uuid
-  FROM input, statements ON CONFLICT DO NOTHING
+  SELECT input.route, owner.creator_account_id, 'identity', owner.creator_account_id, '', 'commerce.payout.owner', '(,)'::tstzrange, :transaction_id::uuid
+  FROM input, (SELECT DISTINCT creator_account_id FROM statements) AS owner ON CONFLICT DO NOTHING
 )
 SELECT statement_id AS id, creator_account_id AS "creatorAccountId", period, currency,
        gross_minor::text AS "grossMinor", tax_minor::text AS "taxMinor", fee_minor::text AS "feeMinor",
