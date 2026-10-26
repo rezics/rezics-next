@@ -295,9 +295,10 @@ export async function handleFixture(
       ...auth,
       internal: {
         ...auth.internal,
-        async revokeSessions(accountId: string) {
+        async revokeSessions(...args: Parameters<typeof auth.internal.revokeSessions>) {
+          const [accountId] = args;
           await beforeRevoke?.(accountId);
-          await auth.internal.revokeSessions(accountId);
+          await auth.internal.revokeSessions(...args);
         },
         async provisionPassword(input: Parameters<typeof auth.internal.provisionPassword>[0]) {
           const result = await auth.internal.provisionPassword(input);
