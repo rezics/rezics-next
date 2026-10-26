@@ -143,7 +143,7 @@ export async function writeProposal(
     /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
     allowContent?: boolean;
     /** Runs after the candidate id and revision are allocated and before the candidate row is inserted. */
-    install?: (allocated: { candidate: string; revision: number; body: unknown }) => Promise<void>;
+    install?: (allocated: { candidate: string; revision: number; body: unknown }) => Promise<unknown | undefined>;
   },
 ) {
   const route = routeOf(options.subject)!;
@@ -170,7 +170,18 @@ export async function writeProposal(
   if (errors.length) throw new SubjectInputError(errors);
   const revision = subject.revision + 1;
   const candidate = derivedId(CANDIDATE_NS, `${options.subject}\n${revision}`, route);
-  if (options.install) await options.install({ candidate, revision, body: input.fact.body });
+  const body = structuredClone(input.fact.body);
+  const replacement = options.install ? await options.install({ candidate, revision, body }) : undefined;
+  const factBody =
+    replacement === undefined
+      ? body
+      : {
+          ...(body as Record<string, unknown>),
+          value: {
+            ...((body as { value: Record<string, unknown> }).value),
+            content: replacement,
+          },
+        };
   try {
     await expandSlot(tx, options.subject, input.property, transactionId);
     await insertProposalRevision.run(tx, {
@@ -193,7 +204,7 @@ export async function writeProposal(
       slot_id: slotId(options.subject, input.property),
       property: input.property,
       rank: (input.fact.body as { rank: string }).rank,
-      statement: input.fact.body,
+      statement: factBody,
       release: options.release.digest,
       revision,
     });

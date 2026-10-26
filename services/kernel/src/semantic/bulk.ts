@@ -1,6 +1,6 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
@@ -87,7 +87,7 @@ export function importedStatementDigest(
     const content = statement.value.content;
     if (typeof content.language === 'string' && content.document !== undefined) {
       const documentDigest = createHash('sha256')
-        .update(serializeDocument(identityDocument(content.document as DocumentSnapshot)))
+      .update(serializeDocument(identityDocument(parseDocument(content.document))))
         .digest('hex');
       return createHash('sha256')
         .update(canonicalize({ property: statement.property, language: content.language, digest: documentDigest })!)
@@ -150,6 +150,18 @@ export async function batchCommand(
   },
 ): Promise<Value & { component: SubjectComponent }> {
   const { command, actor, route } = options;
+  if (command.op === 'propose' && command.source.field_group === 'summary') {
+    const value = command.statement.value;
+    const content = value.type === 'value' && record(value.content) ? value.content : null;
+    try {
+      const document = parseDocument(content?.document);
+      if (document.profile !== 'text') throw new TypeError('Imported summaries require a text document');
+    } catch {
+      throw new SubjectInputError([
+        { pointer: '/statement/value/content/document', code: 'invalid_format' },
+      ]);
+    }
+  }
   const partition = partitionOf(route);
   const kind = `subject.batch_${command.op}`;
   const digest = requestDigest(kind, actor, command);
@@ -285,12 +297,11 @@ export async function batchCommand(
                               attribution: command.rights.attribution,
                             },
                           });
-                          body.value.content = {
+                          return {
                             language: content.language,
                             document: stored.id,
                             digest: stored.digest,
                           };
-                          return;
                         }
                         if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
                         await claimMedia(tx, {
