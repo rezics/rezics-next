@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import { createSuspensionCommands } from './suspension.ts';
 import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
@@ -19,7 +20,6 @@ import { readAccount } from './account-data.ts';
 import {
   APPROVAL_REFERENCE_PURPOSE,
   approvalRowDigest,
-  approvalClock,
   readApprovedIdentity,
   ApprovalIdentityUnavailableError,
   verifiedBearerExpiry,
@@ -487,7 +487,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       hash([row.operationKey, businessOperation(approvedOperation)]) === row.digest &&
         canonicalize(row.operation) === canonicalize(businessOperation(approvedOperation)),
     );
-    const deadline = Math.min(bounded.deadline, Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
+    const deadline = bounded.deadline;
     await authorizeActor(actor, descriptor, bounded, deadline);
     // A resolved approval is a live, server-owned context. Expose the native
     // barrier only for this closed operation, bound to its target and stable
@@ -502,7 +502,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                 await createSuspensionCommands({
                   pool: config.pool,
                   access: config.access,
-                  clock: approvalClock(config.access),
+                  clock: accessClock(config.access),
                 }).suspend(
                   { actor, pool: config.pool, deadline },
                   {
@@ -579,7 +579,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       if (operation.kind === 'credential')
         requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
       const expires = verifiedBearerExpiry(config.access, actor, bounded);
-      const deadline = Math.min(bounded.deadline, expires);
+      const deadline = bounded.deadline;
       const route = routeOf(actor.accountId)!;
       const digest = hash([operationKey, businessOperation(operation)]);
       // A fresh credential approval observes a new floor without changing Auth's
@@ -606,7 +606,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(route),
-          clock: approvalClock(config.access),
+          clock: accessClock(config.access),
           deadline,
           basis,
           authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
@@ -628,7 +628,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(route),
-          clock: approvalClock(config.access),
+          clock: accessClock(config.access),
           deadline,
           basis,
           authorization: authorization(
@@ -701,7 +701,11 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         | { route: number; id: string; binding: string }
         | undefined;
       requireAllowed(located && routeOf(located.id) === located.route);
-      const row = await credentialRead.run(bounded.pool, { route: located.route, receipt_id: located.id });
+      const row = await credentialRead.run(bounded.pool, {
+        route: located.route,
+        receipt_id: located.id,
+        at: accessClock(config.access)().toISOString(),
+      });
       requireAllowed(row);
       const { data: _native, ...immutable } = row;
       requireAllowed(approvalRowDigest(immutable) === located.binding);
@@ -779,7 +783,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(row.route),
-          clock: approvalClock(config.access),
+          clock: accessClock(config.access),
           deadline: bounded.deadline,
           basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
           authorization: authorization(actor, descriptor, bounded),

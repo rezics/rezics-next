@@ -1,6 +1,6 @@
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
-import { systemClock, type KernelClock } from '../clock.ts';
-import { accessRoot } from './derived-access.ts';
+import { installAccessClock } from './access-clock.ts';
+export { accessClock } from './access-clock.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAttempt,
@@ -53,12 +53,6 @@ type PlatformGateCheck = (
   context: AccessContext,
   at: string,
 ) => Promise<boolean>;
-const clocks = new WeakMap<Access, KernelClock>();
-/** Internal Access composition only; derived adapters share their root's clock. */
-export function accessClock(access: Access): KernelClock {
-  return clocks.get(accessRoot(access)) ?? systemClock;
-}
-
 const platformGateChecks = new WeakMap<Access, PlatformGateCheck>();
 const gateActionPattern = /^gate:([a-z][a-z_]{0,62})$/;
 const reservedGateNames = new Set(['any', 'open', 'close']);
@@ -98,8 +92,9 @@ export function createAccess(config: AccessConfig): Access {
   // gate:any is an internal Access action used by the Global Context and by the
   // built-in platform role; it is intentionally absent from the mounted route catalogue.
   actions.set('gate:any', { anonymous: false });
-  const authentication = createAuthenticator(config.auth);
-  const admission = createCommandAdmission(authentication.identity);
+  const clock = config.clock ?? (() => new Date(Date.now()));
+  const authentication = createAuthenticator(config.auth, clock);
+  const admission = createCommandAdmission(authentication.identity, clock);
   const prepared = new WeakMap<object, Prepared>();
   const permissions = permissionAccess({
     actions,
@@ -126,9 +121,9 @@ export function createAccess(config: AccessConfig): Access {
         const deadline = Math.min(
           context.deadline,
           identity?.deadline ?? Infinity,
-          identity?.expires ?? Infinity,
           !attempt && identity ? identity.observedAt + 180_000 : Infinity,
         );
+        if (identity && clock().getTime() >= identity.expires) return null;
         const permissionContext = {
           pool: deadlineClient(context.pool, deadline) as typeof context.pool,
           deadline,
@@ -168,6 +163,8 @@ export function createAccess(config: AccessConfig): Access {
       )
         return false;
       try {
+        const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
+        if (identity && clock().getTime() >= identity.expires) return false;
         return await within(facts.deadline, () =>
           permissions.authorize(deadlineClient(client, facts.deadline), actor, action, resource, evidence, time),
         );
@@ -176,7 +173,7 @@ export function createAccess(config: AccessConfig): Access {
       }
     },
   };
-  clocks.set(access, config.clock ?? systemClock);
+  installAccessClock(access, clock);
   platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
     if (
       actor.kind !== 'account' ||
@@ -253,7 +250,6 @@ export function createAccess(config: AccessConfig): Access {
     discard: authentication.discardDurable,
   });
   installApprovalIdentityBridge(access, {
-    clock: accessClock(access),
     scope: authentication.approvalScope,
     expiry(actor, context) {
       const identity = authentication.identity(actor);

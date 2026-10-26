@@ -1,3 +1,6 @@
+import { accessClock } from './access-clock.ts';
+import { systemClock } from '../clock.ts';
+import type { Access } from '../request/access.ts';
 import type {
   AccessAccount,
   ProvisioningReceiptMetadata,
@@ -76,8 +79,8 @@ function floor(value: bigint): number {
   allowed(value > 0n && value <= BigInt(Number.MAX_SAFE_INTEGER));
   return Number(value);
 }
-function live(value: string): boolean {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) > Date.now();
+function live(value: string, at: number): boolean {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) > at;
 }
 function scopes(left: string[], right: string[]): boolean {
   return (
@@ -109,7 +112,9 @@ function translate(account: Account | null, recovery = false): AccessAccount | n
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
-export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilities): PasskeyTrustedAccessPorts {
+export function createAuthBindings(
+  config: { pool: Pool; access?: Access } & AuthBindingCapabilities,
+): PasskeyTrustedAccessPorts {
   const {
     pool,
     verifyPendingIdentity,
@@ -118,6 +123,8 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     invalidateAccount,
     authorizeRecovery,
   } = config;
+  const clock = config.access ? accessClock(config.access) : systemClock;
+  const liveAt = (value: string) => live(value, clock().getTime());
   async function account(id: string): Promise<Account | null> {
     const route = routeOf(id);
     if (route === null) return null;
@@ -137,12 +144,12 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
   async function provisioning(id: string | null, reference: string) {
     if (verifyPendingIdentity) {
       const pending = await verifyPendingIdentity(reference);
-      allowed(pending && (id === null || pending.accountId === id) && live(pending.expiresAt));
+      allowed(pending && (id === null || pending.accountId === id) && liveAt(pending.expiresAt));
       return pending;
     }
     if (!verifyProvisioningReceipt || typeof reference !== 'string' || reference.length === 0) return null;
     const receipt = await verifyProvisioningReceipt(reference);
-    allowed(receipt && (id === null || receipt.accountId === id) && live(receipt.expiresAt));
+    allowed(receipt && (id === null || receipt.accountId === id) && liveAt(receipt.expiresAt));
     const current = await account(receipt.accountId);
     allowed(current && current.kind === 'actor' && current.state === 'pending' && !current.fenced);
     const authnEpoch = floor(current.minimumAuthnEpoch);
@@ -151,6 +158,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       route: routeOf(current.accountId)!,
       account_id: current.accountId,
       expires_at: receipt.expiresAt,
+      at: clock().toISOString(),
     });
     allowed(
       registration &&
@@ -158,7 +166,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
         typeof receipt.registrationId === 'string' &&
         receipt.registrationId.length > 0 &&
         registration.expiresAt &&
-        live(registration.expiresAt) &&
+        liveAt(registration.expiresAt) &&
         Date.parse(registration.expiresAt) === Date.parse(receipt.expiresAt),
     );
     return {
@@ -243,7 +251,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
         result.humanEpoch === input.human.authn_epoch &&
         result.clientId === input.human.client_id &&
         scopes(result.scopes, input.human.scope) &&
-        live(result.expiresAt) &&
+        liveAt(result.expiresAt) &&
         subject &&
         subject.kind === 'actor' &&
         epoch(result.subjectEpoch) &&
@@ -269,7 +277,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
           scopes(opening.scopes, result.scopes) &&
           opening.requestedBy === null &&
           opening.purpose === (input.purpose === 'session' ? 'session' : 'credential-management') &&
-          live(opening.expiresAt) &&
+          liveAt(opening.expiresAt) &&
           Date.parse(opening.expiresAt) === Date.parse(result.expiresAt),
       );
     } else allowed(!opening && result.operatorAccountId === null && result.actingHumanId === subject.accountId);

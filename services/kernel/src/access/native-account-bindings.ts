@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import type {
   AccountWorkflowPorts,
   AccountOperation,
@@ -175,20 +176,20 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock: accessClock(access),
     provisioningEvidence: (evidence) => proofs.provisioning.resolve(evidence),
     recoveryEvidence: (evidence) => proofs.recoveryEvidence?.(evidence) ?? Promise.resolve(null),
   });
   const lifecycle = createLifecycleCommands({
     pool,
     access,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock: accessClock(access),
   });
   const continuations = createCommittedContinuations({
     pool,
     access,
     referenceKeys,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock: accessClock(access),
   });
   const operators = createOperatorCommands({
     pool,
@@ -199,8 +200,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   });
   const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
   const delegations = createDelegationCommands({ pool, access, action: 'access:delegate' });
-  const registration = createRegistrationProofBindings({ pool, referenceKeys });
-  const barriers = createAuthBarrierCapabilities({ lifecycle: internalLifecycle, proofs: proofs.barriers });
+  const registration = createRegistrationProofBindings({ pool, access, referenceKeys });
+  const barriers = createAuthBarrierCapabilities({ lifecycle: internalLifecycle, access, proofs: proofs.barriers });
   const session = createOperatorSessionCapability({
     pool,
     access,
@@ -233,11 +234,12 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const trustedAccess: TrustedAccessPorts = {
     ...createAuthBindings({
       pool,
+      access,
       ...createRecoveryCompletion({
         pool,
         routeKey: config.routeKey,
         auth: config.auth,
-        ...(config.clock ? { clock: config.clock } : {}),
+        clock: accessClock(access),
       }),
       ...registration,
       consumeAuthAuthorization: (input) =>
@@ -290,7 +292,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     approveCredentialEffect: (input) => credentialCapability().approveCredentialEffect(input),
     revalidateCredentialEffect: (input) => credentialCapability().revalidateCredentialEffect(input),
     advanceCredentialFloor: (input) => credentialCapability().advanceCredentialFloor(input),
-    readAssignment: (requestedBy, assignedActorId) => readAssignment(pool, requestedBy, assignedActorId),
+    readAssignment: (requestedBy, assignedActorId) =>
+      readAssignment(pool, requestedBy, assignedActorId, accessClock(access)),
   };
   const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = authWorkflowBoundary({
     ...internalLifecycle,

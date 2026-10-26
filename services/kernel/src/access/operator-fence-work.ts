@@ -1,3 +1,5 @@
+import { installAccessClock } from './access-clock.ts';
+import { systemClock } from '../clock.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
@@ -51,10 +53,12 @@ export function createOperatorFenceRunner(config: {
   const pageSize = config.pageSize ?? PAGE_SIZE;
   allow(Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= PAGE_SIZE);
   const actions = new Map([['account:manage', { anonymous: false }]]);
+  const access = createAccess({ actions, accountEvidence: () => null });
+  installAccessClock(access, config.clock ?? systemClock);
   const operators = createOperatorCommands({
     pool: config.pool,
     actions,
-    access: createAccess({ actions, accountEvidence: () => null }),
+    access,
     managementAction: 'account:manage',
     cursorKeys: config.referenceKeys,
   });
@@ -254,10 +258,12 @@ export function createOperatorFenceRunner(config: {
  * releases every connection, then enqueues a separate workflow for its child. */
 export function registerOperatorFenceWork(context: WorkContext, referenceKeys: KeyRing): void {
   const actions = new Map([['account:manage', { anonymous: false }]]);
+  const access = createAccess({ actions, accountEvidence: () => null });
+  installAccessClock(access, context.clock);
   const continuations = createCommittedContinuations({
     pool: context.pool,
     referenceKeys,
-    access: createAccess({ actions, accountEvidence: () => null }),
+    access,
     clock: context.clock,
   });
   const effect = DBOS.registerStep(

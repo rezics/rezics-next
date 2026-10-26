@@ -1,4 +1,5 @@
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 import type { Access, AccessContext, AccountActor, Actor } from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
@@ -87,7 +88,10 @@ export async function requireCommandAdmission(access: Access, actor: Actor, cont
  * replace the authenticated snapshot: even a changed floor below token epoch
  * revokes that snapshot. All action preparations share only this opaque result.
  */
-export function createCommandAdmission(identity: (actor: AccountActor) => Snapshot | undefined): Admission {
+export function createCommandAdmission(
+  identity: (actor: AccountActor) => Snapshot | undefined,
+  clock: KernelClock = systemClock,
+): Admission {
   const observations = new WeakMap<
     object,
     WeakMap<AccountActor, { deadline: number; account: Promise<Account | null> }>
@@ -97,9 +101,10 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
     if (!attempt || actor.kind !== 'account') return null;
     admitted.get(attempt.time)?.delete(actor);
     const snapshot = identity(actor);
-    const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity, snapshot?.expires ?? -Infinity);
+    const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity);
     if (
       !snapshot ||
+      clock().getTime() >= snapshot.expires ||
       snapshot.pool !== context.pool ||
       (snapshot.durableTime !== undefined && snapshot.durableTime !== attempt.time) ||
       Date.now() >= deadline ||

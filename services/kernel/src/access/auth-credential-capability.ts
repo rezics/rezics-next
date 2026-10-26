@@ -1,5 +1,6 @@
+import { accessClock } from './access-clock.ts';
 import { commandAccessContext } from './command-admission.ts';
-import type { CommandAttempt } from '../command/command.ts';
+import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import credentialFloorRead from './auth-barriers-credential-read.sql';
 import canonicalize from 'canonicalize';
 import { routeOf } from '../route/route.ts';
@@ -224,11 +225,16 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     const row = selected
       ? { data: selected }
       : opening.operatorAccountId === null
-        ? await consumedWorkflow.run(pool, { route: routeOf(opening.receiptId)!, receipt_id: opening.receiptId })
+        ? await consumedWorkflow.run(pool, {
+            route: routeOf(opening.receiptId)!,
+            receipt_id: opening.receiptId,
+            at: accessClock(access)().toISOString(),
+          })
         : await consumedOperator.run(pool, {
             route: routeOf(opening.operatorAccountId)!,
             operator_id: opening.operatorAccountId,
             receipt_id: opening.receiptId,
+            at: accessClock(access)().toISOString(),
           });
     allowed(row && row.data && typeof row.data === 'object');
     const native = row.data as unknown as NativeConsumed;
@@ -251,7 +257,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         (own ? native.actor_id : native.acting_human_id) === opening.actingHumanId &&
         Number(own ? native.authn_epoch : native.human_authn_epoch) === opening.humanEpoch &&
         Date.parse(native.expires_at) === Date.parse(opening.expiresAt) &&
-        Date.parse(native.expires_at) > Date.now() &&
+        Date.parse(native.expires_at) > accessClock(access)().getTime() &&
         Number(own ? native.operation?.subjectEpoch : native.subject_epoch_floor) === previous,
     );
     if (prior)
@@ -331,12 +337,13 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           route: routeOf(operator.accountId)!,
           organization_id: operator.accountId,
           human_id: human.accountId,
+          at: attempt ? authoritativeTimeValue(attempt.time) : accessClock(access)().toISOString(),
         });
         allowed(membership.length === 1);
       } else allowed(operator.kind === 'actor' && operator.accountId === human.accountId);
       resource = { route: routeOf(operator.accountId)!, id: operator.accountId };
     } else allowed(subject.accountId === human.accountId);
-    const boundary = { pool, deadline: Math.min(Date.now() + 1000, Date.parse(opening.expiresAt)) };
+    const boundary = { pool, deadline: Date.now() + 1000 };
     const context = attempt ? commandAccessContext(boundary, attempt) : boundary;
     const proof = Object.freeze({}) as CredentialFloorIdentity;
     floorIdentities.set(proof, { actor, account: human, pool });
@@ -346,7 +353,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       floorIdentities.delete(proof);
     }
   }
-  const advanceCredentialFloor = createCredentialFloorHook({ pool, validate: validateNative });
+  const advanceCredentialFloor = createCredentialFloorHook({ pool, access, validate: validateNative });
   async function authenticate(human: Parameters<CredentialCapability['approveCredentialEffect']>[0]['human']) {
     const actor = await access.authenticate(await accessTokenForProof(human), { pool, deadline: Date.now() + 3000 });
     allowed(
@@ -413,6 +420,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
               route: routeOf(reference.operatorAccountId)!,
               operator_id: reference.operatorAccountId,
               receipt_id: reference.receiptId,
+              at: accessClock(access)().toISOString(),
             });
       allowed(row?.data);
       const native = row.data as unknown as NativeConsumed;
@@ -569,7 +577,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           after.version === subject.version &&
           after.reservationId === subject.reservationId &&
           after.minimumAuthnEpoch === subject.minimumAuthnEpoch &&
-          Date.parse(expiresAt) > Date.now(),
+          Date.parse(expiresAt) > accessClock(access)().getTime(),
       );
       return {
         operatorOpening,

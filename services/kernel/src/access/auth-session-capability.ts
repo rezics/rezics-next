@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import type { AuthSessionPort } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
@@ -96,7 +97,7 @@ export function createOperatorSessionCapability(config: {
           JSON.stringify(opening.scopes) === JSON.stringify(actor.scopes) &&
           opening.requestedBy === null &&
           opening.purpose === 'session' &&
-          Date.parse(opening.expiresAt) > Date.now(),
+          Date.parse(opening.expiresAt) > accessClock(access)().getTime(),
       );
       const subject = await operatorAccount.run(pool, {
         route: routeOf(opening.subjectAccountId)!,

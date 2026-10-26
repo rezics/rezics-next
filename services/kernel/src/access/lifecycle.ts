@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
@@ -1212,7 +1213,7 @@ export function createLifecycleInternals(
  */
 export function createLifecycleCommands(config: Boundary & { access: Access }) {
   const { pool, access } = config;
-  const execute = lifecycleExecutor(pool, config.clock);
+  const execute = lifecycleExecutor(pool, config.clock ?? accessClock(access));
   async function authorize(context: LifecycleRequest, action: string, accountId: string) {
     return accessCommandAuthorization(
       access,

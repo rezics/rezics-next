@@ -276,7 +276,7 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Workflow approvals
 
-Approval creation, reads and consumption use the kernel clock configured on Access (including derived Access adapters). On this T timeline, expiry is `min(T + TTL, JWT expiry)`: TTL is 60 seconds for a credential approval and 300 seconds otherwise. Reads and consumption require T strictly before both the approval expiry and bearer expiry. The fence-operator suspension uses that same clock. Evidence deadlines remain on the database clock plus the remaining evidence budget and are never compared with T; request deadlines remain on real time.
+Approval creation, reads and consumption use the kernel clock configured on Access (including derived Access adapters). On this T timeline, expiry is `min(T + TTL, JWT expiry)`: TTL is 60 seconds for a credential approval and 300 seconds otherwise. Reads and consumption require T strictly before both the approval expiry and bearer expiry. The fence-operator suspension uses that same clock. Operator session and credential openings, consumed native opening readers, bearer validation and registration readers also evaluate lifetimes at T. Operator opening TTL remains 60 seconds; binding a credential opening caps it at bearer expiry. Request and evidence budgets never use a stored lifetime as a wall-clock deadline. Evidence deadlines remain on the database clock plus the remaining evidence budget and are never compared with T; request deadlines remain on real time.
 
 `client:manage` authorizes Auth client scope reductions on the Global Context through the ordinary Access formula; the approval binds the exact client, first-party flag and scopes.
 

@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import { verifiedBearerExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';
@@ -117,7 +118,7 @@ type Mutation = {
   deadline?: number;
   authorization?: CommandAuthorization;
 };
-function executor(pool: Pool) {
+function executor(pool: Pool, clock: () => Date) {
   return async function execute<T>(
     options: Mutation,
     body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
@@ -138,6 +139,7 @@ function executor(pool: Pool) {
       {
         partition: partitionOf(anchorRoute),
         basis,
+        clock,
         authorization: options.authorization,
         ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
         receipt: {
@@ -211,7 +213,8 @@ export function createOperatorCommands(config: OperatorConfig) {
     /^(account|access):[a-z][a-z0-9_-]*$/.test(managementAction) &&
       config.actions.get(managementAction)?.anonymous === false,
   );
-  const execute = executor(pool);
+  const clock = accessClock(access);
+  const execute = executor(pool, clock);
   const read = (id: string) => withConnection(pool, (client) => account(client, id));
   async function reservation(input: OperatorResponsibility) {
     return withConnection(pool, (client) =>
@@ -254,6 +257,7 @@ export function createOperatorCommands(config: OperatorConfig) {
             route: route(input.operatorAccountId),
             organization_id: input.operatorAccountId,
             human_id: context.actor.accountId,
+            at: authoritativeTimeValue(attempt.time),
           }),
         );
         requireAllowed(members.length === 1 && members[0]);
@@ -310,7 +314,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     async fenceOperatedSubject(input: OperatorResponsibility & { key: string }) {
       input = structuredClone(input);
       const subjectRoute = route(input.subjectAccountId);
-      return lifecycleExecutor(pool)(
+      return lifecycleExecutor(pool, clock)(
         {
           route: subjectRoute,
           id: input.subjectAccountId,
@@ -450,6 +454,7 @@ export function createOperatorCommands(config: OperatorConfig) {
           const safety = await safetyRead.run(tx, {
             route: route(input.subjectAccountId),
             account_id: input.subjectAccountId,
+            at: authoritativeTimeValue(currentCommand(tx).time),
           });
           requireAllowed(safety && !safety.held);
           const slot = await slotRead.run(tx, {
@@ -626,7 +631,11 @@ export function createOperatorCommands(config: OperatorConfig) {
     async deletionEligibility(accountId: string) {
       return withConnection(pool, async (client) => {
         const current = await account(client, accountId);
-        const safety = await safetyRead.run(client, { route: route(accountId), account_id: accountId });
+        const safety = await safetyRead.run(client, {
+          route: route(accountId),
+          account_id: accountId,
+          at: clock().toISOString(),
+        });
         return {
           accountId,
           safe:
@@ -687,6 +696,7 @@ export function createOperatorCommands(config: OperatorConfig) {
               operator_id: input.operatorAccountId,
               receipt_id: receiptId,
               ...credentialParameters(input.credential),
+              at: authoritativeTimeValue(currentCommand(tx).time),
               expires_at: new Date(
                 Math.min(
                   verifiedBearerExpiry(access, context.actor, { pool, deadline: context.deadline }),

@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -146,7 +147,7 @@ export async function grantCommand<T>(
         deadline: context.deadline,
         basis,
         authorization,
-        clock: config.clock,
+        clock: config.clock ?? accessClock(config.access),
         receipt: {
           actorAccountId: actor.accountId,
           kind: options.kind,

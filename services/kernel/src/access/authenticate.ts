@@ -1,3 +1,4 @@
+import { systemClock, type KernelClock } from '../clock.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRemoteJWKSet, customFetch, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
 import type { QueryConfig } from 'pg';
@@ -101,8 +102,8 @@ function settings(config?: AuthenticationConfig): AuthenticationConfig {
   return { ...value };
 }
 
-function claims(payload: JWTPayload, config: AuthenticationConfig): void {
-  const now = Math.floor(Date.now() / 1000);
+function claims(payload: JWTPayload, config: AuthenticationConfig, at: Date): void {
+  const now = Math.floor(at.getTime() / 1000);
   if (
     payload.iss !== config.issuer ||
     payload.aud !== config.audience ||
@@ -140,7 +141,7 @@ function claims(payload: JWTPayload, config: AuthenticationConfig): void {
 }
 
 /** Each factory owns its key cache and its opaque, immutable request identities. */
-export function createAuthenticator(configuration?: AuthenticationConfig) {
+export function createAuthenticator(configuration?: AuthenticationConfig, clock: KernelClock = systemClock) {
   const approvalScope = Object.freeze({});
   const durableScope = Object.freeze({});
   const identities = new WeakMap<AccountActor, Identity>();
@@ -174,9 +175,11 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
     try {
       remaining(context.deadline);
       const { config, keys } = resolveVerifier();
+      const at = clock();
       const { payload, protectedHeader } = await within(context.deadline, () =>
         deadlines.run(context.deadline, () =>
           jwtVerify(token, keys, {
+            currentDate: at,
             issuer: config.issuer,
             audience: config.audience,
             algorithms: ['ES256'],
@@ -198,7 +201,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
       );
       if (protectedHeader.typ !== 'at+jwt' || typeof protectedHeader.kid !== 'string' || !protectedHeader.kid)
         throw invalid();
-      claims(payload, config);
+      claims(payload, config, at);
       const accountId = payload.sub!;
       const client = deadlineClient(context.pool, context.deadline);
       // Authentication keeps its single actor point read on the account anchor.
@@ -218,12 +221,13 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
       if (Object.hasOwn(payload, 'requested_by')) {
         const request = typeof payload.requested_by === 'string' ? requestedByPattern.exec(payload.requested_by) : null;
         if (!request || request[0] !== payload.requested_by) throw invalid();
-        const assignment = await readAssignment(client, payload.requested_by as string, accountId);
+        const assignment = await readAssignment(client, payload.requested_by as string, accountId, clock);
         if (assignment.kind !== 'resolved') throw invalid();
         requestedBy = payload.requested_by as string;
       }
       const expires = payload.exp! * 1000;
-      remaining(Math.min(context.deadline, expires));
+      remaining(context.deadline);
+      if (clock().getTime() >= expires) throw invalid();
       const actor: AccountActor = Object.freeze({
         kind: 'account',
         accountId,
@@ -239,7 +243,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         expires,
         observedAt,
       });
-      bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
+      bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock);
       return actor;
     } catch {
       throw invalid();
@@ -263,12 +267,12 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         account,
         pool: context.pool,
         deadline,
-        expires: deadline,
+        expires: Infinity,
         observedAt: Date.now(),
         durableTime: time,
         durableAction: facts.action,
       });
-      bindAccountRateIdentity(actor, { ...context, actor }, account, deadline);
+      bindAccountRateIdentity(actor, { ...context, actor }, account, Infinity, clock);
       return actor;
     },
     discardDurable(actor: AccountActor): void {
@@ -280,8 +284,9 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         const facts = approvedIdentityClaims(proof, approvalScope, context.pool);
         if (!facts) throw invalid();
         const { actor, expires } = facts;
-        remaining(Math.min(context.deadline, expires));
-        const client = deadlineClient(context.pool, Math.min(context.deadline, expires));
+        remaining(context.deadline);
+        if (clock().getTime() >= expires) throw invalid();
+        const client = deadlineClient(context.pool, context.deadline);
         const observedAt = Date.now();
         const account = await readAccount(client, routeOf(actor.accountId), actor.accountId);
         if (
@@ -296,10 +301,11 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
           throw invalid();
         if (
           actor.requestedBy !== null &&
-          (await readAssignment(client, actor.requestedBy, actor.accountId)).kind !== 'resolved'
+          (await readAssignment(client, actor.requestedBy, actor.accountId, clock)).kind !== 'resolved'
         )
           throw invalid();
-        remaining(Math.min(context.deadline, expires));
+        remaining(context.deadline);
+        if (clock().getTime() >= expires) throw invalid();
         identities.set(actor, {
           account: Object.freeze(account),
           pool: context.pool,
@@ -307,7 +313,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
           expires,
           observedAt,
         });
-        bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
+        bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock);
         return actor;
       } catch {
         throw invalid();

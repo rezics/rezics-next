@@ -1,3 +1,6 @@
+import { accessClock } from './access-clock.ts';
+import { systemClock } from '../clock.ts';
+import type { Access } from '../request/access.ts';
 import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
@@ -27,7 +30,15 @@ function allowed(value: unknown): asserts value {
  * proof verifier closure and its database. Kernel receives neither credentials
  * nor a proof-minting facility. Structural substitutes prove boundary denial only.
  */
-export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle: Lifecycle; proofs: Proofs }) {
+export function createAuthBarrierCapabilities({
+  lifecycle,
+  proofs,
+  access,
+}: {
+  lifecycle: Lifecycle;
+  proofs: Proofs;
+  access?: Access;
+}) {
   async function commit(
     value: { accountId: string; proofReference?: string; operationKey?: string },
     purpose: 'consent-reduction' | 'recovery',
@@ -62,7 +73,7 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
         proof.previousEpoch === previousEpoch &&
         proof.operationKey === expected.operationKey &&
         /^[a-f0-9]{64}$/.test(proof.digest) &&
-        Date.parse(proof.expiresAt) > Date.now(),
+        Date.parse(proof.expiresAt) > (access ? accessClock(access) : systemClock)().getTime(),
     );
     const bound = { ...proof };
     const outcome = await lifecycle.advanceAuthenticationFloor(
@@ -137,6 +148,7 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
  */
 export function createCredentialFloorHook(config: {
   pool: Pool;
+  access?: Access;
   validate(
     input: Parameters<CredentialFloorPort>[0],
     prior: CredentialFloorReceipt | null,
@@ -172,11 +184,12 @@ export function createCredentialFloorHook(config: {
         : null;
     }
     const digest = createHash('sha256').update(canonicalize(input)!).digest();
-    const deadline = Math.min(Date.now() + 3000, Date.parse(opening.expiresAt));
+    const deadline = Date.now() + 3000;
     const result = await runCommand(
       config.pool,
       {
         partition: partitionOf(route),
+        clock: config.access ? accessClock(config.access) : systemClock,
         deadline,
         authorization: {
           action: 'credential-floor',

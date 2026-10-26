@@ -1,3 +1,4 @@
+import { accessClock } from './access-clock.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -356,7 +357,8 @@ export function createCommittedContinuations(config: {
   clock?: () => Date;
   pageSize?: number;
 }): CommittedContinuations {
-  const execute = (clock?: () => Date) => lifecycleExecutor(config.pool, clock ?? config.clock);
+  const clock = config.clock ?? accessClock(config.access);
+  const execute = (frozenClock?: () => Date) => lifecycleExecutor(config.pool, frozenClock ?? clock);
   function unsealed(reference: string): { route: number; continuationId: string; digest: string } {
     const payload = unseal(config.referenceKeys, COMMITTED_CONTINUATION_PURPOSE, reference);
     refused(payload && typeof payload === 'object' && !Array.isArray(payload));
@@ -376,7 +378,7 @@ export function createCommittedContinuations(config: {
   const runner = createOperatorFenceRunner({
     pool: config.pool,
     referenceKeys: config.referenceKeys,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock,
     ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
     async root(reference) {
       const located = unsealed(reference);
@@ -496,7 +498,7 @@ export function createCommittedContinuations(config: {
     async renew(token, continuationId) {
       const route = routeOf(continuationId);
       if (route === null) throw new GrantDeniedError();
-      const at = config.clock?.() ?? new Date();
+      const at = clock();
       if (!Number.isFinite(at.getTime())) throw new GrantDeniedError();
       const frozen = () => new Date(at.getTime());
       const deadline = Date.now() + 10_000;

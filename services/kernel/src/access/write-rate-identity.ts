@@ -1,3 +1,4 @@
+import { systemClock, type KernelClock } from '../clock.ts';
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { Actor, AccountActor } from '../request/access.ts';
@@ -7,6 +8,7 @@ type Identity = {
   pool: WriteRateContext['pool'];
   deadline: number;
   expires: number;
+  clock: KernelClock;
   route?: number;
   name: string;
   rateClass: AccountRateClass;
@@ -19,13 +21,14 @@ export function bindAccountRateIdentity(
   context: WriteRateContext,
   facts: { route: number; createdAt: number | null; rateTier: string; operatorAccountId: string | null },
   expires: number,
+  clock: KernelClock = systemClock,
 ): void {
   const rateClass: AccountRateClass =
     facts.rateTier === 'service' && facts.operatorAccountId !== null
       ? 'service'
       : facts.rateTier === 'trusted'
         ? 'trusted'
-        : typeof facts.createdAt === 'number' && Date.now() - facts.createdAt >= 7 * 86400000
+        : typeof facts.createdAt === 'number' && clock().getTime() - facts.createdAt >= 7 * 86400000
           ? 'member'
           : 'new-account';
   identities.set(
@@ -34,6 +37,7 @@ export function bindAccountRateIdentity(
       pool: context.pool,
       deadline: context.deadline,
       expires,
+      clock,
       route: facts.route,
       name: `account:${actor.accountId}`,
       rateClass,
@@ -86,7 +90,8 @@ export function bindAnonymousRateIdentity(
     Object.freeze({
       pool: context.pool,
       deadline: context.deadline,
-      expires: context.deadline,
+      expires: Infinity,
+      clock: systemClock,
       name: `anonymous:${canonicalRateAddress(address)}`,
       rateClass: 'anonymous',
     }),
@@ -99,7 +104,8 @@ export function rateIdentity(context: WriteRateContext, secret: string) {
   if (
     !identity ||
     identity.pool !== context.pool ||
-    Date.now() >= Math.min(identity.deadline, identity.expires, context.deadline)
+    identity.clock().getTime() >= identity.expires ||
+    Date.now() >= Math.min(identity.deadline, context.deadline)
   )
     throw new Error('Verified rate identity unavailable');
   const identityDigest = createHmac('sha256', secret).update(identity.name).digest('hex');
@@ -107,6 +113,6 @@ export function rateIdentity(context: WriteRateContext, secret: string) {
     identityDigest,
     route: identity.route ?? Number.parseInt(identityDigest.slice(0, 4), 16),
     rateClass: identity.rateClass,
-    deadline: Math.min(context.deadline, identity.deadline, identity.expires),
+    deadline: Math.min(context.deadline, identity.deadline),
   };
 }
