@@ -1176,7 +1176,14 @@ ALTER TABLE ONLY content.thread
 -- Name: author_item_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
-CREATE INDEX author_item_page_idx ON content.author_item USING btree (route, author_account_id, item_kind, created_at DESC, item_id);
+CREATE INDEX author_item_page_idx ON content.author_item USING btree (route, author_account_id, item_kind, thread_kind, created_at DESC, item_id);
+
+
+--
+-- Name: author_item_post_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX author_item_post_page_idx ON content.author_item USING btree (route, author_account_id, created_at DESC, item_id) WHERE (item_kind = 'post'::text);
 
 
 --

@@ -10,6 +10,7 @@ import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { REACTION_KINDS } from './events.ts';
+import type { AuthorPostEntry } from './author-item-reads.ts';
 import type { BoardView } from './model.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReportView } from './reports.ts';
@@ -323,6 +324,42 @@ export const SubjectThreadsQuerySchema = t.Object(
 export const SubjectThreadsResponseSchema = t.Object(
   {
     threads: t.Array(ThreadViewSchema, { maxItems: 20 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+
+export const AuthorPostsQuerySchema = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1 })),
+  },
+  closed,
+);
+export const AuthorThreadsQuerySchema = t.Object(
+  {
+    ...AuthorPostsQuerySchema.properties,
+    kind: t.Optional(t.Union([t.Literal('discussion'), t.Literal('review')])),
+  },
+  closed,
+);
+export const AuthorThreadsResponseSchema = SubjectThreadsResponseSchema;
+export const AuthorPostsResponseSchema = t.Object(
+  {
+    posts: t.Array(
+      t.Unsafe<AuthorPostEntry>(
+        t.Object(
+          {
+            ...item,
+            availability: t.Literal('available'),
+            body: document,
+            thread: t.Object({ id: ContentIdSchema, title: t.Union([t.String(), t.Null()]) }, closed),
+          },
+          closed,
+        ),
+      ),
+      { maxItems: 20 },
+    ),
     next: t.Union([t.String(), t.Null()]),
   },
   closed,

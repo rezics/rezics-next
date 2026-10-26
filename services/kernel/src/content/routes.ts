@@ -1,3 +1,4 @@
+import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { listSubjectThreads } from './subject-threads.ts';
 import { withHeaders } from '@elysia/openapi';
@@ -72,6 +73,10 @@ import {
   ThreadResponseSchema,
   SubjectThreadsQuerySchema,
   SubjectThreadsResponseSchema,
+  AuthorThreadsQuerySchema,
+  AuthorThreadsResponseSchema,
+  AuthorPostsQuerySchema,
+  AuthorPostsResponseSchema,
 } from './schemas.ts';
 
 export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
@@ -146,6 +151,10 @@ const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
 const subjectThreadsQuery = strictContentSchema(SubjectThreadsQuerySchema);
 const subjectThreadsResponse = strictContentSchema(SubjectThreadsResponseSchema);
+const authorThreadsQuery = strictContentSchema(AuthorThreadsQuerySchema);
+const authorThreadsResponse = strictContentSchema(AuthorThreadsResponseSchema);
+const authorPostsQuery = strictContentSchema(AuthorPostsQuerySchema);
+const authorPostsResponse = strictContentSchema(AuthorPostsResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
 const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
 
@@ -732,6 +741,71 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               next: page.nextCursor,
               rankRefreshedAt: page.rankRefreshedAt,
             };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/threads',
+      {
+        params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
+        query: authorThreadsQuery,
+        response: { 200: withHeaders(authorThreadsResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'author_threads.list',
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { accountId }, query, actor, admission, job, session }) => {
+        existingId(accountId);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listAuthorThreads(
+              dependencies,
+              accountId,
+              { actor, deadline: job.deadline },
+              {
+                kind: query.kind ?? 'discussion',
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+            );
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { threads: [...page.entries], next: page.nextCursor };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/posts',
+      {
+        params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
+        query: authorPostsQuery,
+        response: { 200: withHeaders(authorPostsResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'author_posts.list',
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { accountId }, query, actor, admission, job, session }) => {
+        existingId(accountId);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listAuthorPosts(
+              dependencies,
+              accountId,
+              { actor, deadline: job.deadline },
+              {
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+            );
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { posts: [...page.entries], next: page.nextCursor };
           }),
         );
       },

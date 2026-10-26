@@ -55,8 +55,23 @@ the retained post's author by primary key in the thread's partition and releases
 command. Missing posts and unchanged rows do nothing; receipts make committed replay inert and the source epoch
 and position guard rejects stale writes. No backfill is needed.
 
-Takedown, visibility and Realm changes are not mirrored. These rows are candidates only: future profile reads must
-apply the final disclosure checks used by subject thread reads.
+`GET /v1/accounts/{accountId}/threads?kind=discussion|review&limit=&cursor=` returns `{ threads, next }` in
+board-list summary shapes. Kind defaults to `discussion`; reviews use their own section. Threads are ordered by
+creation time descending, then item id ascending. `GET /v1/accounts/{accountId}/posts?limit=&cursor=` returns
+`{ posts, next }`: reply entries include `thread: { id, title }`, with a null title when thread disclosure hides it.
+Opening posts belong only to the thread list. Both limits are 1–20, default 20.
+
+Takedown, visibility and Realm changes are not mirrored. Index rows are candidates only: reads apply the current
+thread, opening post, board, Realm and Access disclosure checks, and posts also pass their own disclosure checks.
+Drafts, taken-down and erased items are omitted, including when exact reads would disclose an erased slot. An erased
+opening post may still supply a reply's null thread title. Unknown or erased account ids have empty pages through
+these candidate checks; there is no account lookup. No membership or item count is returned.
+
+Each page reads at most four times its limit in candidates and returns a continuation when more may remain, even
+if filtering leaves the page empty. The signed keyset cursor binds account, list, thread kind, viewer and author
+partition epoch. Its keyset position is also encrypted so a skipped item's identity cannot be decoded from the
+continuation. Two disjoint index seeks handle timestamp ties and older rows within one combined scan budget;
+there is no offset. The thread index includes kind, while a separate partial reply index spans both thread kinds.
 
 ## Covers
 
@@ -239,6 +254,21 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 - **Touches:** One rank-refresh index range of at most 500 candidates, one totals statement per thread partition in the batch, one Realm-votes statement per board partition in the batch, and one batch update.
 - **Bound:** O(B log R) rows with at most 2B + 2 statements for B <= 500; independent of reactions per thread.
 - **Growth check:** `test/content/board-hot-refresh.test.ts`, `one hot rank refresh batch`: one batch stays constant in rows and statements at 2048, 8192 and 32768 candidates, with reaction totals on the batch's threads.
+
+### Author thread page
+
+- **Touches:** At most 4L index rows in the author's partition; per candidate, the subject thread read's disclosure
+  probes in its thread's and board's partitions, each released before the next.
+- **Bound:** O(L) candidates and statements for L <= 20, independent of the account's item count.
+- **Growth check:** `test/content/author-item-reads.test.ts`, `author thread page`, at 64, 512 and 4096 threads by
+  the account. Rows and statements per page stay constant.
+
+### Author post page
+
+- **Touches:** At most 4L index rows; per candidate, the post and thread disclosure probes.
+- **Bound:** O(L) for L <= 20, independent of the account's item count.
+- **Growth check:** `test/content/author-item-reads.test.ts`, `author post page`, at 64, 512 and 4096 replies by
+  the account. Rows and statements per page stay constant.
 
 ### Author erasure
 

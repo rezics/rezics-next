@@ -195,6 +195,8 @@ const typed = [
   'DELETE /v1/subjects/:subjectId/ratings/:questionId/vote',
   'GET /v1/subjects/:subjectId/ratings/:questionId/vote',
   'GET /v1/subjects/:id/threads',
+  'GET /v1/accounts/:accountId/threads',
+  'GET /v1/accounts/:accountId/posts',
   'GET /v1/subjects/:subjectId/source-statistics',
   'PUT /v1/subjects/:subjectId/source-statistics/:source',
 ] as const satisfies readonly Routes[];
