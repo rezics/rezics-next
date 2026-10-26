@@ -576,10 +576,14 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaReservationInput,
-      Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number; sha256?: string }> &
+      Readonly<{ purpose: 'post-image' | 'avatar'; mediaType: string; byteCount: number; sha256?: string }> &
         (
           | Readonly<{ containerId: string; newThread?: never }>
-          | Readonly<{ newThread: Readonly<{ boardId: string; idempotencyKey: string }>; containerId?: never }>
+          | Readonly<{
+              purpose: 'post-image';
+              newThread: Readonly<{ boardId: string; idempotencyKey: string }>;
+              containerId?: never;
+            }>
         )
     >
   >();
@@ -660,7 +664,7 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaMetadata,
-      | (MediaMetadataBase & Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number }>)
+      | (MediaMetadataBase & Readonly<{ purpose: 'post-image' | 'avatar'; mediaType: string; byteCount: number }>)
       | (MediaMetadataBase &
           Readonly<{
             purpose: 'cover';
