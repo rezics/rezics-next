@@ -191,6 +191,8 @@ const typed = [
   'POST /v1/collections/:collectionId/members/:memberId/$move',
   'GET /v1/subjects/:id/collections',
   'GET /v1/rating-questions/:questionId',
+  'GET /v1/subjects/:subjectId/ratings',
+  'GET /v1/subjects/:subjectId/ratings/populations',
   'PUT /v1/subjects/:subjectId/ratings/:questionId/vote',
   'DELETE /v1/subjects/:subjectId/ratings/:questionId/vote',
   'GET /v1/subjects/:subjectId/ratings/:questionId/vote',

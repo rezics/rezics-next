@@ -285,6 +285,13 @@ ALTER TABLE ONLY rating.voter_state
 
 
 --
+-- Name: aggregate_component_target_population_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX aggregate_component_target_population_idx ON rating.aggregate_component USING btree (route, question_id, target_id, population_id, shard) WHERE (count > 0);
+
+
+--
 -- Name: population_vote_counted_idx; Type: INDEX; Schema: rating; Owner: -
 --
 

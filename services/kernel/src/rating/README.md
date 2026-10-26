@@ -120,6 +120,24 @@ the authenticated account; the target and question identify a vote but never sel
 Vote request bodies reject unknown fields and non-integer values. The question scale carries the units used by vote
 requests, so vote routes do not accept or return floating-point vote values. Errors use RFC 9457 problem responses.
 
+Aggregate reads require an authenticated account with `rating:vote` and disclose the subject through the same
+`subject:read` rules as other subject reads.
+
+- `GET /v1/subjects/{subjectId}/ratings?question={id}&population={id}` accepts 1–20 `population` values; repeated
+  query parameters request multiple populations, and Global uses the Global Context id. It returns one independent
+  figure per requested population. Each figure has `population`, `count` and `freshness` (`asOf` is the latest applied
+  shard time, or `null` when no shard has been applied; `updating` reports active Realm membership jobs). A work or
+  release score appears from 5 votes; an episode or character score appears from 10. At the threshold the figure
+  includes the mean in stored units, rounded to two decimals, and the histogram over the question's units. Below the
+  threshold a positive count includes `remaining`, and no mean or histogram. A zero count has no `remaining`. A
+  protected Realm the reader cannot read is returned as zero with no score or update state disclosed.
+- `GET /v1/subjects/{subjectId}/ratings/populations?question={id}&cursor=` pages every population with a positive
+  count, in population-id order, 20 per page. The signed cursor is bound to the subject and question. Global is
+  included when it has votes; Realms the reader cannot read are omitted.
+
+Unknown or unreadable subjects and unknown questions return `404`. A population figure is never combined with another
+population's votes.
+
 ## Voter Realm membership
 
 `rating.voter_realm` belongs to the voter's route. Membership events update it in one command in the voter's
@@ -198,3 +216,20 @@ both votes and Realm memberships for reinstatement.
 - Bound: 100 votes per page.
 - Growth check: `test/rating/growth-segment-job.test.ts`, test "re-key page has constant rows and statements as voter
   votes grow", at scales `[256, 1024, 4096]`.
+
+
+### Aggregate read
+
+- Touches: one population reads at most 16 shard rows in the target partition and one pending row in the population's
+  partition. A request is bounded to 20 populations.
+- Bound: at most 340 rows and a constant number of statements per population.
+- Growth check: `test/rating/growth-aggregate-read.test.ts`, test "one population aggregate read has constant rows
+  and statements as target voters grow" at scales `[64, 256, 1024]`.
+
+### Population page
+
+- Touches: up to 16 shard rows for each of 20 populations, plus at most 21 index-only population-id seeks on
+  `(route, question_id, target_id, population_id)` to find the page and its continuation.
+- Bound: 20 × 16 shard rows.
+- Growth check: `test/rating/growth-aggregate-read.test.ts`, test "a target population page has constant rows and
+  statements as rated populations grow" at scales `[256, 1024, 4096]`.

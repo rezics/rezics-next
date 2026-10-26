@@ -35,6 +35,46 @@ export const RatingQuestionResponseSchema = t.Object(
   closed,
 );
 
+const RatingFreshnessSchema = t.Object(
+  {
+    asOf: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    updating: t.Boolean(),
+  },
+  closed,
+);
+
+const ratingFigureFields = {
+  population: id,
+  count: t.Integer({ minimum: 0 }),
+  freshness: RatingFreshnessSchema,
+};
+
+export const RatingAggregateFigureSchema = t.Union([
+  t.Object(
+    { ...ratingFigureFields, mean: t.Number(), histogram: t.Array(t.Integer({ minimum: 0 }), { minItems: 1 }) },
+    closed,
+  ),
+  t.Object({ ...ratingFigureFields, remaining: t.Integer({ minimum: 1 }) }, closed),
+  t.Object(ratingFigureFields, closed),
+]);
+
+export const RatingAggregateResponseSchema = t.Object(
+  {
+    question: id,
+    subject: id,
+    figures: t.Array(RatingAggregateFigureSchema, { minItems: 1, maxItems: 20 }),
+  },
+  closed,
+);
+
+export const RatingPopulationPageResponseSchema = t.Object(
+  {
+    populations: t.Array(t.Object({ population: id, count: t.Integer({ minimum: 1 }) }, closed), { maxItems: 20 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+
 const sourceScale = t.Object(
   {
     min: t.Integer({ minimum: 0, maximum: 4096 }),

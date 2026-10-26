@@ -350,6 +350,7 @@ export function createKernel(dependencies: KernelDependencies) {
   let sourceStatistics: ReturnType<typeof sourceStatisticRoutes>;
   ratings = ratingRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
   });
