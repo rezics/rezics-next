@@ -34,13 +34,17 @@ async function runIntegrationChecks(
 ): Promise<GateResult> {
   const execute = gateRunner(180_000);
   let output = '';
+  let passed = true,
+    timedOut = false;
+  // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors.
   for (const command of commands) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
     const result = await execute(command, cwd, logPath);
     output += result.output;
-    if (!result.passed) return { ...result, output: result.output };
+    passed &&= result.passed;
+    timedOut ||= result.timedOut;
   }
-  return { passed: true, output, timedOut: false };
+  return { passed, output, timedOut };
 }
 
 // While dev already fails a check, a branch is still refused for error lines that dev does not have. Source
@@ -407,9 +411,18 @@ export class MergeTrain {
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
         const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
-        // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents.
-        if (Number(git(trainTree, 'rev-list', '--count', `${originalBase}..HEAD`)) === 0)
-          throw new Error('No committed changes beyond the base: commit the work before finishing');
+        // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents. The
+        // controller commits the frozen acceptance files itself, so they are not the worker's work.
+        const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
+        const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
+        // A changed frozen file is the worker's doing; the frozen check below refuses it with its own reason.
+        const worked =
+          changedFrozenFiles(trainTree, frozenAtStart).length > 0 ||
+          git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
+            .split('\n')
+            .some((path) => path && !frozenPaths.has(path));
+        if (!worked)
+          throw new Error('No committed changes beyond the base and the frozen acceptance files: commit the work before finishing');
         rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles);
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
