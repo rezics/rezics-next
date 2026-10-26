@@ -9,11 +9,10 @@ import { createThread } from '../../src/content/commands.ts';
 import { reserveMedia } from '../../src/content/media.ts';
 import {
   createContentOperationClient,
-  createContentWork,
   CONTENT_COLLECTION_SCHEDULE,
   CONTENT_OPERATION_PROGRESS,
 } from '../../src/content/work.ts';
-import { registerContent, createContentWorkAccess } from '../../src/content/register.ts';
+import { registerContent } from '../../src/content/register.ts';
 import {
   CONTENT_QUEUES,
   CONTENT_WORKFLOWS,
@@ -26,14 +25,12 @@ import { eraseStandaloneMedia } from '../../src/content/moderation.ts';
 import { decideDownload } from '../../src/content/media.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { systemClock } from '../../src/clock.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { startWorker } from '../../src/worker.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createNativeContentSystem } from './support/native-system.ts';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { beginAuthorErasure } from '../../src/content/operations.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
@@ -46,6 +43,27 @@ const partition = partitionOf(route);
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 if (process.argv.includes('--content-worker')) {
+  const nativeFetch = globalThis.fetch;
+  const storageEndpoint = `https://${'a'.repeat(32)}.r2.cloudflarestorage.com`;
+  const consentEndpoint = 'https://consent.example.test';
+  const storage = process.env.CONTENT_TEST_STORAGE;
+  const consent = process.env.CONTENT_TEST_CONSENT;
+  if (storage || consent) {
+    globalThis.fetch = (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      const localOrigin =
+        url.origin === storageEndpoint ? storage : url.origin === consentEndpoint ? consent : undefined;
+      if (!localOrigin) return nativeFetch(request);
+      const target = new URL(localOrigin);
+      target.pathname = `${target.pathname.replace(/\/$/, '')}${url.pathname}`;
+      target.search = url.search;
+      const response = await nativeFetch(new Request(target, request));
+      return url.origin === consentEndpoint
+        ? new Response(response.body, { status: response.status, headers: response.headers })
+        : response;
+    }) as typeof globalThis.fetch;
+  }
   const worker = await startWorker(
     {
       databaseUrl,
@@ -53,29 +71,23 @@ if (process.argv.includes('--content-worker')) {
       poolSize: 10,
       ...(process.env.CONTENT_TEST_NOW ? { clock: () => new Date(process.env.CONTENT_TEST_NOW!) } : {}),
     },
-    [
-      createContentWork({
-        storage: new R2Storage({
-          endpoint: process.env.CONTENT_TEST_STORAGE!,
-          bucket: 'media-test',
-          accessKeyId: 'fixture',
-          secretAccessKey: 'fixture-secret',
-          maxObjectBytes: 20 * 1024 * 1024,
-          fetch,
-        }),
-        collectionPartitions: [partition],
-        access: createContentWorkAccess(
-          process.env.CONTENT_TEST_NOW ? () => new Date(process.env.CONTENT_TEST_NOW!) : systemClock,
-        ),
-        readConsent: createAuthConsentReader({
-          url: `${process.env.CONTENT_TEST_CONSENT ?? 'http://127.0.0.1:1'}/internal/v1/consents:read`,
-          serviceTokenId: 'fixture.access',
-          serviceTokenSecret: 'fixture-secret',
-        }),
-        routeKey: Buffer.from(process.env.CONTENT_TEST_ROUTE_KEY ?? '', 'base64url'),
-        fetchConfig: { allowedHosts: ['images.example.org'] },
-      }),
-    ],
+    KERNEL_WORK_MODULES,
+    {
+      CONTENT_R2_ENDPOINT: storageEndpoint,
+      CONTENT_R2_BUCKET: 'media-test',
+      CONTENT_R2_ACCESS_KEY_ID: 'fixture',
+      CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
+      CONTENT_SOURCE_HOSTS: 'images.example.org',
+      CONTENT_AUTH_CONSENT_URL: `${consentEndpoint}/internal/v1/consents:read`,
+      CF_ACCESS_CLIENT_ID: 'fixture.access',
+      CF_ACCESS_CLIENT_SECRET: 'fixture-secret',
+      AUTH_ISSUER: 'https://auth.example.test',
+      AUTH_AUDIENCE: 'https://api.example.test',
+      AUTH_JWKS_URL: 'https://auth.example.test/.well-known/jwks.json',
+      KERNEL_ROUTE_KEY: process.env.CONTENT_TEST_ROUTE_KEY ?? Buffer.alloc(32, 7).toString('base64url'),
+      KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
+      CONTENT_TEST_COLLECTION_PARTITIONS: String(partition),
+    },
   );
   console.log('ready');
   for await (const line of console) {

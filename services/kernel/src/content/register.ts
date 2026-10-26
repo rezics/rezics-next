@@ -42,6 +42,19 @@ export type ContentWorkDependencies = Readonly<{
   fetchConfig: MediaImportFetchConfig;
 }>;
 
+function testCollectionPartitions(env: Readonly<Record<string, string | undefined>>): readonly number[] | undefined {
+  const value = env.CONTENT_TEST_COLLECTION_PARTITIONS;
+  if (value === undefined) return undefined;
+  const partitions = value.split(',').map((part) => Number(part));
+  if (
+    partitions.length === 0 ||
+    new Set(partitions).size !== partitions.length ||
+    partitions.some((partition) => !Number.isInteger(partition) || partition < 0 || partition >= 4096)
+  )
+    throw new RangeError('Invalid content collection partitions');
+  return partitions;
+}
+
 /** One port factory for registration and tests. Absent groups fail closed and do not construct a client. */
 export function contentWorkDependencies(
   env: Readonly<Record<string, string | undefined>>,
@@ -88,6 +101,7 @@ export const registerContent: WorkModule = {
   name: 'content',
   async register(context) {
     const dependencies = contentWorkDependencies(context.env, fetch);
+    const collectionPartitions = testCollectionPartitions(context.env);
     for (const group of dependencies.config.absentGroups) {
       console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
     }
@@ -97,6 +111,7 @@ export const registerContent: WorkModule = {
       readConsent: dependencies.readConsent,
       routeKey: readMembershipRouteKey(context.env),
       fetchConfig: dependencies.fetchConfig,
+      ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
     context.addEffects(contentEffects(context.pool, context.client));
   },
