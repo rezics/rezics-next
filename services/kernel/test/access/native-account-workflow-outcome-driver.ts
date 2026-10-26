@@ -1417,7 +1417,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         await new Promise<never>(() => {});
       };
       try {
-        const execution = executeWorkflow(f, referenceValue, f.work);
+        const execution = executeWorkflow(referenceValue, f.work);
         await Promise.race([
           committed,
           execution.then(async () => {
