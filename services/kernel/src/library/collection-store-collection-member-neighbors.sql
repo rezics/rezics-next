@@ -1,4 +1,4 @@
-WITH input AS (
+WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :collection_id::uuid AS collection_id,
          :kind::text AS kind, :member_id::nullable(uuid) AS member_id
 ), target AS (
