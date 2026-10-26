@@ -83,9 +83,6 @@ test('dropTestDatabase fails at its bound with the pid, application_name, state 
 const testRoot = resolve(import.meta.dir, '..');
 const forcedDrop = /DROP\s+DATABASE[^;`'"]*WITH\s*\(\s*FORCE\s*\)/i;
 const helper = ['support/drop-test-database.ts', 'support/drop-test-database.test.ts'];
-// Files of other owners that still hold a raw forced drop; each owner deletes its entries as it moves them, and the
-// list goes when it is empty.
-const allowlist = ['semantic/governance-actions.test.ts'];
 
 const sources = new Map<string, string>();
 for (const file of new Bun.Glob('**/*.ts').scanSync({ cwd: testRoot })) {
@@ -95,12 +92,11 @@ const raw = [...sources]
   .filter(([file, source]) => !helper.includes(file) && forcedDrop.test(source))
   .map(([file]) => file);
 
-test('the guard fails on a raw DROP DATABASE ... WITH (FORCE) under services/kernel/test outside the helper and the allowlist', () => {
+test('the guard fails on a raw DROP DATABASE ... WITH (FORCE) under services/kernel/test outside the helper', () => {
   expect(forcedDrop.test('await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`)')).toBe(true);
   expect(forcedDrop.test('DROP  DATABASE x\n  WITH ( force )')).toBe(true);
   expect(forcedDrop.test('DROP DATABASE x')).toBe(false);
-  expect(raw.filter((file) => !allowlist.includes(file)).sort()).toEqual([]);
-  expect(allowlist.filter((file) => !raw.includes(file))).toEqual([]);
+  expect(raw.sort()).toEqual([]);
 });
 
 test('every content, community and root-level file drops its databases through the helper', () => {
