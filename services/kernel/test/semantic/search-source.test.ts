@@ -4,7 +4,7 @@ import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -16,9 +16,6 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const source = subjectSource(pool);
-beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
-});
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -35,33 +32,28 @@ const ACTIONS = [
   'moderation:hide',
   'moderation:takedown',
 ];
-const editor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000041',
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const access: Access = {
-  async authenticate(token) {
-    if (token !== 'editor') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return editor;
-  },
-  async authorize(_client, _actor, action, resource) {
-    return action === 'subject:read' || resource.id === GLOBAL_CONTEXT;
-  },
-};
+const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000041' };
+const realAccess = await createRealAccess(admin, accounts, ACTIONS);
+beforeAll(async () => {
+  for (const action of [
+    'subject:create',
+    'subject:merge',
+    'statement:propose',
+    'context:accept',
+    'context:adopt',
+    'moderation:hide',
+    'moderation:takedown',
+  ]) {
+    await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  }
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+});
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
 
 async function call(method: string, path: string, body?: unknown) {
@@ -69,7 +61,7 @@ async function call(method: string, path: string, body?: unknown) {
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
-        authorization: 'Bearer editor',
+        authorization: `Bearer ${realAccess.bearer('editor')}`,
         ...(body === undefined ? {} : { 'idempotency-key': `"${randomUUID()}"`, 'content-type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),

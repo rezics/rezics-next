@@ -6,7 +6,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -17,17 +17,18 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
-beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
-});
 afterAll(async () => {
   await relays.stop();
   await pool.end();
   await admin.end();
 });
 
-const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
-const ACTIONS = [
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
+  acceptor: '019a1b2c-3d4e-7f00-8a00-acce97000002',
+  outsider: '019a1b2c-3d4e-7f00-8a00-0075de000003',
+};
+const actions = [
   'subject:create',
   'subject:read',
   'statement:propose',
@@ -35,59 +36,33 @@ const ACTIONS = [
   'context:adopt',
   'subject:merge',
 ];
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
+const realAccess = await createRealAccess(admin, accounts, actions);
+beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
-const actors: Record<string, AccountActor> = {
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000001'),
-  acceptor: account('019a1b2c-3d4e-7f00-8a00-acce97000002'),
-  outsider: account('019a1b2c-3d4e-7f00-8a00-0075de000003'),
-};
-const grants = new Set([
-  'editor subject:create',
-  'editor statement:propose',
-  'acceptor context:accept',
-  'acceptor context:adopt',
-  'acceptor subject:merge',
-]);
-const checks: { action: string; route: number; id: string }[] = [];
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    if (action === 'subject:read') return true;
-    checks.push({ action, route: resource.route, id: resource.id });
-    const persona = Object.keys(actors).find(
-      (name) => actor.kind === 'account' && actors[name]!.accountId === actor.accountId,
-    );
-    return resource.id === GLOBAL_CONTEXT && grants.has(`${persona} ${action}`);
-  },
-};
+
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
 
 const sessions: Record<string, string> = {};
 async function call(method: string, path: string, options: { as?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
   if (options.as) {
-    headers.authorization = `Bearer ${options.as}`;
+    const credential = Object.hasOwn(accounts, options.as)
+      ? realAccess.bearer(options.as as keyof typeof accounts)
+      : options.as;
+    headers.authorization = `Bearer ${credential}`;
     const session = sessions[options.as];
     if (session) headers['rezics-session-token'] = session;
   }
@@ -172,7 +147,11 @@ test('a merge redirects the larger id to the smallest with one revision in the r
   const merged = await merge(body, { key: token });
   expect(merged.response.status).toBe(200);
   expect(merged.body).toEqual({ survivor: survivor.id, redirected: redirected.id, revision: 2 });
-  expect(checks.at(-1)).toEqual({ action: 'subject:merge', route: 0, id: GLOBAL_CONTEXT });
+  expect(realAccess.checks.at(-1)).toEqual({
+    persona: 'acceptor',
+    action: 'subject:merge',
+    resource: { route: 0, id: GLOBAL_CONTEXT },
+  });
   const redirect = await call('GET', `/v1/subjects/${redirected.id}?context=${GLOBAL_CONTEXT}`);
   expect(redirect.response.status).toBe(308);
   expect(redirect.response.headers.get('location')).toBe(`/v1/subjects/${survivor.id}?context=${GLOBAL_CONTEXT}`);

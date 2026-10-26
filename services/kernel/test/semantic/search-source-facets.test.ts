@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
@@ -14,6 +15,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 const source = subjectSource(pool);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(21)]]) };
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const ACTIONS = [
   'subject:create',
   'subject:read',
@@ -24,43 +26,30 @@ const ACTIONS = [
   'moderation:hide',
   'moderation:takedown',
 ];
-const editor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000053',
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const access: Access = {
-  async authenticate(token) {
-    if (token !== 'editor') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return editor;
-  },
-  async authorize(_client, _actor, action, resource) {
-    return action === 'subject:read' || resource.id === GLOBAL_CONTEXT;
-  },
-};
+const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000053' };
+const realAccess = await createRealAccess(admin, accounts, ACTIONS);
+beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await bootstrapRelease(pool, bundledRelease);
+});
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(22),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
-beforeAll(() => bootstrapRelease(pool, bundledRelease));
-afterAll(() => pool.end());
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
+});
 
 async function create(body: unknown) {
   const response = await kernel.handle(
     new Request('http://kernel.test/v1/subjects', {
       method: 'POST',
       headers: {
-        authorization: 'Bearer editor',
+        authorization: `Bearer ${realAccess.bearer('editor')}`,
         'idempotency-key': `"${randomUUID()}"`,
         'content-type': 'application/json',
       },
