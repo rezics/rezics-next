@@ -8,10 +8,25 @@ import { fixture } from './support/process.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const routeKey = Buffer.alloc(32, 41).toString('base64url');
+const workerEnvironment = {
+  KERNEL_ROUTE_KEY: routeKey,
+  KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 42).toString('base64url')}`,
+  AUTH_ISSUER: 'https://auth.worker.test',
+  AUTH_AUDIENCE: 'https://kernel.worker.test',
+  AUTH_JWKS_URL: 'https://auth.worker.test/.well-known/jwks.json',
+};
 
 test('worker configuration names invalid variables without revealing values', () => {
   expect(KERNEL_WORK_MODULES.filter((module) => module === commerceWorkModule)).toHaveLength(1);
-  expect(KERNEL_WORK_MODULES).toEqual([commerceWorkModule]);
+  expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
+    'accounts',
+    'commerce',
+    'library',
+    'community',
+    'search',
+    'content',
+  ]);
   expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
   expect(readWorkerConfig({ DATABASE_URL: databaseUrl })).toMatchObject({ databaseUrl, poolSize: 10 });
   expect(
@@ -51,6 +66,7 @@ test('worker configuration names invalid variables without revealing values', ()
 
 test('a worker missing or rejecting commerce configuration names the variable and hides secret values', async () => {
   const valid = {
+    ...workerEnvironment,
     DATABASE_URL: databaseUrl,
     STRIPE_SECRET_KEY: 'sk_test_worker_configuration_secret',
     STRIPE_MANAGED_PAYMENTS: 'false',
@@ -145,6 +161,7 @@ test('stop is idempotent and releases module pools, and the direct entrypoint ha
   const direct = Bun.spawn([process.execPath, `${import.meta.dir}/../../src/worker.ts`], {
     env: {
       ...process.env,
+      ...workerEnvironment,
       STRIPE_SECRET_KEY: 'sk_test_worker_entrypoint',
       STRIPE_MANAGED_PAYMENTS: 'false',
       CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
@@ -155,8 +172,13 @@ test('stop is idempotent and releases module pools, and the direct entrypoint ha
   });
   try {
     const reader = direct.stdout.getReader();
-    const first = await reader.read();
-    expect(new TextDecoder().decode(first.value)).toContain('Worker ready');
+    let output = '';
+    while (!output.includes('Worker ready')) {
+      const next = await reader.read();
+      if (next.done) break;
+      output += new TextDecoder().decode(next.value);
+    }
+    expect(output).toContain('Worker ready');
     direct.kill('SIGINT');
     expect(await direct.exited).toBe(0);
   } finally {
