@@ -38,7 +38,6 @@ const audience = 'https://realm-participation.api.test';
 const password = 'realm participation registration password with enough entropy';
 const routeKey = new Uint8Array(32).fill(97);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(98)]]) };
-const growthScales: [number, number, number] = [256, 1024, 4096];
 const growthBounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
 let db: GrowthDatabase;
@@ -766,7 +765,7 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
   };
   const report = await checkGrowth(db, {
     name: 'Realm participation',
-    scales: growthScales,
+    scales: [256, 1024, 4096],
     bounds: growthBounds,
     async grow(database, scale, previous) {
       await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
@@ -779,7 +778,7 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
       return result.response.status;
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual(growthScales);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
   for (const sample of report.samples) {
     for (const [name, cost] of Object.entries(sample.cost.relations ?? {})) {
       if (name.startsWith('community.') || name === 'access.resource_role_grant') {
