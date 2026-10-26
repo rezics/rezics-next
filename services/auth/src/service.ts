@@ -495,9 +495,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
   }
+  function freshAuthentication(human: SessionProof) {
+    if (Math.floor(Date.now() / 1000) - human.auth_time > 600) throw new StepUpRequired();
+  }
   function freshCredentialProof(human: SessionProof, subjectId: string) {
-    if (human.account_id === subjectId && Math.floor(Date.now() / 1000) - human.auth_time > 600)
-      throw new StepUpRequired();
+    if (human.account_id === subjectId) freshAuthentication(human);
   }
   async function withCredentialProof<T>(human: SessionProof, callback: () => Promise<T>): Promise<T> {
     const scope = { proof: human, live: true };
@@ -1043,6 +1045,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           purpose: stage.purpose,
           digest: stage.effectDigest,
         };
+      },
+      async withFreshHuman(input, work) {
+        const human = await humanProof(input.headers);
+        if (input.fresh !== false) freshAuthentication(human);
+        return withCredentialProof(human, () => work(human));
       },
       async approveCredentialEffect(input) {
         if (!trustedAccess.approveCredentialEffect) throw new Denied(503);

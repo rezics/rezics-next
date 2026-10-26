@@ -9,6 +9,12 @@ actor and any authenticated principal. The check uses the route's `x-action` sco
 authorization and domain reads. Anonymous and ungranted account callers receive the same `403 platform_closed`.
 Public routes do not read the exposure catalogue. Gate state is read for each request and is never cached.
 
+Entries that are not mounted routes apply the same rule through `admitGroup` (`admission.ts`), which `admitExposure`
+also calls: an open group admits everyone, a closed one only an account holding `gate:<group>` or `gate:any` on the
+Global Context. The `organizations` group closes organization creation. The Auth host's account-operation approval for
+an `organization` request calls `admitGroup` for it before approving and answers `403 platform_closed` to an ungranted
+person. No other account operation is gated, and deletion never is.
+
 The ordinary grant routes manage `gate:<group>` and `gate:any` as direct actions on the Global Context. Platform staff
 receive `gate:any`, `access:grant`, `exposure:open`, and `exposure:close` through the additive
 `platform.governance` action list.

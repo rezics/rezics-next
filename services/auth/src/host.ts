@@ -4,6 +4,11 @@ import { createAuthService, type AuthServiceOptions } from './index.ts';
 import { credentialEffects, CredentialEffectDenied } from './credential-effects.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts, type WorkflowContext } from './workflows.ts';
 import type { TurnstileConfiguration } from './turnstile.ts';
+import {
+  accountOperationTransport,
+  readJsonObject,
+  type AccountOperationAccess,
+} from './account-operations-transport.ts';
 import { AUTH_MAINTENANCE_CRON, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from './maintenance.ts';
 
 export class AuthHostConfigurationError extends Error {
@@ -21,6 +26,9 @@ export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceO
   /** Cloudflare Siteverify configuration for the public sign-up endpoint. */
   turnstile?: TurnstileConfiguration;
   access: AccountWorkflowPorts<Context>;
+  /** Kernel workflow approval and gate ports for the account-operation routes.
+   * Absent, both routes answer 503 account_operation_denied. */
+  accountOperations?: AccountOperationAccess;
   executorId?: string;
   /** UTC five- or six-field numeric cron expression. */
   maintenanceSchedule?: string;
@@ -141,7 +149,12 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     })());
   return {
     service,
-    handler: credentialEffectTransport(service, workflows.handler, options),
+    handler: accountOperationTransport(
+      service,
+      workflows,
+      credentialEffectTransport(service, workflows.handler, options),
+      options.accountOperations,
+    ),
     workflows,
     config,
     start() {
@@ -194,29 +207,7 @@ export function credentialEffectTransport(
     )
       return denied(400);
     try {
-      const reader = request.body?.getReader();
-      if (!reader) return denied(400);
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      try {
-        while (true) {
-          const next = await reader.read();
-          if (next.done) break;
-          size += next.value.byteLength;
-          if (size > 16384) return denied(413);
-          chunks.push(next.value);
-        }
-      } finally {
-        await reader.cancel();
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      } catch {
-        return denied(400);
-      }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return denied(400);
-      const body = parsed as Record<string, unknown>;
+      const body = await readJsonObject(request);
       const names =
         command === 'stage'
           ? ['key', 'subjectId', 'credential']

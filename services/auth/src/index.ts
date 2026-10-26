@@ -63,6 +63,7 @@ import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
 export { createAuthHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
+export type { AccountOperationAccess } from './account-operations-transport.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export type { TurnstileConfiguration } from './turnstile.ts';
@@ -183,6 +184,15 @@ export interface AuthService {
     /** Trusted server composition only; the exact native human proof is live only
      * during this instance's trusted authorization callbacks. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;
+    /** Auth-host transport only. Proves the current human from the Auth session as
+     * approveCredentialEffect does and, unless `fresh` is false, requires the
+     * session's auth_time within the last 600 seconds (401 step_up_required).
+     * `work` runs inside the live proof scope, where accessTokenForProof gives the
+     * Access bearer for the proof; the bearer never leaves that scope. */
+    withFreshHuman<T>(
+      input: { headers: Headers; fresh?: boolean },
+      work: (proof: SessionProof) => Promise<T>,
+    ): Promise<T>;
     /** One native expiry batch, at most 1000 rows; scheduled by the Auth host. */
     pruneExpiredVerifications(): Promise<number>;
     /** Bounded maintenance; the host registers and schedules these ports. */
