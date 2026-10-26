@@ -225,6 +225,7 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 ### Sourced bulk write
 
+- Proposal install hooks return replacement values and never mutate command input.
 - Touches: One `readFences` statement per source-tuple partition (at most 100 tuples) before the receipt and before deduplication; one anchored media reference probe per cover; each command then pays its single-request cost plus one document insert or one media claim by key. Same-partition fence reads run inside the command. Grow N; fix the command count at the batch cap.
 - Bound: O(commands × log N). At most 100 commands. No path scans a partition or table, or grows with N, U×t or M beyond index depth.
 - Growth check: `test/semantic/imported-fields.test.ts`: `a cover proposal claims an available cover media object in its own transaction` and `an unchanged summary refresh appends no document` (fixed fixtures, no scale sweep).
