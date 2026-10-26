@@ -157,6 +157,8 @@ type SharedCommunity = {
   work: WorkClient;
   observer: SqlObserver;
   provisioned: { fixture: Fixture; governance: Account } | undefined;
+  /** `contextId:accountId` pairs already granted the Context moderator role. */
+  contextModerators: Set<string>;
   /** Suspensions end the fixture's accounts for good, so the next test builds a new base. */
   retired: boolean;
   closing: Promise<void> | undefined;
@@ -198,7 +200,7 @@ async function buildShared(): Promise<SharedCommunity> {
     });
     worker = await startWorker(system);
     observer = observeSql(system.database.pool);
-    return { system, kernel, worker, work, observer, provisioned: undefined, retired: false, closing: undefined };
+    return { system, kernel, worker, work, observer, provisioned: undefined, contextModerators: new Set(), retired: false, closing: undefined };
   } catch (error) {
     const errors: unknown[] = [error];
     for (const release of [() => observer?.close(), () => work?.close(), () => worker?.stop(), () => system.close()]) {
@@ -480,18 +482,32 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
       if (!fixture) throw new Error('Community fixture is not provisioned');
       const route = routeOf(realmId);
       if (route === null) throw new TypeError('Realm id is not routed');
-      return request({
+      const grant = (resource: { route: number; id: string }, role: string) =>
+        request({
+          actor: fixture!.owner,
+          method: 'POST',
+          path: '/v1/roleGrants',
+          key: nextKey(),
+          body: { resource, subject: { kind: 'account', id: account.id }, role, valid: '(,)' },
+        });
+      const realmGrant = await grant({ route, id: realmId }, 'community.realm.moderator');
+      if (realmGrant.status >= 300) return realmGrant;
+      // A Context can serve several Realms, so moderating a Realm never implies authority over its Context.
+      const realmRead = await request({
         actor: fixture.owner,
-        method: 'POST',
-        path: '/v1/roleGrants',
-        key: nextKey(),
-        body: {
-          resource: { route, id: realmId },
-          subject: { kind: 'account', id: account.id },
-          role: 'community.realm.moderator',
-          valid: '(,)',
-        },
+        method: 'GET',
+        path: `/v1/realms/${realmId}`,
       });
+      if (realmRead.status !== 200) return realmRead;
+      const contextId = ((await realmRead.json()) as { realm: { contextId: string } }).realm.contextId;
+      const contextRoute = routeOf(contextId);
+      if (contextRoute === null) throw new TypeError('Realm Context id is not routed');
+      // The Context is shared by every Realm of the fixture; an identical active role grant is refused as a duplicate.
+      const key = `${contextId}:${account.id}`;
+      if (base.contextModerators.has(key)) return realmGrant;
+      const contextGrant = await grant({ route: contextRoute, id: contextId }, 'semantic.context.moderator');
+      if (contextGrant.status < 300) base.contextModerators.add(key);
+      return contextGrant;
     },
     async suspend(account) {
       if (!governanceAccount) throw new Error('Community governance credential is missing');
