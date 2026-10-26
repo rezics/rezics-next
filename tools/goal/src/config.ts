@@ -12,6 +12,8 @@ import { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { deliverDueReminders, parseNotes } from './notes.ts';
+import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
@@ -123,6 +125,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'riskAreasFile',
       'integration',
       'pools',
+      'notes',
     ],
     'settings',
   );
@@ -169,7 +172,8 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   if (!Array.isArray(poolValues)) throw new Error('pools must be an array');
   const pools: Pool[] = poolValues.map((raw: unknown) => {
     const pool = object(raw, 'pool');
-    keys(pool, ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy'], 'pool');
+    keys(pool, ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'], 'pool');
+    if (pool.note !== undefined && typeof pool.note !== 'string') throw new Error('pool note must be text');
     if (!['codex', 'grok', 'cursor', 'claude'].includes(String(pool.cli))) throw new Error('unsupported pool CLI');
     if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
       throw new Error('pool classes required');
@@ -218,6 +222,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     integrationChecks,
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
+    notes: parseNotes(local.notes),
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     codex: {
       serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
@@ -432,6 +437,15 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     pump,
     hostCommand: command,
     codeIsCurrent,
+    deliverReminders: () => {
+      const deliver = (summary: string) =>
+        inbox.deliver({ managerId: settings.integration.supermanager, kind: 'instruction', summary } as never);
+      refreshCodexSchedule(settings.stateDirectory);
+      return (
+        deliverDueReminders(settings.notes ?? [], settings.stateDirectory, deliver) +
+        alertUnspentAllowances(settings.pools, (pool) => tasks.reader(pool), settings.stateDirectory, deliver)
+      );
+    },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
       await job.recoverOrphans(options);
       await afterSettle();

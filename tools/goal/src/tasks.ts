@@ -15,6 +15,7 @@ import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
 import { choosePoolWithFallback } from './allowance.ts';
+import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { launch, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
@@ -331,6 +332,14 @@ export class WorkerTasks {
           ...(old ? { preferred: old.pool } : {}),
           ...(options.excludePools ? { exclude: options.excludePools } : {}),
         },
+        // A new task goes to the allowance that would otherwise expire unused first; an explicit profile is kept.
+        options.profile
+          ? undefined
+          : (candidate) => {
+              const reading = readings.find((value) => value.pool === candidate.name);
+              const schedule = readCodexSchedule(this.settings.stateDirectory);
+              return reading ? pace(reading, candidate, Date.now(), schedule)?.urgency : undefined;
+            },
       );
       const make = (n: number): Attempt => ({
         taskId,

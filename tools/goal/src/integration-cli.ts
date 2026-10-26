@@ -17,7 +17,7 @@ import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
   hostSweepIntervalMs?: number;
-  codeIsCurrent?(): boolean; recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>;
+  codeIsCurrent?(): boolean; recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>; deliverReminders?(): number;
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   supermanager?: string;
   fence: AttemptFence; sink: GateOutcomeSink;
@@ -205,7 +205,9 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(runtime.managerSocket, resolve); });
     chmodSync(runtime.managerSocket, 0o600);
     console.log('ready');
-    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); }, 60_000);
+    const remind = () => { try { runtime.deliverReminders?.(); } catch (error) { console.error(error); } };
+    remind();
+    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); remind(); }, 60_000);
     recoveryTimer.unref();
     await new Promise<void>(resolve => {
       stopServer = resolve;

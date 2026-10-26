@@ -31,9 +31,24 @@ export function choosePool(profile: Profile, pools: readonly Pool[], readings: r
   return ranked[0].pool;
 }
 
-/** The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. */
+/**
+ * The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. With a pacing
+ * measure, a new task instead goes to the allowed profile whose allowance most needs spending before it resets; a
+ * retry keeps its engine while that has quota.
+ */
 export function choosePoolWithFallback(profile: Profile, fallbacks: readonly Profile[], pools: readonly Pool[],
-  readings: readonly PoolReading[], options: Parameters<typeof choosePool>[3] = {}): { profile: Profile; pool: Pool } {
+  readings: readonly PoolReading[], options: Parameters<typeof choosePool>[3] = {},
+  urgency?: (pool: Pool) => number | undefined): { profile: Profile; pool: Pool } {
+  if (urgency && !options.preferred) {
+    const choices = [profile, ...fallbacks].flatMap((candidate, order) => {
+      try {
+        const pool = choosePool(candidate, pools, readings, options);
+        return [{ profile: candidate, pool, order, urgency: urgency(pool) ?? -1 }];
+      } catch { return []; }
+    });
+    choices.sort((a, b) => b.urgency - a.urgency || a.order - b.order);
+    if (choices[0]) return { profile: choices[0].profile, pool: choices[0].pool };
+  }
   try { return { profile, pool: choosePool(profile, pools, readings, options) }; }
   catch (error) {
     for (const candidate of fallbacks) {
