@@ -20,7 +20,7 @@ export {
   defineRegistry,
   platformRegistry,
 } from './registry.ts';
-export { curie, href, localizedText, pickText, plainText } from './strings.ts';
+export { curie, href, localeChain, localizedText, pickLanguage, pickText, plainText } from './strings.ts';
 export { compositionSchema } from './schema.ts';
 export { validateComposition } from './validate.ts';
 export { MAX_ZONE_PAGES, MAX_ZONE_SCOPE, UI_LOCALES, validateZoneStarter, type ZoneStarter } from './zone.ts';

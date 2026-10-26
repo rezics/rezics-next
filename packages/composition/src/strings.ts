@@ -91,26 +91,64 @@ function primarySubtag(tag: string): string {
   return dash === -1 ? tag : tag.slice(0, dash);
 }
 
-/** Locale, then a related primary subtag, then English, then the first key in code-unit order. */
+/** Traditional-script Chinese: the script subtag or one of the regions that write it. */
+function traditional(tag: string): boolean {
+  return /-(?:Hant|TW|HK|MO)(?:-|$)/i.test(tag);
+}
+
+/**
+ * The reader's fallback list: the locale, its primary language, the other scripts of that language in a fixed order
+ * (zh-Hans reads zh-Hant, zh-Hant reads zh-Hans), then English.
+ */
+export function localeChain(locale: string): string[] {
+  const primary = primarySubtag(locale);
+  const chain = [locale];
+  if (primary !== locale) chain.push(primary);
+  if (primary === 'zh') {
+    const scripts = traditional(locale) ? ['zh-Hant', 'zh-Hans'] : ['zh-Hans', 'zh-Hant'];
+    for (const script of scripts) if (!chain.includes(script)) chain.push(script);
+  }
+  if (!chain.includes('en')) chain.push('en');
+  return chain;
+}
+
+/**
+ * The language to read from among `languages`. Walks `localeChain(locale)`, offers other regions or scripts of the
+ * reader's language and then `original` (the language the subject was first written in) before English, and ends
+ * with the first language in code-unit order.
+ */
+export function pickLanguage(languages: Iterable<string>, locale: string, original?: string): string | undefined {
+  const available = new Set(languages);
+  if (available.size === 0) return undefined;
+  const chain = localeChain(locale);
+  const primary = primarySubtag(locale);
+  const english = primary === 'en' ? [] : ['en'];
+  const lead = primary === 'en' ? chain : chain.slice(0, -1);
+  const related = [...available].filter((tag) => primarySubtag(tag) === primary && !chain.includes(tag)).sort();
+  const origins =
+    original === undefined
+      ? []
+      : [
+          original,
+          primarySubtag(original),
+          ...[...available].filter((tag) => primarySubtag(tag) === primarySubtag(original)).sort(),
+        ];
+  for (const tag of [...lead, ...related, ...origins, ...english]) if (available.has(tag)) return tag;
+  return [...available].sort()[0];
+}
+
+/** `pickLanguage` over the entries that hold text, with the chosen text and its language. */
 export function pickText(
   value: string | Record<string, string>,
   locale: string,
+  original?: string,
 ): { text: string; lang: string | null } {
   if (typeof value === 'string') return { text: value, lang: null };
-  if (Object.hasOwn(value, locale)) return { text: value[locale] ?? '', lang: locale };
-  const primary = primarySubtag(locale);
-  let bare: string | undefined;
-  let related: string | undefined;
-  let english: string | undefined;
-  let first: string | undefined;
-  for (const key of Object.keys(value)) {
-    if (first === undefined || key < first) first = key;
-    if (key === 'en') english = key;
-    if (primarySubtag(key) !== primary) continue;
-    if (key === primary) bare = key;
-    else if (related === undefined || key < related) related = key;
-  }
-  const lang = bare ?? related ?? english ?? first;
+  const lang = pickLanguage(
+    Object.keys(value).filter((tag) => value[tag]),
+    locale,
+    original,
+  );
   if (lang === undefined) return { text: '', lang: null };
   return { text: value[lang] ?? '', lang };
 }

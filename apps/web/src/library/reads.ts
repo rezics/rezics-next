@@ -7,7 +7,8 @@ import { readSessionIdentity, type SessionIdentity } from '../session/state';
 /** One rendered library list page. The kernel allows at most 100. */
 export const LIBRARY_PAGE_LIMIT = 100;
 
-export type LibrarySubject = { id: string; type: string; label: string };
+/** `typeLabel` is the type's name in the reader's language, once the page's server function has set it. */
+export type LibrarySubject = { id: string; type: string; label: string; typeLabel?: string };
 export type LibraryLabel = string | { value: string; language: string } | null;
 
 /** Both subject summaries and collection/space targets present a plain display label. */

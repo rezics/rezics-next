@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
@@ -76,14 +77,18 @@ export const readPublishedLog = createServerFn({ method: 'GET' })
   .validator(validateLogId)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadPublishedLog(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const result = await loadPublishedLog(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    await nameSubjectTypes([result.log.subject]);
+    return result;
   });
 
 export const readMyPublishedLogs = createServerFn({ method: 'GET' })
   .validator(validateListInput)
   .handler(async ({ data }): Promise<PublishedLogPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadMyPublishedLogs(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const page = await loadMyPublishedLogs(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    await nameSubjectTypes(page.logs.map((log) => log.subject));
+    return page;
   });
 
 export const publishProgressLog = createServerFn({ method: 'POST' })

@@ -280,6 +280,8 @@ work plus cache-miss discovery and, for signed token validation, SDK JWKS fetchi
 This is constant endpoint work in s/M/t; cache misses must be exercised independently of page size.
 Browser redirects to authorization/logout are separate Auth requests, not Worker fetches.
 The development-only fixture kernel scans fixture arrays; it is not evidence for production kernel complexity.
+Every kernel read carries the reader's language chain (at most four tags) as `Accept-Language`; this adds no request,
+and the kernel chooses embedded labels from it.
 
 Follow-ups below are proposed tests in `tests/request-cost.test.ts`, counting calls through the fake kernel and session
 at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests cited cover only the stated call assertion.
@@ -323,10 +325,11 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Search page (`/<locale>/search`)
 
 - **Touches:** In parallel: one `POST /v1/subjects:search` and one `POST /v1/subjects:facets`; the search read asks for
-  descriptions, two languages and, for a single-type search, at most two facet properties; active definitions digest
+  descriptions, the reader's language chain (at most four languages) and, for a single-type search, at most two facet
+  properties; active definitions digest
   cached for 60 s and release cached by digest without expiry
 - **Bound:** 2 K and 0 D per search; result page is at most 100 entries and facet work is bounded to 8 properties × 10
-  values; the response stays O(page size), with each description at most 200 grapheme clusters in at most two languages
+  values; the response stays O(page size), with each description at most 200 grapheme clusters in at most four languages
   and at most 2 properties × 3 values per hit; 0 R/A
 - **Growth check:** `tests/search-facets.test.ts`:
   `searches read the definitions release once per digest and make two kernel reads each`
@@ -411,6 +414,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Touches:** One session read and, started together, `GET /v1/collections/<id>?view=FULL` plus
   `GET /v1/collections/<id>/members?view=FULL` for one members page. FULL embeds the curator and each member's subject.
 - **Bound:** 1 D, 2 K, 0 R and 0 A. The members read is one page of at most 100 entries. No per-member reads.
+- **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
+
+### Library type names
+
+- **Touches:** After a collection, personal library, copies, reading progress, published log or following page is read,
+  one definitions lookup (active digest cached for 60 s, release cached by digest without expiry) names each distinct
+  subject type of that page in the reader's language chain
+- **Bound:** 0 K, 0 D, 0 R and 0 A beyond the page's own reads; at most 1 definitions fetch when the digest is cold and
+  none when warm; local work is one lookup per distinct type among at most 100 rows. A type with no name is left out
 - **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
 
 ### My collections and following

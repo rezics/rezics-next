@@ -11,7 +11,7 @@ export type MineFollow = {
   targetType: 'subject' | 'collection' | 'space';
   state: 'following' | 'unfollowed';
   reason: 'explicit' | 'library' | 'membership';
-  target: { id: string; type: string; label: string } | null;
+  target: { id: string; type: string; label: string; typeLabel?: string } | null;
   idempotencyKey: string;
 };
 

@@ -37,7 +37,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const client = kernelClient();
+    const client = kernelClient(data.locale);
     const [result, library] = await Promise.all([
       loadSubjectPage(client, data.id),
       loadSubjectLibrarySlot(

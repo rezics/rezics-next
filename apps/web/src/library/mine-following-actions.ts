@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
@@ -22,7 +23,9 @@ export const readMineFollowingPage = createServerFn({ method: 'GET' })
   .validator(validateInput)
   .handler(async ({ data }): Promise<MineFollowingPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadMineFollowingPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const page = await loadMineFollowingPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
+    return page;
   });
 
 function validateUnfollow(input: unknown): { targetId: string; idempotencyKey: string } {

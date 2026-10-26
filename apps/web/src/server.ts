@@ -138,7 +138,7 @@ export default {
           { headers: { 'cache-control': 'no-store' } },
         );
       try {
-        return Response.json(await suggestSubjects(query), { headers: { 'cache-control': 'no-store' } });
+        return Response.json(await suggestSubjects(query, request), { headers: { 'cache-control': 'no-store' } });
       } catch {
         return Response.json(
           { error: 'Suggestions unavailable' },

@@ -4,7 +4,9 @@ import { Compile } from 'typebox/schema';
 import {
   compositionSchema,
   defineRegistry,
+  localeChain,
   localizedText,
+  pickLanguage,
   pickText,
   platformRegistry,
   validateComposition,
@@ -74,4 +76,29 @@ test("pickText chooses the reader's locale, then a related one, then English, th
   expect(pickText(text, 'fr')).toEqual({ text: 'Works', lang: 'en' });
   expect(pickText({ ko: '작품', de: 'Werke' }, 'fr')).toEqual({ text: 'Werke', lang: 'de' });
   expect(pickText('Plain', 'ja')).toEqual({ text: 'Plain', lang: null });
+});
+
+test('the locale chain keeps the reader inside their language before English', () => {
+  expect(localeChain('en')).toEqual(['en']);
+  expect(localeChain('ja')).toEqual(['ja', 'en']);
+  expect(localeChain('zh-Hans')).toEqual(['zh-Hans', 'zh', 'zh-Hant', 'en']);
+  expect(localeChain('zh-Hant')).toEqual(['zh-Hant', 'zh', 'zh-Hans', 'en']);
+  expect(localeChain('zh-TW')).toEqual(['zh-TW', 'zh', 'zh-Hant', 'zh-Hans', 'en']);
+  expect(localeChain('zh')).toEqual(['zh', 'zh-Hans', 'zh-Hant', 'en']);
+  expect(localeChain('en-GB')).toEqual(['en-GB', 'en']);
+  expect(localeChain('pt-BR')).toEqual(['pt-BR', 'pt', 'en']);
+});
+
+test("the original language comes before English and after the reader's own language", () => {
+  const text = { de: 'Werke', en: 'Works', ja: '作品' };
+  expect(pickText(text, 'zh-Hans', 'ja')).toEqual({ text: '作品', lang: 'ja' });
+  expect(pickText(text, 'zh-Hans', 'fr')).toEqual({ text: 'Works', lang: 'en' });
+  expect(pickText(text, 'de', 'ja')).toEqual({ text: 'Werke', lang: 'de' });
+  expect(pickText({ en: 'Works', 'ja-Jpan': '作品' }, 'ko', 'ja')).toEqual({ text: '作品', lang: 'ja-Jpan' });
+  expect(pickText({ en: 'Works', fr: 'Oeuvres' }, 'en', 'fr')).toEqual({ text: 'Works', lang: 'en' });
+  expect(pickText({ fr: 'Oeuvres', ja: '作品' }, 'en', 'ja')).toEqual({ text: '作品', lang: 'ja' });
+  expect(pickText({ en: '', ja: '作品' }, 'en')).toEqual({ text: '作品', lang: 'ja' });
+  expect(pickText({}, 'en')).toEqual({ text: '', lang: null });
+  expect(pickLanguage(['zh-Hant', 'de'], 'zh-Hans')).toBe('zh-Hant');
+  expect(pickLanguage([], 'en')).toBeUndefined();
 });

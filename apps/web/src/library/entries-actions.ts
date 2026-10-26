@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { nameSubjectTypes } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import {
   changePersonalLibraryEntry,
@@ -13,6 +14,11 @@ import {
   type LibraryRemoveInput,
   type PersonalLibraryView,
 } from './entries-read';
+
+async function nameConflict(result: LibraryMutationResult): Promise<LibraryMutationResult> {
+  if (!result.ok && result.reason === 'conflict') await nameSubjectTypes([result.entry.subject]);
+  return result;
+}
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -62,19 +68,25 @@ export const readPersonalLibrary = createServerFn({ method: 'GET' })
   .validator(validateRead)
   .handler(async ({ data }): Promise<PersonalLibraryView> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const view = await loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    if (view.signedIn) await nameSubjectTypes(view.entries.map((entry) => entry.subject));
+    return view;
   });
 
 export const savePersonalLibraryEntry = createServerFn({ method: 'POST' })
   .validator(validateChange)
   .handler(async ({ data }): Promise<LibraryMutationResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return changePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return nameConflict(
+      await changePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+    );
   });
 
 export const deletePersonalLibraryEntry = createServerFn({ method: 'POST' })
   .validator(validateRemove)
   .handler(async ({ data }): Promise<LibraryMutationResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return removePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return nameConflict(
+      await removePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+    );
   });

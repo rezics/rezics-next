@@ -287,14 +287,22 @@ string is checked as `plainText`. An object reports a bad key as `invalid` at th
 value as `unsafe` or `invalid` at that value, and too few or too many entries as `invalid` at
 the property. Any other JSON value is `invalid` at the property.
 
-`pickText(value, locale)` returns `{ text, lang }`. A string yields `{ text: value, lang: null }`.
-An object yields the entry for `locale`, otherwise an entry whose primary subtag equals the
-locale's (the key equal to that subtag first, then the others in code-unit order), otherwise
-`en`, otherwise the first key in code-unit order. `lang` is the key chosen.
+`localeChain(locale)` is the reader's one fallback list: the locale, its primary language, the other
+scripts of that language in a fixed order, then English. `zh-Hans` reads `zh-Hans`, `zh`, `zh-Hant`, `en`;
+`zh-Hant` reads `zh-Hant`, `zh`, `zh-Hans`, `en`; `ja` reads `ja`, `en`. Every label, title, description and
+summary the site chooses itself goes through it; the site's kernel client sends the same list as
+`Accept-Language` with descending q-values, so the kernel chooses embedded labels the same way.
+
+`pickText(value, locale, original?)` returns `{ text, lang }`. A string yields `{ text: value, lang: null }`.
+An object walks the chain over its entries that hold text. After the chain it offers other regions or scripts of the
+reader's language (in code-unit order), then the `original` language when the caller knows it (the language of the
+subject's original title or `schema:inLanguage`), then English, then the first key in code-unit order. For an
+English reader the original follows English. `lang` is the key chosen. `pickLanguage(languages, locale,
+original?)` is the same choice over bare language keys, for values that are not strings, such as alias lists.
 
 Localized text multiplies a text property's size by at most 16 entries, and the document
-stays inside `MAX_COMPOSITION_BYTES`. `pickText` is one lookup plus at most one pass over at
-most 16 keys.
+stays inside `MAX_COMPOSITION_BYTES`. `pickText` is one pass over at most 16 keys and
+a chain of at most five tags.
 
 `bun scripts/schema.ts` writes `schema/composition-v1.schema.json` from this registry.
 `bun scripts/schema.ts --check` fails when that file is stale. The schema covers the closed

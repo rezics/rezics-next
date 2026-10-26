@@ -3,6 +3,7 @@ import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { nameSubjectTypes } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import {
   finishProgress,
@@ -150,6 +151,7 @@ export const readProgressIndex = createServerFn({ method: 'GET' })
     const page = await shareRead(viewerReadKey(request, 'index', data), () =>
       loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data),
     );
+    await nameSubjectTypes(page.sessions.map((session) => session.subject));
     return withFreshKey(page);
   });
 
@@ -161,6 +163,7 @@ export const readProgressSession = createServerFn({ method: 'GET' })
     const page = await shareRead(viewerReadKey(request, 'session', data), () =>
       loadProgressSession(kernelClient(), request, env as Partial<SessionEnv>, data),
     );
+    if (page.signedIn) await nameSubjectTypes([page.session.subject, page.session.versionSubject]);
     return withFreshKey(page);
   });
 

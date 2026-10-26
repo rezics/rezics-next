@@ -511,7 +511,8 @@ test(
     expect(body).toContain('Library');
     expect(body.indexOf('Zebra story')).toBeLessThan(body.indexOf('Unavailable'));
     expect(body.indexOf('Unavailable')).toBeLessThan(body.indexOf('Apple story'));
-    expect(body).toContain('book');
+    // The fake serves no definitions, so the type has no name to show and its raw value stays out.
+    expect(body).not.toContain('book');
     expect(body).toContain('data-state="completed"');
     expect(body).toContain('data-state="planned"');
     expect(body).toContain(`datetime="${newerStamp}"`);

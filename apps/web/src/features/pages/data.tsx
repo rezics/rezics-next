@@ -1,5 +1,13 @@
-import { pickText, planReads, platformRegistry, shownProperties, type CompositionDocument } from '@rezics/composition';
+import {
+  pickLanguage,
+  pickText,
+  planReads,
+  platformRegistry,
+  shownProperties,
+  type CompositionDocument,
+} from '@rezics/composition';
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import { languageName, LANGUAGE_PROPERTY, originalLanguage } from '../../subject/language';
 import type { Related, Subject } from '../../subject/types';
 import type { PageDocument } from './render';
 
@@ -37,10 +45,10 @@ export function usePageMessages(): PageMessages {
   return useContext(PageContext).messages;
 }
 
-/** Localized props and read text share the composition fallback policy. */
-export function pageText(value: unknown, locale: string) {
+/** Localized props and read text share the composition fallback chain; `original` is the subject's first language. */
+export function pageText(value: unknown, locale: string, original?: string) {
   const safe = typeof value === 'string' || isRecord(value) ? value : '';
-  const picked = pickText(safe as string | Record<string, string>, locale);
+  const picked = pickText(safe as string | Record<string, string>, locale, original);
   return {
     text: typeof picked.text === 'string' ? picked.text : '',
     lang: picked.lang && picked.lang !== locale ? picked.lang : undefined,
@@ -142,17 +150,23 @@ function inlineValue(snak: Snak, related: Related, options: Options): ReactNode 
     return <span lang={text.lang}>{text.text}</span>;
   }
   if (typeof content !== 'string') return null;
+  if (property.id === LANGUAGE_PROPERTY) {
+    const name = languageName(content, options.locale);
+    return name === undefined ? null : <span>{name}</span>;
+  }
   return property.data_type === 'url' ? <ExternalValue value={content} /> : <span>{content}</span>;
 }
 
 function subjectHeader(subject: Subject, options: Options) {
-  const label = pageText(subject.labels, options.locale);
-  const description = pageText(subject.descriptions, options.locale);
+  const original = originalLanguage(subject);
+  const label = pageText(subject.labels, options.locale, original);
+  const description = pageText(subject.descriptions, options.locale, original);
   // Select a language for the alias list with the same policy as scalar text.
-  const aliasLanguage = pickText(
-    Object.fromEntries(Object.keys(subject.aliases).map((lang) => [lang, lang])),
+  const aliasLanguage = pickLanguage(
+    Object.keys(subject.aliases).filter((lang) => subject.aliases[lang]?.length),
     options.locale,
-  ).lang;
+    original,
+  );
   const aliases = aliasLanguage ? (subject.aliases[aliasLanguage] ?? []) : [];
   return (
     <header className="min-w-0 space-y-3 in-data-[density=compact]:space-y-2">
@@ -202,7 +216,10 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     if (!chosen.length) continue;
     const label = relatedLabel(property);
     const sources = new Set<string>();
-    const values = chosen.map((statement) => {
+    const values = chosen.flatMap((statement) => {
+      // A value the page cannot present, such as a language with no name, stays out of the reading view.
+      const value = inlineValue(statement, read.related, options);
+      if (value === null) return [];
       for (const reference of statement.references) {
         for (const part of reference.parts) {
           if (
@@ -213,9 +230,9 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
             sources.add(part.value.content);
         }
       }
-      return (
+      return [
         <dd key={statement.id} className="min-w-0 space-y-2 break-words sm:col-start-2">
-          {inlineValue(statement, read.related, options)}
+          {value}
           {statement.qualifiers.length > 0 && (
             <dl className="ms-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {statement.qualifiers.map((qualifier, index) => {
@@ -229,9 +246,10 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
               })}
             </dl>
           )}
-        </dd>
-      );
+        </dd>,
+      ];
     });
+    if (!values.length) continue;
     groups.set(
       property,
       <div

@@ -504,7 +504,8 @@ test(
       expect(await first.getByRole('link', { name: 'Zebra story' }).getAttribute('href')).toBe(
         `/en/subjects/${edition}`,
       );
-      expect(await first.innerText()).toContain('book');
+      // The fake serves no definitions, so the type has no name to show and its raw value stays out.
+      expect(await first.innerText()).not.toContain('book');
       expect(await first.getByLabel('Status').inputValue()).toBe('owned');
       expect(await first.getByLabel('Location').inputValue()).toBe('Study');
       expect(await first.getByLabel('Source').inputValue()).toBe('Bookshop');

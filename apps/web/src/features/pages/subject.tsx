@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
+import { originalLanguage } from '../../subject/language';
 import type { Related, Subject } from '../../subject/types';
 import { dataComponents, PageData, pageText, type PageMessages } from './data';
 import { serializeJsonLd, subjectJsonLd } from './jsonld';
@@ -65,7 +66,7 @@ export async function loadSubjectPage(client: KernelClient, id: string): Promise
 /** The subject's label, chosen with the same fallback the page heading uses. */
 export function subjectPageTitle(page: SubjectPageData, locale: string): string {
   const read = subjectBody(page);
-  return read ? pageText(read.subject.labels, locale).text : '';
+  return read ? pageText(read.subject.labels, locale, originalLanguage(read.subject)).text : '';
 }
 
 export function subjectPageJsonLd(page: SubjectPageData, locale: string): string | undefined {

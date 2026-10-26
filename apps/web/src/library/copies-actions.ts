@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
@@ -34,7 +35,9 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
   .validator(validateQuery)
   .handler(async ({ data }): Promise<CopiesPageData> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadCopiesPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const page = await loadCopiesPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    await nameSubjectTypes(page.copies.map((copy) => copy.subject));
+    return page;
   });
 
 export const createCopy = createServerFn({ method: 'POST' })

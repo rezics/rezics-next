@@ -1,7 +1,8 @@
 import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 
-export type SubjectReference = { id: string; type: string; label: string };
+/** An embedded subject; a type with no name in the reader's language is left out. */
+export type SubjectReference = { id: string; type: string; label: string; typeLabel?: string };
 
 /** An embedded subject, linked to its page, or the shared unavailable label when it cannot be read. */
 export function SubjectRef({ subject }: { subject: SubjectReference | null }) {
@@ -11,7 +12,7 @@ export function SubjectRef({ subject }: { subject: SubjectReference | null }) {
       <Link to="/subjects/$id" params={{ id: subject.id }} className="text-primary underline-offset-4 hover:underline">
         {subject.label}
       </Link>
-      <span className="text-muted-foreground">{subject.type}</span>
+      {subject.typeLabel ? <span className="text-muted-foreground">{subject.typeLabel}</span> : null}
     </>
   );
 }

@@ -551,7 +551,8 @@ test(
     const apple = found.find((link) => link.text === 'Apple story');
     expect(zebra?.href).toBe(`/en/subjects/${id(11)}`);
     expect(apple?.href).toBe(`/en/subjects/${id(12)}`);
-    expect(main(page.html)).toContain('book');
+    // The fake serves no definitions, so the type has no name to show and its raw value stays out.
+    expect(main(page.html)).not.toContain('book');
     expect(main(page.html)).toContain('Unavailable');
     expect(page.html).not.toContain(hiddenSubjectId);
     expect(found.some((link) => link.href.includes(hiddenSubjectId) || link.text === hiddenSubjectId)).toBe(false);

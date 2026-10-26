@@ -1,4 +1,4 @@
-import { pickText } from '@rezics/composition';
+import { localeChain, pickText } from '@rezics/composition';
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
@@ -15,8 +15,8 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client.ts';
+import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 
 type Fact =
@@ -68,86 +68,13 @@ type SearchPageData = {
   selectedFacetLabels: Record<string, Record<string, string>>;
   facetsAvailable: boolean;
 };
-type Release = FilterRelease & {
-  types: Record<string, { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[] }>;
-  properties: Record<string, { labels?: Record<string, string>; datatype: string; value?: { pattern?: string } }>;
-};
-
 /** At most this many facet properties are asked for on a single-type search. */
 const FACT_PROPERTIES = 2;
 /** At most this many values of one property are shown on a result. */
 const FACT_VALUES = 3;
 
-const definitionMemory = new Map<string, { storedAt: number; value: unknown }>();
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-async function cachedDefinition<T>(url: string, ttl?: number): Promise<T> {
-  const now = Date.now();
-  const remembered = definitionMemory.get(url);
-  const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default;
-  const request = new Request(url, { method: 'GET' });
-
-  if (cache) {
-    try {
-      const cached = await cache.match(request);
-      if (cached) {
-        const storedAt = Number(cached.headers.get('x-rezics-definition-stored-at'));
-        if (ttl === undefined || (Number.isFinite(storedAt) && now - storedAt < ttl)) {
-          const value = (await cached.json()) as T;
-          definitionMemory.set(url, { storedAt: Number.isFinite(storedAt) ? storedAt : now, value });
-          return value;
-        }
-        await cache.delete(request);
-      }
-    } catch {
-      // The memory copy below keeps local development working if the Cache API is unavailable.
-    }
-  }
-
-  if (remembered && (ttl === undefined || now - remembered.storedAt < ttl)) return remembered.value as T;
-
-  const response = await fetch(request);
-  if (!response.ok) throw new Error('Definitions read failed');
-  const value = (await response.json()) as T;
-  const storedAt = Date.now();
-  definitionMemory.set(url, { storedAt, value });
-  if (cache) {
-    const cacheHeaders = new Headers({
-      'content-type': 'application/json',
-      'cache-control': ttl === undefined ? 'public, max-age=31536000, immutable' : 'public, max-age=60',
-      'x-rezics-definition-stored-at': String(storedAt),
-    });
-    try {
-      await cache.put(request, new Response(JSON.stringify(value), { headers: cacheHeaders }));
-    } catch {
-      // Some local Cache API implementations reject entries; the bounded memory copy is the fallback.
-    }
-  }
-  return value;
-}
-
-function kernelOrigin(): string {
-  const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-  if (origin) return origin;
-  if (import.meta.env.DEV) return 'http://kernel.local';
-  throw new Error('KERNEL_ORIGIN is required to read definitions');
-}
-
-async function readRelease(): Promise<Release> {
-  const origin = kernelOrigin();
-  const activeUrl = new URL('/v1/definitions/active', origin).href;
-  const active = await cachedDefinition<{ digest?: unknown }>(activeUrl, 60_000);
-  if (typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
-    throw new Error('Active definitions release is invalid');
-  const releaseUrl = new URL(`/v1/definitions/releases/${encodeURIComponent(active.digest)}`, origin).href;
-  const response = await cachedDefinition<{ digest?: unknown; release?: unknown }>(releaseUrl);
-  const value = response.release;
-  if (response.digest !== active.digest || !isRecord(value) || !isRecord(value.types) || !isRecord(value.properties))
-    throw new Error('Definitions release is invalid');
-  return value as unknown as Release;
 }
 
 function allowedType(release: Release, type: unknown): type is string {
@@ -243,7 +170,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const selected = release && type ? selectedFilters(release, type, data.facetValues) : undefined;
     const filter = selected?.filter;
     const hasSearch = data.query.length > 0 || type !== undefined;
-    const languages = data.locale === 'en' ? ['en'] : [data.locale, 'en'];
+    const languages = localeChain(data.locale);
     const properties = release && type ? factProperties(release, type) : [];
     const searchPromise: Promise<SearchResult | undefined> = hasSearch
       ? (async () => {
@@ -256,7 +183,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             ...(data.cursor ? { cursor: data.cursor } : {}),
             ...(filter ? { filter } : {}),
           };
-          const response = await kernelClient().subjects.$search.post(body);
+          const response = await kernelClient(data.locale).subjects.$search.post(body);
           if (response.error) throw new Error('Search failed');
           return response.data as SearchResult;
         })()
@@ -265,7 +192,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const facetPropertiesForType = release && type ? facetProperties(release, [type]).slice(0, 8) : [];
     const facetsPromise: Promise<FacetResult | null | undefined> =
       release && type && facetPropertiesForType.length > 0
-        ? kernelClient()
+        ? kernelClient(data.locale)
             .subjects.$facets.post({
               ...(data.query ? { text: data.query } : {}),
               ...(filter ? { filter } : {}),
@@ -320,7 +247,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     };
   });
 
-/** The same fallback the subject page uses: the page locale first, then the related and fallback languages. */
+/** The same chain the subject page uses: the page locale, its language, sibling scripts, then English. */
 function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
   const picked = pickText(labels, locale);
   return { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) };
@@ -601,9 +528,12 @@ export function ShellSearch() {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(value)}`, {
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `/api/search/suggestions?q=${encodeURIComponent(value)}&locale=${encodeURIComponent(locale)}`,
+          {
+            signal: controller.signal,
+          },
+        );
         if (!response.ok) return;
         const result = (await response.json()) as SuggestResult;
         collectionState.set(

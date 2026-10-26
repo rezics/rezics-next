@@ -1,3 +1,5 @@
+import { pickLanguage } from '@rezics/composition';
+import { originalLanguage } from '../../subject/language.ts';
 import type { Related, Subject } from '../../subject/types.ts';
 
 type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
@@ -26,17 +28,17 @@ const reserved = new Set([
   'identifier',
 ]);
 
-function languages(locale: string): string[] {
-  return [locale, ...(locale === 'zh-Hant' ? ['zh-Hans'] : locale === 'zh-Hans' ? ['zh-Hant'] : []), 'en'];
-}
-
-function text<T extends string | string[]>(values: Record<string, T>, order: string[]): T | undefined {
-  for (const language of order) {
-    if (Object.hasOwn(values, language) && values[language]?.length) return values[language];
-  }
-  for (const value of Object.values(values)) {
-    if (value.length) return value;
-  }
+function text<T extends string | string[]>(
+  values: Record<string, T>,
+  locale: string,
+  original?: string,
+): T | undefined {
+  const language = pickLanguage(
+    Object.keys(values).filter((key) => values[key]?.length),
+    locale,
+    original,
+  );
+  return language === undefined ? undefined : values[language];
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -100,7 +102,7 @@ export function subjectJsonLd({
   locale: string;
   url: string;
 }): Record<string, JsonValue> {
-  const order = languages(locale);
+  const original = originalLanguage(subject);
   const entries: [string, JsonValue][] = [
     ['@context', 'https://schema.org'],
     ['@id', `${idBase}${subject.id}`],
@@ -112,9 +114,9 @@ export function subjectJsonLd({
     const base = separator > 0 ? prefixes.get(subject.type.slice(0, separator)) : undefined;
     if (base) entries.push(['additionalType', base + subject.type.slice(separator + 1)]);
   }
-  const name = text(subject.labels, order);
-  const description = text(subject.descriptions, order);
-  const aliases = text(subject.aliases, order);
+  const name = text(subject.labels, locale, original);
+  const description = text(subject.descriptions, locale, original);
+  const aliases = text(subject.aliases, locale, original);
   if (name !== undefined) entries.push(['name', name]);
   if (description !== undefined) entries.push(['description', description]);
   if (aliases !== undefined) entries.push(['alternateName', [...aliases]]);
@@ -122,7 +124,7 @@ export function subjectJsonLd({
   // Select each related label once, even when many statements reference the same subject.
   const references = new Map<string, JsonValue>();
   for (const [id, entry] of Object.entries(related)) {
-    const label = text(entry.labels, order);
+    const label = text(entry.labels, locale);
     references.set(id, { '@id': `${idBase}${entry.redirect ?? id}`, ...(label === undefined ? {} : { name: label }) });
   }
 
