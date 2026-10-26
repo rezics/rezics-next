@@ -234,9 +234,7 @@ export async function writeProposal(
       revision,
       release: options.release.digest,
       transaction_id: transactionId,
-      source:
-        options.source ??
-        accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
+      source: options.source ?? accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
     });
     await updateSubjectRelease.run(tx, {
       route,
