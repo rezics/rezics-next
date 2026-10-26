@@ -4,13 +4,16 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../kernel/client';
 import type { OfferPageData } from './offer';
 import { formatOfferPrice } from './price';
+import { subjectCover } from './subject-cover';
 
 type OfferRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['offers']>['get']>>['data']>;
 
 const reads = new WeakMap<Request, Map<string, Promise<OfferPageData>>>();
 
 async function readOnce(id: string, locale: string): Promise<OfferPageData> {
-  const result = await kernelClient().offers({ offerId: id }).get();
+  const result = await kernelClient()
+    .offers({ offerId: id })
+    .get({ query: { languages: locale } });
   if (result.error) {
     if (result.status === 404 || result.error.status === 404) throw notFound();
     throw new Error('Kernel offer read failed');
@@ -24,6 +27,7 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     state: offer.state,
     price: formatOfferPrice(locale, offer.currency, offer.unitAmountMinor),
     idempotencyKey: crypto.randomUUID(),
+    subject: subjectCover(locale, offer.targetSubjectId, offer.title, offer.subject),
   };
 }
 

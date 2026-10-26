@@ -628,9 +628,9 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Offer page (`/<locale>/offers/<id>`)
 
-- **Touches:** Root preferences → D `signedIn`; one anonymous K `GET /v1/offers/<id>`; the price is formatted locally from `unitAmountMinor` and the currency's minor-unit digits. The page renders one idempotency key and reuses it for retries
-- **Bound:** 1 K, ≤1 D, 0 R and 0 A. Constant offer; no list
-- **Growth check:** `tests/checkout-cost.test.ts`: `offer page stays within its bound as s grows`
+- **Touches:** Root preferences → D `signedIn`; one anonymous K `GET /v1/offers/<id>?languages=<locale>`, which returns the sold subject's summary (title in the visitor's language, types, cover) in the same response; the price is formatted locally from `unitAmountMinor` and the currency's minor-unit digits. The page renders one idempotency key and reuses it for retries. The browser then loads at most one cover variant through the media route (one K `authorizeDownload`, the media download row). An unknown, hidden or unreadable subject (`null`) never fails the page: the cover area shows the typographic placeholder with the offer title
+- **Bound:** 1 K, ≤1 D, 0 R and 0 A for the page; ≤1 download per visit. Constant offer; no list
+- **Growth check:** `tests/checkout-cost.test.ts`: `offer page stays within its bound as s grows`, at s = 1, 8 and 64, asserts the one call and its `languages` query
 
 ### Checkout start (`POST /checkout`)
 

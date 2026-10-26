@@ -1,9 +1,11 @@
-import { Button } from '@rezics/ui/button';
+import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { OfferPageData } from './offer';
 import { PageHeading } from '../shell/page-heading';
+import { SubjectCover } from './subject-cover';
 
 type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable' | 'closed';
 
@@ -58,29 +60,31 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
     }
   }
 
+  const note =
+    phase === 'unavailable'
+      ? m.offer_unavailable()
+      : phase === 'retry'
+        ? m.offer_retry_note()
+        : phase === 'closed'
+          ? m.offer_start_closed()
+          : null;
+
   return (
     <article className="max-w-xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
-      <header className="space-y-4">
-        <PageHeading className="text-foreground">{offer.title}</PageHeading>
-        <p className="space-y-1">
-          <span className="block text-sm font-medium text-muted-foreground">{m.offer_price()}</span>
-          <span className="block font-serif text-3xl text-foreground tabular-nums">{offer.price}</span>
-        </p>
+      <header className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+        <SubjectCover data={offer.subject} size="md" priority />
+        <div className="min-w-0 space-y-4">
+          <PageHeading className="text-foreground">{offer.title}</PageHeading>
+          <p className="space-y-1">
+            <span className="block text-sm font-medium text-muted-foreground">{m.offer_price()}</span>
+            <span className="block font-serif text-3xl text-foreground tabular-nums">{offer.price}</span>
+          </p>
+        </div>
       </header>
-      {phase === 'unavailable' && (
-        <p className="rounded-xl border border-border bg-muted px-4 py-3 text-foreground" role="status">
-          {m.offer_unavailable()}
-        </p>
-      )}
-      {phase === 'retry' && (
-        <p className="rounded-xl border border-border bg-muted px-4 py-3 text-foreground" role="status">
-          {m.offer_retry_note()}
-        </p>
-      )}
-      {phase === 'closed' && (
-        <p className="rounded-xl border border-border bg-muted px-4 py-3 text-foreground" role="status">
-          {m.offer_start_closed()}
-        </p>
+      {note && (
+        <Alert role="status">
+          <AlertDescription className="text-foreground">{note}</AlertDescription>
+        </Alert>
       )}
       <div>
         {phase === 'retry' ? (

@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { loadOffer } from './offer.server';
 import { UUID } from './price';
+import type { SubjectCoverData } from './subject-cover';
 
 export type OfferPageData = {
   id: string;
@@ -11,6 +12,7 @@ export type OfferPageData = {
   state: 'active' | 'delisted';
   price: string;
   idempotencyKey: string;
+  subject: SubjectCoverData;
 };
 
 function validateOffer(input: unknown): { id: string; locale: string } {
