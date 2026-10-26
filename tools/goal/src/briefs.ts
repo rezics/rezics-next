@@ -118,7 +118,8 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   for (const key of ['lines', 'files'])
     if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
       throw new Error(`estimate.${key} must be positive`);
-  if (raw.target !== undefined && raw.target !== 'stabilize') throw new Error('brief target must be stabilize');
+  if (raw.target !== undefined && raw.target !== 'stabilize')
+    throw new Error('brief target must be stabilize; a brief without a target line goes to dev');
   const brief: Brief = {
     goal: text(raw.goal, 'goal'),
     manager: text(raw.manager ?? raw.goal, 'manager'),
