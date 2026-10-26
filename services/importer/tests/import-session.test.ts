@@ -1,11 +1,15 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Importer } from '../src/importer.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
-const fixture = JSON.parse(readFileSync('specs/fixtures/imports/ledger/wikidata.jsonl', 'utf8').split('\n')[0]!);
+const fixture = JSON.parse(
+  readFileSync(join(import.meta.dir, '../../../specs/fixtures/imports/ledger/wikidata.jsonl'), 'utf8').split('\n')[0]!,
+);
 const registration = createSourceRegistration('wikidata');
 function row(id = 1, title = 'Target', aliases = 0) {
   const r = structuredClone(fixture);
@@ -63,7 +67,7 @@ function fake() {
   };
 }
 function directory() {
-  return mkdtempSync('.temp/importer-local-');
+  return mkdtempSync(join(tmpdir(), 'importer-local-'));
 }
 function defer() {
   let resolve!: () => void;
@@ -154,7 +158,7 @@ test('dead process owner recovers immediately with birth identity and no lease t
     [
       process.execPath,
       '--eval',
-      `import {ImportSession} from './services/importer/src/import-session.ts';const s=new ImportSession(${JSON.stringify(`${dir}/state.sqlite`)});s.acquire('wikidata');s.store.begin('wikidata');console.log('ready');setInterval(()=>{},1000);`,
+      `import {ImportSession} from ${JSON.stringify(join(import.meta.dir, '../src/import-session.ts'))};const s=new ImportSession(${JSON.stringify(`${dir}/state.sqlite`)});s.acquire('wikidata');s.store.begin('wikidata');console.log('ready');setInterval(()=>{},1000);`,
     ],
     { stdout: 'pipe', stderr: 'pipe' },
   );
@@ -246,7 +250,9 @@ test('real ignored conversion and vanished record without owned candidates use z
 });
 
 test('unfenced media intent cannot acknowledge without resolver, while fenced cover never calls resolver', async () => {
-  const raw = JSON.parse(readFileSync('specs/fixtures/imports/bangumi/subject.json', 'utf8'));
+  const raw = JSON.parse(
+    readFileSync(join(import.meta.dir, '../../../specs/fixtures/imports/bangumi/subject.json'), 'utf8'),
+  );
   const r = { source: 'bangumi' as const, key: String(raw.id), revision: null, payload: raw };
   const source = createSourceRegistration('bangumi'),
     f = fake();

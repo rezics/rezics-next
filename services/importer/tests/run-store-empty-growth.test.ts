@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import { RUN_TABLES, RunStore, type Run, type SourceProjection } from '../src/run-store.ts';
@@ -163,8 +165,7 @@ test('no-effect acknowledgement validates hostile input without invoking accesso
 });
 
 test('zero-effect resolution persists across connections and lease rotation and is idempotent', () => {
-  mkdirSync('.temp', { recursive: true });
-  const directory = mkdtempSync('.temp/run-empty-');
+  const directory = mkdtempSync(join(tmpdir(), 'run-empty-'));
   const path = `${directory}/runs.sqlite`;
   let store = new RunStore<SourceProjection>(path, { projectionMode: 'source-record' });
   try {

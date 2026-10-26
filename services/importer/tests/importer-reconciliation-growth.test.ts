@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Importer } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -7,7 +9,9 @@ import { createSqliteProbe } from './support/sqlite-growth.ts';
 import { RUN_TABLES } from '../src/run-store.ts';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
-const fixture = JSON.parse(readFileSync('specs/fixtures/imports/ledger/wikidata.jsonl', 'utf8').split('\n')[0]!);
+const fixture = JSON.parse(
+  readFileSync(join(import.meta.dir, '../../../specs/fixtures/imports/ledger/wikidata.jsonl'), 'utf8').split('\n')[0]!,
+);
 const registration = createSourceRegistration('wikidata');
 function row(id = 1, title = 'Target', aliases = 0) {
   const r = structuredClone(fixture);
@@ -65,7 +69,7 @@ function fake() {
   };
 }
 function directory() {
-  return mkdtempSync('.temp/importer-local-');
+  return mkdtempSync(join(tmpdir(), 'importer-local-'));
 }
 // Capture all synchronous production SQLite entry points, including nested bindings,
 // store methods and ownership. Actual SQL, returned rows and EQP come from the probe.

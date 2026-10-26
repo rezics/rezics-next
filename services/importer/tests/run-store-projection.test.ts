@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { MAX_DUMP_RECORD_BYTES } from '../src/dumps-bytes';
 import { RunStore, type SourceProjection } from '../src/run-store';
 
 test('sanitized source projections roundtrip without inventing semantic statements', () => {
@@ -174,8 +175,8 @@ test('malformed source projections reject without executing descriptors or retai
       { value: Symbol('rawdump') },
       { value: () => secret },
       Object.assign([], { rawdump: secret }),
-      'x'.repeat(65536),
-      '\u0000'.repeat(12000),
+      'x'.repeat(MAX_DUMP_RECORD_BYTES - 1),
+      '\u0000'.repeat(Math.floor(MAX_DUMP_RECORD_BYTES / 6) + 1),
     ].map((normalizedRecord) => ({ sourceKind: 'bangumi', normalizedRecord })),
   ];
   let deep: unknown = null;
@@ -220,7 +221,16 @@ test('default staging still validates semantic statement fixtures', () => {
 });
 
 test('source JSON bounds use serialized UTF-8 bytes and retain JSON scalars', () => {
-  for (const normalizedRecord of [null, true, 42, '雪', 'x'.repeat(65534)]) {
+  const exactAscii = 'x'.repeat(MAX_DUMP_RECORD_BYTES - 2);
+  const overAscii = 'x'.repeat(MAX_DUMP_RECORD_BYTES - 1);
+  const exactSnow =
+    '雪'.repeat(Math.floor((MAX_DUMP_RECORD_BYTES - 2) / 3)) + 'x'.repeat((MAX_DUMP_RECORD_BYTES - 2) % 3);
+  const overSnow = '雪'.repeat((MAX_DUMP_RECORD_BYTES - 1) / 3);
+  expect(Buffer.byteLength(JSON.stringify(exactAscii))).toBe(MAX_DUMP_RECORD_BYTES);
+  expect(Buffer.byteLength(JSON.stringify(overAscii))).toBe(MAX_DUMP_RECORD_BYTES + 1);
+  expect(Buffer.byteLength(JSON.stringify(exactSnow))).toBe(MAX_DUMP_RECORD_BYTES);
+  expect(Buffer.byteLength(JSON.stringify(overSnow))).toBe(MAX_DUMP_RECORD_BYTES + 1);
+  for (const normalizedRecord of [null, true, 42, '雪', exactAscii, exactSnow]) {
     const { store, run, row } = sourceStore();
     try {
       const projection: SourceProjection = { sourceKind: 'bangumi', normalizedRecord };
@@ -230,7 +240,7 @@ test('source JSON bounds use serialized UTF-8 bytes and retain JSON scalars', ()
       store.close();
     }
   }
-  for (const normalizedRecord of ['x'.repeat(65535), '雪'.repeat(21845)]) {
+  for (const normalizedRecord of [overAscii, overSnow]) {
     const { store, run, row } = sourceStore();
     try {
       expect(() => store.stage(run, { row, projection: { sourceKind: 'bangumi', normalizedRecord } })).toThrow();

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { MAX_DUMP_RECORD_BYTES } from '../src/dumps-bytes.ts';
 import { RUN_TABLES, RunStore, type Run, type SourceProjection } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 
@@ -160,9 +161,20 @@ test('native slash key exception preserves identifier, metadata, JSON and capabi
         return keys[0];
       },
     };
-    for (const normalizedRecord of [unsafe, { body: 'x'.repeat(65536) }])
+    const oversized = { body: 'x'.repeat(MAX_DUMP_RECORD_BYTES - 10) };
+    expect(Buffer.byteLength(JSON.stringify(oversized))).toBe(MAX_DUMP_RECORD_BYTES + 1);
+    for (const normalizedRecord of [unsafe, oversized])
       expect(() => store.stage(run, { ...target, projection: { ...target.projection, normalizedRecord } })).toThrow();
     expect(invoked).toBe(false);
+    const exact = { body: 'x'.repeat(MAX_DUMP_RECORD_BYTES - 11) };
+    expect(Buffer.byteLength(JSON.stringify(exact))).toBe(MAX_DUMP_RECORD_BYTES);
+    const exactKey = '/works/OL2W';
+    const kept = {
+      ...record(exactKey),
+      projection: { ...record(exactKey).projection, normalizedRecord: exact },
+    };
+    store.stage(run, kept);
+    expect(store.key(source, exactKey, run).staged).toEqual(kept);
     for (const key of [`/works/OL${'1'.repeat(502)}W`, 'é:/@+._-1']) {
       store.stage(run, record(key));
       expect(store.key(source, key, run).staged).toEqual(record(key));

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { RecordStore, RECORD_LOOKUP_SQL, type RecordRow } from '../src/record-store.ts';
 
@@ -8,9 +8,7 @@ const row = (source: string, key: string, state: 'present'|'vanished' = 'present
   source, recordKey: key, recordRevision: 'unversioned', digest: 'a'.repeat(64), converter_revision: 'source@1', state,
 });
 function fixture(run: (path: string) => void) {
-  const base = resolve(import.meta.dir, '../../../.temp');
-  require('node:fs').mkdirSync(base, {recursive: true});
-  const directory = mkdtempSync(join(base, 'record-store-'));
+  const directory = mkdtempSync(join(tmpdir(), 'record-store-'));
   try { run(join(directory, 'imports.sqlite')); } finally { rmSync(directory,{recursive:true,force:true}); }
 }
 
