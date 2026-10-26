@@ -98,7 +98,7 @@ function entitlementView(entitlement: Entitlement) {
   return { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason, active: revokedAt === null };
 }
 async function orderView(pool: Pool, order: Order) {
-  const entitlement = await store.readOrderEntitlement(pool, routeOf(order.id), order.id);
+  const entitlement = await store.readOrderEntitlement(pool, routeOf(order.id)!, order.id);
   const { id, offerId, settlement, checkoutUrl, checkoutExpiresAt, createdAt } = order;
   return {
     id,
