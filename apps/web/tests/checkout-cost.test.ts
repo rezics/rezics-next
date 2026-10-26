@@ -15,8 +15,11 @@ mock.module('cloudflare:workers', () => ({
     },
   },
 }));
+let pageRequest: Request | undefined;
 mock.module('@tanstack/react-start/server', () => ({
-  getRequest() {},
+  getRequest() {
+    return pageRequest;
+  },
   setResponseHeader() {},
 }));
 mock.module('@tanstack/react-router', () => ({
@@ -61,6 +64,9 @@ type Offer = {
 type Order = {
   id: string;
   offerId: string;
+  title: string;
+  targetSubjectId: string;
+  subject: null;
   settlement: 'paid' | 'pending' | 'failed' | 'unknown';
   checkoutUrl: string | null;
   checkoutExpiresAt: string | null;
@@ -84,6 +90,9 @@ const offerOf = (id: string): Offer => ({
 const orderOf = (id: string, settlement: Order['settlement'], offerId = targetOfferId): Order => ({
   id,
   offerId,
+  title: 'A field guide to stars',
+  targetSubjectId: contentId(90),
+  subject: null,
   settlement,
   checkoutUrl: settlement === 'failed' ? null : checkoutUrl,
   checkoutExpiresAt: '2026-12-01T00:00:00.000Z',
@@ -187,7 +196,7 @@ const kernel = Bun.serve({
 kernelOrigin = kernel.url.origin;
 
 const { startCheckout } = await import('../src/checkout/start.ts');
-const { orderStatusResponse } = await import('../src/checkout/order.server.ts');
+const { loadOrder, orderStatusResponse } = await import('../src/checkout/order.server.ts');
 
 type Counts = { credential: number; signedIn: number; create: number; takeLogin: number; end: number; r2: number };
 function sessionHarness() {
@@ -376,6 +385,22 @@ test('order status read stays within its bound as s grows', async () => {
       });
       expect(counts.r2).toBe(0);
       expect(authCalls).toEqual([]);
+
+      // The page read is the same one call, with the page locale in its query, and the subject summary comes with it.
+      kernelCalls.length = 0;
+      const page = sessionHarness();
+      const pageLoad = orderRequest(id);
+      await prepareSession(pageLoad, page.env);
+      pageRequest = pageLoad;
+      const data = await loadOrder(id, 'de');
+      pageRequest = undefined;
+      expect(data).toMatchObject({ id, offerId: targetOfferId, settlement, title: 'A field guide to stars' });
+      expect(data.subject.subject.title).toBe('A field guide to stars');
+      expect(page.counts.credential).toBe(1);
+      expect(durableCalls(page.counts)).toBe(1);
+      expect(sequence(kernelCalls)).toEqual([`GET /v1/orders/${id}?languages=de`]);
+      expect(kernelCalls[0]).toMatchObject({ authorization: `Bearer ${accessToken}` });
+      expect(page.counts.r2).toBe(0);
     }
   }
 });

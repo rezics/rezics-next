@@ -99,6 +99,7 @@ const images = {
 };
 const offerWithoutSubject = id(6);
 const offerWithoutCover = id(7);
+const orderWithoutSubject = id(14);
 const offer: OfferRead = {
   offer: {
     id: id(1),
@@ -115,6 +116,9 @@ function order(n: number, settlement: OrderRead['order']['settlement'] = 'pendin
     order: {
       id: id(n),
       offerId,
+      title: offer.offer.title,
+      targetSubjectId: id(90),
+      subject: summaryOf('en', bookCover),
       settlement,
       checkoutUrl: settlement === 'failed' ? null : stripe,
       checkoutExpiresAt: '2026-12-01T00:00:00.000Z',
@@ -195,9 +199,19 @@ async function kernel(request: Request, url: URL): Promise<Response> {
       headers: { location: `/v1/orders/${result.order.id}`, 'cache-control': 'no-store' },
     });
   }
-  if (url.pathname === `/v1/orders/${id(10)}`) return json(order(10, 'paid'));
-  if (url.pathname === `/v1/orders/${id(11)}`) return json(order(11, settlePending ? 'paid' : 'pending'));
-  if (url.pathname === `/v1/orders/${id(12)}`) return json(order(12));
+  // The order read carries the subject summary in the asked language, as the offer read does.
+  const read = (n: number, settlement: OrderRead['order']['settlement'], subject = true): Response => {
+    const result = order(n, settlement);
+    return json({
+      order: { ...result.order, subject: subject ? summaryOf(call.languages, bookCover) : null },
+    } satisfies OrderRead);
+  };
+  if (url.pathname === `/v1/orders/${id(10)}`) return read(10, 'paid');
+  if (url.pathname === `/v1/orders/${id(11)}`) return read(11, settlePending ? 'paid' : 'pending');
+  if (url.pathname === `/v1/orders/${id(12)}`) return read(12, 'pending');
+  if (url.pathname === `/v1/orders/${orderWithoutSubject}`) return read(14, 'pending', false);
+  if (url.pathname === `/v1/orders/${id(15)}`) return read(15, 'failed');
+  if (url.pathname === `/v1/orders/${id(16)}`) return read(16, 'unknown');
   // An authenticated buyer cannot read another buyer's order.
   if (url.pathname === `/v1/orders/${id(13)}`) return problem(404, 'not_found');
   return problem(404, 'not_found');
@@ -818,6 +832,95 @@ test(
         }
       }
     expect(found).toEqual([]);
+  },
+  timeout,
+);
+
+test(
+  "the return page shows the order's title and the subject's cover in every settlement state",
+  async () => {
+    const auth = await signIn();
+    for (const [n, locale] of [
+      [10, 'en'],
+      [11, 'en'],
+      [15, 'en'],
+      [16, 'en'],
+      [10, 'de'],
+      [10, 'ja'],
+    ] as const) {
+      calls.length = 0;
+      settlePending = false;
+      const page = await open(`/${locale}/orders/${id(n)}?checkout=success`, auth.value);
+      try {
+        expect(await page.locator('main').innerText()).toContain(offer.offer.title);
+        const sources = page.locator('main picture source');
+        expect(await sources.count()).toBe(2);
+        expect(await sources.nth(0).getAttribute('srcset')).toMatch(new RegExp(`/media/${coverMedia}/avif-\\d+ `));
+        expect(await sources.nth(1).getAttribute('srcset')).toMatch(new RegExp(`/media/${coverMedia}/webp-\\d+ `));
+        expect(await page.locator('main picture img').count()).toBe(1);
+        const link = page.getByRole('link', { name: bookLabels[locale]!, exact: true });
+        expect(await link.getAttribute('href')).toBe(subjectPath(locale));
+        expect(reads(n)[0]!.languages).toBe(locale);
+        expect(reads(n)[0]!.authorization).toBe(`Bearer ${auth.access}`);
+        if (n === 11) {
+          // A settlement change from a recheck keeps the cover it already drew.
+          await page.locator('main picture img').evaluate((img) => ((img as HTMLElement).dataset.kept = 'yes'));
+          settlePending = true;
+          await page.waitForFunction(() =>
+            /paid|confirmed|payment received/i.test(document.querySelector('main')?.textContent ?? ''),
+          );
+          expect(await page.locator('main picture img').getAttribute('data-kept')).toBe('yes');
+          expect(await page.locator('main').innerText()).toContain(offer.offer.title);
+        }
+      } finally {
+        settlePending = true;
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  "an order whose subject has no summary shows the placeholder with the order's title",
+  async () => {
+    const auth = await signIn();
+    calls.length = 0;
+    const page = await open(`/en/orders/${orderWithoutSubject}?checkout=success`, auth.value);
+    try {
+      expect(await page.getByRole('heading', { level: 1 }).count()).toBe(1);
+      const cover = page.locator('main [data-slot="cover"]');
+      expect(await cover.count()).toBe(1);
+      expect(await cover.getAttribute('data-state')).toBe('placeholder');
+      expect(await cover.textContent()).toContain(offer.offer.title);
+      expect(await page.locator('main').innerText()).toContain(offer.offer.title);
+      expect(await page.locator('main img').count()).toBe(0);
+      expect(await page.locator('main a[href*="/subjects/"]').count()).toBe(0);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'the order status recheck keeps its response shape',
+  async () => {
+    const auth = await signIn();
+    for (const [n, settlement] of [
+      [10, 'paid'],
+      [12, 'pending'],
+      [15, 'failed'],
+    ] as const) {
+      calls.length = 0;
+      const response = await fetch(`${await site()}/orders/${id(n)}/status`, {
+        headers: { accept: 'application/json', cookie: `${session}=${auth.value}` },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ id: id(n), offerId: id(1), settlement });
+      expect(reads(n)).toHaveLength(1);
+      expect(reads(n)[0]!.languages).toBeNull();
+    }
   },
   timeout,
 );
