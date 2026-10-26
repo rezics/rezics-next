@@ -75,6 +75,13 @@ const fixtures = {
     sourceEpoch: 1,
     sourcePosition: '9223372036854775807',
   },
+  'com.rezics.content.author-item.projected.v1': {
+    authorAccountId: actorId,
+    itemKind: 'thread',
+    itemId: threadId,
+    sourceEpoch: 1,
+    sourcePosition: '9223372036854775807',
+  },
   'com.rezics.content.subject-thread.projected.v1': {
     subjectId: itemId,
     threadId,

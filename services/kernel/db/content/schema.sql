@@ -39,6 +39,24 @@ $$;
 
 
 --
+-- Name: guard_author_item(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_author_item() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ROW(NEW.route, NEW.author_account_id, NEW.item_kind, NEW.item_id, NEW.thread_id, NEW.thread_kind, NEW.created_at)
+       IS DISTINCT FROM ROW(OLD.route, OLD.author_account_id, OLD.item_kind, OLD.item_id, OLD.thread_id, OLD.thread_kind, OLD.created_at)
+     OR ROW(NEW.source_epoch, NEW.source_position) <= ROW(OLD.source_epoch, OLD.source_position) THEN
+    RAISE EXCEPTION 'Author item identity, creation time and source watermark cannot regress' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_board_thread(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -433,6 +451,32 @@ $_$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: author_item; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.author_item (
+    route integer NOT NULL,
+    author_account_id uuid NOT NULL,
+    item_kind text NOT NULL,
+    item_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    thread_kind text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT author_item_check CHECK ((route = ((get_byte(uuid_send(author_account_id), 10) * 256) + get_byte(uuid_send(author_account_id), 11)))),
+    CONSTRAINT author_item_check1 CHECK ((((item_kind = 'thread'::text) AND (item_id = thread_id)) OR ((item_kind = 'post'::text) AND (item_id <> thread_id)))),
+    CONSTRAINT author_item_check2 CHECK (((get_byte(uuid_send(item_id), 10) = get_byte(uuid_send(thread_id), 10)) AND (get_byte(uuid_send(item_id), 11) = get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT author_item_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT author_item_item_kind_check CHECK ((item_kind = ANY (ARRAY['thread'::text, 'post'::text]))),
+    CONSTRAINT author_item_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT author_item_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT author_item_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT author_item_thread_kind_check CHECK ((thread_kind = ANY (ARRAY['discussion'::text, 'review'::text])))
+);
+
 
 --
 -- Name: board; Type: TABLE; Schema: content; Owner: -
@@ -936,6 +980,14 @@ CREATE TABLE content.thread (
 
 
 --
+-- Name: author_item author_item_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.author_item
+    ADD CONSTRAINT author_item_pkey PRIMARY KEY (route, author_account_id, item_kind, item_id);
+
+
+--
 -- Name: board board_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1120,6 +1172,13 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: author_item_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX author_item_page_idx ON content.author_item USING btree (route, author_account_id, item_kind, created_at DESC, item_id);
+
+
+--
 -- Name: board_one_global_reviews_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -1244,6 +1303,13 @@ CREATE INDEX subject_thread_page_idx ON content.subject_thread USING btree (rout
 --
 
 CREATE UNIQUE INDEX thread_one_live_review_idx ON content.thread USING btree (route, board_id, author_account_id, review_subject_id) WHERE ((kind = 'review'::text) AND review_live AND (availability = 'available'::text) AND (visibility <> 'taken_down'::text));
+
+
+--
+-- Name: author_item author_item_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER author_item_identity BEFORE UPDATE ON content.author_item FOR EACH ROW EXECUTE FUNCTION content.guard_author_item();
 
 
 --

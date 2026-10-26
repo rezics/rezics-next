@@ -43,6 +43,21 @@ Published erased posts remain in thread pages as `removed: true` with `body: nul
 
 `clearErasedPostRevisions(pool, { postId }, deadline)` clears retained revision bodies, their SHA-256 digests and search text using the committed tombstone as authority. Each digest is cleared in the same statement as its body, since retaining a hash would let a reader confirm guesses about erased text. It runs `null-erased-revisions.sql` in atomic pages of 100, releases each connection between pages and can safely run again. It changes no revision of an available post. This module exports the cleanup for direct invocation; worker registration and consumption of the post-erased event belong to the content work integration.
 
+## Author items
+
+`content.author_item` keeps candidate threads and replies on the author's route for profile reads. The
+`content_author_item` effect handles thread creation, reply creation and ID-only post erasure with one guarded
+command in the author's partition per event. `actorId` supplies the author and the creation event's `activityAt`
+supplies its original creation time, including microseconds. Thread creation emits only `thread.created.v1`, whose
+`itemId` is the opening post; the index stores the thread identity instead, so the opening post is never a reply.
+Both discussion and review threads retain their kind, and replies retain their containing thread. Erasure reads
+the retained post's author by primary key in the thread's partition and releases that connection before the author
+command. Missing posts and unchanged rows do nothing; receipts make committed replay inert and the source epoch
+and position guard rejects stale writes. No backfill is needed.
+
+Takedown, visibility and Realm changes are not mirrored. These rows are candidates only: future profile reads must
+apply the final disclosure checks used by subject thread reads.
+
 ## Covers
 
 A cover is a media object with purpose `cover`, named by a `schema:image` statement on its subject. One subject can have several images; the preferred-rank statement is its cover. An edition's cover belongs to the edition. A work without its own cover shows the cover of its representative edition, which the work names with one statement, so choosing a cover is one indexed read and never a scan of the work's editions. A work may name one representative edition per language; the cover then follows the same language choice as the title, so a reader never sees a title in one language over a cover chosen for another.
@@ -118,6 +133,12 @@ Board candidates cap `s` at 200 and collection caps it at 100. Post and revision
   reviews the board or subject has. Thread insert and update guards read no table.
 - **Growth check:** `test/content/growth-threads.test.ts`, `Review creation stays within its bound as the reviews board grows`:
   256, 1024 and 4096 reviews, seeded set-based at their authors' routes, with a spare review for each scale's warm-up.
+
+### Author item index
+
+- **Touches:** One guarded upsert or delete in the author's partition per event, plus C. Erasure adds one post primary-key read and its partition anchor in the thread's partition, released first.
+- **Bound:** Constant rows and statements. Blocks O(log I) for I items by the author, plus logarithmic command and source primary-key probes. The route-leading primary key and read index never scan the author's history.
+- **Growth check:** `test/content/author-item-index.test.ts`, `author item index` at 64, 512 and 4096 items by the author. Thread creation, reply creation and erasure keep rows and statements constant; each scale warms on spare probes.
 
 ### Hot board page
 

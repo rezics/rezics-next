@@ -1,3 +1,4 @@
+-- unbound: at most 256 exact media keys are grouped into one partition by checkMediaObjects; routes vary within that group.
 -- A reference fact only: current subject authorization and source fences belong to the caller.
 WITH input AS NOT MATERIALIZED (
   SELECT :partition::integer AS partition

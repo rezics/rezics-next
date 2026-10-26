@@ -63,6 +63,16 @@ export const CONTENT_EVENTS = {
   ),
   ...OPERATION_EVENTS,
   ...BOARD_EVENTS,
+  'com.rezics.content.author-item.projected.v1': Type.Object(
+    {
+      authorAccountId: UUID,
+      itemKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
+      itemId: UUID,
+      sourceEpoch: Type.Integer({ minimum: 1 }),
+      sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.subject-thread.projected.v1': Type.Object(
     {
       subjectId: UUID,
