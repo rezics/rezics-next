@@ -187,14 +187,36 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   return result.stdout.trim();
 }
 
-function capture(
+// Asynchronous, so the file pool's lanes overlap; a synchronous spawn blocks the event loop and runs them one at a time.
+export async function capture(
   program: string,
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
-): { status: number | null; output: string } {
-  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
-  if (result.error) throw result.error;
-  return { status: result.status, output: `${result.stdout}${result.stderr}` };
+): Promise<{ status: number; output: string }> {
+  const child = Bun.spawn([program, ...args], { cwd: directory, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { status, output: `${stdout}${stderr}` };
+}
+
+async function psql(sql: string): Promise<void> {
+  const result = await capture('docker', [
+    'exec',
+    container,
+    'psql',
+    '-U',
+    'rezics',
+    '-d',
+    'postgres',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-c',
+    sql,
+  ]);
+  if (result.status !== 0) throw new Error(`psql -c ${sql} failed:\n${result.output}`);
 }
 
 export function docker(args: string[]): string {
@@ -230,6 +252,9 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     'full_page_writes=off',
     '-c',
     'max_wal_size=256MB',
+    // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
+    '-c',
+    'max_connections=500',
   ]);
 }
 
@@ -349,7 +374,11 @@ async function main(): Promise<void> {
     run(oxlint, ['--config', '../../.oxlintrc.json', '.'], env);
     run(oxfmt, ['--check', '.'], env);
   } else {
-    const typecheck = capture(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'], env);
+    const typecheck = await capture(
+      tsc,
+      ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
+      env,
+    );
     const diagnostics = ownDiagnostics(typecheck.output, plan.files);
     if (diagnostics.length) fail(diagnostics.join('\n'));
     if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
@@ -368,25 +397,11 @@ async function main(): Promise<void> {
   const concurrency = Number(process.env.KERNEL_CHECK_CONCURRENCY ?? 6);
   if (!Number.isInteger(concurrency) || concurrency < 1) fail('KERNEL_CHECK_CONCURRENCY must be a positive integer');
   const outcomes = await scheduleFiles(testFiles, concurrency, {
-    create: (_file, database) => {
-      // Each file gets a fresh copy so its result cannot depend on writes from another file.
-      docker([
-        'exec',
-        container,
-        'psql',
-        '-U',
-        'rezics',
-        '-d',
-        'postgres',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-c',
-        `CREATE DATABASE ${database} TEMPLATE rezics`,
-      ]);
-    },
-    run: (file, database) => {
+    // Each file gets a fresh copy so its result cannot depend on writes from another file.
+    create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
+    run: async (file, database) => {
       // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
-      const result = capture('bun', ['test', '--timeout', '60000', `./${file}`], {
+      const result = await capture('bun', ['test', '--timeout', '60000', `./${file}`], {
         ...env,
         DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
         OPENSEARCH_URL: searchUrl,
@@ -394,21 +409,7 @@ async function main(): Promise<void> {
       if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
       return result.output;
     },
-    drop: (_file, database) => {
-      docker([
-        'exec',
-        container,
-        'psql',
-        '-U',
-        'rezics',
-        '-d',
-        'postgres',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-c',
-        `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`,
-      ]);
-    },
+    drop: (_file, database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
     onComplete: (outcome) => {
       if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
       if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);

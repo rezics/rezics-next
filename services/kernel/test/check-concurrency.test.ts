@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { scheduleFiles } from '../scripts/check.ts';
+import { capture, scheduleFiles } from '../scripts/check.ts';
 
 test('schedules files in order with bounded concurrency', async () => {
   const started: string[] = [];
@@ -51,4 +51,20 @@ test('drops every created database and attributes runner failures to files', asy
     ['bad', 'test failed'],
     ['also-ok', undefined],
   ]);
+});
+
+test('test file processes overlap instead of blocking the pool one at a time', async () => {
+  const startedAt = performance.now();
+  const outcomes = await scheduleFiles(['a', 'b', 'c'], 3, {
+    create: async () => undefined,
+    run: (file) => capture('sh', ['-c', `sleep 0.5; echo ${file}`]),
+    drop: async () => undefined,
+  });
+
+  expect(outcomes.map(({ output }) => output)).toEqual([
+    { status: 0, output: 'a\n' },
+    { status: 0, output: 'b\n' },
+    { status: 0, output: 'c\n' },
+  ]);
+  expect(performance.now() - startedAt).toBeLessThan(1000);
 });
