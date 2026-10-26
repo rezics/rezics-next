@@ -112,7 +112,7 @@ async function publishInside(pool: Pool, plan: SourceFencePlan, partition: numbe
 
 export function bulkRoutes(
   app: ReturnType<typeof subjectRoutes>,
-  { pool, routeKey, access }: { pool: Pool; routeKey: Uint8Array; access: () => Access },
+  { pool, routeKey, access, clock }: { pool: Pool; routeKey: Uint8Array; access: () => Access; clock: () => Date },
 ) {
   return app.post(
     customMethod('/v1/subjects', 'batchWrite'),
@@ -287,6 +287,7 @@ export function bulkRoutes(
                   authorization,
                   release,
                   deadline: job.deadline,
+                  clock,
                 }),
               );
               results[pending.index] = { key, ...result };

@@ -207,6 +207,7 @@ export function createKernel(dependencies: KernelDependencies) {
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
+    clock,
     access: () => resolveAccess({ actions: actionCatalogue(batched), realmRoleReader }),
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, {

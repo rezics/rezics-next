@@ -137,6 +137,7 @@ export async function batchCommand(
     authorization: CommandAuthorization;
     release: { digest: string; release: Release };
     deadline: number;
+    clock: () => Date;
   },
 ): Promise<Value & { component: SubjectComponent }> {
   const { command, actor, route } = options;
@@ -149,6 +150,7 @@ export async function batchCommand(
       {
         partition,
         deadline: options.deadline,
+        clock: options.clock,
         authorization: options.authorization,
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
         receipt: { actorAccountId: actor.accountId, kind, key: command.key, digest },
