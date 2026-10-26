@@ -24,6 +24,7 @@ const postTimes = ['2026-10-24T00:00:00.000Z', '2026-10-24T00:01:00.000Z', '2026
 const boardTitle = 'Stories of the little prince';
 const threadTitle = 'Letters from B-612';
 const searchPrefix = 'webrec';
+const pagePrefix = 'webrecpage';
 const matchingQuery = 'Prince';
 const emptyQuery = 'zzzznotasubject';
 let container = '';
@@ -231,19 +232,133 @@ async function main(): Promise<void> {
     fr: 'Le Petit Prince',
     es: 'El Principito',
   };
-  const created = await fetch(`${origin}/v1/subjects`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+  const create = async (body: JsonObject, description: string): Promise<string> => {
+    const created = await fetch(`${origin}/v1/subjects`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+      },
+      body: JSON.stringify(body),
+    });
+    const creation = (await created.json()) as { subject?: { id?: string } };
+    const id = creation.subject?.id;
+    if (created.status !== 201 || !id)
+      throw new Error(`Creating ${description} returned ${created.status}: ${JSON.stringify(creation)}`);
+    return id;
+  };
+  const item = (property: string, id: string) => ({ property: { id: property }, value: { type: 'value', content: id } });
+  const code = (property: string, content: string) => ({ property: { id: property }, value: { type: 'value', content } });
+  const date = (time: string, precision: 9 | 11) => ({
+    property: { id: 'schema:datePublished' },
+    value: {
+      type: 'value',
+      content: { time, precision, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
     },
-    body: JSON.stringify({ type: 'schema:Book', labels }),
   });
-  const creation = (await created.json()) as { subject?: { id?: string } };
-  const subjectId = creation.subject?.id;
-  if (created.status !== 201 || !subjectId)
-    throw new Error(`Creating the recording subject returned ${created.status}: ${JSON.stringify(creation)}`);
+  const saintExupery = await create(
+    {
+      type: 'schema:Person',
+      labels: {
+        en: 'Antoine de Saint-Exupéry',
+        'zh-Hant': '安東尼·聖修伯里',
+        'zh-Hans': '安托万·德·圣埃克苏佩里',
+        ja: 'アントワーヌ・ド・サン＝テグジュペリ',
+        ko: '앙투안 드 생텍쥐페리',
+        de: 'Antoine de Saint-Exupéry',
+        fr: 'Antoine de Saint-Exupéry',
+        es: 'Antoine de Saint-Exupéry',
+      },
+    },
+    'the author',
+  );
+  const woods = await create(
+    {
+      type: 'schema:Person',
+      labels: {
+        en: 'Katherine Woods',
+        'zh-Hant': '凱瑟琳·伍茲',
+        'zh-Hans': '凯瑟琳·伍兹',
+        ja: 'キャサリン・ウッズ',
+        ko: '캐서린 우즈',
+        de: 'Katherine Woods',
+        fr: 'Katherine Woods',
+        es: 'Katherine Woods',
+      },
+    },
+    'the translator',
+  );
+  const reynal = await create({ type: 'schema:Organization', labels: { en: 'Reynal & Hitchcock' } }, 'a publisher');
+  const gallimard = await create({ type: 'schema:Organization', labels: { en: 'Gallimard' } }, 'a publisher');
+  const fable = await create(
+    {
+      type: 'skos:Concept',
+      labels: {
+        en: 'Fable',
+        'zh-Hant': '寓言',
+        'zh-Hans': '寓言',
+        ja: '寓話',
+        ko: '우화',
+        de: 'Fabel',
+        fr: 'Fable',
+        es: 'Fábula',
+      },
+    },
+    'the genre',
+  );
+  const subjectId = await create(
+    {
+      type: 'schema:Book',
+      labels,
+      descriptions: {
+        en: 'A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential.',
+        ja: '砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。',
+        fr: "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde.",
+        'zh-Hant': '迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。',
+      },
+      aliases: { en: ['Le Petit Prince'], ja: ['星の王子様'] },
+      statements: {
+        'schema:author': [item('schema:author', saintExupery)],
+        'schema:datePublished': [date('+1943-04-06T00:00:00Z', 11)],
+        'schema:inLanguage': [code('schema:inLanguage', 'fr')],
+        'schema:genre': [item('schema:genre', fable)],
+      },
+    },
+    'the recording subject',
+  );
+  // The release gives publisher and translator to editions, not to the work.
+  const editionIds = [
+    await create(
+      {
+        type: 'bf:Instance',
+        labels: { en: 'The Little Prince (Reynal & Hitchcock, 1943)' },
+        statements: {
+          'schema:exampleOfWork': [item('schema:exampleOfWork', subjectId)],
+          'schema:author': [item('schema:author', saintExupery)],
+          'schema:translator': [item('schema:translator', woods)],
+          'schema:publisher': [item('schema:publisher', reynal)],
+          'schema:datePublished': [date('+1943-04-06T00:00:00Z', 11)],
+          'schema:inLanguage': [code('schema:inLanguage', 'en')],
+        },
+      },
+      'the first edition',
+    ),
+    await create(
+      {
+        type: 'bf:Instance',
+        labels: { en: 'Le Petit Prince (Gallimard, 1946)', fr: 'Le Petit Prince (Gallimard, 1946)' },
+        statements: {
+          'schema:exampleOfWork': [item('schema:exampleOfWork', subjectId)],
+          'schema:author': [item('schema:author', saintExupery)],
+          'schema:publisher': [item('schema:publisher', gallimard)],
+          'schema:datePublished': [date('+1946-00-00T00:00:00Z', 9)],
+          'schema:inLanguage': [code('schema:inLanguage', 'fr')],
+        },
+      },
+      'the second edition',
+    ),
+  ];
   if (!pool) throw new Error('Database pool is not open.');
   const database = pool;
   const { newId, partitionOf } = await import(`${kernelBase}/src/route/route.ts`);
@@ -338,6 +453,42 @@ async function main(): Promise<void> {
   );
   await applyBoardCandidate(database, { id: threadId, boardId, createdAt: threadAt, epoch: 1, position: 1n });
 
+  const searchUrl = `http://127.0.0.1:${publishedPort(searchContainer, '9200/tcp')}`;
+  await waitForSearch(searchUrl, searchContainer);
+  const { createOpenSearch } = await import(`${kernelBase}/src/search/opensearch.ts`);
+  const { bulkLines, documentActions } = await import(`${kernelBase}/src/search/document.ts`);
+  const { createSubjectIndex, subjectAlias, subjectIndexName } = await import(`${kernelBase}/src/search/indices.ts`);
+  const { createSearchService } = await import(`${kernelBase}/src/search/service.ts`);
+  const { subjectPartition } = await import(`${kernelBase}/src/search/source.ts`);
+  const { createKernel } = await import(`${kernelBase}/src/http/kernel.ts`);
+  const { subjectSource } = await import(`${kernelBase}/src/semantic/search-source.ts`);
+  const opensearch = createOpenSearch(searchUrl);
+  const cursors = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
+  // The editions list of the subject page is a search read, and the spawned kernel does not mount search. A second
+  // in-process kernel over the same database answers the page read, with the editions indexed from the real source.
+  await createSubjectIndex(opensearch, pagePrefix, 1);
+  const pageIndex = subjectIndexName(pagePrefix, 1);
+  const realSource = subjectSource(database);
+  for (const id of editionIds) {
+    const partition = subjectPartition(id);
+    const snapshot = await realSource.read(partition, [id]);
+    await opensearch.bulk(bulkLines(pageIndex, documentActions(snapshot, [id])), { query: { refresh: 'wait_for' } });
+  }
+  await opensearch.request('POST', '/_aliases', {
+    actions: [{ add: { index: pageIndex, alias: subjectAlias(pagePrefix) } }],
+  });
+  const pageKernel = createKernel({
+    pool: database,
+    routeKey: Buffer.from(kernelRouteKey, 'base64url'),
+    search: createSearchService({
+      pool: database,
+      client: opensearch,
+      prefix: pagePrefix,
+      source: realSource,
+      cursors,
+    }),
+  });
+
   const recorded = new Map<string, JsonObject>();
   const save = async (name: string, path: string) => {
     const response = await fetch(new URL(path, origin));
@@ -353,11 +504,13 @@ async function main(): Promise<void> {
   await expectStatus('missing-subject', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
   const missingSubjectId = '00000000-0000-4000-8000-000000000000';
   const savePost = async (name: string, payload: unknown) => {
-    const response = await fetch(new URL('/v1/pages:read', origin), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const response = await pageKernel.handle(
+      new Request('http://kernel.test/v1/pages:read', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    );
     const body = objectBody(await response.json(), name);
     recorded.set(name, { ...body, status: response.status });
     return response.status;
@@ -384,6 +537,17 @@ async function main(): Promise<void> {
     typeof template.scope !== 'string'
   )
     throw new Error(`subject-page is not a page for the recorded subject: ${JSON.stringify(subjectPage)}`);
+  const subjectRecord = objectBody(objectBody(recorded.get('subject'), 'subject').subject, 'subject record');
+  const described = Object.keys(objectBody(subjectRecord.descriptions, 'subject descriptions'));
+  const aliased = Object.values(objectBody(subjectRecord.aliases, 'subject aliases')).flat();
+  if (!['en', 'ja'].every((language) => described.includes(language)) || aliased.length < 2)
+    throw new Error(`The recorded subject needs descriptions in en and ja and two aliases: ${JSON.stringify(subjectRecord)}`);
+  const pageReads = Object.values(objectBody(subjectPage.reads, 'subject-page reads')).map((read) =>
+    objectBody(objectBody(read, 'subject-page read').body, 'subject-page read body'),
+  );
+  const editionList = pageReads.find((body) => Array.isArray(body.subjects));
+  if (!Array.isArray(editionList?.subjects) || editionList.subjects.length !== editionIds.length)
+    throw new Error(`The recorded page should list ${editionIds.length} editions: ${JSON.stringify(pageReads)}`);
   if ((await savePost('missing-subject-page', { target: { subject: missingSubjectId } })) !== 404)
     throw new Error(`missing-subject-page returned ${JSON.stringify(recorded.get('missing-subject-page'))}`);
   if (recorded.get('missing-subject-page')?.code !== 'not_found')
@@ -414,14 +578,6 @@ async function main(): Promise<void> {
   const reply = pagePosts.find((post) => objectBody(post, 'post').parentId === opening.post);
   if (!reply) throw new Error('The third post should reply to the opening post.');
 
-  const searchUrl = `http://127.0.0.1:${publishedPort(searchContainer, '9200/tcp')}`;
-  await waitForSearch(searchUrl, searchContainer);
-  const { createOpenSearch } = await import(`${kernelBase}/src/search/opensearch.ts`);
-  const { bulkLines, documentActions } = await import(`${kernelBase}/src/search/document.ts`);
-  const { createSubjectIndex, subjectAlias, subjectIndexName } = await import(`${kernelBase}/src/search/indices.ts`);
-  const { createSearchService } = await import(`${kernelBase}/src/search/service.ts`);
-  const { subjectPartition } = await import(`${kernelBase}/src/search/source.ts`);
-  const { createKernel } = await import(`${kernelBase}/src/http/kernel.ts`);
   const subject = objectBody(objectBody(recorded.get('subject'), 'subject').subject, 'subject record');
   const subjectLabels = objectBody(subject.labels, 'subject labels');
   const indexed = {
@@ -449,14 +605,12 @@ async function main(): Promise<void> {
       return subjectPartition(subjectId) === partition ? { position: 1n, count: 1 } : { position: 0n, count: 0 };
     },
   };
-  const opensearch = createOpenSearch(searchUrl);
   await createSubjectIndex(opensearch, searchPrefix, 1);
   const index = subjectIndexName(searchPrefix, 1);
   const partition = subjectPartition(subjectId);
   const snapshot = await source.read(partition, [subjectId]);
   await opensearch.bulk(bulkLines(index, documentActions(snapshot, [subjectId])), { query: { refresh: 'wait_for' } });
   await opensearch.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(searchPrefix) } }] });
-  const cursors = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
   const search = createSearchService({ pool: database, client: opensearch, prefix: searchPrefix, source, cursors });
   // The spawned kernel server does not mount search, so these reads use the same database through an in-process kernel.
   await search.search('anonymous', { text: matchingQuery, limit: 100 });
