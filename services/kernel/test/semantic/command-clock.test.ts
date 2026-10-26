@@ -17,7 +17,16 @@ const accounts = {
   realTimeWriter: '019a1b2c-3d4e-7f00-8a00-1a0000000072',
   seedWriter: '019a1b2c-3d4e-7f00-8a00-1a0000000073',
 };
-const actions = ['subject:create', 'subject:batch_write', 'subject:read', 'statement:propose'];
+const actions = [
+  'subject:create',
+  'subject:batch_write',
+  'subject:read',
+  'statement:propose',
+  'context:accept',
+  'context:adopt',
+  'subject:merge',
+  'moderation:hide',
+];
 const realAccess = await createRealAccess(admin, accounts, actions);
 const commandAt = new Date('2031-02-03T04:05:06.000Z');
 const hour = 60 * 60 * 1000;
@@ -42,8 +51,16 @@ beforeAll(async () => {
   ] as const) {
     const grantedActions =
       persona === 'configuredWriter'
-        ? ['subject:batch_write', 'subject:create', 'statement:propose']
-        : ['subject:batch_write'];
+        ? [
+            'subject:batch_write',
+            'subject:create',
+            'statement:propose',
+            'context:accept',
+            'context:adopt',
+            'subject:merge',
+            'moderation:hide',
+          ]
+        : ['subject:batch_write', 'statement:propose'];
     for (const action of grantedActions) {
       await admin.query(
         `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
@@ -60,14 +77,19 @@ afterAll(async () => {
   await admin.end();
 });
 
-async function call(path: string, body: unknown, persona: keyof typeof accounts = 'configuredWriter') {
+async function call(
+  path: string,
+  body: unknown,
+  persona: keyof typeof accounts = 'configuredWriter',
+  key = randomUUID(),
+) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${realAccess.bearer(persona)}`,
         'content-type': 'application/json',
-        'idempotency-key': `"${randomUUID()}"`,
+        'idempotency-key': `"${key}"`,
       },
       body: JSON.stringify(body),
     }),
@@ -157,4 +179,108 @@ test("a batch command runs at the kernel's configured clock", async () => {
     [refused[1]!.source.source, refused[1]!.source.external_id],
   );
   expect(refusedProposal.rows).toHaveLength(0);
+});
+
+test("subject routes run commands at the kernel's configured clock", async () => {
+  const created = async (label: string) => {
+    const response = await call('/v1/subjects', { type: 'schema:Book', labels: { en: label } });
+    expect(response.status).toBe(201);
+    return (response.body.subject as Record<string, any>).id as string;
+  };
+  const subject = await created('Subject clock');
+  const other = await created('Merge clock one');
+  const third = await created('Merge clock two');
+  const hidden = await created('Hide clock');
+
+  const proposed = await call(`/v1/subjects/${subject}/candidates`, {
+    statement: {
+      property: { id: 'schema:inLanguage' },
+      value: { type: 'value', content: 'ja' },
+    },
+  });
+  expect(proposed.status).toBe(201);
+  const candidate = (proposed.body.candidate as string);
+
+  const accepted = await call(`/v1/subjects/${subject}/candidates/${candidate}:accept`, {
+    context: GLOBAL_CONTEXT,
+    expected_head: null,
+  });
+  expect(accepted.status).toBe(200);
+  expect(accepted.body.acceptance).toEqual({
+    context: GLOBAL_CONTEXT,
+    candidate,
+    decision: 'accept',
+    head: 1,
+  });
+
+  const adopted = await call(`/v1/subjects/${subject}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property: 'schema:inLanguage',
+    mode: 'replace',
+    selection: [{ candidate, rank: 'normal' }],
+    expected_head: 1,
+  });
+  expect(adopted.status).toBe(200);
+  expect(adopted.body.adoption).toEqual({
+    context: GLOBAL_CONTEXT,
+    property: 'schema:inLanguage',
+    mode: 'replace',
+    selection: [{ candidate, rank: 'normal' }],
+    head: 2,
+  });
+
+  const hiddenStatement = await call(`/v1/subjects/${subject}/candidates/${candidate}:hide`, {
+    reason: 'Clock test',
+  });
+  expect(hiddenStatement.status).toBe(200);
+  expect(hiddenStatement.body).toMatchObject({
+    subject,
+    candidate,
+    visibility: 'hidden',
+    security_revision: 1,
+  });
+
+  const hiddenSubject = await call(`/v1/subjects/${hidden}:hide`, { reason: 'Clock test' });
+  expect(hiddenSubject.status).toBe(200);
+  expect(hiddenSubject.body).toEqual({
+    subject: hidden,
+    visibility: 'hidden',
+    security_revision: 1,
+  });
+
+  const merged = await call('/v1/subjects:merge', { subjects: [other, third] });
+  expect(merged.status).toBe(200);
+  expect(merged.body).toEqual({
+    survivor: [other, third].sort()[0],
+    redirected: [other, third].sort()[1],
+    revision: 2,
+  });
+
+  const beforeRefusal = await admin.query(
+    'SELECT count(*)::int AS count FROM semantic.revision WHERE subject_id = $1',
+    [subject],
+  );
+  const refusalKey = randomUUID();
+  const refused = await call(
+    `/v1/subjects/${subject}/candidates`,
+    {
+      statement: {
+        property: { id: 'schema:inLanguage' },
+        value: { type: 'value', content: 'fr' },
+      },
+    },
+    'realTimeWriter',
+    refusalKey,
+  );
+  expect(refused.status).toBe(403);
+  const afterRefusal = await admin.query(
+    'SELECT count(*)::int AS count FROM semantic.revision WHERE subject_id = $1',
+    [subject],
+  );
+  expect(afterRefusal.rows[0]?.count).toBe(beforeRefusal.rows[0]?.count);
+  const receipt = await admin.query(
+    'SELECT 1 FROM core.receipt WHERE actor_account_id = $1 AND idempotency_key = $2',
+    [accounts.realTimeWriter, refusalKey],
+  );
+  expect(receipt.rows).toHaveLength(0);
 });
