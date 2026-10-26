@@ -227,9 +227,22 @@ test('handle claims share a single namespace', async () => {
       route,
       actor,
     ]);
-    const constraints = await client.query(`SELECT count(*)::int AS count FROM pg_constraint
-      WHERE connamespace = 'access'::regnamespace AND contype = 'f'`);
-    expect(constraints.rows).toEqual([{ count: 0 }]);
+    // Cleanup continuations have same-anchor foreign keys. No foreign key may
+    // couple a handle, membership or account to a separately routed identity.
+    const constraints = await client.query(`SELECT conrelid::regclass::text AS source,
+      pg_get_constraintdef(oid) AS definition FROM pg_constraint
+      WHERE connamespace = 'access'::regnamespace AND contype = 'f' ORDER BY source`);
+    expect(constraints.rows).toEqual([
+      {
+        source: 'access.committed_continuation',
+        definition: 'FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id)',
+      },
+      {
+        source: 'access.operator_fence_page',
+        definition:
+          'FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id)',
+      },
+    ]);
   });
 });
 
