@@ -44,7 +44,9 @@ async function enqueue(workflowID: string, delaySeconds?: number): Promise<void>
 async function setTerminal(workflowID: string, status: string, completedAt: number | null): Promise<void> {
   await database.query(
     `UPDATE dbos.workflow_status
-     SET status = $2, completed_at = $3, queue_name = NULL, updated_at = $4
+     SET status = $2, completed_at = $3,
+         created_at = CASE WHEN $3::bigint IS NULL THEN created_at ELSE $3::bigint - 1 END,
+         queue_name = NULL, updated_at = $4
      WHERE workflow_uuid = $1`,
     [workflowID, status, completedAt, completedAt ?? Date.now()],
   );
@@ -158,6 +160,10 @@ test('the retention sweep keeps pending, enqueued, delayed and recently complete
   await setTerminal(recent, 'SUCCESS', cutoff + 1000);
   await setTerminal(onCutoff, 'SUCCESS', cutoff);
   await setTerminal(noCompletedAt, 'ERROR', null);
+  await database.query('UPDATE dbos.workflow_status SET created_at = $2 WHERE workflow_uuid = $1', [
+    recent,
+    cutoff - 1000,
+  ]);
 
   await runWorkflowRetentionSweep(30, client, new Date(now));
 
@@ -167,7 +173,7 @@ test('the retention sweep keeps pending, enqueued, delayed and recently complete
   expect((await client.getWorkflow(pending))?.status).toBe('PENDING');
   expect((await client.getWorkflow(enqueued))?.status).toBe('ENQUEUED');
   expect((await client.getWorkflow(delayed))?.status).toBe('DELAYED');
-  expect((await client.getWorkflow(recent))?.status).toBe('SUCCESS');
+  expect(await client.getWorkflow(recent)).toMatchObject({ status: 'SUCCESS', createdAt: cutoff - 1000 });
   expect((await client.getWorkflow(onCutoff))?.completedAt).toBe(cutoff);
   expect((await client.getWorkflow(noCompletedAt))?.completedAt).toBeUndefined();
 });

@@ -101,6 +101,8 @@ test('a short retention batch stays bounded as retained workflow history grows',
   expect(report.samples[0]!.cost.rows).toBeGreaterThan(0);
   expect(report.samples[1]!.cost.statements).toBe(report.samples[0]!.cost.statements);
   expect(report.samples[2]!.cost.statements).toBe(report.samples[0]!.cost.statements);
+
+  await db.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [`${prefix}short-%`]);
 });
 
 test('one retention batch stays bounded as retained and recent workflow history grow', async () => {

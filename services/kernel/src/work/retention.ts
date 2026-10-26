@@ -40,11 +40,12 @@ export function readWorkflowRetentionConfig(env: Environment): WorkflowRetention
   return { retentionDays };
 }
 
-function listInput(completedBefore: string): GetWorkflowsInput {
+function listInput(strictCutoff: string): GetWorkflowsInput {
   return {
     applicationName: WORK_APPLICATION,
     status: [...TERMINAL_WORKFLOW_STATUSES],
-    completedBefore,
+    completedBefore: strictCutoff,
+    endTime: strictCutoff,
     limit: WORKFLOW_RETENTION_BATCH_SIZE,
     sortDesc: false,
     loadInput: false,
@@ -52,7 +53,7 @@ function listInput(completedBefore: string): GetWorkflowsInput {
   };
 }
 
-/** Select and delete one bounded batch. The extra millisecond makes the SDK's inclusive cutoff strict. */
+/** Select and delete one bounded batch. The extra millisecond makes the SDK's inclusive cutoffs strict. */
 export async function runWorkflowRetentionBatch(
   retentionDays: number,
   sdk: WorkflowRetentionSdk = DBOS,
@@ -65,7 +66,8 @@ export async function runWorkflowRetentionBatch(
   )
     throw new RangeError('Invalid workflow retention period');
   const cutoff = now.getTime() - retentionDays * DAY_MS;
-  const statuses = await sdk.listWorkflows(listInput(new Date(cutoff - 1).toISOString()));
+  const strictCutoff = new Date(cutoff - 1).toISOString();
+  const statuses = await sdk.listWorkflows(listInput(strictCutoff));
   const ids = statuses
     .filter(
       (status) =>
