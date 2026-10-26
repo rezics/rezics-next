@@ -26,6 +26,7 @@ import {
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export type IntegrationCheck = { paths: string[]; command: string[] };
 import { resolveImportConflicts } from './import-conflicts.ts';
+import { resolveInsertedSections } from './section-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
@@ -168,6 +169,30 @@ function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: 
     .map((file) => file.path);
 }
 
+/**
+ * Resolve conflicts that have exactly one safe resolution: import-only hunks in code and insert-only hunks in Markdown.
+ * Returns false, leaving every file for a person, when any file holds another kind of conflict.
+ */
+export function resolveMechanicalConflicts(cwd: string, paths: readonly string[], formatCommand?: readonly string[]): boolean {
+  const resolved = new Map<string, string>();
+  for (const file of paths) {
+    const path = join(cwd, file);
+    if (!existsSync(path)) return false;
+    let text: string | undefined;
+    if (file.endsWith('.md')) {
+      git(cwd, 'checkout', '--conflict=diff3', '--', file);
+      text = resolveInsertedSections(readFileSync(path, 'utf8'));
+    } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
+    if (text === undefined) return false;
+    resolved.set(path, text);
+  }
+  for (const [path, text] of resolved) writeFileSync(path, text);
+  const format = formatCommand ?? [join(cwd, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
+  if (!format[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(format[0]!))
+    spawnSync(format[0]!, [...format.slice(1), ...paths], { cwd, encoding: 'utf8' });
+  return true;
+}
+
 function rebaseWithDerivedFiles(
   cwd: string,
   base: string,
@@ -184,7 +209,12 @@ function rebaseWithDerivedFiles(
       const conflicts = unmergedFiles(cwd);
       if (!conflicts.length) throw rebaseError;
       const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files).length > 0);
-      if (!derivedConflicts.length) return rebaseError;
+      const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
+      if (textConflicts.length) {
+        if (!resolveMechanicalConflicts(cwd, textConflicts)) return rebaseError;
+        appendFileSync(logPath, `Rebase resolved import-only and insert-only conflicts: ${textConflicts.join(', ')}\n`);
+        stagePaths(cwd, new Set(textConflicts));
+      }
 
       for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
       const integrationCommands = new Map<string, string[]>();
@@ -202,14 +232,11 @@ function rebaseWithDerivedFiles(
       const stageFiles = new Set(derivedConflicts);
       for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files).length) stageFiles.add(path);
       stagePaths(cwd, stageFiles);
-      if (derivedConflicts.length !== conflicts.length) return rebaseError;
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
         return undefined;
       } catch (continueError) {
-        const nextConflicts = unmergedFiles(cwd);
-        if (!nextConflicts.length) throw continueError;
-        if (nextConflicts.some((path) => !derivedForPath(path, files).length)) return continueError;
+        if (!unmergedFiles(cwd).length) throw continueError;
         rebaseError = continueError;
       }
     }
@@ -677,7 +704,7 @@ export class MergeTrain {
           if (files.length && this.resolveImportConflicts(trainTree, files)) {
             appendFileSync(
               logPath,
-              `Stabilize ${candidate} merged into ${devBranch} keeping both sides' imports: ${files.join(', ')}\n`,
+              `Stabilize ${candidate} merged into ${devBranch} resolving import-only and insert-only conflicts: ${files.join(', ')}\n`,
             );
           } else {
             try {
@@ -745,21 +772,11 @@ export class MergeTrain {
 
   /** Finish a merge whose every conflict is two sides adding imports; false leaves the merge for a person. */
   private resolveImportConflicts(tree: string, files: readonly string[]): boolean {
-    const resolved = new Map<string, string>();
-    for (const file of files) {
-      const path = join(tree, file);
-      if (!existsSync(path)) return false;
-      const text = resolveImportConflicts(readFileSync(path, 'utf8'));
-      if (text === undefined) return false;
-      resolved.set(path, text);
-    }
-    for (const [path, text] of resolved) writeFileSync(path, text);
     const formatCommand = this.options.formatCommand ?? [
       resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
       ...FORMAT_FLAGS,
     ];
-    if (!formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!))
-      spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...files], { cwd: tree, encoding: 'utf8' });
+    if (!resolveMechanicalConflicts(tree, files, formatCommand)) return false;
     git(tree, 'add', '--', ...files);
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;

@@ -60,3 +60,33 @@ test("a squash keeps the worker's own edit outside the brief; only a file it did
     expect(head).toHaveLength(40);
   } finally { r.dispose(); }
 });
+
+test('a rebase keeps both sections that the target and the worker inserted at one place in a README, the target first', () => {
+  const r = repository();
+  try {
+    const base = r.commit({ 'README.md': '# Module\n\nIntro.\n\n## Later\n\nText.\n' }, 'base');
+    git(r.root, 'checkout', '-qb', 'work');
+    r.commit({ 'README.md': '# Module\n\nIntro.\n\n## Authored fields\n\nField text.\n\n## Later\n\nText.\n' }, 'work');
+    git(r.root, 'checkout', '-q', 'main');
+    const target = r.commit({ 'README.md': '# Module\n\nIntro.\n\n## Avatars\n\nAvatar text.\n\n## Later\n\nText.\n' }, 'target');
+    git(r.root, 'checkout', '-q', 'work');
+    rebaseOnto(r.root, target, base, join(r.root, '.git', 'rebase.log'), []);
+    expect(git(r.root, 'show', 'HEAD:README.md')).toBe(
+      '# Module\n\nIntro.\n\n## Avatars\n\nAvatar text.\n\n## Authored fields\n\nField text.\n\n## Later\n\nText.',
+    );
+    expect(git(r.root, 'merge-base', '--is-ancestor', target, 'HEAD')).toBe('');
+  } finally { r.dispose(); }
+});
+
+test('a rebase conflict where both sides rewrote the same text still returns to the worker', () => {
+  const r = repository();
+  try {
+    const base = r.commit({ 'README.md': '# Module\n\nOld wording.\n' }, 'base');
+    git(r.root, 'checkout', '-qb', 'work');
+    r.commit({ 'README.md': '# Module\n\nWorker wording.\n' }, 'work');
+    git(r.root, 'checkout', '-q', 'main');
+    const target = r.commit({ 'README.md': '# Module\n\nTarget wording.\n' }, 'target');
+    git(r.root, 'checkout', '-q', 'work');
+    expect(() => rebaseOnto(r.root, target, base, join(r.root, '.git', 'rebase.log'), [])).toThrow();
+  } finally { r.dispose(); }
+});
