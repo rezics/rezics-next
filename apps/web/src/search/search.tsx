@@ -1,3 +1,4 @@
+import { pickText } from '@rezics/composition';
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
@@ -18,7 +19,23 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client.ts';
 import { PageHeading } from '../shell/page-heading';
 
-type SearchResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
+type Fact =
+  | { kind: 'item'; id: string; labels: Record<string, string> }
+  | { kind: 'time'; year: number }
+  | { kind: 'quantity'; amount: number; unit: string }
+  | { kind: 'code'; value: string };
+type SearchBody = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
+  descriptions?: boolean;
+  languages?: string[];
+  properties?: string[];
+};
+type SearchData = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
+type SearchResult = Omit<SearchData, 'subjects'> & {
+  subjects: (SearchData['subjects'][number] & {
+    descriptions?: Record<string, string>;
+    facts?: Record<string, Fact[]>;
+  })[];
+};
 type SuggestResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
 type FacetResult = {
   facets: {
@@ -31,6 +48,7 @@ type FacetResult = {
 };
 type SearchParams = {
   query: string;
+  locale: string;
   cursor?: string;
   type?: string;
   facetValues: Record<string, string[]>;
@@ -39,6 +57,7 @@ type SearchPageData = {
   result?: SearchResult;
   type?: string;
   typeLabels?: Record<string, string>;
+  hitTypes: Record<string, Record<string, string>>;
   typeChoices: { id: string; labels: Record<string, string> }[];
   groups: {
     property: string;
@@ -53,6 +72,11 @@ type Release = FilterRelease & {
   types: Record<string, { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[] }>;
   properties: Record<string, { labels?: Record<string, string>; datatype: string; value?: { pattern?: string } }>;
 };
+
+/** At most this many facet properties are asked for on a single-type search. */
+const FACT_PROPERTIES = 2;
+/** At most this many values of one property are shown on a result. */
+const FACT_VALUES = 3;
 
 const definitionMemory = new Map<string, { storedAt: number; value: unknown }>();
 
@@ -130,6 +154,18 @@ function allowedType(release: Release, type: unknown): type is string {
   return typeof type === 'string' && Object.hasOwn(release.types, type) && isRecord(release.types[type]);
 }
 
+/** Properties whose values a result row can show: items, years, quantities and codes with a declared pattern. */
+function factProperties(release: Release, type: string): string[] {
+  return facetProperties(release, [type])
+    .filter((property) => {
+      const definition = Object.hasOwn(release.properties, property) ? release.properties[property] : undefined;
+      if (!definition) return false;
+      if (['wikibase-item', 'time', 'quantity'].includes(definition.datatype)) return true;
+      return definition.datatype === 'string' && !!definition.value?.pattern;
+    })
+    .slice(0, FACT_PROPERTIES);
+}
+
 function selectedFilters(
   release: Release,
   type: string,
@@ -169,10 +205,12 @@ function selectedFilters(
   return { selected, filter: admitFilter(filter, release, { saved: false }) };
 }
 
-const readSearch = createServerFn({ method: 'GET' })
+const readSearchWithLocale = createServerFn({ method: 'GET' })
   .validator((input: unknown): SearchParams => {
     if (!isRecord(input) || typeof input.query !== 'string' || input.query.length > 256)
       throw new Error('Invalid search');
+    if (typeof input.locale !== 'string' || input.locale.length === 0 || input.locale.length > 35)
+      throw new Error('Invalid locale');
     if (input.cursor !== undefined && typeof input.cursor !== 'string') throw new Error('Invalid cursor');
     if (input.type !== undefined && typeof input.type !== 'string') throw new Error('Invalid type');
     const facetValues: Record<string, string[]> = Object.create(null);
@@ -187,6 +225,7 @@ const readSearch = createServerFn({ method: 'GET' })
     }
     return {
       query: input.query,
+      locale: input.locale,
       ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
       ...(typeof input.type === 'string' ? { type: input.type } : {}),
       facetValues,
@@ -204,14 +243,20 @@ const readSearch = createServerFn({ method: 'GET' })
     const selected = release && type ? selectedFilters(release, type, data.facetValues) : undefined;
     const filter = selected?.filter;
     const hasSearch = data.query.length > 0 || type !== undefined;
+    const languages = data.locale === 'en' ? ['en'] : [data.locale, 'en'];
+    const properties = release && type ? factProperties(release, type) : [];
     const searchPromise: Promise<SearchResult | undefined> = hasSearch
       ? (async () => {
-          const response = await kernelClient().subjects.$search.post({
+          const body: SearchBody = {
             ...(data.query ? { text: data.query } : {}),
             limit: 100,
+            descriptions: true,
+            languages,
+            ...(properties.length > 0 ? { properties } : {}),
             ...(data.cursor ? { cursor: data.cursor } : {}),
             ...(filter ? { filter } : {}),
-          });
+          };
+          const response = await kernelClient().subjects.$search.post(body);
           if (response.error) throw new Error('Search failed');
           return response.data as SearchResult;
         })()
@@ -244,6 +289,10 @@ const readSearch = createServerFn({ method: 'GET' })
             values: valuesByProperty.get(property) ?? [],
           }))
         : [];
+    const hitTypes: Record<string, Record<string, string>> = {};
+    if (release)
+      for (const subject of result?.subjects ?? [])
+        if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
     const typeChoices = release
       ? Object.entries(release.types)
           .filter(
@@ -257,6 +306,7 @@ const readSearch = createServerFn({ method: 'GET' })
       ...(result ? { result } : {}),
       ...(type ? { type } : {}),
       ...(type && release ? { typeLabels: release.types[type]?.labels ?? {} } : {}),
+      hitTypes,
       typeChoices,
       groups,
       selectedFacets: selected?.selected ?? {},
@@ -270,15 +320,19 @@ const readSearch = createServerFn({ method: 'GET' })
     };
   });
 
+/** The same fallback the subject page uses: the page locale first, then the related and fallback languages. */
 function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
-  const order =
-    locale === 'zh-Hant'
-      ? ['zh-Hant', 'zh-Hans', 'en']
-      : locale === 'zh-Hans'
-        ? ['zh-Hans', 'zh-Hant', 'en']
-        : [locale, 'en'];
-  const lang = order.find((key) => labels[key]) ?? Object.keys(labels)[0];
-  return { text: lang ? labels[lang]! : '', ...(lang ? { lang } : {}) };
+  const picked = pickText(labels, locale);
+  return { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) };
+}
+
+/** The shown form of one fact value; an item without a label in the asked languages has nothing to show. */
+function factText(fact: Fact, locale: string): { text: string; lang?: string } {
+  if (fact.kind === 'item') return localizedLabel(fact.labels, locale);
+  if (fact.kind === 'time') return { text: String(fact.year) };
+  if (fact.kind === 'quantity')
+    return { text: `${new Intl.NumberFormat(locale).format(fact.amount)}${fact.unit ? ` ${fact.unit}` : ''}` };
+  return { text: fact.value };
 }
 
 function searchHref(
@@ -436,11 +490,11 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
               </div>
             </details>
             <div className="space-y-4 lg:col-start-2 lg:row-start-1">
-              {renderResults(query, cursor, result, locale, type, selectedFacets)}
+              {renderResults(query, cursor, result, locale, type, selectedFacets, data?.hitTypes ?? {})}
             </div>
           </div>
         ) : (
-          renderResults(query, cursor, result, locale, type, selectedFacets)
+          renderResults(query, cursor, result, locale, type, selectedFacets, data?.hitTypes ?? {})
         )}
       </form>
     </section>
@@ -454,6 +508,7 @@ function renderResults(
   locale: string,
   type: string | undefined,
   selectedFacets: Record<string, string[]>,
+  hitTypes: Record<string, Record<string, string>>,
 ) {
   if (!result) return null;
   if (result.subjects.length === 0) return <p>{m.search_no_results()}</p>;
@@ -463,16 +518,49 @@ function renderResults(
       <ul className="divide-y divide-border/60 rounded-xl border border-border/60">
         {result.subjects.map((subject) => {
           const label = localizedLabel(subject.labels, locale);
+          const typeName = localizedLabel(
+            Object.hasOwn(hitTypes, subject.type) ? (hitTypes[subject.type] ?? {}) : {},
+            locale,
+          );
+          const description = localizedLabel(subject.descriptions ?? {}, locale);
+          const facts = Object.values(subject.facts ?? {}).flatMap((values) =>
+            values
+              .slice(0, FACT_VALUES)
+              .map((value) => factText(value, locale))
+              .filter((value) => value.text),
+          );
           return (
-            <li key={subject.id} className="px-4 py-3">
-              <Link
-                to="/subjects/$id"
-                params={{ id: subject.id }}
-                lang={label.lang}
-                className="font-medium underline-offset-4 hover:underline"
-              >
-                {label.text}
-              </Link>
+            <li key={subject.id} className="space-y-1 px-4 py-3">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <Link
+                  to="/subjects/$id"
+                  params={{ id: subject.id }}
+                  lang={label.lang}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {label.text}
+                </Link>
+                {typeName.text && (
+                  <span className="text-xs text-muted-foreground" lang={typeName.lang}>
+                    {typeName.text}
+                  </span>
+                )}
+              </div>
+              {facts.length > 0 && (
+                <p className="text-sm">
+                  {facts.map((fact, index) => (
+                    <span key={index}>
+                      {index > 0 && ' · '}
+                      <span lang={fact.lang}>{fact.text}</span>
+                    </span>
+                  ))}
+                </p>
+              )}
+              {description.text && (
+                <p className="line-clamp-2 text-sm text-muted-foreground" lang={description.lang}>
+                  {description.text}
+                </p>
+              )}
             </li>
           );
         })}
@@ -487,6 +575,11 @@ function renderResults(
       )}
     </>
   );
+}
+
+/** The route's loader call; the page locale travels with the request so the server asks for the right languages. */
+function readSearch({ data }: { data: Omit<SearchParams, 'locale'> }): Promise<SearchPageData> {
+  return readSearchWithLocale({ data: { ...data, locale: getLocale() } });
 }
 
 export { readSearch };

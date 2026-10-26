@@ -310,10 +310,12 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Search page (`/<locale>/search`)
 
-- **Touches:** In parallel: one `POST /v1/subjects:search` and one `POST /v1/subjects:facets`; active definitions digest
+- **Touches:** In parallel: one `POST /v1/subjects:search` and one `POST /v1/subjects:facets`; the search read asks for
+  descriptions, two languages and, for a single-type search, at most two facet properties; active definitions digest
   cached for 60 s and release cached by digest without expiry
 - **Bound:** 2 K and 0 D per search; result page is at most 100 entries and facet work is bounded to 8 properties × 10
-  values; 0 R/A
+  values; the response stays O(page size), with each description at most 200 grapheme clusters in at most two languages
+  and at most 2 properties × 3 values per hit; 0 R/A
 - **Growth check:** `tests/search-facets.test.ts`:
   `searches read the definitions release once per digest and make two kernel reads each`
 
