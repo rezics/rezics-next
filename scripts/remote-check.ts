@@ -2,11 +2,12 @@
 // Runs a command against a copy of a workspace on a development check host, so the check's containers and test lanes
 // stay off the machine the agents run on.
 //
-//   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] <workspace> -- <command...>
+//   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] <workspace> -- <command...>
 //
 // The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
-// host's capped systemd slice, and its exit code is this script's exit code.
+// host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
+// host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
 import { randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -20,7 +21,14 @@ export type Host = {
   slots: number;
 };
 
-export type RemoteCheck = { hosts: Host[]; workspace: string; cwd?: string; command: string[]; pollMs?: number };
+export type RemoteCheck = {
+  hosts: Host[];
+  workspace: string;
+  cwd?: string;
+  command: string[];
+  slots?: number;
+  pollMs?: number;
+};
 
 const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
@@ -95,8 +103,9 @@ done
 exit ${SLOT_BUSY}`;
 }
 
+/** The wrapper directory comes first on the path, so every `docker` a workspace starts is the one that adds the slice. */
 function runScript(id: string, directory: string, cwd: string, command: string[]): string {
-  return `export PATH=/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache KERNEL_CHECK_ON_REMOTE=1
+  return `export PATH=${directory}/scripts/check-host:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache KERNEL_CHECK_ON_REMOTE=1
 cd ${directory} || exit 1
 exec systemd-run --scope --quiet --collect --slice=${SLICE} --unit=rezics-check-${id} \\
   sh -c 'bun install --frozen-lockfile && cd "$1" && shift && exec "$@"' sh ${[cwd, ...command].map(quote).join(' ')}`;
@@ -165,7 +174,7 @@ async function availableMemory(host: Host): Promise<number | null> {
   return code === 0 && match ? Number(match[1]) : null;
 }
 
-/** Tries the host's slots; null when every slot is taken or the host cannot be reached. */
+/** Tries one of the host's slots; null when every slot is taken or the host cannot be reached. */
 async function takeSlot(host: Host): Promise<Lease | null> {
   const holder = Bun.spawn(['ssh', ...sshOptions(host), host.address, slotScript(host)], {
     stdin: 'pipe',
@@ -197,7 +206,30 @@ async function takeSlot(host: Host): Promise<Lease | null> {
   };
 }
 
-async function acquire(hosts: Host[], pollMs: number, signal: AbortSignal): Promise<Lease> {
+/** Takes `count` slots on the host or none: a partial take is given back at once. */
+async function takeSlots(host: Host, count: number): Promise<Lease | null> {
+  const held: Lease[] = [];
+  const releaseAll = async (): Promise<void> => {
+    await Promise.all(held.map((lease) => lease.release()));
+  };
+  while (held.length < count) {
+    let lease: Lease | null;
+    try {
+      lease = await takeSlot(host);
+    } catch (error) {
+      await releaseAll();
+      throw error;
+    }
+    if (!lease) {
+      await releaseAll();
+      return null;
+    }
+    held.push(lease);
+  }
+  return { host, release: releaseAll };
+}
+
+async function acquire(hosts: Host[], slots: number, pollMs: number, signal: AbortSignal): Promise<Lease> {
   let announced = false;
   while (true) {
     const memory = await Promise.all(hosts.map(async (host) => ({ host, available: await availableMemory(host) })));
@@ -206,7 +238,7 @@ async function acquire(hosts: Host[], pollMs: number, signal: AbortSignal): Prom
       .filter((entry): entry is { host: Host; available: number } => entry.available !== null)
       .sort((left, right) => right.available - left.available);
     for (const { host } of ranked) {
-      const lease = await takeSlot(host);
+      const lease = await takeSlots(host, slots);
       if (lease && signal.aborted) {
         await lease.release();
         throw new Aborted();
@@ -233,8 +265,12 @@ async function finished(child: ReturnType<typeof Bun.spawn>, signal: AbortSignal
 }
 
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
+  const slots = options.slots ?? 1;
+  // A host with fewer slots than the run needs can never serve it, so it is not asked and not waited for.
+  const hosts = options.hosts.filter((host) => host.slots >= slots);
+  if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
   const files = workspaceFiles(options.workspace);
-  const lease = await acquire(options.hosts, options.pollMs ?? 5000, signal);
+  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal);
   const { host } = lease;
   const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   const directory = `${ROOT}/runs/${id}`;
@@ -285,16 +321,23 @@ function parse(argv: string[]): RemoteCheck {
   const hostsFile = process.env.KERNEL_CHECK_REMOTE;
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
   let cwd: string | undefined;
+  let slots: number | undefined;
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
-    if (flag !== '--cwd' || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
-    cwd = rest.shift();
+    if ((flag !== '--cwd' && flag !== '--slots') || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
+    const value = rest.shift()!;
+    if (flag === '--cwd') cwd = value;
+    else {
+      slots = Number(value);
+      if (!Number.isSafeInteger(slots) || slots < 1)
+        throw new Error(`--slots must be a positive integer, received ${value}`);
+    }
   }
   const workspace = rest.shift();
   const separator = rest.shift();
   if (!workspace || separator !== '--' || rest.length === 0) {
-    throw new Error('Usage: remote-check.ts [--cwd <directory>] <workspace> -- <command...>');
+    throw new Error('Usage: remote-check.ts [--cwd <directory>] [--slots <n>] <workspace> -- <command...>');
   }
   if (!existsSync(workspace)) throw new Error(`Workspace does not exist: ${workspace}`);
   const pollMs = process.env.REMOTE_CHECK_POLL_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_POLL_MS);
@@ -303,6 +346,7 @@ function parse(argv: string[]): RemoteCheck {
     workspace,
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
+    ...(slots === undefined ? {} : { slots }),
     ...(pollMs === undefined ? {} : { pollMs }),
   };
 }

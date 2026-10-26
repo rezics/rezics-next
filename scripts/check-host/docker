@@ -1,0 +1,33 @@
+#!/bin/sh
+# Stands in for `docker` on a check host: remote-check.ts puts this directory first on the path of every remote run.
+# Containers that `docker run` and `docker create` start are placed in the host's capped slice, so no workspace has to
+# know it is running there. Every other command goes to the real docker unchanged.
+self=$(cd "$(dirname "$0")" && pwd)
+rest=
+old_ifs=$IFS
+IFS=:
+for entry in $PATH; do
+  [ -n "$entry" ] && [ "$(cd "$entry" 2>/dev/null && pwd)" = "$self" ] && continue
+  rest=${rest:+$rest:}$entry
+done
+IFS=$old_ifs
+PATH=$rest
+export PATH
+
+case "$1" in
+  run | create)
+    verb=$1
+    shift
+    exec docker "$verb" --cgroup-parent=rezics-check.slice "$@"
+    ;;
+  container)
+    case "${2:-}" in
+      run | create)
+        verb=$2
+        shift 2
+        exec docker container "$verb" --cgroup-parent=rezics-check.slice "$@"
+        ;;
+    esac
+    ;;
+esac
+exec docker "$@"

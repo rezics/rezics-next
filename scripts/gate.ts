@@ -1,9 +1,65 @@
 #!/usr/bin/env bun
 // The repository's landing gate, run from the root of a clean checkout: install from the lockfile, run every
 // workspace's `check` script, then the control plane's own gate.
+//
+// With KERNEL_CHECK_REMOTE naming a readable hosts file, the whole gate runs on one development check host instead, so
+// no workspace's tests compete with the machine the agents work on. GATE_REMOTE_SLOTS (default 6) is how many of that
+// host's slots the run holds; the output and exit code are the same as a local run's.
+import { accessSync, constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const root = process.cwd();
+
+/** The hosts file when this gate should run on a development host: named, readable and not already on one. */
+function remoteHostsFile(): string | null {
+  const file = process.env.KERNEL_CHECK_REMOTE;
+  if (!file || process.env.KERNEL_CHECK_ON_REMOTE) return null;
+  try {
+    accessSync(file, constants.R_OK);
+    return file;
+  } catch {
+    process.stderr.write(`KERNEL_CHECK_REMOTE ${file} is not readable; running the gate locally\n`);
+    return null;
+  }
+}
+
+function positiveInteger(name: string, value: string): number {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 1) {
+    throw new Error(`${name} must be a positive integer, received ${JSON.stringify(value)}`);
+  }
+  return number;
+}
+
+/** Hands the gate to a check host and returns its exit code; a signal sent here is passed on so the host cleans up. */
+async function runRemotely(): Promise<number> {
+  const slots = positiveInteger('GATE_REMOTE_SLOTS', process.env.GATE_REMOTE_SLOTS ?? '6');
+  const concurrency = process.env.GATE_CONCURRENCY;
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(import.meta.dir, 'remote-check.ts'),
+      '--slots',
+      String(slots),
+      root,
+      '--',
+      ...(concurrency === undefined ? [] : ['env', `GATE_CONCURRENCY=${concurrency}`]),
+      'bun',
+      'scripts/gate.ts',
+    ],
+    { cwd: root, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
+  );
+  const forwarders = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map((name) => {
+    const forward = () => child.kill(name);
+    process.on(name, forward);
+    return [name, forward] as const;
+  });
+  try {
+    return await child.exited;
+  } finally {
+    for (const [name, forward] of forwarders) process.off(name, forward);
+  }
+}
 
 async function run(command: string[], cwd: string): Promise<void> {
   console.log(`$ ${command.join(' ')}  (${cwd === root ? '.' : cwd.slice(root.length + 1)})`);
@@ -40,6 +96,8 @@ async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
     .join('\n');
   return { block: `${block}\n\n`, code, directory: relativeDirectory };
 }
+
+if (remoteHostsFile()) process.exit(await runRemotely());
 
 await run(['bun', 'install', '--frozen-lockfile'], root);
 const manifests = [...new Bun.Glob('{apps,services,packages}/*/package.json').scanSync({ cwd: root })].sort();
