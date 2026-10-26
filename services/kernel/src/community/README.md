@@ -222,7 +222,7 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 - Touches: one primary-key read of community.realm per given Realm, one statement per partition.
 - Bound: O(n log R) for n Realms.
-- Growth check: a fixed set of Realms read with constant rows and statements at 2048, 8192 and 32768 Realms.
+- Growth check: `test/community/realm-votes.test.ts`, `checkGrowth` name `Read Realm votes`: a fixed set of Realms read with constant rows and statements at 2048, 8192 and 32768 Realms.
 
 ### Ban an account
 

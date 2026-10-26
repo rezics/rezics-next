@@ -259,8 +259,8 @@ function communityProblem(error: unknown): never {
   if (error instanceof PublicationCursorError)
     throw new ProblemError(error.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
   if (error instanceof PublicationConflictError) throw new ProblemError('not_found');
-  // A changed head is the same closed not_found as content post edit's failed compare-and-set.
-  if (error instanceof SpaceConflictError || error instanceof RealmConflictError) throw new ProblemError('not_found');
+  if (error instanceof SpaceConflictError || error instanceof RealmConflictError)
+    throw new ProblemError('precondition_failed');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   if (error instanceof RealmMembershipConflictError) throw new ProblemError('idempotency_conflict');
   throw error;
@@ -431,6 +431,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          412: problemSchema('precondition_failed'),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -514,6 +515,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          412: problemSchema('precondition_failed'),
         },
         detail: {
           operationId: 'space.update',
@@ -681,6 +683,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          412: problemSchema('precondition_failed'),
         },
         detail: {
           operationId: 'realm.update',
@@ -733,6 +736,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          412: problemSchema('precondition_failed'),
         },
         detail: {
           operationId: 'realm.board_scheme',
@@ -888,6 +892,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          412: problemSchema('precondition_failed'),
         },
         detail: {
           operationId: 'publication.withdraw',
@@ -920,6 +925,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             };
           });
         } catch (error) {
+          if (error instanceof PublicationConflictError) throw new ProblemError('precondition_failed');
           communityProblem(error);
         }
       },
@@ -932,6 +938,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          412: problemSchema('precondition_failed'),
         },
         detail: {
           operationId: 'publication.reject',
@@ -964,6 +971,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             };
           });
         } catch (error) {
+          if (error instanceof PublicationConflictError) throw new ProblemError('precondition_failed');
           communityProblem(error);
         }
       },

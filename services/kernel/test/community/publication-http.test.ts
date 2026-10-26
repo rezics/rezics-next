@@ -316,6 +316,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host?.stop();
+  authPool?.on('error', (error) => {
+    if ('code' in error && error.code === '57P01') return;
+    throw error;
+  });
   if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await pool?.end();
   await admin?.end();
@@ -486,8 +490,8 @@ test.serial(
         key: crypto.randomUUID(),
         headers: { 'if-match': JSON.stringify(head.publicationId) },
       });
-      expect(stale.response.status).toBe(404);
-      expect(stale.value).toMatchObject({ code: 'not_found', effect_status: 'not_applied' });
+      expect(stale.response.status).toBe(412);
+      expect(stale.value).toMatchObject({ code: 'precondition_failed', effect_status: 'not_applied' });
       expect(stale.value).not.toHaveProperty('publication');
       expect(JSON.stringify(stale.value)).not.toContain((withdrawn.value.publication as Head).publicationId);
       expect(await snapshot()).toEqual(before);

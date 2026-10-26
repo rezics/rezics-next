@@ -431,8 +431,8 @@ test.serial(
       headers: { 'if-match': etag },
       body: { title: 'Stale leaked title', summary: 'Stale leaked summary' },
     });
-    expect(stale.response.status).toBe(404);
-    expect(stale.value).toMatchObject({ code: 'not_found', effect_status: 'not_applied' });
+    expect(stale.response.status).toBe(412);
+    expect(stale.value).toMatchObject({ code: 'precondition_failed', effect_status: 'not_applied' });
     expect(stale.value).not.toHaveProperty('space');
     const staleText = JSON.stringify(stale.value);
     expect(staleText).not.toContain('Stale leaked title');

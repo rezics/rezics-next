@@ -5,6 +5,7 @@ import {
   createProvisioningEvidenceVerifier,
   type AuthService,
 } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -18,6 +19,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId } from '../../src/route/route.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 
 const issuer = 'https://realm-http.auth.test';
 const audience = 'https://realm-http.api.test';
@@ -260,10 +262,15 @@ beforeAll(async () => {
   unrelated = await person('realm_unrelated', scopes);
   contextAuthor = await person('realm_context_author', scopes);
   await bootstrapGovernance(pool, governance.accountId);
+  await bootstrapRelease(pool, bundledRelease);
 }, 60_000);
 
 afterAll(async () => {
   await host?.stop();
+  authPool?.on('error', (error) => {
+    if ('code' in error && error.code === '57P01') return;
+    throw error;
+  });
   if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await pool?.end();
   await admin?.end();
@@ -387,8 +394,8 @@ test.serial(
       headers: { 'if-match': JSON.stringify(protectedRealm.headRevisionId) },
       body: { title: 'Stale leaked title' },
     });
-    expect(stale.response.status).toBe(404);
-    expect(stale.value).toMatchObject({ code: 'not_found', effect_status: 'not_applied' });
+    expect(stale.response.status).toBe(412);
+    expect(stale.value).toMatchObject({ code: 'precondition_failed', effect_status: 'not_applied' });
     expect(stale.value).not.toHaveProperty('realm');
     expect(JSON.stringify(stale.value)).not.toContain('Stale leaked title');
     expect(JSON.stringify(stale.value)).not.toContain(moved.headRevisionId);
