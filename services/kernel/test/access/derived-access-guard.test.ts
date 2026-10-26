@@ -4,7 +4,11 @@ import { resolve } from 'node:path';
 
 type AccessLiteral = Readonly<{ name: string; kind: 'typed' | 'returned' }>;
 
-const allowed = new Map([['community/work.ts', new Set(['followAccess'])]]);
+const allowed = new Map([
+  ['community/work.ts', new Set(['followAccess'])],
+  ['request/access.ts', new Set(['anonymousAccess'])],
+  ['semantic/setup.ts', new Set(['access'])],
+]);
 
 function accessLiterals(source: string): AccessLiteral[] {
   const literals: AccessLiteral[] = [];

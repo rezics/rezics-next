@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import pg, { type Pool, type PoolConfig } from 'pg';
 import { readAccount } from '../access/account-data.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
@@ -167,10 +168,7 @@ function writerPool(pool: Pool): Pool {
 function collectionCreationAccess(access: Access): Access {
   const existing = creationAccesses.get(access);
   if (existing) return existing;
-  const wrapped: Access = {
-    authenticate: access.authenticate.bind(access),
-    ...(access.prepare ? { prepare: access.prepare.bind(access) } : {}),
-    ...(access.replayAuthorization ? { replayAuthorization: access.replayAuthorization.bind(access) } : {}),
+  const wrapped = deriveAccess(access, {
     async authorize(client, actor, action, resource, evidence, time) {
       if (
         action === 'collection:create' &&
@@ -183,7 +181,7 @@ function collectionCreationAccess(access: Access): Access {
       }
       return access.authorize(client, actor, action, resource, evidence, time);
     },
-  };
+  });
   const catalogue = resourceRoleCatalogue(access);
   if (catalogue) installResourceRoleCatalogue(wrapped, catalogue);
   creationAccesses.set(access, wrapped);
