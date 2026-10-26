@@ -5,7 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
@@ -17,9 +17,6 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
-beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
-});
 afterAll(async () => {
   await relays.stop();
   await pool.end();
@@ -36,54 +33,36 @@ const ACTIONS = [
   'moderation:hide',
   'moderation:takedown',
 ];
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000091',
+  moderator: '019a1b2c-3d4e-7f00-8a00-0d0000000092',
+  hider: '019a1b2c-3d4e-7f00-8a00-41de00000093',
+};
+const realAccess = await createRealAccess(admin, accounts, ACTIONS);
+beforeAll(async () => {
+  for (const action of ['subject:create', 'statement:propose', 'context:accept', 'context:adopt'])
+    await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:takedown');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'hider', 'moderation:hide');
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
-const actors: Record<string, AccountActor> = {
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000031'),
-  moderator: account('019a1b2c-3d4e-7f00-8a00-0d0000000032'),
-  hider: account('019a1b2c-3d4e-7f00-8a00-41de00000033'),
-};
-const grants = new Set<string>();
-const grant = (who: string, action: string) => grants.add(`${actors[who]!.accountId} ${action} ${GLOBAL_CONTEXT}`);
-for (const action of ['subject:create', 'statement:propose', 'context:accept', 'context:adopt'])
-  grant('editor', action);
-grant('moderator', 'moderation:hide');
-grant('moderator', 'moderation:takedown');
-grant('hider', 'moderation:hide');
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    if (action === 'subject:read') return true;
-    return actor.kind === 'account' && grants.has(`${actor.accountId} ${action} ${resource.id}`);
-  },
-};
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
 
 const sessions: Record<string, string> = {};
 async function call(method: string, path: string, options: { as?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
   if (options.as) {
-    headers.authorization = `Bearer ${options.as}`;
+    const credential = Object.hasOwn(accounts, options.as)
+      ? realAccess.bearer(options.as as keyof typeof accounts)
+      : options.as;
+    headers.authorization = `Bearer ${credential}`;
     const session = sessions[options.as];
     if (session) headers['rezics-session-token'] = session;
   }

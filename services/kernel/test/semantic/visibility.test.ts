@@ -4,7 +4,7 @@ import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -13,9 +13,6 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
-});
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -23,52 +20,36 @@ afterAll(async () => {
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
 const ACTIONS = ['subject:create', 'subject:read', 'statement:propose', 'moderation:hide', 'moderation:takedown'];
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ACTIONS,
-  requestedBy: null,
-  authnEpoch: 1,
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000081',
+  moderator: '019a1b2c-3d4e-7f00-8a00-0d0000000082',
+  hider: '019a1b2c-3d4e-7f00-8a00-41de00000083',
+};
+const realAccess = await createRealAccess(admin, accounts, ACTIONS);
+beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:takedown');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'hider', 'moderation:hide');
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
-const actors: Record<string, AccountActor> = {
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000011'),
-  moderator: account('019a1b2c-3d4e-7f00-8a00-0d0000000012'),
-  hider: account('019a1b2c-3d4e-7f00-8a00-41de00000013'),
-};
-const grants = new Set<string>();
-const grant = (who: string, action: string) => grants.add(`${actors[who]!.accountId} ${action} ${GLOBAL_CONTEXT}`);
-grant('editor', 'subject:create');
-grant('editor', 'statement:propose');
-grant('moderator', 'moderation:hide');
-grant('moderator', 'moderation:takedown');
-grant('hider', 'moderation:hide');
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    if (action === 'subject:read') return true;
-    return actor.kind === 'account' && grants.has(`${actor.accountId} ${action} ${resource.id}`);
-  },
-};
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const credential = Object.hasOwn(accounts, options.token)
+      ? realAccess.bearer(options.token as keyof typeof accounts)
+      : options.token;
+    headers.authorization = `Bearer ${credential}`;
+  }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(

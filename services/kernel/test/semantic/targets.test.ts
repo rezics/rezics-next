@@ -4,7 +4,7 @@ import pg from 'pg';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -12,6 +12,10 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000041',
+};
+const realAccess = await createRealAccess(admin, accounts, ['subject:create', 'subject:read', 'statement:propose']);
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -64,51 +68,27 @@ const release: Release = {
 };
 const digest = releaseDigest(release);
 beforeAll(async () => {
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
   expect(await bootstrapRelease(pool, release)).toBe(digest);
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
-const editor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
-  clientId: 'web',
-  scopes: ['subject:create', 'subject:read', 'statement:propose'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const access: Access = {
-  async authenticate(token) {
-    if (token !== 'editor') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return editor;
-  },
-  async authorize(_client, actor, action, resource) {
-    return (
-      action === 'subject:read' ||
-      (['subject:create', 'statement:propose'].includes(action) &&
-        actor.kind === 'account' &&
-        actor.accountId === editor.accountId &&
-        resource.id === GLOBAL_CONTEXT)
-    );
-  },
-};
 const kernel = createKernel({
   pool,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  writeRate: realAccess.writeRate,
 });
 
-async function call(method: string, path: string, body?: unknown) {
+async function call(method: string, path: string, body?: unknown, token = 'editor') {
+  const credential = Object.hasOwn(accounts, token) ? realAccess.bearer(token as keyof typeof accounts) : token;
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
-        authorization: 'Bearer editor',
+        authorization: `Bearer ${credential}`,
         'idempotency-key': `"${randomUUID()}"`,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
