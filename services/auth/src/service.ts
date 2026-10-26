@@ -33,10 +33,10 @@ import type {
   AccessAccount,
   AuthService,
   AuthServiceOptions,
-  CredentialAuthorizationInput,
+  CredentialFloorPurpose,
   CredentialEffectAuthorization,
-  CredentialFloorReceipt,
   EffectAuthorization,
+  CredentialFloorReceipt,
   InvalidationReceipt,
   SessionAuthorizationInput,
   SessionProof,
@@ -1005,7 +1005,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const human = await humanProof(input.headers);
         freshCredentialProof(human, input.subjectAccountId);
         await activeActor(text(input.subjectAccountId));
-        if (input.credential?.kind === 'passkey' && input.credential.remove !== true) throw new Denied(400);
+        if ((input.credential as { kind?: string })?.kind === 'passkey') throw new Denied(400);
         const { credential } = await credentials.normalize(input.credential);
         if (credential.kind === 'password' && credential.password !== null) {
           const config = (await getContext()).password.config;
@@ -1017,6 +1017,25 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
         await owner(input.subjectAccountId);
         const stage = await credentials.stage({ ...input, credential, human });
+        if (stage.purpose === 'add-passkey' || stage.purpose === 'remove-passkey') throw new Denied(400);
+        return {
+          effectRef: stage.effectReference,
+          key: stage.operationKey,
+          subjectId: stage.subjectAccountId,
+          purpose: stage.purpose,
+          digest: stage.effectDigest,
+        };
+      },
+      async stagePasskeyEffect(input) {
+        const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
+        const subject = await activeActor(text(input.subjectAccountId));
+        if (subject.automated || human.account_id !== input.subjectAccountId) throw new Denied();
+        if (input.credential?.kind !== 'passkey' || input.credential.remove !== true) throw new Denied(400);
+        const { credential } = await credentials.normalize(input.credential);
+        await owner(input.subjectAccountId);
+        const stage = await credentials.stage({ ...input, credential, human });
+        if (stage.purpose !== 'remove-passkey') throw new Denied();
         return {
           effectRef: stage.effectReference,
           key: stage.operationKey,
@@ -1032,9 +1051,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
         if (!stage.row.committed_at) await credentials.current(database, stage);
-        const approval = await withCredentialProof(human, () =>
-          trustedAccess.approveCredentialEffect!({ stage: stage.binding, human }),
-        );
+        const approval = await withCredentialProof(human, () => {
+          if (trustedAccess.passkeys) return trustedAccess.approveCredentialEffect!({ stage: stage.binding, human });
+          const purpose = stage.binding.purpose;
+          if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+          return trustedAccess.approveCredentialEffect!({ stage: { ...stage.binding, purpose }, human });
+        });
         const expires = Date.parse(approval?.expiresAt);
         const source = proofSources.get(human);
         if (
@@ -1054,7 +1076,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return { reference: approval.reference, expiresAt: approval.expiresAt };
       },
       async applyCredentialEffect(input) {
-        if (!trustedAccess.consumeAuthorization || !trustedAccess.revalidateCredentialEffect) throw new Denied(503);
+        if (!trustedAccess.revalidateCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
         freshCredentialProof(human, input.subjectAccountId);
         const subject = await activeActor(input.subjectAccountId);
@@ -1062,7 +1084,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const authorization = text(input.authorization);
         const revalidate = async (
           replay: boolean,
-          consumedOpening?: CredentialEffectAuthorization,
+          consumedOpening?: CredentialEffectAuthorization<CredentialFloorPurpose>,
           floorReceipt?: CredentialFloorReceipt,
           committedOpeningReceiptId?: string,
         ) => {
@@ -1077,7 +1099,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             ...(floorReceipt ? { floorReceipt } : {}),
             ...(committedOpeningReceiptId ? { committedOpeningReceiptId } : {}),
           };
-          await withCredentialProof(human, () => trustedAccess.revalidateCredentialEffect!(validation));
+          await withCredentialProof(human, () => {
+            if (trustedAccess.passkeys) return trustedAccess.revalidateCredentialEffect!(validation);
+            const purpose = validation.stage.purpose;
+            if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+            const { consumedOpening: opening, ...pendingValidation } = validation;
+            return trustedAccess.revalidateCredentialEffect!({
+              ...pendingValidation,
+              stage: { ...validation.stage, purpose },
+              ...(opening ? { consumedOpening: { ...opening, purpose } } : {}),
+            });
+          });
         };
         if (stage.row.committed_at) {
           await revalidate(true, undefined, undefined, stage.row.opening_receipt_id ?? undefined);
@@ -1085,16 +1117,25 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return { receiptId: stage.row.receipt_id, replayed: true };
         }
         await credentials.current(database, stage);
-        const receipt = await withCredentialProof(human, () =>
-          trustedAccess.consumeAuthorization!({
-            authorization,
-            subjectAccountId: input.subjectAccountId,
-            purpose: stage.binding.purpose,
-            operationKey: stage.binding.operationKey,
-            effectReference: stage.binding.effectReference,
-            human,
-          } satisfies CredentialAuthorizationInput),
-        );
+        const consumeInput = {
+          authorization,
+          subjectAccountId: input.subjectAccountId,
+          operationKey: stage.binding.operationKey,
+          effectReference: stage.binding.effectReference,
+          human,
+        };
+        const purpose = stage.binding.purpose;
+        const receipt = await withCredentialProof<
+          EffectAuthorization | CredentialEffectAuthorization<CredentialFloorPurpose>
+        >(human, () => {
+          if (purpose === 'add-passkey' || purpose === 'remove-passkey') {
+            if (subject.automated || human.account_id !== subject.accountId) throw new Denied();
+            if (!trustedAccess.consumePasskeyAuthorization) throw new Denied(503);
+            return trustedAccess.consumePasskeyAuthorization({ ...consumeInput, purpose });
+          }
+          if (!trustedAccess.consumeAuthorization) throw new Denied(503);
+          return trustedAccess.consumeAuthorization({ ...consumeInput, purpose });
+        });
         const b = stage.binding;
         if (
           !receipt?.receiptId ||
@@ -1117,7 +1158,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             : receipt.operatorAccountId !== null || human.account_id !== subject.accountId)
         )
           throw new Denied();
-        const consumed = receipt as CredentialEffectAuthorization;
+        const consumed = receipt as CredentialEffectAuthorization<CredentialFloorPurpose>;
         const destructive =
           b.purpose === 'remove-password' ||
           b.purpose === 'remove-key' ||
@@ -1167,15 +1208,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           let floor: CredentialFloorReceipt | undefined;
           if (destructive) {
             if (!trustedAccess.advanceCredentialFloor) throw new Denied(503);
-            floor = await withCredentialProof(human, () =>
-              trustedAccess.advanceCredentialFloor!({
+            floor = await withCredentialProof(human, () => {
+              const input = {
                 stage: b,
                 consumedOpening: consumed,
                 expectedPreviousFloor: subject.authnEpoch,
                 key: b.operationKey,
                 purpose: b.purpose,
-              }),
-            );
+              };
+              if (trustedAccess.passkeys) return trustedAccess.advanceCredentialFloor!(input);
+              const purpose = b.purpose;
+              if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+              return trustedAccess.advanceCredentialFloor!({
+                ...input,
+                stage: { ...b, purpose },
+                consumedOpening: { ...consumed, purpose },
+                purpose,
+              });
+            });
             if (
               !floor?.receiptId ||
               floor.accountId !== b.subjectAccountId ||
@@ -1732,7 +1782,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               stage = await credentials.read(binding.effectReference);
             }
           } else {
-            const staged = await service.internal.stageCredentialEffect({
+            const staged = await service.internal.stagePasskeyEffect({
               key: `passkey-remove:${randomUUID()}`,
               subjectAccountId: human.account_id,
               headers: request.headers,

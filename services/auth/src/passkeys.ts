@@ -5,9 +5,9 @@ export type PasskeyAssertion = Parameters<
   NonNullable<NonNullable<PasskeyOptions['authentication']>['afterVerification']>
 >[0]['clientData'];
 import { APIError } from 'better-auth/api';
-import type { CredentialEffect } from './index.ts';
+import type { PasskeyEffect } from './index.ts';
 
-type Installation = Extract<CredentialEffect, { kind: 'passkey'; publicKey: string }>;
+type Installation = Extract<PasskeyEffect, { kind: 'passkey'; publicKey: string }>;
 type Ceremony = { credential?: Installation };
 export const passkeyCeremonies = new AsyncLocalStorage<Ceremony>();
 

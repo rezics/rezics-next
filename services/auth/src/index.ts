@@ -1,6 +1,7 @@
 import type {
   InvalidationReceipt,
   CredentialPurpose,
+  PasskeyPurpose,
   CredentialEffectVerifier,
   TrustedAccessPorts,
   SessionProof,
@@ -10,6 +11,13 @@ export type {
   InvalidationReceipt,
   EffectPurpose,
   CredentialPurpose,
+  PasskeyPurpose,
+  CredentialFloorPurpose,
+  CredentialFloorBinding,
+  CredentialApprovalPorts,
+  PasskeyTrustedAccessPorts,
+  PasskeyAuthorizationInput,
+  CredentialFloorAuthorizationInput,
   CredentialEffectBinding,
   CredentialEffectExpectation,
   CredentialEffectVerifier,
@@ -73,7 +81,10 @@ export type {
 export type CredentialEffect =
   | { kind: 'password'; password: string | null }
   | { kind: 'key'; kid: string; publicJwk: JWK; remove?: false }
-  | { kind: 'key'; kid: string; remove: true }
+  | { kind: 'key'; kid: string; remove: true };
+
+/** Verified public passkey material stays outside operator credential effects. */
+export type PasskeyEffect =
   | { kind: 'passkey'; id: string; remove: true }
   | {
       kind: 'passkey';
@@ -215,9 +226,15 @@ export interface AuthService {
         | { kind: 'password'; password: string }
         | { kind: 'password'; password: null }
         | { kind: 'key'; kid: string; publicJwk: JWK; remove?: undefined }
-        | { kind: 'key'; kid: string; remove: true; publicJwk?: undefined }
-        | { kind: 'passkey'; id: string; remove: true };
+        | { kind: 'key'; kid: string; remove: true; publicJwk?: undefined };
     }): Promise<{ effectRef: string; key: string; subjectId: string; purpose: CredentialPurpose; digest: string }>;
+    /** Own-human removal staging. Installations are accepted only from a verified ceremony. */
+    stagePasskeyEffect(input: {
+      key: string;
+      subjectAccountId: string;
+      headers: Headers;
+      credential: Extract<PasskeyEffect, { remove: true }>;
+    }): Promise<{ effectRef: string; key: string; subjectId: string; purpose: PasskeyPurpose; digest: string }>;
     /** Resolve Auth's stage; enter the live proof callback and request an exact
      * native approval for this purpose/key/commitment. Authenticate anew; never
      * serialize proof/JWT/context. Own-human account:manage uses actor grant AND

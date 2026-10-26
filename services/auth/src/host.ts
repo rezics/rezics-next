@@ -229,10 +229,17 @@ export function credentialEffectTransport(
       const input = { key: string(body.key), subjectAccountId: string(body.subjectId), headers: request.headers };
       if (command === 'stage')
         return response(
-          await service.internal.stageCredentialEffect({
-            ...input,
-            credential: body.credential as Parameters<typeof service.internal.stageCredentialEffect>[0]['credential'],
-          }),
+          (body.credential as { kind?: string } | undefined)?.kind === 'passkey'
+            ? await service.internal.stagePasskeyEffect({
+                ...input,
+                credential: body.credential as Parameters<typeof service.internal.stagePasskeyEffect>[0]['credential'],
+              })
+            : await service.internal.stageCredentialEffect({
+                ...input,
+                credential: body.credential as Parameters<
+                  typeof service.internal.stageCredentialEffect
+                >[0]['credential'],
+              }),
         );
       const effectRef = string(body.effectRef);
       // These hostile transport fields only compare with Auth's committed stage.

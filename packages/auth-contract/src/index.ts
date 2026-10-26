@@ -13,15 +13,12 @@ export interface InvalidationReceipt {
   minimumAuthnEpoch: number;
 }
 
-export type EffectPurpose =
-  | 'session'
-  | 'set-password'
-  | 'remove-password'
-  | 'add-key'
-  | 'remove-key'
-  | 'add-passkey'
-  | 'remove-passkey';
+export type EffectPurpose = 'session' | 'set-password' | 'remove-password' | 'add-key' | 'remove-key';
 export type CredentialPurpose = Exclude<EffectPurpose, 'session'>;
+/** Passkeys are managed only by their human owner, never by an operator. */
+export type PasskeyPurpose = 'add-passkey' | 'remove-passkey';
+/** Every purpose recorded in the shared credential stage and floor stores. */
+export type CredentialFloorPurpose = CredentialPurpose | PasskeyPurpose;
 
 /** Auth-owned nonsecret commitment, never credential material or permission context.
  * The keyed digest binds version, stage locator, immutable (subject, operationKey),
@@ -32,12 +29,12 @@ export type CredentialPurpose = Exclude<EffectPurpose, 'session'>;
  * key conflicts even after consumption or restart. Access/DBOS retain only these
  * locators, never passwords, private keys, cookies, JWTs or SessionProof objects.
  */
-export interface CredentialEffectBinding {
+export interface CredentialEffectBinding<Purpose extends CredentialFloorPurpose = CredentialPurpose> {
   operationKey: string;
   effectReference: string;
   effectDigest: string;
   subjectAccountId: string;
-  purpose: CredentialPurpose;
+  purpose: Purpose;
   credentialRowId: string | null;
   credentialRowVersion: string | null;
   actingHumanId: string;
@@ -46,8 +43,8 @@ export interface CredentialEffectBinding {
 }
 
 /** Expected current identity and immutable operation; an optional digest only compares. */
-export type CredentialEffectExpectation = Pick<
-  CredentialEffectBinding,
+export type CredentialEffectExpectation<Purpose extends CredentialFloorPurpose = CredentialPurpose> = Pick<
+  CredentialEffectBinding<Purpose>,
   'operationKey' | 'subjectAccountId' | 'purpose' | 'actingHumanId' | 'clientId' | 'scopes'
 > & { effectDigest?: string };
 
@@ -57,20 +54,27 @@ export type CredentialEffectExpectation = Pick<
  * never treat the old row version as new mutation authority. No minting path, Auth
  * database/key/runtime exposure to the kernel, or caller digest as provenance.
  */
-export type CredentialEffectVerifier = (
-  reference: string,
-  expected: CredentialEffectExpectation,
-) => Promise<CredentialEffectBinding>;
+export interface CredentialEffectVerifier {
+  <Purpose extends CredentialFloorPurpose>(
+    reference: string,
+    expected: CredentialEffectExpectation<Purpose>,
+  ): Promise<CredentialEffectBinding<Purpose>>;
+  (reference: string, expected: CredentialEffectExpectation): Promise<CredentialEffectBinding>;
+}
+
+export type CredentialFloorBinding = CredentialEffectBinding<CredentialFloorPurpose>;
 
 /** Exact credential consume result. Auth compares every field with its own stage
  * before writing; a session/device approval or broad credential opening cannot
  * substitute. A durable reference is a locator, never current authorization.
  */
-export interface CredentialEffectAuthorization extends EffectAuthorizationBase {
+export interface CredentialEffectAuthorization<
+  Purpose extends CredentialFloorPurpose = CredentialPurpose,
+> extends EffectAuthorizationBase {
   operationKey: string;
   effectReference: string;
   effectDigest: string;
-  purpose: CredentialPurpose;
+  purpose: Purpose;
 }
 
 /** A committed native floor receipt, bound to the exact stage and consumed opening.
@@ -81,7 +85,7 @@ export interface CredentialFloorReceipt extends InvalidationReceipt {
   operationKey: string;
   effectReference: string;
   effectDigest: string;
-  purpose: CredentialPurpose;
+  purpose: CredentialFloorPurpose;
   openingReceiptId: string;
   previousFloor: number;
   fenced: boolean;
@@ -96,12 +100,12 @@ export interface CredentialFloorReceipt extends InvalidationReceipt {
  * operation may finish against only its exact committed barrier and unchanged next
  * floor; its invalidated source session grants no consume/replay authority.
  */
-export type CredentialFloorPort = (input: {
-  stage: CredentialEffectBinding;
-  consumedOpening: CredentialEffectAuthorization;
+export type CredentialFloorPort<Purpose extends CredentialFloorPurpose = CredentialFloorPurpose> = (input: {
+  stage: CredentialEffectBinding<Purpose>;
+  consumedOpening: CredentialEffectAuthorization<Purpose>;
   expectedPreviousFloor: number;
   key: string;
-  purpose: CredentialPurpose;
+  purpose: Purpose;
 }) => Promise<CredentialFloorReceipt>;
 
 /** The session input stays byte-for-byte equivalent to the existing contract. */
@@ -121,6 +125,8 @@ export type CredentialAuthorizationInput = {
   };
 }[CredentialPurpose];
 
+export type PasskeyAuthorizationInput = Omit<CredentialAuthorizationInput, 'purpose'> & { purpose: PasskeyPurpose };
+export type CredentialFloorAuthorizationInput = CredentialAuthorizationInput | PasskeyAuthorizationInput;
 export type AuthorizationConsumeInput = SessionAuthorizationInput | CredentialAuthorizationInput;
 
 interface EffectAuthorizationBase {
@@ -156,7 +162,7 @@ export type AssignmentProof =
   | { kind: 'resolved'; principalId: string; assignedActorId: string; requestId: string; valid: string };
 
 /** Internal application ports. Never construct these results from HTTP fields. */
-export interface TrustedAccessPorts {
+interface SharedAccessPorts {
   readAccount(accountId: string): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
   readErasureAccount?(accountId: string): Promise<AccessAccount | null>;
@@ -174,29 +180,6 @@ export interface TrustedAccessPorts {
    * immutable stage before writing. A credential purpose requires both locators.
    */
   consumeAuthorization?(input: AuthorizationConsumeInput): Promise<EffectAuthorization>;
-  /** Trusted native credential capability. Missing ports fail closed. Approval
-   * creates the exact native opening; revalidation repeats current authorization
-   * at the Auth commit boundary and before disclosing a saved result. The exact
-   * floor receipt permits only this in-flight operation against its own barrier. */
-  approveCredentialEffect?(input: {
-    stage: CredentialEffectBinding;
-    human: SessionProof;
-  }): Promise<{ reference: string; expiresAt: string }>;
-  /** Resolve the exact native opening from authorization and compare its binding
-   * to stage. Repeat the same formula, current human/operator/subject state,
-   * fences, floors, consent, evidence and original expiry on every call. replay
-   * permits saved-result disclosure only; it never reopens a consumed approval.
-   * floorReceipt permits only the exact in-flight own-human barrier exception.
-   * No proof or permission context may be retained after this callback. */
-  revalidateCredentialEffect?(input: {
-    stage: CredentialEffectBinding;
-    human: SessionProof;
-    authorization: string;
-    consumedOpening?: CredentialEffectAuthorization;
-    floorReceipt?: CredentialFloorReceipt;
-    replay: boolean;
-  }): Promise<void>;
-  advanceCredentialFloor?: CredentialFloorPort;
   /** Commit a durable floor increase before returning; never clear an existing fence. */
   invalidateAccount?:
     | ((input: {
@@ -222,6 +205,51 @@ export interface TrustedAccessPorts {
    * receipt/floor before execution or replay. HTTP success awaits completion. */
   completeRecovery?: (reference: string) => Promise<void>;
 }
+
+/** Native approval and floor ports for the purposes installed by the host. */
+export interface CredentialApprovalPorts<Purpose extends CredentialFloorPurpose> {
+  /** Trusted native credential capability. Missing ports fail closed. Approval
+   * creates the exact native opening; revalidation repeats current authorization
+   * at the Auth commit boundary and before disclosing a saved result. The exact
+   * floor receipt permits only this in-flight operation against its own barrier. */
+  approveCredentialEffect?(input: {
+    stage: CredentialEffectBinding<Purpose>;
+    human: SessionProof;
+  }): Promise<{ reference: string; expiresAt: string }>;
+  /** Resolve the exact native opening from authorization and compare its binding
+   * to stage. Repeat the same formula, current human/operator/subject state,
+   * fences, floors, consent, evidence and original expiry on every call. replay
+   * permits saved-result disclosure only; it never reopens a consumed approval.
+   * floorReceipt permits only the exact in-flight own-human barrier exception.
+   * No proof or permission context may be retained after this callback. */
+  revalidateCredentialEffect?(input: {
+    stage: CredentialEffectBinding<Purpose>;
+    human: SessionProof;
+    authorization: string;
+    consumedOpening?: CredentialEffectAuthorization<Purpose>;
+    floorReceipt?: CredentialFloorReceipt;
+    replay: boolean;
+  }): Promise<void>;
+  advanceCredentialFloor?(input: Parameters<CredentialFloorPort<Purpose>>[0]): Promise<CredentialFloorReceipt>;
+}
+
+/** Explicit opt-in keeps existing password/key-only hosts typed to their four purposes. */
+export type PasskeyTrustedAccessPorts = SharedAccessPorts &
+  CredentialApprovalPorts<CredentialFloorPurpose> & {
+    passkeys: true;
+    /** Own-human passkey consumer; operator entry points retain CredentialPurpose. */
+    consumePasskeyAuthorization(
+      input: PasskeyAuthorizationInput,
+    ): Promise<CredentialEffectAuthorization<PasskeyPurpose>>;
+  };
+
+export type TrustedAccessPorts =
+  | (SharedAccessPorts &
+      CredentialApprovalPorts<CredentialPurpose> & {
+        passkeys?: false;
+        consumePasskeyAuthorization?: undefined;
+      })
+  | PasskeyTrustedAccessPorts;
 
 export interface SessionProof {
   account_id: string;

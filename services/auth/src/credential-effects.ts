@@ -12,9 +12,11 @@ import type { Pool, PoolClient } from 'pg';
 import { publicCredential } from './key-credentials.ts';
 import type {
   CredentialEffect,
+  PasskeyEffect,
+  CredentialFloorPurpose,
+  CredentialFloorBinding,
   CredentialEffectBinding,
   CredentialEffectExpectation,
-  CredentialPurpose,
   SessionProof,
 } from './index.ts';
 
@@ -31,7 +33,7 @@ type Query = Pool | PoolClient;
 type Row = {
   receipt_id: string;
   account_id: string;
-  purpose: CredentialPurpose;
+  purpose: CredentialFloorPurpose;
   minimum_authn_epoch: number;
   operation_key: string;
   effect_reference: string;
@@ -48,14 +50,18 @@ type Row = {
   committed_at: Date | null;
   committed_result: { receiptId: string; replayed: false } | null;
 };
-export type CredentialStage = { row: Row; binding: CredentialEffectBinding; credential: CredentialEffect };
+export type CredentialStage = {
+  row: Row;
+  binding: CredentialFloorBinding;
+  credential: CredentialEffect | PasskeyEffect;
+};
 function text(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !value || value.length > 1024) deny(400);
 }
 function same(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
-function bindingOf(row: Row): CredentialEffectBinding {
+function bindingOf(row: Row): CredentialFloorBinding {
   return {
     operationKey: row.operation_key,
     effectReference: row.effect_reference,
@@ -74,11 +80,11 @@ function bindingOf(row: Row): CredentialEffectBinding {
 export function credentialEffects(database: Pool, secret: string) {
   // Separate from registration, and separate encryption and commitment keys for
   // each purpose. The persistent Auth secret supports restart-safe verification.
-  const key = (purpose: CredentialPurpose, role: string) =>
+  const key = (purpose: CredentialFloorPurpose, role: string) =>
     Buffer.from(hkdfSync('sha256', secret, '', `rezics.auth.credential-${role}.${purpose}.v1`, 32));
-  const aad = (b: CredentialEffectBinding) =>
+  const aad = (b: CredentialFloorBinding) =>
     Buffer.from(JSON.stringify([1, b.effectReference, b.operationKey, b.subjectAccountId, b.purpose]));
-  const digest = (b: CredentialEffectBinding, credential: CredentialEffect) =>
+  const digest = (b: CredentialFloorBinding, credential: CredentialEffect | PasskeyEffect) =>
     createHmac('sha256', key(b.purpose, 'binding'))
       .update(
         JSON.stringify([
@@ -99,8 +105,9 @@ export function credentialEffects(database: Pool, secret: string) {
   async function normalize(
     value:
       | CredentialEffect
+      | PasskeyEffect
       | Parameters<import('./index.ts').AuthService['internal']['stageCredentialEffect']>[0]['credential'],
-  ): Promise<{ credential: CredentialEffect; purpose: CredentialPurpose }> {
+  ): Promise<{ credential: CredentialEffect | PasskeyEffect; purpose: CredentialFloorPurpose }> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) deny(400);
     const fields = Object.keys(value);
     if (value.kind === 'password') {
@@ -144,7 +151,7 @@ export function credentialEffects(database: Pool, secret: string) {
       return deny(400);
     }
   }
-  async function selected(query: Query, subject: string, credential: CredentialEffect) {
+  async function selected(query: Query, subject: string, credential: CredentialEffect | PasskeyEffect) {
     const row =
       credential.kind === 'passkey'
         ? (
@@ -173,7 +180,10 @@ export function credentialEffects(database: Pool, secret: string) {
         }
       : { id: null, version: null };
   }
-  function resolve(row: Row | undefined, expected?: CredentialEffectExpectation): CredentialStage {
+  function resolve(
+    row: Row | undefined,
+    expected?: CredentialEffectExpectation<CredentialFloorPurpose>,
+  ): CredentialStage {
     if (!row || row.stage_version !== 1 || !row.stage_ciphertext) return deny();
     const binding = bindingOf(row);
     Object.freeze(binding.scopes);
@@ -189,7 +199,7 @@ export function credentialEffects(database: Pool, secret: string) {
         (expected.effectDigest !== undefined && binding.effectDigest !== expected.effectDigest))
     )
       deny();
-    let credential: CredentialEffect;
+    let credential: CredentialEffect | PasskeyEffect;
     try {
       const encrypted = row.stage_ciphertext;
       const decipher = createDecipheriv('aes-256-gcm', key(binding.purpose, 'staging'), encrypted.subarray(0, 12));
@@ -216,7 +226,7 @@ export function credentialEffects(database: Pool, secret: string) {
   }
   async function read(
     reference: string,
-    expected?: CredentialEffectExpectation,
+    expected?: CredentialEffectExpectation<CredentialFloorPurpose>,
     query: Query = database,
     lock = false,
   ) {
@@ -233,7 +243,7 @@ export function credentialEffects(database: Pool, secret: string) {
   async function stage(input: {
     key: string;
     subjectAccountId: string;
-    credential: CredentialEffect;
+    credential: CredentialEffect | PasskeyEffect;
     human: SessionProof;
   }) {
     text(input.key);
@@ -265,7 +275,7 @@ export function credentialEffects(database: Pool, secret: string) {
       const selectedRow = await selected(connection, input.subjectAccountId, credential);
       if ((purpose === 'remove-password' || purpose === 'remove-key') && selectedRow.id === null) deny(409);
       if (purpose === 'add-key' && selectedRow.id !== null) deny(409);
-      const binding: CredentialEffectBinding = {
+      const binding: CredentialFloorBinding = {
         operationKey: input.key,
         effectReference: randomUUID(),
         effectDigest: '',
@@ -374,16 +384,25 @@ export function credentialEffects(database: Pool, secret: string) {
     }
     if (count !== 1) deny(409);
   }
+  async function verify<Purpose extends CredentialFloorPurpose>(
+    reference: string,
+    expected: CredentialEffectExpectation<Purpose>,
+  ): Promise<CredentialEffectBinding<Purpose>>;
+  async function verify(reference: string, expected: CredentialEffectExpectation): Promise<CredentialEffectBinding>;
+  async function verify(
+    reference: string,
+    expected: CredentialEffectExpectation<CredentialFloorPurpose>,
+  ): Promise<CredentialFloorBinding> {
+    const stage = await read(reference, expected);
+    if (!stage.row.committed_at) await current(database, stage);
+    return stage.binding;
+  }
   return {
     normalize,
     stage,
     read,
     current,
     mutate,
-    async verify(reference: string, expected: CredentialEffectExpectation) {
-      const stage = await read(reference, expected);
-      if (!stage.row.committed_at) await current(database, stage);
-      return stage.binding;
-    },
+    verify,
   };
 }

@@ -269,12 +269,21 @@ share the native `/signin` attempt budget. Errors use fixed codes.
 | `GET /passkeys`                   | Session cookie; returns `{ passkeys: [{ id, name, created_at, last_used_at }] }` for this person only, limited to 32. `last_used_at` is null before the first sign-in.                                                                                                  |
 | `POST /passkeys/remove`           | Session cookie and `{ id }`; stages, approves and applies `remove-passkey`, with a committed credential floor receipt and bounded session revocation, returning `{ success: true }`.                                                                                    |
 
-The closed credential purposes are `set-password`, `remove-password`, `add-key`,
-`remove-key`, `add-passkey` and `remove-passkey`. Passkeys belong only to their
-human owner; operator openings and automated-account credential management
-exclude passkeys. The public passkey aliases operate only on the current person's
+The closed `CredentialPurpose` and `CredentialEffect` contracts retain the four
+operator-manageable purposes: `set-password`, `remove-password`, `add-key` and
+`remove-key`. The separate own-human `PasskeyPurpose` is `add-passkey` or
+`remove-passkey`; `PasskeyEffect` describes their public credential material.
+`CredentialFloorPurpose` records both sets in shared stages, approvals and floor
+receipts. Passkeys belong only to their human owner; operator openings and
+automated-account credential management exclude passkeys. The public passkey aliases operate only on the current person's
 credentials. Installation can only stage a public credential produced by successful WebAuthn verification;
 public credential-effect commands cannot install arbitrary passkey material.
+The host dispatches passkey removal to the own-human `stagePasskeyEffect` port;
+`stageCredentialEffect` keeps its password/public-key input and four-purpose result.
+Passkey consumption uses the separate `consumePasskeyAuthorization` port.
+The kernel binding opts into all floor purposes with `passkeys: true`; existing
+password/public-key-only trusted hosts keep their original approval types and
+refuse passkey effects when that capability is absent.
 The plugin's verification hooks enforce the authenticator's verified UV flag and
 hand registration to credential effects before native persistence.
 

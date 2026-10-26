@@ -1,5 +1,5 @@
 import { createSuspensionCommands } from './suspension.ts';
-import type { CredentialEffectBinding } from '@rezics/auth-contract';
+import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';

@@ -2,6 +2,12 @@ import type {
   AccessAccount,
   ProvisioningReceiptMetadata,
   EffectAuthorization,
+  CredentialEffectAuthorization,
+  CredentialFloorPurpose,
+  CredentialPurpose,
+  PasskeyPurpose,
+  PasskeyAuthorizationInput,
+  PasskeyTrustedAccessPorts,
   InvalidationReceipt,
   TrustedAccessPorts,
 } from '@rezics/auth-contract';
@@ -12,14 +18,14 @@ import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycl
 import type { OperatorOpening } from './operator.ts';
 import registrationRead from './auth-bindings-read.sql';
 
-type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
+type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0] | PasskeyAuthorizationInput;
 type InvalidateInput = Parameters<NonNullable<TrustedAccessPorts['invalidateAccount']>>[0];
 type RecoveryInput = Parameters<NonNullable<TrustedAccessPorts['authorizeRecovery']>>[0];
 export type AuthProvisioningReceipt = Awaited<
   ReturnType<ReturnType<typeof createLifecycleInternals>['createPending']>
 >['value'];
-export type AuthAuthorizationReceipt = {
-  authorization: EffectAuthorization;
+export type AuthAuthorizationReceipt<Purpose extends CredentialFloorPurpose = CredentialPurpose> = {
+  authorization: EffectAuthorization | CredentialEffectAuthorization<Purpose>;
   /** Required for automation; a broad native credential purpose never replaces the exact Auth purpose. */
   operatorOpening: OperatorOpening | null;
 };
@@ -41,7 +47,7 @@ export type AuthBindingCapabilities = {
     | null
   >;
   verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
-  consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt | null>;
+  consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt<CredentialFloorPurpose> | null>;
   invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
   authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
   completeRecovery?: TrustedAccessPorts['completeRecovery'];
@@ -103,7 +109,7 @@ function translate(account: Account | null, recovery = false): AccessAccount | n
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
-export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilities): TrustedAccessPorts {
+export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilities): PasskeyTrustedAccessPorts {
   const {
     pool,
     verifyPendingIdentity,
@@ -203,7 +209,83 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       fenced: true,
     };
   }
+  async function consumeFloorAuthorization(input: ConsumeInput) {
+    if (input.purpose !== 'session' && (!input.operationKey || !input.effectReference))
+      throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+    if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+    allowed(
+      ['session', 'set-password', 'remove-password', 'add-key', 'remove-key', 'add-passkey', 'remove-passkey'].includes(
+        input.purpose,
+      ) &&
+        typeof input.authorization === 'string' &&
+        input.authorization.length > 0 &&
+        epoch(input.human.authn_epoch),
+    );
+    const before = await account(input.subjectAccountId);
+    const human = await read(input.human.account_id, true);
+    allowed(
+      translate(before)?.kind === 'actor' && human && !human.fenced && input.human.authn_epoch >= human.authnEpoch,
+    );
+    if (input.purpose === 'add-passkey' || input.purpose === 'remove-passkey')
+      allowed(before?.operatorAccountId === null && input.subjectAccountId === input.human.account_id);
+    // Preserve Auth's actual SessionProof and caller evidence for the coordinator.
+    const consumed = await consumeAuthAuthorization(input);
+    const result = consumed?.authorization;
+    const current = await account(input.subjectAccountId);
+    const subject = translate(current);
+    allowed(
+      result &&
+        typeof result.receiptId === 'string' &&
+        result.receiptId.length > 0 &&
+        result.subjectAccountId === input.subjectAccountId &&
+        result.purpose === input.purpose &&
+        result.actingHumanId === input.human.account_id &&
+        result.humanEpoch === input.human.authn_epoch &&
+        result.clientId === input.human.client_id &&
+        scopes(result.scopes, input.human.scope) &&
+        live(result.expiresAt) &&
+        subject &&
+        subject.kind === 'actor' &&
+        epoch(result.subjectEpoch) &&
+        result.subjectEpoch === subject.authnEpoch &&
+        current!.operatorAccountId === result.operatorAccountId,
+    );
+    if (input.purpose !== 'session')
+      allowed(
+        result.operationKey === input.operationKey &&
+          result.effectReference === input.effectReference &&
+          typeof result.effectDigest === 'string' &&
+          /^[a-f0-9]{64}$/.test(result.effectDigest),
+      );
+    const opening = consumed!.operatorOpening;
+    if (subject.automated) {
+      allowed(
+        opening &&
+          opening.receiptId === result.receiptId &&
+          opening.subjectAccountId === result.subjectAccountId &&
+          opening.operatorAccountId === result.operatorAccountId &&
+          opening.actingHumanId === result.actingHumanId &&
+          opening.clientId === result.clientId &&
+          scopes(opening.scopes, result.scopes) &&
+          opening.requestedBy === null &&
+          opening.purpose === (input.purpose === 'session' ? 'session' : 'credential-management') &&
+          live(opening.expiresAt) &&
+          Date.parse(opening.expiresAt) === Date.parse(result.expiresAt),
+      );
+    } else allowed(!opening && result.operatorAccountId === null && result.actingHumanId === subject.accountId);
+    if (result.invalidation) {
+      allowed(
+        epoch(result.invalidation.minimumAuthnEpoch) &&
+          result.invalidation.receiptId &&
+          result.invalidation.accountId === subject.accountId &&
+          result.invalidation.minimumAuthnEpoch === subject.authnEpoch &&
+          result.invalidation.minimumAuthnEpoch > floor(before!.minimumAuthnEpoch),
+      );
+    }
+    return result;
+  }
   return {
+    passkeys: true,
     ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
     readAccount: (id) => read(id),
     readErasureAccount: async (id) => {
@@ -230,83 +312,15 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       return { accountId: current.accountId, ...('receipt' in current ? { receipt: current.receipt } : {}) };
     },
     async consumeAuthorization(input) {
-      if (input.purpose !== 'session' && (!input.operationKey || !input.effectReference))
-        throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-      if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-      allowed(
-        [
-          'session',
-          'set-password',
-          'remove-password',
-          'add-key',
-          'remove-key',
-          'add-passkey',
-          'remove-passkey',
-        ].includes(input.purpose) &&
-          typeof input.authorization === 'string' &&
-          input.authorization.length > 0 &&
-          epoch(input.human.authn_epoch),
-      );
-      const before = await account(input.subjectAccountId);
-      const human = await read(input.human.account_id, true);
-      allowed(
-        translate(before)?.kind === 'actor' && human && !human.fenced && input.human.authn_epoch >= human.authnEpoch,
-      );
-      // Preserve Auth's actual SessionProof and caller evidence for the coordinator.
-      const consumed = await consumeAuthAuthorization(input);
-      const result = consumed?.authorization;
-      const current = await account(input.subjectAccountId);
-      const subject = translate(current);
-      allowed(
-        result &&
-          typeof result.receiptId === 'string' &&
-          result.receiptId.length > 0 &&
-          result.subjectAccountId === input.subjectAccountId &&
-          result.purpose === input.purpose &&
-          result.actingHumanId === input.human.account_id &&
-          result.humanEpoch === input.human.authn_epoch &&
-          result.clientId === input.human.client_id &&
-          scopes(result.scopes, input.human.scope) &&
-          live(result.expiresAt) &&
-          subject &&
-          subject.kind === 'actor' &&
-          epoch(result.subjectEpoch) &&
-          result.subjectEpoch === subject.authnEpoch &&
-          current!.operatorAccountId === result.operatorAccountId,
-      );
-      if (input.purpose !== 'session')
-        allowed(
-          result.operationKey === input.operationKey &&
-            result.effectReference === input.effectReference &&
-            typeof result.effectDigest === 'string' &&
-            /^[a-f0-9]{64}$/.test(result.effectDigest),
-        );
-      const opening = consumed!.operatorOpening;
-      if (subject.automated) {
-        allowed(
-          opening &&
-            opening.receiptId === result.receiptId &&
-            opening.subjectAccountId === result.subjectAccountId &&
-            opening.operatorAccountId === result.operatorAccountId &&
-            opening.actingHumanId === result.actingHumanId &&
-            opening.clientId === result.clientId &&
-            scopes(opening.scopes, result.scopes) &&
-            opening.requestedBy === null &&
-            opening.purpose === (input.purpose === 'session' ? 'session' : 'credential-management') &&
-            live(opening.expiresAt) &&
-            Date.parse(opening.expiresAt) === Date.parse(result.expiresAt),
-        );
-      } else allowed(!opening && result.operatorAccountId === null && result.actingHumanId === subject.accountId);
-      if (result.invalidation) {
-        allowed(
-          epoch(result.invalidation.minimumAuthnEpoch) &&
-            result.invalidation.receiptId &&
-            result.invalidation.accountId === subject.accountId &&
-            result.invalidation.minimumAuthnEpoch === subject.authnEpoch &&
-            result.invalidation.minimumAuthnEpoch > floor(before!.minimumAuthnEpoch),
-        );
-      }
-      return result;
+      const result = await consumeFloorAuthorization(input);
+      allowed(result.purpose !== 'add-passkey' && result.purpose !== 'remove-passkey');
+      return result as EffectAuthorization;
+    },
+    async consumePasskeyAuthorization(input) {
+      allowed(input.purpose === 'add-passkey' || input.purpose === 'remove-passkey');
+      allowed(input.subjectAccountId === input.human.account_id);
+      const result = await consumeFloorAuthorization(input);
+      return result as CredentialEffectAuthorization<PasskeyPurpose>;
     },
     async invalidateAccount(input) {
       if (!invalidateAccount) throw new AuthBindingUnavailableError('invalidateAccount');
