@@ -5,7 +5,7 @@ import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
 import { choosePoolWithFallback } from './allowance.ts';
-import { readPool, type PoolReader } from './usage.ts';
+import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { launch, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { terminateProcessGroup } from './process.ts';
@@ -211,7 +211,7 @@ export class WorkerTasks {
       const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;
       const route = old ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
         : routeTask(nextBrief, task.sequence, readRouting(this.settings.routingFile));
-      const readings = this.settings.pools.map(pool => this.reader(pool));
+      const readings = this.settings.pools.map(pool => withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory));
       const history = this.store.attempts().flatMap(a => [a.before, a.after]).filter(r => r !== null);
       const fallbacks = options.profile || nextTaskClass === 'mechanical' ? []
         : readRouting(this.settings.routingFile).classes[nextTaskClass]?.fallbacks ?? [];

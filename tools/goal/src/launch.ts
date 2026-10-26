@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import defaults from '../defaults.json';
+import { NO_COMPILE_CACHE } from './merge.ts';
 import { processIdentity } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
@@ -39,7 +40,7 @@ export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, par
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
   for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
-  return { ...env, ...extra, [key]: pool.configDirectory };
+  return { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
 }
 export function workerPrompt(task: Task, evidence: string | undefined, consultation: string | undefined, resolutionFiles: readonly string[], mainCheckout: string): string {
   const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map(file => file.path);
@@ -53,7 +54,7 @@ export function workerPrompt(task: Task, evidence: string | undefined, consultat
     readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
     task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',
     'The task contract follows:', task.brief.markdown,
-    'A failure outside your declared paths is not your blocker: when your acceptance command passes, report success and name any such failure in your summary.',
+    'A failure that also occurs on your base commit is not your blocker: when your acceptance command passes, report success and name it in your summary. A test that passes on your base and fails after your change is yours: fix it, or report scope growth when the fix needs files outside your paths.',
     "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',

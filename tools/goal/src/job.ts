@@ -2,6 +2,7 @@ import { watch, type FSWatcher } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
 import { liveGroups, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
+import { markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure } from './failures.ts';
@@ -330,6 +331,7 @@ export class WorkerJob implements GateOutcomeSink {
         retry = { evidence: evidencePath, escalation: failureClass, fixRound: attempt.fixRound };
         if (kind === 'pool-exhausted') {
           const key = this.tasks.settings.pools.find(pool => pool.name === attempt.pool)?.allowanceKey;
+          if (key) markExhausted(this.tasks.settings.stateDirectory, key);
           retry.excludePools = this.tasks.settings.pools.filter(pool => pool.allowanceKey === key).map(pool => pool.name);
         }
       }

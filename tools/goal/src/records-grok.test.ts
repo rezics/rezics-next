@@ -17,3 +17,8 @@ test('a blocked report wrapped in prose is still read as blocked', () => {
   expect(measured.failureKind).toBe('spec-conflict');
   expect(measured.blocker).toBe('the frozen test contradicts the brief');
 });
+
+test("Grok's 402 balance-exhausted error is pool exhaustion, not a tool failure", () => {
+  const text = JSON.stringify({ type: 'error', message: 'Internal error: {\n  "message": "API error (status 402 Payment Required): Grok Build usage balance exhausted",\n  "http_status": 402\n}' });
+  expect(measureLog(text).failureKind).toBe('pool-exhausted');
+});
