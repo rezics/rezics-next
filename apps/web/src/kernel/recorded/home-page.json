@@ -1,9 +1,26 @@
 {
-  "profile": "sha256:860534b8356dab814f365ef3284ab9f836f16c1576e42166720479be4ac4115f",
+  "profile": "sha256:88921cc5e997e26013530d390f177bc1578f9fa06f5d81b895cdda09f67a73ea",
   "template": { "scope": "route", "key": "/" },
   "document": {
     "root": { "props": {} },
     "content": [
+      {
+        "type": "Heading",
+        "props": {
+          "id": "heading",
+          "text": {
+            "de": "Klarer sehen, was zählt",
+            "en": "A clearer view of what matters",
+            "es": "Una visión más clara de lo importante",
+            "fr": "Voir plus clairement l’essentiel",
+            "ja": "大切なことを、もっと明確に",
+            "ko": "중요한 것을 더 선명하게",
+            "zh-Hans": "看清真正重要的事",
+            "zh-Hant": "看清真正重要的事"
+          },
+          "level": 1
+        }
+      },
       {
         "type": "SearchBox",
         "props": {
@@ -20,6 +37,7 @@
           }
         }
       },
+      { "type": "Slot", "props": { "id": "personal", "name": "personal", "children": [] } },
       {
         "type": "LinkGrid",
         "props": {
@@ -160,51 +178,97 @@
   },
   "reads": {
     "r0": {
-      "status": 503,
+      "status": 200,
       "body": {
-        "type": "https://rezics.com/problems/index_not_ready",
-        "title": "Search Index Not Ready",
-        "status": 503,
-        "code": "index_not_ready",
-        "retryable": true,
-        "effect_status": "not_applicable",
-        "request_id": "01a1761b-1b43-7363-b1c0-7e14ea6e2071"
+        "subjects": [
+          {
+            "id": "01a1773c-6c07-714e-b364-652003c69555",
+            "type": "schema:Book",
+            "labels": {
+              "en": "The Little Prince",
+              "zh-Hans": "小王子",
+              "ko": "어린 왕자",
+              "zh-Hant": "小王子",
+              "ja": "星の王子さま",
+              "es": "El Principito",
+              "fr": "Le Petit Prince",
+              "de": "Der kleine Prinz"
+            }
+          },
+          {
+            "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
+            "type": "schema:Book",
+            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である" }
+          },
+          {
+            "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
+            "type": "schema:Book",
+            "labels": { "en": "Kokoro", "ja": "こころ" }
+          }
+        ],
+        "total": { "value": 3, "relation": "exact" },
+        "next": null,
+        "as_of": "2026-10-26T08:03:03.024Z"
       }
     },
     "r1": {
-      "status": 503,
+      "status": 200,
       "body": {
-        "type": "https://rezics.com/problems/index_not_ready",
-        "title": "Search Index Not Ready",
-        "status": 503,
-        "code": "index_not_ready",
-        "retryable": true,
-        "effect_status": "not_applicable",
-        "request_id": "01a1761b-1b43-7364-b6aa-7490f79df08b"
+        "subjects": [
+          {
+            "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
+            "type": "schema:TVSeries",
+            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン" }
+          },
+          {
+            "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
+            "type": "schema:TVSeries",
+            "labels": { "en": "Mushishi", "ja": "蟲師" }
+          }
+        ],
+        "total": { "value": 2, "relation": "exact" },
+        "next": null,
+        "as_of": "2026-10-26T08:03:03.024Z"
       }
     },
     "r2": {
-      "status": 503,
+      "status": 200,
       "body": {
-        "type": "https://rezics.com/problems/index_not_ready",
-        "title": "Search Index Not Ready",
-        "status": 503,
-        "code": "index_not_ready",
-        "retryable": true,
-        "effect_status": "not_applicable",
-        "request_id": "01a1761b-1b43-7365-bf55-d7cf1de82de6"
+        "subjects": [
+          {
+            "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
+            "type": "wd:Q689445",
+            "labels": { "en": "Clannad", "ja": "クラナド" }
+          },
+          {
+            "id": "01a1773a-f700-7075-8008-6f06740bee6d",
+            "type": "wd:Q689445",
+            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート" }
+          }
+        ],
+        "total": { "value": 2, "relation": "exact" },
+        "next": null,
+        "as_of": "2026-10-26T08:03:03.024Z"
       }
     },
     "r3": {
-      "status": 503,
+      "status": 200,
       "body": {
-        "type": "https://rezics.com/problems/index_not_ready",
-        "title": "Search Index Not Ready",
-        "status": 503,
-        "code": "index_not_ready",
-        "retryable": true,
-        "effect_status": "not_applicable",
-        "request_id": "01a1761b-1b43-7366-855c-a8b01ccb4b4e"
+        "subjects": [
+          {
+            "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
+            "type": "schema:Recipe",
+            "labels": { "en": "Nikujaga", "ja": "肉じゃが" }
+          },
+          {
+            "id": "01a1773a-f700-7077-883e-8b0879393d7d",
+            "type": "schema:Recipe",
+            "labels": { "en": "Shakshuka", "ja": "シャクシュカ" }
+          }
+        ],
+        "total": { "value": 2, "relation": "exact" },
+        "next": null,
+        "as_of": "2026-10-26T08:03:03.024Z"
       }
     }
   },

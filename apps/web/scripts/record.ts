@@ -27,6 +27,22 @@ const searchPrefix = 'webrec';
 const pagePrefix = 'webrecpage';
 const matchingQuery = 'Prince';
 const emptyQuery = 'zzzznotasubject';
+// Two subjects per vertical list of the home. They exist only in the search index and its in-process source.
+const homeSubjects = [
+  { id: '01a1773a-f6ff-7684-8e44-1a013af60d4b', type: 'schema:Book', en: 'Kokoro', ja: 'こころ' },
+  { id: '01a1773a-f700-7071-b5ef-2b02f7d0e8c6', type: 'schema:Book', en: 'I Am a Cat', ja: '吾輩は猫である' },
+  { id: '01a1773a-f700-7072-b9eb-3c03e51c0440', type: 'schema:TVSeries', en: 'Mushishi', ja: '蟲師' },
+  {
+    id: '01a1773a-f700-7073-bcc1-4d04f35ff67a',
+    type: 'schema:TVSeries',
+    en: "Frieren: Beyond Journey's End",
+    ja: '葬送のフリーレン',
+  },
+  { id: '01a1773a-f700-7074-b1ee-5e05671d3be3', type: 'wd:Q689445', en: 'Clannad', ja: 'クラナド' },
+  { id: '01a1773a-f700-7075-8008-6f06740bee6d', type: 'wd:Q689445', en: 'Steins Gate', ja: 'シュタインズ・ゲート' },
+  { id: '01a1773a-f700-7076-b2d2-7a07a9d7104f', type: 'schema:Recipe', en: 'Nikujaga', ja: '肉じゃが' },
+  { id: '01a1773a-f700-7077-883e-8b0879393d7d', type: 'schema:Recipe', en: 'Shakshuka', ja: 'シャクシュカ' },
+] as const;
 let container = '';
 let searchContainer = '';
 let kernel: ReturnType<typeof spawn> | undefined;
@@ -523,17 +539,6 @@ async function main(): Promise<void> {
   };
   if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
     throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
-  if ((await savePost('home-page', { target: { route: '/' } })) !== 200)
-    throw new Error(`home-page returned ${JSON.stringify(recorded.get('home-page'))}`);
-  const homePage = objectBody(recorded.get('home-page'), 'home-page');
-  const homeTemplate = objectBody(homePage.template, 'home-page template');
-  if (
-    typeof homePage.profile !== 'string' ||
-    !/^sha256:[0-9a-f]{64}$/.test(homePage.profile) ||
-    homeTemplate.scope !== 'route' ||
-    homeTemplate.key !== '/'
-  )
-    throw new Error(`home-page is not a page for the home route: ${JSON.stringify(homePage)}`);
   const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
   const template = objectBody(subjectPage.template, 'subject-page template');
   if (
@@ -588,36 +593,42 @@ async function main(): Promise<void> {
 
   const subject = objectBody(objectBody(recorded.get('subject'), 'subject').subject, 'subject record');
   const subjectLabels = objectBody(subject.labels, 'subject labels');
-  const indexed = {
-    id: subjectId,
-    type: subject.type,
+  const indexedSubject = (id: string, type: unknown, labels: Record<string, unknown>) => ({
+    id,
+    type: String(type),
     visibility: 'visible' as const,
     redirect: null,
     securityRevision: 1,
-    labels: Object.entries(subjectLabels).flatMap(([language, value]) =>
+    labels: Object.entries(labels).flatMap(([language, value]) =>
       typeof value === 'string' ? [{ language, value }] : [],
     ),
     aliases: [],
     descriptions: [],
     statements: [],
-  };
+  });
+  const indexedSubjects = [
+    indexedSubject(subjectId, subject.type, subjectLabels),
+    ...homeSubjects.map(({ id, type, en, ja }) => indexedSubject(id, type, { en, ja })),
+  ];
   const source = {
     async read(partition: number, ids: readonly string[]) {
       return {
         partition,
         position: 1n,
-        subjects: ids.includes(subjectId) && subjectPartition(subjectId) === partition ? [indexed] : [],
+        subjects: indexedSubjects.filter((hit) => ids.includes(hit.id) && subjectPartition(hit.id) === partition),
       };
     },
     async count(partition: number) {
-      return subjectPartition(subjectId) === partition ? { position: 1n, count: 1 } : { position: 0n, count: 0 };
+      const count = indexedSubjects.filter((hit) => subjectPartition(hit.id) === partition).length;
+      return count ? { position: 1n, count } : { position: 0n, count: 0 };
     },
   };
   await createSubjectIndex(opensearch, searchPrefix, 1);
   const index = subjectIndexName(searchPrefix, 1);
-  const partition = subjectPartition(subjectId);
-  const snapshot = await source.read(partition, [subjectId]);
-  await opensearch.bulk(bulkLines(index, documentActions(snapshot, [subjectId])), { query: { refresh: 'wait_for' } });
+  for (const hit of indexedSubjects) {
+    const snapshot = await source.read(subjectPartition(hit.id), [hit.id]);
+    await opensearch.bulk(bulkLines(index, documentActions(snapshot, [hit.id])), { query: { refresh: 'wait_for' } });
+  }
   await opensearch.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(searchPrefix) } }] });
   const search = createSearchService({ pool: database, client: opensearch, prefix: searchPrefix, source, cursors });
   // The spawned kernel server does not mount search, so these reads use the same database through an in-process kernel.
@@ -648,6 +659,37 @@ async function main(): Promise<void> {
     throw new Error(`Search for ${matchingQuery} did not return the recorded subject: ${JSON.stringify(matched)}`);
   if (!Array.isArray(unmatched.subjects) || unmatched.subjects.length !== 0)
     throw new Error(`Empty search returned hits: ${JSON.stringify(unmatched)}`);
+
+  // The home lists are searches, so the home is read through the kernel that mounts search over the index above.
+  const homeResponse = await appHandle.handle(
+    new Request('http://kernel.test/v1/pages:read', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: { route: '/' } }),
+    }),
+  );
+  recorded.set('home-page', {
+    ...objectBody(await homeResponse.json(), 'home-page'),
+    status: homeResponse.status,
+  });
+  if (homeResponse.status !== 200) throw new Error(`home-page returned ${JSON.stringify(recorded.get('home-page'))}`);
+  const homePage = objectBody(recorded.get('home-page'), 'home-page');
+  const homeTemplate = objectBody(homePage.template, 'home-page template');
+  if (
+    typeof homePage.profile !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(homePage.profile) ||
+    homeTemplate.scope !== 'route' ||
+    homeTemplate.key !== '/'
+  )
+    throw new Error(`home-page is not a page for the home route: ${JSON.stringify(homePage)}`);
+  const homeReads = Object.values(objectBody(homePage.reads, 'home-page reads')).map((read) =>
+    objectBody(read, 'home-page read'),
+  );
+  for (const read of homeReads) {
+    const listed = objectBody(read.body, 'home-page read body').subjects;
+    if (read.status !== 200 || !Array.isArray(listed) || listed.length < 2)
+      throw new Error(`Every home list needs status 200 and two subjects: ${JSON.stringify(homePage.reads)}`);
+  }
 
   const output = join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });
