@@ -91,3 +91,23 @@ Every surface builds `Cover` from the cover summary the kernel returned with the
 ### Credit and text alternative
 
 The `alt` text is the subject's title. Decorative repeats of a cover next to its visible title use `alt=""`. Where a cover is shown at `lg` or larger, its credit (rights holder, and the source it came through) is reachable from the cover: in a caption on the subject page (`caption`), and otherwise behind a small credit control on the cover that opens the rights holder, source and licence; the sources section lists it too. A `fill` frame shows the control from 240 px wide.
+
+## Media image
+
+`MediaImage` draws an image inside a document or a gallery that is not a subject cover. Import it from `@rezics/ui/media-image`. It takes the same image summary as `Cover` (`media`, `width`, `height`, `placeholder`, `variants`), a `src` builder from the site that turns `{ media, format, width }` into a URL, the `alt` text and a `sizes` string.
+
+- The frame reserves the image's own ratio before any byte arrives and stops at the image's own width, so the page does not shift and a small image is never enlarged. `frame` sets one ratio for gallery tiles that must align; the image is then cropped to it.
+- The stored placeholder colour is painted behind the image while it loads. A summary without a safe colour falls back to the surface tone.
+- `<picture>` offers AVIF before WebP, each with `srcset` from the variants the summary lists and the `sizes` prop. Images load lazily; `priority` loads one eagerly with high fetch priority.
+- A failed image, or a summary with no variants, becomes a quiet frame of the same size holding the alt text. The browser's broken-image icon never appears. An empty `alt` marks the image decorative and leaves the frame blank.
+
+The variant and placeholder code lives in `media-image-sources.ts`, so `Cover` can import the same summary types and `srcset` writer.
+
+## Entity picker
+
+`EntityPicker` chooses subjects by searching. Import it from `@rezics/ui/entity-picker`. The site passes `search(text, signal)`, which resolves `{ id, title, types, typeLabel, year?, cover }[]`, and the `src` builder `Cover` needs.
+
+- It searches as the person types, after a pause (`debounce`, 250 ms by default), and aborts the search a newer keystroke makes stale. Results of an aborted search are never shown.
+- Each result shows a small cover, the title, and the type label and year. The `id` is passed back through `onValueChange` and never rendered. The cover is `Cover` at `xs`, so a subject with no image shows its placeholder; rows share one frame ratio so covers align. `cover` is the `Cover` summary.
+- Arrow keys move through the results and Enter selects, as in the shadcn `combobox` it builds on. `multiple` keeps the chosen subjects listed below the search box, each with a remove button.
+- An empty answer says nothing matches the text. A failed search says so in words and offers Try again. While a search is running the earlier results stay but cannot be chosen.
