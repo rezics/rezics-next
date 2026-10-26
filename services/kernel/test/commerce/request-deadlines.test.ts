@@ -7,24 +7,22 @@ const sources = readdirSync(directory)
   .filter((file) => file.endsWith('.ts'))
   .map((file) => ({ file, lines: readFileSync(resolve(directory, file), 'utf8').split('\n') }));
 
-const literalBudget = /(?:Date\.now\(\)|getTime\(\))\s*\+\s*[0-9]/;
+const computedDeadline = /(?:Date\.now\(\)|getTime\(\))\s*\+/;
 const namedBudget = /\b[A-Z_]*BUDGET_MS\b/;
-const clockDeadline = /getTime\(\)/;
 
-test('commerce code takes request deadlines from the request and work deadlines from one wall-clock constant', () => {
-  const offenders = sources.flatMap(({ file, lines }) =>
-    lines.flatMap((line, index) =>
-      literalBudget.test(line) || namedBudget.test(line) || (/deadline/i.test(line) && clockDeadline.test(line))
-        ? [`${file}:${index + 1}: ${line.trim()}`]
-        : [],
-    ),
+test('commerce code takes request deadlines from deadlineFor and one wall-clock work budget', () => {
+  const computed = sources.flatMap(({ file, lines }) =>
+    lines.flatMap((line, index) => (computedDeadline.test(line) ? [`${file}: ${line.trim()}`] : [])),
   );
-  expect(offenders).toEqual([]);
+  expect(computed).toEqual(['commands.ts: const deadline = Date.now() + WORK_STEP_DEADLINE_MS;']);
+  const named = sources.flatMap(({ file, lines }) => lines.filter((line) => namedBudget.test(line)).map(() => file));
+  expect(named).toEqual([]);
   const declarations = sources.flatMap(({ file, lines }) =>
     lines.filter((line) => /\bconst WORK_STEP_DEADLINE_MS = [0-9_]+;/.test(line)).map(() => file),
   );
   expect(declarations).toEqual(['commands.ts']);
   const commands = sources.find((source) => source.file === 'commands.ts')!.lines.join('\n');
+  expect(commands.match(/deadlineFor\(WORK_STEP_DEADLINE_MS\)/g)?.length).toBe(2);
   expect(commands).not.toContain("throw new Error('Checkout outcome recording deadline exceeded')");
 });
 
