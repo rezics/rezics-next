@@ -162,9 +162,10 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
         const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
         expect(code).toBe(mode === 'refusal' ? 1 : 0);
         if (mode !== 'refusal') expect(stderr).toBe('');
+        else expect(stderr).toContain('BootstrapGovernanceUnavailableError');
         const raw = JSON.parse(readFileSync(output, 'utf8')) as Capture;
         const cost = costOf(raw);
-        expect(cost.statements).toBeGreaterThan(0);
+        expect(cost.statements, stderr).toBeGreaterThan(0);
         expect(cost.plans).toBeGreaterThan(0);
         // One warm-up precedes the one measured run at each scale.
         if (repetition % 2 === 1) children.push({ scale, cost });
@@ -188,7 +189,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       // The CLI runs the same governance and standing-parent commands. Catalog
       // validation is classified separately from their operation statements.
       expect(sample.cost.statements).toBe(mode === 'first' ? 12 : mode === 'refusal' ? 3 : 10);
-      expect(sample.cost.relations?.['access.account']?.rows).toBe(1);
+      expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }
     const costs = (samples: readonly GrowthSample[]) =>
       samples.map(({ scale, cost }) => ({ scale, statements: cost.statements, rows: cost.rows, blocks: cost.blocks }));
