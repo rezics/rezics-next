@@ -84,7 +84,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await database?.end();
   fixture?.close();
-}, 30_000);
+});
 
 test('consent read returns the client display name registered scopes and current consent', async () => {
   const path = `/consent/${external}`;

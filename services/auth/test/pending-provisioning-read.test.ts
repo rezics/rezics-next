@@ -39,7 +39,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool?.end();
   fixture?.close();
-}, 30_000);
+});
 async function provision(ports: TrustedAccessPorts, automated: boolean) {
   const service = await createAuthService({ ...options, trustedAccess: ports });
   return automated

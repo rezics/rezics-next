@@ -6,12 +6,12 @@ import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount, type EffectAuthorization } from '../src/index.ts';
 
-// One database. Each case used to leave its growth seed behind, and the shared
-// 1g tmpfs restarted Postgres for every later case.
+// One database. Each case used to leave its growth seed behind, and the next
+// case then filled the fixture until Postgres restarted.
 const owned = testDatabase();
 afterAll(() => {
   owned.close();
-}, 30_000);
+});
 const issuer = 'https://growth.auth.test';
 const secret = 'growth-only-persistent-secret-with-at-least-32-bytes';
 const password = 'correct horse battery staple';

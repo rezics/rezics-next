@@ -63,9 +63,14 @@ test(
       });
       expect(result.exitCode).toBe(1);
       expect(result.stderr.toString()).toContain('Stopped after real check dump');
-      const calls = commands();
+      const deadline = Date.now() + 20_000;
+      let calls = commands();
       const container = calls.find((args) => args[0] === 'port')?.[1];
       if (!container) throw new Error('Check did not create a PostgreSQL fixture');
+      while (Date.now() < deadline && calls.at(-1)?.[0] !== 'rm') {
+        Bun.sleepSync(50);
+        calls = commands();
+      }
       const dumps = calls.filter((args) => args.includes('pg_dump'));
       expect(dumps.map((args) => args.slice(0, 3))).toEqual([['exec', container, 'pg_dump']]);
       expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
@@ -139,6 +144,12 @@ test(
           expect(schemaDump(second.url, second)).toContain('CREATE TABLE public.fixture_marker');
           first.close();
           first.close();
+          const removalDeadline = Date.now() + 20_000;
+          while (
+            Date.now() < removalDeadline &&
+            !commands().some((args) => args[0] === 'rm' && args[2] === first.container)
+          )
+            Bun.sleepSync(50);
           const afterClose = commands().length;
           expect(schemaDump(second.url, second)).toContain('CREATE TABLE public.fixture_marker');
           expect(

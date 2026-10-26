@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +12,15 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
+}
+
+// Removal waits on the daemon. Under a full suite that wait exceeds the default
+// hook budget, and a non-zero `docker rm -f` (already gone, or removal already
+// in progress) then fails the hook. Issue the removal in its own session so the
+// caller can return; a later check still collects a fixture whose owner has exited.
+function removeContainer(id: string): void {
+  const child = spawn('docker', ['rm', '-f', id], { cwd: directory, detached: true, stdio: 'ignore' });
+  child.unref();
 }
 
 export function migrate(url: string, migrationsDirectory = 'db/migrations'): void {
@@ -82,8 +91,11 @@ export function testDatabase(): TestDatabase {
     `${label}=${process.pid}`,
     '-p',
     '127.0.0.1::5432',
+    // Concurrent files, growth seeds at three scales and a 1GB WAL outgrew 1g, and
+    // every later file then failed once Postgres had stopped. tmpfs only takes
+    // memory for what is written. Same cap the kernel check uses.
     '--tmpfs',
-    '/var/lib/postgresql:rw,size=1g',
+    '/var/lib/postgresql:rw,size=8g',
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -97,18 +109,14 @@ export function testDatabase(): TestDatabase {
     'synchronous_commit=off',
     '-c',
     'full_page_writes=off',
-    // The data directory is a 1g tmpfs. Default max_wal_size is 1GB, so WAL from
-    // a shared growth database fills the filesystem before checkpoint_timeout.
     '-c',
-    'max_wal_size=64MB',
-    '-c',
-    'min_wal_size=32MB',
+    'max_wal_size=256MB',
   ]);
   let closed = false;
   const close = () => {
     if (!closed) {
       closed = true;
-      run('docker', ['rm', '-f', container]);
+      removeContainer(container);
     }
   };
   const interrupt = (code: number) => {

@@ -213,7 +213,7 @@ afterAll(async () => {
   await system?.end();
   await pool?.end();
   fixture?.close();
-}, 30_000);
+});
 
 test('signup verifies the turnstile token before any registration work and posts the sanitized verification fields', async () => {
   resetSiteverify();

@@ -214,7 +214,7 @@ afterAll(async () => {
   await system?.end();
   await pool?.end();
   fixture?.close();
-}, 30_000);
+});
 
 test('registration persists DBOS pending history and resumes same identity after both executor interruptions', async () => {
   const pending = await workflows.beginRegistration({ key: 'recover-human', handle: 'Recover_Human' });
