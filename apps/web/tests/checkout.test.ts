@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import type { KernelClient } from '@rezics/client';
+import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser, type Page } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
@@ -50,10 +51,59 @@ type Problem = NonNullable<Awaited<ReturnType<KernelClient['orders']['post']>>['
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const offerPath = (n = 1) => `/en/offers/${id(n)}`;
 const stripe = 'https://checkout.stripe.com/c/pay/cs_test_checkout';
+const coverMedia = id(91);
+const bookLabels: Record<string, string> = {
+  en: 'A Field Guide to Stars',
+  de: 'Ein Feldführer zu den Sternen',
+  ja: '星の野外ガイド',
+};
+type Subject = NonNullable<OfferRead['offer']['subject']>;
+// The kernel's subject summary for a book, labelled in the first asked language it has a label for.
+function summaryOf(languages: string | null, cover: Subject['cover']): Subject {
+  const language = languages && languages in bookLabels ? languages : 'en';
+  return {
+    id: id(90),
+    type: 'schema:Book',
+    types: ['schema:Book', 'schema:CreativeWork'],
+    label: { value: bookLabels[language]!, language },
+    creativeWork: true,
+    cover,
+  };
+}
+const bookCover: Subject['cover'] = {
+  media: coverMedia,
+  width: 1200,
+  height: 1800,
+  placeholder: { thumbhash: '', color: '#5a4632' },
+  variants: [
+    { format: 'avif', width: 320 },
+    { format: 'webp', width: 320 },
+    { format: 'avif', width: 640 },
+    { format: 'webp', width: 640 },
+  ],
+  focalPoint: null,
+  credit: {
+    rightsHolder: 'Star Press',
+    via: { name: 'Open Library', url: 'https://openlibrary.org/' },
+    license: 'All rights reserved',
+    obligations: [],
+  },
+};
+// A two-by-three image in each format a cover variant comes in.
+const images = {
+  avif: Buffer.from(
+    'AAAAHGZ0eXBhdmlmAAAAAG1pZjFhdmlmbWlhZgAAANZtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAAA+gABAAAAAAAAACIAAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABhdjAxAAAAAA5waXRtAAAAAAABAAAAVmlwcnAAAAA4aXBjbwAAAAxhdjFDgSACAAAAABRpc3BlAAAAAAAAAAIAAAADAAAAEHBpeGkAAAAAAwgICAAAABZpcG1hAAAAAAAAAAEAAQOBAgMAAAAqbWRhdBIACgg4AHNICGg0gDIUGUJjBMAANAAAkEDJHGFL7Z5wS1A=',
+    'base64',
+  ),
+  webp: Buffer.from('UklGRjAAAABXRUJQVlA4ICQAAABQAQCdASoCAAMAAUAmJQBOgCgAAP70GLc28jb6OerLUQ34AAA=', 'base64'),
+};
+const offerWithoutSubject = id(6);
+const offerWithoutCover = id(7);
 const offer: OfferRead = {
   offer: {
     id: id(1),
     targetSubjectId: id(90),
+    subject: summaryOf('en', bookCover),
     title: 'A field guide to stars',
     currency: 'usd',
     unitAmountMinor: 123456,
@@ -88,6 +138,7 @@ function problem(status: number, code: string): Response {
 type Call = {
   method: string;
   path: string;
+  languages: string | null;
   authorization: string | null;
   key: string | null;
   body: unknown;
@@ -108,6 +159,7 @@ async function kernel(request: Request, url: URL): Promise<Response> {
   const call: Call = {
     method: request.method,
     path: url.pathname,
+    languages: url.searchParams.get('languages'),
     authorization: request.headers.get('authorization'),
     key: request.headers.get('idempotency-key'),
     body,
@@ -115,10 +167,16 @@ async function kernel(request: Request, url: URL): Promise<Response> {
   };
   calls.push(call);
   if (offerRead) {
+    const offerId = url.pathname.split('/').at(-1)!;
+    const languages = call.languages;
     const result: OfferRead = {
       offer: {
         ...offer.offer,
-        id: url.pathname.split('/').at(-1)!,
+        id: offerId,
+        subject:
+          offerId === offerWithoutSubject
+            ? null
+            : summaryOf(languages, offerId === offerWithoutCover ? null : bookCover),
         state: url.pathname.endsWith(id(2)) ? 'delisted' : 'active',
       },
     };
@@ -348,10 +406,29 @@ async function signIn(returnTo = offerPath()) {
 
 // Browser context and navigation steps copied from the browser tests; checkout needs scripts enabled.
 let browser: Browser | undefined;
-async function open(path: string, value?: string): Promise<Page> {
+async function open(
+  path: string,
+  value?: string,
+  look: { width: number; height: number; theme?: 'light' | 'dark' } = { width: 1280, height: 860 },
+): Promise<Page> {
   const origin = await site();
   browser ??= await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
+  const context = await browser.newContext({
+    viewport: { width: look.width, height: look.height },
+    reducedMotion: 'reduce',
+  });
+  if (look.theme)
+    await context.addCookies([
+      { name: 'rezics_theme', value: look.theme, domain: '127.0.0.1', path: '/', sameSite: 'Lax' },
+    ]);
+  // The fake kernel serves no media; every cover variant answers with a small image.
+  await context.route(
+    (url) => url.pathname.startsWith('/media/'),
+    (route) => {
+      const format = new URL(route.request().url()).pathname.split('/').at(-1)!.split('-')[0] as 'avif' | 'webp';
+      return route.fulfill({ status: 200, body: images[format], contentType: `image/${format}` });
+    },
+  );
   if (value)
     await context.addCookies([
       { name: session, value, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
@@ -650,6 +727,97 @@ test(
     } finally {
       await page.context().close();
     }
+  },
+  timeout,
+);
+
+const subjectPath = (locale: string) => `/${locale}/subjects/${id(90)}`;
+
+test(
+  "an offer page draws the subject it sells through Cover with its title in the visitor's language and links to the subject's page",
+  async () => {
+    for (const locale of ['en', 'de', 'ja']) {
+      calls.length = 0;
+      const page = await open(`/${locale}/offers/${id(1)}`);
+      try {
+        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(offer.offer.title);
+        const sources = page.locator('main picture source');
+        expect(await sources.count()).toBe(2);
+        expect(await sources.nth(0).getAttribute('type')).toBe('image/avif');
+        expect(await sources.nth(1).getAttribute('type')).toBe('image/webp');
+        const avif = (await sources.nth(0).getAttribute('srcset'))!;
+        const webp = (await sources.nth(1).getAttribute('srcset'))!;
+        expect(avif).toMatch(new RegExp(`/media/${coverMedia}/avif-\\d+ `));
+        expect(webp).toMatch(new RegExp(`/media/${coverMedia}/webp-\\d+ `));
+        expect(await page.locator('main picture img').count()).toBe(1);
+        const link = page.getByRole('link', { name: bookLabels[locale]!, exact: true });
+        expect(await link.count()).toBe(1);
+        expect(await link.getAttribute('href')).toBe(subjectPath(locale));
+        // The link's name is its label alone: the cover inside it is a decorative repeat.
+        expect(await link.locator('img').getAttribute('alt')).toBe('');
+        const reads = calls.filter((call) => call.method === 'GET' && call.path === `/v1/offers/${id(1)}`);
+        expect(reads).toHaveLength(1);
+        expect(reads[0]!.languages).toBe(locale);
+        expect(reads[0]!.authorization).toBeNull();
+      } finally {
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  'an offer whose subject has no cover or no summary shows the typographic placeholder and still sells',
+  async () => {
+    const auth = await signIn();
+    for (const [n, title, linked] of [
+      [6, offer.offer.title, false],
+      [7, bookLabels.en!, true],
+    ] as const) {
+      calls.length = 0;
+      const page = await open(offerPath(n), auth.value);
+      try {
+        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(offer.offer.title);
+        const cover = page.locator('main [data-slot="cover"]');
+        expect(await cover.count()).toBe(1);
+        expect(await cover.getAttribute('data-state')).toBe('placeholder');
+        expect(await cover.textContent()).toContain(title);
+        expect(await page.locator('main img').count()).toBe(0);
+        expect(await page.locator('main a[href*="/subjects/"]').count()).toBe(linked ? 1 : 0);
+        await buy(page).click();
+        await page.waitForURL(stripe);
+        expect(starts()).toHaveLength(1);
+        expect(starts()[0]).toMatchObject({ body: { offerId: id(n) }, authorization: `Bearer ${auth.access}` });
+      } finally {
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  'the offer page with a cover has no accessibility violations in either theme at phone and desktop widths',
+  async () => {
+    const found: string[] = [];
+    for (const theme of ['light', 'dark'] as const)
+      for (const width of [390, 1280]) {
+        const page = await open(offerPath(), undefined, { width, height: 844, theme });
+        try {
+          expect(await page.locator('main picture img').count()).toBe(1);
+          const result = await new AxeBuilder({ page })
+            .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+            .analyze();
+          for (const violation of result.violations)
+            found.push(
+              `${theme} ${width}px: ${violation.id} ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+            );
+        } finally {
+          await page.context().close();
+        }
+      }
+    expect(found).toEqual([]);
   },
   timeout,
 );

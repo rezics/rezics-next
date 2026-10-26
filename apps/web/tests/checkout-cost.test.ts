@@ -56,6 +56,7 @@ type Offer = {
   currency: string;
   unitAmountMinor: number;
   state: 'active';
+  subject: null;
 };
 type Order = {
   id: string;
@@ -78,6 +79,7 @@ const offerOf = (id: string): Offer => ({
   currency: 'usd',
   unitAmountMinor: 123456,
   state: 'active',
+  subject: null,
 });
 const orderOf = (id: string, settlement: Order['settlement'], offerId = targetOfferId): Order => ({
   id,
@@ -487,10 +489,10 @@ test('offer page stays within its bound as s grows', async () => {
     const response = await fetch(`${origin}/en/offers/${targetOfferId}`);
     const body = await response.text();
     expect(response.status, body.slice(0, 500)).toBe(200);
-    expect(sequence(kernelCalls)).toEqual([`GET /v1/offers/${targetOfferId}`]);
+    expect(sequence(kernelCalls)).toEqual([`GET /v1/offers/${targetOfferId}?languages=en`]);
     expect(kernelCalls[0]).toMatchObject({
       method: 'GET',
-      path: `/v1/offers/${targetOfferId}`,
+      path: `/v1/offers/${targetOfferId}?languages=en`,
       authorization: null,
     });
     expect(authCalls).toEqual([]);
