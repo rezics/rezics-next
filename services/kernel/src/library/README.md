@@ -127,7 +127,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: A repeatable-read snapshot, one account admit, and one `entry` primary key. A missing or foreign row is not found. There is no write.
 - Bound: The entry point is `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the account read and begin and commit.
-- Growth check: No scale sample calls the point read. `test/library/entry-store.test.ts`: `an entry round trip changes state only when the revision matches` reads an entry back and does not grow `N`. `test/library/entries.test.ts`: `put, delete and list statement counts stay equal at three scales of unrelated account entries` does not call the read.
+- Growth check: `test/library/growth-personal-reads.test.ts`: `Entry read has constant rows and statements as entries grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's entries, other accounts' entries in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
 ### Entry page
 
@@ -163,13 +163,13 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: A repeatable-read snapshot, one account admit, and one session primary key. A missing or foreign session is not found.
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit and begin and commit.
-- Growth check: `test/library/sessions.test.ts`: `each mode starts in the account partition, records by CAS and reads its own value` reads the session and is not a scale measurement. `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` does not call the session read.
+- Growth check: `test/library/growth-personal-reads.test.ts`: `Session read has constant rows and statements as sessions grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's sessions, other accounts' sessions in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
 ### Session page
 
 - Touches: A snapshot, an admit, a partition-epoch read, and one keyset on `progress_session_account_subject` `(route, account_id, subject_id, started_at, session_id)`. Two `LIMIT` branches fetch at most `min(100, s + 1)` rows. When `s` is 100 and the page is non-empty, a second limit-1 probe runs, because the first fetch is capped at 100. The cursor binds the operation, the account and the subject.
 - Bound: `R` `O(s+1)`, or `O(s+2)` when the extra probe runs. `B` `O(L(N)+s)`. `S` is 1 or 2, plus the admit and the partition read.
-- Growth check: No scale sample calls the session page. `test/library/sessions.test.ts`: `signed keyset cursors bind the operation, account and session or subject` pages sessions and does not grow `N`. `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` does not call the session page.
+- Growth check: `test/library/growth-personal-reads.test.ts`: `Session page at a fixed limit has constant rows and statements as sessions grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's sessions, other accounts' sessions in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale. The first session page keeps its limit of 20 and its first 21 neighbours fixed.
 
 ### Unit page
 
@@ -205,7 +205,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: A repeatable-read snapshot, one account admit, and one `copy` primary key. A missing or foreign row is not found.
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit and begin and commit.
-- Growth check: The scale sample does not call the point read. `test/library/copies.test.ts`: `statement counts stay equal at three scales of unrelated copies` does not call it. `test/library/copies.test.ts`: `an account records two private copies of one edition and changes each by revision` reads a copy and is not a scale measurement.
+- Growth check: `test/library/growth-personal-reads.test.ts`: `Copy read has constant rows and statements as copies grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's copies, other accounts' copies in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
 ### Copy page
 
@@ -241,7 +241,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: One `follow` primary key for the caller and the target. The read is a single autocommit statement. Another account receives no row. There is no public count.
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1. No envelope, because this read is not a command.
-- Growth check: No scale sample calls the point read. `test/library/follows.test.ts`: `another account reads none of the owner's follows` checks concealment and is not a scale measurement. `test/library/follow-store.test.ts`: `apply and page statement counts and examined rows stay constant as unrelated follows grow` does not call the point read.
+- Growth check: `test/library/growth-personal-reads.test.ts`: `Follow read has constant rows and statements as follows grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's follows, other accounts' follows in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
 ### Follow page
 
