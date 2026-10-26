@@ -9,6 +9,7 @@ import {
   normalizeCommandKey,
   principalCommandIdentity,
   runCommand,
+  type CommandAuthorization,
   type CommandOutcome,
   type CommandPrincipal,
   type PrincipalCommandOptions,
@@ -298,7 +299,7 @@ export async function createReport(
       return proof?.ok === true;
     },
   });
-  const authorization = resourceAuthorization({
+  const accessAuthorization = resourceAuthorization({
     access: dependencies.access,
     actor,
     action: createAction,
@@ -317,6 +318,15 @@ export async function createReport(
     },
     context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(home.route) },
   });
+  const authorization: CommandAuthorization = {
+    ...accessAuthorization,
+    async prepare(attempt) {
+      // Resolve disclosure inside each live command attempt before report:create
+      // authorization can turn an unreadable target into a generic denial.
+      observed = await discloseTarget(dependencies, target, { actor, deadline: context.deadline });
+      return accessAuthorization.prepare!(attempt);
+    },
+  };
   const receipt: PrincipalCommandReceipt = {
     kind: operation,
     key: context.idempotencyKey,

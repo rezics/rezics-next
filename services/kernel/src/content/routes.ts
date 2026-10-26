@@ -288,7 +288,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  return moderationRoutes(
+  const routes = moderationRoutes(
     reportRoutes(
       documentRoutes(
         mediaImportRoutes(
@@ -821,6 +821,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         set.status = 204;
       },
     );
+
+  return routes;
 }
 
 async function writeReaction(

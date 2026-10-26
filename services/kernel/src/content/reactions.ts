@@ -12,16 +12,16 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
+import { prepareRealmParticipationResult, type RealmParticipationCheck } from '../community/participation.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { REACTION_KINDS } from './events.ts';
+import { ContentNotFoundError } from './commands.ts';
 import {
   mediaParentBoard,
   mediaParentSnapshot,
-  prepareRealmParticipation,
   realmParticipationMatches,
   type RealmParticipationProof,
 } from './media-parent.ts';
-import type { RealmParticipationCheck } from '../community/participation.ts';
 import type { RequestContext } from './model.ts';
 import slotStatement from './reaction-slot.sql';
 import targetStatement from './reaction-target.sql';
@@ -91,8 +91,8 @@ async function mutate(
       );
       const thread = rows[0],
         last = rows.at(-1);
+      if (!thread) throw new ContentNotFoundError();
       if (
-        !thread ||
         thread.kind !== 'thread' ||
         !thread.board_id ||
         rows.length < 2 ||
@@ -168,7 +168,7 @@ async function mutate(
         boardRealmId = (await mediaParentBoard(client, boardId)).realm_id;
       });
       if (realmParticipation) {
-        const proof = await prepareRealmParticipation(
+        const proof = await prepareRealmParticipationResult(
           deps.pool,
           realmParticipation,
           actor,
@@ -176,6 +176,7 @@ async function mutate(
           attempt.time,
           context.deadline,
         );
+        if (proof.readable === false) throw new ContentNotFoundError();
         if (!proof.allowed) throw new GrantDeniedError();
         participation.set(attempt.time, proof);
       }
