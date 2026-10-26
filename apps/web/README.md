@@ -477,7 +477,7 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Touches:** Root preferences/D and the subject loader are independent; one public K `POST /v1/pages:read` supplies the
   template, the subject and the template's planned reads; local rendering follows; a merged id redirects without
   another K
-- **Bound:** ≤1 K (`pages:read`) and ≤1 D (preferences) per page view; the kernel behind that read is one subject read
+- **Bound:** ≤1 K (`pages:read`) and ≤1 D (preferences) for the page itself, plus the Subject library slot's initial reads (1 K signed out; 2 K and 1 D signed in), so ≤2 K and ≤1 D signed out, ≤3 K and ≤2 D signed in, per page view; the kernel behind that read is one subject read
   plus the template's planned reads (at most 16); 0 R/A; O(s) bytes parsed, buffered and rendered, with s at most 512
   facts
 - **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`;
