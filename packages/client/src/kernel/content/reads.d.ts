@@ -3,6 +3,9 @@ import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Anchored, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
+/** One exact command replay. GET reads stay outside this scope, so owner roles
+ * and the public floor still cannot authorize erased metadata. */
+export declare function withReplayedRevision<T>(revisionId: string, read: () => Promise<T>): Promise<T>;
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 /** Erased slots retain identity without disclosing bytes or a digest of erased text. */
 type ContentPayload = Readonly<{
