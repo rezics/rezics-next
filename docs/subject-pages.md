@@ -57,6 +57,32 @@ the overview. A template may give a view the vertical's word (Contents is "Episo
 manga). The tab bar stays in view under the top bar while the page scrolls. On narrow screens it scrolls
 horizontally with the active view in sight; it never wraps into several rows.
 
+## Agents
+
+People, organizations (studios, publishers, bands, groups) and automated agents are agents, whether they arrived
+as catalogue subjects (an author imported from a source), as accounts, or both. Every agent has exactly one page.
+
+- **One agent, one page.** An account is an agent. When an account is verified as a catalogue person or
+  organization, the two are one agent with one page at the account's `/@handle`; the subject's address redirects
+  there. An agent without an account keeps its subject address. The page is the same either way.
+- **Views.** An agent's page is a subject page: Works (credits by role) and Characters come from the graph; an agent
+  with an account adds its public posts, reviews and collections; an organization adds its members and, if it
+  chooses, the accounts that speak for it. The view rules above apply unchanged.
+- **Speaking for another agent.** A person's account acts for an organization through membership in that
+  organization; what it publishes as the organization is the organization's speech and appears on the
+  organization's page. A pen name or a collective name is its own agent, related to the people behind it; a link
+  that is not already a sourced public fact is shown only when the people behind it make it public.
+- **Who controls what.** The agent controls its self-presentation: display name, avatar, bio, links and which of its
+  activity views are public. Sourced facts about the agent (dates, credits, affiliations) stay under the ordinary
+  edit and review process with their sources; the agent can dispute them there but cannot remove them by owning
+  the page. Its own statements about itself are accepted with the agent as their source.
+- **Verification before merging.** An account becomes a catalogue agent only through verification. An unverified
+  claim never merges pages or changes attribution.
+- **Separate personas are separate accounts.** A person who wants a reading life apart from their author page uses
+  another account under the same controller; ratings still count once per controller.
+- **Never inside a Realm.** An agent's page is never routed inside a Realm or Zone. A Realm is a venue where the
+  agent speaks, not where its identity lives.
+
 ## Overview
 
 The overview answers "what is this, is it for me, and what do I do next" in the first viewport, then previews every
