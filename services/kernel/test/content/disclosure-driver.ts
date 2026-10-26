@@ -60,6 +60,8 @@ import {
   PROJECTION_CONSUMER,
   revisionFromView,
   seedDisclosureDistractors,
+  seedGovernanceAuthority,
+  seedResourceDenial,
   storedVisibility,
   textFromBytea,
 } from './support/disclosure-fixtures.ts';
@@ -70,6 +72,12 @@ const OWNER_ROLE = {
   board: 'content.board.owner',
   thread: 'content.thread.owner',
   post: 'content.post.owner',
+} as const;
+/** Actions the public role-revoke command rechecks. They match the catalogue templates. */
+const OWNER_ACTIONS = {
+  board: ['board:read', 'thread:create'],
+  thread: ['thread:read', 'post:create', 'media:create'],
+  post: ['post:read', 'post:revise', 'post:erase', 'media:create'],
 } as const;
 const MODERATION_ACTIONS = ['moderation:read_reports', 'moderation:takedown'];
 const MEASURED_ROUTE = 16;
@@ -233,6 +241,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   let definitionsReady = false;
   let paused = false;
   let governanceBearerValue: string | undefined;
+  let governanceAccountValue: string | undefined;
   let workerStarting: Promise<void> | undefined;
   let workClient: WorkClient | undefined;
   let workerStop: (() => Promise<void>) | undefined;
@@ -297,20 +306,33 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     return asRecord(await response.clone().json(), path);
   }
 
-  async function governanceBearer(): Promise<string> {
-    if (governanceBearerValue) return governanceBearerValue;
+  async function governanceAccount(): Promise<string> {
+    if (governanceAccountValue) return governanceAccountValue;
     const { rows } = await pool.query<{ account_id: string }>(
       'SELECT account_id::text AS account_id FROM access.governance_bootstrap WHERE route = 0',
     );
     const account = rows[0]?.account_id;
     if (!account) throw new Error('Governance bootstrap account is missing');
+    governanceAccountValue = account;
+    return account;
+  }
+
+  async function governanceBearer(): Promise<string> {
+    if (governanceBearerValue) return governanceBearerValue;
     const credential = await system.auth.issue({
-      accountId: account,
+      accountId: await governanceAccount(),
       clientId: system.auth.ordinaryClient.id,
       scopes,
     });
     governanceBearerValue = credential.bearer;
     return governanceBearerValue;
+  }
+
+  async function ensureGovernanceAuthority(target: Target): Promise<void> {
+    const actions = [
+      ...new Set(['access:grant', READ_ACTION[target.kind], ...OWNER_ACTIONS[target.kind], ...MODERATION_ACTIONS]),
+    ];
+    await seedGovernanceAuthority(pool, requiredRoute(target.id), target.id, await governanceAccount(), actions);
   }
 
   async function submitGrant(path: string, body: unknown, status: number, bearer?: string): Promise<void> {
@@ -327,57 +349,17 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     }
   }
 
-  function bearerForAccount(account: string): string | undefined {
-    for (const actor of [system.actors.author, system.actors.other, system.actors.moderator, system.actors.suspended]) {
-      if (actor.actor.accountId === account) return actor.bearer;
-    }
-    return undefined;
+  async function submitResourceGrant(path: string, target: Target, body: unknown, status: number): Promise<void> {
+    await ensureGovernanceAuthority(target);
+    await submitGrant(path, body, status, await governanceBearer());
   }
 
-  async function grantorBearers(resourceId: string): Promise<string[]> {
-    const route = requiredRoute(resourceId);
-    const { rows } = await pool.query<{ subject_id: string }>(
-      `SELECT subject_id::text AS subject_id
-       FROM access.resource_role_grant
-       WHERE route = $1 AND resource_id = $2 AND subject_kind = 'identity' AND subject_role = ''
-         AND grant_role LIKE '%.owner'
-       ORDER BY subject_id`,
-      [route, resourceId],
-    );
-    const bearers: string[] = [];
-    const push = (bearer: string | undefined) => {
-      if (bearer && !bearers.includes(bearer)) bearers.push(bearer);
-    };
-    for (const row of rows) push(bearerForAccount(row.subject_id));
-    push(await governanceBearer());
-    push(system.actors.other.bearer);
-    push(system.actors.author.bearer);
-    return bearers;
-  }
-
-  async function submitResourceGrant(path: string, resourceId: string, body: unknown, status: number): Promise<void> {
-    const failures: string[] = [];
-    for (const bearer of await grantorBearers(resourceId)) {
-      const response = await call({
-        method: 'POST',
-        path,
-        persona: 'moderator',
-        bearer,
-        key: randomUUID(),
-        body,
-      });
-      if (response.status === status) return;
-      failures.push(`${response.status} ${await response.clone().text()}`);
-    }
-    throw new Error(`Access ${path} failed: ${failures.join(' || ')}`);
-  }
-
-  async function createGrant(subjectId: string, resourceId: string, actions: string[]): Promise<void> {
+  async function createGrant(subjectId: string, target: Target, actions: string[]): Promise<void> {
     await submitResourceGrant(
       '/v1/grants',
-      resourceId,
+      target,
       {
-        resource: { route: requiredRoute(resourceId), id: resourceId },
+        resource: { route: requiredRoute(target.id), id: target.id },
         subject: { kind: 'account', id: subjectId },
         actions,
         valid: '(,)',
@@ -386,15 +368,15 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     );
   }
 
-  async function revokeDirect(subjectId: string, resourceId: string, actions: string[]): Promise<void> {
-    const route = requiredRoute(resourceId);
+  async function revokeDirect(subjectId: string, target: Target, actions: string[]): Promise<void> {
+    const route = requiredRoute(target.id);
     const { rows } = await pool.query<{ action: string; valid: string }>(
       `SELECT action, valid::text AS valid
        FROM access.resource_grant
        WHERE route = $1 AND resource_id = $2 AND subject_kind = 'identity' AND subject_id = $3
          AND subject_role = '' AND action = ANY($4::text[])
        ORDER BY valid::text, action`,
-      [route, resourceId, subjectId, actions],
+      [route, target.id, subjectId, actions],
     );
     const grouped = new Map<string, string[]>();
     for (const row of rows) {
@@ -405,9 +387,9 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     for (const [valid, rangeActions] of grouped) {
       await submitResourceGrant(
         '/v1/grants:revoke',
-        resourceId,
+        target,
         {
-          resource: { route, id: resourceId },
+          resource: { route, id: target.id },
           subject: { kind: 'account', id: subjectId },
           actions: rangeActions,
           valid,
@@ -417,22 +399,22 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     }
   }
 
-  async function revokeRole(subjectId: string, resourceId: string, role: string): Promise<void> {
-    const route = requiredRoute(resourceId);
+  async function revokeRole(subjectId: string, target: Target, role: string): Promise<void> {
+    const route = requiredRoute(target.id);
     const { rows } = await pool.query<{ valid: string }>(
       `SELECT valid::text AS valid
        FROM access.resource_role_grant
        WHERE route = $1 AND resource_id = $2 AND subject_kind = 'identity' AND subject_id = $3
          AND subject_role = '' AND grant_role = $4
        ORDER BY valid::text`,
-      [route, resourceId, subjectId, role],
+      [route, target.id, subjectId, role],
     );
     for (const row of rows) {
       await submitResourceGrant(
         '/v1/roleGrants:revoke',
-        resourceId,
+        target,
         {
-          resource: { route, id: resourceId },
+          resource: { route, id: target.id },
           subject: { kind: 'account', id: subjectId },
           role,
           valid: row.valid,
@@ -476,8 +458,8 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     const key = moderationKey(target);
     const state = moderation.get(key);
     if (state === 'allow' || state === 'deny' || state === 'revoke') return;
-    await createGrant(accountId('moderator'), target.id, MODERATION_ACTIONS);
-    await createGrant(accountId('suspended'), target.id, MODERATION_ACTIONS);
+    await createGrant(accountId('moderator'), target, MODERATION_ACTIONS);
+    await createGrant(accountId('suspended'), target, MODERATION_ACTIONS);
     moderation.set(key, 'allow');
   }
 
@@ -1289,27 +1271,30 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     protect,
     async revokeCreatorReadAuthority(target) {
       const creator = await creatorAccount(target);
-      await revokeRole(creator, target.id, OWNER_ROLE[target.kind]);
-      await revokeDirect(creator, target.id, [READ_ACTION[target.kind]]);
+      // The owner role is the creator's read authority. Standing roles do not
+      // include the read action. No denial: a later direct grant still applies.
+      await revokeRole(creator, target, OWNER_ROLE[target.kind]);
     },
     async grantRead(persona, target) {
       if (persona === 'anonymous') throw new Error('Anonymous read grants have no account');
-      await createGrant(accountId(persona), target.id, [READ_ACTION[target.kind]]);
+      await createGrant(accountId(persona), target, [READ_ACTION[target.kind]]);
     },
     async setModeration(_persona, target, mode) {
       const key = moderationKey(target);
       if (mode === 'deny') {
+        // No public denial command. The grant stays; the formula reads this row.
+        await seedResourceDenial(pool, requiredRoute(target.id), target.id, accountId('moderator'), MODERATION_ACTIONS);
         moderation.set(key, 'deny');
         return;
       }
       if (mode === 'revoke') {
-        await revokeDirect(accountId('moderator'), target.id, MODERATION_ACTIONS);
-        await revokeDirect(accountId('suspended'), target.id, MODERATION_ACTIONS);
+        await revokeDirect(accountId('moderator'), target, MODERATION_ACTIONS);
+        await revokeDirect(accountId('suspended'), target, MODERATION_ACTIONS);
         moderation.set(key, 'revoke');
         return;
       }
-      await createGrant(accountId('moderator'), target.id, MODERATION_ACTIONS);
-      await createGrant(accountId('suspended'), target.id, MODERATION_ACTIONS);
+      await createGrant(accountId('moderator'), target, MODERATION_ACTIONS);
+      await createGrant(accountId('suspended'), target, MODERATION_ACTIONS);
       moderation.set(key, 'allow');
     },
     failContainer,

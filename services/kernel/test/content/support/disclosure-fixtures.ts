@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { documentText, fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';
 import { createTurnstileVerifier, type TurnstileVerifier } from '../../../src/content/turnstile.ts';
@@ -10,6 +10,8 @@ export const PROJECTION_CONSUMER = 'disclosure_projection';
 export const BOARD_TITLE = 'Disclosure topic';
 export const TURNSTILE_HOSTNAME = 'content.test';
 export const TURNSTILE_ACTION = 'report';
+/** Suite publishes and cursor ties use this command instant. Administrative rows open here. */
+export const FIXTURE_T = '2026-01-01T00:00:00.000Z';
 
 /** Trusted operational budgets. Verification and authorization stay on the product path. */
 export const HIGH_RATE_OVERRIDES = JSON.stringify(
@@ -79,6 +81,70 @@ export function hexFromBytea(value: unknown): string {
   if (Buffer.isBuffer(value)) return value.toString('hex');
   if (value instanceof Uint8Array) return Buffer.from(value).toString('hex');
   throw new Error('Revision digest is not stored bytea');
+}
+
+/**
+ * Setup only. Content roles do not hold access:grant, and thread:read is not a
+ * platform-reach action, so the governance account cannot call the public grant
+ * or role-revoke APIs until these rows exist. Role revocation checks every action
+ * in the owner template, and moderation grants check the moderation actions.
+ * The Access formula still decides every read. Valid from the suite clock.
+ */
+export async function seedGovernanceAuthority(
+  admin: Pool,
+  route: number,
+  resourceId: string,
+  accountId: string,
+  actions: readonly string[],
+): Promise<void> {
+  if (actions.length === 0) return;
+  await admin.query(
+    `INSERT INTO access.resource_grant
+       (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
+     SELECT $1, $2, 'identity', $3, '', candidate.action, tstzrange($4::timestamptz, NULL, '[)'), $5
+     FROM unnest($6::text[]) AS candidate(action)
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM access.resource_grant existing
+       WHERE existing.route = $1
+         AND existing.resource_id = $2
+         AND existing.subject_kind = 'identity'
+         AND existing.subject_id = $3
+         AND existing.subject_role = ''
+         AND existing.action = candidate.action
+         AND existing.valid && tstzrange($4::timestamptz, NULL, '[)')
+     )`,
+    [route, resourceId, accountId, FIXTURE_T, randomUUID(), actions],
+  );
+}
+
+/** An overriding resource denial. There is no public denial command; the formula reads this row. */
+export async function seedResourceDenial(
+  admin: Pool,
+  route: number,
+  resourceId: string,
+  accountId: string,
+  actions: readonly string[],
+): Promise<void> {
+  if (actions.length === 0) return;
+  await admin.query(
+    `INSERT INTO access.resource_denial
+       (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+     SELECT $1, $2, $3, '', candidate.action, 'resource', tstzrange($4::timestamptz, NULL, '[)'), $5
+     FROM unnest($6::text[]) AS candidate(action)
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM access.resource_denial existing
+       WHERE existing.route = $1
+         AND existing.resource_id = $2
+         AND existing.subject_id = $3
+         AND existing.subject_role = ''
+         AND existing.action = candidate.action
+         AND existing.reason = 'resource'
+         AND upper_inf(existing.valid)
+     )`,
+    [route, resourceId, accountId, FIXTURE_T, randomUUID(), actions],
+  );
 }
 
 /** Opaque one-use provider tokens. Production siteverify still checks success, hostname and action. */
