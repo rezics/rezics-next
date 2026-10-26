@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   checkBatchWrite,
   checkBatchWriteResult,
@@ -137,8 +138,7 @@ class Remote {
 }
 async function scenario(body: (h: Harness) => Promise<void>) {
   const create = await loadCliDriver(); // Each scenario must fail here without a production binding.
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp(resolve('.temp/import-cli-'));
+  const directory = await mkdtemp(join(tmpdir(), 'import-cli-'));
   const h = new Harness(directory);
   let driver: CliDriver | undefined;
   try {

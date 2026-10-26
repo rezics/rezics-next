@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadReaderBounds, type BoundsProbe, type RetainedSample } from './imports-reader-bounds-driver.ts';
 import type { DumpRecord, DumpSource } from './imports-dumps-driver.ts';
 import type { SourceProjection } from '../services/importer/src/run-store.ts';
@@ -349,8 +351,7 @@ test('three seeded unique-key scales have linear actual byte visits constant buf
 test('identical and conflicting duplicates all reach real indexed RunStore staging and seal invalid before transport', async () =>
   scenario(async ({ api, probe }) => {
     const { RunStore } = await import('../services/importer/src/run-store.ts');
-    await mkdir('.temp', { recursive: true });
-    const directory = await mkdtemp('.temp/reader-bounds-');
+    const directory = await mkdtemp(join(tmpdir(), 'reader-bounds-'));
     try {
       for (const source of sources)
         for (const conflicting of [false, true]) {

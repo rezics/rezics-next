@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { sqliteEvidence, type Entry } from '../../../specs/imports-vndb-tables-driver.ts';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import { VndbTablesStore } from '../src/vndb-tables.ts';
@@ -47,8 +48,7 @@ async function* stream(entries: Entry[]) {
   }
 }
 function harness(options: ConstructorParameters<typeof VndbTablesStore>[1] = {}) {
-  mkdirSync('.temp', { recursive: true });
-  const directory = mkdtempSync(resolve('.temp/vndb-tables-'));
+  const directory = mkdtempSync(join(tmpdir(), 'vndb-tables-'));
   const path = resolve(directory, 'stage.sqlite');
   const evidence = sqliteEvidence();
   let db: Database;

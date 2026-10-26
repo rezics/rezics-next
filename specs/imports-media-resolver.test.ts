@@ -1,7 +1,8 @@
 import { expect, spyOn, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   checkMediaImportRequest,
@@ -260,8 +261,7 @@ class Harness {
 async function harness(run: (h: Harness) => Promise<void>) {
   const factory = await loadMediaResolver(); // Every outcome is red for this exact missing production binding.
   expect(typeof factory).toBe('function');
-  mkdirSync('.temp', { recursive: true });
-  const directory = mkdtempSync('.temp/import-media-resolver-');
+  const directory = mkdtempSync(join(tmpdir(), 'import-media-resolver-'));
   const h = new Harness(resolve(directory, 'bindings.sqlite'), factory);
   const network = spyOn(globalThis, 'fetch').mockImplementation((() => {
     throw new Error('Unexpected image or out-of-port network');

@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   checkBatchWrite,
@@ -150,8 +151,7 @@ async function harness(run: (h: Harness) => void) {
   if (!module) throw new Error(MISSING_BINDINGS_DRIVER);
   const binding = (await import(resolve(module))) as { openRecordBindings: OpenRecordBindings };
   expect(typeof binding.openRecordBindings).toBe('function');
-  mkdirSync('.temp', { recursive: true });
-  const directory = mkdtempSync('.temp/import-bindings-');
+  const directory = mkdtempSync(join(tmpdir(), 'import-bindings-'));
   const h = new Harness(resolve(directory, 'bindings.sqlite'), binding.openRecordBindings);
   try {
     run(h);

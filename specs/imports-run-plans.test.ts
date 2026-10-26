@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import {
   checkBatchWrite,
@@ -188,8 +190,7 @@ async function withStore(work: (h: Harness) => Promise<void>) {
   if (!binding) throw new Error(MISSING_RUN_PLANS_DRIVER);
   const factory = (await import(binding)).createImportRunPlansDriver as CreateImportRunPlansDriver;
   expect(typeof factory).toBe('function');
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp('.temp/import-run-plans-');
+  const directory = await mkdtemp(join(tmpdir(), 'import-run-plans-'));
   const h = new Harness(factory, directory, await factory({ directory }));
   try {
     await work(h);

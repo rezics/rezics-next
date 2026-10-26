@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createPublicKey, generateKeyPairSync, verify as verifySignature, type JsonWebKey } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   exit,
   loadCliCredentialsDriver,
@@ -141,8 +142,7 @@ class Harness {
 
 async function withDriver(body: (h: Harness) => Promise<void>) {
   const create = await loadCliCredentialsDriver();
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp(resolve('.temp/import-cli-credentials-'));
+  const directory = await mkdtemp(join(tmpdir(), 'import-cli-credentials-'));
   const key = await makeKey();
   const keyPath = resolve(directory, 'account.jwk');
   await writeFile(keyPath, key.serializedPrivateJwk, { mode: 0o600 });

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
 import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
 import {
@@ -118,8 +120,7 @@ async function withStore(work: (h: Harness) => Promise<void>) {
   if (!path) throw new Error(MISSING_RUN_STORE_DRIVER);
   const factory = (await import(path)).createImportRunStoreDriver as CreateImportRunStoreDriver;
   expect(typeof factory).toBe('function');
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp('.temp/import-run-store-');
+  const directory = await mkdtemp(join(tmpdir(), 'import-run-store-'));
   const h = new Harness(factory, directory, await factory({ directory }));
   try {
     await work(h);
