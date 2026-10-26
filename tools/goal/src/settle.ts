@@ -42,6 +42,7 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
     store.putRecord(makeRecord(task, attempt, measurement));
     evidenceBundle(task, store.attempt(ref));
     if (measurement.failureKind) return;
+    tasks.commitFinishedWork(task, ref.attempt);
     store.write(ref, () => {
       store.updateTask(ref, t => { t.state = 'landing'; });
       store.landing({ taskId: task.id, attempt: ref.attempt, branch: task.branch, worktree: task.worktree,
