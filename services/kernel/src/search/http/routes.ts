@@ -16,9 +16,18 @@ const result = t.Object(
   { id: t.String({ format: 'uuid' }), type: t.String(), labels: t.Record(t.String(), t.String()) },
   object,
 );
+const searchHit = t.Object(
+  {
+    id: t.String({ format: 'uuid' }),
+    type: t.String(),
+    labels: t.Record(t.String(), t.String()),
+    descriptions: t.Optional(t.Record(t.String(), t.String())),
+  },
+  object,
+);
 const searchResponse = t.Object(
   {
-    subjects: t.Array(result),
+    subjects: t.Array(searchHit),
     total: t.Object({ value: t.Integer(), relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]) }, object),
     next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
@@ -75,6 +84,8 @@ export function searchRoutes<App>(
             ),
             limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
             cursor: t.Optional(t.String()),
+            descriptions: t.Optional(t.Boolean()),
+            languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
           },
           object,
         ),

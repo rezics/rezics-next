@@ -2,6 +2,7 @@ import { type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type FacetRequest, type FacetValue } from './facets.ts';
+import { type SearchHit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
 import type { SubjectSource } from './source.ts';
@@ -11,6 +12,8 @@ export type SearchRequest = {
     sort?: SearchPlan['sort'];
     limit?: number;
     cursor?: string;
+    descriptions?: boolean;
+    languages?: string[];
 };
 type Result = {
     id: string;
@@ -27,7 +30,7 @@ export declare function createSearchService({ pool, client, prefix, source, curs
     facetSample?: number;
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number): Promise<{
-        subjects: Result[];
+        subjects: SearchHit[];
         total: {
             value: number;
             relation: 'exact' | 'lower_bound';

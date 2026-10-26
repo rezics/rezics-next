@@ -15,6 +15,7 @@ import {
 } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
+import { projectHit, validateHitOptions, type SearchHit } from './hits.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import {
@@ -35,6 +36,8 @@ export type SearchRequest = {
   sort?: SearchPlan['sort'];
   limit?: number;
   cursor?: string;
+  descriptions?: boolean;
+  languages?: string[];
 };
 
 type Result = { id: string; type: string; labels: Record<string, string> };
@@ -104,18 +107,22 @@ function validate(request: SearchRequest) {
   if (sort === 'relevance' && !text) unsupported('/sort');
   const limit = request.limit === undefined ? 20 : request.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) invalid('/limit', 'out_of_range');
+  const hitOptions = validateHitOptions(request);
 
   return {
     text,
     filter,
     sort,
     limit,
+    hitOptions,
     // Keep the validated JSON, rather than the compiler's internal representation, in the binding.
     bindingRequest: {
       ...(text ? { text: request.text } : {}),
       ...(filter ? { filter } : {}),
       sort,
       limit,
+      ...(hitOptions.descriptions ? { descriptions: true } : {}),
+      ...(hitOptions.languages ? { languages: hitOptions.languages } : {}),
     },
   };
 }
@@ -227,7 +234,7 @@ export function createSearchService({
 
   return {
     async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
-      const { text, filter, sort, limit, bindingRequest } = validate(request);
+      const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
       const admitted = await admitQuery(text, filter);
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       const cursor =
@@ -259,7 +266,7 @@ export function createSearchService({
       let generation = cursor?.generation;
       let total;
       let exhausted = false;
-      const results: Result[] = [];
+      const results: SearchHit[] = [];
       for (let round = 0; round < 3; round++) {
         const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
@@ -277,7 +284,7 @@ export function createSearchService({
           after = hit.sort;
           consumed++;
           const subject = subjects.get(hit);
-          if (subject) results.push(project(subject));
+          if (subject) results.push(projectHit(subject, hitOptions));
           if (results.length === limit) break;
         }
         exhausted = page.hits.length < size && consumed === page.hits.length;

@@ -48,6 +48,8 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                         sort?: "collections" | "id" | "name" | "relevance";
                         limit?: number;
                         cursor?: string;
+                        descriptions?: boolean;
+                        languages?: string[];
                     };
                     params: {};
                     query: unknown;
@@ -58,6 +60,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                                 id: string;
                                 type: string;
                                 labels: Record<string, string>;
+                                descriptions?: Record<string, string>;
                             }[];
                             total: {
                                 value: number;
