@@ -176,11 +176,12 @@ are exact point reads of committed evidence. The role reader returns the owner
 and member proofs, using the current temporal key and the next lower-bound seek.
 A missing Realm, or one that is not yet active at T, has no proof.
 
-| Operation               | Touches                                                                                                               | Bound                              | Growth check                                                                                                                                                 |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans |
-| Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks         | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
-| Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks         | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
+| Operation               | Touches                                                                                                               | Bound                                     | Growth check                                                                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A        | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans |
+| Read current membership | One `realm_member_open` unique index point read, filtered at T; closed history does not widen the lookup              | O(1) rows and statements; O(log R) blocks | `growth-membership-history.test.ts`: one row and statement, zero sequential scans at 2048, 8192 and 32768 closed intervals of the same account and Realm     |
+| Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks                | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
+| Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks                | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
 
 ### Check Realm participation
 
@@ -214,9 +215,9 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 ### Read own Realm membership
 
-- Touches: One point read of the member's current interval after the Realm read check.
+- Touches: One `realm_member_open` unique index point read of the member's open interval, filtered at T, after the Realm read check. Closed intervals do not widen the lookup.
 - Bound: O(1) rows and statements; O(log R) blocks.
-- Growth check: `join.test.ts` reads one interval. No scan of members.
+- Growth check: `growth-membership-history.test.ts` fixes one account and Realm at 2048, 8192 and 32768 closed intervals of that same membership, with 65536, 524288 and 4194304 unrelated memberships spread across routes; one index point read, one row and one statement at every scale, zero sequential scans.
 
 ### Read Realm votes
 

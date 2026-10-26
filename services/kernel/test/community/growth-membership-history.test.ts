@@ -15,28 +15,6 @@ let db: GrowthDatabase;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
-  await seed(
-    db,
-    {
-      name: 'membership-history-neighbours',
-      hotPartition: partitionOf(route),
-      hotShare: 1,
-      rows: () => ({
-        'community.realm_member': [
-          {
-            route,
-            realm_id: realmId,
-            account_id: newId(route),
-            role: 'member',
-            valid: `[${since},)`,
-            reservation_id: newId(route),
-            transaction_id: newId(route),
-          },
-        ],
-      }),
-    },
-    { from: 0, to: 2048 },
-  );
   await db.admin.query(
     `INSERT INTO community.realm_member
        (route, realm_id, account_id, role, valid, reservation_id, transaction_id)
@@ -68,6 +46,28 @@ test('current membership is one index point read as the same account and Realm a
       await seed(
         db,
         {
+          name: 'membership-history-neighbours',
+          hotPartition: partitionOf(route),
+          hotShare: 0,
+          rows: ({ route: memberRoute }) => ({
+            'community.realm_member': [
+              {
+                route: memberRoute,
+                realm_id: newId(memberRoute),
+                account_id: newId(memberRoute),
+                role: 'member',
+                valid: `[${since},)`,
+                reservation_id: newId(memberRoute),
+                transaction_id: newId(memberRoute),
+              },
+            ],
+          }),
+        },
+        { from: previous === 0 ? 0 : 65_536 * (previous / 2048) ** 1.5, to: 65_536 * (scale / 2048) ** 1.5 },
+      );
+      await seed(
+        db,
+        {
           name: 'membership-closed-history',
           hotPartition: partitionOf(route),
           hotShare: 1,
@@ -93,6 +93,8 @@ test('current membership is one index point read as the same account and Realm a
         [route, realmId, accountId],
       );
       expect(count.rows[0].count).toBe(scale);
+      // Initialize the SQL reader before capturing the operation's plan.
+      await operation();
       plans.push((await capture(db, operation)).capture.plans);
     },
     operation,
@@ -110,4 +112,4 @@ test('current membership is one index point read as the same account and Realm a
   }
   expect(await readRealmMembershipInterval(db.pool, realmId, accountId, since)).toEqual({ since, reservationId });
   expect(await readRealmMembershipInterval(db.pool, realmId, accountId, '2020-01-01T00:00:00.000Z')).toBeNull();
-}, 120_000);
+}, 1_200_000);

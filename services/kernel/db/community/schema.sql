@@ -570,6 +570,13 @@ CREATE INDEX realm_member_next ON community.realm_member USING btree (route, rea
 
 
 --
+-- Name: realm_member_open; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE UNIQUE INDEX realm_member_open ON community.realm_member USING btree (route, realm_id, account_id) WHERE upper_inf(valid);
+
+
+--
 -- Name: realm_member_reservation; Type: INDEX; Schema: community; Owner: -
 --
 
