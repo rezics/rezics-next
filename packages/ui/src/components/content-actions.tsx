@@ -1,16 +1,24 @@
 import type { ReactNode, Ref } from 'react';
 import { useState } from 'react';
-import { EllipsisIcon, FlagIcon, LinkIcon, PencilIcon, Trash2Icon } from 'lucide-react';
-import { Button } from './button.tsx';
+import { EllipsisIcon, FlagIcon, LinkIcon, LoaderCircleIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-} from './alert-dialog.tsx';
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './menu.tsx';
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
+import { Button } from '@rezics/ui/shadcn/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@rezics/ui/shadcn/dropdown-menu';
 import { ReportDialog, type ReportDialogLabels, type ReportSubmission } from './report-dialog.tsx';
 
 export const contentActionsLabels = {
@@ -54,7 +62,11 @@ export interface OtherContentActionsProps extends ContentActionsCommonProps {
 
 export type ContentActionsProps = OwnerContentActionsProps | OtherContentActionsProps;
 
-/** The owner sees editing and deletion actions; everyone else can report the content. */
+/**
+ * The overflow menu of a piece of content. shadcn has no content-actions pattern; this composes `dropdown-menu`,
+ * `alert-dialog` for confirming deletion, and the report dialog. The owner sees editing and deletion actions;
+ * everyone else can report the content, so reporting never needs a visible button.
+ */
 export function ContentActions(props: ContentActionsProps) {
   const [reportOpen, setReportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -80,67 +92,75 @@ export function ContentActions(props: ContentActionsProps) {
 
   return (
     <>
-      <Menu>
-        <MenuTrigger asChild>
-          <Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost">
-            <EllipsisIcon aria-hidden="true" />
-          </Button>
-        </MenuTrigger>
-        <MenuContent>
-          <MenuItem onClick={props.onCopyLink} value="copy-link">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost" />}
+        >
+          <EllipsisIcon aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuItem onClick={props.onCopyLink}>
             <LinkIcon aria-hidden="true" />
             {labels.copyLink}
-          </MenuItem>
+          </DropdownMenuItem>
           {props.ownsContent ? (
             <>
-              <MenuItem onClick={props.onEdit} value="edit">
+              <DropdownMenuItem onClick={props.onEdit}>
                 <PencilIcon aria-hidden="true" />
                 {labels.edit}
-              </MenuItem>
+              </DropdownMenuItem>
               {props.onDelete ? (
                 <>
-                  <MenuSeparator />
-                  <MenuItem onClick={() => setDeleteOpen(true)} value="delete">
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setDeleteOpen(true)} variant="destructive">
                     <Trash2Icon aria-hidden="true" />
                     {labels.delete}
-                  </MenuItem>
+                  </DropdownMenuItem>
                 </>
               ) : null}
             </>
           ) : (
-            <MenuItem onClick={() => setReportOpen(true)} value="report">
+            <DropdownMenuItem onClick={() => setReportOpen(true)}>
               <FlagIcon aria-hidden="true" />
               {labels.report}
-            </MenuItem>
+            </DropdownMenuItem>
           )}
-        </MenuContent>
-      </Menu>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {props.ownsContent ? (
         props.onDelete ? (
           <AlertDialog
-            onOpenChange={({ open }) => {
+            onOpenChange={(open, details) => {
+              // A deletion in flight finishes before the dialog may close.
+              if (!open && deletePending) {
+                details.cancel();
+                return;
+              }
               setDeleteOpen(open);
               if (!open) setDeleteFailure('');
             }}
             open={deleteOpen}
-            pending={deletePending}
           >
             <AlertDialogContent size="sm">
-              <AlertDialogHeader description={labels.deleteDescription} title={labels.deleteTitle} />
+              <AlertDialogHeader>
+                <AlertDialogTitle>{labels.deleteTitle}</AlertDialogTitle>
+                <AlertDialogDescription>{labels.deleteDescription}</AlertDialogDescription>
+              </AlertDialogHeader>
               {deleteFailure ? (
-                <p className="px-6 text-sm" role="alert">
+                <p className="text-destructive text-sm" role="alert">
                   {deleteFailure}
                 </p>
               ) : null}
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={deletePending}>{labels.cancel}</AlertDialogCancel>
                 <AlertDialogAction
+                  aria-busy={deletePending}
                   disabled={deletePending}
-                  isLoading={deletePending}
                   onClick={confirmDelete}
                   variant="destructive"
                 >
+                  {deletePending ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : null}
                   {labels.confirmDelete}
                 </AlertDialogAction>
               </AlertDialogFooter>

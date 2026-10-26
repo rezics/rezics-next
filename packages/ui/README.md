@@ -29,6 +29,14 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 `Prose` is the surface for documents, in the reading page (`DocumentBody`) and in the editor. Body text is interface text. Only a Work title, marked with the `work-title` class, takes the serif face. A line holds about 65 characters (36 em for Chinese, Japanese and Korean, where a character is an em wide), and CJK text gets more leading. The styles live in `src/prose.css`.
 
+## Content feedback
+
+`Reactions`, `ContentActions`, `ReportDialog` and the rating components are built from shadcn primitives (`button`, `popover`, `dropdown-menu`, `alert-dialog`, `dialog`, `radio-group`, `field`, `textarea`, `slider`, `badge`) and import no Ark UI.
+
+- On a detail page the reaction cluster sits top right and reporting lives in the `ContentActions` overflow menu; there is no visible report button.
+- `RatingSummary` takes the aggregates the rating module returns (count, sum and histogram per population, plus the threshold) and never shows a score without its population and count. The headline is the page's own population; every other population is a labelled list and is never averaged or substituted; imported source scores follow, labelled with their source and scale. Below the threshold it shows the count, the votes still needed and why the distribution is hidden; with no votes it draws nothing.
+- `RatingInput` is one slider over the question's scale plus a clear button. It works in displayed points and reports stored units, saves optimistically and rolls back with an announced message when saving fails.
+
 ## Cover
 
 `Cover` draws the image area of any subject: a work, edition, character, person, organization, recipe or Realm. Import it from `@rezics/ui/cover`. Do not draw subject images with a bare `<img>`.

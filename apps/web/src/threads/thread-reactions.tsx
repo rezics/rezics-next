@@ -45,9 +45,10 @@ function installSingleReactionMenu() {
   document.documentElement.dataset.reactionMenu = 'ready';
   document.addEventListener('click', (event) => {
     const target = event.target;
-    if (!(target instanceof Element) || target.closest('[data-scope="popover"]')) return;
+    if (!(target instanceof Element) || target.closest('[data-slot="popover-content"], [data-slot="popover-trigger"]'))
+      return;
     for (const trigger of document.querySelectorAll(
-      '[data-slot="reactions"] [data-slot="popover-trigger"][data-state="open"]',
+      '[data-slot="reactions"] [data-slot="popover-trigger"][data-popup-open]',
     )) {
       if (trigger instanceof HTMLElement) trigger.click();
     }

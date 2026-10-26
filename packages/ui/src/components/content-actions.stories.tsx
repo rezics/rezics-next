@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { waitForFocus } from '../test/focus.ts';
 import { dismissed, highlighted } from '../test/waits.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 import { ContentActions } from './content-actions.tsx';
@@ -64,7 +65,11 @@ export const MenuKeyboard: Story = {
     await userEvent.keyboard('{Enter}');
     const menu = await settled(await screen.findByRole('menu'));
     await highlighted(() => within(menu).getAllByRole('menuitem')[0]!);
-    await userEvent.keyboard('{End}{Enter}');
+    // A key pressed before the menu takes focus goes to the trigger and is lost.
+    await waitForFocus([menu, ...within(menu).getAllByRole('menuitem')]);
+    await userEvent.keyboard('{End}');
+    await highlighted(() => within(menu).getAllByRole('menuitem').at(-1)!);
+    await userEvent.keyboard('{Enter}');
 
     const dialog = await settled(await screen.findByRole('dialog', { name: 'Report this content' }));
     const illegal = within(dialog).getByRole('radio', { name: 'Illegal activity' });
@@ -97,11 +102,13 @@ export const OwnerActions: Story = {
     await expect(within(menu).queryByRole('menuitem', { name: 'Report' })).not.toBeInTheDocument();
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Copy link' }));
     await expect(ownerActions.copy).toHaveBeenCalledTimes(1);
+    await dismissed('menu');
 
     await userEvent.click(canvas.getByRole('button', { name: 'More actions' }));
     const editMenu = await settled(await screen.findByRole('menu'));
     await userEvent.click(within(editMenu).getByRole('menuitem', { name: 'Edit' }));
     await expect(ownerActions.edit).toHaveBeenCalledTimes(1);
+    await dismissed('menu');
 
     await userEvent.click(canvas.getByRole('button', { name: 'More actions' }));
     const deleteMenu = await settled(await screen.findByRole('menu'));

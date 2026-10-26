@@ -51,7 +51,9 @@ function PendingReactions({
           setStarted((count) => count + 1);
           return new Promise((resolve) => {
             releases.current.push(() => {
-              setCounts((current) => applyReactionChange(current, valueRef.current, kind));
+              // Read the previous kind now: React may run the updater after the ref moves on.
+              const previous = valueRef.current;
+              setCounts((current) => applyReactionChange(current, previous, kind));
               valueRef.current = kind;
               setValue(kind);
               resolve();

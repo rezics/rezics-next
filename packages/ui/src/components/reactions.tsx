@@ -9,9 +9,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import React from 'react';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from '@rezics/ui/shadcn/popover';
 import { cn } from '../utils.ts';
-import { Button, buttonVariants } from './button.tsx';
-import { Popover, PopoverContent, PopoverHeader, PopoverTrigger } from './popover.tsx';
 
 /** One reaction slot per person and target. Order is the display order. */
 export const reactionKinds = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'] as const;
@@ -112,23 +112,20 @@ function formatCount(locale: string, count: number): string {
 
 // Pressed text is ink blue (`--primary`). Brand red is a mark and never colors text.
 const chipClass = cn(
-  buttonVariants({ variant: 'outline', size: 'sm', pill: true, clickEffect: false }),
-  'pointer-coarse:after:absolute pointer-coarse:after:inset-0 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11',
-  'transition-none',
+  buttonVariants({ variant: 'outline', size: 'sm' }),
+  'relative rounded-full transition-none pointer-coarse:after:absolute pointer-coarse:after:-inset-2',
 );
 
 const pressedClass =
   'border-primary/40 bg-primary/10 text-primary hover:border-primary/40 hover:bg-primary/15 hover:text-primary';
 
-const toggleClass = cn(
-  buttonVariants({ variant: 'ghost', size: 'sm', clickEffect: false }),
-  'w-full justify-start px-3',
-  'pointer-coarse:after:absolute pointer-coarse:after:inset-0 pointer-coarse:after:min-h-11',
-  'transition-none',
-);
+const toggleClass =
+  'relative w-full justify-start px-3 transition-none pointer-coarse:after:absolute pointer-coarse:after:-inset-1';
 
 /**
- * Reactions on a thread or post. Each person holds one kind: choosing another replaces it,
+ * Reactions on a thread or post. shadcn has no reaction cluster (it offers `toggle-group` for exclusive choices and
+ * `bubble` for chat reactions); this composes `button` chips and a `popover` and adds the one-slot rule on top.
+ * Each person holds one kind: choosing another replaces it,
  * and choosing the current one clears it. Counts and the selection move at once, then roll
  * back if saving fails. Further choices wait until the one in flight settles.
  */
@@ -231,52 +228,57 @@ export const Reactions = (props: ReactionsProps) => {
           );
         }
         return (
-          <button
+          <Button
             aria-pressed={pressed}
             className={cn(chipClass, pressed && pressedClass)}
             data-pressed={pressed ? 'true' : 'false'}
             data-slot="reaction-chip"
             key={kind}
             onClick={() => select(kind)}
-            type="button"
+            size="sm"
+            variant="outline"
           >
             <Icon aria-hidden className={cn(pressed && 'fill-current')} />
             <span className="sr-only">{labels[kind]}</span>
             <span className="tabular-nums">{formatted}</span>
-          </button>
+          </Button>
         );
       })}
       {signedOut ? (
-        <a
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm', pill: true, clickEffect: false }))}
-          href={signInHref}
-        >
+        <a className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-full')} href={signInHref}>
           {labels.react}
         </a>
       ) : (
-        <Popover closeOnInteractOutside={false} modal={false}>
-          <PopoverTrigger asChild>
-            <Button clickEffect={false} pill size="sm" variant="outline">
-              {labels.react}
-            </Button>
+        <Popover
+          modal={false}
+          onOpenChange={(_, details) => {
+            // The panel stays open for another choice; Escape or its trigger closes it.
+            if (details.reason === 'outside-press' || details.reason === 'focus-out') details.cancel();
+          }}
+        >
+          <PopoverTrigger render={<Button className="rounded-full" size="sm" variant="outline" />}>
+            {labels.react}
           </PopoverTrigger>
-          <PopoverContent className="w-64">
-            <PopoverHeader title={labels.choose} />
-            <div className="flex flex-col gap-1 px-2 pb-2">
+          <PopoverContent className="w-64 gap-2 p-3">
+            <PopoverHeader>
+              <PopoverTitle>{labels.choose}</PopoverTitle>
+            </PopoverHeader>
+            <div className="flex flex-col gap-1">
               {reactionKinds.map((kind) => {
                 const Icon = reactionIcons[kind];
                 const pressed = shown.value === kind;
                 return (
-                  <button
+                  <Button
                     aria-pressed={pressed}
                     className={cn(toggleClass, pressed && pressedClass)}
                     key={kind}
                     onClick={() => select(kind)}
-                    type="button"
+                    size="sm"
+                    variant="ghost"
                   >
                     <Icon aria-hidden className={cn(pressed && 'fill-current')} />
                     {labels[kind]}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
