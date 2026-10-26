@@ -1,30 +1,33 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import pg from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
-import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
-const admin = new pg.Pool({ connectionString: url, max: 2 });
-afterAll(async () => {
-  await pool.end();
-  await admin.end();
-});
 const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
-const realAccess = await createRealAccess(admin, accounts, ['subject:create']);
-const kernel = createKernel({
-  pool,
-  routeKey: new Uint8Array(32).fill(7),
-  access: realAccess.access,
-  writeRate: realAccess.writeRate,
-});
+const routeKey = new Uint8Array(32).fill(7);
+const actor = {
+  kind: 'account' as const,
+  accountId: accounts.editor,
+  clientId: 'web',
+  scopes: ['subject:create'],
+  requestedBy: null,
+  authnEpoch: 1,
+};
+let growth: GrowthDatabase;
+let pool: Pool;
+let admin: Pool;
+let realAccess: Awaited<ReturnType<typeof createRealAccess<typeof accounts>>>;
+let kernel: ReturnType<typeof createKernel>;
 
 async function call(method: string, path: string, body?: unknown, editor = false) {
   const headers: Record<string, string> = {};
@@ -45,20 +48,56 @@ async function call(method: string, path: string, body?: unknown, editor = false
 
 const pageRead = (subject: string) => call('POST', '/v1/pages:read', { target: { subject } });
 async function create(type: string, label: string): Promise<string> {
-  const created = await call('POST', '/v1/subjects', { type, labels: { en: label } }, true);
-  expect(created.response.status).toBe(201);
-  return created.body.subject.id;
+  const idempotencyKey = randomUUID();
+  const target = subjectTarget(routeKey, actor.accountId, idempotencyKey);
+  const created = await createSubject(pool, {
+    actor,
+    target,
+    idempotencyKey,
+    digest: createHash('sha256').update(idempotencyKey).digest(),
+    item: { type, labels: { en: label } },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: async () => true,
+  });
+  return created.subject.id;
 }
 const node = (type: string, id: string, props: Record<string, unknown> = {}) => ({ type, props: { id, ...props } });
 const document = (...content: ReturnType<typeof node>[]) => ({ root: { props: {} }, content });
 
 let subject: string;
+let holder: string;
+let linksGrowthSubject: string;
+let collectionsGrowthSubject: string;
+let reactionsGrowthSubject: string;
+let linkStatement: string;
 let profile: PresentationProfile;
 
 beforeAll(async () => {
+  growth = await openGrowthDatabase(url);
+  pool = growth.pool;
+  admin = growth.admin;
+  realAccess = await createRealAccess(admin, accounts, ['subject:create']);
+  kernel = createKernel({ pool, routeKey, access: realAccess.access, writeRate: realAccess.writeRate });
   await bootstrapRelease(pool, bundledRelease);
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   subject = await create('schema:Book', 'Page read kinds');
+  holder = await create('schema:Person', 'Inverse link holder');
+  linksGrowthSubject = await create('schema:Book', 'Links growth subject');
+  collectionsGrowthSubject = await create('schema:Book', 'Collections growth subject');
+  reactionsGrowthSubject = await create('schema:Book', 'Reactions growth subject');
+  linkStatement = randomUUID();
+  await admin.query(
+    `INSERT INTO semantic.inbound_link
+       (route, subject_id, property, source_subject_id, statement_id, source_revision, present,
+        recorded_transaction_id, source_type, order_key, filter_value)
+     VALUES ($1,$2,'wdt:P725',$3,$4,1,true,$4,'schema:Person','00000001',$2)`,
+    [routeOf(subject), subject, holder, linkStatement],
+  );
+  await admin.query(
+    `INSERT INTO semantic.inbound_link_count (route,subject_id,property,filter_value,value)
+     VALUES ($1,$2,'wdt:P725',$2,1)`,
+    [routeOf(subject), subject],
+  );
   profile = {
     format: PROFILE_FORMAT,
     generic: document(node('SubjectHeader', 'header'), node('MoreStatements', 'more')),
@@ -84,6 +123,10 @@ beforeAll(async () => {
   await bootstrapProfile(pool, profile);
 });
 
+afterAll(async () => {
+  await growth?.close();
+});
+
 test('a page read plans and answers an inverse links read by property, filter and type, with its exact or at-least count', async () => {
   const answer = await pageRead(subject);
   expect(answer.response.status).toBe(200);
@@ -95,8 +138,16 @@ test('a page read plans and answers an inverse links read by property, filter an
     `/v1/subjects/${subject}/links?property=wdt%3AP725&filter=${subject}&type=schema%3APerson&limit=12`,
   );
   expect(answer.body.reads.r1).toEqual({ status: standalone.response.status, body: standalone.body });
-  expect(answer.body.reads.r1.body.count).toMatchObject({ value: expect.any(Number), exact: expect.any(Boolean) });
-  expect(answer.body.reads.r1.body.links).toEqual([]);
+  expect(answer.body.reads.r1.body.count).toEqual({ value: 1, exact: true });
+  expect(answer.body.reads.r1.body.links).toEqual([
+    {
+      subject: holder,
+      property: 'wdt:P725',
+      statement: linkStatement,
+      type: 'schema:Person',
+      label: 'Inverse link holder',
+    },
+  ]);
 });
 
 test("a page read plans and answers the subject's public collections read with its count", async () => {
@@ -115,4 +166,144 @@ test("a page read plans and answers the subject's reaction counts without a view
   expect(answer.body.reads.r3).toEqual({ status: standalone.response.status, body: standalone.body });
   expect(answer.body.reads.r3.body).not.toHaveProperty('viewerReaction');
   expect(answer.body.reads.r3.body.counts).toEqual([]);
+});
+
+async function requestGrowthRoute(path: string): Promise<Record<string, any>> {
+  const { response, body } = await call('GET', path);
+  if (response.status !== 200) throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
+  return body;
+}
+
+function assertConstantStatements(samples: readonly { cost: { statements: number } }[]): void {
+  expect(new Set(samples.map(({ cost }) => cost.statements)).size).toBe(1);
+}
+
+test('inverse links read stays within its bound at 1, 10 and 100 holders', async () => {
+  const id = linksGrowthSubject;
+  const route = routeOf(id)!;
+  const report = await checkGrowth(growth, {
+    name: 'Inverse links read',
+    scales: [1, 10, 100],
+    repetitions: 1,
+    warmups: 0,
+    bounds: { rows: 'linear', blocks: 'logarithmic', statements: 'constant' },
+    async grow(database, scale, previous) {
+      const amount = scale - previous;
+      const sources = Array.from({ length: amount }, () => newId(route));
+      const statements = Array.from({ length: amount }, () => randomUUID());
+      await database.admin.query(
+        `INSERT INTO semantic.inbound_link
+           (route,subject_id,property,source_subject_id,statement_id,source_revision,present,
+            recorded_transaction_id,source_type,order_key,filter_value)
+         SELECT $1,$2,'wdt:P725',rows.source_id,rows.statement_id,1,true,rows.source_id,
+                'schema:Person',lpad(rows.ordinal::text,8,'0'),$2
+         FROM unnest($3::uuid[],$4::uuid[]) WITH ORDINALITY AS rows(source_id,statement_id,ordinal)`,
+        [route, id, sources, statements],
+      );
+      await database.admin.query(
+        `INSERT INTO semantic.inbound_link_count (route,subject_id,property,filter_value,value)
+         VALUES ($1,$2,'wdt:P725',$2,$3)
+         ON CONFLICT (route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
+        [route, id, scale],
+      );
+    },
+    async operation(_database, scale) {
+      const body = await requestGrowthRoute(
+        `/v1/subjects/${id}/links?property=wdt%3AP725&filter=${id}&type=schema%3APerson&limit=12`,
+      );
+      expect(body.links).toHaveLength(Math.min(scale, 12));
+      expect(body.count).toEqual({ value: scale, exact: true });
+      return body;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
+  assertConstantStatements(report.samples);
+  expect(report.samples.map(({ scale, cost }) => cost.relations['semantic.inbound_link']?.rows ?? 0)).toEqual([
+    2, 20, 149,
+  ]);
+});
+
+test('public collections read stays within its bound at 1, 10 and 100 collections', async () => {
+  const id = collectionsGrowthSubject;
+  const route = routeOf(id)!;
+  const curator = newId(route);
+  const report = await checkGrowth(growth, {
+    name: 'Public collections read',
+    scales: [1, 10, 100],
+    repetitions: 1,
+    warmups: 0,
+    bounds: { rows: 'linear', blocks: 'logarithmic', statements: 'constant' },
+    async grow(database, scale, previous) {
+      const collectionIds = Array.from({ length: scale - previous }, () => newId(route));
+      await database.admin.query(
+        `INSERT INTO library.collection
+           (route,collection_id,curator_account_id,title,visibility,state,revision,member_count,
+            order_epoch,created_at,updated_at,transaction_id)
+         SELECT $1,collection_id,$2,'Growth collection','public','active',1,0,0,now(),now(),collection_id
+         FROM unnest($3::uuid[]) AS rows(collection_id)`,
+        [route, curator, collectionIds],
+      );
+      await database.admin.query(
+        `INSERT INTO library.subject_collection
+           (route,subject_id,collection_id,collection_route,multiplicity,updated_at,transaction_id)
+         SELECT $1,$2,collection_id,$1,1,now(),collection_id
+         FROM unnest($3::uuid[]) AS rows(collection_id)`,
+        [route, id, collectionIds],
+      );
+      await database.admin.query(
+        `INSERT INTO library.subject_listing (route,subject_id,public_collection_count,revision,updated_at,transaction_id)
+         VALUES ($1,$2,$3,1,now(),$2)
+         ON CONFLICT (route,subject_id) DO UPDATE SET
+           public_collection_count=EXCLUDED.public_collection_count, updated_at=EXCLUDED.updated_at`,
+        [route, id, scale],
+      );
+    },
+    async operation(_database, scale) {
+      const body = await requestGrowthRoute(`/v1/subjects/${id}/collections?limit=6`);
+      expect(body.collections).toHaveLength(Math.min(scale, 6));
+      expect(body.count).toEqual({ value: scale, exact: true });
+      return body;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
+  assertConstantStatements(report.samples);
+  expect(report.samples.map(({ cost }) => cost.relations['library.subject_collection']?.rows ?? 0)).toEqual([1, 7, 7]);
+  expect(report.samples.map(({ cost }) => cost.relations['library.collection']?.rows ?? 0)).toEqual([1, 6, 6]);
+});
+
+test('reaction counts read stays within its bound at 1, 10 and 100 contributors', async () => {
+  const id = reactionsGrowthSubject;
+  const route = routeOf(id)!;
+  const report = await checkGrowth(growth, {
+    name: 'Reaction counts read',
+    scales: [1, 10, 100],
+    repetitions: 1,
+    warmups: 0,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(database, scale, previous) {
+      await database.admin.query(
+        `INSERT INTO content.reaction_count
+           (route,target_id,source_partition,kind,count,source_epoch,source_position)
+         SELECT $1,$2,partition,'like',1,1,partition
+         FROM generate_series($3,$4) AS partition`,
+        [route, id, previous + 1, scale],
+      );
+      await database.admin.query(
+        `INSERT INTO content.reaction_total (route,target_id,kind,count,source_epoch,source_position)
+         VALUES ($1,$2,'like',$3,1,$3)
+         ON CONFLICT (route,target_id,kind) DO UPDATE SET
+           count=EXCLUDED.count, source_position=EXCLUDED.source_position`,
+        [route, id, scale],
+      );
+    },
+    async operation(_database, scale) {
+      const body = await requestGrowthRoute(`/v1/subjects/${id}/reactions`);
+      expect(body.counts).toEqual([{ kind: 'like', count: scale }]);
+      expect(body).not.toHaveProperty('viewerReaction');
+      return body;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
+  assertConstantStatements(report.samples);
+  expect(report.samples.map(({ cost }) => cost.relations['content.reaction_total']?.rows ?? 0)).toEqual([1, 1, 1]);
 });
