@@ -12,8 +12,12 @@ export const RATING_EVENTS = {
       previous: units,
       units,
       revision: Type.Integer({ minimum: 1 }),
-      populations: Type.Array(Type.String({ pattern: UUID }), { minItems: 1, maxItems: 1 }),
+      populations: Type.Array(Type.String({ pattern: UUID }), { minItems: 1, maxItems: 101, uniqueItems: true }),
     },
+    { additionalProperties: false },
+  ),
+  'com.rezics.rating.aggregate.applied.v1': Type.Object(
+    { applied: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
 } as const;

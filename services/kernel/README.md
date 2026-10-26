@@ -29,7 +29,9 @@ The worker replays the log into the new generation. A failed rebuild reports one
 Run `bun run db up`, then `bun run dev` from this workspace to serve the API locally. The server reads
 `DATABASE_URL` (required), `KERNEL_ROUTE_KEY` (required), and `KERNEL_SESSION_KEYS` (required) from the environment.
 `KERNEL_HOSTNAME` defaults to `127.0.0.1` and `KERNEL_PORT` defaults to `4100`. `db up` generates the development
-secrets once and keeps them in `.env` across restarts.
+secrets once and keeps them in `.env` across restarts. The worker also requires `KERNEL_RATING_COUNTER_SECRET`, a
+canonical base64url value containing at least 32 bytes, shared by every worker instance so controller counts remain
+stable.
 
 Commerce settings are optional and all or nothing: `STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`,
 `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` are required when enabled; the API also requires

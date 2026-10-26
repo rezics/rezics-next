@@ -72,6 +72,7 @@ export function developmentEnv(existing: string, url: string): string {
   let hasDatabaseUrl = false;
   let hasRouteKey = false;
   let hasSessionKeys = false;
+  let hasRatingCounterSecret = false;
   const updated = lines.map((line) => {
     if (line.startsWith('DATABASE_URL=')) {
       hasDatabaseUrl = true;
@@ -79,11 +80,13 @@ export function developmentEnv(existing: string, url: string): string {
     }
     if (line.startsWith('KERNEL_ROUTE_KEY=')) hasRouteKey = true;
     if (line.startsWith('KERNEL_SESSION_KEYS=')) hasSessionKeys = true;
+    if (line.startsWith('KERNEL_RATING_COUNTER_SECRET=')) hasRatingCounterSecret = true;
     return line;
   });
   if (!hasDatabaseUrl) updated.push(`DATABASE_URL=${url}`);
   if (!hasRouteKey) updated.push(`KERNEL_ROUTE_KEY=${randomBytes(32).toString('base64url')}`);
   if (!hasSessionKeys) updated.push(`KERNEL_SESSION_KEYS=1:${randomBytes(32).toString('base64url')}`);
+  if (!hasRatingCounterSecret) updated.push(`KERNEL_RATING_COUNTER_SECRET=${randomBytes(32).toString('base64url')}`);
   return `${updated.join('\n')}\n`;
 }
 
@@ -237,7 +240,7 @@ async function main(): Promise<void> {
     await up();
   } else if (action === 'dump') {
     const url = databaseUrl(port);
-    process.env.KERNEL_DATABASE_CONTAINER = container;
+    process.env.KERNEL_DATABASE_CONTAINER ??= container;
     for (const [path, dump] of Object.entries(schemaDumps(url))) {
       await Bun.write(resolve(directory, path), dump);
     }

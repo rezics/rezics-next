@@ -11,6 +11,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const routeKey = Buffer.alloc(32, 41).toString('base64url');
 const workerEnvironment = {
   KERNEL_ROUTE_KEY: routeKey,
+  KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
   KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 42).toString('base64url')}`,
   AUTH_ISSUER: 'https://auth.worker.test',
   AUTH_AUDIENCE: 'https://kernel.worker.test',
@@ -21,6 +22,7 @@ test('worker configuration names invalid variables without revealing values', ()
   expect(KERNEL_WORK_MODULES.filter((module) => module === commerceWorkModule)).toHaveLength(1);
   expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
     'accounts',
+    'rating',
     'commerce',
     'library',
     'community',
