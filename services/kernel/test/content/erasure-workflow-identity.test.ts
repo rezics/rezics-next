@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import pg from 'pg';
 import { Value } from 'typebox/value';
 import { runCommand } from '../../src/command/command.ts';
@@ -24,7 +26,8 @@ const row = (name: string, home = route) => ({
   operation_id: id(name, home),
   initiator_account_id: id('initiator', 0x9876),
   author_account_id: id('author', 0x9876),
-  thread_id: id('thread', home ^ 1),
+  thread_id: id(`thread-${name}`, home),
+  anchor_post_id: id(`anchor-${name}`, home),
   actor_kind: 'account',
   actor_account_id: id('initiator', 0x9876),
   actor_client_id: 'rezics-web',
@@ -43,7 +46,80 @@ const data = (operation: Row) => ({
   threadId: operation.thread_id,
   authorId: operation.author_account_id,
 });
+function anchorRows(operation: Row) {
+  const revisionId = id(`revision-${operation.operation_id}`, operation.route);
+  const body = Buffer.from(serializeDocument(fromPlainText('Erasure identity fixture')));
+  return {
+    'content.thread': [
+      {
+        route: operation.route,
+        thread_id: operation.thread_id,
+        author_account_id: operation.author_account_id,
+        board_id: id('board'),
+        title: 'Fixture',
+        visibility: 'published',
+        security_revision: 1,
+        recorded_transaction_id: operation.recorded_transaction_id,
+      },
+    ],
+    'content.post': [
+      {
+        route: operation.route,
+        thread_id: operation.thread_id,
+        post_id: operation.anchor_post_id,
+        reply_to_post_id: null,
+        author_account_id: operation.author_account_id,
+        head_revision_id: revisionId,
+        visibility: 'published',
+        security_revision: 1,
+        recorded_transaction_id: operation.recorded_transaction_id,
+      },
+    ],
+    'content.revision': [
+      {
+        route: operation.route,
+        thread_id: operation.thread_id,
+        post_id: operation.anchor_post_id,
+        revision_id: revisionId,
+        body,
+        body_sha256: createHash('sha256').update(body).digest(),
+        search_text: 'Erasure identity fixture',
+        licence: 'CC0-1.0',
+        subject_ids: [],
+        board_id: id('board'),
+        availability: 'available',
+        recorded_transaction_id: operation.recorded_transaction_id,
+      },
+    ],
+  };
+}
+async function insertAnchor(client: Pick<pg.PoolClient, 'query'>, operation: Row) {
+  const rows = anchorRows(operation);
+  for (const [table, values] of Object.entries(rows)) {
+    const record = values[0]!;
+    await client.query(
+      `INSERT INTO ${table} (${Object.keys(record).join(',')}) VALUES (${Object.keys(record)
+        .map((_, index) => `$${index + 1}`)
+        .join(',')})`,
+      Object.values(record),
+    );
+  }
+}
+async function appendMalformed(partition: number, type: string, eventData: unknown) {
+  const advanced = await pool.query(
+    'UPDATE core.partition SET position=position+1 WHERE partition_no=$1 RETURNING epoch,position',
+    [partition],
+  );
+  const state = advanced.rows[0];
+  if (!state) throw new Error(`Missing partition ${partition}`);
+  await pool.query(
+    `INSERT INTO core.outbox (partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
+     VALUES ($1,$2,0,1,$3,$4,$5,$6,$7)`,
+    [partition, state.position, state.epoch, crypto.randomUUID(), type, crypto.randomUUID(), JSON.stringify(eventData)],
+  );
+}
 async function insert(client: Pick<pg.PoolClient, 'query'>, operation: Row) {
+  await insertAnchor(client, operation);
   await client.query(
     `INSERT INTO content.operation (${Object.keys(operation).join(',')}) VALUES (${Object.keys(operation)
       .map((_, index) => `$${index + 1}`)
@@ -284,10 +360,10 @@ test('requested event catalogue is closed and native readBatch still stops unkno
     expect(Value.Check(OPERATION_EVENTS[requested], invalid)).toBe(false);
   for (const malformed of [false, true]) {
     const selected = 0x678 + Number(malformed);
-    await runCommand(pool, { partition: selected }, async () => ({
-      value: null,
-      events: [{ type: malformed ? requested : 'com.rezics.unknown.v1', data: { ...data(target), body: 'invalid' } }],
-    }));
+    await appendMalformed(selected, malformed ? requested : 'com.rezics.unknown.v1', {
+      ...data(target),
+      body: 'invalid',
+    });
     expect(
       await readBatch(pool, {
         partition: selected,
@@ -314,7 +390,10 @@ test('checkGrowth proves exact-key work with a route-leading operation PK', asyn
     name: 'erasure-workflow-identity',
     hotPartition: partition,
     hotShare: 1,
-    rows: ({ ordinal, route }) => ({ 'content.operation': [row(`growth-${ordinal}`, route)] }),
+    rows: ({ ordinal, route }) => {
+      const operation = row(`growth-${ordinal}`, route);
+      return { ...anchorRows(operation), 'content.operation': [operation] };
+    },
   };
   try {
     expect(

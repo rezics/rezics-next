@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import pg from 'pg';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { readBoardCandidates } from '../../src/content/board-projection.ts';
@@ -126,6 +127,20 @@ async function seedMedia(data: ReturnType<typeof uploaded>, db = admin) {
   );
 }
 
+async function appendMalformed(partition: number, type: string, data: unknown) {
+  const advanced = await admin.query(
+    'UPDATE core.partition SET position=position+1 WHERE partition_no=$1 RETURNING epoch,position',
+    [partition],
+  );
+  const state = advanced.rows[0];
+  if (!state) throw new Error(`Missing partition ${partition}`);
+  await admin.query(
+    `INSERT INTO core.outbox (partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
+     VALUES ($1,$2,0,1,$3,$4,$5,$6,$7)`,
+    [partition, state.position, state.epoch, crypto.randomUUID(), type, crypto.randomUUID(), JSON.stringify(data)],
+  );
+}
+
 test('native durable media and URL import use actual event sequence and partitioned deterministic IDs without an executor', async () => {
   const partition = freshPartition();
   const first = uploaded(partition);
@@ -231,7 +246,7 @@ test('malformed, unanchored, wrong and unknown closed events are rejected withou
     ['com.rezics.content.media.uploaded.v1', { ...uploaded(partition), body: 'private' }, 'invalid_data'],
   ] as const) {
     const broken = freshPartition();
-    await runCommand(pool, { partition: broken }, async () => ({ value: null, events: [{ type, data }] }));
+    await appendMalformed(broken, type, data);
     expect(
       await readBatch(pool, {
         consumer: 'effects',
@@ -248,15 +263,44 @@ test('author erasure binds the validated native requested event before enqueue a
   const partition = freshPartition();
   const route = partition * 16;
   const operationId = newId(route);
-  const threadId = newId(route + 1);
+  const threadId = newId(route);
+  const anchorPostId = newId(route);
+  const revisionId = newId(route);
   const authorId = newId(16);
-  await admin.query(
-    `INSERT INTO content.operation
-      (route,operation_id,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
-       actor_client_id,actor_scopes,actor_authn_epoch,empty_scope,requested_at,recorded_transaction_id)
-     VALUES ($1,$2,$3,$3,$4,'account',$3,'rezics-web',ARRAY['content:write'],1,true,now(),$5)`,
-    [route, operationId, authorId, threadId, crypto.randomUUID()],
-  );
+  const anchorBody = Buffer.from(serializeDocument(fromPlainText('Relay author erasure fixture')));
+  const setup = await admin.connect();
+  try {
+    await setup.query('BEGIN');
+    await setup.query(
+      `INSERT INTO content.thread
+        (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
+       VALUES ($1,$2,$3,$4,'Fixture','published',1,$5)`,
+      [route, threadId, authorId, newId(route), crypto.randomUUID()],
+    );
+    await setup.query(
+      `INSERT INTO content.post
+        (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+       VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
+      [route, threadId, anchorPostId, authorId, revisionId, crypto.randomUUID()],
+    );
+    await setup.query(
+      `INSERT INTO content.revision
+        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+       VALUES ($1,$2,$3,$4,$5,sha256($5),'Relay author erasure fixture','CC0-1.0','{}',$6,'available',$7)`,
+      [route, threadId, anchorPostId, revisionId, anchorBody, newId(route), crypto.randomUUID()],
+    );
+    await setup.query(
+      `INSERT INTO content.operation
+        (route,operation_id,initiator_account_id,author_account_id,thread_id,anchor_post_id,actor_kind,actor_account_id,
+         actor_client_id,actor_scopes,actor_authn_epoch,empty_scope,requested_at,recorded_transaction_id)
+       VALUES ($1,$2,$3,$3,$4,$5,'account',$3,'rezics-web',ARRAY['content:write'],1,true,now(),$6)`,
+      [route, operationId, authorId, threadId, anchorPostId, crypto.randomUUID()],
+    );
+    await setup.query('COMMIT');
+  } finally {
+    await setup.query('ROLLBACK');
+    setup.release();
+  }
   const envelope = await append(partition, [
     { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } },
     { type: 'com.rezics.content.author-erasure.requested.v1', data: { operationId, threadId, authorId } },

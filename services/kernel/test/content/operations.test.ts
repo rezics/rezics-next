@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, type AuthService } from '@rezics/auth';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../../../auth/scripts/database.ts';
@@ -30,6 +31,8 @@ const tokens = new Map<string, string>();
 const issuer = 'https://operations.auth.test';
 const actions = ['post:erase', 'account:read'];
 const nativeClients: Awaited<ReturnType<typeof createWorkClient>>[] = [];
+const fixedBody = Buffer.from(serializeDocument(fromPlainText('fixed')));
+const fixedBodySha256 = createHash('sha256').update(fixedBody).digest();
 afterAll(async () => {
   for (const client of nativeClients) await client.close();
   await authPool?.end();
@@ -86,6 +89,7 @@ async function grant(resource: string, action: string, subject = authorId) {
 async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z') {
   const post = id(name);
   const revision = id(`${name}-revision`);
+  const body = Buffer.from(serializeDocument(fromPlainText('private')));
   const client = await db.admin.connect();
   try {
     await client.query('BEGIN');
@@ -99,7 +103,7 @@ async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z'
       `INSERT INTO content.revision
       (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
       VALUES ($1,$2,$3,$4,$5,sha256($5),'private','CC0-1.0','{}',$6,'available',$7)`,
-      [route, threadId, post, revision, Buffer.from('private'), id('board'), id('transaction')],
+      [route, threadId, post, revision, body, id('board'), id('transaction')],
     );
     await client.query('COMMIT');
   } finally {
@@ -232,7 +236,7 @@ test('initiation commits one identity and ID-only native source before any worke
     initiator_account_id: authorId,
     actor_account_id: authorId,
     actor_client_id: actor.clientId,
-    actor_scopes: actor.scopes,
+    actor_scopes: [...actor.scopes],
     thread_id: threadId,
     author_account_id: authorId,
     upper_post_id: upperId,
@@ -336,8 +340,8 @@ test('status conceals noninitiators and current account denials before exact nat
   };
   expect(await readOperation(deps, actor, outcome.value.operationId, context())).toMatchObject({
     done: true,
-    response: native.response,
-    metadata: native.progress,
+    response: { ...native.response },
+    metadata: { ...native.progress },
   });
   native = {
     done: true,
@@ -522,6 +526,7 @@ test('explicit legal grants, concurrent retries and current named status denials
 });
 
 test('checkGrowth measures production initiation and status with fixed Access through same-partition history', async () => {
+  const otherAnchorPostId = await post('growth-other-anchor', other.accountId, '2010-01-01T00:00:00Z');
   const population: Population = {
     name: 'operation-history',
     hotPartition: partitionOf(route),
@@ -563,8 +568,8 @@ test('checkGrowth measures production initiation and status with fixed Access th
           thread_id: threadId,
           post_id: id(`history-post-${ordinal}`),
           revision_id: id(`history-revision-${ordinal}`),
-          body: Buffer.from('fixed'),
-          body_sha256: createHash('sha256').update('fixed').digest(),
+          body: fixedBody,
+          body_sha256: fixedBodySha256,
           search_text: 'fixed',
           licence: 'CC0-1.0',
           subject_ids: [],
@@ -577,8 +582,8 @@ test('checkGrowth measures production initiation and status with fixed Access th
           thread_id: threadId,
           post_id: postId,
           revision_id: id(`old-revision-${ordinal}`),
-          body: Buffer.from('fixed'),
-          body_sha256: createHash('sha256').update('fixed').digest(),
+          body: fixedBody,
+          body_sha256: fixedBodySha256,
           search_text: 'fixed',
           licence: 'CC0-1.0',
           subject_ids: [],
@@ -594,7 +599,7 @@ test('checkGrowth measures production initiation and status with fixed Access th
           initiator_account_id: authorId,
           author_account_id: other.accountId,
           thread_id: threadId,
-          anchor_post_id: postId,
+          anchor_post_id: otherAnchorPostId,
           actor_kind: 'account',
           actor_account_id: authorId,
           actor_client_id: actor.clientId,

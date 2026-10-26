@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import pg from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Effect } from '../../src/events/effects.ts';
@@ -249,7 +250,9 @@ if (process.argv.includes('--content-registration')) {
     const containerId = newId(targetRoute);
     const uploaderId = newId(targetRoute + 1);
     const operationId = newId(targetRoute);
-    const threadId = newId(targetRoute + 1);
+    const threadId = newId(targetRoute);
+    const anchorPostId = newId(targetRoute);
+    const revisionId = newId(targetRoute);
     const accountId = newId(0x1010);
     const bytes = new Uint8Array([1, 2, 3, 4]);
     const digest = createHash('sha256').update(bytes).digest('hex');
@@ -289,13 +292,40 @@ if (process.argv.includes('--content-registration')) {
           };
         },
       );
-      await pool.query(
-        `INSERT INTO content.operation
-           (route,operation_id,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
-            actor_client_id,actor_scopes,actor_authn_epoch,empty_scope,requested_at,recorded_transaction_id)
-         VALUES ($1,$2,$3,$3,$4,'account',$3,'content-register-test',ARRAY['content:write'],1,true,now(),$5)`,
-        [targetRoute, operationId, accountId, threadId, randomUUID()],
-      );
+      const anchorBody = Buffer.from(serializeDocument(fromPlainText('Content registration erasure fixture')));
+      const setup = await pool.connect();
+      try {
+        await setup.query('BEGIN');
+        await setup.query(
+          `INSERT INTO content.thread
+             (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
+           VALUES ($1,$2,$3,$4,'Fixture','published',1,$5)`,
+          [targetRoute, threadId, accountId, newId(targetRoute), randomUUID()],
+        );
+        await setup.query(
+          `INSERT INTO content.post
+             (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+           VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
+          [targetRoute, threadId, anchorPostId, accountId, revisionId, randomUUID()],
+        );
+        await setup.query(
+          `INSERT INTO content.revision
+             (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+           VALUES ($1,$2,$3,$4,$5,sha256($5),'Content registration erasure fixture','CC0-1.0','{}',$6,'available',$7)`,
+          [targetRoute, threadId, anchorPostId, revisionId, anchorBody, newId(targetRoute), randomUUID()],
+        );
+        await setup.query(
+          `INSERT INTO content.operation
+             (route,operation_id,initiator_account_id,author_account_id,thread_id,anchor_post_id,actor_kind,actor_account_id,
+              actor_client_id,actor_scopes,actor_authn_epoch,empty_scope,requested_at,recorded_transaction_id)
+           VALUES ($1,$2,$3,$3,$4,$5,'account',$3,'content-register-test',ARRAY['content:write'],1,true,now(),$6)`,
+          [targetRoute, operationId, accountId, threadId, anchorPostId, randomUUID()],
+        );
+        await setup.query('COMMIT');
+      } finally {
+        await setup.query('ROLLBACK');
+        setup.release();
+      }
       const before = await contentState(pool, mediaId, operationId);
       expect(before.media).toEqual([
         { state: 'uploaded', decision: null, unclaimed: true, erased: false, collection_pending: false, variants: 0 },

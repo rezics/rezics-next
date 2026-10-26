@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -22,6 +23,9 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 const cookies = new Map<string, string>();
+const privateBody = Buffer.from(serializeDocument(fromPlainText('private')));
+const fixedBody = Buffer.from(serializeDocument(fromPlainText('fixed')));
+const fixedBodySha256 = createHash('sha256').update(fixedBody).digest();
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const db = await openGrowthDatabase();
 let authDatabase: ReturnType<typeof testDatabase>;
@@ -95,7 +99,7 @@ async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z'
       `INSERT INTO content.revision
       (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
       VALUES ($1,$2,$3,$4,$5,sha256($5),'private','CC0-1.0','{}',$6,'available',$7)`,
-      [route, threadId, post, revision, Buffer.from('private'), id('board'), id('transaction')],
+      [route, threadId, post, revision, privateBody, id('board'), id('transaction')],
     );
     await client.query('COMMIT');
   } finally {
@@ -673,91 +677,133 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
     name: 'erasure-provenance-history',
     hotPartition: partitionOf(route),
     hotShare: 1,
-    rows: ({ ordinal }) => ({
-      'core.receipt': [
-        {
-          partition_no: partitionOf(route),
-          principal_kind: 'account',
-          principal_id: id(`receipt-principal-${ordinal}`),
-          command_kind: kind,
-          idempotency_key: `history-${ordinal}`,
-          request_digest: Buffer.alloc(32, 1),
-          epoch: 1,
-          position: ordinal + 1,
-          transaction_id: id(`receipt-transaction-${ordinal}`),
-          response: {},
-        },
-      ],
-      'access.resource_grant': [
-        {
-          route,
-          resource_id: id(`grant-${ordinal}`),
-          subject_id: authorId,
-          action: 'post:erase',
-          valid: '(,)',
-          transaction_id: id('transaction'),
-        },
-      ],
-      'access.resource_denial': [
-        {
-          route,
-          resource_id: id(`denial-${ordinal}`),
-          subject_id: authorId,
-          action: 'post:erase',
-          reason: 'resource',
-          valid: '(,)',
-          transaction_id: id('transaction'),
-        },
-      ],
-      'content.post': [
-        {
-          route,
-          thread_id: threadId,
-          post_id: id(`history-${ordinal}`),
-          author_account_id: authorId,
-          head_revision_id: id(`revision-${ordinal}`),
-          visibility: 'published',
-          security_revision: 1,
-          recorded_transaction_id: id('transaction'),
-          created_at: new Date('2020-06-01T00:00:00Z'),
-        },
-      ],
-      'content.revision': [
-        {
-          route,
-          thread_id: threadId,
-          post_id: id(`history-${ordinal}`),
-          revision_id: id(`revision-${ordinal}`),
-          body: Buffer.from('fixed'),
-          body_sha256: createHash('sha256').update('fixed').digest(),
-          search_text: 'fixed',
-          licence: 'CC0-1.0',
-          subject_ids: [],
-          board_id: id('board'),
-          availability: 'available',
-          recorded_transaction_id: id('transaction'),
-        },
-      ],
-      'content.operation': [
-        {
-          route,
-          operation_id: id(`noise-${ordinal}`),
-          initiator_account_id: authorId,
-          author_account_id: otherId,
-          thread_id: threadId,
-          anchor_post_id: postId,
-          actor_kind: 'account',
-          actor_account_id: authorId,
-          actor_client_id: actor.clientId,
-          actor_scopes: actor.scopes,
-          actor_requested_by: null,
-          actor_authn_epoch: 1,
-          empty_scope: true,
-          requested_at: new Date(),
-          recorded_transaction_id: id('transaction'),
-        },
-      ],
-    }),
+    rows: ({ ordinal }) => {
+      const noiseThreadId = id(`noise-thread-${ordinal}`);
+      const noiseAnchorPostId = id(`noise-anchor-${ordinal}`);
+      return {
+        'core.receipt': [
+          {
+            partition_no: partitionOf(route),
+            principal_kind: 'account',
+            principal_id: id(`receipt-principal-${ordinal}`),
+            command_kind: kind,
+            idempotency_key: `history-${ordinal}`,
+            request_digest: Buffer.alloc(32, 1),
+            epoch: 1,
+            position: ordinal + 1,
+            transaction_id: id(`receipt-transaction-${ordinal}`),
+            response: {},
+          },
+        ],
+        'access.resource_grant': [
+          {
+            route,
+            resource_id: id(`grant-${ordinal}`),
+            subject_id: authorId,
+            action: 'post:erase',
+            valid: '(,)',
+            transaction_id: id('transaction'),
+          },
+        ],
+        'access.resource_denial': [
+          {
+            route,
+            resource_id: id(`denial-${ordinal}`),
+            subject_id: authorId,
+            action: 'post:erase',
+            reason: 'resource',
+            valid: '(,)',
+            transaction_id: id('transaction'),
+          },
+        ],
+        'content.thread': [
+          {
+            route,
+            thread_id: noiseThreadId,
+            author_account_id: otherId,
+            board_id: id('board'),
+            title: 'Fixture',
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: id('transaction'),
+            created_at: new Date('2010-01-01T00:00:00Z'),
+          },
+        ],
+        'content.post': [
+          {
+            route,
+            thread_id: threadId,
+            post_id: id(`history-${ordinal}`),
+            author_account_id: authorId,
+            head_revision_id: id(`revision-${ordinal}`),
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: id('transaction'),
+            created_at: new Date('2020-06-01T00:00:00Z'),
+          },
+          {
+            route,
+            thread_id: noiseThreadId,
+            post_id: noiseAnchorPostId,
+            author_account_id: otherId,
+            head_revision_id: id(`noise-revision-${ordinal}`),
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: id('transaction'),
+            created_at: new Date('2010-01-01T00:00:00Z'),
+          },
+        ],
+        'content.revision': [
+          {
+            route,
+            thread_id: threadId,
+            post_id: id(`history-${ordinal}`),
+            revision_id: id(`revision-${ordinal}`),
+            body: fixedBody,
+            body_sha256: fixedBodySha256,
+            search_text: 'fixed',
+            licence: 'CC0-1.0',
+            subject_ids: [],
+            board_id: id('board'),
+            availability: 'available',
+            recorded_transaction_id: id('transaction'),
+          },
+          {
+            route,
+            thread_id: noiseThreadId,
+            post_id: noiseAnchorPostId,
+            revision_id: id(`noise-revision-${ordinal}`),
+            body: fixedBody,
+            body_sha256: fixedBodySha256,
+            search_text: 'fixed',
+            licence: 'CC0-1.0',
+            subject_ids: [],
+            board_id: id('board'),
+            availability: 'available',
+            recorded_transaction_id: id('transaction'),
+          },
+        ],
+        'content.operation': [
+          {
+            route,
+            operation_id: id(`noise-${ordinal}`),
+            initiator_account_id: authorId,
+            author_account_id: otherId,
+            thread_id: noiseThreadId,
+            anchor_post_id: noiseAnchorPostId,
+            actor_kind: 'account',
+            actor_account_id: authorId,
+            actor_client_id: actor.clientId,
+            actor_scopes: actor.scopes,
+            actor_requested_by: null,
+            actor_authn_epoch: 1,
+            empty_scope: true,
+            requested_at: new Date(),
+            recorded_transaction_id: id('transaction'),
+          },
+        ],
+      };
+    },
   };
   const report = await checkGrowth(db, {
     name: 'author erasure initiation provenance',
