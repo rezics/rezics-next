@@ -198,6 +198,29 @@ CREATE TABLE rating.voter_realm (
 
 
 --
+-- Name: voter_state; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.voter_state (
+    route integer NOT NULL,
+    voter_id uuid NOT NULL,
+    state text DEFAULT 'eligible'::text NOT NULL,
+    cursor_question_id uuid,
+    cursor_target_id uuid,
+    transition_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    purge_votes boolean DEFAULT false NOT NULL,
+    populations uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    CONSTRAINT voter_state_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11)))),
+    CONSTRAINT voter_state_check1 CHECK (((cursor_question_id IS NULL) = (cursor_target_id IS NULL))),
+    CONSTRAINT voter_state_check2 CHECK (((state = ANY (ARRAY['leaving'::text, 'returning'::text])) OR (cursor_question_id IS NULL))),
+    CONSTRAINT voter_state_check3 CHECK (((NOT purge_votes) OR (state = 'leaving'::text))),
+    CONSTRAINT voter_state_populations_check CHECK ((cardinality(populations) <= 101)),
+    CONSTRAINT voter_state_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT voter_state_state_check CHECK ((state = ANY (ARRAY['eligible'::text, 'leaving'::text, 'ineligible'::text, 'returning'::text])))
+);
+
+
+--
 -- Name: aggregate_component aggregate_component_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -251,6 +274,14 @@ ALTER TABLE ONLY rating.vote
 
 ALTER TABLE ONLY rating.voter_realm
     ADD CONSTRAINT voter_realm_pkey PRIMARY KEY (route, voter_id, realm_id);
+
+
+--
+-- Name: voter_state voter_state_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.voter_state
+    ADD CONSTRAINT voter_state_pkey PRIMARY KEY (route, voter_id);
 
 
 --

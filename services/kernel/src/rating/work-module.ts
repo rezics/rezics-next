@@ -1,6 +1,7 @@
 import { createRatingCounter, type RatingCounter } from '../access/rating-counter.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createRatingAggregateEffect } from './aggregate-effect.ts';
+import { createVoterEligibilityEffect } from './eligibility.ts';
 import { registerRatingSegmentWork } from './segment-job.ts';
 import { createVoterRealmsEffect } from './voter-realms.ts';
 
@@ -22,7 +23,11 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
     register(context) {
       const counter =
         ratingCounter ?? createRatingCounter({ secret: counterSecret(context.env[RATING_COUNTER_SECRET_ENV]) });
-      context.addEffects([createRatingAggregateEffect(context.pool, counter), createVoterRealmsEffect(context.pool)]);
+      context.addEffects([
+        createRatingAggregateEffect(context.pool, counter),
+        createVoterRealmsEffect(context.pool),
+        createVoterEligibilityEffect(context.pool),
+      ]);
       // The direct module-registration test uses a minimal context; composed workers always provide a DBOS client.
       if (context.client) registerRatingSegmentWork(context);
     },

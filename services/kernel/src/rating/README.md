@@ -154,6 +154,25 @@ Membership changes write at most two membership rows: the affected Realm and one
 partial indexes bound the membership read and promotion independently of other voters and the waiting set's
 size. Vote writes add at most 100 membership rows to their existing bounded reads.
 
+## Voter eligibility
+
+`rating.voter_state` keeps one row per voter with `eligible`, `leaving`, `ineligible` or `returning`, a transition id,
+and the last applied `(question_id, target_id)` cursor. Existing voters are backfilled as eligible. Vote commands
+ensure the row exists and emit no populations while the voter is leaving or ineligible; a returning voter counts
+again while its pages run so newer vote revisions can be applied idempotently alongside the page events.
+
+Suspension starts a `leaving` transition and reinstatement starts a `returning` transition. They use the same durable
+segment workflow, page step and `com.rezics.rating.segment.page.v1` event as Realm membership jobs. Each page reads
+at most 100 votes by keyset from the voter partition. Each vote carries the populations where that key currently
+counts: Global and the Realm populations admitted by their `counted`, `adding` or `removing` cursor. Removal
+subtracts those populations; return adds them. The page checkpoint commits with the event, so replay resumes from
+the stored cursor without applying a page twice.
+
+An account tombstone uses the removal transition with source deletion enabled. Each page records the vote and its
+populations in the removal event before deleting those vote rows in the same voter-partition command. Once the final
+page is empty, the remaining `voter_realm` rows are deleted and the voter remains `ineligible`. A suspension retains
+both votes and Realm memberships for reinstatement.
+
 ## Cost
 
 ### Segment page
@@ -163,3 +182,11 @@ size. Vote writes add at most 100 membership rows to their existing bounded read
 - Bound: 100 votes per page.
 - Growth check: `test/rating/growth-segment-job.test.ts`, test "segment page has constant rows and statements as voter
   votes grow", at scales `[256, 1024, 4096]`.
+
+### Eligibility page
+
+- Touches: at most 100 vote rows by keyset and one capped set of at most 100 voter Realm rows in the voter's
+  partition. Each vote applies to Global and at most 100 Realm populations.
+- Bound: 100 votes and 101 populations per vote per page.
+- Growth check: `test/rating/growth-segment-job.test.ts`, test "eligibility page has constant rows and statements as
+  voter votes grow", at scales `[256, 1024, 4096]`.

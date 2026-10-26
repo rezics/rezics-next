@@ -262,27 +262,44 @@ export async function applyRatingSegmentPageEvent(
     !Number.isFinite(Date.parse(event.time))
   )
     throw new TypeError('Invalid rating segment page event');
-  const data = event.data as {
-    voterId: string;
-    realmId: string;
-    direction: 'adding' | 'removing';
-    votes: Array<{ questionId: string; targetId: string; units: number | null; revision: number }>;
-  };
+  const data = event.data as
+    | {
+        voterId: string;
+        direction: 'adding' | 'removing';
+        votes: Array<{
+          questionId: string;
+          targetId: string;
+          units: number | null;
+          revision: number;
+          populations: string[];
+        }>;
+      }
+    | {
+        voterId: string;
+        realmId: string;
+        direction: 'adding' | 'removing';
+        votes: Array<{ questionId: string; targetId: string; units: number | null; revision: number }>;
+      };
   if (data.votes.length === 0) return;
   const countingKey = await withConnection(pool, (client) => ratingCounter(client, data.voterId, event.time));
-  await applyRatingChanges(
-    pool,
-    data.votes.map((vote) => ({
-      voterId: data.voterId,
-      countingKey,
-      questionId: vote.questionId,
-      populationId: data.realmId,
-      targetId: vote.targetId,
-      revision: vote.revision,
-      at: event.time,
-      ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
-    })),
-  );
+  const change = (
+    vote: { questionId: string; targetId: string; units: number | null; revision: number },
+    populationId: string,
+  ): RatingChange => ({
+    voterId: data.voterId,
+    countingKey,
+    questionId: vote.questionId,
+    populationId,
+    targetId: vote.targetId,
+    revision: vote.revision,
+    at: event.time,
+    ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
+  });
+  const changes: RatingChange[] =
+    'realmId' in data
+      ? data.votes.flatMap((vote) => [change(vote, data.realmId)])
+      : data.votes.flatMap((vote) => vote.populations.map((populationId) => change(vote, populationId)));
+  await applyRatingChanges(pool, changes);
 }
 
 /** Sum at most sixteen shards. A missing question returns null; a question without votes returns zero components. */

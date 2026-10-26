@@ -16,7 +16,7 @@ export const RATING_EVENTS = {
       previous: units,
       units,
       revision: Type.Integer({ minimum: 1 }),
-      populations: Type.Array(Type.String({ pattern: UUID }), { minItems: 1, maxItems: 101, uniqueItems: true }),
+      populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
     },
     { additionalProperties: false },
   ),
@@ -24,24 +24,50 @@ export const RATING_EVENTS = {
     { applied: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
-  'com.rezics.rating.segment.page.v1': Type.Object(
-    {
-      voterId: Type.String({ pattern: UUID }),
-      realmId: Type.String({ pattern: UUID }),
-      direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
-      votes: Type.Array(
-        Type.Object(
-          {
-            questionId: Type.String({ pattern: UUID }),
-            targetId: Type.String({ pattern: UUID }),
-            units,
-            revision: Type.Integer({ minimum: 1 }),
-          },
-          { additionalProperties: false },
+  'com.rezics.rating.segment.page.v1': Type.Union([
+    Type.Object(
+      {
+        voterId: Type.String({ pattern: UUID }),
+        direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
+        votes: Type.Array(
+          Type.Object(
+            {
+              questionId: Type.String({ pattern: UUID }),
+              targetId: Type.String({ pattern: UUID }),
+              units,
+              revision: Type.Integer({ minimum: 1 }),
+              populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
+            },
+            { additionalProperties: false },
+          ),
+          { maxItems: 100 },
         ),
-        { maxItems: 100 },
-      ),
-    },
+      },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      {
+        voterId: Type.String({ pattern: UUID }),
+        realmId: Type.String({ pattern: UUID }),
+        direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
+        votes: Type.Array(
+          Type.Object(
+            {
+              questionId: Type.String({ pattern: UUID }),
+              targetId: Type.String({ pattern: UUID }),
+              units,
+              revision: Type.Integer({ minimum: 1 }),
+            },
+            { additionalProperties: false },
+          ),
+          { maxItems: 100 },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  ]),
+  'com.rezics.rating.eligibility.changed.v1': Type.Object(
+    { voterId: Type.String({ pattern: UUID }) },
     { additionalProperties: false },
   ),
   'com.rezics.rating.population.pending.v1': Type.Object(

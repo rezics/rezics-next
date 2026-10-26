@@ -13,6 +13,8 @@ import insertRealm from './voter-realm-insert.sql';
 import updateRealm from './voter-realm-update.sql';
 import deleteRealm from './voter-realm-delete.sql';
 import promoteRealm from './voter-realm-promote.sql';
+import ensureVoterState from './voter-state-ensure.sql';
+import readVoterState from './voter-state-status-read.sql';
 
 export const VOTER_REALM_CAP = 100;
 const MEMBERSHIP = 'com.rezics.community.realm.membership.v1';
@@ -149,6 +151,15 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
 }
 
 type VoteKey = { questionId: string; targetId: string };
+export type VoterRealmPopulationRow = {
+  realmId: string;
+  state: string;
+  cursorQuestionId: string | null;
+  cursorTargetId: string | null;
+  limitQuestionId: string | null;
+  limitTargetId: string | null;
+};
+
 function compare(a: VoteKey, b: VoteKey): number {
   return a.questionId < b.questionId
     ? -1
@@ -161,13 +172,9 @@ function compare(a: VoteKey, b: VoteKey): number {
           : 0;
 }
 
-/** Read only the capped set, in the same transaction as the vote and its emitted populations. */
-export async function readVotePopulations(
-  tx: CommandTransaction,
-  input: { route: number; voterId: string } & VoteKey,
-): Promise<string[]> {
-  const rows = await readCapped.run(tx, { route: input.route, voter_id: input.voterId });
-  const populations = [GLOBAL_CONTEXT.id];
+/** Resolve the populations in which one key currently counts, including in-flight Realm cursors. */
+export function populationsForVoteKey(input: VoteKey, rows: readonly VoterRealmPopulationRow[]): string[] {
+  const populations: string[] = [];
   for (const row of rows) {
     const cursor =
       row.cursorQuestionId === null ? null : { questionId: row.cursorQuestionId, targetId: row.cursorTargetId! };
@@ -183,4 +190,16 @@ export async function readVotePopulations(
       populations.push(row.realmId);
   }
   return populations;
+}
+
+/** Read only the capped set, in the same transaction as the vote and its emitted populations. */
+export async function readVotePopulations(
+  tx: CommandTransaction,
+  input: { route: number; voterId: string } & VoteKey,
+): Promise<string[]> {
+  await ensureVoterState.run(tx, { route: input.route, voter_id: input.voterId });
+  const eligibility = await readVoterState.run(tx, { route: input.route, voter_id: input.voterId });
+  if (eligibility?.state === 'leaving' || eligibility?.state === 'ineligible') return [];
+  const rows = await readCapped.run(tx, { route: input.route, voter_id: input.voterId });
+  return [GLOBAL_CONTEXT.id, ...populationsForVoteKey(input, rows)];
 }
