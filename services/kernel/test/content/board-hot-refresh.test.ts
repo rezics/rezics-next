@@ -15,7 +15,7 @@ import { createReactionCountEffect } from '../../src/content/reaction-projection
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
 
 const db = await openGrowthDatabase();
@@ -283,11 +283,11 @@ function refreshPopulation(baseAt: Date): Population {
     hotShare: 1,
     rows: ({ ordinal }) => {
       const rankRefreshedAt =
-        ordinal < 500
+        ordinal < 1000
           ? staleAt
-          : ordinal >= 8192 && ordinal < 8692
+          : ordinal >= 8192 && ordinal < 9192
             ? new Date(baseAt.getTime() - 38 * 60_000).toISOString()
-            : ordinal >= 2048 && ordinal < 2548
+            : ordinal >= 2048 && ordinal < 3048
               ? new Date(baseAt.getTime() - 49 * 60_000).toISOString()
               : new Date(baseAt.getTime() + 60 * 60_000).toISOString();
       const boardId = newId(boardRoute);
@@ -344,20 +344,21 @@ test.serial(
   async () => {
     const baseAt = new Date(Date.now() + 20 * 60_000);
     const population = refreshPopulation(baseAt);
+    const refresh = async (_growthDb: GrowthDatabase, _scale: number, repetition: number) => {
+      const at = new Date(baseAt.getTime() + repetition * 11 * 60_000);
+      const refreshed = await refreshBoardRankBatch(db.pool, at);
+      expect(refreshed).toBe(500);
+      return refreshed;
+    };
     const report = await checkGrowth(db, {
       name: 'one hot rank refresh batch',
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,
-      warmups: 0,
       grow: async (growthDb, scale, previous) =>
         seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale }),
-      operation: async (_growthDb, _scale, repetition) => {
-        const at = new Date(baseAt.getTime() + repetition * 11 * 60_000);
-        const refreshed = await refreshBoardRankBatch(db.pool, at);
-        expect(refreshed).toBe(500);
-        return refreshed;
-      },
+      warmup: refresh,
+      operation: refresh,
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     expect(

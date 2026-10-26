@@ -777,7 +777,6 @@ test.serial('a content write has constant participation cost as unrelated Realms
     scales: [2048, 8192, 32768],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 1,
-    warmups: 0,
     async grow(database, scale, previous) {
       await seed(database, population, { from: previous, to: scale });
     },
