@@ -1084,7 +1084,6 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   }
 
   async function erase(persona: Persona, thread: Target, _author: 'author', key: string): Promise<Reply<unknown>> {
-    const workerReady = persona === 'author' ? ensureWorker() : undefined;
     const response = await call({
       method: 'POST',
       path: `/v1/threads/${thread.id}:erase`,
@@ -1094,6 +1093,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       body: { authorId: accountId('author') },
     });
     if (response.status !== 202) return { response };
+    const workerReady = persona === 'author' ? ensureWorker() : undefined;
     const partition = partitionOf(requiredRoute(thread.id));
     rememberCommand(thread.id, key, persona, 'content.author-erasure', partition);
     projectionPartitions.add(partition);

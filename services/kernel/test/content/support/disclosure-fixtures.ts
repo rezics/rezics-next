@@ -56,7 +56,7 @@ export function revisionFromView(value: unknown): Revision {
   if (typeof view.sha256 !== 'string' && view.sha256 !== null) throw new Error('Content view is missing sha256');
   return {
     id: view.revisionId,
-    hash: typeof view.sha256 === 'string' ? view.sha256 : '',
+    hash: view.sha256,
     body: view.body === null ? null : documentText(view.body as DocumentSnapshot),
     availability: view.availability,
   };
@@ -77,7 +77,8 @@ export function textFromBytea(value: unknown): string | null {
   return documentText(JSON.parse(bytes.toString('utf8')) as DocumentSnapshot);
 }
 
-export function hexFromBytea(value: unknown): string {
+export function hexFromBytea(value: unknown): string | null {
+  if (value === null) return null;
   if (Buffer.isBuffer(value)) return value.toString('hex');
   if (value instanceof Uint8Array) return Buffer.from(value).toString('hex');
   throw new Error('Revision digest is not stored bytea');

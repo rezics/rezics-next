@@ -517,9 +517,9 @@ test('authorized erasure nulls every authored revision and exact references rema
     const after = await d().observe(target);
     expect(after.revisions).toHaveLength(before[index]!.revisions.length);
     for (const old of before[index]!.revisions) {
-      expect(after.revisions.find((r) => r.id === old.id)).toEqual({ ...old, body: null, availability: 'erased' });
+      expect(after.revisions.find((r) => r.id === old.id)).toEqual({ ...old, body: null, hash: null, availability: 'erased' });
       const response = await d().read('author', target, old.id);
-      expect((await ok(response)).revision).toEqual({ ...old, body: null, availability: 'erased' });
+      expect((await ok(response)).revision).toEqual({ ...old, body: null, hash: null, availability: 'erased' });
       for (const row of before)
         for (const revision of row.revisions) expect(await wire(response)).not.toContain(revision.body!);
     }
@@ -547,7 +547,7 @@ test('authorized erasure nulls every authored revision and exact references rema
   await ok(await d().takedown('moderator', thread, 'hide-erased'));
   for (const old of before[0]!.revisions) {
     const exact = await ok(await d().read('author', thread, old.id));
-    expect(exact.revision).toEqual({ ...old, body: null, availability: 'erased' });
+    expect(exact.revision).toEqual({ ...old, body: null, hash: null, availability: 'erased' });
     await problem(await d().read('anonymous', thread, old.id), 'not_found');
   }
 });
@@ -618,7 +618,7 @@ test('authorized create and revision replay cannot recover erased bytes from rec
   expect(erased.revisions).toHaveLength(beforeReplay.revisions.length);
   expect(erased.effects.some((effect) => effect.kind === 'erasure')).toBe(true);
   for (const [index, { key, revision }] of commands.entries()) {
-    const tombstone = { ...revision, body: null, availability: 'erased' as const };
+    const tombstone = { ...revision, body: null, hash: null, availability: 'erased' as const };
     expect(erased.revisions.find((row) => row.id === revision.id)).toEqual(tombstone);
     const response = await d().replayCommand(key);
     expect(response.response.status).toBe(statuses[index]!);
@@ -629,7 +629,7 @@ test('authorized create and revision replay cannot recover erased bytes from rec
     const current = await d().read('author', thread);
     expect(await ok(current)).toEqual({
       id: thread.id,
-      revision: { ...edited, body: null, availability: 'erased' },
+      revision: { ...edited, body: null, hash: null, availability: 'erased' },
     });
     for (const body of bodies) {
       expect(await wire(response)).not.toContain(body);
