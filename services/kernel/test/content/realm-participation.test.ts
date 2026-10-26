@@ -446,6 +446,8 @@ beforeAll(async () => {
   });
   expect(ban.response.status).toBe(200);
   if (typeof ban.value.ban.workflowId === 'string') await settle(ban.value.ban.workflowId);
+  await stopKernelWorker(worker);
+  worker = undefined;
 }, 120_000);
 
 afterAll(async () => {
