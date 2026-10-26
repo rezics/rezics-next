@@ -1,3 +1,4 @@
+-- unbound: one input route scopes the post, related thread and media updates; the checker does not trace route columns through data-modifying CTEs
 -- Logical erasure returns before any physical history/media page is read.
 -- Existing media terminal fences survive this decision. Collection owns its
 -- pending rows; that independent irreversible cleanup must not be cancelled.

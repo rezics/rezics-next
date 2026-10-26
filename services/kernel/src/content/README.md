@@ -146,7 +146,27 @@ in the account's partition. `readAvatarSummaries(client, ids)` accepts 1–256 i
 returns a map with one statement per media partition. Each available avatar has the cover summary shape with
 `credit: null`; unknown, unavailable and non-avatar ids map to null. An account upload has no source credit.
 
+## Authored field documents
+
+An authored field document stores the editor's canonical document body, SPDX licence and BCP 47 language in
+`content.authored_field`, beside the subject's route. Its row binds the body to the semantic subject, candidate and
+revision, and records the acting account as `author_account_id`. `appendAuthoredField` runs only inside the current
+authorized subject command and returns the document `{ id, digest }` for semantic to store as the statement value.
+The semantic command emits `com.rezics.content.authored-field.created.v1` with the document, subject, candidate and author IDs
+in the same transaction.
+Documents are text-only until subject-field media claims exist; image and media nodes are refused.
+
+`readAuthoredField` is a low-level exact storage read that includes erased tombstones and must never serve as a public
+handler. Disclosure follows the current semantic candidate, as it does for imported documents; a document ID by itself
+does not authorize disclosure.
+
 ## Cost
+
+### Authored field document append and read
+
+- **Touches:** Validate and hash at most 2 MiB of canonical document bytes; insert one authored-field row by primary key in the subject's partition and emit one event in the caller's command. `readAuthoredField` performs one exact primary-key read, including tombstones.
+- **Bound:** Constant rows and statements; O(log D) blocks in the partition, where D is its authored document count.
+- **Growth check:** `test/content/authored-fields.test.ts`, `authored document append and read` at 64, 512 and 4096 documents in the partition. Rows and statements stay constant.
 
 These are derivations from the implemented adapters and SQL here, checked against `db/content/migrations/` and `db/content/schema.sql`, not measurements or promises about a particular query plan.
 `T` is total threads, `P` rows in an anchor's partition, `p` posts in one thread, `r` revisions of one post, `t` threads in one board, `d` page depth, `s` requested results and `k` changed rows; `u` is one uploader's media history.

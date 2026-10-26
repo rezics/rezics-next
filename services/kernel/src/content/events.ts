@@ -46,6 +46,10 @@ export const CONTENT_EVENTS = {
     { boardId: UUID, realmId: UUID, conceptId: UUID, actorId: UUID },
     { additionalProperties: false },
   ),
+  'com.rezics.content.authored-field.created.v1': Type.Object(
+    { id: UUID, subject: UUID, candidate: UUID, authorId: UUID },
+    { additionalProperties: false },
+  ),
   ...MEDIA_EVENTS,
   ...MEDIA_IMPORT_EVENTS,
   ...MEDIA_MODERATION_EVENTS,
