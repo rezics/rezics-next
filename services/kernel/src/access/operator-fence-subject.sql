@@ -8,7 +8,7 @@ JOIN access.operator_relation_slot s ON s.route = a.route AND s.subject_account_
   AND s.reservation_id = a.operator_reservation_id
 WHERE a.state <> 'deleted' AND (NOT a.authn_fenced OR EXISTS (
   SELECT 1 FROM access.lifecycle_fence_receipt f
-  WHERE f.route = a.route AND f.account_id = a.account_id AND f.receipt_id = a.fence_receipt_id
+  WHERE f.route = i.route AND f.account_id = a.account_id AND f.receipt_id = a.fence_receipt_id
     AND f.operator_account_id = i.operator_id AND f.operator_reservation_id = i.reservation_id
 ))
   AND a.operator_account_id = i.operator_id AND a.operator_reservation_id = i.reservation_id
