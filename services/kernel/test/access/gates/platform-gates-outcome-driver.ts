@@ -2,12 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { spyOn } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
-import {
-  createAuthHost,
-  createNativeWorkflowProofPorts,
-  createProvisioningEvidenceVerifier,
-  type AuthService,
-} from '@rezics/auth';
+import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { testDatabase } from '../../../../auth/scripts/database.ts';
 import { GLOBAL_CONTEXT_ID } from '../../../../../specs/platform-gates-driver.ts';
@@ -31,7 +26,7 @@ await import('reylo/register');
 
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
 const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
-const { createLifecycleInternals } = await import('../../../src/access/lifecycle.ts');
+const { createRegistrationPorts } = await import('../../support/registration-ports.ts');
 const { createRegistrationProofBindings } = await import('../../../src/access/registration-proof.ts');
 const { resourceRoleCatalogue } = await import('../../../src/access/resource-roles.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
@@ -627,35 +622,13 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     authPool = new Pool({ connectionString: authDatabase.url });
     const privateKey = await generateKeyPair('ES256', { extractable: true });
     signingKey = { ...(await exportJWK(privateKey.privateKey)), kid: signingKid };
-    const proofPorts = createNativeWorkflowProofPorts({ database: authPool });
     const registration = createRegistrationProofBindings({ pool: livePool(), referenceKeys: tokens });
-    const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-    const internals = createLifecycleInternals({
+    const { ports: registrationPorts } = createRegistrationPorts({
       pool: livePool(),
+      authPool,
       routeKey,
-      provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-      recoveryEvidence: async () => null,
+      referenceKeys: tokens,
     });
-    const registrationPorts = {
-      ...internals,
-      async createPending(input: Parameters<typeof internals.createPending>[0]) {
-        const outcome = await internals.createPending(input);
-        const pair = { accountId: input.accountId, reservationId: input.reservationId };
-        if (!(await proofPorts.pendingReference(pair))) {
-          const reference = await registration.createProvisioningReference({ input, outcome });
-          if (!reference) throw new Error('Missing native registration reference');
-          await proofPorts.recordPending({ ...pair, reference });
-        }
-        return outcome;
-      },
-      async provisioningReference(input: { accountId: string; reservationId: string }) {
-        const reference = await proofPorts.pendingReference(input);
-        if (!reference) throw new Error('Missing persisted registration reference');
-        return reference;
-      },
-      provisioningEvidence: (input: { accountId: string; reservationId: string }) =>
-        proofPorts.provisioningEvidence(input),
-    };
     host = await createAuthHost({
       database: authPool,
       systemDatabasePool: authPool,

@@ -1,18 +1,13 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { Pool } from 'pg';
-import {
-  createAuthHost,
-  createNativeWorkflowProofPorts,
-  createProvisioningEvidenceVerifier,
-  type AuthService,
-} from '@rezics/auth';
+import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { testDatabase } from '../../../../auth/scripts/database.ts';
 
 await import('reylo/register');
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
 const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
-const { createLifecycleInternals } = await import('../../../src/access/lifecycle.ts');
+const { createRegistrationPorts } = await import('../../support/registration-ports.ts');
 const { createRegistrationProofBindings } = await import('../../../src/access/registration-proof.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const { createPool, withConnection } = await import('../../../src/database/pool.ts');
@@ -202,34 +197,13 @@ beforeAll(async () => {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'gate-admission',
   };
-  const proofs = createNativeWorkflowProofPorts({ database: authPool });
   const registration = createRegistrationProofBindings({ pool, referenceKeys: tokens });
-  const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-  const internal = createLifecycleInternals({
+  const { ports: registrationPorts } = createRegistrationPorts({
     pool,
+    authPool,
     routeKey,
-    provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-    recoveryEvidence: async () => null,
+    referenceKeys: tokens,
   });
-  const registrationPorts = {
-    ...internal,
-    async createPending(input: Parameters<typeof internal.createPending>[0]) {
-      const outcome = await internal.createPending(input);
-      const pair = { accountId: input.accountId, reservationId: input.reservationId };
-      if (!(await proofs.pendingReference(pair))) {
-        const reference = await registration.createProvisioningReference({ input, outcome });
-        if (!reference) throw new Error('Missing native registration reference');
-        await proofs.recordPending({ ...pair, reference });
-      }
-      return outcome;
-    },
-    async provisioningReference(input: { accountId: string; reservationId: string }) {
-      const reference = await proofs.pendingReference(input);
-      if (!reference) throw new Error('Missing persisted registration reference');
-      return reference;
-    },
-    provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
-  };
   host = await createAuthHost({
     database: authPool,
     systemDatabasePool: authPool,
