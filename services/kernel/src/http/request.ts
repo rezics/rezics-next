@@ -232,11 +232,14 @@ export class MountedRouteCatalogue {
 const mountedCatalogues = new WeakMap<object, MountedRouteCatalogue>();
 
 /** App instances and standalone stage route arrays have independent catalogue lifetimes. */
-export function mountedRouteCatalogue(app: RouteApp | readonly MountedRoute[]): MountedRouteCatalogue {
+export function mountedRouteCatalogue(
+  app: RouteApp | readonly MountedRoute[],
+  routes?: readonly MountedRoute[],
+): MountedRouteCatalogue {
   let catalogue = mountedCatalogues.get(app);
   if (!catalogue) {
     catalogue = new MountedRouteCatalogue(
-      Array.isArray(app) ? app : (app as RouteApp).routes,
+      routes ?? (Array.isArray(app) ? app : (app as RouteApp).routes),
       Array.isArray(app) ? undefined : (app as RouteApp),
     );
     mountedCatalogues.set(app, catalogue);

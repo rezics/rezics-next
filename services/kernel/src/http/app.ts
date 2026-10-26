@@ -266,8 +266,9 @@ export function createApp({
   app.wrap((handle) => {
     // Elysia 2.0.0-rc.0 applies coerceBody even with normalize:false.
     // Compile original schemas once, then check parsed JSON before its coercing validation.
+    const routes = app.routes;
     jsonBodyChecks.clear();
-    for (const { method, path, hooks } of app.routes) {
+    for (const { method, path, hooks } of routes) {
       const schemas: TSchema[] = [];
       for (const declaration of [hooks, ...(hooks?.schemas ?? [])]) {
         let schema = declaration?.body;
@@ -286,7 +287,7 @@ export function createApp({
           Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas)),
         );
     }
-    catalogue = mountedRouteCatalogue(mountedApp);
+    catalogue = mountedRouteCatalogue(mountedApp, routes);
     const verbs = new Set(
       catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
     );
