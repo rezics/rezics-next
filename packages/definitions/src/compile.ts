@@ -596,13 +596,11 @@ export async function compileCatalogue(input: {
         }
       }
       if (hasSymmetric) {
-        if (annotations.symmetric !== true)
-          add(annotation('symmetric'), 'invalid', 'Symmetric must be true');
+        if (annotations.symmetric !== true) add(annotation('symmetric'), 'invalid', 'Symmetric must be true');
         else direction.symmetric = true;
       }
       if (Object.hasOwn(annotations, 'acyclic')) {
-        if (annotations.acyclic !== true)
-          add(annotation('acyclic'), 'invalid', 'Acyclic must be true');
+        if (annotations.acyclic !== true) add(annotation('acyclic'), 'invalid', 'Acyclic must be true');
         else if (annotations.symmetric === true)
           add(annotation('acyclic'), 'invalid', 'Symmetric relations cannot be acyclic');
         else direction.acyclic = true;
@@ -784,11 +782,7 @@ export async function compileCatalogue(input: {
           'English label is required',
         );
   for (const [key, property] of Object.entries(release.properties))
-    if (
-      property.relation?.inverse &&
-      property.relation.inverse !== 'none' &&
-      !property.relation.inverseLabels?.en
-    ) {
+    if (property.relation?.inverse && property.relation.inverse !== 'none' && !property.relation.inverseLabels?.en) {
       const sourceFile = propertyLocations.get(key)?.file ?? '';
       const home = presentationGroup(sourceFile);
       add(

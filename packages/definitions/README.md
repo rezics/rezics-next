@@ -223,8 +223,7 @@ Source conventions:
   LinkML derives its properties through `is_a` and `slot_usage`; each type has at
   most 64.
 - A class may set `annotations.facets` to a space-separated list of slot names and
-  `annotations.cover_ratio` to a `W:H` ratio with positive integer sides from 1 to
-  64. A type compiles its own ratio or the first annotated base's ratio, nearest
+  `annotations.cover_ratio` to a `W:H` ratio with positive integer sides from 1 to 64. A type compiles its own ratio or the first annotated base's ratio, nearest
   first; absent ratios stay absent for consumers to default.
   A type inherits its ancestors' declarations from root to leaf, retaining that
   display order. Each facet must be one of the type's properties. Its datatype is

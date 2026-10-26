@@ -190,10 +190,7 @@
           "enum": ["order", "derivation", "world", "membership", "association"]
         },
         "inverse": {
-          "anyOf": [
-            { "const": "none" },
-            { "$ref": "#/$defs/curie" }
-          ]
+          "anyOf": [{ "const": "none" }, { "$ref": "#/$defs/curie" }]
         },
         "inverseLabels": {
           "$ref": "#/$defs/labels"

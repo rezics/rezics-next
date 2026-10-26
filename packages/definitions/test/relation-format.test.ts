@@ -108,9 +108,7 @@ const presentation = (inverse?: string) => ({
     ...english,
     ...(inverse === undefined ? {} : { inverseProperties: { 'schema:related': inverse } }),
   }),
-  ...(inverse === undefined
-    ? {}
-    : { 'relations/ja': 'inverseProperties:\n  schema:related: 関連される\n' }),
+  ...(inverse === undefined ? {} : { 'relations/ja': 'inverseProperties:\n  schema:related: 関連される\n' }),
 });
 
 const input = (schema = relations, inverse?: string) => ({
@@ -281,45 +279,30 @@ test('inconsistent relation declarations are refused with precise errors', async
     (draft) => (draft.properties['schema:related'].relation.inverseLabels = { en: 'inverse', 'bad tag': 'bad' }),
     '/properties/schema:related/relation/inverseLabels/bad tag',
   );
-  validatePointer(
-    (draft) => {
-      delete draft.properties['schema:related'].relation.inverse;
-      draft.properties['schema:related'].relation.symmetric = true;
-    },
-    '/properties/schema:related/relation/inverseLabels',
-  );
-  validatePointer(
-    (draft) => {
-      delete draft.properties['schema:related'].relation.inverse;
-      draft.properties['schema:related'].relation.symmetric = true;
-      draft.properties['schema:related'].relation.acyclic = true;
-    },
-    '/properties/schema:related/relation/acyclic',
-  );
-  validatePointer(
-    (draft) => {
-      const property = draft.properties['schema:related'];
-      property.datatype = 'string';
-      delete property.targets;
-      property.value = valueSchema('string');
-    },
-    '/properties/schema:related/relation',
-  );
-  validatePointer(
-    (draft) => {
-      draft.properties['schema:related'].qualifiers = ['schema:role'];
-      draft.properties['schema:related'].relation.order = 'position';
-    },
-    '/properties/schema:related/relation/order',
-  );
+  validatePointer((draft) => {
+    delete draft.properties['schema:related'].relation.inverse;
+    draft.properties['schema:related'].relation.symmetric = true;
+  }, '/properties/schema:related/relation/inverseLabels');
+  validatePointer((draft) => {
+    delete draft.properties['schema:related'].relation.inverse;
+    draft.properties['schema:related'].relation.symmetric = true;
+    draft.properties['schema:related'].relation.acyclic = true;
+  }, '/properties/schema:related/relation/acyclic');
+  validatePointer((draft) => {
+    const property = draft.properties['schema:related'];
+    property.datatype = 'string';
+    delete property.targets;
+    property.value = valueSchema('string');
+  }, '/properties/schema:related/relation');
+  validatePointer((draft) => {
+    draft.properties['schema:related'].qualifiers = ['schema:role'];
+    draft.properties['schema:related'].relation.order = 'position';
+  }, '/properties/schema:related/relation/order');
   validatePointer(
     (draft) => (draft.properties['schema:related'].relation.filter = 'schema:position'),
     '/properties/schema:related/relation/filter',
   );
-  validatePointer(
-    (draft) => (draft.types['schema:Deep'].coverRatio = '0:1'),
-    '/types/schema:Deep/coverRatio',
-  );
+  validatePointer((draft) => (draft.types['schema:Deep'].coverRatio = '0:1'), '/types/schema:Deep/coverRatio');
 });
 
 test("a type's cover ratio is its own annotation or its nearest base's", async () => {
