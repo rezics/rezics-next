@@ -8,7 +8,10 @@ export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b1634
 type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
 
 export function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
-  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout: 30_000 });
+  // 30s was short enough to kill a live `docker run` while the daemon was still
+  // creating the container. The container then stayed up, owned by this process,
+  // and the next start waited even longer. Two minutes still fails a stuck daemon.
+  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout: 120_000 });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
@@ -80,59 +83,77 @@ export function testDatabase(): TestDatabase {
       // An inaccessible owner may still be alive; only a missing process is stale.
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
       // Removing a container that another checker already removed is success.
-      spawnSync('docker', ['rm', '-f', id], { cwd: directory, encoding: 'utf8', timeout: 30_000 });
+      spawnSync('docker', ['rm', '-f', id], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
     }
   }
-  const container = run('docker', [
-    'run',
-    '-d',
-    '--rm',
-    '--label',
-    `${label}=${process.pid}`,
-    '-p',
-    '127.0.0.1::5432',
-    // Concurrent files, growth seeds at three scales and a 1GB WAL outgrew 1g, and
-    // every later file then failed once Postgres had stopped. tmpfs only takes
-    // memory for what is written. Same cap the kernel check uses.
-    '--tmpfs',
-    '/var/lib/postgresql:rw,size=8g',
-    '-e',
-    'POSTGRES_USER=rezics',
-    '-e',
-    'POSTGRES_PASSWORD=rezics',
-    '-e',
-    'POSTGRES_DB=rezics_auth_test',
-    POSTGRES_IMAGE,
-    '-c',
-    'fsync=off',
-    '-c',
-    'synchronous_commit=off',
-    '-c',
-    'full_page_writes=off',
-    '-c',
-    'max_wal_size=256MB',
-  ]);
-  let closed = false;
-  const close = () => {
-    if (!closed) {
-      closed = true;
-      removeContainer(container);
-    }
-  };
-  const interrupt = (code: number) => {
-    close();
-    process.exit(code);
-  };
-  process.once('SIGINT', () => interrupt(130));
-  process.once('SIGTERM', () => interrupt(143));
+  // Unique per attempt so a timed-out `docker run` can be reaped without touching
+  // another fixture this process already owns.
+  const nonce = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+  let container: string | undefined;
   try {
-    const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
-    if (!port) throw new Error('Cannot determine Auth test database port');
-    const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics_auth_test?sslmode=disable`;
-    migrate(url);
-    return { url, container, close };
+    container = run('docker', [
+      'run',
+      '-d',
+      '--rm',
+      '--label',
+      `${label}=${process.pid}`,
+      '--label',
+      `rezics.auth.check.nonce=${nonce}`,
+      '-p',
+      '127.0.0.1::5432',
+      // Concurrent files, growth seeds at three scales and a 1GB WAL outgrew 1g, and
+      // every later file then failed once Postgres had stopped. tmpfs only takes
+      // memory for what is written. Same cap the kernel check uses.
+      '--tmpfs',
+      '/var/lib/postgresql:rw,size=8g',
+      '-e',
+      'POSTGRES_USER=rezics',
+      '-e',
+      'POSTGRES_PASSWORD=rezics',
+      '-e',
+      'POSTGRES_DB=rezics_auth_test',
+      POSTGRES_IMAGE,
+      '-c',
+      'fsync=off',
+      '-c',
+      'synchronous_commit=off',
+      '-c',
+      'full_page_writes=off',
+      '-c',
+      'max_wal_size=256MB',
+    ]);
+    let closed = false;
+    const close = () => {
+      if (!closed && container) {
+        closed = true;
+        removeContainer(container);
+      }
+    };
+    const interrupt = (code: number) => {
+      close();
+      process.exit(code);
+    };
+    process.once('SIGINT', () => interrupt(130));
+    process.once('SIGTERM', () => interrupt(143));
+    try {
+      const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
+      if (!port) throw new Error('Cannot determine Auth test database port');
+      const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics_auth_test?sslmode=disable`;
+      migrate(url);
+      return { url, container, close };
+    } catch (error) {
+      close();
+      throw error;
+    }
   } catch (error) {
-    close();
+    if (!container && (error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+      const listed = spawnSync('docker', ['ps', '-aq', '--filter', `label=rezics.auth.check.nonce=${nonce}`], {
+        cwd: directory,
+        encoding: 'utf8',
+        timeout: 120_000,
+      });
+      for (const id of (listed.stdout ?? '').split('\n').filter(Boolean)) removeContainer(id);
+    }
     throw error;
   }
 }
