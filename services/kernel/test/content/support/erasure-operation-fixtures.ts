@@ -181,6 +181,7 @@ export async function revokeGrant(
 export async function createFixtureResources(
   databaseUrl: string,
   duringSetup?: (system: NativeContentSystem) => Promise<void>,
+  stopSetupWorker?: () => Promise<void>,
 ): Promise<FixtureResources> {
   const started = performance.now();
   const system = await createNativeContentSystem({ databaseUrl });
@@ -318,8 +319,19 @@ export async function createFixtureResources(
     return resources;
   } catch (error) {
     bootstrapProcess?.kill();
+    await bootstrapProcess?.exited;
     await overlapped.catch(() => undefined);
-    await system.close();
+    const failures: unknown[] = [];
+    // The overlapped worker owns native connections to these databases. Retire
+    // it before the system drops either database, including failed setup.
+    for (const close of [() => stopSetupWorker?.(), () => system.close()]) {
+      try {
+        await close();
+      } catch (failure) {
+        failures.push(failure);
+      }
+    }
+    if (failures.length) throw new AggregateError([error, ...failures], 'Native fixture setup and cleanup failed');
     throw error;
   }
 }
@@ -415,12 +427,28 @@ async function assertSameErasureShape(pool: Pool, route: number, apiPostId: stri
       `SELECT count(*)::int AS count FROM access.resource_grant WHERE route=$1 AND resource_id=$2`,
       [route, postId],
     );
+    const events = await pool.query(
+      `SELECT e.data->>'placeId' AS place_id, e.data->>'kind' AS kind,
+              e.data->'subjectIds' AS subject_ids, e.data->>'actorId' AS actor_id,
+              (e.data->>'activityAt')::timestamptz = p.created_at AS at_creation,
+              e.data->>'threadId' = p.thread_id::text AS same_thread,
+              EXISTS (SELECT 1 FROM content.revision r
+                      WHERE r.route=p.route AND r.post_id=p.post_id
+                        AND r.revision_id=(e.data->>'revisionId')::uuid) AS has_revision
+       FROM core.outbox e
+       JOIN content.post p ON p.route=$1 AND p.post_id=$2
+       WHERE e.partition_no=$3 AND e.type='com.rezics.content.post.created.v1'
+         AND e.subject=$2::text AND e.data->>'itemId'=$2::text`,
+      [route, postId, partitionOf(route)],
+    );
+    if (events.rows.length !== 1) throw new Error('Seeded post must have exactly one native creation event');
     return {
       post: post.rows[0],
       revisions: revisions.rows[0],
       roles: roles.rows,
       initialized: initialized.rows,
       actionGrants: actions.rows[0]?.count ?? 0,
+      events: events.rows,
     };
   };
   const api = await shape(apiPostId);
@@ -436,6 +464,7 @@ async function writeBulkPosts(
     threadId: string;
     parentId: string;
     boardId: string;
+    placeId: string;
     authorId: string;
     marker: string;
     revisions: number;
@@ -577,21 +606,38 @@ async function writeBulkPosts(
           type: 'content.post',
           creator: input.authorId,
         });
-      const first = posts[0]!;
+      // Match publish's thread-index fields and preserve the command's native T.
+      const context = await tx.query<{
+        kind: 'discussion' | 'review';
+        subject_ids: string[];
+        activity_at: string;
+      }>(
+        `SELECT t.kind, r.subject_ids,
+                to_char($3::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS activity_at
+         FROM content.thread t
+         JOIN content.post p ON p.route=t.route AND p.post_id=t.first_post_id
+         JOIN content.revision r ON r.route=p.route AND r.revision_id=p.head_revision_id
+         WHERE t.route=$1 AND t.thread_id=$2`,
+        [input.route, input.threadId, at],
+      );
+      const index = context.rows[0];
+      if (!index) throw new Error('Bulk history has no native thread index context');
       return {
         value: { posts: posts.length },
-        events: [
-          {
-            type: 'com.rezics.content.post.created.v1',
-            subject: first.id,
-            data: {
-              threadId: input.threadId,
-              itemId: first.id,
-              revisionId: first.history[0]!.id,
-              actorId: input.authorId,
-            },
+        events: posts.map((post) => ({
+          type: 'com.rezics.content.post.created.v1',
+          subject: post.id,
+          data: {
+            threadId: input.threadId,
+            itemId: post.id,
+            revisionId: post.history[0]!.id,
+            actorId: input.authorId,
+            placeId: input.placeId,
+            kind: index.kind,
+            subjectIds: index.subject_ids,
+            activityAt: index.activity_at,
           },
-        ],
+        })),
       };
     },
   );
@@ -754,6 +800,7 @@ export async function buildBoardAndThreads(
       threadId,
       parentId: firstPostId,
       boardId: board.id,
+      placeId: realm.realmId,
       authorId,
       marker,
       revisions,

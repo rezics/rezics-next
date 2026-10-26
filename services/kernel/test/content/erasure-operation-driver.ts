@@ -7,7 +7,8 @@ import { appendFileSync, mkdirSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
+import permissionRead from '../../src/access/permission-check.sql';
 import { createContentOperationClient, createContentWork } from '../../src/content/work.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import { contentEffects } from '../../src/content/relays.ts';
@@ -30,7 +31,7 @@ import { createWorkClient, DBOS_SCHEMA, type WorkClient } from '../../src/work/c
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import type { Cost, GrowthDatabase, GrowthReport, GrowthSample, Population } from '../support/growth.ts';
+import type { Cost, GrowthDatabase, GrowthSample, Population } from '../support/growth.ts';
 import type { FixtureResources, SeededBoard } from './support/erasure-operation-fixtures.ts';
 import type { SqlObserver } from './support/sql-observer.ts';
 
@@ -83,22 +84,48 @@ function erasureGrowthPopulation(
     rows({ route, ordinal }) {
       const entries = Array.from({ length: 16 }, () => {
         const account = newId(route);
+        const organization = newId(route);
         const thread = newId(route);
         const post = newId(route);
         const revision = newId(route);
         const media = newId(route);
         const operation = newId(route);
         const body = Buffer.alloc(256, ordinal % 251);
-        return { account, thread, post, revision, media, operation, body };
+        return { account, organization, thread, post, revision, media, operation, body };
       });
       const hash = (body: Buffer) => createHash('sha256').update(body).digest();
       return {
-        'access.account': entries.map(({ account }) => ({
-          route: routeOf(account)!,
+        'access.account': entries.flatMap(({ account, organization }) => [
+          { route, account_id: account, kind: 'actor', state: 'active', transaction_id: account },
+          { route, account_id: organization, kind: 'organization', state: 'active', transaction_id: organization },
+        ]),
+        // Keep the acting account's neighbourhood fixed while the native inverse,
+        // forward membership and delegation indexes grow with unrelated accounts.
+        'access.membership_inverse': entries.map(({ account, organization }) => ({
+          route,
           account_id: account,
-          kind: 'actor',
-          state: 'active',
-          transaction_id: account,
+          kind: 'organization',
+          group_id: organization,
+          reservation_id: organization,
+          transaction_id: organization,
+        })),
+        'access.organization_member': entries.map(({ account, organization }) => ({
+          route,
+          organization_id: organization,
+          member_account_id: account,
+          role: 'member',
+          valid: '(,)',
+          transaction_id: organization,
+        })),
+        'access.principal_assignment': entries.map(({ account, organization, post }) => ({
+          route,
+          principal_id: organization,
+          request_id: post,
+          assigned_actor_id: account,
+          creator_principal_id: organization,
+          valid: '(,)',
+          issued_valid: '(,)',
+          transaction_id: post,
         })),
         'content.thread': entries.map(({ account, thread }) => ({
           route,
@@ -189,30 +216,39 @@ function erasureGrowthPopulation(
           recorded_transaction_id: post,
           anchor_post_id: post,
         })),
+        // Retained, unrelated history grows too. None of these identities or
+        // events belongs to an erasure under test; its progress stays DBOS-owned.
+        'dbos.workflow_status': entries.map(({ operation }) => ({
+          workflow_uuid: `erasure-growth-history:${operation}`,
+          status: 'SUCCESS',
+          name: 'erasure.growth.history',
+        })),
+        'dbos.workflow_input': entries.map(({ operation }) => ({
+          workflow_uuid: `erasure-growth-history:${operation}`,
+          inputs: '[]',
+        })),
+        'dbos.workflow_output': entries.map(({ operation }) => ({
+          workflow_uuid: `erasure-growth-history:${operation}`,
+          output: '{}',
+        })),
+        'dbos.workflow_events': entries.map(({ operation }) => ({
+          workflow_uuid: `erasure-growth-history:${operation}`,
+          key: 'baseline',
+          value: '{}',
+        })),
+        'dbos.workflow_events_history': entries.map(({ operation }) => ({
+          workflow_uuid: `erasure-growth-history:${operation}`,
+          function_id: 0,
+          key: 'baseline',
+          value: '{}',
+        })),
+        'dbos.operation_outputs': entries.map(({ operation }) => ({
+          workflow_uuid: `erasure-growth-history:${operation}`,
+          function_id: 0,
+          function_name: 'erasure.growth.history',
+        })),
       };
     },
-  };
-}
-
-function combineCost(left: GrowthSample['cost'], right: Cost): GrowthSample['cost'] {
-  const relations: Record<string, { rows: number; blocks: number; sequentialScans?: number }> = {
-    ...left.relations,
-  };
-  for (const [name, value] of Object.entries(right.relations)) {
-    const previous = relations[name];
-    relations[name] = previous
-      ? {
-          rows: previous.rows + value.rows,
-          blocks: previous.blocks + value.blocks,
-          sequentialScans: (previous.sequentialScans ?? 0) + value.sequentialScans,
-        }
-      : { rows: value.rows, blocks: value.blocks, sequentialScans: value.sequentialScans };
-  }
-  return {
-    rows: left.rows + right.rows,
-    blocks: left.blocks + right.blocks,
-    statements: left.statements + right.statements,
-    relations,
   };
 }
 
@@ -271,6 +307,47 @@ export async function runOperationWorkerProcess(): Promise<void> {
         });
     }
     return allowed;
+  };
+  const originalAuthorizePage = access.authorizePage!.bind(access);
+  access.authorizePage = async (client, actor, action, page, evidence, time) => {
+    const workflowId = DBOS.workflowID;
+    const current = workflowId ? active.get(workflowId) : undefined;
+    const operation = current && /^wf:([^:]+):/.exec(current.step)?.[1];
+    if (!workflowId || !current || !operation || action !== 'post:erase' || actor.kind !== 'account' || !time)
+      return originalAuthorizePage(client, actor, action, page, evidence, time);
+    // The page port returns an aggregate decision. Observe the unchanged native
+    // formula's individual rows instead of assigning that aggregate to each post.
+    const observed = Object.create(client) as typeof client;
+    observed.query = (async (query: string | { text?: string; values?: unknown[] }, values?: unknown[]) => {
+      const result = await client.query(query as string, values);
+      const statement = typeof query === 'string' ? query : query.text;
+      if (statement === permissionRead.sql) {
+        const parameters = typeof query === 'string' ? values : query.values;
+        const at = parameters?.[permissionRead.params.indexOf('at')];
+        if (typeof at !== 'string' || at !== authoritativeTimeValue(time))
+          throw new Error('Native page formula used a different attempt time');
+        for (const row of result.rows) {
+          if (
+            typeof row.resourceId !== 'string' ||
+            typeof row.allowed !== 'boolean' ||
+            !page.ids.includes(row.resourceId)
+          )
+            throw new Error('Native page formula returned an invalid per-post decision');
+          current.checks.push({
+            workflowId,
+            operationId: operation,
+            step: current.step,
+            postId: row.resourceId,
+            action,
+            partition: partitionOf(page.route),
+            at,
+            allowed: row.allowed,
+          });
+        }
+      }
+      return result;
+    }) as typeof client.query;
+    return originalAuthorizePage(observed, actor, action, page, evidence, time);
   };
 
   let barrierMode: 'run' | 'hold' = config.initialMode === 'hold' ? 'hold' : 'run';
@@ -847,6 +924,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
   let ownedAppPool: Pool | undefined;
   let ownedWorkClient: WorkClient | undefined;
   let ownedMeasuredClient: WorkClient | undefined;
+  let ownedStatusGrowth: GrowthDatabase | undefined;
+  let ownedStatusClient: WorkClient | undefined;
   let ownedControlClient: WorkClient | undefined;
   let ownedObserver: SqlObserver | undefined;
   let worker: NativeWorker | undefined;
@@ -878,12 +957,14 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       import('../../src/access/resource-authorization.ts'),
       import('../support/growth.ts'),
     ]);
-    const resources = (ownedResources = await createFixtureResources(databaseUrl, async (system) => {
-      const appUrl = system.database.pool.options.connectionString;
-      const authUrl = system.database.authPool.options.connectionString;
-      if (!appUrl || !authUrl) throw new Error('Native content system has no database URL');
-      await system.database.pool.query(
-        `CREATE TABLE IF NOT EXISTS ${BARRIER_TABLE} (
+    const resources = (ownedResources = await createFixtureResources(
+      databaseUrl,
+      async (system) => {
+        const appUrl = system.database.pool.options.connectionString;
+        const authUrl = system.database.authPool.options.connectionString;
+        if (!appUrl || !authUrl) throw new Error('Native content system has no database URL');
+        await system.database.pool.query(
+          `CREATE TABLE IF NOT EXISTS ${BARRIER_TABLE} (
            workflow_id text NOT NULL,
            serial integer NOT NULL,
            name text NOT NULL,
@@ -892,12 +973,17 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
            error text,
            PRIMARY KEY (workflow_id, serial)
          )`,
-      );
-      const controlClient = (ownedControlClient = await createWorkClient(appUrl));
-      mark('worker-start');
-      worker = await pendingWorker!.activate({ appUrl, authUrl, routeKey: system.routeKey }, controlClient);
-      mark('worker-ready');
-    }));
+        );
+        const controlClient = (ownedControlClient = await createWorkClient(appUrl));
+        mark('worker-start');
+        worker = await pendingWorker!.activate({ appUrl, authUrl, routeKey: system.routeKey }, controlClient);
+        mark('worker-ready');
+      },
+      async () => {
+        await (worker ?? pendingWorker)?.close();
+        await ownedControlClient?.close();
+      },
+    ));
     mark('resources-ready');
     const databaseName = (
       await resources.system.database.pool.query<{ name: string }>('SELECT current_database() AS name')
@@ -908,6 +994,11 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     // same-partition command dominates seeding under host IO pressure.
     await resources.system.database.pool.query(`ALTER DATABASE ${databaseName} SET synchronous_commit = off`);
     const growth = (ownedGrowth = await openGrowthDatabase(resources.appUrl));
+    // These attempts are serial. Keep one explained backend across catalogue
+    // growth so a new connection's SQL-function cache is not a different variable
+    // at each scale. The native statements and their plans are unchanged.
+    growth.pool.options.max = 1;
+    growth.pool.options.idleTimeoutMillis = 0;
     // The growth pool explains every statement. Functional traffic stays on the
     // plain application pool; only a measured checkGrowth attempt uses it.
     const readPool = (ownedReadPool = new Pool({ connectionString: resources.appUrl, max: 4 }));
@@ -916,8 +1007,11 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       connectionString: resources.appUrl,
       max: 16,
       connectionTimeoutMillis: 1_000,
-      idleTimeoutMillis: 30_000,
+      idleTimeoutMillis: 0,
     }));
+    const appCheckouts = new Map<PoolClient, string>();
+    appPool.on('acquire', (client) => appCheckouts.set(client, new Error('Application pool checkout').stack ?? ''));
+    appPool.on('release', (_error, client) => appCheckouts.delete(client));
     resources.pool = appPool;
     const workClient = (ownedWorkClient = await createWorkClient(resources.appUrl, workPool));
     const controlClient = ownedControlClient!;
@@ -938,6 +1032,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     const bearerHistory = new Map<Persona, string>();
     const accountReadValidity = new Map<string, string[]>();
     let authorityAt: string | undefined;
+    let closing = false;
     const receiptBaselines = new Map<number, Set<string>>();
     const preparedStock: Fixture[] = [];
     const inspectionCache = new Map<string, { token: string; value: Inspection }>();
@@ -998,7 +1093,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       if (route === null) throw new TypeError('Invalid operation route');
       const deadline = Date.now() + 30_000;
       let workflowId: string | null | undefined;
-      while (Date.now() < deadline) {
+      while (!closing && Date.now() < deadline) {
         const result = await readPool.query<{ native_workflow_id: string | null }>(
           'SELECT native_workflow_id FROM content.operation WHERE route=$1 AND operation_id=$2',
           [route, id],
@@ -1117,7 +1212,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
 
     async function waitForBarrier(workflowId: string, serial: number): Promise<StepEvent> {
       const deadline = Date.now() + 60_000;
-      while (Date.now() < deadline) {
+      while (!closing && Date.now() < deadline) {
         const row = await barrierRow(workflowId, serial);
         if (row) return { serial: row.serial, name: row.name };
         const status = await readPool.query<{ status: string; error: string | null }>(
@@ -1146,7 +1241,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
 
     async function waitForChecks(workflowId: string, serial: number): Promise<NativeCheck[]> {
       const deadline = Date.now() + 60_000;
-      while (Date.now() < deadline) {
+      while (!closing && Date.now() < deadline) {
         const row = await barrierRow(workflowId, serial);
         if (row?.error) throw await nativeStepFailure(workflowId, serial, row.error);
         if (row?.checks) return row.checks;
@@ -1158,7 +1253,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     async function waitForNativeResult(workflowId: string): Promise<void> {
       let waiting = true;
       const failure = (async () => {
-        while (waiting) {
+        while (waiting && !closing) {
           const rows = await readPool.query<{ serial: number; error: string }>(
             `SELECT serial,error FROM ${BARRIER_TABLE}
              WHERE workflow_id=$1 AND error IS NOT NULL ORDER BY serial LIMIT 1`,
@@ -1179,6 +1274,30 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
 
     async function waitForOperationBarrier(name: string, serial: number): Promise<void> {
       await waitForBarrier(await workflowIdFor(name), serial);
+    }
+
+    async function releaseLogicalPage(name: string, expectNext: boolean): Promise<string[]> {
+      const id = operationId(name);
+      const workflowId = await workflowIdFor(name);
+      const serial = (serialByOperation.get(id) ?? 0) + 1;
+      const event = await waitForBarrier(workflowId, serial);
+      // Preserve logical-before-physical inspection by holding the actual relay.
+      await worker!.pauseRelays();
+      await readPool.query(`UPDATE ${BARRIER_TABLE} SET released=true WHERE workflow_id=$1 AND serial=$2`, [
+        workflowId,
+        serial,
+      ]);
+      const entries = await waitForChecks(workflowId, serial);
+      if (expectNext) await waitForBarrier(workflowId, serial + 1);
+      serialByOperation.set(id, serial);
+      checks.push(...entries);
+      observedCheckEvents.add(`${workflowId}:${serial}`);
+      if (entries.some((entry) => entry.step !== event.name))
+        throw new Error('Native Access trace does not match the barrier step');
+      const ids = [...new Set(entries.map((entry) => entry.postId))];
+      if (ids.length === 0) throw new Error('Native erasure page completed without real Access checks');
+      mark(`step ${ids.length}`);
+      return ids;
     }
 
     async function mutateAuthority(persona: Persona, axis: string, operation: 'allow' | 'revoke'): Promise<void> {
@@ -1434,22 +1553,55 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
 
     const driver: ErasureOperationDriver = {
       async close() {
+        closing = true;
         const closingAt = performance.now();
         const failures: unknown[] = [];
         resources.stopBootstrap();
-        for (const close of [
-          () => resources.bootstrap.catch(() => undefined),
-          () => worker!.close(),
-          () => observer?.close() ?? Promise.resolve(),
-          () => controlClient.close(),
-          () => ownedMeasuredClient?.close() ?? Promise.resolve(),
-          () => workClient.close(),
-          () => workPool.end(),
-          () => appPool.end(),
-          () => readPool.end(),
-          () => growth.close(),
-          () => system.close(),
-        ]) {
+        const cleanup: [string, () => Promise<unknown>][] = [
+          ['bootstrap', () => resources.bootstrap.catch(() => undefined)],
+          ['worker', () => worker!.close()],
+          ['observer', () => observer?.close() ?? Promise.resolve()],
+          ['control-client', () => controlClient.close()],
+          ['measured-client', () => ownedMeasuredClient?.close() ?? Promise.resolve()],
+          ['status-client', () => ownedStatusClient?.close() ?? Promise.resolve()],
+          ['work-client', () => workClient.close()],
+          ['work-pool', () => workPool.end()],
+          [
+            'app-pool',
+            async () => {
+              console.log(
+                'erasure-cleanup-pool',
+                JSON.stringify({
+                  total: appPool.totalCount,
+                  idle: appPool.idleCount,
+                  waiting: appPool.waitingCount,
+                  ending: appPool.ending,
+                  ended: appPool.ended,
+                  checkouts: appCheckouts.size,
+                }),
+              );
+              if (appCheckouts.size) {
+                const sessions = [...appCheckouts].map(([client, stack]) => ({
+                  pid: (client as PoolClient & { processID: number }).processID,
+                  stack,
+                }));
+                const activity = await readPool.query(
+                  `SELECT pid, state, wait_event_type, wait_event, query
+                   FROM pg_stat_activity WHERE pid=ANY($1::integer[])`,
+                  [sessions.map(({ pid }) => pid)],
+                );
+                console.error('erasure-cleanup-checkouts', JSON.stringify({ sessions, activity: activity.rows }));
+              }
+              await appPool.end();
+            },
+          ],
+          ['read-pool', () => readPool.end()],
+          ['growth', () => growth.close()],
+          ['status-growth', () => ownedStatusGrowth?.close() ?? Promise.resolve()],
+          ['system', () => system.close()],
+        ];
+        for (const [name, close] of cleanup) {
+          console.log(`erasure-cleanup start=${name}`);
           try {
             await close();
           } catch (error) {
@@ -1557,29 +1709,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         await worker!.hold();
       },
       async step(name) {
-        const id = operationId(name);
-        const workflowId = await workflowIdFor(name);
-        const serial = (serialByOperation.get(id) ?? 0) + 1;
-        const event = await waitForBarrier(workflowId, serial);
-        // Point-erasure events would null revision bodies as soon as the logical
-        // page commits. Hold that consumer until finish, so the paused inspect
-        // still sees the physical bytes.
-        await worker!.pauseRelays();
-        await readPool.query(`UPDATE ${BARRIER_TABLE} SET released=true WHERE workflow_id=$1 AND serial=$2`, [
-          workflowId,
-          serial,
-        ]);
-        const entries = await waitForChecks(workflowId, serial);
-        await waitForBarrier(workflowId, serial + 1);
-        serialByOperation.set(id, serial);
-        checks.push(...entries);
-        observedCheckEvents.add(`${workflowId}:${serial}`);
-        if (entries.some((entry) => entry.step !== event.name))
-          throw new Error('Native Access trace does not match the barrier step');
-        const ids = [...new Set(entries.map((entry) => entry.postId))];
-        if (ids.length === 0) throw new Error('Native erasure page completed without real Access checks');
-        mark(`step ${ids.length}`);
-        return ids;
+        return releaseLogicalPage(name, true);
       },
       async finish(name) {
         mark('finish-start');
@@ -1782,8 +1912,29 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         return value.threads.map((thread) => thread.id);
       },
       async checkGrowth(input): Promise<GrowthResult[]> {
+        const { capture, costOf } = await import('../support/growth.ts');
+        // A second instrumented connection set separates the status capture from
+        // initiation's enclosing checkGrowth capture on the same native database.
+        const statusGrowth = (ownedStatusGrowth = await openGrowthDatabase(resources.appUrl));
+        statusGrowth.pool.options.max = 1;
+        statusGrowth.pool.options.idleTimeoutMillis = 0;
+        const statusClient = (ownedStatusClient = await createWorkClient(resources.appUrl, statusGrowth.pool));
+        const statusKernel = createKernel({
+          ...kernelOptions,
+          pool: statusGrowth.pool,
+          content: {
+            cursorNow: () => Date.now(),
+            workflows: createContentOperationClient({
+              pool: statusGrowth.pool,
+              client: statusClient,
+              clock: () => new Date(),
+            }),
+          },
+          workClient: statusClient,
+        });
         return checkGrowthActual(this, {
           growth,
+          statusGrowth,
           worker: worker!,
           seedFixture,
           getStoredFixture(fixture) {
@@ -1793,7 +1944,21 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
           },
           actor: system.actors.author.actor,
           useMeasuredKernel,
+          async measureStatus(name) {
+            const measured = await capture(statusGrowth, async () => {
+              resources.kernel = statusKernel;
+              try {
+                const reply = await driver.status('author', name);
+                if (reply.response.status !== 200 || !reply.value)
+                  throw new Error(`Native erasure status returned ${reply.response.status}`);
+              } finally {
+                resources.kernel = driverKernel;
+              }
+            });
+            return costOf(measured.capture);
+          },
           waitForOperationBarrier,
+          releaseFinalPage: (name) => releaseLogicalPage(name, false),
           input,
         });
       },
@@ -1801,7 +1966,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
 
     async function drainEffects(partition: number): Promise<void> {
       const deadline = Date.now() + 30_000;
-      while (Date.now() < deadline) {
+      while (!closing && Date.now() < deadline) {
         const result = await readPool.query<{ position: string; checkpoint: string | null }>(
           `SELECT p.position::text, c.position::text AS checkpoint
          FROM core.partition p LEFT JOIN core.consumer_checkpoint c
@@ -1820,7 +1985,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     async function waitBodiesNull(f: StoredFixture): Promise<void> {
       const ids = f.targeted.map((post) => post.id);
       const deadline = Date.now() + 30_000;
-      while (Date.now() < deadline) {
+      while (!closing && Date.now() < deadline) {
         const result = await readPool.query<{ remaining: number }>(
           `SELECT count(*)::integer AS remaining FROM content.revision r
          JOIN content.post p USING(route,thread_id,post_id)
@@ -1836,7 +2001,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     async function waitPostCleanup(f: StoredFixture, postIds: string[]): Promise<void> {
       const deadline = Date.now() + 30_000;
       let events: { id: string; post_id: string }[] = [];
-      while (Date.now() < deadline) {
+      while (!closing && Date.now() < deadline) {
         const result = await readPool.query<{ id: string; post_id: string }>(
           `SELECT id::text, data->>'postId' AS post_id FROM core.outbox
            WHERE partition_no=$1 AND type='com.rezics.content.post.erased.v1'
@@ -1878,17 +2043,19 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     if (ownedObserver) cleanup.push(ownedObserver.close());
     if (ownedControlClient) cleanup.push(ownedControlClient.close());
     if (ownedMeasuredClient) cleanup.push(ownedMeasuredClient.close());
+    if (ownedStatusClient) cleanup.push(ownedStatusClient.close());
     if (ownedWorkClient) cleanup.push(ownedWorkClient.close());
     if (ownedWorkPool) cleanup.push(ownedWorkPool.end());
     if (ownedAppPool) cleanup.push(ownedAppPool.end());
     if (ownedReadPool) cleanup.push(ownedReadPool.end());
     if (ownedGrowth) cleanup.push(ownedGrowth.close());
+    if (ownedStatusGrowth) cleanup.push(ownedStatusGrowth.close());
     if (ownedResources) {
       ownedResources.stopBootstrap();
       cleanup.push(ownedResources.bootstrap.catch(() => undefined));
-      cleanup.push(ownedResources.system.close());
     }
     const results = await Promise.allSettled(cleanup);
+    if (ownedResources) results.push(...(await Promise.allSettled([ownedResources.system.close()])));
     const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failures.length)
       throw new AggregateError(
@@ -1903,12 +2070,15 @@ async function checkGrowthActual(
   driver: ErasureOperationDriver,
   dependencies: {
     growth: GrowthDatabase;
+    statusGrowth: GrowthDatabase;
     worker: NativeWorker;
     seedFixture(posts: number, revisions: number, marker: string, targetPartition?: number): Promise<Fixture>;
     getStoredFixture(fixture: Fixture): StoredFixture;
     actor: FixtureResources['system']['actors']['author']['actor'];
     useMeasuredKernel(active: boolean): Promise<void>;
+    measureStatus(name: string): Promise<Cost>;
     waitForOperationBarrier(name: string, serial: number): Promise<void>;
+    releaseFinalPage(name: string): Promise<string[]>;
     input: {
       seed: number;
       scales: [32, 256, 2048];
@@ -1917,121 +2087,243 @@ async function checkGrowthActual(
   },
 ): Promise<GrowthResult[]> {
   const { assertGrowth, checkGrowth, seed } = await import('../support/growth.ts');
-  const { growth, worker, input } = dependencies;
-  const fixtures = new Map<number, Fixture>();
-  const operations = new Map<number, Operation>();
-  const workerCosts: Cost[] = [];
-  const fixtureScales = input.scales;
+  const { growth, statusGrowth, worker, input } = dependencies;
+  const fixtures = new Map<number, { measured: Fixture; warmup: Fixture }>();
+  const changedFixtures = new Map<number, Fixture>();
+  const changedSamples: GrowthSample[] = [];
+  const statusSamples: GrowthSample[] = [];
+  const nativeSamples: GrowthSample[] = [];
   let targetPartition: number | undefined;
+  let targetBytes: string | undefined;
   await worker.restart(true);
-  for (const [index, scale] of fixtureScales.entries()) {
-    const marker = `erasure-growth-${input.seed}-${scale}-${randomUUID().replaceAll('-', '')}`;
+  for (const scale of input.scales) {
+    const marker = `erasure-growth-${input.seed}-${String(scale).padStart(4, '0')}-${randomUUID().replaceAll('-', '')}`;
     const fixture = await dependencies.seedFixture(101, 1, marker, targetPartition);
     targetPartition ??= fixture.partition;
     if (fixture.partition !== targetPartition) throw new Error('Native growth fixtures did not share one partition');
-    fixtures.set(scale, fixture);
-    if (index === 0 && fixture.targeted.length !== 101)
+    if (fixture.targeted.length !== 101)
       throw new Error('Native growth fixture does not contain its fixed 101-post neighbourhood');
+    const bytes = await growth.admin.query<{ bytes: string }>(
+      `SELECT sum(octet_length(body))::text AS bytes FROM content.revision
+       WHERE route=$1 AND post_id=ANY($2::uuid[])`,
+      [routeOf(fixture.thread)!, fixture.targeted.map((post) => post.id)],
+    );
+    const actualBytes = bytes.rows[0]?.bytes;
+    if (!actualBytes || (targetBytes !== undefined && actualBytes !== targetBytes))
+      throw new Error('Native growth targets do not retain a fixed canonical byte count');
+    targetBytes = actualBytes;
+    const warmup = await dependencies.seedFixture(
+      101,
+      1,
+      marker.replace('erasure-growth', 'erasure-warmup'),
+      targetPartition,
+    );
+    if (warmup.partition !== targetPartition || warmup.targeted.length !== 101)
+      throw new Error('Native growth warmup does not match the fixed neighbourhood');
+    fixtures.set(scale, { measured: fixture, warmup });
   }
-  const firstFixture = fixtures.get(fixtureScales[0])!;
+  // Catalogue growth keeps the logical page fixed at 100 posts. Independently
+  // vary the changed rows against one catalogue to prove work follows the page.
+  for (const posts of [1, 8, 64]) {
+    const fixture = await dependencies.seedFixture(
+      posts,
+      1,
+      `erasure-changed-${posts}-${randomUUID().replaceAll('-', '')}`,
+      targetPartition,
+    );
+    if (fixture.partition !== targetPartition || fixture.targeted.length !== posts)
+      throw new Error('Native changed-row fixture does not match its logical page');
+    changedFixtures.set(posts, fixture);
+  }
+  const firstFixture = fixtures.get(input.scales[0])!.measured;
   const population = erasureGrowthPopulation(
     input.seed,
     dependencies.getStoredFixture(firstFixture),
     dependencies.actor,
   );
-  // The governance queue runs two workflows. Parking every scale at once leaves
-  // the third operation queued, so each initiation releases its own step and
-  // lets that workflow finish before the next scale starts.
-  const stepCosts = new Map<number, Cost>();
-
+  const populatedRelations = Object.keys(
+    population.rows!({
+      ordinal: 0,
+      route: routeOf(firstFixture.thread)!,
+      partition: firstFixture.partition,
+      hot: true,
+    }),
+  );
   let seedCalls = 0;
   const bounds = { rows: 'constant' as const, statements: 'constant' as const, blocks: 'logarithmic' as const };
-  const reports = new Map<GrowthResult['measurement'], GrowthReport>();
-
-  for (const measurement of input.measurements) {
-    const report = await checkGrowth(growth, {
-      name: `native author erasure ${measurement}`,
-      scales: input.scales,
-      repetitions: 1,
-      warmups: 0,
-      bounds,
-      async grow(database, scale, previous) {
-        if (measurement !== 'initiation') return;
-        await seed(database, population, { from: previous, to: scale });
-        seedCalls++;
-      },
-      async operation(_database, scale) {
-        await dependencies.useMeasuredKernel(true);
-        try {
-          const fixture = fixtures.get(scale);
-          if (!fixture) throw new Error(`Missing fixed native growth fixture at scale ${scale}`);
-          if (measurement === 'initiation') {
-            await worker.hold();
-            const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
-            if (reply.response.status !== 202 || !reply.value)
-              throw new Error(`Native erasure initiation returned ${reply.response.status}`);
-            operations.set(scale, reply.value);
-            await dependencies.waitForOperationBarrier(reply.value.name, 1);
-            await worker.captureNextStep();
-            const [measured] = await Promise.all([worker.waitCost(), driver.finish(reply.value.name)]);
-            if (measured.serial !== 1)
-              throw new Error('Native growth step did not capture the first persisted logical batch');
-            stepCosts.set(scale, measured.cost);
-            return;
-          }
-          const operation = operations.get(scale);
-          if (!operation) throw new Error(`Native growth operation at scale ${scale} was not initiated`);
-          if (measurement === 'status') {
-            const reply = await driver.status('author', operation.name);
-            if (reply.response.status !== 200 || !reply.value)
-              throw new Error(`Native erasure status returned ${reply.response.status}`);
-            return;
-          }
-          const measured = stepCosts.get(scale);
-          if (!measured) throw new Error(`Native growth step at scale ${scale} was not measured`);
-          workerCosts.push(measured);
-        } finally {
-          await dependencies.useMeasuredKernel(false);
-        }
-      },
-    });
-    reports.set(measurement, report);
-  }
-
-  if (seedCalls !== 3) throw new Error(`Native growth seeded ${seedCalls} times instead of once at each scale`);
-  const nativeReport = reports.get('native-step');
-  if (!nativeReport) throw new Error('Native growth harness omitted its worker measurement');
-  if (workerCosts.length !== nativeReport.samples.length)
-    throw new Error('Native growth did not return one actual worker cost per scale');
-  const nativeSamples = nativeReport.samples.map((sample, index) => ({
-    scale: sample.scale,
-    cost: combineCost(sample.cost, workerCosts[index]!),
-  }));
-  assertGrowth(nativeSamples, nativeReport.bounds);
-
-  return input.measurements.map((measurement) => {
-    const report = reports.get(measurement);
-    if (!report) throw new Error(`Native growth harness omitted ${measurement}`);
-    const samples =
-      measurement === 'native-step'
-        ? nativeSamples
-        : report.samples.map((sample) => ({ scale: sample.scale, cost: sample.cost }));
-    return {
-      measurement,
-      scales: [...input.scales],
-      seedCalls,
-      rows: 'constant',
-      statements: 'constant',
-      buffers: 'logarithmic',
-      passed: true,
-      samples: samples.map(({ scale, cost }) => ({
-        scale,
-        rows: cost.rows,
-        statements: cost.statements,
-        buffers: cost.blocks,
-      })),
+  // All three measurements observe each scale before the next seed grows the
+  // database. Status must not label three reads of the largest population as
+  // measurements of three different populations.
+  await dependencies.useMeasuredKernel(true);
+  await dependencies.useMeasuredKernel(false);
+  let scaleAtCapture: number | undefined;
+  const nativePlans: { scale: number; query: string; blocks: number; nodes: unknown[] }[] = [];
+  const listeners = new Map<PoolClient, (notice: { message?: string | undefined }) => void>();
+  const observePlans = (client: PoolClient) => {
+    if (listeners.has(client)) return;
+    const onNotice = (notice: { message?: string | undefined }) => {
+      if (scaleAtCapture === undefined || !notice.message?.includes('plan:\n')) return;
+      const document = JSON.parse(notice.message.split('plan:\n')[1]!) as {
+        'Query Text': string;
+        Plan: Record<string, any>;
+      };
+      const root = document.Plan;
+      if (!root) return;
+      const blocks = (root['Shared Hit Blocks'] ?? 0) + (root['Shared Read Blocks'] ?? 0);
+      if (blocks < 32) return;
+      const nodes: unknown[] = [];
+      const visit = (node: Record<string, any>) => {
+        if (node['Relation Name'])
+          nodes.push({
+            type: node['Node Type'],
+            relation: `${node.Schema}.${node['Relation Name']}`,
+            index: node['Index Name'],
+            rows: node['Actual Rows'],
+            loops: node['Actual Loops'],
+            blocks: (node['Shared Hit Blocks'] ?? 0) + (node['Shared Read Blocks'] ?? 0),
+            condition: node['Index Cond'],
+          });
+        for (const child of node.Plans ?? []) visit(child);
+      };
+      visit(root);
+      nativePlans.push({ scale: scaleAtCapture, query: document['Query Text'], blocks, nodes });
     };
-  });
+    client.on('notice', onNotice);
+    listeners.set(client, onNotice);
+  };
+  growth.pool.on('acquire', observePlans);
+  statusGrowth.pool.on('acquire', observePlans);
+  const initiation = await checkGrowth(growth, {
+    name: 'native author erasure initiation',
+    scales: input.scales,
+    repetitions: 1,
+    warmups: 1,
+    bounds,
+    async grow(database, scale, previous) {
+      await seed(database, population, { from: previous, to: scale });
+      seedCalls++;
+      if (previous === 0) {
+        for (const relation of populatedRelations) {
+          const count = await database.admin.query<{ count: number }>(`SELECT count(*)::int AS count FROM ${relation}`);
+          if ((count.rows[0]?.count ?? 0) < 500)
+            throw new Error(`Native growth relation ${relation} has fewer than 500 rows at its smallest scale`);
+        }
+      }
+    },
+    async warmup(_database, scale) {
+      const fixture = fixtures.get(scale)!.warmup;
+      await dependencies.useMeasuredKernel(true);
+      try {
+        // Warm the actual write/status paths on spare state, as checkGrowth's
+        // normal warmup does. Every workflow still completes its native cleanup.
+        await worker.hold();
+        const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
+        if (reply.response.status !== 202 || !reply.value)
+          throw new Error(`Native erasure warmup returned ${reply.response.status}`);
+        await driver.finish(reply.value.name);
+        await dependencies.measureStatus(reply.value.name);
+      } finally {
+        await dependencies.useMeasuredKernel(false);
+      }
+    },
+    async operation(_database, scale) {
+      scaleAtCapture = scale;
+      await dependencies.useMeasuredKernel(true);
+      try {
+        const fixture = fixtures.get(scale)?.measured;
+        if (!fixture) throw new Error(`Missing fixed native growth fixture at scale ${scale}`);
+        // The governance queue runs two workflows. Complete each real operation
+        // before parking the next scale; retain its actual first-page capture.
+        await worker.hold();
+        const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
+        if (reply.response.status !== 202 || !reply.value)
+          throw new Error(`Native erasure initiation returned ${reply.response.status}`);
+        await dependencies.waitForOperationBarrier(reply.value.name, 1);
+        await worker.captureNextStep();
+        const [measured] = await Promise.all([worker.waitCost(), driver.step(reply.value.name)]);
+        if (measured.serial !== 1)
+          throw new Error('Native growth step did not capture the first persisted logical batch');
+        nativeSamples.push({ scale, cost: measured.cost });
+        await driver.finish(reply.value.name);
+        statusSamples.push({ scale, cost: await dependencies.measureStatus(reply.value.name) });
+      } finally {
+        scaleAtCapture = undefined;
+        await dependencies.useMeasuredKernel(false);
+      }
+    },
+  })
+    .catch((error: unknown) => {
+      console.error('erasure-growth-native-plans', JSON.stringify(nativePlans));
+      console.error('erasure-growth-status-samples', JSON.stringify(statusSamples));
+      console.error('erasure-growth-step-samples', JSON.stringify(nativeSamples));
+      if (error && typeof error === 'object' && 'samples' in error)
+        console.error('erasure-growth-initiation-samples', JSON.stringify(error.samples));
+      throw error;
+    })
+    .finally(() => {
+      growth.pool.off('acquire', observePlans);
+      statusGrowth.pool.off('acquire', observePlans);
+      for (const [client, listener] of listeners) client.off('notice', listener);
+    });
+  if (seedCalls !== 3) throw new Error(`Native growth seeded ${seedCalls} times instead of once at each scale`);
+  try {
+    assertGrowth(statusSamples, bounds);
+    assertGrowth(nativeSamples, bounds);
+    for (const samples of [initiation.samples, statusSamples, nativeSamples]) {
+      for (const { scale, cost } of samples) {
+        for (const [relation, actual] of Object.entries(cost.relations ?? {})) {
+          if (relation.startsWith('content.') && (actual.sequentialScans ?? 0) > 0)
+            throw new Error(`Native erasure scanned ${relation} sequentially at scale ${scale}`);
+        }
+      }
+    }
+    for (const [posts, fixture] of changedFixtures) {
+      await worker.hold();
+      const reply = await driver.erase('author', fixture.thread, fixture.authorId, randomUUID());
+      if (reply.response.status !== 202 || !reply.value)
+        throw new Error(`Native changed-row erasure returned ${reply.response.status}`);
+      await dependencies.waitForOperationBarrier(reply.value.name, 1);
+      await worker.captureNextStep();
+      const [measured, changed] = await Promise.all([
+        worker.waitCost(),
+        dependencies.releaseFinalPage(reply.value.name),
+      ]);
+      if (measured.serial !== 1 || changed.length !== posts)
+        throw new Error('Native changed-row capture did not cover its complete logical page');
+      changedSamples.push({ scale: posts, cost: measured.cost });
+      await driver.finish(reply.value.name);
+    }
+    assertGrowth(changedSamples, { rows: 'linear', statements: 'linear', blocks: 'linear' });
+    console.log('erasure-growth-changed-samples', JSON.stringify(changedSamples));
+  } catch (error) {
+    console.error('erasure-growth-native-plans', JSON.stringify(nativePlans));
+    console.error('erasure-growth-status-samples', JSON.stringify(statusSamples));
+    console.error('erasure-growth-step-samples', JSON.stringify(nativeSamples));
+    console.error('erasure-growth-changed-samples', JSON.stringify(changedSamples));
+    throw error;
+  }
+  const samplesByMeasurement = {
+    initiation: initiation.samples,
+    status: statusSamples,
+    'native-step': nativeSamples,
+  };
+  const results: GrowthResult[] = input.measurements.map((measurement) => ({
+    measurement,
+    scales: [...input.scales],
+    seedCalls,
+    rows: 'constant',
+    statements: 'constant',
+    buffers: 'logarithmic',
+    passed: true,
+    samples: samplesByMeasurement[measurement].map(({ scale, cost }) => ({
+      scale,
+      rows: cost.rows,
+      statements: cost.statements,
+      buffers: cost.blocks,
+    })),
+  }));
+  console.log('erasure-growth-samples', JSON.stringify(results));
+  return results;
 }
 
 if (import.meta.main && process.env.ERASURE_OPERATION_WORKER === '1') {
