@@ -18,7 +18,6 @@ export type {
   CredentialFloorPort,
   SessionAuthorizationInput,
   CredentialAuthorizationInput,
-  LegacyCredentialAuthorizationInput,
   AuthorizationConsumeInput,
   EffectAuthorization,
   AssignmentProof,
@@ -246,12 +245,6 @@ export interface AuthService {
     }): Promise<{ receiptId: string; replayed: boolean }>;
     /** Auth-owned point-read verifier; no minting path. */
     verifyCredentialEffect: CredentialEffectVerifier;
-    setCredential(input: {
-      authorization: string;
-      subjectAccountId: string;
-      headers: Headers;
-      credential: CredentialEffect;
-    }): Promise<void>;
     reduceConsent(input: {
       accountId: string;
       clientId: string;

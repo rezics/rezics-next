@@ -74,6 +74,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     recoveryEvidence: async () => null,
   });
   const pair = await generateKeyPair('ES256', { extractable: true });
+  const vehicleJwk = { ...(await exportJWK(pair.publicKey)), alg: 'ES256' };
   service = await createAuthService({
     database: authPool,
     issuer,
@@ -85,9 +86,12 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     },
     trustedAccess: {
       ...createAuthBindings({ pool, ...registration }),
+      async revalidateCredentialEffect() {
+        throw new Error('kernel-test-complete');
+      },
       async consumeAuthorization(input) {
         result = await capability.consumeAuthAuthorization({ ...pending, human: input.human });
-        // Stop before the legacy Auth mutation: these tests prove kernel checks only.
+        // Stop before Auth writes: these tests prove kernel checks only.
         throw new Error('kernel-test-complete');
       },
     },
@@ -235,12 +239,20 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
         operationKey: binding.operationKey,
         effectReference: binding.effectReference,
       };
+      const kid = key();
+      const staged = await service.internal.stageCredentialEffect({
+        key: key(),
+        subjectAccountId: binding.subjectAccountId,
+        headers,
+        credential: { kind: 'key', kid, publicJwk: { ...vehicleJwk, kid } },
+      });
       try {
-        await service.internal.setCredential({
+        await service.internal.applyCredentialEffect({
           authorization: reference,
+          effectRef: staged.effectRef,
+          key: staged.key,
           subjectAccountId: binding.subjectAccountId,
           headers,
-          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;

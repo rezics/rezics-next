@@ -44,10 +44,10 @@ export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCre
     /** Seal only a verified native exact opening locator; no caller approval minting.
      */
     createOpeningReference(opening: CredentialOpeningLocator): string;
-    /** Credential-only consumer. Reject legacy unbound input, session/device approval
-     * and broad credential-management alone. Auth verifies the committed stage; the
-     * exact purpose/key/reference/digest/subject must match the narrowed native row
-     * and returned CredentialEffectAuthorization before Auth writes.
+    /** Credential-only consumer. Require one exact credential purpose and reject
+     * session/device approval or broad credential-management alone. Auth verifies
+     * the committed stage; purpose/key/reference/digest/subject must match the
+     * narrowed native row and returned CredentialEffectAuthorization before Auth writes.
      */
     consumeAuthAuthorization(input: CredentialAuthorizationInput): Promise<AuthAuthorizationReceipt & {
         authorization: CredentialEffectAuthorization;

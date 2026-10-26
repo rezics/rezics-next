@@ -111,6 +111,9 @@ async function fixture() {
         // No fabricated approval: an absent native effect coordinator denies.
         return bindings.consumeAuthorization!(input);
       },
+      async revalidateCredentialEffect() {
+        throw new Error('Credential revalidation is unavailable');
+      },
     };
     const key = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -333,11 +336,18 @@ test('all current native issuance paths deny removed scope before cookie, JWT or
       expect(await f.use(retainedJwt, retained)).toBe(true);
       expect(await f.use(retainedJwt, removed)).toBe(false);
     };
+    const unavailable = await f.auth.internal.stageCredentialEffect({
+      key: 'unavailable-native-coordinator',
+      subjectAccountId: f.target.accountId,
+      credential: { kind: 'password', password: null },
+      headers: new Headers({ cookie: fullCookie }),
+    });
     await expect(
-      f.auth.internal.setCredential({
+      f.auth.internal.applyCredentialEffect({
         authorization: 'unavailable-native-coordinator',
+        effectRef: unavailable.effectRef,
+        key: unavailable.key,
         subjectAccountId: f.target.accountId,
-        credential: { kind: 'password', password: null },
         headers: new Headers({ cookie: fullCookie }),
       }),
     ).rejects.toThrow();
@@ -538,11 +548,18 @@ test('checkGrowth captures complete native consent transactions, pending issuanc
               expect(decodeJwt(live).scope).toBe(retained);
               expect(decodeJwt(live).authn_epoch).toBe(receipt.minimumAuthnEpoch);
             };
+            const absent = await f.auth.internal.stageCredentialEffect({
+              key: 'absent-native-coordinator',
+              subjectAccountId: f.target.accountId,
+              credential: { kind: 'password', password: null },
+              headers: new Headers({ cookie: selected }),
+            });
             await expect(
-              f.auth.internal.setCredential({
+              f.auth.internal.applyCredentialEffect({
                 authorization: 'absent-native-coordinator',
+                effectRef: absent.effectRef,
+                key: absent.key,
                 subjectAccountId: f.target.accountId,
-                credential: { kind: 'password', password: null },
                 headers: new Headers({ cookie: selected }),
               }),
             ).rejects.toThrow();

@@ -1,4 +1,4 @@
-import { createAuthService, type AuthService } from '@rezics/auth';
+import { createAuthService, type AuthService, type SessionProof } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import type { Pool, PoolClient } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -271,14 +271,27 @@ test('proof substitution, reference substitution and credential purposes preserv
     ).rejects.toThrow();
   const credential = await f.opening(headers, human, subject, 'credential-management');
   await expect(f.open(credential.reference, subject, headers)).rejects.toThrow();
-  await expect(
-    f.service.internal.setCredential({
-      authorization: reference,
-      subjectAccountId: subject,
-      headers,
-      credential: { kind: 'password', password },
-    }),
-  ).rejects.toThrow('unavailable');
+  const proof = (await (await f.request('/session', undefined, headers)).json()) as SessionProof;
+  const credentialAttempts = await Promise.allSettled(
+    (['set-password', 'remove-password', 'add-key', 'remove-key'] as const).map((purpose) =>
+      f.capability.consumeAuthAuthorization({
+        authorization: reference,
+        subjectAccountId: subject,
+        purpose,
+        operationKey: f.key(),
+        effectReference: f.key(),
+        human: proof,
+      }),
+    ),
+  );
+  expect(
+    credentialAttempts.every(
+      (attempt) =>
+        attempt.status === 'rejected' &&
+        attempt.reason instanceof Error &&
+        attempt.reason.message.includes('unavailable'),
+    ),
+  ).toBe(true);
   // A public proof has identical JSON, but has no live Auth object capability.
   const publicProof = await (await f.request('/session', undefined, headers)).json();
   await expect(

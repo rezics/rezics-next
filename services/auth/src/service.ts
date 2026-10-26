@@ -8,7 +8,7 @@ import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
-import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
+import { verifyKeyAssertion } from './key-credentials.ts';
 import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
@@ -36,9 +36,7 @@ import type {
   CredentialEffectAuthorization,
   CredentialFloorReceipt,
   EffectAuthorization,
-  EffectPurpose,
   InvalidationReceipt,
-  LegacyCredentialAuthorizationInput,
   SessionAuthorizationInput,
   SessionProof,
 } from './index.ts';
@@ -443,6 +441,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
 
   async function owner(accountId: string): Promise<void> {
+    // Existing owners need no lock. Taking the only pool connection and then reading
+    // through the pool deadlocks a single-connection Auth host.
+    if (await (await getContext()).internalAdapter.findUserById(accountId)) return;
     // Advisory locking makes concurrent first establishment use one native owner.
     const connection = await database.connect();
     try {
@@ -524,7 +525,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
   async function consume(
     input: { authorization: string; subjectAccountId: string; headers: Headers },
-    purpose: EffectPurpose,
+    purpose: 'session',
   ) {
     if (!trustedAccess.consumeAuthorization) throw new Denied();
     const human = await humanProof(input.headers);
@@ -533,7 +534,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const scope = { proof: human, live: true };
     const receipt = await proofScope.run(scope, async () => {
       try {
-        const authorization: SessionAuthorizationInput | LegacyCredentialAuthorizationInput = {
+        const authorization: SessionAuthorizationInput = {
           authorization: text(input.authorization),
           subjectAccountId: input.subjectAccountId,
           purpose,
@@ -1201,68 +1202,6 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
       },
       verifyCredentialEffect: credentials.verify,
-      async setCredential(input) {
-        const value = input.credential;
-        const purpose =
-          value.kind === 'password'
-            ? value.password === null
-              ? 'remove-password'
-              : 'set-password'
-            : value.remove
-              ? 'remove-key'
-              : 'add-key';
-        // Validate material before spending Access authorization or changing its floor.
-        let hash: string | null = null;
-        let publicJwk;
-        if (value.kind === 'password' && value.password !== null) {
-          if (
-            value.password.length < (await getContext()).password.config.minPasswordLength ||
-            value.password.length > (await getContext()).password.config.maxPasswordLength
-          )
-            throw new Denied(400);
-          hash = await (await getContext()).password.hash(value.password);
-        } else if (value.kind === 'key') {
-          text(value.kid);
-          if (!value.remove) publicJwk = await publicCredential(value.publicJwk, value.kid);
-        }
-        const { receipt, subject, previousEpoch } = await consume(input, purpose);
-        const oldPassword = await (await getContext()).internalAdapter.findCredentialAccount(subject.accountId);
-        const destructive =
-          purpose === 'remove-password' ||
-          purpose === 'remove-key' ||
-          (purpose === 'set-password' && !!oldPassword?.password);
-        if (destructive) {
-          if (!receipt.invalidation) throw new Denied();
-          invalidation(receipt.invalidation, subject.accountId, previousEpoch);
-        }
-        await owner(subject.accountId);
-        if (value.kind === 'password') {
-          if (hash !== null) await (await getContext()).internalAdapter.updatePassword(subject.accountId, hash);
-          else
-            await (
-              await getContext()
-            ).adapter.update({
-              model: 'account',
-              where: [
-                { field: 'userId', value: subject.accountId },
-                { field: 'providerId', value: 'credential' },
-              ],
-              update: { password: null },
-            });
-        } else if (value.remove)
-          await database.query('DELETE FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
-            subject.accountId,
-            value.kid,
-          ]);
-        else
-          await database.query('INSERT INTO auth_public_key (account_id, kid, public_jwk) VALUES ($1,$2,$3)', [
-            subject.accountId,
-            value.kid,
-            publicJwk,
-          ]);
-        if (destructive || receipt.invalidation)
-          await (await getContext()).internalAdapter.deleteUserSessions(subject.accountId);
-      },
       async reduceConsent(input) {
         const granted = scopes(input.scopes);
         const client = await clientFor(text(input.clientId));
