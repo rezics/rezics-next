@@ -391,6 +391,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   at most 100 entries. No per-entry reads.
 - **Growth check:** `tests/library-entries-cost.test.ts`: `personal library view and state change stay within their bounds as entries grow`
 
+### Copies
+
+- **Touches:** One session read, then `GET /v1/copies?view=FULL` for one page of the viewer’s copies. A `subjectId`
+  in the page URL filters the request. Adding, editing and deleting each send one write with an
+  `Idempotency-Key`; an edit sends the revision in the body and a deletion sends `?revision=`.
+- **Bound:** 1 D and 1 K for a view, which reads at most 100 copies; 1 D and 1 K for each change; 0 R and 0 A with a
+  fresh credential.
+- **Growth check:** `tests/library-copies-cost.test.ts`: `copies stay within their bound as the copy list grows`
+
 ### Reading progress
 
 - **Touches:** One session credential read, then GET session, one changes page and one completed-units page started
