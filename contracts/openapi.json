@@ -37035,6 +37035,32 @@
                               ],
                               "type": "object"
                             },
+                            "crop": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "pattern": "^xywh=\\d+,\\d+,(?:0*[1-9]\\d*),(?:0*[1-9]\\d*)$",
+                              "type": "string"
+                            },
+                            "focalPoint": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "x": {
+                                  "maximum": 1,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "maximum": 1,
+                                  "minimum": 0,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
+                              ],
+                              "type": "object"
+                            },
                             "id": {
                               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])",
                               "type": "string"
@@ -37313,6 +37339,32 @@
                                 "via",
                                 "license",
                                 "obligations"
+                              ],
+                              "type": "object"
+                            },
+                            "crop": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "pattern": "^xywh=\\d+,\\d+,(?:0*[1-9]\\d*),(?:0*[1-9]\\d*)$",
+                              "type": "string"
+                            },
+                            "focalPoint": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "x": {
+                                  "maximum": 1,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "maximum": 1,
+                                  "minimum": 0,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
                               ],
                               "type": "object"
                             },
@@ -38988,6 +39040,32 @@
                       "via",
                       "license",
                       "obligations"
+                    ],
+                    "type": "object"
+                  },
+                  "crop": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^xywh=\\d+,\\d+,(?:0*[1-9]\\d*),(?:0*[1-9]\\d*)$",
+                    "type": "string"
+                  },
+                  "focalPoint": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "x": {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "y": {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
                     ],
                     "type": "object"
                   },

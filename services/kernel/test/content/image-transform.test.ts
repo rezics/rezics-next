@@ -14,6 +14,10 @@ mock.module('sharp', () => ({
   },
 }));
 const { transformImage, ImageDecodeRejection } = await import('../../src/content/image-transform');
+const transformWithCrop = transformImage as unknown as (
+  bytes: Uint8Array,
+  crop?: readonly [number, number, number, number],
+) => ReturnType<typeof transformImage>;
 afterEach(() => mock.restore());
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -155,6 +159,52 @@ test('the fitted RGBA image produces a deterministic ThumbHash and matching aver
   expect(second.variants.map(({ format, width, sha256 }) => [format, width, sha256])).toEqual(
     first.variants.map(({ format, width, sha256 }) => [format, width, sha256]),
   );
+});
+
+test('authored crop feeds every variant, ThumbHash and colour without enlarging or changing the original', async () => {
+  const input = await source(1200, 800);
+  const original = Uint8Array.from(input);
+  const decoded = await realSharp(input, { limitInputPixels: 40_000_000, failOn: 'warning', autoOrient: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const cropped = await realSharp(decoded.data, {
+    limitInputPixels: 40_000_000,
+    failOn: 'warning',
+    raw: { width: decoded.info.width, height: decoded.info.height, channels: decoded.info.channels },
+  })
+    .extract({ left: 600, top: 100, width: 200, height: 250 })
+    .resize({ width: 100, height: 100, fit: 'inside' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const expectedHash = rgbaToThumbHash(cropped.info.width, cropped.info.height, cropped.data);
+  const average = thumbHashToAverageRGBA(expectedHash);
+  const expectedColor = `#${[average.r, average.g, average.b]
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+
+  const result = await transformWithCrop(input, [600, 100, 200, 250]);
+  expect(result).toMatchObject({ width: 1200, height: 800, thumbhash: expectedHash, averageColor: expectedColor });
+  expect(Buffer.from(input).equals(Buffer.from(original))).toBe(true);
+  expect(result.variants.map(({ width }) => width)).toEqual([200, 200]);
+  for (const variant of result.variants) {
+    expect(variant.width).toBeLessThanOrEqual(200);
+    const output = await realSharp(variant.bytes).raw().toBuffer({ resolveWithObject: true });
+    for (let offset = 0; offset < output.data.length; offset += output.info.channels) {
+      expect(output.data[offset + 2]!).toBeGreaterThan(output.data[offset]! + 80);
+    }
+  }
+});
+
+test('a crop outside the oriented image is rejected before producing derivatives', async () => {
+  const input = await source(1200, 800, 6);
+  await expect(transformWithCrop(input, [700, 0, 200, 100])).rejects.toMatchObject({
+    name: 'ImageCropOutOfBoundsRejection',
+  });
 });
 
 test('overpixel, truncated intact-header and malformed bytes reject before derivative work', async () => {

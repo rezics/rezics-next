@@ -20,6 +20,7 @@ export interface TransformedImage {
   averageColor: string;
   variants: ImageVariant[];
 }
+export type ImageCrop = readonly [left: number, top: number, width: number, height: number];
 
 /** Invalid input is permanent; callers must retry unrelated runtime failures. */
 export class ImageDecodeRejection extends Error {
@@ -28,6 +29,16 @@ export class ImageDecodeRejection extends Error {
   constructor(cause: Error) {
     super('Image cannot be decoded safely', { cause });
     this.name = 'ImageDecodeRejection';
+  }
+}
+
+/** An authored crop is valid syntax but does not fit the auto-oriented image. */
+export class ImageCropOutOfBoundsRejection extends Error {
+  readonly permanent = true;
+
+  constructor() {
+    super('Image crop is outside the decoded image');
+    this.name = 'ImageCropOutOfBoundsRejection';
   }
 }
 
@@ -58,7 +69,7 @@ function isDecodeFailure(error: unknown): error is Error {
 }
 
 /** In-memory transformation only: no original bytes are returned as derivatives. */
-export async function transformImage(bytes: Uint8Array): Promise<TransformedImage> {
+export async function transformImage(bytes: Uint8Array, crop?: ImageCrop | null): Promise<TransformedImage> {
   let decoded: { data: Buffer; info: OutputInfo };
   try {
     // Fully decode once before fan-out. Raw pixels bound memory by the input
@@ -72,8 +83,26 @@ export async function transformImage(bytes: Uint8Array): Promise<TransformedImag
   }
 
   const { width, height } = decoded.info;
-  const selectedWidths = width < widths[0] ? [width] : widths.filter((size) => size <= width);
-  const placeholder = await decodedImage(decoded)
+  let image = decoded;
+  if (crop) {
+    const [left, top, cropWidth, cropHeight] = crop;
+    if (
+      ![left, top, cropWidth, cropHeight].every(Number.isSafeInteger) ||
+      left < 0 ||
+      top < 0 ||
+      cropWidth < 1 ||
+      cropHeight < 1
+    )
+      throw new TypeError('Invalid image crop');
+    if (left > width - cropWidth || top > height - cropHeight) throw new ImageCropOutOfBoundsRejection();
+    image = await decodedImage(decoded)
+      .extract({ left, top, width: cropWidth, height: cropHeight })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+  }
+  const outputWidth = image.info.width;
+  const selectedWidths = outputWidth < widths[0] ? [outputWidth] : widths.filter((size) => size <= outputWidth);
+  const placeholder = await decodedImage(image)
     .resize({ width: 100, height: 100, fit: 'inside' })
     .ensureAlpha()
     .raw()
@@ -92,7 +121,7 @@ export async function transformImage(bytes: Uint8Array): Promise<TransformedImag
   // active when this function resolves or rejects.
   for (const size of selectedWidths) {
     for (const format of ['avif', 'webp'] as const) {
-      const { data, info } = await decodedImage(decoded)
+      const { data, info } = await decodedImage(image)
         .resize({ width: size, withoutEnlargement: true })
         .toFormat(format)
         .toBuffer({ resolveWithObject: true });
