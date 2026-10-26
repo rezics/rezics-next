@@ -49,8 +49,13 @@ A Realm-routed page adds nothing to this list; it changes the population of scor
 [Realm context](#realm-context)).
 
 Views appear in the order above. Each tab shows its count when the count is known. A view with no data is left out,
-except Reviews and Discussion, whose empty state invites the first contribution. On narrow screens the tab bar
-scrolls horizontally with the active view in sight; it never wraps into several rows.
+except Reviews and Discussion, whose empty state invites the first contribution. A list view whose items all fit in
+its overview preview, with nothing to filter, has no tab: the overview section shows all of it without a "See all"
+link, and the view's URL still renders. With typical catalogue data (a median work has about five characters, two
+credits and one relation) most subjects show Overview, Reviews, Discussion, Lists and Details, and no tab repeats
+the overview. A template may give a view the vertical's word (Contents is "Episodes" on an anime, "Volumes" on a
+manga). The tab bar stays in view under the top bar while the page scrolls. On narrow screens it scrolls
+horizontally with the active view in sight; it never wraps into several rows.
 
 ## Overview
 

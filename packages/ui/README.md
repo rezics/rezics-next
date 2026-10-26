@@ -45,7 +45,7 @@ An image whose own ratio is within 15% of the frame fills it (`object-fit: cover
 
 ### Typographic placeholder
 
-The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id within the type's palette. It never shows a single letter or a generic icon alone. Text shrinks and truncates to fit the smallest size (`xs`) and stays legible against its background in both themes. The same subject always gets the same placeholder, on every surface.
+The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id within the type's palette. It never shows a generic icon alone. Below 64 px a set title is unreadable, so the placeholder there shows the title's initials on the same background, and every surface that uses those sizes prints the subject's name beside the cover. Text stays legible against its background in both themes. The same subject always gets the same placeholder, on every surface.
 
 ### Sizes and loading
 
