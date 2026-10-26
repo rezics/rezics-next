@@ -366,6 +366,28 @@ test.serial('a Realm moderator publishes a subject, and anonymous lists and read
   expect(withoutRequest(hidden.value)).toEqual(withoutRequest(missing.value));
 });
 
+test.serial('publishing into an occupied slot without its head answers 409 to an authorized publisher', async () => {
+  const f = await fixture();
+  const created = await call('POST', f.path, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: { subjectId: f.subjectId },
+  });
+  expect(created.response.status).toBe(201);
+  const before = await snapshot();
+
+  const conflict = await call('POST', f.path, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: { subjectId: f.subjectId },
+  });
+
+  expect(conflict.response.status).toBe(409);
+  expect(conflict.value).toMatchObject({ code: 'conflict', effect_status: 'not_applied' });
+  expect(conflict.value).not.toHaveProperty('publication');
+  expect(await snapshot()).toEqual(before);
+});
+
 test.serial(
   'withdraw and reject remove the publication from the next list and read, and nothing is granted on the subject or the Global Context',
   async () => {

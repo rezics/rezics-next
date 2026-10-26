@@ -125,9 +125,10 @@ confers no ownership and writes no access grant, resource initialization or sema
 or the Global Context.
 
 The anchor admits the actor once, then at T reads the active Realm and requires the subject to exist
-and pass `subjectReadEligibility`. An empty slot takes no `expectedHead`. An occupied slot moves only
-from that head. Withdraw and reject append a record and move the same head, so the slot leaves the
-adopted keyset in the transaction that writes it.
+and pass `subjectReadEligibility`. An empty slot takes no `expectedHead`. For an authorized publisher,
+an occupied slot without a head returns 409 and writes nothing. An occupied slot moves only from its
+head; a wrong head returns 412. Withdraw and reject append a record and move the same head, so the slot
+leaves the adopted keyset in the transaction that writes it.
 
 `subject_revision_id` is null. The subject point reads at T (`subject-public-evidence.sql` and
 `subject-exists.sql`) expose no revision. `readSubject` exposes a monotonic integer `revision`, not a

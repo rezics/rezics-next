@@ -52,6 +52,7 @@ import {
   listPublications,
   publish,
   PublicationConflictError,
+  PublicationOccupiedSlotError,
   PublicationCursorError,
   PublicationInputError,
   readPublication,
@@ -264,6 +265,7 @@ function communityProblem(error: unknown): never {
     throw new ProblemError('invalid_request');
   if (error instanceof PublicationCursorError)
     throw new ProblemError(error.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
+  if (error instanceof PublicationOccupiedSlotError) throw new ProblemError('conflict');
   if (error instanceof PublicationConflictError) throw new ProblemError('not_found');
   if (error instanceof SpaceConflictError || error instanceof RealmConflictError)
     throw new ProblemError('precondition_failed');
