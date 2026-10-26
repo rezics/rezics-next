@@ -13,6 +13,7 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
+  mintReadTime,
   principalCommandIdentity,
   runCommand,
   type CommandAttempt,
@@ -74,6 +75,13 @@ export function mediaCropFragment(crop: readonly (number | null)[] | null): stri
   const values = crop as readonly number[];
   if (values[2]! < 1 || values[3]! < 1) throw new TypeError('Invalid stored media crop');
   return `xywh=${values.join(',')}`;
+}
+
+export class MediaImportConflictError extends Error {
+  constructor() {
+    super('The imported source is fenced or changed during preparation');
+    this.name = 'MediaImportConflictError';
+  }
 }
 
 async function validatePlatform(client: AccessClient): Promise<boolean> {
@@ -209,14 +217,16 @@ export async function importMediaFromUrl(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      const before = await fence(deps, tuple, context.deadline);
-      if (before.takenDown) throw new GrantDeniedError();
       const sourceProof = await sourceAuthority.prepare!(attempt);
       const creationProof = await base.prepare!(attempt);
+      // Establish both current permissions before disclosing a source state conflict.
+      const before = await fence(deps, tuple, context.deadline);
+      if (before.takenDown) throw new MediaImportConflictError();
       // Trusted source reference recheck immediately before target checkout.
       // A later governance change remains effective at every final disclosure.
       const current = await fence(deps, tuple, context.deadline);
-      if (current.takenDown || current.securityRevision !== before.securityRevision) throw new GrantDeniedError();
+      if (current.takenDown || current.securityRevision !== before.securityRevision)
+        throw new MediaImportConflictError();
       // Keep both native proofs private and bind their composite to this attempt.
       const proof = Object.freeze({});
       proofs.set(proof, { attempt, sourceProof, creationProof });
@@ -317,7 +327,8 @@ export async function readMediaImportStatus(
     },
   );
   const row = await anchoredRead(deps, route, context.deadline, async (client) => {
-    if (!(await check(client))) return null;
+    const time = await mintReadTime(client, deps.clock);
+    if (!(await check(client, time))) return null;
     const [current] = await readStatus.run(client, { route, media_id: id });
     return current ?? null;
   });

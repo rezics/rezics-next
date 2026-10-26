@@ -56,8 +56,13 @@ test('source documents fence race and imported cover API outcomes remain red wit
   expect(trace.writes.every(w => w.partition === c.partition && w.transactionId === c.transactionId)).toBe(true);
   success(await driver.exact('importer', c.documentId, c.revision));
   const manual = await driver.adoptManual();
-  for (const recordRevision of ['native-revision-2', 'unversioned']) {
-    const refreshKey = key(); success(await driver.refresh('importer', { ...input, recordRevision }, refreshKey));
+  // An unchanged statement from the same tuple resolves to its existing contribution; a source revision is recorded
+  // with the document it changed.
+  const revised = fromPlainText('Full source summary: revised at the source.');
+  for (const [recordRevision, document] of [['native-revision-2', revised], ['unversioned', input.document]] as const) {
+    const refreshKey = key();
+    const digest = sha(new TextEncoder().encode(serializeDocument(document)));
+    success(await driver.refresh('importer', { ...input, recordRevision, document, digest }, refreshKey));
     expect((await driver.contribution(refreshKey)).provenance.recordRevision).toBe(recordRevision);
     expect(await driver.adopted()).toBe(manual);
   }

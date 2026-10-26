@@ -1,13 +1,11 @@
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
-import sharp from 'sharp';
 import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { fetchSourceImage, SourceImageRejection } from './fetch-source-image.ts';
-import { ImageCropOutOfBoundsRejection, ImageDecodeRejection, transformImage } from './image-transform.ts';
 import { tupleRoute } from './imported-contract.ts';
-import { mediaCropFragment, mediaCropTuple, type MediaImportDependencies } from './media-import.ts';
+import { mediaCropFragment, type MediaImportDependencies } from './media-import.ts';
 import type { MediaStorage } from './media-storage.ts';
 import { readFences } from './source-fences.ts';
 import readWork from './read-import-media-work.sql';
@@ -36,6 +34,57 @@ const processable = (row: Work | null | undefined): row is Work =>
   !row.taken_down;
 const evidence = (row: Work) =>
   JSON.stringify([row.source_url, row.credit, row.provenance, row.crop, row.focal_x, row.focal_y, row.uploader_id]);
+
+function storedOriginalMediaType(bytes: Uint8Array): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  )
+    return 'image/png';
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  )
+    return 'image/gif';
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  )
+    return 'image/webp';
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70 &&
+    ((bytes[8] === 0x61 && bytes[9] === 0x76 && bytes[10] === 0x69 && bytes[11] === 0x66) ||
+      (bytes[8] === 0x61 && bytes[9] === 0x76 && bytes[10] === 0x69 && bytes[11] === 0x73))
+  )
+    return 'image/avif';
+  // Do not use this metadata fallback to accept the bytes. The shared Sharp job
+  // decides whether the original can produce a publishable variant.
+  return 'image/jpeg';
+}
 
 /** Trusted native step body, registered by the single content worker. No actor or
  * remote/destination facts are accepted in its input. The media row is the durable
@@ -121,21 +170,12 @@ export async function processImportedMedia(
         if (code === null) {
           try {
             fetched = await fetchSourceImage(row.source_url!, deps.fetchConfig);
-            // Sharp inspects actual bytes; a complete decode and re-encode through
-            // the shared pipeline enforces its 40 MP bound, never remote metadata.
-            await transformImage(
-              fetched.bytes,
-              mediaCropTuple(row.crop === null ? undefined : mediaCropFragment(row.crop)),
-            );
-            const metadata = await sharp(fetched.bytes, { limitInputPixels: 40_000_000 }).metadata();
-            const format = metadata.format === 'heif' && metadata.compression === 'av1' ? 'avif' : metadata.format;
-            if (!['avif', 'gif', 'jpeg', 'png', 'webp'].includes(format ?? ''))
-              throw new SourceImageRejection('source-format');
-            mediaType = `image/${format}`;
+            // Keep the fetched bytes as an untrusted upload. The shared image
+            // worker performs the bounded Sharp decode and publishes only its
+            // re-encoded variants; failed decodes transition uploaded -> rejected.
+            mediaType = storedOriginalMediaType(fetched.bytes);
           } catch (error) {
             if (error instanceof SourceImageRejection) code = error.code;
-            else if (error instanceof ImageCropOutOfBoundsRejection) code = 'crop_out_of_bounds';
-            else if (error instanceof ImageDecodeRejection) code = 'source-format';
             else throw error;
           }
         }

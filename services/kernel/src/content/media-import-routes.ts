@@ -10,6 +10,7 @@ import type { mediaModerationRoutes } from './media-moderation-routes.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import {
   importMediaFromUrl,
+  MediaImportConflictError,
   readMediaImportStatus,
   type MediaImportDependencies,
   type MediaImportFetchConfig,
@@ -39,6 +40,7 @@ async function importOperation<T>(operation: () => Promise<T>): Promise<T> {
     return await operation();
   } catch (error) {
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+    if (error instanceof MediaImportConflictError) throw new ProblemError('conflict');
     if (
       error instanceof TypeError &&
       [
@@ -77,6 +79,7 @@ export function mediaImportRoutes(
           202: withHeaders(MediaImportReceiptSchema, { [SESSION_HEADER]: t.String() }),
           ...failures,
           403: problemSchema('forbidden'),
+          409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict', 'too_many_events'),
           429: problemSchema('rate_limited'),
           503: problemSchema(
