@@ -6,5 +6,5 @@ const driver = pathToFileURL(resolve(directory, 'command-admission-outcome-drive
 process.env.COMMAND_ADMISSION_DRIVER_MODULE = driver;
 
 // Loading the kernel module graph is not part of the first case's budget: it takes seconds on a loaded host.
-await import(driver);
+await import('./command-admission-outcome-driver.ts');
 await import('../../../../specs/command-admission-outcomes.test.ts');
