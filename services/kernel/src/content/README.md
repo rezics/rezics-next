@@ -56,11 +56,14 @@ Every read that returns a subject for display (subject read, search hits, collec
     { "format": "avif", "width": 320 },
     { "format": "webp", "width": 320 }
   ],
+  "focalPoint": { "x": 0.5, "y": 0.5 },
   "credit": { "rightsHolder": "…", "via": { "name": "…", "url": "https://…" }, "license": "…" }
 }
 ```
 
 or `null` when the subject has no cover the reader may see. A missing, rejected, erased, taken-down or withheld cover is `null` (or carries a `withheld` reason for suitability), never an error, so a page never fails or waits because of an image. The summary is read with the subject in the same batched read; it never costs one request per item.
+
+The summary's width and height describe the authored crop when one exists, or the original otherwise. Its ThumbHash is base64, its colour is the stored average colour, and variant entries are ordered by ascending width. `focalPoint` is null when no focal point was authored.
 
 ### Serving
 
