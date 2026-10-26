@@ -24,6 +24,9 @@ import type { Capture, Cost } from '../support/growth-cost.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import type { ImportIdentity } from './identity-fixture.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { DBOSExecutor } from '@dbos-inc/dbos-sdk/internal/dbos-executor';
+import { globalParams } from '@dbos-inc/dbos-sdk/internal/utils';
+import { wfQueueRunner, type WorkflowQueue } from '@dbos-inc/dbos-sdk/internal/wfqueue';
 import { composeWork } from '../../src/work/registry.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -502,7 +505,8 @@ async function workerHost(): Promise<RpcHost> {
   const names: string[] = [];
   const calls: { workflowId: string; name: string; mediaId: string }[] = [];
   const network: string[] = [];
-  let caseStart = 0;
+  let drainStart = 0;
+  let drainMaximum = 0;
   const registerStep = DBOS.registerStep;
   const registerWorkflow = DBOS.registerWorkflow;
   // Observe registration and executed native steps while delegating unchanged to
@@ -523,6 +527,7 @@ async function workerHost(): Promise<RpcHost> {
     return Reflect.apply(registerStep, DBOS, [
       name
         ? async (...args: any[]) => {
+            if (calls.length - drainStart >= drainMaximum) throw new Error('Exceeded bounded native dispatch');
             calls.push({ workflowId: DBOS.workflowID!, name, mediaId: args[0].mediaId });
             return Reflect.apply(fn, undefined, args);
           }
@@ -547,6 +552,14 @@ async function workerHost(): Promise<RpcHost> {
   }) as typeof fetch;
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   let ending: Promise<void> | undefined;
+  // Launch starts the queue poller. Keep its promise so a measured import can
+  // stop the poller and wait until an in-flight sweep has left the pool.
+  const startDispatchLoop = wfQueueRunner.dispatchLoop.bind(wfQueueRunner);
+  let queueLoop: Promise<void> = Promise.resolve();
+  wfQueueRunner.dispatchLoop = (executor, listenQueues, maxConcurrentQueueDispatches) => {
+    queueLoop = startDispatchLoop(executor, listenQueues, maxConcurrentQueueDispatches);
+    return queueLoop;
+  };
   const close = () =>
     (ending ??= (async () => {
       try {
@@ -583,11 +596,44 @@ async function workerHost(): Promise<RpcHost> {
     DBOS.registerStep = registerStep;
     DBOS.registerWorkflow = registerWorkflow;
     await work.launch();
+    const executor = DBOSExecutor.globalInstance;
+    if (!executor) throw new Error('Missing work executor');
+    // The timeout sweep issues a statement on a one-second timer. Leaving it on
+    // the measured pool makes the statement count follow wall-clock duration.
+    executor.systemDatabase.cancelTimedOutWorkflows = async () => [];
+    const effectsQueue = await DBOS.retrieveQueue('effects');
+    const importQueue = await DBOS.retrieveQueue('import');
+    if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
+    let queuesQuiet = false;
+    const quietQueues = async () => {
+      if (queuesQuiet) return;
+      wfQueueRunner.stop();
+      await queueLoop.catch(() => undefined);
+      queuesQuiet = true;
+    };
+    const admit = async (queue: WorkflowQueue, workflowId: string) => {
+      const ownerXid = randomUUID();
+      const claimed = await executor.systemDatabase.findAndMarkStartablePartitionedWorkflows(
+        queue,
+        executor.executorID,
+        globalParams.appVersion,
+        1,
+        ownerXid,
+      );
+      if (claimed.length !== 1 || claimed[0] !== workflowId) throw new Error(`Missing queued workflow ${workflowId}`);
+      await executor.dispatchDequeuedWorkflows([workflowId], ownerXid);
+    };
     return {
       close,
       async call(method, input) {
         if (method === 'reset') {
-          caseStart = calls.length;
+          drainStart = calls.length;
+          drainMaximum = 0;
+          return null;
+        }
+        if (method === 'beginDrain') {
+          drainStart = calls.length;
+          drainMaximum = input.maxJobs;
           return null;
         }
         if (method === 'trace') return observer.trace(input.mediaId);
@@ -596,7 +642,7 @@ async function workerHost(): Promise<RpcHost> {
         const envelope = input.envelope as Envelope;
         const mediaId = input.mediaId as string;
         const run = async (source: Envelope, effect: string, kind: 'importFromUrl' | 'image') => {
-          if (calls.length - caseStart >= 16) throw new Error('Exceeded bounded native dispatch');
+          if (calls.length - drainStart >= drainMaximum) throw new Error('Exceeded bounded native dispatch');
           const type =
             kind === 'image' ? 'com.rezics.content.media.uploaded.v1' : 'com.rezics.content.media.import-requested.v1';
           const index = source.events.findIndex((event) => event.subject === mediaId && event.type === type);
@@ -606,8 +652,37 @@ async function workerHost(): Promise<RpcHost> {
           const id = contentWorkWorkflowId(source, index, kind, kind === 'image' ? undefined : mediaId);
           return DBOS.retrieveWorkflow(id).getResult();
         };
-        if (method === 'measure')
-          return (await capture(database, () => run(envelope, 'content_url_import', 'importFromUrl'))).capture;
+        if (method === 'measure') {
+          drainStart = calls.length;
+          drainMaximum = 16;
+          // Queue polling and result polling share this pool, and a sweep walks
+          // every enqueued partition head. Either one adds statements as the
+          // measured import waits or as unrelated heads accumulate. Stop the
+          // poller, drop those heads, and claim this import directly.
+          await quietQueues();
+          await database.admin.query(
+            `UPDATE dbos.workflow_status
+                SET status = 'CANCELLED',
+                    updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+              WHERE status = 'ENQUEUED'`,
+          );
+          return (
+            await capture(database, async () => {
+              if (calls.length - drainStart >= drainMaximum) throw new Error('Exceeded bounded native dispatch');
+              const index = envelope.events.findIndex(
+                (event) => event.subject === mediaId && event.type === 'com.rezics.content.media.import-requested.v1',
+              );
+              if (index < 0) throw new Error('Missing native dispatch event');
+              await work!.effects.enqueue([envelope]);
+              const effectId = effectWorkflowId(envelope, index, 'content_url_import');
+              await admit(effectsQueue, effectId);
+              await DBOS.retrieveWorkflow(effectId).getResult();
+              const importId = contentWorkWorkflowId(envelope, index, 'importFromUrl', mediaId);
+              await admit(importQueue, importId);
+              return DBOS.retrieveWorkflow(importId).getResult();
+            })
+          ).capture;
+        }
         await run(envelope, 'content_url_import', 'importFromUrl');
         const trace = observer.trace(mediaId);
         if ((trace.anchors[mediaId] ?? []).length) {
