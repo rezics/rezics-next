@@ -25,8 +25,10 @@ export interface AttemptFence {
 export type LandingRequest = AttemptRef & {
   branch: string;
   worktree: string;
-  /** Path patterns the brief declared; changes outside them fail at the scope stage. */
+  /** Path patterns the brief declared: where the work is expected. A worker may change files outside them. */
   declaredPaths: readonly string[];
+  /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
+  protectedPaths?: readonly string[];
   gate: readonly string[];
 };
 
