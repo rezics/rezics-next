@@ -43,28 +43,29 @@ function yearsFrom(base: number, years: number): Date {
   date.setUTCFullYear(date.getUTCFullYear() + years);
   return date;
 }
-async function bearer() {
+async function bearer(at: Date) {
+  const issuedAt = Math.floor(at.getTime() / 1000);
   return new SignJWT({
     client_id: owner.clientId,
     scope: owner.scopes.join(' '),
     authn_epoch: owner.authnEpoch,
-    auth_time: Math.floor(Date.now() / 1000),
+    auth_time: issuedAt,
     amr: ['pwd'],
   })
     .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'kernel-clock' })
     .setIssuer(issuer)
     .setAudience(audience)
     .setSubject(owner.accountId)
-    .setIssuedAt()
-    .setExpirationTime('5m')
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + 300)
     .sign(signingKey);
 }
-async function call(method: string, path: string, body?: unknown) {
+async function call(method: string, path: string, body?: unknown, tokenTime = clock()) {
   const response = await app.handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${await bearer()}`,
+        authorization: `Bearer ${await bearer(tokenTime)}`,
         ...(body === undefined
           ? {}
           : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
@@ -156,6 +157,23 @@ test.serial('a create and the following read share a kernel clock two years ahea
     mediaId,
   ]);
   expect(row.rowCount).toBe(1);
+});
+
+test.serial('a wall-time token is expired on the kernel clock two years ahead of PostgreSQL', async () => {
+  kernelNow = yearsFrom(databaseNow, 2);
+  const response = await call(
+    'POST',
+    '/v1/media',
+    {
+      containerId: thread,
+      purpose: 'post-image',
+      mediaType: 'image/png',
+      byteCount: 256,
+      sha256: hash,
+    },
+    new Date(),
+  );
+  expect(response.status).toBe(401);
 });
 
 function normalize(statement: string): string {
