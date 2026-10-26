@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { Pool } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess as createPermissionAccess, permissionEvidenceDeadline } from '../../src/access/permission.ts';
 import { creationCapability, parentCreationAuthorization } from '../../src/access/parent-creation.ts';
@@ -323,9 +324,9 @@ async function resetSeededRows(): Promise<void> {
   seededTestResourceIds.length = 0;
 }
 
-async function prepare(growthDb: GrowthDatabase, resource = target): Promise<unknown> {
+async function prepare(pool: Pool, resource = target): Promise<unknown> {
   const evidence = await permissions.prepare!(actor, action, resource, {
-    pool: growthDb.pool,
+    pool,
     deadline: Date.now() + 5_000,
   });
   if (permissionEvidenceDeadline(evidence) === undefined)
@@ -337,7 +338,7 @@ test('Permission preparation stays within its bound as O grows', async () => {
   await resetSeededRows();
   const report = await checkGrowth(
     db!,
-    growth('Permission preparation stays within its bound as O grows', async (growthDb) => prepare(growthDb)),
+    growth('Permission preparation stays within its bound as O grows', async (growthDb) => prepare(growthDb.pool)),
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
   expect(report.samples.every(({ cost }) => cost.statements === 3)).toBe(true);
@@ -345,29 +346,21 @@ test('Permission preparation stays within its bound as O grows', async () => {
 
 test('Final permission check stays within its bound as G grows', async () => {
   await resetSeededRows();
-  const evidenceByRun = new Map<number, unknown>();
-  const check = growth('Final permission check stays within its bound as G grows', async (growthDb, _scale, run) => {
-    const evidence = evidenceByRun.get(run);
-    if (!evidence) throw new Error(`No prepared permission evidence for run ${run}`);
-    const client = await growthDb.pool.connect();
-    try {
-      if (!(await permissions.authorize(client, actor, action, target, evidence)))
-        throw new Error('The bounded resource grant did not authorize its actor');
-    } finally {
-      client.release();
-    }
-  });
-  const grow = check.grow;
-  await checkGrowth(db!, {
-    ...check,
-    grow: async (growthDb, scale, previous) => {
-      await grow(growthDb, scale, previous);
-      const scaleIndex = scale === 1 ? 0 : scale === 8 ? 1 : 2;
-      const firstRun = scaleIndex * 4;
-      for (let run = firstRun; run < firstRun + 4; run++) evidenceByRun.set(run, await prepare(growthDb));
-    },
-  });
-  expect(evidenceByRun.size).toBe(12);
+  await checkGrowth(
+    db!,
+    growth('Final permission check stays within its bound as G grows', async (growthDb) => {
+      // Evidence lives one second, so it is prepared right before the check. The uninstrumented pool keeps the
+      // preparation's statements out of the measured window, which holds only the final formula.
+      const evidence = await prepare(growthDb.admin);
+      const client = await growthDb.pool.connect();
+      try {
+        if (!(await permissions.authorize(client, actor, action, target, evidence)))
+          throw new Error('The bounded resource grant did not authorize its actor');
+      } finally {
+        client.release();
+      }
+    }),
+  );
 }, 85_000);
 
 test('Parent creation authorization stays within its bound as G grows', async () => {
