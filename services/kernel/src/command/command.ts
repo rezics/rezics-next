@@ -130,7 +130,7 @@ export type CommandOutcome<T> = {
 };
 
 declare const authoritativeTime: unique symbol;
-/** Only runCommand can mint a time. Its value is usable for the live attempt only. */
+/** Opaque authoritative time minted for one live command attempt or one read. */
 export type AuthoritativeTime = { readonly [authoritativeTime]: true };
 export type CommandAttempt = Readonly<{
   partition: number;
@@ -210,6 +210,11 @@ async function mintTime(client: CommandTransaction, clock?: () => Date): Promise
   const time = Object.freeze({}) as AuthoritativeTime;
   times.set(time, row.at);
   return time;
+}
+
+/** Mints an authoritative time for a read outside a command, with no command context. */
+export function mintReadTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime> {
+  return mintTime(client, clock);
 }
 
 export class IdempotencyConflictError extends Error {

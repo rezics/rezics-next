@@ -12,14 +12,22 @@ import { createAccess as createPermissionAccess } from '../../src/access/permiss
 import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { createAccountsWorkModule, enqueueMembership } from '../../src/access/membership-work.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { recordResourceDenial } from '../../src/access/resource-denials.ts';
+import { recordResourceDenial, ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { createRealmMembership } from '../../src/community/membership.ts';
+import { createRealmParticipationCheck } from '../../src/community/participation.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
-import { runCommand, principalCommandIdentity } from '../../src/command/command.ts';
-import { accessCommandAuthorization } from '../../src/request/access.ts';
+import {
+  authoritativeTimeValue,
+  commandTime,
+  currentCommand,
+  mintReadTime,
+  principalCommandIdentity,
+  runCommand,
+} from '../../src/command/command.ts';
+import { accessCommandAuthorization, type AccessClient } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
@@ -442,6 +450,211 @@ test.serial('a Realm ban denial overrides public participation', async () => {
   });
   expect(denied.response.status).toBe(403);
   expect(denied.value).toMatchObject({ code: 'forbidden', effect_status: 'not_applicable' });
+});
+
+const clockStatement = 'SELECT clock_timestamp()::text AS at';
+
+function clientReplacingClockRead(at: string): AccessClient {
+  const source = pool as unknown as AccessClient;
+  return {
+    query: ((...args: unknown[]) => {
+      const first = args[0];
+      const text =
+        typeof first === 'string'
+          ? first
+          : typeof first === 'object' && first !== null && 'text' in first && typeof first.text === 'string'
+            ? first.text
+            : '';
+      if (text.replace(/\s+/g, ' ').trim().replace(/;$/, '') === clockStatement)
+        return Promise.resolve({ rows: [{ at }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] });
+      return (source.query as (...queryArgs: unknown[]) => Promise<unknown>)(...args);
+    }) as AccessClient['query'],
+  };
+}
+
+function accessObservingTime(observed: { action: string; at: string | null; client: AccessClient }[]) {
+  return {
+    ...access,
+    async authorize(
+      client: Parameters<typeof access.authorize>[0],
+      checkedActor: Parameters<typeof access.authorize>[1],
+      action: Parameters<typeof access.authorize>[2],
+      resource: Parameters<typeof access.authorize>[3],
+      evidence: Parameters<typeof access.authorize>[4],
+      time: Parameters<typeof access.authorize>[5],
+    ) {
+      observed.push({ action, at: time ? authoritativeTimeValue(time) : null, client });
+      return access.authorize(client, checkedActor, action, resource, evidence, time);
+    },
+  };
+}
+
+test.serial(
+  "a Realm participation check outside a command evaluates realm:participate and realm:read at one authoritative time from the kernel clock, with no interception of another module's SQL",
+  async () => {
+    const owner = await personWithToken(`participation_time_owner_${crypto.randomUUID()}`, scopes);
+    const member = await personWithToken(`participation_time_member_${crypto.randomUUID()}`, scopes);
+    await grant(owner.accountId, ['realm:create', 'space:create']);
+    const space = await createSpace(owner, `Timed participation host ${crypto.randomUUID()}`);
+    const realm = await protectRealm(
+      owner,
+      await createRealm(owner, space.spaceId, 'public', `Timed participation Realm ${crypto.randomUUID()}`),
+    );
+    const joined = await joinMember(realm.realmId, member, owner);
+    expect(joined).toMatchObject({ status: 'completed', accountId: member.accountId });
+    const actor = await access.authenticate(member.bearer, { pool, deadline: Date.now() + 30_000 });
+    const fixed = new Date('2035-04-03T02:01:00.000Z');
+    const client = clientReplacingClockRead('1999-01-01 00:00:00+00');
+    const observed: { action: string; at: string | null; client: AccessClient }[] = [];
+    const allowed = await createRealmParticipationCheck({
+      pool,
+      access: accessObservingTime(observed),
+      clock: () => fixed,
+    })(client, { realmId: realm.realmId, actor });
+
+    expect(allowed).toBe(true);
+    expect(observed.map((entry) => entry.action)).toEqual(['realm:participate', 'realm:read']);
+    expect(observed.every((entry) => entry.client === client)).toBe(true);
+    expect(new Set(observed.map((entry) => entry.at)).size).toBe(1);
+    expect(Date.parse(observed[0]?.at ?? '')).toBe(fixed.getTime());
+    expect(Date.parse(observed[0]?.at ?? '')).not.toBe(Date.parse('1999-01-01T00:00:00.000Z'));
+  },
+);
+
+test.serial("inside a command both checks use the command's time", async () => {
+  const owner = await personWithToken(`participation_command_owner_${crypto.randomUUID()}`, scopes);
+  const member = await personWithToken(`participation_command_member_${crypto.randomUUID()}`, scopes);
+  await grant(owner.accountId, ['realm:create', 'space:create']);
+  const space = await createSpace(owner, `Command participation host ${crypto.randomUUID()}`);
+  const realm = await protectRealm(
+    owner,
+    await createRealm(owner, space.spaceId, 'public', `Command participation Realm ${crypto.randomUUID()}`),
+  );
+  const joined = await joinMember(realm.realmId, member, owner);
+  expect(joined).toMatchObject({ status: 'completed', accountId: member.accountId });
+  const actor = await access.authenticate(member.bearer, { pool, deadline: Date.now() + 30_000 });
+  if (actor.kind !== 'account') throw new Error('Member authentication did not yield an account');
+  const fixed = new Date('2035-06-07T08:09:10.000Z');
+  const observed: { action: string; at: string | null; client: AccessClient }[] = [];
+  const resource = { route: routeOf(realm.realmId)!, id: realm.realmId };
+  const readClient = pool as unknown as AccessClient;
+  let sawCommandTime = false;
+  await runCommand(
+    pool,
+    {
+      partition: partitionOf(resource.route),
+      deadline: Date.now() + 30_000,
+      clock: () => fixed,
+      authorization: {
+        action: 'realm:participate',
+        resource,
+        denied: () => new Error('Realm participation command denied'),
+        async prepare(attempt) {
+          const allowed = await createRealmParticipationCheck({
+            pool,
+            access: accessObservingTime(observed),
+            clock: () => {
+              throw new Error('read clock consulted inside a command');
+            },
+          })(readClient, { realmId: realm.realmId, actor }, attempt.time);
+          expect(commandTime(readClient)).toBeUndefined();
+          expect(allowed).toBe(true);
+          expect(observed.map((entry) => entry.action)).toEqual(['realm:participate', 'realm:read']);
+          const at = authoritativeTimeValue(attempt.time);
+          expect(observed.every((entry) => entry.client === readClient && entry.at === at)).toBe(true);
+          expect(Date.parse(at)).toBe(fixed.getTime());
+          sawCommandTime = true;
+          return null;
+        },
+        async authorize(tx, attempt) {
+          expect(commandTime(tx)).toBe(attempt.time);
+          return 'execute';
+        },
+      },
+    },
+    async (tx, command) => {
+      expect(commandTime(tx)).toBe(command.time);
+      expect(currentCommand(tx).time).toBe(command.time);
+      const readTime = await mintReadTime(tx, () => new Date('1999-01-01T00:00:00.000Z'));
+      expect(commandTime(tx)).toBe(command.time);
+      expect(currentCommand(tx).time).toBe(command.time);
+      expect(readTime).not.toBe(command.time);
+      return {
+        value: null,
+        events: [{ type: 'com.rezics.fixture.created.v1', subject: realm.realmId, data: {} }],
+      };
+    },
+  );
+  expect(sawCommandTime).toBe(true);
+});
+
+test.serial('a mutation refuses a read time', async () => {
+  const owner = await personWithToken(`participation_read_time_owner_${crypto.randomUUID()}`, scopes);
+  await grant(owner.accountId, ['realm:create', 'space:create']);
+  const space = await createSpace(owner, `Read time participation host ${crypto.randomUUID()}`);
+  const realm = await createRealm(
+    owner,
+    space.spaceId,
+    'public',
+    `Read time participation Realm ${crypto.randomUUID()}`,
+  );
+  const actor = await access.authenticate(owner.bearer, { pool, deadline: Date.now() + 30_000 });
+  if (actor.kind !== 'account') throw new Error('Owner authentication did not yield an account');
+  const resource = { route: routeOf(realm.realmId)!, id: realm.realmId };
+  const fixed = new Date('2035-04-03T02:01:00.000Z');
+  const readClient = pool as unknown as AccessClient;
+  const readTime = await mintReadTime(readClient, () => fixed);
+  expect(Date.parse(authoritativeTimeValue(readTime))).toBe(fixed.getTime());
+  expect(commandTime(readClient)).toBeUndefined();
+  expect(() => currentCommand(readClient)).toThrow('No authorized live command transaction');
+  const denial = {
+    resource,
+    subjectId: owner.accountId,
+    subjectRole: '' as const,
+    action: 'realm:participate',
+    reason: 'realm_ban' as const,
+  };
+  await expect(recordResourceDenial(readClient, { ...denial, at: readTime })).rejects.toBeInstanceOf(
+    ResourceAccessWriteDeniedError,
+  );
+
+  const deadline = Date.now() + 30_000;
+  const authorization = await accessCommandAuthorization(
+    access,
+    actor,
+    'realm:manage',
+    resource,
+    { pool, deadline },
+    () => new Error('Realm ban command denied'),
+  );
+  await runCommand(
+    pool,
+    {
+      ...principalCommandIdentity(actor),
+      partition: partitionOf(resource.route),
+      deadline,
+      authorization,
+    },
+    async (tx, command) => {
+      const nested = await mintReadTime(tx, () => fixed);
+      expect(commandTime(tx)).toBe(command.time);
+      expect(currentCommand(tx).time).toBe(command.time);
+      expect(commandTime(tx)).not.toBe(nested);
+      expect(currentCommand(tx).time).not.toBe(nested);
+      expect(commandTime(tx)).not.toBe(readTime);
+      expect(currentCommand(tx).time).not.toBe(readTime);
+      await expect(recordResourceDenial(tx, { ...denial, at: nested })).rejects.toBeInstanceOf(
+        ResourceAccessWriteDeniedError,
+      );
+      await expect(recordResourceDenial(tx, { ...denial, at: readTime })).rejects.toBeInstanceOf(
+        ResourceAccessWriteDeniedError,
+      );
+      return {
+        value: null,
+        events: [{ type: 'com.rezics.fixture.created.v1', subject: realm.realmId, data: {} }],
+      };
+    },
+  );
 });
 
 test.serial('Realm participation stays bounded as Realms, members and grants grow', async () => {

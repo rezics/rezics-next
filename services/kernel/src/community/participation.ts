@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { createResourcePublicEligibility } from '../access/index.ts';
 import { grantGroupRole } from '../access/resource-group-grant.ts';
 import { requireResourceCommand, ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
-import { commandTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
+import { commandTime, mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import read from './realm-read.sql';
@@ -13,29 +13,16 @@ export type RealmParticipationCheck = (
   time?: AuthoritativeTime,
 ) => Promise<boolean>;
 
-function atTimeClient(client: AccessClient, at: string): AccessClient {
-  const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
-  const bounded = Object.create(client) as AccessClient;
-  bounded.query = ((...args: unknown[]) => {
-    const first = args[0];
-    const statement =
-      typeof first === 'string'
-        ? first
-        : typeof first === 'object' && first !== null && 'text' in first && typeof first.text === 'string'
-          ? first.text
-          : '';
-    if (statement.replace(/\s+/g, ' ').trim().replace(/;$/, '') === 'SELECT clock_timestamp()::text AS at')
-      return Promise.resolve({ rows: [{ at }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] });
-    return query(...args);
-  }) as AccessClient['query'];
-  return bounded;
-}
-
 /** Checks participation and the independent Realm read anchor at one T.
  * The participation action uses its exact denial check. A protected Realm also
  * requires realm:read, while the single Realm head read supplies public eligibility.
+ * Outside a command, both checks share one read time from the kernel clock.
  */
-export function createRealmParticipationCheck(input: { pool: Pool; access: Access }): RealmParticipationCheck {
+export function createRealmParticipationCheck(input: {
+  pool: Pool;
+  access: Access;
+  clock?: () => Date;
+}): RealmParticipationCheck {
   return async (client, { realmId, actor }, time) => {
     const route = routeOf(realmId);
     if (route === null) return false;
@@ -61,16 +48,8 @@ export function createRealmParticipationCheck(input: { pool: Pool; access: Acces
       { ...resource, eligibility },
       context,
     );
-    const commandAttemptTime = time ?? commandTime(client);
-    let checkedClient = client;
-    let checkedTime = commandAttemptTime;
-    if (!checkedTime) {
-      const observed = await client.query('SELECT clock_timestamp()::text AS at');
-      const at = (observed as { rows?: readonly { at?: unknown }[] }).rows?.[0]?.at;
-      if (typeof at !== 'string' || !Number.isFinite(Date.parse(at))) return false;
-      checkedClient = atTimeClient(client, at);
-    }
-    if (!(await participationCheck(checkedClient, checkedTime))) return false;
+    const checkedTime = time ?? commandTime(client) ?? (await mintReadTime(client, input.clock));
+    if (!(await participationCheck(client, checkedTime))) return false;
     if (visibility === 'public') return true;
     if (visibility !== 'protected') return false;
 
@@ -91,7 +70,7 @@ export function createRealmParticipationCheck(input: { pool: Pool; access: Acces
       { ...resource, eligibility: readEligibility },
       context,
     );
-    return readCheck(checkedClient, checkedTime);
+    return readCheck(client, checkedTime);
   };
 }
 
