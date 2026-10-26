@@ -8,6 +8,8 @@ import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readThreadPage, type ThreadPost } from '../../threads/reads';
+import type { PageAuthors } from '../../identity/read';
+import { Byline } from '../../threads/byline';
 import { ThreadReactions } from '../../threads/thread-reactions';
 import {
   erasePost,
@@ -30,7 +32,7 @@ export const Route = createFileRoute('/threads/$id')({
 });
 
 function ThreadPage() {
-  const { thread, posts: loadedPosts, idempotencyKey, viewerId, verification } = Route.useLoaderData();
+  const { thread, posts: loadedPosts, idempotencyKey, viewerId, verification, authors, now } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
@@ -65,6 +67,8 @@ function ThreadPage() {
                   anchorId={firstPost ? `thread-${thread.id}` : `post-${post.id}`}
                   onChange={updatePost}
                   post={post}
+                  authors={authors}
+                  now={now}
                   counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
                   returnTo={returnTo}
                   signedIn={session === 'signed-in'}
@@ -129,6 +133,8 @@ function postDeleteFailureText(failure: WriteFailure): string {
 
 function PostSlot({
   post,
+  authors,
+  now,
   viewerId,
   onChange,
   anchorId,
@@ -140,6 +146,8 @@ function PostSlot({
   verification,
 }: {
   post: ThreadPost;
+  authors: PageAuthors;
+  now: string;
   viewerId: string | undefined;
   onChange: (post: ThreadPost) => void;
   anchorId: string;
@@ -209,11 +217,12 @@ function PostSlot({
     <li id={anchorId} className="py-6">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex min-h-8 flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <time dateTime={post.createdAt} title={fullDateTime(post.createdAt)}>
-            {new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(
-              new Date(post.createdAt),
-            )}
-          </time>
+          <Byline
+            author={authors?.[post.authorId]}
+            createdAt={post.createdAt}
+            now={now}
+            showAuthor={authors !== null}
+          />
           {post.revisedAt ? (
             <>
               <span aria-hidden="true">·</span>

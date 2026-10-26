@@ -352,9 +352,10 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Board page (`/<locale>/boards/<id>`)
 
-- **Touches:** Root preferences/D and public board plus thread-page K reads; preserve kernel thread order and pass
-  `next` as the paging cursor
-- **Bound:** ≤2 K (board and one page of at most s ≤ 100 threads), ≤1 D, 0 R/A; work and buffered JSON are O(s)
+- **Touches:** Root preferences/D and public board plus thread-page K reads started together, then one batched
+  identity read for the page's authors; preserve kernel thread order and pass `next` as the paging cursor
+- **Bound:** ≤3 K (board and one page of at most s ≤ 100 threads, then at most one identity read), ≤1 D, 0 R/A;
+  work and buffered JSON are O(s)
 - **Growth check:** `tests/request-cost.test.ts`: `board page stays within its bound as s grows`
 
 ### New-thread page (`/<locale>/boards/<id>/new`)
@@ -366,13 +367,21 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Thread page (`/<locale>/threads/<id>`)
 
-- **Touches:** Root preferences/D and thread plus post-page K reads started together; render each page body locally with
-  `DocumentBody`. Reactions add no read, because counts and the viewer's kind come with the thread and post-page reads.
+- **Touches:** Root preferences/D and thread plus post-page K reads started together, then one batched identity read
+  for the page's authors; render each page body locally with `DocumentBody`. Reactions add no read, because counts and
+  the viewer's kind come with the thread and post-page reads.
   A signed-in page read resolves the session credential once and sends it on those two reads
-- **Bound:** ≤2 K started together (thread and one page of at most s ≤ 100 posts), ≤1 D, 0 R/A; work is O(total body
-  size of the page), each body capped at 2 MiB (ADR-0036)
+- **Bound:** ≤3 K (thread and one page of at most s ≤ 100 posts started together, then at most one identity read),
+  ≤1 D, 0 R/A; work is O(total body size of the page), each body capped at 2 MiB (ADR-0036)
 - **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
-- **Growth check:** `tests/reactions-cost.test.ts`: `thread page reads stay within their bound as s grows`
+  `tests/reactions-cost.test.ts`: `thread page reads stay within their bound as s grows`
+
+### Page authors
+
+- **Touches:** one `GET /v1/accounts?ids=` per thread or board page view, for the page's distinct author ids.
+- **Bound:** at most 1 K per page view (0 when the page has no authors) whatever the number of posts, threads or
+  authors on it (at most 100 ids, one call); 0 D, R and A.
+- **Growth check:** `tests/bylines-cost.test.ts`: a thread or board page reads its authors in one request at every size
 
 ### Reaction
 
@@ -496,7 +505,7 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** `tests/composer-media.test.ts`:
   `a member adds an image to a reply, which uploads through the site and is sent with its media id` records the reserve,
   the put, the state reads and `mediaIds`
-- **Growth check:** `tests/new-thread-media-cost.test.ts`: `a new thread's opening image keeps K/D/R/A fixed as stored media grows`
+  `tests/new-thread-media-cost.test.ts`: `a new thread's opening image keeps K/D/R/A fixed as stored media grows`
 
 ### Subject page (`/<locale>/subjects/<id>`)
 

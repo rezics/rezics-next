@@ -1,16 +1,16 @@
 {
   "publishedLogs": [
     {
-      "id": "01a17973-182e-72b9-8423-5592bc9a17b0",
-      "accountId": "01a17972-7eab-7516-90e0-55928f8396cc",
-      "subjectId": "01a17973-16a7-7485-ad5f-692b696c34bc",
+      "id": "01a179cd-a835-71cb-81af-2f34b53f0cca",
+      "accountId": "01a179cc-e32d-72d1-92fa-2f34411cae21",
+      "subjectId": "01a179cd-a550-7319-a12f-f8caa75d7417",
       "sessionState": "active",
       "startedAt": "2026-10-26T18:22:28.378Z",
       "completedAt": null,
       "note": "Halfway through. The summer chapters are slow and exact; I am reading them on the train.",
       "publishedAt": "2026-10-26T18:22:28.397Z",
-      "subject": { "id": "01a17973-16a7-7485-ad5f-692b696c34bc", "type": "schema:Book", "label": "Kokoro" },
-      "account": { "id": "01a17972-7eab-7516-90e0-55928f8396cc", "handle": "mira", "displayName": "Mira Okabe" }
+      "subject": { "id": "01a179cd-a550-7319-a12f-f8caa75d7417", "type": "schema:Book", "label": "Kokoro" },
+      "account": { "id": "01a179cc-e32d-72d1-92fa-2f34411cae21", "handle": "mira", "displayName": "Mira Okabe" }
     }
   ],
   "next": null,

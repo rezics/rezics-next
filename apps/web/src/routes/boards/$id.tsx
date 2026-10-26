@@ -3,6 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readBoardPage } from '../../threads/reads';
 import { SignInPrompt } from '../../threads/composer';
+import { Byline } from '../../threads/byline';
 import { ClosedErrorPage } from '../../shell/closed';
 import { PageHeading } from '../../shell/page-heading';
 
@@ -17,7 +18,7 @@ export const Route = createFileRoute('/boards/$id')({
 });
 
 function BoardPage() {
-  const { board, threads } = Route.useLoaderData();
+  const { board, threads, authors, now } = Route.useLoaderData();
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
   const id = Route.useParams().id;
@@ -51,6 +52,12 @@ function BoardPage() {
                 >
                   {thread.title ?? m.threads_untitled()}
                 </Link>
+                <Byline
+                  author={authors?.[thread.authorId]}
+                  createdAt={thread.createdAt}
+                  now={now}
+                  showAuthor={authors !== null}
+                />
               </li>
             ))}
           </ul>

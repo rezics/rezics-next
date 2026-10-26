@@ -1,44 +1,44 @@
 {
   "libraryEntries": [
     {
-      "subjectId": "01a17973-16a7-7485-ad5f-692b696c34bc",
+      "subjectId": "01a179cd-a550-7319-a12f-f8caa75d7417",
       "state": "in_progress",
       "revision": 2,
       "createdAt": "2026-10-26T18:22:28.098Z",
       "updatedAt": "2026-10-26T18:22:28.159Z",
-      "subject": { "id": "01a17973-16a7-7485-ad5f-692b696c34bc", "type": "schema:Book", "label": "Kokoro" }
+      "subject": { "id": "01a179cd-a550-7319-a12f-f8caa75d7417", "type": "schema:Book", "label": "Kokoro" }
     },
     {
-      "subjectId": "01a17973-16c2-72e7-9a5f-0e9cf0b4e244",
+      "subjectId": "01a179cd-a5a8-723b-9ab2-2c86bfb43e27",
       "state": "dropped",
       "revision": 1,
       "createdAt": "2026-10-26T18:22:28.154Z",
       "updatedAt": "2026-10-26T18:22:28.154Z",
-      "subject": { "id": "01a17973-16c2-72e7-9a5f-0e9cf0b4e244", "type": "schema:Book", "label": "I Am a Cat" }
+      "subject": { "id": "01a179cd-a5a8-723b-9ab2-2c86bfb43e27", "type": "schema:Book", "label": "I Am a Cat" }
     },
     {
-      "subjectId": "01a17973-16b8-72b1-8a30-87f646accf10",
+      "subjectId": "01a179cd-a58d-7634-adc7-70e7f87b55b2",
       "state": "paused",
       "revision": 1,
       "createdAt": "2026-10-26T18:22:28.136Z",
       "updatedAt": "2026-10-26T18:22:28.136Z",
-      "subject": { "id": "01a17973-16b8-72b1-8a30-87f646accf10", "type": "schema:Book", "label": "The Tale of Genji" }
+      "subject": { "id": "01a179cd-a58d-7634-adc7-70e7f87b55b2", "type": "schema:Book", "label": "The Tale of Genji" }
     },
     {
-      "subjectId": "01a17973-16af-735b-acb0-7ac5101e3fe4",
+      "subjectId": "01a179cd-a55f-7029-9adc-241603654940",
       "state": "planned",
       "revision": 1,
       "createdAt": "2026-10-26T18:22:28.118Z",
       "updatedAt": "2026-10-26T18:22:28.118Z",
-      "subject": { "id": "01a17973-16af-735b-acb0-7ac5101e3fe4", "type": "schema:Book", "label": "Norwegian Wood" }
+      "subject": { "id": "01a179cd-a55f-7029-9adc-241603654940", "type": "schema:Book", "label": "Norwegian Wood" }
     },
     {
-      "subjectId": "01a17972-cf6a-744f-aff2-67e3a1c29953",
+      "subjectId": "01a179cd-568e-7795-8842-14d6f31ad75b",
       "state": "completed",
       "revision": 1,
       "createdAt": "2026-10-26T18:22:28.077Z",
       "updatedAt": "2026-10-26T18:22:28.077Z",
-      "subject": { "id": "01a17972-cf6a-744f-aff2-67e3a1c29953", "type": "schema:Book", "label": "The Little Prince" }
+      "subject": { "id": "01a179cd-568e-7795-8842-14d6f31ad75b", "type": "schema:Book", "label": "The Little Prince" }
     }
   ],
   "next": null,

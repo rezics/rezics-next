@@ -17,6 +17,7 @@ import boardRecording from './recorded/board.json';
 import boardThreadsRecording from './recorded/board-threads.json';
 import threadRecording from './recorded/thread.json';
 import threadPostsRecording from './recorded/thread-posts.json';
+import accountsRecording from './recorded/accounts.json';
 import searchRecording from './recorded/search.json';
 import searchEmptyRecording from './recorded/search-empty.json';
 import searchTypedRecording from './recorded/search-typed.json';
@@ -163,6 +164,7 @@ async function selectRecording(
   if (request.method === 'GET' && pathname === `/v1/accounts/${storyViewerId}/preferences`)
     return recordings['settings-preferences'];
   if (request.method === 'GET') {
+    if (pathname === '/v1/accounts') return recordings.accounts;
     const subject = /^\/v1\/subjects\/([^/]+)$/.exec(pathname);
     if (subject?.[1]) {
       const id = decodeURIComponent(subject[1]);
@@ -245,6 +247,7 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'board-threads': boardThreadsRecording,
     thread: threadRecording,
     'thread-posts': threadPostsRecording,
+    accounts: accountsRecording,
     search: searchRecording,
     'search-empty': searchEmptyRecording,
     'search-typed': searchTypedRecording,

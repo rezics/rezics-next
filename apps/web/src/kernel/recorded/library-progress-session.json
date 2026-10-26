@@ -1,7 +1,7 @@
 {
   "progressSession": {
-    "id": "01a17973-181b-71f1-aef4-55929827edb2",
-    "subjectId": "01a17973-16a7-7485-ad5f-692b696c34bc",
+    "id": "01a179cd-a81e-7622-9c20-2f34da08ddc5",
+    "subjectId": "01a179cd-a550-7319-a12f-f8caa75d7417",
     "versionSubjectId": null,
     "mode": "cursor_position",
     "unit": "chapter",
@@ -14,7 +14,7 @@
     "revision": 2,
     "startedAt": "2026-10-26T18:22:28.378Z",
     "completedAt": null,
-    "subject": { "id": "01a17973-16a7-7485-ad5f-692b696c34bc", "type": "schema:Book", "label": "Kokoro" }
+    "subject": { "id": "01a179cd-a550-7319-a12f-f8caa75d7417", "type": "schema:Book", "label": "Kokoro" }
   },
   "status": 200
 }

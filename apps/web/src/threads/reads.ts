@@ -7,13 +7,14 @@ import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import { cookie } from '../session/cookies';
 import { kernelClient } from '../kernel/client';
-import { loadThreadPage, type ThreadPost } from './thread-page';
+import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
+import type { PageAuthors } from '../identity/read';
+import type { ThreadPost } from './thread-page';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
-type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type { ThreadPost };
 
@@ -55,18 +56,9 @@ function checkRead<T>(result: { error?: unknown; status?: number; data?: T | nul
 
 export const readBoardPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }): Promise<{ board: Board['board']; threads: ThreadPage }> => {
+  .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const client = kernelClient();
-    const query = data.cursor ? { query: { cursor: data.cursor } } : {};
-    const [boardResult, threadsResult] = await Promise.all([
-      client.boards({ id: data.id }).get(),
-      client.boards({ id: data.id }).threads.get(query),
-    ]);
-    const board = checkRead<Board>(boardResult, 'board');
-    const threads = checkRead<ThreadPage>(threadsResult, 'board threads');
-    if (board.board.id !== data.id) throw notFound();
-    return { board: board.board, threads };
+    return loadBoardPageWithAuthors(kernelClient(), data);
   });
 
 export const readNewThreadPage = createServerFn({ method: 'GET' })
@@ -90,11 +82,13 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       idempotencyKey: string;
       viewerId?: string;
       verification: VerificationConfig;
+      authors: PageAuthors;
+      now: string;
     }> => {
       setResponseHeader('cache-control', 'private, no-store');
       const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
       const request = getRequest();
-      const page = await loadThreadPage(kernelClient(), request, env as Partial<SessionEnv>, data, {
+      const page = await loadThreadPageWithAuthors(kernelClient(), request, env as Partial<SessionEnv>, data, {
         sitekey: config.TURNSTILE_SITE_KEY ?? '',
         scriptUrl:
           (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||

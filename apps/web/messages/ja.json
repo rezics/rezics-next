@@ -348,6 +348,8 @@
   "subject_value_none": "値なし",
   "subject_value_unknown": "不明な値",
   "subject_value_unlabelled": "ラベルのない項目",
+  "thread_author_deleted": "削除されたアカウント",
+  "thread_author_unknown": "不明なアカウント",
   "thread_content_copy_link": "リンクをコピー",
   "thread_content_delete": "削除",
   "thread_content_edit": "編集",

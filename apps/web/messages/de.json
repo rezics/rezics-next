@@ -348,6 +348,8 @@
   "subject_value_none": "Kein Wert",
   "subject_value_unknown": "Unbekannter Wert",
   "subject_value_unlabelled": "Unbeschrifteter Eintrag",
+  "thread_author_deleted": "Gelöschtes Konto",
+  "thread_author_unknown": "Unbekanntes Konto",
   "thread_content_copy_link": "Link kopieren",
   "thread_content_delete": "Löschen",
   "thread_content_edit": "Bearbeiten",

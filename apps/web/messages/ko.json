@@ -348,6 +348,8 @@
   "subject_value_none": "값 없음",
   "subject_value_unknown": "알 수 없는 값",
   "subject_value_unlabelled": "라벨이 없는 항목",
+  "thread_author_deleted": "삭제된 계정",
+  "thread_author_unknown": "알 수 없는 계정",
   "thread_content_copy_link": "링크 복사",
   "thread_content_delete": "삭제",
   "thread_content_edit": "수정",

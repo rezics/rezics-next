@@ -1,5 +1,5 @@
 {
-  "subject": "01a17972-cf6a-744f-aff2-67e3a1c29953",
+  "subject": "01a179cd-568e-7795-8842-14d6f31ad75b",
   "profile": "sha256:88921cc5e997e26013530d390f177bc1578f9fa06f5d81b895cdda09f67a73ea",
   "template": { "scope": "base", "key": "schema:CreativeWork" },
   "document": {
@@ -58,7 +58,7 @@
       "status": 200,
       "body": {
         "subject": {
-          "id": "01a17972-cf6a-744f-aff2-67e3a1c29953",
+          "id": "01a179cd-568e-7795-8842-14d6f31ad75b",
           "type": "schema:Book",
           "revision": 1,
           "release": "sha256:b4b908a62812149c815181a50e2934abcc8d0f1327d047575f88b6cbbb2597f8",
@@ -84,10 +84,10 @@
           "statements": {
             "schema:author": [
               {
-                "id": "adf46013-4e89-8293-8bf9-67e370bbb5a7",
+                "id": "49ef7acf-78bf-86a6-b4c2-14d6c05141b0",
                 "rank": "normal",
                 "property": { "id": "schema:author", "data_type": "wikibase-item" },
-                "value": { "type": "value", "content": "01a17972-cf1c-70c2-abbb-a07d61c7f8a0" },
+                "value": { "type": "value", "content": "01a179cd-5606-734c-94a7-0a8666ca46f2" },
                 "qualifiers": [],
                 "references": [],
                 "rezics": {
@@ -98,7 +98,7 @@
             ],
             "schema:datePublished": [
               {
-                "id": "50437121-98a0-82fc-894b-67e31725ff41",
+                "id": "d98b7f00-f849-8e27-bc9d-14d6bacbe065",
                 "rank": "normal",
                 "property": { "id": "schema:datePublished", "data_type": "time" },
                 "value": {
@@ -119,10 +119,10 @@
             ],
             "schema:genre": [
               {
-                "id": "3ac8ccd7-a3f3-8df2-81a8-67e3f866a9cd",
+                "id": "589e8eb6-e245-8716-bb07-14d697506d77",
                 "rank": "normal",
                 "property": { "id": "schema:genre", "data_type": "wikibase-item" },
-                "value": { "type": "value", "content": "01a17972-cf60-7227-b901-2e4283e078c0" },
+                "value": { "type": "value", "content": "01a179cd-5671-72af-93fc-a86232b8c4c2" },
                 "qualifiers": [],
                 "references": [],
                 "rezics": {
@@ -133,7 +133,7 @@
             ],
             "schema:inLanguage": [
               {
-                "id": "009643dc-9ab7-8ad7-acd5-67e3ef00e842",
+                "id": "91bba3b8-df70-867e-8289-14d611324469",
                 "rank": "normal",
                 "property": { "id": "schema:inLanguage", "data_type": "string" },
                 "value": { "type": "value", "content": "fr" },
@@ -196,7 +196,7 @@
               "zh-Hant": "語言"
             }
           },
-          "01a17972-cf1c-70c2-abbb-a07d61c7f8a0": {
+          "01a179cd-5606-734c-94a7-0a8666ca46f2": {
             "labels": {
               "de": "Antoine de Saint-Exupéry",
               "en": "Antoine de Saint-Exupéry",
@@ -208,7 +208,7 @@
               "zh-Hant": "安東尼·聖修伯里"
             }
           },
-          "01a17972-cf60-7227-b901-2e4283e078c0": {
+          "01a179cd-5671-72af-93fc-a86232b8c4c2": {
             "labels": {
               "de": "Fabel",
               "en": "Fable",
@@ -228,12 +228,12 @@
       "body": {
         "subjects": [
           {
-            "id": "01a17972-cf83-710c-8ae8-1695db2489fe",
+            "id": "01a179cd-56be-74c4-b289-1b674d07c8b9",
             "type": "bf:Instance",
             "labels": { "en": "Le Petit Prince (Gallimard, 1946)", "fr": "Le Petit Prince (Gallimard, 1946)" }
           },
           {
-            "id": "01a17972-cf78-73a5-8cce-97a1e590de48",
+            "id": "01a179cd-56ad-716a-b2ca-75f25a3d0300",
             "type": "bf:Instance",
             "labels": { "en": "The Little Prince (Reynal & Hitchcock, 1943)" }
           }

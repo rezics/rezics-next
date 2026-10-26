@@ -375,9 +375,9 @@ test(
   timeout,
 );
 
-// Start thread and post-page reads together without per-post reads.
+// Start thread and post-page reads together, then fill the page's bylines in one batch.
 test(
-  'a thread page makes at most two kernel reads, issued together',
+  'a thread page reads the thread and its posts together, then fills bylines with one batched identity read',
   async () => {
     const origin = await site();
     calls.length = 0;
@@ -391,12 +391,15 @@ test(
     try {
       const response = await fetch(`${origin}/en/threads/${id(2)}`);
       await response.text();
-      expect(calls.length).toBeLessThanOrEqual(2);
-      expect(calls).toEqual(expect.arrayContaining([read(`/v1/threads/${id(2)}`), read(`/v1/threads/${id(2)}/posts`)]));
+      expect(calls).toEqual([read(`/v1/threads/${id(2)}`), read(`/v1/threads/${id(2)}/posts`), read('/v1/accounts')]);
+      expect(calls.filter((call) => call.path === '/v1/accounts')).toHaveLength(1);
       expect(events.slice(0, 2).sort()).toEqual(
         [`start /v1/threads/${id(2)}`, `start /v1/threads/${id(2)}/posts`].sort(),
       );
-      expect(events.slice(2).every((event) => event.startsWith('answer '))).toBe(true);
+      expect(events.slice(2, 4).sort()).toEqual(
+        [`answer /v1/threads/${id(2)}`, `answer /v1/threads/${id(2)}/posts`].sort(),
+      );
+      expect(events.slice(4)).toEqual(['start /v1/accounts', 'answer /v1/accounts']);
       expect(response.status).toBe(200);
     } finally {
       clearTimeout(fallback);

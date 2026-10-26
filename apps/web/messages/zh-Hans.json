@@ -348,6 +348,8 @@
   "subject_value_none": "没有值",
   "subject_value_unknown": "未知的值",
   "subject_value_unlabelled": "未标记的条目",
+  "thread_author_deleted": "已删除的账号",
+  "thread_author_unknown": "未知账号",
   "thread_content_copy_link": "复制链接",
   "thread_content_delete": "删除",
   "thread_content_edit": "编辑",

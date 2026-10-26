@@ -348,6 +348,8 @@
   "subject_value_none": "Sin valor",
   "subject_value_unknown": "Valor desconocido",
   "subject_value_unlabelled": "Ficha sin etiqueta",
+  "thread_author_deleted": "Cuenta eliminada",
+  "thread_author_unknown": "Cuenta desconocida",
   "thread_content_copy_link": "Copiar enlace",
   "thread_content_delete": "Eliminar",
   "thread_content_edit": "Editar",

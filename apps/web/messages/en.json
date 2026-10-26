@@ -348,6 +348,8 @@
   "subject_value_none": "No value",
   "subject_value_unknown": "Unknown value",
   "subject_value_unlabelled": "Unlabelled subject",
+  "thread_author_deleted": "Deleted account",
+  "thread_author_unknown": "Unknown account",
   "thread_content_copy_link": "Copy link",
   "thread_content_delete": "Delete",
   "thread_content_edit": "Edit",

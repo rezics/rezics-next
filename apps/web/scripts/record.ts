@@ -494,6 +494,27 @@ async function recordLibrary(input: {
   return recordedLibrary;
 }
 
+/** Keep existing story content stable; only newly recorded UUIDs change in existing recordings. */
+function stableRecording(value: unknown, previous: unknown): unknown {
+  if (previous === undefined) return value;
+  const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+  if (typeof value === 'string' && typeof previous === 'string')
+    return value.replace(uuid, '<id>') === previous.replace(uuid, '<id>') ? value : previous;
+  if (Array.isArray(value) && Array.isArray(previous))
+    return previous.map((item, index) => stableRecording(value[index], item));
+  if (!value || typeof value !== 'object' || !previous || typeof previous !== 'object') return previous;
+  const current = value as Record<string, unknown>;
+  const before = previous as Record<string, unknown>;
+  const oldIds = Object.keys(before).filter((key) => key.match(uuid));
+  const newIds = Object.keys(current).filter((key) => key.match(uuid));
+  return Object.fromEntries(
+    Object.entries(before).map(([name, item]) => {
+      const recordedName = oldIds.includes(name) ? (newIds[oldIds.indexOf(name)] ?? name) : name;
+      return [recordedName, stableRecording(current[recordedName], item)];
+    }),
+  );
+}
+
 async function main(): Promise<void> {
   const kernelBase = '../../../services/kernel';
   const { startPostgresContainer } = await import(`${kernelBase}/scripts/check.ts`);
@@ -1101,10 +1122,15 @@ async function main(): Promise<void> {
 
   for (const [name, body] of await recordLibrary({ origin, pool: database, accountId, subjectId }))
     recorded.set(name, body);
+  await expectStatus('accounts', `/v1/accounts?ids=${accountId}`, 200);
 
   const output = join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });
-  for (const [name, body] of recorded) await writeFile(join(output, `${name}.json`), JSON.stringify(body));
+  for (const [name, body] of recorded) {
+    const file = join(output, `${name}.json`);
+    const previous = name !== 'accounts' && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    await writeFile(file, JSON.stringify(stableRecording(body, previous)));
+  }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
   const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', output], {
     cwd: root,

@@ -327,7 +327,11 @@ test('board page stays within its bound as s grows', async () => {
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/boards/${boardId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([`GET /v1/boards/${boardId}`, `GET /v1/boards/${boardId}/threads`]);
+    expect(kernelCalls).toEqual([
+      `GET /v1/boards/${boardId}`,
+      `GET /v1/boards/${boardId}/threads`,
+      `GET /v1/accounts?ids=${contentId(999)}`,
+    ]);
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
@@ -339,7 +343,11 @@ test('thread page stays within its bound as s grows', async () => {
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/threads/${threadId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([`GET /v1/threads/${threadId}`, `GET /v1/threads/${threadId}/posts`]);
+    expect(kernelCalls).toEqual([
+      `GET /v1/threads/${threadId}`,
+      `GET /v1/threads/${threadId}/posts`,
+      `GET /v1/accounts?ids=${contentId(999)}`,
+    ]);
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
