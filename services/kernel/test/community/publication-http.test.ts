@@ -386,6 +386,60 @@ test.serial('publishing into an occupied slot without its head answers 409 to an
   expect(conflict.value).toMatchObject({ code: 'conflict', effect_status: 'not_applied' });
   expect(conflict.value).not.toHaveProperty('publication');
   expect(await snapshot()).toEqual(before);
+
+  const wrongHead = await call('POST', f.path, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    headers: { 'if-match': JSON.stringify(newId(routeOf(f.realm.realmId)!)) },
+    body: { subjectId: f.subjectId },
+  });
+
+  expect(wrongHead.response.status).toBe(412);
+  expect(wrongHead.value).toMatchObject({ code: 'precondition_failed', effect_status: 'not_applied' });
+  expect(wrongHead.value).not.toHaveProperty('publication');
+  expect(await snapshot()).toEqual(before);
+});
+
+test.serial('a publisher can re-publish a withdrawn or rejected subject from its current head', async () => {
+  const f = await fixture();
+  for (const [subjectId, verdict] of [
+    [f.subjectId, 'withdraw'],
+    [await subject(), 'reject'],
+  ] as const) {
+    const created = await call('POST', f.path, {
+      bearer: owner.bearer,
+      key: crypto.randomUUID(),
+      body: { subjectId },
+    });
+    expect(created.response.status).toBe(201);
+
+    const decision = await call('POST', `${f.path}/${subjectId}:${verdict}`, {
+      bearer: owner.bearer,
+      key: crypto.randomUUID(),
+      headers: { 'if-match': created.response.headers.get('etag')! },
+    });
+    expect(decision.response.status).toBe(200);
+
+    const republished = await call('POST', f.path, {
+      bearer: owner.bearer,
+      key: crypto.randomUUID(),
+      headers: { 'if-match': decision.response.headers.get('etag')! },
+      body: { subjectId },
+    });
+    expect(republished.response.status).toBe(201);
+    expect(republished.value.publication).toMatchObject({
+      realmId: f.realm.realmId,
+      subjectId,
+      publicationId: expect.any(String),
+      verdict: 'adopt',
+      subjectRevisionId: null,
+      publishedAt: expect.any(String),
+    });
+    expect(republished.response.headers.get('etag')).not.toBe(decision.response.headers.get('etag'));
+    const current = await call('GET', `${f.path}/${subjectId}`);
+    expect(current.response.status).toBe(200);
+    expect(current.value).toEqual(republished.value);
+  }
 });
 
 test.serial(

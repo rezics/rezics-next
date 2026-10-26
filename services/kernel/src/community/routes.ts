@@ -237,6 +237,10 @@ const writeFailures = {
 };
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
+const publicationHeaders = t.Object(
+  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
+  { additionalProperties: true },
+);
 const updateHeaders = t.Object(
   { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.String() },
   { additionalProperties: true },
@@ -795,11 +799,13 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/publications',
       {
         params: realmParams,
-        headers: commandHeaders,
+        headers: publicationHeaders,
         body: strict(t.Object({ subjectId: id }, closed)),
         response: {
           201: withHeaders(strict(publicationResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
           ...writeFailures,
+          409: problemSchema('conflict'),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
           operationId: 'publication.publish',
@@ -811,13 +817,14 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       },
       async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = headers['if-match'] === undefined ? undefined : matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
           return await admission.run('normal', job, async () => {
             const result = await publish(
               realmDependencies(),
               actor,
-              { realmId, subjectId: body.subjectId },
+              { realmId, subjectId: body.subjectId, ...(expectedHead === undefined ? {} : { expectedHead }) },
               { idempotencyKey: key, deadline: job.deadline },
             );
             session.record(result);
@@ -827,6 +834,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             return { publication: publishedPublication(result.value) };
           });
         } catch (error) {
+          if (error instanceof PublicationConflictError && expectedHead !== undefined)
+            throw new ProblemError('precondition_failed');
           communityProblem(error);
         }
       },
