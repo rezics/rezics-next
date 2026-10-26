@@ -182,6 +182,16 @@ for (const population of ['unrelated accounts', 'completed and pending history']
                SELECT $1,id,repeat('0',64),'[]'::jsonb FROM unnest($2::uuid[]) id`,
               [route, ids],
             );
+            // Unrelated receipt keys keep exact command replay checks on their
+            // index from the first scale, before native page receipts accrue.
+            await db.admin.query(
+              `INSERT INTO core.receipt
+                 (partition_no,principal_kind,principal_id,command_kind,idempotency_key,
+                  request_digest,epoch,position,transaction_id,response)
+               SELECT $1,'account',id,'access.suspend',id::text,$3,1,1,id,'{}'
+               FROM unnest($2::uuid[]) id`,
+              [route >>> 4, ids, Buffer.alloc(32)],
+            );
           }
         },
         async operation() {
