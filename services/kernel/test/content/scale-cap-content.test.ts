@@ -1,7 +1,15 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-const FILES = ["collection-job.test.ts", "cover-reference.test.ts", "growth-reactions.test.ts", "point-command-admission.test.ts", "post-pages.test.ts", "post-revise-precondition.test.ts", "realm-boards.test.ts"];
+const FILES = [
+  'collection-job.test.ts',
+  'cover-reference.test.ts',
+  'growth-reactions.test.ts',
+  'point-command-admission.test.ts',
+  'post-pages.test.ts',
+  'post-revise-precondition.test.ts',
+  'realm-boards.test.ts',
+];
 
 for (const file of FILES) {
   test(`${file} measures three scales with an equal ratio of at least four and the largest at most 4096`, () => {
