@@ -217,7 +217,6 @@ both votes and Realm memberships for reinstatement.
 - Growth check: `test/rating/growth-segment-job.test.ts`, test "re-key page has constant rows and statements as voter
   votes grow", at scales `[256, 1024, 4096]`.
 
-
 ### Aggregate read
 
 - Touches: one population reads at most 16 shard rows in the target partition and one pending row in the population's
