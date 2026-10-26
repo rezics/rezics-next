@@ -12,7 +12,8 @@
   "scripts": {
     "storybook": "storybook dev -p 6006",
     "check": "oxfmt --check . && tsc --noEmit -p tsconfig.json && bun run test #bun test",
-    "test": "bun scripts/isolated.ts bun test"
+    "test": "bun scripts/isolated.ts bun test",
+    "test:stories:slow-frames": "bun scripts/isolated.ts bun x vitest run --config vitest.slow-frames.config.ts"
   },
   "dependencies": {
     "@ark-ui/react": "5.39.3",
