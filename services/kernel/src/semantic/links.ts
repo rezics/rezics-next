@@ -223,6 +223,10 @@ export type SubjectLinksPage = {
   component: { partition: number; epoch: number; position: bigint };
 };
 
+export function waitForSubjectLinks(pool: Pool, seen: readonly SessionComponent[], subject: string): Promise<boolean> {
+  return linksCaughtUp(pool, seen, subject);
+}
+
 function validAfter(after: CursorKey[], property: string | null): boolean {
   if (after.length !== 3) return false;
   const [cursorProperty, source, statement] = after;
@@ -242,6 +246,7 @@ export async function listSubjectLinks(
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
     seen: readonly SessionComponent[];
+    caughtUp?: boolean;
   },
 ): Promise<SubjectLinksPage> {
   const route = routeOf(options.subject);
@@ -257,7 +262,7 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const caughtUp = await linksCaughtUp(pool, options.seen, options.subject);
+  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {

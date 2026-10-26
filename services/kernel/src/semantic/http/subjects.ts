@@ -29,7 +29,7 @@ import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
-import { listSubjectLinks } from '../links.ts';
+import { listSubjectLinks, waitForSubjectLinks } from '../links.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
   moderateStatement,
@@ -1408,6 +1408,8 @@ function subjectRoutes(
         if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
           throw new ProblemError('invalid_request');
         const resource = { route, id: params.id };
+        const seen = [...session.components];
+        const caughtUp = await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id));
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
@@ -1417,7 +1419,8 @@ function subjectRoutes(
               limit: query.limit ?? 20,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
-              seen: [...session.components],
+              seen,
+              caughtUp,
             }),
           );
           session.record(component);
