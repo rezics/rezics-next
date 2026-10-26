@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount, type Account } from '../access/account-data.ts';
+import { readPublicViews } from '../access/index.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -18,6 +19,8 @@ import curatorPublicPage from './collection-reads-curator-public.sql';
 import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 import listingCounts from './listing-counts.sql';
+
+type CuratorPageOptions = { curatorAccountId: string; cursor?: string | null; limit?: number };
 
 type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
@@ -189,7 +192,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
 
-  return { readCollection, listCollections, listMembers, listSubjectCollections };
+  return { readCollection, listCollections, listAccountCollections, listMembers, listSubjectCollections };
 
   async function loadCollection(viewer: Actor, id: string): Promise<StoredCollection | null> {
     if (typeof id !== 'string') return null;
@@ -239,22 +242,38 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
     return { epoch: decoded.epoch, after: decoded.after };
   }
 
-  async function listCollections(
+  function listCollections(viewer: Actor, options: CuratorPageOptions) {
+    return listCuratorPage(viewer, options, false);
+  }
+
+  /** The account's public face uses the public index even when the curator is the viewer. */
+  function listAccountCollections(viewer: Actor, options: CuratorPageOptions) {
+    return listCuratorPage(viewer, options, true);
+  }
+
+  async function listCuratorPage(
     viewer: Actor,
-    options: { curatorAccountId: string; cursor?: string | null; limit?: number },
+    options: CuratorPageOptions,
+    publicOnly: boolean,
   ): Promise<{ collections: CollectionView[]; next: string | null }> {
     const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
     if (typeof options.curatorAccountId !== 'string')
       throw new TypeError('Collection list options need a curator account id');
     const route = routeOf(options.curatorAccountId);
     if (route === null) throw notFound();
-    const fullView = await seesAll(viewer, options.curatorAccountId);
+    // Presentation visibility is read before opening the page transaction. A visible account path
+    // needs no private account read; only a hidden view needs the existing curator exception.
+    const publicViews = await readPublicViews(pool, [options.curatorAccountId]);
+    const visible = publicViews.get(options.curatorAccountId)?.collections === true;
+    const curator = (!publicOnly || !visible) && (await seesAll(viewer, options.curatorAccountId));
+    const fullView = !publicOnly && curator;
     const binding: CursorBinding = {
-      operation: 'library.collection.list',
+      operation: publicOnly ? 'library.account.collections' : 'library.collection.list',
       parameters: { curatorAccountId: options.curatorAccountId, fullView },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = listPosition(cursor, route);
+    if (!visible && !curator) return { collections: [], next: null };
     return readOnly(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       if (cursor && cursor.epoch !== partition?.epoch) {

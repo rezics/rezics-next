@@ -184,6 +184,30 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         ),
     )
     .get(
+      '/v1/accounts/:accountId/collections',
+      {
+        params: t.Object({ accountId: id }, closed),
+        query: t.Object(pageQuery, closed),
+        response: {
+          200: t.Object(
+            { collections: t.Array(embedded(collectionSchema, curatorFields)), next: nullableString },
+            closed,
+          ),
+          ...failures,
+        },
+        detail: detail('account.collections', 'collection:read', true),
+      },
+      async ({ params, query, actor, admission, job }) =>
+        admission.run('normal', job, async () =>
+          fullView(
+            viewDependencies(),
+            actor,
+            query.view,
+            await read().listAccountCollections(actor, { curatorAccountId: params.accountId, ...basicQuery(query) }),
+          ),
+        ),
+    )
+    .get(
       '/v1/collections/:collectionId',
       {
         query: t.Object(viewQuery, closed),

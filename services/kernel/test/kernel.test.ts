@@ -183,6 +183,7 @@ const typed = [
   'GET /v1/follows',
   'POST /v1/collections',
   'GET /v1/collections',
+  'GET /v1/accounts/:accountId/collections',
   'GET /v1/collections/:collectionId',
   'PATCH /v1/collections/:collectionId',
   'DELETE /v1/collections/:collectionId',
