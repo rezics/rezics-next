@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
-import { assertNoServiceImports, clientDeclarations, committedDeclarations } from '../scripts/client.ts';
+import {
+  assertNoServiceImports,
+  clientCompilerEnvironment,
+  clientDeclarations,
+  committedDeclarations,
+} from '../scripts/client.ts';
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
 const timeout = 60_000;
@@ -145,6 +150,17 @@ test('client generation refuses declarations importing a service workspace and n
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("the client compiler ignores the caller's Reylo project", () => {
+  const environment = clientCompilerEnvironment({
+    REYLO_CONFIG: '/somewhere/.reylo.yaml',
+    DATABASE_URL: 'postgres://example/db',
+    PATH: '/usr/bin',
+  });
+  expect(environment).not.toHaveProperty('REYLO_CONFIG');
+  expect(environment.DATABASE_URL).toBe('postgres://example/db');
+  expect(environment.PATH).toBe('/usr/bin');
 });
 
 test('generated client declarations import no Auth service and declare all package dependencies', async () => {
