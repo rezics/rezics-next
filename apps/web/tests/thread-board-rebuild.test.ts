@@ -19,7 +19,7 @@ const coveredSubject = id(70);
 const bareSubject = id(71);
 const coverMedia = id(72);
 const recent = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-const active = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+const active = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 const old = '2025-01-02T03:04:05.000Z';
 const metadata = { route: 0, visibility: 'published', securityRevision: '1', createdAt: recent } as const;
 const authors = { mira: id(90), bob: id(91), deleted: id(92), unknown: id(93) } as const;
@@ -230,7 +230,12 @@ function site(): Promise<string> {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
         const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
+        if (response.status < 500) {
+          // The first visit to a route makes the dev server optimize its dependencies and reload; do that before any test.
+          for (const path of [`/en/threads/${threadId}`, `/en/boards/${boardId}`])
+            await fetch(`${origin}${path}`, { signal: AbortSignal.timeout(120_000) }).then((page) => page.text());
+          return origin;
+        }
       } catch {}
       if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
       await Bun.sleep(500);
@@ -277,7 +282,7 @@ test(
         expect(await slots.nth(1).locator('[data-slot="avatar-fallback"]').innerText()).toBe('B');
         expect(await slots.nth(1).innerText()).toContain('@bob');
         expect(await slots.nth(2).innerText()).toContain(deleted);
-        expect(await slots.nth(2).getByRole('link').count()).toBe(0);
+        expect(await slots.nth(2).locator(`a[href^="/${locale}/@"]`).count()).toBe(0);
         expect(await slots.nth(2).innerText()).not.toContain('@');
       } finally {
         await page.context().close();
@@ -409,7 +414,7 @@ test(
       expect(await first.getByRole('link', { name: 'A first discussion' }).count()).toBe(1);
       expect(await first.innerText()).toContain('Mira Okabe');
       expect(await first.innerText()).toContain('Replies: 3');
-      expect(await first.innerText()).toContain('Last activity 20 minutes ago');
+      expect(await first.innerText()).toContain('Last activity 2 hours ago');
       expect(await first.locator(`time[datetime="${active}"]`).count()).toBe(1);
       expect(await items.nth(1).innerText()).toContain('Replies: 0');
       expect(await items.nth(1).innerText()).toContain('@bob');

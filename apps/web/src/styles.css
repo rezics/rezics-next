@@ -96,7 +96,7 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
   box-sizing: border-box;
   max-height: 100dvh;
   overflow-y: auto;
-  font-family: var(--font-work-serif);
+  font-family: var(--font-interface);
   font-size: 1.125rem;
   line-height: 1.8;
 }

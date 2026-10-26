@@ -9,6 +9,7 @@ import { cookie } from '../session/cookies';
 import { kernelClient } from '../kernel/client';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
 import type { PageAuthors } from '../identity/read';
+import type { ThreadSubject } from './subjects';
 import type { ThreadPost } from './thread-page';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -83,6 +84,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       viewerId?: string;
       verification: VerificationConfig;
       authors: PageAuthors;
+      subjects: ThreadSubject[];
       now: string;
     }> => {
       setResponseHeader('cache-control', 'private, no-store');

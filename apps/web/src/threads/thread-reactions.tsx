@@ -93,15 +93,13 @@ export function ThreadReactions({
   }
 
   return (
-    <div className="mt-4">
-      <Reactions
-        counts={counts}
-        labels={reactionLabels(failed)}
-        locale={getLocale()}
-        onChange={onChange}
-        value={value}
-        {...(signedIn ? {} : { signInHref: `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
-      />
-    </div>
+    <Reactions
+      counts={counts}
+      labels={reactionLabels(failed)}
+      locale={getLocale()}
+      onChange={onChange}
+      value={value}
+      {...(signedIn ? {} : { signInHref: `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
+    />
   );
 }

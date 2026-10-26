@@ -1,3 +1,7 @@
+import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
+import { initials } from '@rezics/ui/avatar-initials';
+import { cn } from '@rezics/ui/utils';
+import type { ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthor } from '../identity/read';
@@ -6,7 +10,7 @@ const minute = 60_000;
 const hour = 60 * minute;
 const day = 24 * hour;
 
-function timeText(createdAt: string, now: string, locale: string): string {
+export function timeText(createdAt: string, now: string, locale: string): string {
   const difference = new Date(createdAt).getTime() - new Date(now).getTime();
   const distance = Math.abs(difference);
   if (distance <= 7 * day) {
@@ -23,46 +27,83 @@ function timeText(createdAt: string, now: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(createdAt));
 }
 
-function fullDateTime(createdAt: string, locale: string): string {
+export function fullDateTime(createdAt: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'long', timeZone: 'UTC' }).format(
     new Date(createdAt),
   );
 }
 
+const personLink = 'underline-offset-4 hover:underline focus-visible:underline';
+
+/** The author of a post or thread: avatar with initials, display name and handle linked to the person, and the time. */
 export function Byline({
   author,
   createdAt,
   now,
   showAuthor = true,
+  size = 'default',
+  className,
+  children,
 }: {
   author: PageAuthor | undefined;
   createdAt: string;
   now: string;
   showAuthor?: boolean;
+  size?: 'default' | 'sm';
+  className?: string;
+  /** Further facts that follow the time, such as when a post was edited. */
+  children?: ReactNode;
 }) {
   const locale = getLocale();
   const deleted = author?.state === 'deleted';
   const unknown = showAuthor && (!author || (!author.displayName && !author.handle));
   const hasAuthor = showAuthor && (deleted || unknown || Boolean(author?.displayName || author?.handle));
+  const person = deleted || !author?.handle ? null : `/${locale}/@${encodeURIComponent(author.handle)}`;
 
   return (
-    <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm text-muted-foreground">
+    <div className={cn('flex min-w-0 items-center gap-2.5 text-sm text-muted-foreground', className)}>
       {showAuthor ? (
-        deleted ? (
-          <span>{m.thread_author_deleted()}</span>
-        ) : unknown ? (
-          <span>{m.thread_author_unknown()}</span>
-        ) : (
-          <>
-            {author?.displayName ? <span className="text-foreground">{author.displayName}</span> : null}
-            {author?.handle ? <span>@{author.handle}</span> : null}
-          </>
-        )
+        <Avatar aria-hidden="true" size={size === 'sm' ? 'sm' : 'default'}>
+          <AvatarFallback>
+            {deleted || unknown ? '?' : initials(author?.displayName ?? author?.handle ?? '')}
+          </AvatarFallback>
+        </Avatar>
       ) : null}
-      {hasAuthor ? <span aria-hidden="true">·</span> : null}
-      <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
-        {timeText(createdAt, now, locale)}
-      </time>
-    </p>
+      <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+        {showAuthor ? (
+          deleted ? (
+            <span>{m.thread_author_deleted()}</span>
+          ) : unknown ? (
+            <span>{m.thread_author_unknown()}</span>
+          ) : (
+            <>
+              {author?.displayName ? (
+                person ? (
+                  <a className={cn('font-medium text-foreground', personLink)} href={person}>
+                    {author.displayName}
+                  </a>
+                ) : (
+                  <span className="font-medium text-foreground">{author.displayName}</span>
+                )
+              ) : null}
+              {author?.handle ? (
+                !author.displayName && person ? (
+                  <a className={cn('font-medium text-foreground', personLink)} href={person}>
+                    @{author.handle}
+                  </a>
+                ) : (
+                  <span>@{author.handle}</span>
+                )
+              ) : null}
+            </>
+          )
+        ) : null}
+        {hasAuthor ? <span aria-hidden="true">·</span> : null}
+        <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
+          {timeText(createdAt, now, locale)}
+        </time>
+        {children}
+      </p>
+    </div>
   );
 }

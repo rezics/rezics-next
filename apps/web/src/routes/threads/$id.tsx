@@ -1,3 +1,4 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
 import type { ReactionKind } from '@rezics/ui/reactions';
@@ -10,6 +11,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { readThreadPage, type ThreadPost } from '../../threads/reads';
 import type { PageAuthors } from '../../identity/read';
 import { Byline } from '../../threads/byline';
+import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReactions } from '../../threads/thread-reactions';
 import {
   erasePost,
@@ -32,7 +34,16 @@ export const Route = createFileRoute('/threads/$id')({
 });
 
 function ThreadPage() {
-  const { thread, posts: loadedPosts, idempotencyKey, viewerId, verification, authors, now } = Route.useLoaderData();
+  const {
+    thread,
+    posts: loadedPosts,
+    idempotencyKey,
+    viewerId,
+    verification,
+    authors,
+    subjects,
+    now,
+  } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
@@ -52,6 +63,7 @@ function ThreadPage() {
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <PageHeading>{thread.title ?? m.threads_untitled()}</PageHeading>
+        <ThreadSubjects subjects={subjects} />
       </header>
       <section className="space-y-6" aria-labelledby="thread-posts-heading">
         <h2 id="thread-posts-heading" className="text-xl font-semibold">
@@ -89,7 +101,7 @@ function ThreadPage() {
               to="/threads/$id"
               params={{ id }}
               search={{ cursor: posts.next }}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >
               {m.threads_next_page()}
             </Link>
@@ -214,15 +226,15 @@ function PostSlot({
   }
 
   return (
-    <li id={anchorId} className="py-6">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div className="flex min-h-8 flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <Byline
-            author={authors?.[post.authorId]}
-            createdAt={post.createdAt}
-            now={now}
-            showAuthor={authors !== null}
-          />
+    <li id={anchorId} className="py-5">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <Byline
+          author={authors?.[post.authorId]}
+          createdAt={post.createdAt}
+          now={now}
+          showAuthor={authors !== null}
+          className="min-h-8"
+        >
           {post.revisedAt ? (
             <>
               <span aria-hidden="true">·</span>
@@ -231,27 +243,29 @@ function PostSlot({
               </time>
             </>
           ) : null}
+        </Byline>
+        <div className="ms-auto flex items-center gap-1">
+          <ThreadReactions counts={counts} returnTo={returnTo} signedIn={signedIn} target={target} value={value} />
+          {editing ? null : ownsPost ? (
+            <ContentActions
+              labels={labels}
+              onCopyLink={copyLink}
+              onDelete={deletePost}
+              onEdit={() => {
+                setEditKey(crypto.randomUUID());
+                setEditing(true);
+              }}
+              ownsContent
+              triggerRef={menuButton}
+            />
+          ) : (
+            <PostActions
+              target={target}
+              {...(post.revisionId ? { revisionId: post.revisionId } : {})}
+              verification={verification}
+            />
+          )}
         </div>
-        {editing ? null : ownsPost ? (
-          <ContentActions
-            labels={labels}
-            onCopyLink={copyLink}
-            onDelete={deletePost}
-            onEdit={() => {
-              setEditKey(crypto.randomUUID());
-              setEditing(true);
-            }}
-            ownsContent
-            triggerRef={menuButton}
-          />
-        ) : (
-          <PostActions
-            target={target}
-            {...(post.revisionId ? { revisionId: post.revisionId } : {})}
-            ownsContent={false}
-            verification={verification}
-          />
-        )}
       </div>
       {editing ? (
         <InlinePostEditor
@@ -276,7 +290,6 @@ function PostSlot({
       ) : (
         <DocumentBody document={post.body} labels={{ revealSpoiler: m.thread_reveal_spoiler() }} />
       )}
-      <ThreadReactions counts={counts} returnTo={returnTo} signedIn={signedIn} target={target} value={value} />
     </li>
   );
 }

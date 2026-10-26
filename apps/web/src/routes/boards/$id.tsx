@@ -1,9 +1,13 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Item, ItemActions, ItemContent, ItemTitle } from '@rezics/ui/shadcn/item';
 import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
+import { MessageSquareIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readBoardPage } from '../../threads/reads';
+import { threadActivity } from '../../threads/activity';
 import { SignInPrompt } from '../../threads/composer';
-import { Byline } from '../../threads/byline';
+import { Byline, fullDateTime, timeText } from '../../threads/byline';
 import { ClosedErrorPage } from '../../shell/closed';
 import { PageHeading } from '../../shell/page-heading';
 
@@ -22,15 +26,13 @@ function BoardPage() {
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
   const id = Route.useParams().id;
+  const locale = getLocale();
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <PageHeading>{board.title ?? m.threads_untitled()}</PageHeading>
         {session === 'signed-in' ? (
-          <a
-            href={`/${getLocale()}/boards/${id}/new`}
-            className="inline-flex min-h-10 items-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90"
-          >
+          <a className={buttonVariants({ size: 'lg' })} href={`/${locale}/boards/${id}/new`}>
             {m.board_start_thread()}
           </a>
         ) : session === 'signed-out' ? (
@@ -43,23 +45,48 @@ function BoardPage() {
         </h2>
         {threads.threads.length ? (
           <ul className="divide-y divide-border/60 border-y border-border/60">
-            {threads.threads.map((thread) => (
-              <li key={thread.id} className="py-4">
-                <Link
-                  to="/threads/$id"
-                  params={{ id: thread.id }}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  {thread.title ?? m.threads_untitled()}
-                </Link>
-                <Byline
-                  author={authors?.[thread.authorId]}
-                  createdAt={thread.createdAt}
-                  now={now}
-                  showAuthor={authors !== null}
-                />
-              </li>
-            ))}
+            {threads.threads.map((thread) => {
+              const { replyCount, lastActivityAt } = threadActivity(thread);
+              return (
+                <li key={thread.id}>
+                  <Item className="gap-x-4 gap-y-1 rounded-none px-1 py-3" size="sm">
+                    <ItemContent className="min-w-0 basis-72 gap-1.5">
+                      <ItemTitle className="max-w-full text-base">
+                        <Link
+                          to="/threads/$id"
+                          params={{ id: thread.id }}
+                          className="truncate text-primary hover:underline"
+                        >
+                          {thread.title ?? m.threads_untitled()}
+                        </Link>
+                      </ItemTitle>
+                      <Byline
+                        author={authors?.[thread.authorId]}
+                        createdAt={thread.createdAt}
+                        now={now}
+                        showAuthor={authors !== null}
+                        size="sm"
+                      />
+                    </ItemContent>
+                    {replyCount !== null || lastActivityAt ? (
+                      <ItemActions className="flex-wrap gap-x-4 text-sm text-muted-foreground">
+                        {replyCount !== null ? (
+                          <span className="inline-flex items-center gap-1.5 tabular-nums">
+                            <MessageSquareIcon aria-hidden="true" className="size-4" />
+                            {m.board_thread_replies({ count: replyCount })}
+                          </span>
+                        ) : null}
+                        {lastActivityAt ? (
+                          <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)}>
+                            {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
+                          </time>
+                        ) : null}
+                      </ItemActions>
+                    ) : null}
+                  </Item>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="text-muted-foreground">{m.board_threads_empty()}</p>
@@ -70,7 +97,7 @@ function BoardPage() {
               to="/boards/$id"
               params={{ id }}
               search={{ cursor: threads.next }}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >
               {m.threads_next_page()}
             </Link>

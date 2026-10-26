@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
+import { readThreadSubjects } from '../threads/subjects';
 import { loadThreadPage } from '../threads/thread-page';
 import { readPageAuthors, type PageAuthors } from './read';
 
@@ -47,9 +48,12 @@ export async function loadThreadPageWithAuthors(
 ) {
   const now = new Date().toISOString();
   const page = await loadThreadPage(client, request, sessionEnv, data, verification);
-  const authors = await readPageAuthors(client, [
-    page.thread.authorId,
-    ...page.posts.posts.flatMap((post) => ('authorId' in post ? [post.authorId] : [])),
+  const [authors, subjects] = await Promise.all([
+    readPageAuthors(client, [
+      page.thread.authorId,
+      ...page.posts.posts.flatMap((post) => ('authorId' in post ? [post.authorId] : [])),
+    ]),
+    readThreadSubjects(client, page.thread.subjectIds),
   ]);
-  return { ...page, authors, now };
+  return { ...page, authors, subjects, now };
 }

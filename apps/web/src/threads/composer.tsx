@@ -1,6 +1,9 @@
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
-import { Button } from '@rezics/ui/button';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Label } from '@rezics/ui/shadcn/label';
+import { Spinner } from '@rezics/ui/shadcn/spinner';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -265,12 +268,10 @@ export function PostComposer<T>({
       <form id={formId} onSubmit={submit}>
         {titleRequired ? (
           <div className="mb-5 space-y-2">
-            <label className="text-sm font-medium" htmlFor="thread-title">
-              {m.thread_title_label()}
-            </label>
-            <input
+            <Label htmlFor="thread-title">{m.thread_title_label()}</Label>
+            <Input
               id="thread-title"
-              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-11 border-border bg-background px-3"
               value={title}
               onChange={(event) => setTitle(event.currentTarget.value)}
               autoComplete="off"
@@ -494,7 +495,8 @@ export function InlinePostEditor({
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={!ready || submitting || pendingUploads > 0} isLoading={submitting}>
+          <Button type="submit" disabled={!ready || submitting || pendingUploads > 0}>
+            {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
             {m.thread_edit_save()}
           </Button>
           <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>

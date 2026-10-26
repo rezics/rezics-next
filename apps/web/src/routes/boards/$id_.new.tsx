@@ -1,3 +1,4 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -51,11 +52,7 @@ function NewThreadPage() {
       ) : session === 'signed-out' ? (
         <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
       ) : null}
-      <Link
-        to="/boards/$id"
-        params={{ id: board.id }}
-        className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-      >
+      <Link to="/boards/$id" params={{ id: board.id }} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
         {m.board_threads_heading()}
       </Link>
     </article>

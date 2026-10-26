@@ -1,8 +1,5 @@
 import { ContentActions } from '@rezics/ui/content-actions';
 import type { ReportDialogLabels, ReportSubmission } from '@rezics/ui/report-dialog';
-import { Button } from '@rezics/ui/button';
-import { Menu, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
-import { EllipsisIcon, LinkIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -54,15 +51,14 @@ function refusalText(result: Extract<ReportResult, { ok: false }>): string {
   }
 }
 
+/** The overflow menu of a thread or post the viewer did not write: copy its link or report it. */
 export function PostActions({
   target,
   revisionId,
-  ownsContent,
   verification,
 }: {
   target: { kind: 'thread' | 'post'; id: string };
   revisionId?: string;
-  ownsContent: boolean;
   verification: VerificationConfig;
 }) {
   const [token, setToken] = useState('');
@@ -97,24 +93,6 @@ export function PostActions({
     }
   };
 
-  // The shared owner's menu also requires edit and delete handlers. Until those operations
-  // exist on this page, owners have only the supported copy-link action.
-  if (ownsContent)
-    return (
-      <Menu>
-        <MenuTrigger asChild>
-          <Button aria-label={m.report_more()} size="icon-sm" variant="ghost">
-            <EllipsisIcon aria-hidden="true" />
-          </Button>
-        </MenuTrigger>
-        <MenuContent>
-          <MenuItem onClick={copyLink} value="copy-link">
-            <LinkIcon aria-hidden="true" />
-            {m.report_copy()}
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-    );
   return (
     <ContentActions
       ownsContent={false}
