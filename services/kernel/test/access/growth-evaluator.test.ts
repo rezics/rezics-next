@@ -165,9 +165,9 @@ async function fixture() {
   await f.grant(f.staleId, 'owner', staleTarget);
   return { db, f, outage, staleTarget };
 }
-// Evidence lives one second and its database-side budget charges preparation time twice, so it is prepared
-// immediately before each check on a warm, uninstrumented pool as wide as the measured one. That keeps the
-// preparation out of the measured window, which holds only the check's own statements.
+// Evidence lives one second, so it is prepared immediately before each check on a warm, uninstrumented pool as
+// wide as the measured one. That keeps the preparation out of the measured window, which holds only the check's
+// own statements.
 async function run(
   f: ActorFixture,
   identity = f.actor,
