@@ -227,7 +227,14 @@ test('Space owner with Global realm:create mints a distinct Realm on the Space r
         [route, realmId],
       )
     ).rows,
-  ).toEqual([{ grant_role: 'community.realm.owner', subject_kind: 'identity', subject_id: f.actor.accountId }]);
+  ).toEqual([
+    {
+      grant_role: 'community.realm.standing',
+      subject_kind: 'active_accounts',
+      subject_id: '00000000-0000-0000-0000-000000000000',
+    },
+    { grant_role: 'community.realm.owner', subject_kind: 'identity', subject_id: f.actor.accountId },
+  ]);
   expect(
     (
       await admin.query('SELECT resource_type FROM access.resource_initialization WHERE route=$1 AND resource_id=$2', [
