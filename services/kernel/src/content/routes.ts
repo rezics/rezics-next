@@ -395,13 +395,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const readContext = { actor, deadline: job.deadline };
             const thread = await readThread(dependencies, result.value.threadId, readContext);
             if (!thread.value) throw new ProblemError('not_found');
-            await applyBoardCandidate(dependencies.pool, {
-              id: thread.value.id,
-              boardId: thread.value.boardId,
-              createdAt: thread.value.createdAt,
-              epoch: thread.anchor.epoch,
-              position: thread.anchor.position,
-            });
+            if (!result.replayed) {
+              await applyBoardCandidate(dependencies.pool, {
+                id: thread.value.id,
+                boardId: thread.value.boardId,
+                createdAt: thread.value.createdAt,
+                epoch: thread.anchor.epoch,
+                position: thread.anchor.position,
+              });
+            }
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,

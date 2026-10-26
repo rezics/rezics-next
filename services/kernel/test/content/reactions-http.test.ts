@@ -273,7 +273,21 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  const total = authPool?.totalCount ?? 0;
+  const removed = new Promise<void>((resolve) => {
+    if (total === 0) return resolve();
+    let remaining = total;
+    const onRemove = () => {
+      remaining -= 1;
+      if (remaining !== 0) return;
+      authPool.off('remove', onRemove);
+      resolve();
+    };
+    authPool.on('remove', onRemove);
+  });
   await host?.stop();
+  if (authPool && !authPool.ending) await authPool.end();
+  await removed;
   if (authDatabaseName) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await db?.close();
 });
