@@ -93,7 +93,10 @@ async function read(id: string, context?: string) {
   expect(response.headers.get('etag')).toBe(`"${subject.revision}"`);
   return {
     subject,
-    related: response.body.related as Record<string, { labels: Record<string, string>; redirect?: string }>,
+    related: response.body.related as Record<
+      string,
+      { labels: Record<string, string>; redirect?: string; type?: string; types?: string[]; cover?: Json }
+    >,
   };
 }
 async function candidates(id: string, property: string, context = driver.globalContext) {
@@ -481,7 +484,12 @@ test('Editor creates a work edition and recipe in Wikibase shape and creation ke
     { amount: '+256', unit: '1' },
     digest,
   );
-  expect((await read(edition.id)).related[work.id]).toEqual({ labels: work.labels });
+  expect((await read(edition.id)).related[work.id]).toEqual({
+    labels: work.labels,
+    type: 'schema:Book',
+    types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+    cover: null,
+  });
   shape(edition.statements['schema:isbn']![0]!, 'schema:isbn', 'external-id', '9780143106036', digest);
   shape(
     recipe.statements['schema:recipeIngredient']![0]!,
