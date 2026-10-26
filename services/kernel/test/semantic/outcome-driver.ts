@@ -1,9 +1,4 @@
-import {
-  createAuthHost,
-  createNativeWorkflowProofPorts,
-  createProvisioningEvidenceVerifier,
-  type AuthService,
-} from '@rezics/auth';
+import { createAuthHost, type AuthService } from '@rezics/auth';
 import { releaseDigest } from '@rezics/definitions';
 import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
@@ -16,8 +11,8 @@ import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../..
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
+import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -143,34 +138,13 @@ export async function createSemanticDriver(): Promise<SemanticDriver> {
     });
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
-    const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const registration = createRegistrationProofBindings({ pool, referenceKeys: sessionKeys });
-    const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-    const lifecycle = createLifecycleInternals({
+    const { ports: registrationPorts } = createRegistrationPorts({
       pool,
+      authPool,
       routeKey,
-      provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-      recoveryEvidence: async () => null,
+      referenceKeys: sessionKeys,
     });
-    const registrationPorts = {
-      ...lifecycle,
-      async createPending(input: Parameters<typeof lifecycle.createPending>[0]) {
-        const outcome = await lifecycle.createPending(input);
-        const pending = { accountId: input.accountId, reservationId: input.reservationId };
-        if (!(await proofs.pendingReference(pending))) {
-          const reference = await registration.createProvisioningReference({ input, outcome });
-          if (!reference) throw new Error('Missing native registration reference');
-          await proofs.recordPending({ ...pending, reference });
-        }
-        return outcome;
-      },
-      async provisioningReference(input: { accountId: string; reservationId: string }) {
-        const reference = await proofs.pendingReference(input);
-        if (!reference) throw new Error('Missing persisted registration reference');
-        return reference;
-      },
-      provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
-    };
     host = await createAuthHost({
       database: authPool,
       systemDatabasePool: authPool,
