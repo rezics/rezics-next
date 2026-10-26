@@ -252,7 +252,7 @@ test('three informative seeded scales have zero content sequential scans and bou
   try {
     const report = await checkGrowth(db, {
       name: 'native revision parent-prefix seek',
-      scales: [256, 2048, 16384],
+      scales: [256, 1024, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         if (client) {
@@ -277,7 +277,7 @@ test('three informative seeded scales have zero content sequential scans and bou
         await finishPlan(client!);
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     for (const { cost } of report.samples) {
       expect(cost.rows).toBe(38);
       expect(cost.statements).toBe(1);

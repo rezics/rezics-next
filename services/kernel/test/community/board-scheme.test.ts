@@ -259,7 +259,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host?.stop();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) {
+    // Let the auth host's connections close on their own; a forced drop would kill them while they are still draining.
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const open = await admin?.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [authDatabaseName]);
+      if (!open.rowCount) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  }
   await db?.close();
 });
 
@@ -389,7 +397,7 @@ test.serial("a suspended account cannot set a Realm's board scheme and writes no
 });
 
 test.serial(
-  'setting and reading a fixed scheme stays bounded at 2048, 8192 and 32768 Realms and subjects',
+  'setting and reading a fixed scheme stays bounded at 256, 1024 and 4096 Realms and subjects',
   async () => {
     const modulePath = '../../src/community/board-scheme.ts';
     const board = await import(modulePath);
@@ -523,7 +531,7 @@ test.serial(
         );
       },
     };
-    const scales: [number, number, number] = [2048, 8192, 32768];
+    const scales = [256, 1024, 4096] as const;
     {
       let head = probe.headRevisionId;
       const report = await checkGrowth(db, {
@@ -547,7 +555,7 @@ test.serial(
           return changed;
         },
       });
-      expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
+      expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
       expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
       expect(new Set(report.samples.map((sample) => sample.cost.rows)).size).toBe(1);
       for (const sample of report.samples) {

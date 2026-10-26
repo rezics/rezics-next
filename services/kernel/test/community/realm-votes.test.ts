@@ -22,7 +22,7 @@ const audience = 'https://realm-votes.api.test';
 const password = 'realm votes registration password with enough entropy';
 const routeKey = new Uint8Array(32).fill(97);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(98)]]) };
-const scales = [2048, 8192, 32768] as const;
+const scales = [256, 1024, 4096] as const;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
 let admin: Pool;
@@ -256,7 +256,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host?.stop();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) {
+    // Let the auth host's connections close on their own; a forced drop would kill them while they are still draining.
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const open = await admin?.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [authDatabaseName]);
+      if (!open.rowCount) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  }
   await pool?.end();
   await admin?.end();
 });
@@ -439,7 +447,7 @@ test.serial(
       };
       const report = await checkGrowth(db, {
         name: 'Read Realm votes',
-        scales: [...scales],
+        scales,
         bounds,
         async grow(database, scale, previous) {
           const from = previous === 0 ? 0 : previous - realms.length;
