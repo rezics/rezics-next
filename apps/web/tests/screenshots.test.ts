@@ -22,7 +22,10 @@ function screenshotSettle() {
   if (start < 0 || end < 0) throw new Error('The screenshot capture settle function is missing.');
   const compiled = new Bun.Transpiler({ loader: 'ts' }).transformSync(`${source.slice(start, end)}\nreturn settle;`);
   return new Function(compiled)() as (
-    page: { waitForFunction: (...args: unknown[]) => Promise<unknown>; evaluate: (...args: unknown[]) => Promise<unknown> },
+    page: {
+      waitForFunction: (...args: unknown[]) => Promise<unknown>;
+      evaluate: (...args: unknown[]) => Promise<unknown>;
+    },
     id: string,
     pageErrors?: readonly string[],
   ) => Promise<void>;

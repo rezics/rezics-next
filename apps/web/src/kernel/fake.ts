@@ -8,6 +8,17 @@ import {
 } from '@rezics/composition';
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import type { Related, Subject } from '../subject/types';
+import homePageRecording from './recorded/home-page.json';
+import missingSubjectPageRecording from './recorded/missing-subject-page.json';
+import missingSubjectRecording from './recorded/missing-subject.json';
+import subjectPageRecording from './recorded/subject-page.json';
+import subjectRecording from './recorded/subject.json';
+import boardRecording from './recorded/board.json';
+import boardThreadsRecording from './recorded/board-threads.json';
+import threadRecording from './recorded/thread.json';
+import threadPostsRecording from './recorded/thread-posts.json';
+import searchRecording from './recorded/search.json';
+import searchEmptyRecording from './recorded/search-empty.json';
 
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
@@ -114,6 +125,23 @@ export function createRecordedKernelFetch(recordings: Record<string, KernelRecor
     if (!recording) return new Response(null, { status: 404 });
     return recordedResponse(recording);
   }) as typeof fetch;
+}
+
+/** The browser-only Storybook kernel uses the checked-in responses for the real page routes. */
+export function createStoryRecordedKernelFetch(): typeof fetch {
+  return createRecordedKernelFetch({
+    'home-page': homePageRecording,
+    'missing-subject-page': missingSubjectPageRecording,
+    'missing-subject': missingSubjectRecording,
+    'subject-page': subjectPageRecording,
+    subject: subjectRecording,
+    board: boardRecording,
+    'board-threads': boardThreadsRecording,
+    thread: threadRecording,
+    'thread-posts': threadPostsRecording,
+    search: searchRecording,
+    'search-empty': searchEmptyRecording,
+  });
 }
 
 function notFound(): Response {

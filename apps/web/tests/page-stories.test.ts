@@ -100,7 +100,9 @@ async function openStory(name: string, visitor: string, locale: string) {
       candidate.name === visitor,
   );
   if (!entry) throw new Error(`Missing ${name} story for ${visitor}.`);
-  const context = await (await sharedBrowser()).newContext({
+  const context = await (
+    await sharedBrowser()
+  ).newContext({
     viewport: { width: 1280, height: 860 },
     reducedMotion: 'reduce',
   });
@@ -215,7 +217,9 @@ test(
         const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
         expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
         if (entry.name === 'Signed Out')
-          expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
+          expect(
+            await page.getByRole('banner').getByRole('link', { name: own.account_sign_in, exact: true }).count(),
+          ).toBe(1);
         if (entry.name === 'Signed In') {
           expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
           const account = page.getByRole('button', { name: own.account_menu, exact: true });

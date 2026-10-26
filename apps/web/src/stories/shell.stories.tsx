@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { PageStory, pageReady, pages } from './page';
+import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = { title: 'Pages/Shell', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -17,10 +17,10 @@ export const SignedIn: Story = {
     await canvas.findByRole('link', { name: m.account_security_settings() });
     await canvas.findByRole('button', { name: m.account_sign_out() });
   },
-  render: () => <PageStory visitor="Signed In">{pages.shell}</PageStory>,
+  render: () => <PageStory visitor="Signed In" path={pagePaths.shell} />,
 };
 export const SignedOut: Story = {
   name: 'Signed Out',
   play: pageReady,
-  render: () => <PageStory visitor="Signed Out">{pages.shell}</PageStory>,
+  render: () => <PageStory visitor="Signed Out" path={pagePaths.shell} />,
 };

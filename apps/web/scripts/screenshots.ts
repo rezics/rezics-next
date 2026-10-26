@@ -173,17 +173,34 @@ async function build(directory: string, cacheDir: string): Promise<void> {
   }
 }
 
-async function settle(page: Page, id: string): Promise<void> {
-  await page.waitForFunction(
-    (storyId: string) => {
-      const render = (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender;
-      return render?.id === storyId && (render.phase === 'finished' || render.phase === 'errored');
-    },
-    id,
-    { timeout: 60_000 },
-  );
+async function settle(page: Page, id: string, pageErrors: readonly string[] = []): Promise<void> {
+  const failure = (phase: string | undefined, timeout?: unknown) => {
+    const errors = pageErrors.slice(0, 5);
+    const details = errors.length ? ` First page errors: ${errors.join(' | ')}` : '';
+    const wait = timeout instanceof Error ? ` ${timeout.name}: ${timeout.message}` : '';
+    return new Error(`Story ${id} did not finish rendering (last phase: ${phase ?? 'missing'}).${details}${wait}`);
+  };
+  try {
+    await page.waitForFunction(
+      (storyId: string) => {
+        const render = (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender;
+        return render?.id === storyId && (render.phase === 'finished' || render.phase === 'errored');
+      },
+      id,
+      { timeout: 60_000 },
+    );
+  } catch (error) {
+    const phase = await Promise.race([
+      page
+        .evaluate(() => (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender?.phase)
+        .then((value) => (typeof value === 'string' ? value : 'missing'))
+        .catch(() => 'unavailable'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('unresponsive'), 1_000)),
+    ]);
+    throw failure(phase, error);
+  }
   const phase = await page.evaluate(() => (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender?.phase);
-  if (phase !== 'finished') throw new Error(`Story ${id} ended in phase ${phase ?? 'missing'}.`);
+  if (phase !== 'finished') throw failure(typeof phase === 'string' ? phase : undefined);
   await page.evaluate(async () => {
     await document.fonts.ready;
     if (document.fonts.status !== 'loaded') await document.fonts.ready;
@@ -192,11 +209,23 @@ async function settle(page: Page, id: string): Promise<void> {
 
 async function captureOne(page: Page, origin: string, job: Job, out: string): Promise<string> {
   const url = `${origin}/iframe.html?id=${encodeURIComponent(job.id)}&globals=locale:${job.locale};theme:${job.theme}`;
-  await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
-  await settle(page, job.id);
-  const file = join(out, `${job.id}.${job.locale}.${job.theme}.png`);
-  await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
-  return file;
+  const pageErrors: string[] = [];
+  const onPageError = (error: Error) => pageErrors.push(error.message);
+  const onConsole = (message: import('playwright').ConsoleMessage) => {
+    if (message.type() === 'error') pageErrors.push(message.text());
+  };
+  page.on('pageerror', onPageError);
+  page.on('console', onConsole);
+  try {
+    await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
+    await settle(page, job.id, pageErrors);
+    const file = join(out, `${job.id}.${job.locale}.${job.theme}.png`);
+    await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
+    return file;
+  } finally {
+    page.off('pageerror', onPageError);
+    page.off('console', onConsole);
+  }
 }
 
 async function capture(

@@ -22,6 +22,7 @@ const config: StorybookConfig = {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
       'cloudflare:workers': fileURLToPath(new URL('./cloudflare-workers.ts', import.meta.url)),
+      '@tanstack/react-start/server': fileURLToPath(new URL('./react-start.ts', import.meta.url)),
       '@tanstack/react-start': fileURLToPath(new URL('./react-start.ts', import.meta.url)),
     };
     config.plugins ??= [];
