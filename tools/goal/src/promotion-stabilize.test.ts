@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { appendFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
@@ -99,13 +99,36 @@ test('a blocked stabilize candidate is gated again only after its head moves', a
   }
 });
 
-test('a stabilize publish leaves the branch and notifies when dev does not contain main', async () => {
+function commitOn(
+  h: ReturnType<typeof integrationHarness>,
+  branch: string,
+  from: string,
+  files: Record<string, string>,
+): string {
+  const tree = join(h.root, '..', `commit-${branch}-${Date.now()}`);
+  git(h.root, 'worktree', 'add', '--detach', tree, from);
+  try {
+    for (const [path, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(tree, path)), { recursive: true });
+      writeFileSync(join(tree, path), content);
+    }
+    git(tree, 'add', '.');
+    git(tree, 'commit', '-m', `Change on ${branch}`);
+    const commit = git(tree, 'rev-parse', 'HEAD');
+    git(h.root, 'update-ref', `refs/heads/${branch}`, commit);
+    return commit;
+  } finally {
+    git(h.root, 'worktree', 'remove', '--force', tree);
+  }
+}
+
+test('a stabilize publish that does not merge into dev leaves the branch and notifies', async () => {
   const h = integrationHarness();
   try {
     await h.seed('stable');
     const candidate = h.head();
     createStabilize(h, candidate);
-    git(h.root, 'update-ref', 'refs/heads/dev', h.head('main'), candidate);
+    commitOn(h, 'dev', h.head('main'), { stable: 'dev side\n' });
 
     await h.promote(async () => success);
 
@@ -113,8 +136,33 @@ test('a stabilize publish leaves the branch and notifies when dev does not conta
     expect(h.head('stabilize')).toBe(candidate);
     expect(h.inbox).toHaveLength(1);
     expect(h.inbox[0]?.managerId).toBe(h.settings.integration.supermanager);
-    expect(h.inbox[0]?.summary).toContain('dev');
-    expect(h.inbox[0]?.summary).toContain('main');
+    expect(h.inbox[0]?.summary).toContain('does not merge into dev');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a stabilize publish merges main into dev, keeping dev for derived files, and then advances', async () => {
+  const h = integrationHarness();
+  try {
+    const declaration = 'packages/client/src/kernel/fixture.d.ts';
+    const base = commitOn(h, 'main', h.head('main'), {
+      [declaration]: 'base\n',
+      'services/kernel/package.json': JSON.stringify({ private: true, scripts: { derived: 'true' } }),
+    });
+    git(h.root, 'reset', '-q', '--hard', base);
+    commitOn(h, 'stabilize', base, { [declaration]: 'stabilize side\n', fix: 'fix\n' });
+    const dev = commitOn(h, 'dev', base, { [declaration]: 'dev side\n', feature: 'feature\n' });
+
+    await h.promote(async () => success);
+
+    const main = h.head('main');
+    expect(git(h.root, 'merge-base', '--is-ancestor', main, 'dev')).toBe('');
+    expect(git(h.root, 'merge-base', '--is-ancestor', dev, 'dev')).toBe('');
+    expect(git(h.root, 'show', `dev:${declaration}`)).toBe('dev side');
+    expect(git(h.root, 'show', 'dev:fix')).toBe('fix');
+    expect(h.head('stabilize')).toBe(h.head('dev'));
+    expect(h.inbox).toHaveLength(0);
   } finally {
     h.dispose();
   }
