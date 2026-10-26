@@ -98,7 +98,7 @@ async function root(operator: string) {
 for (const population of ['unrelated accounts', 'completed and pending history'] as const) {
   for (const late of [false, true]) {
     test(`${late ? 'late' : 'first'} committed fence page stays bounded as ${population} grows`, async () => {
-      let prepared: { reference: string; next?: string | null; pageKey?: string }[] = [];
+      let prepared: { reference: string; next: string | null | undefined; pageKey: string | undefined }[] = [];
       let run = 0;
       const report = await checkGrowth(db, {
         name: `${late ? 'late' : 'first'} fence page: ${population}`,
