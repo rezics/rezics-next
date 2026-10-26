@@ -11,7 +11,8 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
+import { resourceAuthorizationPage } from '../access/resource-authorization.ts';
+import { accessCommandAuthorization, type Access, type AccessClient, type Actor } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -19,6 +20,7 @@ import readScope from './read-erasure-scope.sql';
 import erase from './erase-content.sql';
 import takedown from './takedown.sql';
 import countRevisions from './erase-post-revisions.sql';
+import validatePage from './validate-erasure-page.sql';
 
 export type ErasePostDependencies = Readonly<{
   pool: Pool;
@@ -206,8 +208,6 @@ async function prepareAuthorizedPoint(
     route,
     identity,
     authorization,
-    restore,
-    prepareRestored,
     async mutate(tx: CommandTransaction) {
       if (!scope) throw new GrantDeniedError();
       const statement = point.action === 'moderation:takedown' ? takedown : erase;
@@ -337,57 +337,85 @@ export function erasePostLogicalAsInitiator(
 }
 
 /** One bounded logical page, authorized completely at the command's T before
- * receipt lookup or mutations. Each post uses the ordinary point seam; one
- * denied point rolls back the entire page, including its events and receipt.
+ * receipt lookup or mutations. Access prepares evidence once per attempt and
+ * evaluates one formula statement for every post; one denied post rolls back
+ * the entire page, including its events and receipt.
  */
 export async function erasePostLogicalPageAsInitiator(
   deps: Omit<ErasePostDependencies, 'routeKey'>,
   initiator: ErasureInitiator,
-  input: Readonly<{ postIds: readonly string[]; reason: string }>,
+  input: Readonly<{ postIds: readonly string[]; threadId: string; reason: string }>,
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ postIds: string[]; processedPosts: number; erasedRevisions: number }>> {
   const postIds = [...input.postIds];
   if (postIds.length < 1 || postIds.length > 100 || new Set(postIds).size !== postIds.length)
     throw new RangeError('Invalid erasure page');
-  const points: Awaited<ReturnType<typeof prepareAuthorizedPoint>>[] = [];
-  for (const id of postIds) {
-    points.push(
-      await prepareAuthorizedPoint(
-        deps,
-        initiator,
-        { action: 'post:erase', kind: 'post', id, reason: input.reason },
-        context,
-      ),
+  if (
+    typeof input.reason !== 'string' ||
+    !input.reason.length ||
+    input.reason.length > 1024 ||
+    !input.reason.isWellFormed()
+  )
+    throw new RangeError('Invalid moderation reason');
+  const route = routeOf(postIds[0]!);
+  if (route === null || postIds.some((id) => routeOf(id) !== route)) throw new GrantDeniedError();
+  const identity = {
+    principal: { kind: 'account' as const, id: initiator.accountId },
+    basis: { clientId: initiator.clientId, requestedBy: initiator.requestedBy },
+  };
+  const target = Object.freeze({ route, id: postIds[0]! });
+  async function validate(client: AccessClient, ids: readonly string[]) {
+    const parameters = { ids, route, thread_id: input.threadId };
+    const rows = await client.query<{ valid: boolean }>(
+      validatePage.sql,
+      validatePage.params.map((name) => parameters[name as keyof typeof parameters]),
     );
+    return rows.rows[0]?.valid === true;
   }
-  const first = points[0]!;
-  if (points.some((point) => point.route !== first.route)) throw new GrantDeniedError();
+  const page = {
+    route,
+    resourceType: 'content.post',
+    ids: postIds,
+    validate: (client: AccessClient) => validate(client, postIds),
+  };
   const authorization: CommandAuthorization = {
     action: 'post:erase',
-    resource: first.authorization.resource,
+    resource: target,
     denied: () => new GrantDeniedError(),
     async prepare(attempt) {
-      // Restore one native person/action identity for this live attempt. Account,
-      // source, consent and delegation evidence is shared at T; every actual post
-      // still gets its own ordinary Access admission/check and scope validation.
-      const verified = await first.restore(attempt);
-      const proofs: unknown[] = [];
-      for (const point of points) proofs.push({ targetProof: await point.prepareRestored(attempt, verified) });
-      return proofs;
+      // Restore one native person/action identity for this live attempt. The same
+      // evidence then serves one formula statement over the whole page.
+      const actor = await initiator.restorer.restoreInitiator(
+        {
+          operation: initiator.operation,
+          action: 'post:erase',
+          anchor: { resource: target, validate: (client) => validate(client, [target.id]) },
+          context: { pool: deps.pool, deadline: context.deadline },
+        },
+        attempt.time,
+      );
+      const current = resourceAuthorizationPage({
+        access: deps.access,
+        actor,
+        action: 'post:erase',
+        context: { pool: deps.pool, deadline: context.deadline, partition: partitionOf(route) },
+        anchor: page,
+      });
+      return { current, proof: await current.prepare!(attempt) };
     },
     async authorize(tx, attempt, evidence) {
-      const proofs = evidence as unknown[];
-      for (const [index, point] of points.entries())
-        if ((await point.authorization.authorize(tx, attempt, proofs[index])) !== 'execute')
-          throw new GrantDeniedError();
+      // At trusted T, before even the receipt lookup. Denied replay cannot see
+      // the old response or security revision and cannot append an effect.
+      const { current, proof } = evidence as { current: CommandAuthorization; proof: unknown };
+      if ((await current.authorize(tx, attempt, proof)) !== 'execute') throw new GrantDeniedError();
       return 'execute';
     },
   };
   return runCommand(
     deps.pool,
     {
-      ...first.identity,
-      partition: partitionOf(first.route),
+      ...identity,
+      partition: partitionOf(route),
       deadline: context.deadline,
       clock: deps.clock,
       authorization,
@@ -395,23 +423,33 @@ export async function erasePostLogicalPageAsInitiator(
         kind: 'content.author-erasure.page',
         key: context.idempotencyKey,
         digest: createHash('sha256')
-          .update(canonicalize([first.identity, points.map((point) => point.point)])!)
+          .update(
+            canonicalize([
+              identity,
+              postIds.map((id) => ({ action: 'post:erase', kind: 'post', id, reason: input.reason })),
+            ])!,
+          )
           .digest(),
       },
     },
     async (tx) => {
       let erasedRevisions = 0;
       const events = [];
-      for (const point of points) {
-        const parameters = { route: point.route, id: point.point.id };
-        const result = await tx.query<{ revisions: string }>(
-          countRevisions.sql,
-          countRevisions.params.map((name) => parameters[name as keyof typeof parameters]),
-        );
-        erasedRevisions += Number(result.rows[0]!.revisions);
+      for (const id of postIds) {
+        const parameters = { route, id, kind: 'post' };
+        const args = (statement: { params: readonly string[] }) =>
+          statement.params.map((name) => parameters[name as keyof typeof parameters]);
+        const counted = await tx.query<{ revisions: string }>(countRevisions.sql, args(countRevisions));
+        erasedRevisions += Number(counted.rows[0]!.revisions);
         if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
           throw new RangeError('Operation counter overflow');
-        events.push(...(await point.mutate(tx)).events);
+        const changed = (await tx.query<{ security_revision: string }>(erase.sql, args(erase))).rows[0];
+        // An already erased post cannot become a new effect on a different key.
+        if (!changed) throw new GrantDeniedError();
+        events.push({
+          type: 'com.rezics.content.post.erased.v1',
+          data: { postId: id, securityRevision: changed.security_revision },
+        });
       }
       return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
     },

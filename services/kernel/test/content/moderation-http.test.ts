@@ -45,6 +45,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
       'realm:participate',
       'realm:join',
       'board:create',
+      'account:read',
     ]);
     const catalogue = resourceRoleCatalogue(fixture.access);
     if (!catalogue) throw new Error('Fixture Access has no resource role catalogue');
@@ -85,6 +86,8 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     );
     await fixture.grant(fixture.actor, 'thread:create', { route: routeOf(boardId)!, id: boardId });
     await fixture.grant(fixture.actor, 'board:read', { route: routeOf(boardId)!, id: boardId });
+    // Author erasure initiation requires the initiator's own account read as well as post:erase.
+    await fixture.grant(fixture.actor, 'account:read', { route: routeOf(fixture.actor)!, id: fixture.actor });
   });
   afterAll(async () => {
     await fixture?.close();

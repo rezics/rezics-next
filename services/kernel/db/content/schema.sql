@@ -770,7 +770,8 @@ CREATE TABLE content.revision (
     CONSTRAINT revision_media_routes_check CHECK (content.media_routes_match(route, media_ids)),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT revision_subject_ids_limit CHECK ((cardinality(subject_ids) <= 128))
-);
+)
+WITH (fillfactor='50');
 ALTER TABLE ONLY content.revision ALTER COLUMN body SET COMPRESSION lz4;
 
 

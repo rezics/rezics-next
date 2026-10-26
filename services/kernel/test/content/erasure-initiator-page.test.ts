@@ -114,7 +114,7 @@ async function scope(posts: number) {
       },
     }),
   };
-  return { ids, initiator };
+  return { ids, initiator, threadId };
 }
 
 async function postState(ids: readonly string[]) {
@@ -128,11 +128,11 @@ async function postState(ids: readonly string[]) {
 }
 
 test('a logical erasure page run as a restored durable initiator executes and erases every post in the page', async () => {
-  const { ids, initiator } = await scope(3);
+  const { ids, initiator, threadId } = await scope(3);
   const result = await erasePostLogicalPageAsInitiator(
     dependencies(),
     initiator,
-    { postIds: ids, reason: 'Erase author history' },
+    { postIds: ids, threadId, reason: 'Erase author history' },
     context(),
   );
   expect(result.value).toEqual({ postIds: ids, processedPosts: ids.length, erasedRevisions: ids.length });
@@ -155,7 +155,7 @@ test('a single logical erasure run as a restored durable initiator executes', as
 });
 
 test('a restored initiator without post:erase on one post of a page is denied and the whole page rolls back', async () => {
-  const { ids, initiator } = await scope(3);
+  const { ids, initiator, threadId } = await scope(3);
   // Keep the first post (and restoration anchor) authorized; deny a later point.
   await fixture.reader.query(
     "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='post:erase'",
@@ -166,7 +166,7 @@ test('a restored initiator without post:erase on one post of a page is denied an
     erasePostLogicalPageAsInitiator(
       dependencies(),
       initiator,
-      { postIds: ids, reason: 'Erase author history' },
+      { postIds: ids, threadId, reason: 'Erase author history' },
       context(),
     ),
   ).rejects.toBeInstanceOf(GrantDeniedError);

@@ -261,7 +261,7 @@ export async function runAuthorErasure(
           const outcome = await erasePostLogicalPageAsInitiator(
             commandDependencies,
             initiator,
-            { postIds: posts.map((post) => post.post_id), reason: 'Author erasure' },
+            { postIds: posts.map((post) => post.post_id), threadId: source.threadId, reason: 'Author erasure' },
             { deadline: Date.now() + 10_000, idempotencyKey: prefix + name, requestId: operationId },
           );
           return { committed: true, erasedRevisions: outcome.value.erasedRevisions };

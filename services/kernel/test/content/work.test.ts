@@ -9,10 +9,13 @@ import { createThread } from '../../src/content/commands.ts';
 import { reserveMedia } from '../../src/content/media.ts';
 import {
   createContentOperationClient,
+  createContentWork,
   CONTENT_COLLECTION_SCHEDULE,
   CONTENT_OPERATION_PROGRESS,
 } from '../../src/content/work.ts';
-import { registerContent } from '../../src/content/register.ts';
+import { contentWorkDependencies, createContentWorkAccess, registerContent } from '../../src/content/register.ts';
+import { contentEffects } from '../../src/content/relays.ts';
+import { readMembershipRouteKey } from '../../src/access/membership-work-config.ts';
 import {
   CONTENT_QUEUES,
   CONTENT_WORKFLOWS,
@@ -27,6 +30,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import type { WorkModule } from '../../src/work/registry.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { startWorker } from '../../src/worker.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
@@ -40,7 +44,29 @@ import { readPartition } from '../../src/partition/partition.ts';
 const databaseUrl = process.env.DATABASE_URL!;
 const route = 0x4920;
 const partition = partitionOf(route);
+// A failed durable step retries after this delay in the child process; production waits one second.
+const STEP_RETRY_DELAY_SECONDS = 0.05;
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
+/** The production content registration with a shorter delay between attempts of a failed durable step. */
+function contentWithStepRetryDelay(stepRetryDelaySeconds: number): WorkModule {
+  return {
+    name: registerContent.name,
+    async register(context) {
+      const dependencies = contentWorkDependencies(context.env, fetch);
+      await createContentWork({
+        storage: dependencies.storage,
+        access: createContentWorkAccess(context.clock),
+        readConsent: dependencies.readConsent,
+        routeKey: readMembershipRouteKey(context.env),
+        fetchConfig: dependencies.fetchConfig,
+        collectionPartitions: [partition],
+        stepRetryDelaySeconds,
+      }).register(context);
+      context.addEffects(contentEffects(context.pool, context.client));
+    },
+  };
+}
 
 if (process.argv.includes('--content-worker')) {
   const nativeFetch = globalThis.fetch;
@@ -67,11 +93,13 @@ if (process.argv.includes('--content-worker')) {
   const worker = await startWorker(
     {
       databaseUrl,
-      executorId: 'content-test',
+      executorId: `content-test-${new URL(databaseUrl).pathname.slice(1)}`,
       poolSize: 10,
       ...(process.env.CONTENT_TEST_NOW ? { clock: () => new Date(process.env.CONTENT_TEST_NOW!) } : {}),
     },
-    KERNEL_WORK_MODULES,
+    KERNEL_WORK_MODULES.map((module) =>
+      module === registerContent ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
+    ),
     {
       CONTENT_R2_ENDPOINT: storageEndpoint,
       CONTENT_R2_BUCKET: 'media-test',
@@ -151,8 +179,8 @@ if (process.argv.includes('--content-worker')) {
   }
   type Store = ReturnType<typeof storageFixture>;
 
-  async function until(check: () => boolean | Promise<boolean>) {
-    const deadline = Date.now() + 15_000;
+  async function until(check: () => boolean | Promise<boolean>, timeout = 15_000) {
+    const deadline = Date.now() + timeout;
     while (!(await check())) {
       if (Date.now() >= deadline) throw new Error('Timed out waiting for durable content work');
       await Bun.sleep(20);
@@ -172,14 +200,15 @@ if (process.argv.includes('--content-worker')) {
     })();
     const errors = new Response(child.stderr).text();
     try {
+      // The child imports the whole kernel before it prints anything, which takes seconds of CPU on a busy host.
       await until(() => {
         if (child.exitCode !== null) throw new Error(`Worker startup failed: ${output}`);
         return output.includes('ready');
-      });
+      }, 120_000);
     } catch (error) {
       child.kill('SIGKILL');
       await child.exited;
-      throw new Error(`${String(error)}\n${await errors}`);
+      throw new Error(`${String(error)}\nstdout:\n${output}\nstderr:\n${await errors}`);
     }
     return {
       async kill() {
@@ -195,7 +224,7 @@ if (process.argv.includes('--content-worker')) {
         } catch (error) {
           child.kill('SIGKILL');
           await child.exited;
-          throw new Error(`${String(error)}\n${await errors}`);
+          throw new Error(`${String(error)}\nstdout:\n${output}\nstderr:\n${await errors}`);
         }
         expect(await child.exited).toBe(0);
         await read;
