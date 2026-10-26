@@ -73,7 +73,15 @@ beforeAll(async () => {
   const issuer = 'https://auth.example.test';
   const audience = 'https://api.example.test';
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: new Map(
+      actions.map((action) => [
+        action,
+        {
+          anonymous: false,
+          ...(action === 'media:import_from_url' ? { 'x-resource-types': ['content.media'] } : {}),
+        },
+      ]),
+    ),
     auth: {
       issuer,
       audience,

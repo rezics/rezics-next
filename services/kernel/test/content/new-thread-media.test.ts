@@ -9,7 +9,7 @@ import {
   type PublicJwks,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { normalizeDocument } from '@rezics/document';
+import { fromPlainText } from '@rezics/document';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -204,7 +204,21 @@ beforeAll(async () => {
   otherBearer = await issueWebsite(otherId);
 
   const access = createAccess({
-    actions: new Map(actionNames.map((action) => [action, { anonymous: action.endsWith(':read') }])),
+    actions: new Map(
+      actionNames.map((action) => [
+        action,
+        {
+          anonymous: action.endsWith(':read'),
+          ...(action === 'media:create'
+            ? { 'x-resource-types': ['content.media'] }
+            : action === 'thread:create'
+              ? { 'x-resource-types': ['content.thread', 'content.post'] }
+              : action === 'post:create'
+                ? { 'x-resource-types': ['content.post'] }
+                : {}),
+        },
+      ]),
+    ),
     auth: {
       issuer,
       audience,
@@ -227,7 +241,6 @@ beforeAll(async () => {
       }),
     }),
   });
-
   await db.admin.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
      VALUES ($1,$2,$3,'New thread media','published',1,$4)`,
@@ -249,14 +262,7 @@ afterAll(async () => {
 });
 
 function snapshot(text: string) {
-  return normalizeDocument({
-    version: 'rezics-document-v1',
-    profile: 'text',
-    doc: {
-      type: 'doc',
-      content: [{ type: 'paragraph', attrs: { id: 'new-thread-paragraph' }, content: [{ type: 'text', text }] }],
-    },
-  });
+  return fromPlainText(text);
 }
 
 function threadInput(mediaIds: string[] = []) {

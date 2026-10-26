@@ -99,7 +99,15 @@ beforeAll(async () => {
   // Exercise native JWT verification, account anchoring, Access and rate identity.
   // The website code/PKCE/private_key_jwt issuance port is absent from current Auth exports.
   access = createAccess({
-    actions: new Map([...scopes, 'media:erase'].map((action) => [action, { anonymous: action.endsWith(':read') }])),
+    actions: new Map(
+      [...scopes, 'media:erase'].map((action) => [
+        action,
+        {
+          anonymous: action.endsWith(':read'),
+          ...(action === 'media:create' ? { 'x-resource-types': ['content.media'] } : {}),
+        },
+      ]),
+    ),
     auth: {
       issuer,
       audience: 'https://kernel.test',
@@ -235,7 +243,7 @@ test('strict media schemas, exact actions, problems and AIP custom methods are p
     ).toBe(true);
     if (method === 'post')
       expect(operation?.['x-rate-limit']).toEqual({
-        family: 'upload',
+        family: action === 'media:complete' ? 'write' : 'upload',
         units: 1,
       });
     else expect(operation?.['x-rate-limit']).toBeUndefined();

@@ -36,7 +36,15 @@ beforeAll(async () => {
   signingKey = pair.privateKey;
   const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'media-complete-rate', alg: 'ES256', use: 'sig' };
   const access = createAccess({
-    actions: new Map([...actions, 'media:erase'].map((action) => [action, { anonymous: action.endsWith(':read') }])),
+    actions: new Map(
+      [...actions, 'media:erase'].map((action) => [
+        action,
+        {
+          anonymous: action.endsWith(':read'),
+          ...(action === 'media:create' ? { 'x-resource-types': ['content.media'] } : {}),
+        },
+      ]),
+    ),
     auth: {
       issuer,
       audience,
