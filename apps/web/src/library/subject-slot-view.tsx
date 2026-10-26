@@ -1,10 +1,20 @@
+// The web package does not depend on Ark directly. The styled select's collection helper
+// comes from the UI package's installed Ark build.
+import { createListCollection } from '../../../../packages/ui/node_modules/@ark-ui/react/dist/components/select/index.js';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@rezics/ui/select';
+import { Loader2Icon } from 'lucide-react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { m } from '../paraglide/messages.js';
 import { AccountRef } from './account-ref';
 import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
 import { mutateSubjectLibrarySlot, readSubjectLibraryCollections } from './subject-slot-actions';
-import type { SubjectLibraryMutation, SubjectLibrarySlotData } from './subject-slot';
-import { m } from '../paraglide/messages.js';
-import { useEffect, useState, type FormEvent } from 'react';
+import type {
+  LibraryEntryState,
+  SubjectLibraryMutation,
+  SubjectLibraryMutationResponse,
+  SubjectLibrarySlotData,
+} from './subject-slot';
 
 type SubjectSlotProps = {
   subject: SubjectReference;
@@ -15,14 +25,59 @@ type SubjectSlotProps = {
 const buttonClass =
   'inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-sm text-primary hover:bg-muted';
 const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
+const removeValue = 'remove';
+
+function LibraryStateSelect({
+  busy,
+  disabled,
+  hasEntry,
+  selectedState,
+  stateOptions,
+  onChoose,
+}: {
+  busy: boolean;
+  disabled: boolean;
+  hasEntry: boolean;
+  selectedState: LibraryEntryState | '';
+  stateOptions: readonly (readonly [LibraryEntryState, string])[];
+  onChoose: (value: string) => void;
+}) {
+  const choices = [
+    ...stateOptions.map(([value, label]) => ({ value, label })),
+    ...(hasEntry ? [{ value: removeValue, label: m.library_subject_remove() }] : []),
+  ];
+  const collection = createListCollection({ items: choices });
+  return (
+    <Select
+      collection={collection}
+      disabled={disabled}
+      onValueChange={(details) => onChoose(details.value[0] ?? '')}
+      value={selectedState ? [selectedState] : []}
+    >
+      <SelectTrigger aria-busy={busy ? true : undefined} aria-label={m.library_subject_entry()} className="w-fit">
+        {busy ? <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+        <SelectValue placeholder={m.library_subject_add()} />
+      </SelectTrigger>
+      <SelectContent>
+        {choices.map((option) => (
+          <Fragment key={option.value}>
+            {option.value === removeValue ? <SelectSeparator /> : null}
+            <SelectItem item={option}>{option.label}</SelectItem>
+          </Fragment>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 /** Compact subject-level Library controls rendered in the page's template action slot. */
 export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) {
   const action = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject.id)}`;
   const [hydrated, setHydrated] = useState(false);
+  const [pending, setPending] = useState(false);
   const [actionResult, setActionResult] = useState(data.result);
   const [entry, setEntry] = useState(data.entry);
-  const [selectedState, setSelectedState] = useState(data.entry?.state ?? 'planned');
+  const [selectedState, setSelectedState] = useState<LibraryEntryState | ''>(data.entry?.state ?? '');
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
   const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
@@ -48,37 +103,96 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             : result === 'closed'
               ? m.library_subject_closed()
               : result === 'conflict'
-                ? m.library_subject_unavailable()
+                ? m.library_conflict()
                 : result === 'unavailable'
                   ? m.library_subject_unavailable()
                   : null;
 
+  function applyEntryResult(response: SubjectLibraryMutationResponse, previous: LibraryEntryState | '') {
+    if (response.result === 'saved' && response.entry) {
+      setEntry(response.entry);
+      setSelectedState(response.entry.state);
+      setActionResult('saved');
+      return;
+    }
+    if (response.result === 'cleared') {
+      setEntry(null);
+      setSelectedState('');
+      setActionResult('cleared');
+      return;
+    }
+    if (response.result === 'conflict' && 'entry' in response) {
+      setEntry(response.entry ?? null);
+      setSelectedState(response.entry?.state ?? '');
+      setActionResult('conflict');
+      return;
+    }
+    setSelectedState(previous);
+    setActionResult(response.result);
+  }
+
+  async function writeEntry(input: SubjectLibraryMutation, previous: LibraryEntryState | '') {
+    try {
+      const response = await mutateSubjectLibrarySlot({
+        data: input,
+        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+      });
+      applyEntryResult(response, previous);
+    } catch {
+      setSelectedState(previous);
+      setActionResult('unavailable');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function choose(value: string) {
+    if (!hydrated || pending || !value) return;
+    if (value === 'remove') {
+      if (!entry) return;
+      const previous = selectedState;
+      setPending(true);
+      void writeEntry(
+        {
+          subjectId: subject.id,
+          intent: 'entry',
+          action: 'clear',
+          revision: entry.revision,
+          idempotencyKey: crypto.randomUUID(),
+        },
+        previous,
+      );
+      return;
+    }
+    if (value === selectedState || !stateOptions.some(([state]) => state === value)) return;
+    const next = value as LibraryEntryState;
+    const previous = selectedState;
+    setSelectedState(next);
+    setPending(true);
+    void writeEntry(
+      {
+        subjectId: subject.id,
+        intent: 'entry',
+        action: 'save',
+        state: next,
+        ...(entry ? { revision: entry.revision } : {}),
+        idempotencyKey: crypto.randomUUID(),
+      },
+      previous,
+    );
+  }
+
   async function mutate(input: SubjectLibraryMutation) {
-    if (!hydrated) return;
+    if (!hydrated || pending) return;
     try {
       const response = await mutateSubjectLibrarySlot({
         data: input,
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
       setActionResult(response.result);
-      if ('entry' in response) {
-        setEntry(response.entry ?? null);
-        setSelectedState(response.entry?.state ?? 'planned');
-      }
     } catch {
       setActionResult('unavailable');
     }
-  }
-
-  function saveEntry(action: 'save' | 'clear') {
-    return mutate({
-      subjectId: subject.id,
-      intent: 'entry',
-      action,
-      ...(action === 'save' ? { state: selectedState } : {}),
-      ...(entry ? { revision: entry.revision } : {}),
-      idempotencyKey: crypto.randomUUID(),
-    });
   }
 
   function addToCollection(collectionId: string) {
@@ -113,32 +227,14 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
           onSubmit={(event) => event.preventDefault()}
           className="flex flex-wrap items-center gap-2"
         >
-          <label className="sr-only" htmlFor={`library-state-${subject.id}`}>
-            {m.library_subject_entry()}
-          </label>
-          <select
-            id={`library-state-${subject.id}`}
-            value={selectedState}
-            disabled={!hydrated}
-            onChange={(event) =>
-              setSelectedState(event.currentTarget.value as NonNullable<SubjectLibraryMutation['state']>)
-            }
-            className="min-h-9 max-w-44 rounded-lg border border-border bg-background px-2 text-sm text-foreground"
-          >
-            {stateOptions.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button className={buttonClass} type="button" disabled={!hydrated} onClick={() => void saveEntry('save')}>
-            {m.library_subject_save()}
-          </button>
-          {entry ? (
-            <button className={buttonClass} type="button" disabled={!hydrated} onClick={() => void saveEntry('clear')}>
-              {m.library_subject_clear()}
-            </button>
-          ) : null}
+          <LibraryStateSelect
+            busy={pending}
+            disabled={!hydrated || pending}
+            hasEntry={entry !== null}
+            onChoose={choose}
+            selectedState={selectedState}
+            stateOptions={stateOptions}
+          />
         </form>
       ) : null}
 

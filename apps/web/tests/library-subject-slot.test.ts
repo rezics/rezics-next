@@ -465,18 +465,25 @@ test(
       expect(await page.getByRole('option', { name: 'Remove from library', exact: true }).count()).toBe(0);
       holdEntryWrite();
       await page.getByRole('option', { name: 'In progress', exact: true }).click();
-      await eventually(async () => (await select.getAttribute('aria-busy')) === 'true' && (await select.isDisabled()));
-      const pending = calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`);
-      expect(pending).toHaveLength(1);
+      // The control can show busy before the kernel records the write, so wait for both.
+      await eventually(async () => {
+        const recorded =
+          calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`).length === 1;
+        return recorded && (await select.getAttribute('aria-busy')) === 'true' && (await select.isDisabled());
+      });
       releaseWrite?.();
-      await eventually(() => libraryEntry?.state === 'in_progress' && libraryEntry.revision === 1);
-      expect(await select.getAttribute('aria-busy')).not.toBe('true');
-      expect(await select.isDisabled()).toBe(false);
+      await eventually(
+        async () =>
+          libraryEntry?.state === 'in_progress' &&
+          libraryEntry.revision === 1 &&
+          (await select.innerText()).includes('In progress') &&
+          (await select.getAttribute('aria-busy')) !== 'true' &&
+          !(await select.isDisabled()),
+      );
       const put = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(put.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(put.body).toEqual({ state: 'in_progress' });
       expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
-      expect(await select.innerText()).toContain('In progress');
     } finally {
       releaseWrite?.();
       await page.context().close();
@@ -515,11 +522,15 @@ test(
 
       calls.length = 0;
       await pick(page, select, 'In progress');
-      await eventually(() => libraryEntry?.state === 'in_progress' && libraryEntry.revision === 2);
+      await eventually(
+        async () =>
+          libraryEntry?.state === 'in_progress' &&
+          libraryEntry.revision === 2 &&
+          (await select.innerText()).includes('In progress'),
+      );
       const put = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(put.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(put.body).toEqual({ state: 'in_progress', revision: 1 });
-      expect(await select.innerText()).toContain('In progress');
 
       await select.click();
       const list = page.getByRole('listbox');
@@ -546,11 +557,10 @@ test(
 
       calls.length = 0;
       await pick(page, select, 'Remove from library');
-      await eventually(() => libraryEntry === null);
+      await eventually(async () => libraryEntry === null && (await select.innerText()).includes('Add to library'));
       const remove = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(remove.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(remove.query).toContain('revision=8');
-      expect(await select.innerText()).toContain('Add to library');
     } finally {
       await page.context().close();
     }
