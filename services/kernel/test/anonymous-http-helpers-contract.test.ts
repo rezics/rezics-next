@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import {
   ANONYMOUS_PRINCIPAL_ID,
-  CommandUnavailableError,
   normalizeCommandKey,
   principalCommandIdentity,
   runCommand,
@@ -153,7 +152,7 @@ test('account request digest bytes and attribution remain unchanged', () => {
   ).not.toEqual(digest);
 });
 
-test('helper output and an original parsed key grant no anonymous execution before I/O', async () => {
+test('helper output without both authorization and a receipt grants no anonymous execution before I/O', async () => {
   let touched = 0;
   const unexpected = (): never => {
     touched++;
@@ -178,11 +177,10 @@ test('helper output and an original parsed key grant no anonymous execution befo
   const { receipt, ...withoutReceipt } = options;
   for (const input of [withoutReceipt, { ...withoutReceipt, receipt }]) {
     await expect(runCommand(pool, input, unexpected)).rejects.toThrow('Anonymous commands require authorization');
-    await expect(runCommand(pool, { ...input, authorization }, unexpected)).rejects.toMatchObject({
-      name: CommandUnavailableError.name,
-      reason: 'anonymous-receipts',
-    });
   }
+  await expect(runCommand(pool, { ...withoutReceipt, authorization }, unexpected)).rejects.toThrow(
+    'Anonymous commands require a client-generated UUIDv4 key',
+  );
   expect(originalKey).toBe(key.toUpperCase());
   expect(touched).toBe(0);
 });
