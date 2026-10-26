@@ -66,3 +66,31 @@ test('a brief held after a merged task is ready at once', () => {
     expect(h.store.task(h.tasks.dispatch(brief).id).state).toBe('ready');
   } finally { h.dispose(); }
 });
+
+test('a stopped task held by a reshape starts when a later reshape drops the unmet dependency', async () => {
+  const h = harness();
+  try {
+    writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]'));
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const blocker = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id);
+    await h.tasks.stop(task.id);
+    const heldBrief = join(h.root, '.temp/goal/held.md');
+    writeFileSync(heldBrief, markdown.replace('command: [bun, test]', 'command: ["true"]')
+      .replace('waiting: []', `waiting: []\nafter: [${blocker.id}]`));
+    await expect(h.tasks.retry(task.id, { brief: heldBrief })).rejects.toThrow('held until its dependencies merge');
+    expect(h.store.task(task.id).state).toBe('held');
+    // Retrying without a reshape keeps it held while the dependency is unmet.
+    await expect(h.tasks.retry(task.id)).rejects.toThrow('held until its dependencies merge');
+    expect(h.store.task(task.id).state).toBe('held');
+
+    const freeBrief = join(h.root, '.temp/goal/free.md');
+    writeFileSync(freeBrief, markdown.replace('command: [bun, test]', 'command: ["true"]'));
+    const before = h.store.task(task.id).currentAttempt;
+    const worker = await h.tasks.retry(task.id, { brief: freeBrief });
+    await worker.exited;
+    expect(h.store.task(task.id).currentAttempt).toBe(before + 1);
+    expect(h.store.task(task.id).brief.after).toEqual([]);
+  } finally { h.dispose(); }
+});

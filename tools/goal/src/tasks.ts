@@ -284,7 +284,8 @@ export class WorkerTasks {
       if (!nextBrief.acceptance.command.length)
         throw new Error('Imported attempts need a dispatchable contract before retry');
       const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
-      if (reshaped && nextBrief.after.some((id) => !['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))) {
+      // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
+      if ((reshaped || task.state === 'held') && nextBrief.after.some((id) => !['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
