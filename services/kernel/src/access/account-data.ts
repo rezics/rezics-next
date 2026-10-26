@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { routeOf } from '../route/route.ts';
+import handleRead from './account-handle-read.sql';
 import accountRead from './account-read.sql';
 import publicPage from './public-identity-page.sql';
 import publicRead from './account-public-read.sql';
@@ -35,6 +38,46 @@ export type PublicIdentity = {
   automated: boolean;
   operatorId: string | null;
 };
+
+export type AccountLink = { label: string; url: string };
+export type PublicAccountProfile = PublicIdentity & {
+  bio: string | null;
+  links: AccountLink[];
+  avatar: {
+    media: string;
+    width: number;
+    height: number;
+    placeholder: { thumbhash: string; color: string };
+    variants: { format: 'avif' | 'webp'; width: number }[];
+    focalPoint: { x: number; y: number } | null;
+    credit: { rightsHolder: string; via: { name: string; url: string }; license: string };
+  } | null;
+  subject: { id: string; label: string; type: string } | null;
+};
+
+/** Resolve only an active claim, then read the account on its own anchor. */
+export async function readPublicAccountByHandle(
+  client: Queryable,
+  handle: string,
+): Promise<(PublicIdentity | PublicAccountProfile)[]> {
+  const route = createHash('sha256').update(handle).digest().readUInt16BE(0);
+  const claim = await handleRead.run(client, { route, handle });
+  if (!claim) return [];
+  const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
+  if (!row || row.state === 'pending') return [];
+  const deleted = row.state === 'deleted';
+  const identity: PublicIdentity = {
+    id: row.accountId,
+    kind: row.kind === 'organization' ? 'organization' : 'actor',
+    handle: row.handle,
+    displayName: row.displayName,
+    state: deleted ? 'deleted' : 'active',
+    automated: !deleted && row.operatorAccountId !== null,
+    operatorId: row.operatorAccountId,
+  };
+  if (deleted) return [identity];
+  return [{ ...identity, bio: row.biography, links: row.links as AccountLink[], avatar: null, subject: null }];
+}
 
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.

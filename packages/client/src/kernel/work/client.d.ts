@@ -1,5 +1,5 @@
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 export declare const DBOS_SCHEMA = "dbos";
 export declare const WORK_APPLICATION = "rezics-kernel";
 export type WorkClient = DBOSClient & {

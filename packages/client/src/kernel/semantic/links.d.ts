@@ -1,3 +1,4 @@
+import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import type { Relay } from '../events/relays.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -8,9 +9,15 @@ export type SubjectLink = {
     subject: string;
     property: string;
     statement: string;
+    type?: string;
+    label?: string;
 };
 export type SubjectLinksPage = {
     links: SubjectLink[];
+    count?: {
+        value: number;
+        exact: boolean;
+    };
     freshness: {
         consistency: 'eventual';
         target_seconds: 10;
@@ -28,6 +35,11 @@ export declare function listSubjectLinks(pool: Pool, ring: KeyRing, options: {
     subject: string;
     property: string | null;
     limit: number;
+    filter?: string;
+    type?: string;
+    language?: string;
+    includeLabels?: boolean;
+    release?: Release;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
     seen: readonly SessionComponent[];

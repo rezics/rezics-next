@@ -33,6 +33,46 @@ export type PublicIdentity = {
     automated: boolean;
     operatorId: string | null;
 };
+export type AccountLink = {
+    label: string;
+    url: string;
+};
+export type PublicAccountProfile = PublicIdentity & {
+    bio: string | null;
+    links: AccountLink[];
+    avatar: {
+        media: string;
+        width: number;
+        height: number;
+        placeholder: {
+            thumbhash: string;
+            color: string;
+        };
+        variants: {
+            format: 'avif' | 'webp';
+            width: number;
+        }[];
+        focalPoint: {
+            x: number;
+            y: number;
+        } | null;
+        credit: {
+            rightsHolder: string;
+            via: {
+                name: string;
+                url: string;
+            };
+            license: string;
+        };
+    } | null;
+    subject: {
+        id: string;
+        label: string;
+        type: string;
+    } | null;
+};
+/** Resolve only an active claim, then read the account on its own anchor. */
+export declare function readPublicAccountByHandle(client: Queryable, handle: string): Promise<(PublicIdentity | PublicAccountProfile)[]>;
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */

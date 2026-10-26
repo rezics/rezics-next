@@ -1,8 +1,8 @@
 import { treaty } from '@elysia/eden';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
-import type { Kernel as KernelType } from './kernel/http/kernel.ts';
+import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 
-export type { Kernel } from './kernel/http/kernel.ts';
+export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 

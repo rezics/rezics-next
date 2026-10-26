@@ -379,12 +379,14 @@ CREATE TABLE access.account (
     handle_operation_id text,
     created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     rate_tier text DEFAULT 'ordinary'::text NOT NULL,
+    links jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
     CONSTRAINT account_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT account_handle_check CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
     CONSTRAINT account_kind_check CHECK ((kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
+    CONSTRAINT account_links_check CHECK (((jsonb_typeof(links) = 'array'::text) AND (jsonb_array_length(links) <= 5))),
     CONSTRAINT account_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
     CONSTRAINT account_operator_relation_version_check CHECK ((operator_relation_version >= 0)),
     CONSTRAINT account_rate_tier_check CHECK ((rate_tier = ANY (ARRAY['ordinary'::text, 'trusted'::text, 'service'::text]))),
@@ -1454,22 +1456,6 @@ CREATE TRIGGER rating_controller AFTER INSERT OR UPDATE OF operator_account_id O
 --
 
 CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
-
-
---
--- Name: committed_continuation_completion committed_continuation_completion_route_continuation_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
---
-
-ALTER TABLE ONLY access.committed_continuation_completion
-    ADD CONSTRAINT committed_continuation_completion_route_continuation_id_fkey FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id);
-
-
---
--- Name: committed_continuation_entry committed_continuation_entry_route_continuation_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
---
-
-ALTER TABLE ONLY access.committed_continuation_entry
-    ADD CONSTRAINT committed_continuation_entry_route_continuation_id_fkey FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id);
 
 
 --

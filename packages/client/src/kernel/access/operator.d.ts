@@ -140,6 +140,9 @@ export declare function createOperatorCommands(config: OperatorConfig): {
         accountId: string;
         safe: boolean;
     }>;
+    /** Authorization replay returns the original receipt after checking current
+     * authority. Only session issuance or the bound credential effect consumes it.
+     */
     authorizeOpening(context: LifecycleRequest, input: {
         operatorAccountId: string;
         subjectAccountId: string;

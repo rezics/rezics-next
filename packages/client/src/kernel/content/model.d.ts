@@ -23,6 +23,11 @@ export type ContentCommandValue = Readonly<{
     itemId: PostId;
     revisionId: RevisionId;
 }>;
+export type ReviewVoteCitation = Readonly<{
+    questionId: string;
+    units: number;
+    revision: number;
+}>;
 export type ItemMetadata = Readonly<{
     id: PostId;
     threadId: ThreadId;
@@ -39,6 +44,7 @@ export type ItemMetadata = Readonly<{
     revisedAt: string | null;
     sha256: string;
     mediaIds: readonly MediaId[];
+    voteCitation: ReviewVoteCitation | null;
 }>;
 export type RevisionMetadata = Readonly<{
     id: RevisionId;
@@ -53,6 +59,7 @@ export type RevisionMetadata = Readonly<{
     revisedAt: string | null;
     sha256: string;
     mediaIds: readonly MediaId[];
+    voteCitation: ReviewVoteCitation | null;
 }>;
 export type ErasedPlaceholder = Readonly<{
     id: PostId;
@@ -85,6 +92,7 @@ export type ThreadView = Readonly<{
     id: ThreadId;
     route: Route;
     authorId: ContentId;
+    kind: 'discussion' | 'review';
     title: string | null;
     licence: string;
     subjectIds: readonly ContentId[];
@@ -103,18 +111,21 @@ export type BoardView = Readonly<{
     id: BoardId;
     route: Route;
     title: string | null;
+    purpose: 'discussion' | 'reviews';
     visibility: Visibility;
     securityRevision: SecurityRevision;
     availability: Availability;
     createdAt: string;
 }>;
 export type ThreadInput = Readonly<{
+    kind?: 'discussion' | 'review';
     title: string;
     body: unknown;
     licence: string;
     subjectIds: readonly ContentId[];
     boardId: BoardId;
     visibility: 'published' | 'draft';
+    voteCitation?: ReviewVoteCitation;
 }>;
 export type PostInput = Readonly<{
     threadId: ThreadId;
@@ -135,6 +146,7 @@ export type RevisionInput = Readonly<{
     mediaIds?: readonly MediaId[];
     /** Head the caller last observed. Null omits the check; the digest still records it. */
     expectedRevisionId?: string | null;
+    voteCitation?: ReviewVoteCitation;
 }>;
 export type RequestContext = Readonly<{
     idempotencyKey: string;

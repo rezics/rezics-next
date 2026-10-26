@@ -2,10 +2,13 @@ import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import type { Access, ActionCatalogue } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { type LifecycleReceipt } from './lifecycle-20261025094010-command.ts';
 /** Distinct from workflow approvals. A sealed reference authorizes one allowlisted
  * cleanup step and never a caller's result or a later permission. */
 export declare const COMMITTED_CONTINUATION_PURPOSE = "access.committed-continuation.v1";
 export declare const COMMITTED_CONTINUATION_TTL_MS: number;
+/** The protected native workflow port gives each resumed step ten seconds. */
+export declare const COMMITTED_CONTINUATION_RESUME_BUDGET_MS = 10000;
 /** Route-bearing continuation ids. Independent of the lifecycle fence namespace. */
 export declare const CONTINUATION_NAMESPACE = "b7c3d1e2-4f50-4a61-8c70-0d1e2f304152";
 export declare const COMMITTED_CONTINUATION_ACTIONS: ActionCatalogue;
@@ -23,6 +26,7 @@ export type ContinuationBinding = {
     operationKey: string;
     operationDigest: string;
     commandKeyPrefix: string;
+    approvalExpiresAt?: string;
 };
 export type ContinuationSnapshot = {
     route: number;
@@ -61,6 +65,12 @@ export declare function deletionAllowlist(input: {
     reservationId: string | null;
 }): ContinuationEntry[] | null;
 export declare function validateContinuationBinding(binding: ContinuationBinding): void;
+/** Approval lifetime is admission metadata, not part of the replayed business command. */
+export declare function continuationCommandBinding(binding: ContinuationBinding | undefined): {
+    operationKey: string;
+    operationDigest: string;
+    commandKeyPrefix: string;
+} | null;
 /** The row commits in the tombstone transaction. Its sealed reference is derived
  * later from the immutable digest; renewal changes only the live expiry. */
 export declare function insertDeletionContinuation(tx: CommandTransaction, input: {
@@ -76,15 +86,13 @@ export declare function insertDeletionContinuation(tx: CommandTransaction, input
 }): Promise<void>;
 export declare function isFenceContinuation(root: ContinuationSnapshot): boolean;
 export declare function isDeletionContinuation(root: ContinuationSnapshot): boolean;
-/** The one completion path. Every step of a continuation, listed on the root or
- * proven by the runner against an immutable page, passes the digest and the stored
- * expiry at the command's T before its completion row is written, in the effect's
- * own transaction. The receipt is derived from the step, so replay writes nothing. */
+/** Every effect checks an exact root entry and the stored expiry at its command's T.
+ * The completion and the business receipt commit together; receipt replay writes neither twice. */
 export declare function recordCompletion(tx: CommandTransaction, located: {
     route: number;
     continuationId: string;
     digest: string;
-}, presented: ContinuationEntry, listed: boolean): Promise<{
+}, presented: ContinuationEntry, receiptId: string, receipt: LifecycleReceipt): Promise<{
     continuationId: string;
     receiptId: string;
 }>;

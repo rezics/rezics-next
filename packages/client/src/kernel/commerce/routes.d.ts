@@ -2112,9 +2112,12 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             id: string;
                         };
                         query: {
-                            limit?: string | number;
                             cursor?: string;
+                            limit?: string | number;
                             property?: string;
+                            filter?: string;
+                            type?: string;
+                            language?: string;
                         };
                         headers: unknown;
                         response: {
@@ -2123,7 +2126,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     subject: string;
                                     property: string;
                                     statement: string;
+                                    type?: string;
+                                    label?: string;
                                 }[];
+                                count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
                                 freshness: {
                                     consistency: "eventual";
                                     target_seconds: 10;

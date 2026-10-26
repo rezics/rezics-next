@@ -84,22 +84,35 @@ export declare const CONTENT_EVENTS: {
         securityRevision: Type.TString;
     }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
         threadId: Type.TString;
         itemId: Type.TString;
         revisionId: Type.TString;
         actorId: Type.TString;
     }>;
     readonly 'com.rezics.content.post.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
         threadId: Type.TString;
         itemId: Type.TString;
         revisionId: Type.TString;
         actorId: Type.TString;
     }>;
     readonly 'com.rezics.content.revision.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
         threadId: Type.TString;
         itemId: Type.TString;
         revisionId: Type.TString;
         actorId: Type.TString;
+        previousSubjectIds: Type.TOptional<Type.TArray<Type.TString>>;
     }>;
     readonly 'com.rezics.content.board.created.v1': Type.TObject<{
         boardId: Type.TString;
@@ -113,6 +126,12 @@ export declare const CONTENT_EVENTS: {
         targetId: Type.TString;
         previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
         kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.content.subject-thread.projected.v1': Type.TObject<{
+        subjectId: Type.TString;
+        threadId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
     }>;
 };
 export type ContentEventType = keyof typeof CONTENT_EVENTS;

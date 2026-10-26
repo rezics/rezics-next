@@ -1610,7 +1610,23 @@ function validatePatch(value: unknown): Record<string, unknown> {
   for (const [key, field] of Object.entries(patch)) {
     if (['displayName', 'avatarUrl', 'biography'].includes(key))
       requireAllowed(field === null || (typeof field === 'string' && field.length <= 4096));
-    else if (key === 'birthDate')
+    else if (key === 'links') {
+      requireAllowed(Array.isArray(field) && field.length <= 5);
+      for (const link of field) {
+        requireAllowed(link && typeof link === 'object' && !Array.isArray(link));
+        requireAllowed(Object.keys(link).length === 2 && Object.hasOwn(link, 'label') && Object.hasOwn(link, 'url'));
+        requireAllowed(typeof link.label === 'string' && link.label.length >= 1 && Array.from(link.label).length <= 64);
+        requireAllowed(typeof link.url === 'string' && Array.from(link.url).length <= 2048);
+        requireAllowed(/^https:\/\/[^/@\s]+(?:[/?#]|$)/i.test(link.url) && !/[\u0000-\u0020\u007f]/.test(link.url));
+        let url: URL;
+        try {
+          url = new URL(link.url);
+        } catch {
+          throw new LifecycleDeniedError();
+        }
+        requireAllowed(url.protocol === 'https:' && url.hostname && !url.username && !url.password);
+      }
+    } else if (key === 'birthDate')
       requireAllowed(
         field === null ||
           (typeof field === 'string' &&

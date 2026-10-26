@@ -70,6 +70,9 @@ export declare function withReactionCounts<T extends {
     readonly reactionsAsOf: ReactionCountFreshness | null;
 }>;
 export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext): Promise<Anchored<ThreadView | null>>;
+/** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
+ * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */
+export declare function readSubjectThread(dependencies: ContentReadDependencies, threadId: ThreadId, subjectId: string, placeId: string, context: ReadContext): Promise<Anchored<ThreadView | null>>;
 export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId): Promise<Anchored<PostEntry | null>>;
 export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<PostEntry>>;
 export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<RevisionView>>;

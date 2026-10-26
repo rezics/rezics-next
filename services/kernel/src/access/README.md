@@ -404,6 +404,10 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Public identity read
 
+`GET /v1/accounts` accepts exactly one of `ids` (1–100 comma-separated account UUIDs, deduplicated in first-request
+order) or `handle` (one handle, normalized to lowercase using the claim rules). Both return
+`{ accounts: [...], next: null }`. The web builds an account's public page at `/@handle`, outside Realms and Zones.
+
 - Returns per visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state` (`active` or
   `deleted`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
   every other account is `automated: false` with `operatorId: null`. A deleted account keeps only its `kind`: handle,
@@ -414,6 +418,23 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 - Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
   the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,
   logarithmic buffers.
+
+### Public profile by handle
+
+- Returns the identity fields above plus `bio` (the stored biography or null), `links` (an array of `{ label, url }`),
+  `avatar` and `subject`. Both `avatar` and `subject` are currently null. The schema reserves `avatar` for the
+  [Content cover summary](../content/README.md#the-cover-summary) and `subject` for `{ id, label, type }`.
+  Only an active handle claim resolves: unknown, pending or merely reserved handles return an empty list. Pending
+  accounts are absent. A deleted account returns exactly its ids-read identity tombstone, without profile fields.
+- The existing account profile patch accepts `links` alongside `displayName` and `biography`; `[]` clears links.
+  There are at most 5 links, with labels of 1–64 characters and absolute `https:` URLs of at most 2048 characters,
+  without credentials. Fencing or deleting an account clears its biography and links in the account update.
+- Touches: one `handle_claim_pkey(route, normalized_handle)` point read on the handle's route, then one
+  `account_pkey(route, account_id)` point read on the account's route. A missing active claim stops after the first read.
+- Bound: constant rows and statements; logarithmic blocks in accounts and handle claims.
+- Growth check: `test/access/growth-account-handle-read.test.ts`,
+  `public profile by handle stays bounded as accounts and handle claims grow`, uses the shared harness at
+  [256, 1024, 4096], seeding growing accounts and handle claims in `grow` with the default warm-up.
 
 ### Organization creation
 

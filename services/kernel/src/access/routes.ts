@@ -13,7 +13,13 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
-import { readPublicIdentities } from './account-data.ts';
+import { normalizeHandle } from './lifecycle.ts';
+import {
+  readPublicAccountByHandle,
+  readPublicIdentities,
+  type PublicIdentity,
+  type PublicAccountProfile,
+} from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
 import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
@@ -32,6 +38,47 @@ const publicIdentity = t.Object(
     operatorId: t.Union([id, t.Null()]),
   },
   closed,
+);
+const coverSummary = t.Object(
+  {
+    media: id,
+    width: t.Integer({ minimum: 1 }),
+    height: t.Integer({ minimum: 1 }),
+    placeholder: t.Object({ thumbhash: t.String(), color: t.String() }, closed),
+    variants: t.Array(
+      t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
+    ),
+    focalPoint: t.Union([
+      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+      t.Null(),
+    ]),
+    credit: t.Object(
+      {
+        rightsHolder: t.String(),
+        via: t.Object({ name: t.String(), url: t.String() }, closed),
+        license: t.String(),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+const publicProfile = t.Object(
+  {
+    ...publicIdentity.properties,
+    bio: t.Union([t.String(), t.Null()]),
+    links: t.Array(
+      t.Object({ label: t.String({ minLength: 1, maxLength: 64 }), url: t.String({ maxLength: 2048 }) }, closed),
+      { maxItems: 5 },
+    ),
+    avatar: t.Union([coverSummary, t.Null()]),
+    subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
+  },
+  closed,
+);
+// Named item types keep the client declaration within the compiler's serialization bound.
+const publicAccountList = t.Unsafe<{ accounts: (PublicIdentity | PublicAccountProfile)[]; next: null }>(
+  t.Object({ accounts: t.Array(t.Union([publicProfile, publicIdentity])), next: t.Null() }, closed),
 );
 const preferenceValues = {
   spoilerLevel: t.Union([t.Literal(0), t.Literal(1), t.Literal(2)]),
@@ -91,7 +138,7 @@ function strict<S extends TSchema>(schema: S) {
           ? { value: value as Static<S> }
           : { issues: [{ message: 'Value does not match the request schema' }] };
       },
-      jsonSchema: { input: () => schema, output: () => schema },
+      jsonSchema: { input: (): TSchema => schema, output: (): TSchema => schema },
     },
   };
 }
@@ -119,15 +166,23 @@ const publicReadFailures = {
 };
 const accountUuidPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const accountIdPattern = new RegExp(`^${accountUuidPattern}$`);
-const publicIdentityQuery = t.Object(
-  {
-    ids: t.String({
-      minLength: 36,
-      maxLength: 3699,
-      pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
-    }),
-  },
-  closed,
+const publicIdentityQuery = t.Unsafe<{ ids: string } | { handle: string }>(
+  t.Union([
+    t.Object(
+      {
+        ids: t.String({
+          minLength: 36,
+          maxLength: 3699,
+          pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
+        }),
+      },
+      closed,
+    ),
+    t.Object(
+      { handle: t.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$' }) },
+      closed,
+    ),
+  ]),
 );
 const response = <S extends TSchema>(schema: S) =>
   withHeaders(t.Object({ grant: schema }, closed), { [SESSION_HEADER]: t.String() });
@@ -258,7 +313,7 @@ export function accessRoutes(
       {
         query: strict(publicIdentityQuery),
         response: {
-          200: withHeaders(t.Object({ accounts: t.Array(publicIdentity) }, closed), {
+          200: withHeaders(publicAccountList, {
             etag: t.String(),
             'cache-control': t.String(),
           }),
@@ -272,28 +327,30 @@ export function accessRoutes(
         },
       },
       async ({ query, admission, job, set }) => {
-        const requested = query.ids.split(',');
-        if (
-          requested.length < 1 ||
-          requested.length > 100 ||
-          requested.some((accountId) => !accountIdPattern.test(accountId))
-        )
-          throw new ProblemError('invalid_request');
+        const accounts = await admission.run('normal', job, async () => {
+          if ('handle' in query) return readPublicAccountByHandle(dependencies.pool, normalizeHandle(query.handle));
+          const requested = query.ids.split(',');
+          if (
+            requested.length < 1 ||
+            requested.length > 100 ||
+            requested.some((accountId) => !accountIdPattern.test(accountId))
+          )
+            throw new ProblemError('invalid_request');
 
-        const seen = new Set<string>();
-        const accountIds = requested.filter((accountId) => {
-          if (seen.has(accountId)) return false;
-          seen.add(accountId);
-          return true;
+          const seen = new Set<string>();
+          const accountIds = requested.filter((accountId) => {
+            if (seen.has(accountId)) return false;
+            seen.add(accountId);
+            return true;
+          });
+          // Account routes are the two bytes at offsets 10 and 11, as enforced by account_check.
+          const routes = accountIds.map((accountId) => Number.parseInt(accountId.slice(24, 28), 16));
+          return readPublicIdentities(dependencies.pool, routes, accountIds);
         });
-        // Account routes are the two bytes at offsets 10 and 11, as enforced by account_check.
-        const routes = accountIds.map((accountId) => Number.parseInt(accountId.slice(24, 28), 16));
-        const accounts = await admission.run('normal', job, () =>
-          readPublicIdentities(dependencies.pool, routes, accountIds),
-        );
-        set.headers.etag = `"${createHash('sha256').update(JSON.stringify(accounts)).digest('base64url')}"`;
+        const body = { accounts, next: null };
+        set.headers.etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
         set.headers['cache-control'] = 'no-cache';
-        return { accounts };
+        return body;
       },
     )
     .post(

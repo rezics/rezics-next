@@ -53,6 +53,7 @@ export type WorkflowApprovalRequest = {
 export type WorkflowApprovalBinding = Readonly<{
     operationKey: string;
     digest: string;
+    expiresAt: string;
     /** Stable across fresh approvals and DBOS attempts. Append a fixed native step
      * name, and keep the native command's complete input digest on every retry. */
     commandKeyPrefix: string;

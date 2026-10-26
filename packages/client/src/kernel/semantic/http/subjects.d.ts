@@ -2186,9 +2186,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         id: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
-        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         property: import("typebox").TOptional<import("typebox").TString>;
+        filter: import("typebox").TOptional<import("typebox").TString>;
+        type: import("typebox").TOptional<import("typebox").TString>;
+        language: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -2252,6 +2255,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 subject: import("typebox").TString;
                 property: import("typebox").TString;
                 statement: import("typebox").TString;
+                type: import("typebox").TOptional<import("typebox").TString>;
+                label: import("typebox").TOptional<import("typebox").TString>;
+            }>>;
+            count: import("typebox").TOptional<import("typebox").TObject<{
+                value: import("typebox").TInteger;
+                exact: import("typebox").TBoolean;
             }>>;
             freshness: import("typebox").TObject<{
                 consistency: import("typebox").TLiteral<"eventual">;
@@ -2356,7 +2365,13 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 subject: string;
                 property: string;
                 statement: string;
+                type?: string;
+                label?: string;
             }[];
+            count?: {
+                value: number;
+                exact: boolean;
+            };
             freshness: {
                 consistency: "eventual";
                 target_seconds: 10;
@@ -2433,7 +2448,13 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 subject: string;
                 property: string;
                 statement: string;
+                type?: string;
+                label?: string;
             }[];
+            count?: {
+                value: number;
+                exact: boolean;
+            };
             freshness: {
                 consistency: "eventual";
                 target_seconds: 10;
@@ -2453,9 +2474,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             id: import("typebox").TString;
         }>;
         query: import("typebox").TObject<{
-            limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
+            limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             property: import("typebox").TOptional<import("typebox").TString>;
+            filter: import("typebox").TOptional<import("typebox").TString>;
+            type: import("typebox").TOptional<import("typebox").TString>;
+            language: import("typebox").TOptional<import("typebox").TString>;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -2519,6 +2543,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     subject: import("typebox").TString;
                     property: import("typebox").TString;
                     statement: import("typebox").TString;
+                    type: import("typebox").TOptional<import("typebox").TString>;
+                    label: import("typebox").TOptional<import("typebox").TString>;
+                }>>;
+                count: import("typebox").TOptional<import("typebox").TObject<{
+                    value: import("typebox").TInteger;
+                    exact: import("typebox").TBoolean;
                 }>>;
                 freshness: import("typebox").TObject<{
                     consistency: import("typebox").TLiteral<"eventual">;
@@ -2575,9 +2605,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     store: {};
     body: unknown;
     query: {
-        limit?: number;
         cursor?: string;
+        limit?: number;
         property?: string;
+        filter?: string;
+        type?: string;
+        language?: string;
     };
     params: {
         id: string;
@@ -2598,6 +2631,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     links: import("../links.ts").SubjectLink[];
+    count?: {
+        value: number;
+        exact: boolean;
+    };
     freshness: {
         consistency: 'eventual';
         target_seconds: 10;
@@ -2614,9 +2651,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         id: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
-        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         property: import("typebox").TOptional<import("typebox").TString>;
+        filter: import("typebox").TOptional<import("typebox").TString>;
+        type: import("typebox").TOptional<import("typebox").TString>;
+        language: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -2680,6 +2720,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 subject: import("typebox").TString;
                 property: import("typebox").TString;
                 statement: import("typebox").TString;
+                type: import("typebox").TOptional<import("typebox").TString>;
+                label: import("typebox").TOptional<import("typebox").TString>;
+            }>>;
+            count: import("typebox").TOptional<import("typebox").TObject<{
+                value: import("typebox").TInteger;
+                exact: import("typebox").TBoolean;
             }>>;
             freshness: import("typebox").TObject<{
                 consistency: import("typebox").TLiteral<"eventual">;
