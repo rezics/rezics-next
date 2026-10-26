@@ -391,6 +391,14 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   at most 100 entries. No per-entry reads.
 - **Growth check:** `tests/library-entries-cost.test.ts`: `personal library view and state change stay within their bounds as entries grow`
 
+### Reading progress
+
+- **Touches:** One session credential read, then GET session, one changes page and one completed-units page started
+  together (`view=FULL`). A record is one POST `:record` after that credential read.
+- **Bound:** Session view: 1 D and 3 K in parallel, 0 R, 0 A. Each history read is one page of at most 100. A record is
+  1 D and 1 K carrying at most 100 unit ids. No per-unit or per-change reads.
+- **Growth check:** `tests/library-progress-cost.test.ts`: `reading progress stays within its bound as its pages and unit batches grow`
+
 ### Start a thread
 
 - **Touches:** One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency
