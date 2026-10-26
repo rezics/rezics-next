@@ -69,6 +69,12 @@ export class PublicationConflictError extends Error {
     this.name = 'PublicationConflictError';
   }
 }
+export class PublicationOccupiedSlotError extends PublicationConflictError {
+  constructor() {
+    super('Publication slot is already occupied');
+    this.name = 'PublicationOccupiedSlotError';
+  }
+}
 export class PublicationInputError extends Error {
   constructor() {
     super('Invalid publication identity');
@@ -314,7 +320,10 @@ function decide(
             verdict,
             at,
           });
-      if (!moved) throw new PublicationConflictError();
+      if (!moved) {
+        if (expected === null) throw new PublicationOccupiedSlotError();
+        throw new PublicationConflictError();
+      }
       const event =
         verdict === 'adopt'
           ? 'com.rezics.community.publication.adopted.v1'
