@@ -1,4 +1,5 @@
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import { listSubjectThreads } from './subject-threads.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { parseItem } from 'structured-headers';
@@ -67,6 +68,8 @@ import {
   strictContentSchema,
   ThreadInputSchema,
   ThreadResponseSchema,
+  SubjectThreadsQuerySchema,
+  SubjectThreadsResponseSchema,
 } from './schemas.ts';
 
 export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
@@ -138,6 +141,8 @@ const boardCreateInput = t.Object(
 const boardCreateBody = strictContentSchema(boardCreateInput);
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
+const subjectThreadsQuery = strictContentSchema(SubjectThreadsQuerySchema);
+const subjectThreadsResponse = strictContentSchema(SubjectThreadsResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
 const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
 
@@ -720,6 +725,41 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               next: page.nextCursor,
               rankRefreshedAt: page.rankRefreshedAt,
             };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/subjects/:id/threads',
+      {
+        params,
+        query: subjectThreadsQuery,
+        response: { 200: withHeaders(subjectThreadsResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'subject_threads.list',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, query, actor, admission, job, session }) => {
+        existingId(id);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listSubjectThreads(
+              dependencies,
+              id,
+              { actor, deadline: job.deadline },
+              {
+                place: query.place,
+                kind: query.kind,
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+            );
+            session.record(sessionComponent(page.anchor));
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { threads: [...page.entries], next: page.nextCursor };
           }),
         );
       },

@@ -194,6 +194,7 @@ const typed = [
   'PUT /v1/subjects/:subjectId/ratings/:questionId/vote',
   'DELETE /v1/subjects/:subjectId/ratings/:questionId/vote',
   'GET /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'GET /v1/subjects/:id/threads',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;

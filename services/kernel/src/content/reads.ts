@@ -17,6 +17,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { isErasedPlaceholder } from './model.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import readThreadPlace from './read-thread-place.sql';
 import type {
   Anchored,
   BoardId,
@@ -287,6 +289,7 @@ async function disclose(
   revisionId?: string,
   threadDetail = false,
   replayedRevisionId?: string,
+  subjectScope?: { subjectId: string; placeId: string },
 ): Promise<Anchored<PostEntry | ThreadView | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -325,6 +328,17 @@ async function disclose(
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
+    if (subjectScope) {
+      if (!current.revision?.subject_ids.includes(subjectScope.subjectId) || !current.thread.board_id) return null;
+      const boardRoute = route(current.thread.board_id);
+      const parameters = { route: boardRoute, id: current.thread.board_id };
+      const boardPlace = await client.query<(typeof readThreadPlace)['~reylo']['element']>(
+        readThreadPlace.sql,
+        readThreadPlace.params.map((name) => parameters[name as keyof typeof parameters]),
+      );
+      const realmId = boardPlace.rows[0]?.realm_id ?? null;
+      if (boardPlace.rows.length !== 1 || (realmId ?? GLOBAL_CONTEXT) !== subjectScope.placeId) return null;
+    }
     for (let index = 0; index < rows.length; index++) {
       if (
         !admissible(rows[index]!, context, erased || rows[index]!.availability === 'erased') ||
@@ -549,6 +563,20 @@ export async function readThread(
   context: ReadContext,
 ): Promise<Anchored<ThreadView | null>> {
   return (await disclose(dependencies, threadId, context, undefined, undefined, true)) as Anchored<ThreadView | null>;
+}
+/** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
+ * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */
+export async function readSubjectThread(
+  dependencies: ContentReadDependencies,
+  threadId: ThreadId,
+  subjectId: string,
+  placeId: string,
+  context: ReadContext,
+): Promise<Anchored<ThreadView | null>> {
+  return (await disclose(dependencies, threadId, context, undefined, undefined, true, undefined, {
+    subjectId,
+    placeId,
+  })) as Anchored<ThreadView | null>;
 }
 export async function readPost(
   dependencies: ContentReadDependencies,

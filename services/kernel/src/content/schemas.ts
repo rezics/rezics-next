@@ -290,6 +290,22 @@ export const BoardThreadsResponseSchema = t.Object(
   },
   closed,
 );
+export const SubjectThreadsQuerySchema = t.Object(
+  {
+    place: ContentIdSchema,
+    kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1 })),
+  },
+  closed,
+);
+export const SubjectThreadsResponseSchema = t.Object(
+  {
+    threads: t.Array(ThreadViewSchema, { maxItems: 20 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
 
 const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
