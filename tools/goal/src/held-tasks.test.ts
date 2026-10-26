@@ -139,3 +139,52 @@ test('only the host starts a released task, and a second starter leaves it to th
     expect(h.store.task(second.id).currentAttempt).toBe(1);
   } finally { h.dispose(); }
 });
+
+test('a dev task after a stabilize task stays held until stabilize reaches dev, then the host sweep releases it', async () => {
+  const h = harness();
+  try {
+    writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]'));
+    git(h.root, 'branch', 'stabilize', git(h.root, 'rev-parse', 'HEAD'));
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const fixBrief = join(h.root, '.temp/goal/fix.md');
+    writeFileSync(fixBrief, markdown.replace('command: [bun, test]', 'command: ["true"]')
+      .replace('waiting: []', 'waiting: []\ntarget: stabilize'));
+    const fix = h.tasks.dispatch(fixBrief);
+    const laterBrief = join(h.root, '.temp/goal/later.md');
+    writeFileSync(laterBrief, markdown.replace('command: [bun, test]', 'command: ["true"]')
+      .replace('waiting: []', `waiting: []\nafter: [${fix.id}]`));
+    const later = h.tasks.dispatch(laterBrief);
+    expect(h.store.task(later.id).state).toBe('held');
+
+    await job.start(fix.id);
+    const fixCommit = git(h.store.task(fix.id).worktree, 'rev-parse', 'HEAD');
+    git(h.root, 'update-ref', 'refs/heads/stabilize', fixCommit, git(h.root, 'rev-parse', 'stabilize'));
+    job.onGateOutcome(merged(fix.id, fixCommit)); await job.drain();
+    expect(h.store.task(fix.id).state).toBe('integrated');
+    // Integrated on stabilize only: dev does not have the fix, so the dev task does not start without it.
+    expect(h.store.task(later.id).state).toBe('held');
+    await job.recoverOrphans(); await job.drain();
+    expect(h.store.task(later.id).state).toBe('held');
+
+    git(h.root, 'update-ref', 'refs/heads/dev', fixCommit, git(h.root, 'rev-parse', 'dev'));
+    await job.recoverOrphans(); await job.drain();
+    expect(h.store.task(later.id).currentAttempt).toBe(1);
+  } finally { h.dispose(); }
+});
+
+test('a brief after a stabilize task that dev does not contain yet is held at dispatch', () => {
+  const h = harness();
+  try {
+    git(h.root, 'branch', 'stabilize', git(h.root, 'rev-parse', 'HEAD'));
+    const fixBrief = join(h.root, '.temp/goal/fix.md');
+    writeFileSync(fixBrief, markdown.replace('waiting: []', 'waiting: []\ntarget: stabilize'));
+    const fix = h.tasks.dispatch(fixBrief);
+    h.store.updateTask({ taskId: fix.id, attempt: 0 }, task => {
+      task.state = 'integrated';
+      task.integratedCommit = git(h.root, 'commit-tree', '-p', 'HEAD', '-m', 'fix', 'HEAD^{tree}');
+    });
+    const laterBrief = join(h.root, '.temp/goal/later.md');
+    writeFileSync(laterBrief, markdown.replace('waiting: []', `waiting: []\nafter: [${fix.id}]`));
+    expect(h.tasks.dispatch(laterBrief).state).toBe('held');
+  } finally { h.dispose(); }
+});

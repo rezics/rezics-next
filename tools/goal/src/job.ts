@@ -347,19 +347,42 @@ export class WorkerJob implements GateOutcomeSink {
    * held elsewhere is skipped, never waited for. Short-lived commands pass `adoptRunning: false`: an orphan whose
    * worker still runs is left to the manager host, which can wait for it without blocking a command.
    */
+  /** Release held tasks whose dependencies are met; returns their ids. */
+  private releaseMetDependents(): string[] {
+    const store = this.tasks.store;
+    const tasks = store.tasks();
+    const released = tasks
+      .filter((candidate) => candidate.state === 'held' && this.tasks.dependenciesMet(candidate, tasks))
+      .map((candidate) => candidate.id);
+    for (const taskId of released) {
+      const candidate = store.task(taskId),
+        ref = { taskId, attempt: candidate.currentAttempt };
+      if (candidate.state !== 'held') continue;
+      if (candidate.currentAttempt)
+        store.updateHeldRetryTask(ref, (current) => {
+          current.state = 'ready';
+        });
+      else
+        store.updateTask(ref, (current) => {
+          current.state = 'ready';
+        });
+    }
+    return released;
+  }
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
-    // it. Commands leave it to the host, so released tasks are not started from every command at once.
-    const merged = (id: string) => ['integrated', 'merged'].includes(store.task(id).state);
-    for (const task of !adoptRunning ? [] : store
-      .tasks()
+    // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
+    // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.
+    if (adoptRunning) this.releaseMetDependents();
+    const tasks = store.tasks();
+    for (const task of !adoptRunning ? [] : tasks
       .filter(
         (t) =>
           t.state === 'ready' &&
           t.brief.after.length &&
-          t.brief.after.every(merged) &&
+          this.tasks.dependenciesMet(t, tasks) &&
           // A ready task with a pending retry intent is a retry, started from the intent.
           store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
       ))
@@ -647,29 +670,7 @@ export class WorkerJob implements GateOutcomeSink {
             }
           });
           if (plan) store.clearIntegrationPlan(outcome);
-          const tasks = store.tasks(),
-            byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
-          released = tasks
-            .filter(
-              (candidate) =>
-                candidate.state === 'held' &&
-                (candidate.brief.after ?? []).every((id) =>
-                  ['integrated', 'merged'].includes(byId.get(id)?.state ?? ''),
-                ),
-            )
-            .map((candidate) => candidate.id);
-          for (const taskId of released) {
-            const candidate = store.task(taskId),
-              ref = { taskId, attempt: candidate.currentAttempt };
-            if (candidate.currentAttempt)
-              store.updateHeldRetryTask(ref, (current) => {
-                current.state = 'ready';
-              });
-            else
-              store.updateTask(ref, (current) => {
-                current.state = 'ready';
-              });
-          }
+          released = this.releaseMetDependents();
           const goalTasks = store.tasks().filter((candidate) => candidate.brief.goal === task.brief.goal);
           const goalInFlight = goalTasks.some((candidate) =>
             ['ready', 'running', 'landing', 'held', 'integrated'].includes(candidate.state),

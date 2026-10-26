@@ -160,6 +160,24 @@ export class WorkerTasks {
   private integrationHead(): string {
     return this.branchHead(this.settings.integrationBranch, true);
   }
+  /**
+   * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A
+   * stabilize dependency of a dev task counts only after stabilize has been merged into dev: released earlier, the
+   * dependent started without the fix it waited for.
+   */
+  dependenciesMet(task: Pick<Task, 'brief'>, tasks: readonly Task[] = this.store.tasks()): boolean {
+    const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
+    const branch = task.brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.settings.integrationBranch;
+    return task.brief.after.every((id) => {
+      const dependency = byId.get(id);
+      if (!dependency || !['integrated', 'merged'].includes(dependency.state)) return false;
+      if (dependency.brief.target === task.brief.target) return true;
+      const commit = dependency.integratedCommit ?? dependency.mergedCommit;
+      if (!commit) return true;
+      return spawnSync('git', ['merge-base', '--is-ancestor', commit, `refs/heads/${branch}`],
+        { cwd: this.settings.mainCheckout }).status === 0;
+    });
+  }
   /** A stabilize brief bases on that branch; every other brief bases on the integration branch. */
   private taskBaseHead(brief: { target?: 'stabilize' }): string {
     return brief.target === 'stabilize'
@@ -241,9 +259,11 @@ export class WorkerTasks {
       git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
       installWorktreeDependencies(worktree);
       commitFrozenFiles(worktree, files);
-      this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
+      const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
+      const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
         (current as FrozenTask).frozenFiles = files.map(({ path, hash }) => ({ path, hash }));
+        if (held) current.state = 'held';
       });
       return this.store.task(id);
     } finally {
@@ -336,7 +356,7 @@ export class WorkerTasks {
         throw new Error('Imported attempts need a dispatchable contract before retry');
       const byId = new Map(this.store.tasks().map((candidate) => [candidate.id, candidate]));
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
-      if ((reshaped || task.state === 'held') && nextBrief.after.some((id) => !['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))) {
+      if ((reshaped || task.state === 'held') && !this.dependenciesMet({ brief: nextBrief }, [...byId.values()])) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
