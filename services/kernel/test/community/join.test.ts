@@ -4,6 +4,8 @@ import { createAuthHost, type AuthService } from '@rezics/auth';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
+import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
+import { startConsentServer, type ConsentServer } from './membership-fixture.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
@@ -27,6 +29,8 @@ const tokens = { current: 1, keys: new Map([[1, sessionKey]]) };
 let admin: Pool;
 let pool: Pool;
 let authPool: Pool;
+let consent: ConsentServer;
+const authConnectionsClosed: Promise<void>[] = [];
 let authDatabaseName = '';
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -191,12 +195,13 @@ async function createRealm(spaceId: string, visibility: 'public' | 'protected', 
   return { realmId: realm.realmId, spaceId };
 }
 
+// Counts the membership workflows only: the worker's own background refreshes enqueue workflows at any moment.
 async function footprint(): Promise<Footprint> {
   const result = await admin.query<Footprint>(`SELECT
     (SELECT count(*)::int FROM community.realm_member) AS members,
     (SELECT count(*)::int FROM community.realm_member_terminal) AS terminals,
     (SELECT count(*)::int FROM library.follow) AS follows,
-    (SELECT count(*)::int FROM dbos.workflow_status) AS workflows`);
+    (SELECT count(*)::int FROM dbos.workflow_status WHERE name LIKE 'community.%' OR name LIKE 'accounts.%') AS workflows`);
   const row = result.rows[0]!;
   return { members: row.members, terminals: row.terminals, follows: row.follows, workflows: row.workflows };
 }
@@ -233,10 +238,16 @@ beforeAll(async () => {
   authUrl.pathname = `/${authDatabaseName}`;
   migrateAuth(authUrl.href);
   authPool = new Pool({ connectionString: authUrl.href });
+  authPool.on('connect', (client) => {
+    authConnectionsClosed.push(new Promise<void>((resolve) => client.connection.stream.once('close', () => resolve())));
+  });
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'realm-join',
   };
+  // Auth's current consent, served over HTTPS from this process: the worker restores initiators from it.
+  const consentReader = createCurrentConsentReader({ database: authPool });
+  consent = await startConsentServer(async (input) => (await consentReader.readCurrentConsent(input))?.scopes ?? null);
   const workerEnv = {
     DATABASE_URL: url,
     KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
@@ -253,9 +264,7 @@ beforeAll(async () => {
     CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
     CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
     CONTENT_SOURCE_HOSTS: 'images.example.org',
-    CONTENT_AUTH_CONSENT_URL: 'https://realm-join.auth.test/internal/v1/consents:read',
-    CF_ACCESS_CLIENT_ID: 'realm-join.access',
-    CF_ACCESS_CLIENT_SECRET: 'realm-join-access-secret',
+    ...consent.env,
     OPENSEARCH_URL: '',
   };
   worker = await startKernelWorker(workerEnv);
@@ -321,10 +330,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await stopKernelWorker(worker);
+  await consent?.close();
   await work?.close();
   await host?.stop();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   if (!host) await authPool?.end();
+  // pg.Pool.end resolves before idle sockets finish closing. Let Auth disconnect
+  // before dropping its database so those sockets cannot receive a forced-close error.
+  await Promise.all(authConnectionsClosed);
+  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await pool?.end();
   await admin?.end();
 });

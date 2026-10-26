@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createRealmMembership } from '../../src/community/membership.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { withConnection } from '../../src/database/pool.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { createProductionAccess, type ProductionAccess } from './membership-fixture.ts';
 
 const actions = ['realm:join', 'realm:manage', 'realm:participate', 'realm:read', 'realm:publish', 'access:grant'];
 const scopes = [...actions];
@@ -18,7 +17,9 @@ const scales = [2048, 8192, 32768] as [number, number, number];
 
 let db: GrowthDatabase;
 let membership: ReturnType<typeof createRealmMembership>;
-let request: LifecycleRequest;
+let production: ProductionAccess;
+let requests: LifecycleRequest[] = [];
+let managerId: string;
 let probe: {
   realmId: string;
   route: number;
@@ -31,14 +32,14 @@ let probe: {
 };
 let candidates: { accountId: string; reservationId: string }[];
 
-function actor(accountId: string): AccountActor {
+/** One request per publish, authenticated by Access just before it runs. */
+async function authenticatedRequest(): Promise<LifecycleRequest> {
+  const account = await withConnection(db.pool, (client) => readAccount(client, probeRoute, managerId));
+  if (!account) throw new Error('Missing manager');
   return {
-    kind: 'account',
-    accountId,
-    clientId: 'realm-membership',
-    scopes,
-    requestedBy: null,
-    authnEpoch: 1,
+    actor: await production.authenticate(db.pool, managerId, scopes),
+    account,
+    deadline: Date.now() + 60_000,
   };
 }
 
@@ -51,7 +52,7 @@ beforeAll(async () => {
   const spaceId = newId(route);
   const spaceRevision = newId(route);
   const realmRevision = newId(route);
-  const managerId = newId(route);
+  managerId = newId(route);
   const memberId = newId(0x2140);
   const terminalAccountId = newId(0x2150);
   const memberReservationId = newId(routeOf(memberId)!);
@@ -114,17 +115,14 @@ beforeAll(async () => {
   } finally {
     connection.release();
   }
-  const account = await withConnection(db.pool, (client) => readAccount(client, route, managerId));
-  if (!account) throw new Error('Missing manager');
   let roleReader: ReturnType<typeof createRealmMembership>['roleReader'] = async () => null;
-  const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
-    accountEvidence: () => account,
+  // Production composition: only the authenticator's own actors are admitted.
+  production = await createProductionAccess({
+    actions,
     realmRoleReader: (client, input) => roleReader(client, input),
   });
-  membership = createRealmMembership({ pool: db.pool, access });
+  membership = createRealmMembership({ pool: db.pool, access: production.access });
   roleReader = membership.roleReader;
-  request = { actor: actor(managerId), account, deadline: Date.now() + 60_000 };
   probe = {
     realmId,
     route,
@@ -344,12 +342,13 @@ test('publish, terminal reads and role proofs stay within their bound as Realms 
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(_database, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
+      requests = await Promise.all(candidates.map(() => authenticatedRequest()));
     },
     async operation(_database, _scale, repetition) {
       const candidate = candidates[repetition];
       if (!candidate) throw new Error(`Missing candidate ${repetition}`);
       const published = await membership.publish(
-        { ...request, deadline: Date.now() + 60_000 },
+        { ...requests[repetition]!, deadline: Date.now() + 60_000 },
         {
           kind: 'membership',
           principal,

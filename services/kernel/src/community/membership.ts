@@ -4,6 +4,14 @@ import type { Pool } from 'pg';
 import type { MembershipWorkInput } from '@rezics/auth-contract';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import {
+  DurableInitiatorUnavailableError,
+  type DurableInitiatorReader,
+  type DurableInitiatorRecord,
+  type DurableOperationAnchor,
+  type InitiatorRestorer,
+} from '../access/durable-initiator.ts';
 import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
 import type { RealmMembershipCommands } from '../access/membership-work.ts';
@@ -12,10 +20,18 @@ import {
   authoritativeTimeValue,
   principalCommandIdentity,
   runCommand,
+  type CommandAuthorization,
   type CommandTransaction,
+  type PrincipalCommandIdentity,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessCheck, accessCommandAuthorization, type Access, type AccessClient } from '../request/access.ts';
+import {
+  accessCheck,
+  accessCommandAuthorization,
+  type AccessCommandAuthorization,
+  type Access,
+  type AccessClient,
+} from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
@@ -28,26 +44,50 @@ import readChangeRow from './membership-read-change.sql';
 import readCurrent from './membership-current.sql';
 import readRoles from './membership-role.sql';
 import readRealmHead from './realm-read.sql';
+import readOperationRow from './membership-operation-read.sql';
+import readOperationReceipt from './membership-operation-receipt.sql';
 
 type MembershipInput = Extract<MembershipWorkInput, { kind: 'membership' }>;
 type Row = Record<string, unknown>;
 const MEMBERSHIP_KIND = 'community.realm.membership';
 const TERMINAL_KIND = 'community.realm.membership.terminal';
 const CLIENT_ID = 'realm-membership';
+const AUTHORIZE_DEADLINE_MS = 30_000;
 /** Shared by the HTTP issuer and the workflow authorizer. */
 export const REALM_MEMBERSHIP_SEAL_SCOPE = 'community.realm.membership';
-const AUTHORIZE_DEADLINE_MS = 30_000;
 
-/** Least privilege for sealed actors: self join/leave, owner add, or a Realm-bound ban removal. */
-export function realmMembershipActorScopes(input: {
-  actorAccountId: string;
+export type MembershipOperationKind = 'join' | 'leave' | 'removal';
+/** Command kind of each acceptance command. It is also the durable operation's kind. */
+export const MEMBERSHIP_OPERATION_COMMANDS = {
+  join: 'community.realm.join',
+  leave: 'community.realm.leave',
+  removal: 'community.realm.removal',
+} as const satisfies Record<MembershipOperationKind, string>;
+/** The request's facts, committed with the operation. They carry no authority. */
+export type MembershipOperationFacts = Readonly<{
+  realmId: string;
+  spaceId: string;
   memberAccountId: string;
-  role: MembershipInput['role'];
-  removal?: boolean;
-}): readonly ['realm:join'] | readonly ['realm:manage'] | readonly ['realm:ban'] {
-  if (input.removal) return ['realm:ban'];
-  if (input.role !== null && input.actorAccountId !== input.memberAccountId) return ['realm:manage'];
-  return ['realm:join'];
+  reservationId: string | null;
+  banId: string | null;
+}>;
+
+/** Exact immutable source commitment: the operation, its creation target and the request's facts. */
+export function membershipSourceDigest(
+  operation: DurableOperationAnchor,
+  target: DurableInitiatorRecord['creation']['target'],
+  facts: MembershipOperationFacts,
+): string {
+  return createHash('sha256').update(canonicalize({ operation, target, facts })!).digest('hex');
+}
+
+/** The action the initiator holds on the Realm for this operation. */
+export function membershipOperationAction(
+  kind: MembershipOperationKind,
+  initiatorAccountId: string,
+  memberAccountId: string,
+): 'realm:ban' | 'realm:join' | 'realm:manage' {
+  return kind === 'removal' ? 'realm:ban' : initiatorAccountId === memberAccountId ? 'realm:join' : 'realm:manage';
 }
 
 /** Realm owners are identity grants, not membership rows. */
@@ -65,6 +105,8 @@ export type RealmMembershipDependencies = {
   clock?: () => Date;
   /** Session key ring shared with HTTP. Authorize denies when it is absent. */
   referenceKeys?: KeyRing;
+  /** Restores the initiator of a sealed workflow at every step. Without it, sealed steps fail closed. */
+  restorer?: InitiatorRestorer;
 };
 
 export type RealmMembership = RealmMembershipCommands & { roleReader: RealmRoleReader };
@@ -124,10 +166,107 @@ function realmRoute(realmId: string): number {
   return route;
 }
 
+type LoadedOperation = Readonly<{
+  record: DurableInitiatorRecord;
+  kind: MembershipOperationKind;
+  facts: MembershipOperationFacts;
+}>;
+
+/** The operation row is its own immutable source. Its creation receipt must commit
+ * the whole record, so a copied row, source or transaction never reads back.
+ */
+async function loadOperation(client: AccessClient, operation: DurableOperationAnchor): Promise<LoadedOperation | null> {
+  const kind = (Object.keys(MEMBERSHIP_OPERATION_COMMANDS) as MembershipOperationKind[]).find(
+    (candidate) => MEMBERSHIP_OPERATION_COMMANDS[candidate] === operation.kind,
+  );
+  if (!kind || operation.sourceId !== operation.id || routeOf(operation.id) !== operation.route) return null;
+  const row = await readOperationRow.run(client, { route: operation.route, operation_id: operation.id });
+  if (
+    !row ||
+    row.kind !== kind ||
+    row.creation_command_kind !== operation.kind ||
+    routeOf(row.realm_id) !== operation.route
+  )
+    return null;
+  const receipt = await readOperationReceipt.run(client, {
+    partition_no: partitionOf(operation.route),
+    initiator_account_id: row.initiator_account_id,
+    creation_command_kind: row.creation_command_kind,
+    creation_idempotency_key: row.creation_idempotency_key,
+  });
+  if (
+    !receipt ||
+    receipt.receipt_transaction_id !== row.recorded_transaction_id ||
+    receipt.receipt_request_digest !== row.creation_request_digest ||
+    receipt.receipt_commitment === null
+  )
+    return null;
+  const authnEpoch = Number(row.actor_authn_epoch);
+  const scopes = row.actor_scopes;
+  if (!Number.isSafeInteger(authnEpoch) || authnEpoch <= 0 || !scopes.every((scope): scope is string => scope !== null))
+    return null;
+  const facts: MembershipOperationFacts = {
+    realmId: row.realm_id,
+    spaceId: row.space_id,
+    memberAccountId: row.member_account_id,
+    reservationId: row.reservation_id,
+    banId: row.ban_id,
+  };
+  const record: DurableInitiatorRecord = {
+    operation: { route: row.route, id: row.operation_id, kind: row.creation_command_kind, sourceId: row.operation_id },
+    initiatorAccountId: row.initiator_account_id,
+    actor: {
+      kind: 'account',
+      accountId: row.initiator_account_id,
+      clientId: row.actor_client_id,
+      scopes,
+      requestedBy: row.actor_requested_by,
+      authnEpoch,
+    },
+    recordedTransactionId: row.recorded_transaction_id,
+    sourceDigest: row.source_digest,
+    originalAccount: {
+      minimumAuthnEpoch: row.original_minimum_authn_epoch,
+      operatorAccountId: row.original_operator_account_id,
+    },
+    originalDelegation:
+      row.actor_requested_by === null
+        ? null
+        : {
+            transactionId: row.original_delegation_transaction_id!,
+            issuedValid: row.original_delegation_issued_valid!,
+          },
+    creation: {
+      commandKind: row.creation_command_kind,
+      idempotencyKey: row.creation_idempotency_key,
+      requestDigest: row.creation_request_digest,
+      target: { route: row.creation_target_route, id: row.creation_target_id },
+    },
+  };
+  if (
+    membershipSourceDigest(record.operation, record.creation.target, facts) !== record.sourceDigest ||
+    durableInitiatorCommitment(record) !== receipt.receipt_commitment
+  )
+    return null;
+  return { record, kind, facts };
+}
+
+/** Reads the committed operation and its creation receipt on the caller's connection. */
+export const readMembershipInitiator: DurableInitiatorReader = async (client, operation) =>
+  (await loadOperation(client, operation))?.record ?? null;
+
+/** A sealed step's operation. The initiator names the receipt; it supplies no authority. */
+type SealedOperation = Readonly<{
+  anchor: DurableOperationAnchor;
+  kind: MembershipOperationKind;
+  facts: MembershipOperationFacts;
+  initiator: Readonly<{ accountId: string; clientId: string; requestedBy: string | null }>;
+}>;
+
 /** Accounts owns the workflow. This adapter publishes and proves the Realm side. */
 export function createRealmMembership(config: RealmMembershipDependencies) {
   const { pool, access } = config;
-  const removals = new WeakMap<LifecycleRequest, { realmId: string; accountId: string; reservationId: string }>();
+  const operations = new WeakMap<LifecycleRequest, SealedOperation>();
 
   async function authorize(reference: string, input: MembershipWorkInput): Promise<LifecycleRequest> {
     denyUnless(input.kind === 'membership' && input.principal.kind === 'realm');
@@ -232,71 +371,124 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     return proofs;
   };
 
+  /** A sealed reference names a committed operation. Nothing in it is an actor: the
+   * returned request is only a carrier, and publish restores the initiator itself.
+   */
   async function authorizeSealed(payload: unknown, input: MembershipWorkInput): Promise<LifecycleRequest> {
     const seal = membershipSeal(payload);
     if (!seal || input.kind !== 'membership' || input.principal.kind !== 'realm') throw new GrantDeniedError();
-    const scopes = realmMembershipActorScopes({
-      actorAccountId: seal.accountId,
-      memberAccountId: input.memberAccountId,
-      role: input.role,
-      removal: seal.removal !== undefined,
-    });
+    const removal = seal.kind === 'removal';
     if (
       seal.realmId !== input.principal.id ||
       seal.memberAccountId !== input.memberAccountId ||
       seal.role !== input.role ||
       seal.reservationId !== input.reservationId ||
-      seal.scopes.length !== scopes.length ||
-      seal.scopes.some((scope, index) => scope !== scopes[index]) ||
-      seal.expiresAt <= Date.now()
+      (seal.kind === 'join') !== (input.role === 'member') ||
+      removal !== (seal.removal !== undefined) ||
+      (seal.kind === 'join' && seal.reservationId !== undefined) ||
+      (seal.kind !== 'join' && seal.reservationId === undefined)
     )
       throw new GrantDeniedError();
-    const actorRoute = routeOf(seal.accountId);
     const realmRouteId = routeOf(seal.realmId);
-    if (actorRoute === null || realmRouteId === null || routeOf(seal.spaceId) === null) throw new GrantDeniedError();
-    const at = (config.clock ?? (() => new Date()))().toISOString();
-    const account = await withConnection(pool, (client) => readAccount(client, actorRoute, seal.accountId));
+    if (realmRouteId === null || routeOf(seal.spaceId) === null) throw new GrantDeniedError();
+    const anchor: DurableOperationAnchor = {
+      route: realmRouteId,
+      id: seal.operationId,
+      kind: MEMBERSHIP_OPERATION_COMMANDS[seal.kind],
+      sourceId: seal.operationId,
+    };
+    const loaded = await withConnection(pool, (client) => loadOperation(client, anchor));
     if (
-      !account ||
-      account.kind !== 'actor' ||
-      account.state !== 'active' ||
-      account.fenced ||
-      !Number.isSafeInteger(seal.authnEpoch) ||
-      seal.authnEpoch <= 0 ||
-      BigInt(seal.authnEpoch) < account.minimumAuthnEpoch
+      !loaded ||
+      loaded.kind !== seal.kind ||
+      loaded.facts.realmId !== seal.realmId ||
+      loaded.facts.spaceId !== seal.spaceId ||
+      loaded.facts.memberAccountId !== seal.memberAccountId ||
+      loaded.facts.reservationId !== (seal.reservationId ?? null) ||
+      loaded.facts.banId !== (seal.removal ?? null)
     )
       throw new GrantDeniedError();
+    const initiator = loaded.record.initiatorAccountId;
+    const at = (config.clock ?? (() => new Date()))().toISOString();
     const realm = await withConnection(pool, (client) =>
       readOne(readRealmHead.run(client, { route: realmRouteId, id: seal.realmId, at })),
     );
     const visibility = text(realm, 'visibility');
     if (text(realm, 'space_id') !== seal.spaceId || (visibility !== 'public' && visibility !== 'protected'))
       throw new GrantDeniedError();
-    if (input.role === 'member' && seal.accountId === input.memberAccountId && visibility !== 'public')
+    if (seal.kind === 'join' && initiator === seal.memberAccountId && visibility !== 'public')
       throw new GrantDeniedError();
-    const removal = seal.removal !== undefined;
-    if (removal && (input.role !== null || input.reservationId === undefined || routeOf(seal.removal!) === null))
-      throw new GrantDeniedError();
-    if (input.role === null && seal.accountId !== input.memberAccountId && !removal) throw new GrantDeniedError();
+    if (seal.kind === 'leave' && initiator !== seal.memberAccountId) throw new GrantDeniedError();
     const request: LifecycleRequest = {
-      actor: {
-        kind: 'account',
-        accountId: seal.accountId,
-        clientId: seal.clientId,
-        scopes: [...seal.scopes],
-        requestedBy: seal.requestedBy,
-        authnEpoch: seal.authnEpoch,
-      },
-      account,
-      deadline: Math.min(seal.expiresAt, Date.now() + AUTHORIZE_DEADLINE_MS),
+      // The committed snapshot, frozen for the carrier's type only. Access never authenticated it.
+      actor: Object.freeze({ ...loaded.record.actor, scopes: Object.freeze([...loaded.record.actor.scopes]) }),
+      deadline: Date.now() + AUTHORIZE_DEADLINE_MS,
     };
-    if (removal)
-      removals.set(request, {
-        realmId: seal.realmId,
-        accountId: seal.memberAccountId,
-        reservationId: input.reservationId!,
-      });
+    operations.set(request, {
+      anchor,
+      kind: seal.kind,
+      facts: loaded.facts,
+      initiator: {
+        accountId: loaded.record.initiatorAccountId,
+        clientId: loaded.record.actor.clientId,
+        requestedBy: loaded.record.actor.requestedBy,
+      },
+    });
     return request;
+  }
+
+  /** Every attempt restores the initiator from the committed operation at its own T, then
+   * authorizes that actor for the action on the Realm. A revoked, suspended, fenced or
+   * consent-reduced initiator fails here, before the Realm record is touched.
+   */
+  function restoredAuthorization(
+    operation: SealedOperation,
+    action: string,
+    target: Readonly<{ route: number; id: string }>,
+    deadline: number,
+  ): AccessCommandAuthorization {
+    type Prepared = { current: AccessCommandAuthorization; proof: unknown };
+    const denied = () => new GrantDeniedError();
+    let active: AccessCommandAuthorization | undefined;
+    const authorization: CommandAuthorization = {
+      action,
+      resource: target,
+      denied,
+      async prepare(attempt) {
+        active = undefined;
+        if (!config.restorer) throw new DurableInitiatorUnavailableError();
+        const actor = await config.restorer.restoreInitiator(
+          {
+            operation: operation.anchor,
+            action,
+            anchor: {
+              resource: target,
+              async validate(client, time) {
+                return (
+                  text(
+                    await readOne(
+                      realmActive.run(client, { route: target.route, id: target.id, at: authoritativeTimeValue(time) }),
+                    ),
+                    'realmId',
+                  ) === target.id
+                );
+              },
+            },
+            context: { pool, deadline },
+          },
+          attempt.time,
+        );
+        const current = await accessCommandAuthorization(access, actor, action, target, { pool, deadline }, denied);
+        return { current, proof: await current.prepare!(attempt) } satisfies Prepared;
+      },
+      async authorize(tx, attempt, evidence) {
+        const prepared = evidence as Prepared | undefined;
+        if (!prepared) throw denied();
+        active = prepared.current;
+        return prepared.current.authorize(tx, attempt, prepared.proof);
+      },
+    };
+    return { ...authorization, check: async (client, time) => (active ? active.check(client, time) : false) };
   }
 
   async function publish(
@@ -308,14 +500,6 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     if (input.role === 'owner') throw new RealmMembershipRoleError();
     if (input.role !== 'member' && input.role !== null) throw new GrantDeniedError();
     const role = input.role;
-    const actor = {
-      kind: 'account' as const,
-      accountId: request.actor.accountId,
-      clientId: request.actor.clientId,
-      scopes: [...request.actor.scopes],
-      requestedBy: request.actor.requestedBy,
-      authnEpoch: request.actor.authnEpoch,
-    };
     const realmId = input.principal.id;
     const route = realmRoute(realmId);
     denyUnless(input.kind === 'membership' && input.principal.kind === 'realm');
@@ -325,32 +509,45 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(routeOf(input.memberAccountId) !== null);
     denyUnless(routeOf(reservation.reservationId) === routeOf(input.memberAccountId));
     denyUnless(Number.isFinite(request.deadline) && Date.now() < request.deadline);
-    const removal = removals.get(request);
-    if (removal)
+    const target = { route, id: realmId };
+    const operation = operations.get(request);
+    let identity: PrincipalCommandIdentity;
+    let authorization: AccessCommandAuthorization;
+    if (operation) {
       denyUnless(
-        role === null &&
-          removal.realmId === realmId &&
-          removal.accountId === input.memberAccountId &&
-          removal.reservationId === reservation.reservationId,
+        operation.facts.realmId === realmId &&
+          operation.facts.memberAccountId === input.memberAccountId &&
+          (operation.kind === 'join'
+            ? role === 'member'
+            : role === null && operation.facts.reservationId === reservation.reservationId),
       );
-    else denyUnless(role !== null || actor.accountId === input.memberAccountId);
-    const action = removal ? 'realm:ban' : actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
-    const commandContext = { ...request, actor, pool };
-    const authorization = await accessCommandAuthorization(
-      access,
-      actor,
-      action,
-      { route, id: realmId },
-      commandContext,
-      () => new GrantDeniedError(),
-    );
+      const action = membershipOperationAction(operation.kind, operation.initiator.accountId, input.memberAccountId);
+      identity = Object.freeze({
+        principal: Object.freeze({ kind: 'account' as const, id: operation.initiator.accountId }),
+        basis: Object.freeze({ clientId: operation.initiator.clientId, requestedBy: operation.initiator.requestedBy }),
+      });
+      authorization = restoredAuthorization(operation, action, target, request.deadline);
+    } else {
+      // The authenticator's own actor, never a copy: Access knows no other object.
+      const actor = request.actor;
+      denyUnless(role !== null || actor.accountId === input.memberAccountId);
+      const action = membershipOperationAction('join', actor.accountId, input.memberAccountId);
+      identity = principalCommandIdentity(actor);
+      authorization = await accessCommandAuthorization(
+        access,
+        actor,
+        action,
+        target,
+        { ...request, pool },
+        () => new GrantDeniedError(),
+      );
+    }
     const body = {
       realmId,
       memberAccountId: input.memberAccountId,
       reservationId: reservation.reservationId,
       role,
     };
-    const identity = principalCommandIdentity(actor);
     return runCommand(
       pool,
       {
@@ -456,85 +653,58 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
   } satisfies RealmMembership;
 }
 
+/** The request's facts and the committed operation that holds its initiator. No actor field exists. */
 type MembershipSeal = {
-  accountId: string;
-  clientId: string;
-  requestedBy: string | null;
-  authnEpoch: number;
-  scopes: readonly string[];
+  operationId: string;
+  kind: MembershipOperationKind;
   realmId: string;
   spaceId: string;
   memberAccountId: string;
   role: 'member' | null;
   reservationId: string | undefined;
   removal: string | undefined;
-  expiresAt: number;
 };
 
 function membershipSeal(value: unknown): MembershipSeal | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const allowed = new Set([
-    'accountId',
-    'clientId',
-    'requestedBy',
-    'authnEpoch',
-    'scopes',
+    'operationId',
+    'kind',
     'realmId',
     'spaceId',
     'memberAccountId',
     'role',
     'reservationId',
     'removal',
-    'expiresAt',
   ]);
   if (Object.keys(row).some((key) => !allowed.has(key))) return null;
-  const accountId = row.accountId;
-  const clientId = row.clientId;
-  const realmId = row.realmId;
-  const spaceId = row.spaceId;
-  const memberAccountId = row.memberAccountId;
-  const scopes = row.scopes;
+  const { operationId, kind, realmId, spaceId, memberAccountId, reservationId, removal } = row;
   if (
-    typeof accountId !== 'string' ||
-    routeOf(accountId) === null ||
-    typeof clientId !== 'string' ||
-    clientId.length < 1 ||
-    clientId.length > 128 ||
+    typeof operationId !== 'string' ||
+    routeOf(operationId) === null ||
+    (kind !== 'join' && kind !== 'leave' && kind !== 'removal') ||
     typeof realmId !== 'string' ||
     routeOf(realmId) === null ||
     typeof spaceId !== 'string' ||
     routeOf(spaceId) === null ||
     typeof memberAccountId !== 'string' ||
     routeOf(memberAccountId) === null ||
-    (row.role !== 'member' && row.role !== null) ||
-    (row.requestedBy !== null && typeof row.requestedBy !== 'string') ||
-    typeof row.authnEpoch !== 'number' ||
-    !Number.isSafeInteger(row.authnEpoch) ||
-    typeof row.expiresAt !== 'number' ||
-    !Number.isSafeInteger(row.expiresAt) ||
-    !Array.isArray(scopes) ||
-    scopes.some((scope) => typeof scope !== 'string')
+    (row.role !== 'member' && row.role !== null)
   )
     return null;
-  const reservationId = row.reservationId;
   if (reservationId !== undefined && (typeof reservationId !== 'string' || routeOf(reservationId) === null))
     return null;
-  const removal = row.removal;
   if (removal !== undefined && (typeof removal !== 'string' || routeOf(removal) === null)) return null;
   return {
-    accountId,
-    clientId,
-    requestedBy: row.requestedBy as string | null,
-    authnEpoch: row.authnEpoch,
-    scopes: scopes as string[],
+    operationId,
+    kind,
     realmId,
     spaceId,
     memberAccountId,
     role: row.role,
     reservationId,
     removal,
-    expiresAt: row.expiresAt,
   };
 }
 

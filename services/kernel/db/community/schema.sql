@@ -84,6 +84,19 @@ $$;
 
 
 --
+-- Name: guard_realm_membership_operation(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.guard_realm_membership_operation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Realm membership operations are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_realm_revision(); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -329,6 +342,58 @@ CREATE TABLE community.realm_member_terminal (
 
 
 --
+-- Name: realm_membership_operation; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.realm_membership_operation (
+    route integer NOT NULL,
+    operation_id uuid NOT NULL,
+    kind text NOT NULL,
+    realm_id uuid NOT NULL,
+    space_id uuid NOT NULL,
+    member_account_id uuid NOT NULL,
+    reservation_id uuid,
+    ban_id uuid,
+    initiator_account_id uuid NOT NULL,
+    actor_client_id text NOT NULL,
+    actor_scopes text[] NOT NULL,
+    actor_requested_by text,
+    actor_authn_epoch bigint NOT NULL,
+    requested_at timestamp with time zone NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    source_digest text NOT NULL,
+    original_minimum_authn_epoch text CONSTRAINT realm_membership_operation_original_minimum_authn_epoc_not_null NOT NULL,
+    original_operator_account_id uuid,
+    original_delegation_transaction_id uuid,
+    original_delegation_issued_valid text,
+    creation_command_kind text NOT NULL,
+    creation_idempotency_key text NOT NULL,
+    creation_request_digest text NOT NULL,
+    creation_target_route integer NOT NULL,
+    creation_target_id uuid NOT NULL,
+    CONSTRAINT realm_membership_operation_actor_authn_epoch_check CHECK (((actor_authn_epoch >= 1) AND (actor_authn_epoch <= '9007199254740991'::bigint))),
+    CONSTRAINT realm_membership_operation_actor_client_id_check CHECK (((char_length(actor_client_id) >= 1) AND (char_length(actor_client_id) <= 1024))),
+    CONSTRAINT realm_membership_operation_actor_requested_by_check CHECK ((actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text)),
+    CONSTRAINT realm_membership_operation_actor_scopes_check CHECK (((cardinality(actor_scopes) <= 100) AND ((cardinality(actor_scopes) = 0) OR (array_ndims(actor_scopes) = 1)))),
+    CONSTRAINT realm_membership_operation_check CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
+    CONSTRAINT realm_membership_operation_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT realm_membership_operation_check2 CHECK ((((kind = 'join'::text) AND (reservation_id IS NULL) AND (ban_id IS NULL)) OR ((kind = 'leave'::text) AND (reservation_id IS NOT NULL) AND (ban_id IS NULL) AND (member_account_id = initiator_account_id)) OR ((kind = 'removal'::text) AND (reservation_id IS NOT NULL) AND (ban_id IS NOT NULL)))),
+    CONSTRAINT realm_membership_operation_check3 CHECK (((actor_requested_by IS NULL) = (original_delegation_transaction_id IS NULL))),
+    CONSTRAINT realm_membership_operation_check4 CHECK (((original_delegation_transaction_id IS NULL) = (original_delegation_issued_valid IS NULL))),
+    CONSTRAINT realm_membership_operation_creation_command_kind_check CHECK ((creation_command_kind ~ '^[!-~]{1,255}$'::text)),
+    CONSTRAINT realm_membership_operation_creation_idempotency_key_check CHECK ((creation_idempotency_key ~ '^[!-~]{1,255}$'::text)),
+    CONSTRAINT realm_membership_operation_creation_request_digest_check CHECK ((creation_request_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT realm_membership_operation_creation_target_route_check CHECK (((creation_target_route >= 0) AND (creation_target_route <= 65535))),
+    CONSTRAINT realm_membership_operation_kind_check CHECK ((kind = ANY (ARRAY['join'::text, 'leave'::text, 'removal'::text]))),
+    CONSTRAINT realm_membership_operation_original_delegation_issued_val_check CHECK ((char_length(original_delegation_issued_valid) <= 256)),
+    CONSTRAINT realm_membership_operation_original_minimum_authn_epoch_check CHECK ((original_minimum_authn_epoch ~ '^[1-9][0-9]{0,18}$'::text)),
+    CONSTRAINT realm_membership_operation_requested_at_check CHECK (isfinite(requested_at)),
+    CONSTRAINT realm_membership_operation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_membership_operation_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
 -- Name: realm_revision; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -467,6 +532,14 @@ ALTER TABLE ONLY community.realm_member
 
 ALTER TABLE ONLY community.realm_member_terminal
     ADD CONSTRAINT realm_member_terminal_pkey PRIMARY KEY (route, realm_id, account_id, reservation_id);
+
+
+--
+-- Name: realm_membership_operation realm_membership_operation_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.realm_membership_operation
+    ADD CONSTRAINT realm_membership_operation_pkey PRIMARY KEY (route, operation_id);
 
 
 --
@@ -616,6 +689,13 @@ CREATE TRIGGER realm_identity BEFORE UPDATE ON community.realm FOR EACH ROW EXEC
 --
 
 CREATE TRIGGER realm_member_terminal_immutable BEFORE DELETE OR UPDATE ON community.realm_member_terminal FOR EACH ROW EXECUTE FUNCTION community.guard_realm_member_terminal();
+
+
+--
+-- Name: realm_membership_operation realm_membership_operation_immutable; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_membership_operation_immutable BEFORE DELETE OR UPDATE ON community.realm_membership_operation FOR EACH ROW EXECUTE FUNCTION community.guard_realm_membership_operation();
 
 
 --

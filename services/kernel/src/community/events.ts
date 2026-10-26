@@ -59,6 +59,17 @@ export const COMMUNITY_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.community.realm.membership.requested.v1': Type.Object(
+    {
+      realmId: id,
+      accountId: id,
+      operationId: id,
+      kind: Type.Union([Type.Literal('join'), Type.Literal('leave'), Type.Literal('removal')]),
+      at: instant,
+      transactionId: id,
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.community.realm.membership.terminalized.v1': Type.Object(
     { realmId: id, accountId: id, reservationId: id, transactionId: id, at: instant },
     { additionalProperties: false },

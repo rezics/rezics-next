@@ -1,10 +1,13 @@
+import { createAuthConsentReader, type CurrentConsentReader } from '../access/auth-consent.ts';
+import { createInitiatorRestorer } from '../access/durable-initiator.ts';
+import { createAccess } from '../access/index.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
-import { createAccess } from '../access/permission.ts';
 import roles from '../access/resource-roles.json';
-import { createRealmMembership } from '../community/membership.ts';
+import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
 import { communityWorkModule } from '../community/work.ts';
 import { registerContent } from '../content/register.ts';
+import { readContentWorkConfig } from '../content/work-config.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
@@ -17,7 +20,20 @@ function realmActionCatalogue() {
   return new Map([...names].map((action) => [action, { anonymous: false }]));
 }
 
-/** Accounts registration installs the Realm adapter before any Realm workflow runs. */
+/** The kernel's one Auth consent configuration. Absent, restoration is unavailable and its steps fail. */
+function consentReader(env: Readonly<Record<string, string | undefined>>): CurrentConsentReader {
+  const consent = readContentWorkConfig(env).consent;
+  return consent === null
+    ? async () => {
+        throw new Error('Auth consent is not configured');
+      }
+    : createAuthConsentReader(consent);
+}
+
+/** Accounts registration installs the Realm adapter before any Realm workflow runs.
+ * Its Access is the production composition, so a step authorizes only the initiator
+ * that the restorer returns for its committed operation.
+ */
 const accountsWorkModule: WorkModule = {
   name: 'accounts',
   async register(context) {
@@ -25,7 +41,7 @@ const accountsWorkModule: WorkModule = {
     let membership: ReturnType<typeof createRealmMembership> | undefined;
     const access = createAccess({
       actions: realmActionCatalogue(),
-      accountEvidence: (_actor, request) => request.account ?? null,
+      auth: config.auth,
       realmRoleReader: (client, input) => {
         if (!membership) throw new Error('Realm membership role reader is not installed');
         return membership.roleReader(client, input);
@@ -37,6 +53,12 @@ const accountsWorkModule: WorkModule = {
       access,
       referenceKeys: config.referenceKeys,
       clock: context.clock,
+      restorer: createInitiatorRestorer({
+        pool: context.pool,
+        access,
+        readOperation: readMembershipInitiator,
+        readConsent: consentReader(context.env),
+      }),
     });
     await createAccountsWorkModule({ realm: membership }).register(context);
   },
