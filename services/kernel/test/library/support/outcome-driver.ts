@@ -19,6 +19,7 @@ import type {
 } from '../../../../../specs/library-driver.ts';
 import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
+import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createCollectionCommands } from '../../../src/library/collections.ts';
@@ -52,6 +53,34 @@ type SavedMeasurement = { scale: number; index: number; statements: string[]; bu
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 type ConnectCallback = (error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => void;
 type ConnectPrototype = { connect: (...args: unknown[]) => unknown };
+
+const reyloFreshnessQueryPrefix =
+  'SELECT r.name AS fresh_table, a.attname::text AS fresh_column, pg_catalog.format_type(a.atttypid, a.atttypmod) AS fresh_type, ' +
+  "(a.attnotnull OR (t.typtype = 'd' AND t.typnotnull))::text AS fresh_not_null, " +
+  "(a.atthasdef OR a.attidentity <> '' OR (t.typtype = 'd' AND t.typdefault IS NOT NULL))::text AS fresh_default " +
+  'FROM pg_catalog.unnest(ARRAY[';
+const reyloFreshnessQuerySuffix =
+  ']::text[]) AS r(name) JOIN pg_catalog.pg_attribute a ON a.attrelid = pg_catalog.to_regclass(r.name) ' +
+  'AND a.attnum > 0 AND NOT a.attisdropped JOIN pg_catalog.pg_type t ON t.oid = a.atttypid ORDER BY 1, 2';
+
+/** The exact catalog query Reylo runs for generated statement freshness, with only its relation list variable. */
+function isReyloFreshnessQuery(text: string): boolean {
+  if (!text.startsWith(reyloFreshnessQueryPrefix) || !text.endsWith(reyloFreshnessQuerySuffix)) return false;
+  const relations = text.slice(reyloFreshnessQueryPrefix.length, -reyloFreshnessQuerySuffix.length);
+  return /^'"(?:[^\"]|"")*"\."(?:[^\"]|"")*"'(?:, '"(?:[^\"]|"")*"\."(?:[^\"]|"")*"')*$/.test(relations);
+}
+
+function isReyloFreshnessPlan(document: unknown): boolean {
+  const entries = Array.isArray(document) ? document : [document];
+  return (
+    entries.length > 0 &&
+    entries.every((entry) => {
+      if (typeof entry !== 'object' || entry === null) return false;
+      const query = (entry as Record<string, unknown>)['Query Text'];
+      return typeof query === 'string' && isReyloFreshnessQuery(query);
+    })
+  );
+}
 
 function queryText(query: unknown): string | undefined {
   if (typeof query === 'string') return query;
@@ -289,7 +318,20 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     const governor = { id: newId(0x1101), route: 0x1101, partition: partitionOf(0x1101) };
     const seedSamePartition = { id: newId(0x3302), route: 0x3302, partition: partitionOf(0x3302) };
     const seedOtherPartition = { id: newId(0x6610), route: 0x6610, partition: partitionOf(0x6610) };
-    const knownPeople = [ownerAccount, otherAccount, suspendedAccount, governor, seedSamePartition, seedOtherPartition];
+    const seedParallelPeople = [0x7710, 0x8810, 0x9910, 0xaa10, 0xbb10, 0xcc10, 0xdd10, 0xee10].map((route) => ({
+      id: newId(route),
+      route,
+      partition: partitionOf(route),
+    }));
+    const knownPeople = [
+      ownerAccount,
+      otherAccount,
+      suspendedAccount,
+      governor,
+      seedSamePartition,
+      seedOtherPartition,
+      ...seedParallelPeople,
+    ];
     for (const person of knownPeople) approvals.add(person.id);
 
     const signingKey = {
@@ -433,6 +475,21 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       if (!token) throw new Error(`No authenticated fixture token for ${person.id}`);
       return token;
     };
+    const grantSeedSubjectCreation = async (person: Anchor) => {
+      const response = await byRoute(
+        tokenFor(governor),
+        'POST',
+        '/v1/grants',
+        {
+          resource: PLATFORM_RESOURCE,
+          subject: { kind: 'account', id: person.id },
+          actions: ['subject:create'],
+          valid: '(,)',
+        },
+        { 'Idempotency-Key': key() },
+      );
+      await expectJson(`Granting subject creation to seed account ${person.id}`, response, 201);
+    };
     // Account rows and Auth credentials are established through the fixture provisioning handshake.
     await bootstrapRelease(db.pool, bundledRelease);
     const bootstrap = Bun.spawn([process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.id], {
@@ -454,6 +511,9 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
         'Idempotency-Key': key(),
       });
       await expectJson(`Opening ${group}`, response, 200);
+    }
+    for (const person of [seedSamePartition, seedOtherPartition, ...seedParallelPeople]) {
+      await grantSeedSubjectCreation(person);
     }
     const suspend = await byRoute(
       tokenFor(governor),
@@ -487,7 +547,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       logId: newId(ownerAccount.route),
     };
     const initialSubjectIds = new Set<string>();
-    let seedActors = [seedSamePartition, seedOtherPartition];
+    let seedActors: Anchor[] = [seedSamePartition, seedOtherPartition, ...seedParallelPeople];
     let seedSubjects = 0;
     let measurementScale = -1;
     let measurementIndex = 0;
@@ -573,8 +633,14 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       }
     }
 
+    async function resumeExecutor(): Promise<void> {
+      if (!child) throw new Error('Production library executor was not started with the driver');
+      if (childHeld) child.kill('SIGCONT');
+      childHeld = false;
+    }
+
     async function settle(): Promise<void> {
-      await startExecutor();
+      await resumeExecutor();
       for (;;) {
         if (workerFailure) {
           const stopped = workerFailure.match(/partition (\d+) position (\d+)/);
@@ -787,7 +853,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       };
     }
 
-    async function provisionSubject(input: { versionOf?: string } = {}): Promise<Anchor> {
+    async function provisionSubject(input: { versionOf?: string } = {}, author: Anchor = governor): Promise<Anchor> {
       const body =
         input.versionOf === undefined
           ? { type: 'schema:Book', labels: { en: 'Library outcome subject' } }
@@ -803,7 +869,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
                 ],
               },
             };
-      const response = await byRoute(tokenFor(governor), 'POST', '/v1/subjects', body, { 'Idempotency-Key': key() });
+      const response = await byRoute(tokenFor(author), 'POST', '/v1/subjects', body, { 'Idempotency-Key': key() });
       const result = await expectJson<{ subject: { id: string } }>('Creating semantic subject', response, 201);
       const subjectRoute = routeOf(result.subject.id);
       if (subjectRoute === null) throw new Error('Production semantic create returned an unroutable subject');
@@ -861,110 +927,114 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
         if (!Number.isSafeInteger(scale) || scale < seedSubjects) throw new RangeError('Seed scales must increase');
         measurementScale = scale;
         measurementIndex = 0;
-        if (scale > 0 && seedActors.length === 2 && initialSubjectIds.size > 0) {
+        if (scale > 0 && initialSubjectIds.size > 0) {
           const firstSubject = [...initialSubjectIds][0]!;
           const subjectRoute = routeOf(firstSubject)!;
-          if (
-            partitionOf(subjectRoute) !== seedSamePartition.partition &&
-            partitionOf(subjectRoute) !== seedOtherPartition.partition
-          ) {
+          if (!seedActors.some((person) => person.partition === partitionOf(subjectRoute))) {
             const person = await createPerson(subjectRoute);
+            await grantSeedSubjectCreation(person);
             seedActors = [...seedActors, person];
           }
         }
         while (seedSubjects < scale) {
-          const index = seedSubjects;
-          const subject = await provisionSubject();
-          const account = seedActors[index % seedActors.length]!;
-          const token = tokenFor(account);
-          const collectionResponse = await byRoute(
-            token,
-            'POST',
-            '/v1/collections',
-            {
-              title: `Growth shelf ${index}`,
-              visibility: 'private',
-            },
-            { 'Idempotency-Key': key() },
+          const start = seedSubjects;
+          const count = Math.min(seedActors.length, scale - start);
+          await Promise.all(
+            Array.from({ length: count }, async (_, offset) => {
+              const index = start + offset;
+              const account = seedActors[index % seedActors.length]!;
+              const subject = await provisionSubject({}, account);
+              const token = tokenFor(account);
+              const collectionResponse = await byRoute(
+                token,
+                'POST',
+                '/v1/collections',
+                {
+                  title: `Growth shelf ${index}`,
+                  visibility: 'private',
+                },
+                { 'Idempotency-Key': key() },
+              );
+              const collection = (
+                await expectJson<{ collection: CollectionView }>(`Seeding collection ${index}`, collectionResponse, 201)
+              ).collection;
+              const entryResponse = await byRoute(
+                token,
+                'PUT',
+                `/v1/libraryEntries/${subject.id}`,
+                { state: 'planned' },
+                {
+                  'Idempotency-Key': key(),
+                },
+              );
+              await expectJson<{ libraryEntry: EntryView }>(`Seeding entry ${index}`, entryResponse, 201);
+              const sessionResponse = await byRoute(
+                token,
+                'POST',
+                '/v1/progressSessions',
+                {
+                  subjectId: subject.id,
+                  mode: 'completed_units',
+                  unit: 'chapter',
+                },
+                { 'Idempotency-Key': key() },
+              );
+              const session = (
+                await expectJson<{ progressSession: SessionView }>(`Seeding session ${index}`, sessionResponse, 201)
+              ).progressSession;
+              const copyResponse = await byRoute(
+                token,
+                'POST',
+                '/v1/copies',
+                {
+                  subjectId: subject.id,
+                  status: 'ordered',
+                },
+                { 'Idempotency-Key': key() },
+              );
+              await expectJson<{ copy: CopyView }>(`Seeding copy ${index}`, copyResponse, 201);
+              const followResponse = await byRoute(token, 'PUT', `/v1/follows/${subject.id}`, undefined, {
+                'Idempotency-Key': key(),
+              });
+              await expectJson<{ follow: FollowView }>(`Seeding follow ${index}`, followResponse, 200);
+              const memberResponse = await byRoute(
+                token,
+                'POST',
+                `/v1/collections/${collection.id}/members`,
+                {
+                  subjectId: subject.id,
+                },
+                { 'Idempotency-Key': key() },
+              );
+              await expectJson(`Seeding collection member ${index}`, memberResponse, 201);
+              const recordResponse = await byRoute(
+                token,
+                'POST',
+                `/v1/progressSessions/${session.id}:record`,
+                {
+                  revision: session.revision,
+                  add: [`growth-unit:${index}`],
+                },
+                { 'Idempotency-Key': key() },
+              );
+              await expectJson(`Seeding completed unit ${index}`, recordResponse, 200);
+              const publishedResponse = await byRoute(
+                token,
+                'POST',
+                '/v1/publishedLogs',
+                {
+                  sessionId: session.id,
+                },
+                { 'Idempotency-Key': key() },
+              );
+              await expectJson<{ publishedLog: PublishedLogView }>(
+                `Seeding published log ${index}`,
+                publishedResponse,
+                201,
+              );
+            }),
           );
-          const collection = (
-            await expectJson<{ collection: CollectionView }>(`Seeding collection ${index}`, collectionResponse, 201)
-          ).collection;
-          const entryResponse = await byRoute(
-            token,
-            'PUT',
-            `/v1/libraryEntries/${subject.id}`,
-            { state: 'planned' },
-            {
-              'Idempotency-Key': key(),
-            },
-          );
-          await expectJson<{ libraryEntry: EntryView }>(`Seeding entry ${index}`, entryResponse, 201);
-          const sessionResponse = await byRoute(
-            token,
-            'POST',
-            '/v1/progressSessions',
-            {
-              subjectId: subject.id,
-              mode: 'completed_units',
-              unit: 'chapter',
-            },
-            { 'Idempotency-Key': key() },
-          );
-          const session = (
-            await expectJson<{ progressSession: SessionView }>(`Seeding session ${index}`, sessionResponse, 201)
-          ).progressSession;
-          const copyResponse = await byRoute(
-            token,
-            'POST',
-            '/v1/copies',
-            {
-              subjectId: subject.id,
-              status: 'ordered',
-            },
-            { 'Idempotency-Key': key() },
-          );
-          await expectJson<{ copy: CopyView }>(`Seeding copy ${index}`, copyResponse, 201);
-          const followResponse = await byRoute(token, 'PUT', `/v1/follows/${subject.id}`, undefined, {
-            'Idempotency-Key': key(),
-          });
-          await expectJson<{ follow: FollowView }>(`Seeding follow ${index}`, followResponse, 200);
-          const memberResponse = await byRoute(
-            token,
-            'POST',
-            `/v1/collections/${collection.id}/members`,
-            {
-              subjectId: subject.id,
-            },
-            { 'Idempotency-Key': key() },
-          );
-          await expectJson(`Seeding collection member ${index}`, memberResponse, 201);
-          const recordResponse = await byRoute(
-            token,
-            'POST',
-            `/v1/progressSessions/${session.id}:record`,
-            {
-              revision: session.revision,
-              add: [`growth-unit:${index}`],
-            },
-            { 'Idempotency-Key': key() },
-          );
-          await expectJson(`Seeding completed unit ${index}`, recordResponse, 200);
-          const publishedResponse = await byRoute(
-            token,
-            'POST',
-            '/v1/publishedLogs',
-            {
-              sessionId: session.id,
-            },
-            { 'Idempotency-Key': key() },
-          );
-          await expectJson<{ publishedLog: PublishedLogView }>(
-            `Seeding published log ${index}`,
-            publishedResponse,
-            201,
-          );
-          seedSubjects++;
+          seedSubjects += count;
         }
       },
       async measure<T>(operation: () => Promise<T>) {
@@ -975,8 +1045,10 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
           activeInternalCapture = undefined;
         });
         const raw = {
-          statements: [...result.capture.statements, ...internal.statements],
-          plans: [...result.capture.plans, ...internal.plans],
+          statements: [...result.capture.statements, ...internal.statements].filter(
+            (statement) => !isReyloFreshnessQuery(statement),
+          ),
+          plans: [...result.capture.plans, ...internal.plans].filter((plan) => !isReyloFreshnessPlan(plan)),
         };
         const cost = costOf(raw);
         const saved = {
@@ -1011,6 +1083,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
         dropped = true;
       },
     };
+    await startExecutor();
     return driver;
   } catch (error) {
     await cleanup();

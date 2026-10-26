@@ -270,8 +270,25 @@ test('another account cannot mutate private or public Collections or their membe
       const response = await attempt();
       expect(visibility === 'private' ? [404] : [403, 404]).toContain(response.status);
       const denied = await problem(response, response.status);
-      if (visibility === 'private') expect(denied)
-        .toEqual(await problem(await get(`/v1/collections/${driver.unknown.collectionId}`, 'other'), 404));
+      if (visibility === 'private') {
+        expect(denied.effect_status).toBe('not_applied');
+        const concealed = Object.fromEntries(Object.entries(denied).filter(([field]) => field !== 'effect_status'));
+        const unknown = await problem(await get(`/v1/collections/${driver.unknown.collectionId}`, 'other'), 404);
+        const unknownConcealed = Object.fromEntries(
+          Object.entries(unknown).filter(([field]) => field !== 'effect_status'),
+        );
+        expect(concealed).toEqual(unknownConcealed);
+      }
+      await driver.settle();
+      expect(await driver.inspect()).toEqual(before);
+    }
+    if (visibility === 'private') {
+      const hiddenPatch = await problem(await write(
+        'PATCH', `/v1/collections/${shelf.id}`, { revision: shelf.revision, title: 'Stolen' }, 'other'), 404);
+      const unknownPatch = await problem(await write(
+        'PATCH', `/v1/collections/${driver.unknown.collectionId}`, { revision: shelf.revision, title: 'Stolen' }, 'other'), 404);
+      expect(hiddenPatch).toEqual(unknownPatch);
+      expect(hiddenPatch.effect_status).toBe('not_applied');
       await driver.settle();
       expect(await driver.inspect()).toEqual(before);
     }
