@@ -176,11 +176,12 @@ kernel responses and run as part of `bun run check`. To refresh those responses,
 Docker access to start a disposable PostgreSQL container and a disposable OpenSearch container, and permission to run
 the kernel. The recorder migrates the disposable database, creates a recording account with governance authority,
 signs a short-lived test token, and creates the launch subject through `POST /v1/subjects`. It then inserts a published
-board and a published thread with three posts, and records the board, its first thread page, the thread, and its first
-post page. The kernel server does not mount subject search, so the recorder indexes that subject in its OpenSearch
-node and records `POST /v1/subjects:search` through an in-process kernel: one query that matches the subject and one
-that matches nothing. It also records the subject read and a missing ID. It stops the kernel and removes the containers
-it started on success and failure; it does not use a development kernel, the shared search node, or a shared database.
+board and a published thread with three posts, and records the board, its first thread page, the thread, its first
+post page, and the public identities used by their bylines. The kernel server does not mount subject search, so the
+recorder indexes that subject in its OpenSearch node and records `POST /v1/subjects:search` through an in-process
+kernel: one query that matches the subject and one that matches nothing. It also records the subject read and a
+missing ID. It stops the kernel and removes the containers it started on success and failure; it does not use a
+development kernel, the shared search node, or a shared database.
 
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
 The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a

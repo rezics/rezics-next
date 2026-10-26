@@ -629,7 +629,7 @@ test(
 
 // Counts and the viewer's kind ride the thread read and the one post page. A long page adds no reaction read.
 test(
-  'a thread page reads reactions with its existing two reads',
+  'a thread page reads reactions with its thread and post reads',
   async () => {
     reset();
     current.thread.reactions = { upvote: 9 };
@@ -654,9 +654,14 @@ test(
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(calls.map((call) => `${call.method} ${call.path}`).sort()).toEqual(
-      [`GET /v1/threads/${id(2)}`, `GET /v1/threads/${id(2)}/posts`].sort(),
+      [`GET /v1/threads/${id(2)}`, `GET /v1/threads/${id(2)}/posts`, 'GET /v1/accounts'].sort(),
     );
-    expect(calls.every((call) => call.authorization === `Bearer ${accessTokens.at(-1)}`)).toBe(true);
+    expect(
+      calls
+        .filter((call) => call.path !== '/v1/accounts')
+        .every((call) => call.authorization === `Bearer ${accessTokens.at(-1)}`),
+    ).toBe(true);
+    expect(calls.find((call) => call.path === '/v1/accounts')?.authorization).toBeNull();
     expect(calls.some((call) => call.path.endsWith('/reaction'))).toBe(false);
     expect(html.match(/data-slot="reactions"/g)?.length).toBe(100);
     expect(html).toContain('Upvote');

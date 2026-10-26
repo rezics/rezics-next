@@ -482,7 +482,10 @@ async function recordLibrary(input: {
   const entries = recordedLibrary.get('library-entries')?.libraryEntries;
   const shelfMembers = recordedLibrary.get('library-collection-members')?.members;
   const shelfLabels = Array.isArray(shelfMembers)
-    ? shelfMembers.map((member) => objectBody(objectBody(member, 'member').subject, 'member subject').label)
+    ? shelfMembers.map((member) => {
+        const label = objectBody(objectBody(member, 'member').subject, 'member subject').label;
+        return typeof label === 'string' ? label : objectBody(label, 'member subject label').value;
+      })
     : [];
   if (!Array.isArray(entries) || entries.length !== 5)
     throw new Error(`The library should hold five entries: ${JSON.stringify(entries)}`);

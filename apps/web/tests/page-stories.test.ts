@@ -372,6 +372,7 @@ test(
       "type BoardResource = ReturnType<KernelClient['boards']>;",
       "type BoardResponse = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;",
       "type BoardThreadsResponse = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;",
+      "type AccountsResponse = NonNullable<Awaited<ReturnType<KernelClient['accounts']['get']>>['data']>;",
       // Eden merges threads/:id with threads/:threadId, so ReturnType of threads() has no get or posts.
       "type Routes = Kernel extends { '~Routes': infer Schema } ? Schema : never;",
       'type ThreadRoutes = Routes extends { v1: { threads: infer Threads } } ? Threads : never;',
@@ -403,6 +404,7 @@ test(
       "type PreferencesResponse = Data<ReturnType<ReturnType<KernelClient['accounts']>['preferences']['get']>>;",
     ];
     const responseType: Record<string, string> = {
+      'accounts.json': 'AccountsResponse',
       'missing-subject.json': 'MissingResponse',
       'missing-subject-page.json': 'PageMissingResponse',
       'home-page.json': 'PageResponse',
