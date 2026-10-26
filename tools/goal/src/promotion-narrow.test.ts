@@ -51,3 +51,25 @@ test('pausing stops a bisection between rounds and leaves main and dev where the
     expect(h.store.promotion()?.phase).toBe('classify-prefixes');
   } finally { h.dispose(); }
 });
+
+test('a workspace check that lists its failing test files is bisected on those files', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('alpha'); const culprit = await h.seed('bad'); await h.seed('omega');
+    h.settings.gate = ['root-gate']; h.settings.promotionParallelism = 2;
+    const commands: string[] = [];
+    await h.promote(async (command, cwd, log) => {
+      commands.push(command.join(' '));
+      const broken = existsSync(join(cwd, 'bad'));
+      const failure = 'AssertionError: incompatible feature\n';
+      const output = !broken ? '' : command[0] === 'root-gate'
+        ? `Workspace @fixture/kernel finished in 1.00s\n$ bun run check  (services/kernel)\n${failure}error: Kernel tests failed for 2 file(s):\ntest/a.test.ts\ntest/b.test.ts\n\nFailed workspaces: services/kernel\n`
+        : failure;
+      appendFileSync(log, output);
+      return { passed: !broken, output, timedOut: false };
+    });
+    expect(commands).toContain('bun run --cwd services/kernel check test/a.test.ts test/b.test.ts');
+    expect(commands).not.toContain('bun run --cwd services/kernel check');
+    expect(h.store.task(culprit.id).currentAttempt).toBe(2);
+  } finally { h.dispose(); }
+});
