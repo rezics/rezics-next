@@ -28,6 +28,7 @@ import {
   type ContentSystem,
 } from '../content/support/system.ts';
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
+import { setupRequest } from '../content/support/setup-retry.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { startConsentServer } from './membership-fixture.ts';
 
@@ -274,6 +275,7 @@ export async function queryCommunityDatabase<T extends QueryResultRow>(
 
 function bindDriver(base: SharedCommunity): CommunityDriver {
   const { system, kernel, worker, work, observer } = base;
+  const setupDeadline = Date.now() + 180_000;
   const pending = new Set<string>();
   let fixture: Fixture | undefined;
   let governanceAccount: Account | undefined;
@@ -287,7 +289,7 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
   const scope = `t${++driverCount}`;
   const scopedKey = (key: string) => JSON.stringify(`${scope}-${parsedKey(key)}`);
 
-  async function request(command: Command): Promise<Response> {
+  async function request(command: Command, setup = false): Promise<Response> {
     const mark = observer.records.length;
     const headers = new Headers();
     if (command.actor) headers.set('authorization', `Bearer ${command.actor.bearer}`);
@@ -298,7 +300,10 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
       headers.set('content-type', 'application/json');
       init.body = JSON.stringify(command.body);
     }
-    const response = await (growthKernel ?? kernel).handle(new Request(`${AUDIENCE}${command.path}`, init));
+    const input = new Request(`${AUDIENCE}${command.path}`, init);
+    const response = await (setup
+      ? setupRequest((request) => (growthKernel ?? kernel).handle(request), input, { deadline: setupDeadline })
+      : (growthKernel ?? kernel).handle(input));
     trace = observer.records.slice(mark);
     const body = (await response
       .clone()
@@ -317,7 +322,7 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
     command: Command,
     statuses: readonly number[] = [200, 201, 202, 204],
   ): Promise<Response> {
-    const response = await request(command);
+    const response = await request(command, true);
     if (!statuses.includes(response.status)) return fixtureError(label, response);
     return response;
   }

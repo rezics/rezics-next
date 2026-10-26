@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -16,6 +16,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { setupRequest } from '../content/support/setup-retry.ts';
 
 type Person = { accountId: string; bearer: string };
 type Subject = {
@@ -47,45 +48,67 @@ let member: Person;
 let unrelated: Person;
 let contextId: string;
 let realmId: string;
+let setupDeadline: number;
 
-async function call(method: string, path: string, actor?: Person, body?: unknown) {
+async function call(
+  method: string,
+  path: string,
+  actor?: Person,
+  body?: unknown,
+  setup?: { deadline: number; status: number },
+) {
   const headers = new Headers();
   if (actor) headers.set('authorization', `Bearer ${actor.bearer}`);
   if (body !== undefined) {
     headers.set('content-type', 'application/json');
     headers.set(IDEMPOTENCY_HEADER, JSON.stringify(crypto.randomUUID()));
   }
-  const response = await kernel.handle(
-    new Request(`http://kernel.test${path}`, {
-      method,
-      headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }),
-  );
+  const request = new Request(`http://kernel.test${path}`, {
+    method,
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const response = await (setup === undefined
+    ? kernel.handle(request)
+    : setupRequest((input) => kernel.handle(input), request, setup));
   return { status: response.status, body: (await response.json()) as Record<string, any> };
+}
+
+function setupCall(
+  method: string,
+  path: string,
+  actor?: Person,
+  body?: unknown,
+  status = method === 'GET' ? 200 : 201,
+) {
+  return call(method, path, actor, body, { deadline: setupDeadline, status });
 }
 
 async function person(name: string, scopes: string[]): Promise<Person> {
   const email = `${name}@realm-context.test`;
   const registered = await host.workflows.register({ key: name, handle: name, email, password });
-  const signed = await service.handler(
+  const signed = await setupRequest(
+    (request) => service.handler(request),
     new Request(`${issuer}/signin`, {
       method: 'POST',
       headers: { origin: issuer, 'content-type': 'application/json' },
       body: JSON.stringify({ email, password, client_id: 'realm-context-client', scope: scopes }),
     }),
+    { deadline: setupDeadline, status: 200 },
   );
   expect(signed.status).toBe(200);
   const cookie = signed.headers
     .getSetCookie()
     .map((value) => value.split(';')[0])
     .join('; ');
-  const issued = await service.handler(
+  const issued = await setupRequest(
+    (request) => service.handler(request),
     new Request(`${issuer}/token`, {
       method: 'POST',
       headers: { origin: issuer, 'content-type': 'application/json', cookie },
       body: '{}',
     }),
+    { deadline: setupDeadline, status: 200 },
   );
   expect(issued.status).toBe(200);
   return { accountId: registered.accountId, bearer: ((await issued.json()) as { access_token: string }).access_token };
@@ -103,11 +126,12 @@ async function grant(
     ...authority,
     valid: '(,)',
   };
-  const result = await call('POST', 'role' in authority ? '/v1/roleGrants' : '/v1/grants', actor, body);
+  const result = await setupCall('POST', 'role' in authority ? '/v1/roleGrants' : '/v1/grants', actor, body);
   expect(result).toEqual({ status: 201, body: { grant: body } });
 }
 
 beforeAll(async () => {
+  setupDeadline = Date.now() + 60_000;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is required');
   admin = new Pool({ connectionString: url });
@@ -178,25 +202,29 @@ beforeAll(async () => {
   unrelated = await person('context_unrelated', scopes);
   // Deployment bootstrap only; all content and delegated authority use mounted routes.
   await bootstrapGovernance(pool, governance.accountId);
-  const published = await call('POST', '/v1/definitions/releases', governance, { release: bundledRelease });
+  const published = await setupCall('POST', '/v1/definitions/releases', governance, { release: bundledRelease });
   expect(published.status).toBe(201);
   expect(
     (
-      await call('POST', `/v1/definitions/releases/${published.body.digest}:activate`, governance, {
-        expected_head: null,
-      })
+      await setupCall(
+        'POST',
+        `/v1/definitions/releases/${published.body.digest}:activate`,
+        governance,
+        { expected_head: null },
+        200,
+      )
     ).status,
   ).toBe(200);
   await grant(governance, owner, PLATFORM_RESOURCE.id, {
     actions: ['access:grant', 'context:create', 'realm:create', 'space:create', 'subject:create'],
   });
-  const context = await call('POST', '/v1/contexts', owner, { labels: { en: 'Realm editorial Context' } });
+  const context = await setupCall('POST', '/v1/contexts', owner, { labels: { en: 'Realm editorial Context' } });
   expect(context.status).toBe(201);
   expect(context.body.context.kind).toBe('community');
   contextId = context.body.context.id;
-  const space = await call('POST', '/v1/spaces', owner, { title: 'Context host', summary: '' });
+  const space = await setupCall('POST', '/v1/spaces', owner, { title: 'Context host', summary: '' });
   expect(space.status).toBe(201);
-  const realm = await call('POST', '/v1/realms', owner, {
+  const realm = await setupCall('POST', '/v1/realms', owner, {
     spaceId: space.body.space.spaceId,
     title: 'Context Realm',
     summary: '',
@@ -208,10 +236,14 @@ beforeAll(async () => {
   await grant(owner, moderator, realmId, { role: 'community.realm.moderator' });
   await grant(owner, moderator, contextId, { role: 'semantic.context.moderator' });
   await grant(owner, member, realmId, { actions: ['realm:read'] });
-  const read = await call('GET', `/v1/realms/${realmId}`, moderator);
+  const read = await setupCall('GET', `/v1/realms/${realmId}`, moderator);
   expect(read.status).toBe(200);
   expect(read.body.realm.contextId).toBe(contextId);
 }, 60_000);
+
+beforeEach(() => {
+  setupDeadline = Date.now() + 60_000;
+});
 
 afterAll(async () => {
   if (host) await host.stop();
@@ -226,7 +258,7 @@ const statement = (property: string, content: unknown) => ({
   value: { type: 'value', content },
 });
 async function subject(body: unknown): Promise<Subject> {
-  const result = await call('POST', '/v1/subjects', owner, body);
+  const result = await setupCall('POST', '/v1/subjects', owner, body);
   expect(result.status).toBe(201);
   return result.body.subject;
 }
