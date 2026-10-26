@@ -245,6 +245,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   let workClient: WorkClient | undefined;
   let workerStop: (() => Promise<void>) | undefined;
   let workerAbort: (() => Promise<void>) | undefined;
+  let workerOutput = '';
   let storageServer: { stop(closeActiveConnections?: boolean): void; url: URL } | undefined;
   let consentServer: { stop(closeActiveConnections?: boolean): void; url: URL } | undefined;
   let closing: Promise<void> | undefined;
@@ -1003,9 +1004,21 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       };
       let output = '';
       const readOutput = (async () => {
-        for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
+        for await (const chunk of child.stdout) {
+          const message = new TextDecoder().decode(chunk);
+          output += message;
+          workerOutput = (workerOutput + message).slice(-32_768);
+        }
       })();
-      const errors = new Response(child.stderr).text();
+      const errors = (async () => {
+        let output = '';
+        for await (const chunk of child.stderr) {
+          const message = new TextDecoder().decode(chunk);
+          output += message;
+          workerOutput = (workerOutput + message).slice(-32_768);
+        }
+        return output;
+      })();
       const readyDeadline = Date.now() + 50_000;
       while (!output.includes('ready')) {
         if (child.exitCode !== null || Date.now() >= readyDeadline) {
@@ -1086,7 +1099,36 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     projectionPartitions.add(partition);
     const value = await response.clone().json();
     await workerReady;
-    await settleErasure(thread.id, accountId('author'));
+    try {
+      await settleErasure(thread.id, accountId('author'));
+    } catch (error) {
+      const operationId = text(asRecord(value, 'author erasure'), 'name').slice('operations/'.length);
+      const receipt = await pool.query(
+        `SELECT transaction_id::text, position::text, response
+         FROM core.receipt
+         WHERE partition_no = $1 AND principal_kind = 'account' AND principal_id = $2
+           AND command_kind = 'content.author-erasure' AND idempotency_key = $3`,
+        [partition, accountId(persona), key],
+      );
+      const operation = await pool.query(
+        `SELECT operation.operation_id::text, operation.native_workflow_id,
+                workflow.status, workflow.error
+         FROM content.operation AS operation
+         LEFT JOIN dbos.workflow_status AS workflow ON workflow.workflow_uuid = operation.native_workflow_id
+         WHERE operation.route = $1 AND operation.operation_id = $2`,
+        [requiredRoute(operationId), operationId],
+      );
+      const recorded = recordedRequests.get(key)!;
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${JSON.stringify({
+          request: { method: recorded.method, url: recorded.url, body: recorded.body },
+          response: { status: response.status, body: value },
+          receipts: receipt.rows,
+          operations: operation.rows,
+          workerOutput,
+        })}`,
+      );
+    }
     return { response, value };
   }
 
