@@ -677,9 +677,9 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Order return (`/<locale>/orders/<id>`)
 
-- **Touches:** `/orders/<id>` redirects with the same locale rules as `/` and keeps the query. The buyer read is D `credential` → K `GET /v1/orders/<id>`. Pending settlement rechecks every 2 s for at most 30 s
-- **Bound:** ≤1 D → 1 K per read, and at most 16 reads per return visit because of the pending rechecks. Constant order; no list
-- **Growth check:** `tests/checkout-cost.test.ts`: `order status read stays within its bound as s grows`. The 16-read visit limit is derived from the page's polling constants.
+- **Touches:** `/orders/<id>` redirects with the same locale rules as `/` and keeps the query. The buyer read is D `credential` → K `GET /v1/orders/<id>?languages=<locale>`, which returns the order's title and the sold subject's summary in the same response. Pending settlement rechecks every 2 s through `/orders/<id>/status`, which reads without `languages` and answers `{ id, offerId, settlement }`; a recheck never reloads the cover. The browser loads at most one cover variant through the media route on the first render (one K `authorizeDownload`)
+- **Bound:** ≤1 D → 1 K per read, and at most 16 reads per return visit because of the pending rechecks; ≤1 download per visit. Constant order; no list
+- **Growth check:** `tests/checkout-cost.test.ts`: `order status read stays within its bound as s grows` asserts the one call per status read and the one call, with its `languages` query, per page read. The 16-read visit limit is derived from the page's polling constants.
 
 ### Storybook (`bun run storybook`)
 

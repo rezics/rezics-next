@@ -1,9 +1,11 @@
-import { Button } from '@rezics/ui/button';
+import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { OrderPageData, Settlement } from './order';
 import { PageHeading } from '../shell/page-heading';
+import { SubjectCover } from './subject-cover';
 
 const recheckMs = 2_000;
 // The first read is the page loader. Fifteen further reads reach the 16-read cap at 30 seconds.
@@ -69,16 +71,22 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
   return (
     <article className="max-w-xl min-w-0 space-y-6 text-foreground">
       <PageHeading className="text-foreground">{heading}</PageHeading>
+      <div className="flex min-w-0 items-start gap-4">
+        <SubjectCover data={order.subject} size="sm" priority />
+        <p className="min-w-0 pt-1 font-serif text-xl text-foreground">{order.title}</p>
+      </div>
       {checkout === 'canceled' && (
-        <div className="space-y-3 rounded-xl border border-border bg-muted px-4 py-3">
-          <p role="note">{m.order_canceled()}</p>
-          <a
-            href={`/${getLocale()}/offers/${order.offerId}`}
-            className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-          >
-            {m.order_back()}
-          </a>
-        </div>
+        <Alert role="status">
+          <AlertDescription className="space-y-3 text-foreground">
+            <p role="note">{m.order_canceled()}</p>
+            <a
+              href={`/${getLocale()}/offers/${order.offerId}`}
+              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+            >
+              {m.order_back()}
+            </a>
+          </AlertDescription>
+        </Alert>
       )}
       {gaveUp && pending && (
         <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>

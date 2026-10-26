@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { OrderPage } from '../../checkout/order-page';
 import { readOrder } from '../../checkout/order';
 import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
 
 function checkoutQuery(value: unknown): 'canceled' | 'success' | undefined {
   if (value === 'canceled') return 'canceled';
@@ -14,7 +15,7 @@ export const Route = createFileRoute('/orders/$id')({
     const checkout = checkoutQuery(search.checkout);
     return checkout ? { checkout } : {};
   },
-  loader: ({ params }) => readOrder({ data: { id: params.id } }),
+  loader: ({ params }) => readOrder({ data: { id: params.id, locale: getLocale() } }),
   staleTime: 60_000,
   head: ({ loaderData }) => ({
     meta: [
