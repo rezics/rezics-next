@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
@@ -309,27 +310,25 @@ function printCatalogQueryTexts(samples: GrowthReport['samples'], queryTexts: Se
 }
 
 async function clearFixtureRows(): Promise<void> {
-  await db.admin.query(`
-    TRUNCATE TABLE
-      core.receipt,
-      core.outbox,
-      editorial.write_basis,
-      access.account,
-      access.handle_claim,
-      access.lifecycle_coordination,
-      access.lifecycle_fence_receipt,
-      access.lifecycle_membership_slot,
-      access.membership_inverse,
-      access.organization_member,
-      access.principal_assignment,
-      access.resource_denial,
-      access.resource_grant,
-      access.resource_initialization,
-      access.resource_role_grant,
-      access.standing_parent_installation,
-      ${resourceTable}
-    CASCADE
-  `);
+  await resetGrowthTables(db.admin, [
+    'core.receipt',
+    'core.outbox',
+    'editorial.write_basis',
+    'access.account',
+    'access.handle_claim',
+    'access.lifecycle_coordination',
+    'access.lifecycle_fence_receipt',
+    'access.lifecycle_membership_slot',
+    'access.membership_inverse',
+    'access.organization_member',
+    'access.principal_assignment',
+    'access.resource_denial',
+    'access.resource_grant',
+    'access.resource_initialization',
+    'access.resource_role_grant',
+    'access.standing_parent_installation',
+    resourceTable,
+  ]);
   await db.admin.query('UPDATE core.partition SET position = 0');
   await db.admin.query('CHECKPOINT');
   accountEvidence.clear();

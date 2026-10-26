@@ -4,6 +4,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { createAuthBarrierCapabilities } from '../../src/access/auth-barriers.ts';
+import { createRecoveryCompletion } from '../../src/access/recovery-completion.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -15,6 +16,8 @@ let service: AuthService;
 let fixture: ReturnType<typeof testDatabase>;
 let database: Pool;
 let delivery = '';
+let delivered: (() => void) | undefined;
+let serial = 0;
 const accountId = newId(914);
 const issuer = 'https://growth-barriers.test';
 const password = 'correct horse battery staple';
@@ -44,7 +47,11 @@ beforeAll(async () => {
   fixture = testDatabase();
   database = new Pool({ connectionString: fixture.url });
   const barriers = createAuthBarrierCapabilities({ lifecycle, proofs: createBarrierProofVerifier({ database }) });
-  const access = { ...createAuthBindings({ pool: db.pool }), ...barriers.trustedAccess };
+  const access = {
+    ...createAuthBindings({ pool: db.pool }),
+    ...barriers.trustedAccess,
+    ...createRecoveryCompletion({ pool: db.pool, routeKey: new Uint8Array(32), auth: () => service }),
+  };
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'growth',
@@ -78,15 +85,11 @@ beforeAll(async () => {
     recoveryDelivery: {
       async deliver({ token }) {
         delivery = token;
+        delivered?.();
       },
     },
   });
   await lifecycle.raiseFence({ accountId, key: 'initial' });
-  for (let i = 0; i < 512; i++) {
-    const other = newId(routeOf(accountId)!);
-    await account(other);
-    await lifecycle.raiseFence({ accountId: other, key: `baseline-other-${i}` });
-  }
 }, 60_000);
 afterAll(async () => {
   await db?.close();
@@ -101,6 +104,13 @@ test('native Auth barriers stay bounded with same-account receipts and unrelated
     repetitions: 3,
     warmups: 1,
     async grow(_db, scale, previous) {
+      if (previous === 0) {
+        for (let i = 0; i < 512; i++) {
+          const other = newId(routeOf(accountId)!);
+          await account(other);
+          await lifecycle.raiseFence({ accountId: other, key: `baseline-other-${i}` });
+        }
+      }
       for (let i = previous * 4; i < scale * 4; i++) {
         await lifecycle.raiseFence({ accountId, key: `history-${i}` });
         const other = newId(routeOf(accountId)!);
@@ -111,7 +121,12 @@ test('native Auth barriers stay bounded with same-account receipts and unrelated
         await db.admin.query(`VACUUM (ANALYZE) ${table}`);
     },
     async operation() {
+      await lifecycle.raiseFence({ accountId, key: `operation-${serial++}` });
+      const deliveryReady = new Promise<void>((resolve) => {
+        delivered = resolve;
+      });
       expect((await request('/recovery/start', { email: `${accountId}@example.test` })).status).toBe(200);
+      await deliveryReady;
       expect(
         (await request('/recovery/complete', { account_id: accountId, token: delivery, new_password: password }))
           .status,

@@ -95,7 +95,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       name: `governance bootstrap ${mode}`,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 1,
-      warmups: 0,
+      warmups: 1,
       async grow(database, scale, previous) {
         const ids = Array.from({ length: (scale - previous) * 500 }, () => newId(0));
         await database.admin.query(
@@ -141,7 +141,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
         ])
           await database.admin.query(`ANALYZE ${table}`);
       },
-      async operation(database, scale) {
+      async operation(database, scale, repetition) {
         if (mode === 'first') await clearInstallation();
         const id = mode === 'refusal' ? other : person;
         if (mode === 'refusal') await expect(bootstrapGovernance(database.pool, id)).rejects.toThrow();
@@ -166,7 +166,8 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
         const cost = costOf(raw);
         expect(cost.statements).toBeGreaterThan(0);
         expect(cost.plans).toBeGreaterThan(0);
-        children.push({ scale, cost });
+        // One warm-up precedes the one measured run at each scale.
+        if (repetition % 2 === 1) children.push({ scale, cost });
         const state = await database.admin.query(
           `SELECT
           (SELECT count(*)::int FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1) markers,

@@ -26,7 +26,7 @@ const access = createAccess({
 });
 let db: GrowthDatabase;
 let fixturePool: ReturnType<typeof createPool>;
-let actor: Awaited<ReturnType<typeof access.authenticate>>;
+let token: string;
 const P = 4;
 const reservation = (n: number) => `00000000-0000-8000-8000-7540${n.toString(16).padStart(8, '0')}`;
 const continuation = (pool = db.pool) =>
@@ -37,7 +37,7 @@ beforeAll(async () => {
   await account(governor);
   await bootstrapGovernance(fixturePool, governor);
   const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
+  token = await new SignJWT({
     sub: governor,
     client_id: 'growth',
     scope: 'account:suspend',
@@ -51,7 +51,6 @@ beforeAll(async () => {
     .setAudience(audience)
     .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
     .sign(pair.privateKey);
-  actor = await access.authenticate(token, { pool: fixturePool, deadline: Date.now() + 10_000 });
 });
 afterAll(async () => {
   await fixturePool?.end();
@@ -88,6 +87,7 @@ async function held(operator: string, n: number, related = true) {
   }
 }
 async function root(operator: string) {
+  const actor = await access.authenticate(token, { pool: fixturePool, deadline: Date.now() + 10_000 });
   const suspended = await createSuspensionCommands({ pool: fixturePool, access, clock: () => new Date() }).suspend(
     { pool: fixturePool, actor, deadline: Date.now() + 10_000 },
     { accountId: operator, key: randomUUID() },
@@ -98,49 +98,66 @@ async function root(operator: string) {
 for (const population of ['unrelated accounts', 'completed and pending history'] as const) {
   for (const late of [false, true]) {
     test(`${late ? 'late' : 'first'} committed fence page stays bounded as ${population} grows`, async () => {
-      let scaleNow = 0;
+      let prepared: { reference: string; next?: string | null; pageKey?: string }[] = [];
+      let run = 0;
       const report = await checkGrowth(db, {
         name: `${late ? 'late' : 'first'} fence page: ${population}`,
         scales: [1, 8, 64],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         repetitions: 1,
-        warmups: 0,
-        async grow(_database, scale) {
-          scaleNow = scale;
+        warmups: 1,
+        async grow(_database, scale, previous) {
+          if (previous === 0) {
+            // Populate unrelated responsibility keys before VACUUM so the fixed
+            // page seek cannot scan the entire tiny first fixture instead.
+            const ids = Array.from({ length: 1024 }, () => newId(route));
+            await db.admin.query(
+              `INSERT INTO access.lifecycle_coordination
+                (route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+               SELECT $1,id,id,id,'operator',id FROM unnest($2::uuid[]) id`,
+              [route, ids],
+            );
+          }
+          prepared = [];
+          run = 0;
+          // Warm-up and capture each get a fresh committed page. Fixture writes
+          // and earlier pages finish before checkGrowth vacuums and captures.
+          for (let repetition = 0; repetition < 2; repetition++) {
+            const operator = await account();
+            for (let i = 1; i <= P; i++) await held(operator, i);
+            for (let i = 1; i <= P; i++) await held(operator, 1_000_000 + i);
+            if (population === 'unrelated accounts') {
+              for (let i = 0; i < scale * 32; i++) await account();
+            } else {
+              for (let i = 1; i <= scale * 16; i++) {
+                // Completed slots no longer have responsibility rows. Pending
+                // unpublished holds sort beyond both fixed page seeks.
+                const subject = await account();
+                await db.admin.query('INSERT INTO access.operator_relation_slot VALUES ($1,$2,$3,$4,true,$4)', [
+                  route,
+                  subject,
+                  reservation(2_000_000 + i),
+                  operator,
+                ]);
+                await db.admin.query(`INSERT INTO access.lifecycle_coordination VALUES ($1,$2,$3,$4,'operator',$2)`, [
+                  route,
+                  operator,
+                  reservation(3_000_000 + i),
+                  newId(route),
+                ]);
+              }
+            }
+            const view = await root(operator);
+            const first = late ? await continuation(fixturePool).continueCommittedPage(view.reference) : undefined;
+            prepared.push({ reference: view.reference, next: first?.next, pageKey: first?.pageKey });
+          }
         },
         async operation() {
-          // Seed through the uninstrumented fixture pool so the measurement is
-          // the actual committed page, including its native per-subject effects.
-          const operator = await account();
-          for (let i = 1; i <= P; i++) await held(operator, i);
-          for (let i = 1; i <= P; i++) await held(operator, 1_000_000 + i);
-          if (population === 'unrelated accounts') {
-            for (let i = 0; i < scaleNow * 32; i++) await account();
-          } else {
-            for (let i = 1; i <= scaleNow * 16; i++) {
-              // Completed slots no longer have responsibility rows. Pending
-              // unpublished holds sort beyond both fixed page seeks.
-              const subject = await account();
-              await db.admin.query('INSERT INTO access.operator_relation_slot VALUES ($1,$2,$3,$4,true,$4)', [
-                route,
-                subject,
-                reservation(2_000_000 + i),
-                operator,
-              ]);
-              await db.admin.query(`INSERT INTO access.lifecycle_coordination VALUES ($1,$2,$3,$4,'operator',$2)`, [
-                route,
-                operator,
-                reservation(3_000_000 + i),
-                newId(route),
-              ]);
-            }
-          }
-          const view = await root(operator);
-          const first = late ? await continuation(fixturePool).continueCommittedPage(view.reference) : undefined;
+          const page = prepared[run++]!;
           const result = await continuation().continueCommittedPage(
-            view.reference,
-            first?.next ?? undefined,
-            first?.pageKey,
+            page.reference,
+            page.next ?? undefined,
+            page.pageKey,
           );
           expect(result.pageKey).toBeString();
         },
@@ -156,18 +173,27 @@ for (const population of ['unrelated accounts', 'completed and pending history']
 }
 
 test('total committed fanout work is linear in affected accounts with fixed page size', async () => {
+  let prepared: { operator: string; reference: string }[] = [];
+  let run = 0;
   const report = await checkGrowth(db, {
     name: 'total operator fence fanout',
     scales: [1, 8, 64],
     bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
     repetitions: 1,
-    warmups: 0,
-    async grow() {},
+    warmups: 1,
+    async grow(_database, scale) {
+      prepared = [];
+      run = 0;
+      for (let repetition = 0; repetition < 2; repetition++) {
+        const operator = await account();
+        for (let n = 1; n <= scale * P; n++) await held(operator, n);
+        const view = await root(operator);
+        prepared.push({ operator, reference: view.reference });
+      }
+    },
     async operation(_database, scale) {
-      const operator = await account();
-      for (let n = 1; n <= scale * P; n++) await held(operator, n);
-      const view = await root(operator);
-      await continuation().continueCommitted(view.reference);
+      const { operator, reference } = prepared[run++]!;
+      await continuation().continueCommitted(reference);
       expect(
         (
           await db.admin.query(

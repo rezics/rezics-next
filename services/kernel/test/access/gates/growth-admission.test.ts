@@ -95,6 +95,7 @@ beforeAll(async () => {
     },
     access: (config) =>
       createAccess({
+        ...config,
         actions: new Map(config.actions),
         auth: {
           issuer,

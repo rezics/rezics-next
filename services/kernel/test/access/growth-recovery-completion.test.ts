@@ -21,6 +21,7 @@ let bindings: ReturnType<typeof createNativeAccountBindings>;
 let accountId: string;
 let authDatabase: Pool;
 let token = '';
+let delivered: (() => void) | undefined;
 let serial = 0;
 const issuer = 'https://growth-recovery.auth.test';
 const password = 'native growth recovery password';
@@ -34,7 +35,11 @@ const request = (path: string, body: unknown) =>
   );
 async function recover() {
   await bindings.internalLifecycle.raiseFence({ accountId, key: `growth-fence-${serial++}` });
+  const delivery = new Promise<void>((resolve) => {
+    delivered = resolve;
+  });
   expect((await request('/recovery/start', { email: 'human@growth.test' })).status).toBe(200);
+  await delivery;
   const body = { account_id: accountId, token, new_password: password };
   expect((await request('/recovery/complete', body)).status).toBe(200);
   // Exact success replay includes real Auth/current-credential resolution and
@@ -91,6 +96,7 @@ beforeAll(async () => {
     recoveryDelivery: {
       async deliver(value) {
         token = value.token;
+        delivered?.();
       },
     },
     maintenanceSchedule: '0 0 1 1 *',
@@ -105,12 +111,6 @@ beforeAll(async () => {
       password,
     })
   ).accountId;
-  // Real native history on the same owner and unrelated owners, beyond the
-  // small-table scan crossover. None of these rows grants the measured effect.
-  for (let i = 0; i < 256; i++) {
-    await recover();
-    await unrelated(i);
-  }
 }, 600000);
 afterAll(async () => {
   await host?.stop();
@@ -125,8 +125,15 @@ test('native completion growth independent of receipt history', async () => {
     // The native DBOS supervisor can overlap a capture with a bounded wake.
     slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
     repetitions: 3,
-    warmups: 0,
+    warmups: 1,
     async grow(_db, scale, previous) {
+      // Native baseline history belongs to growth setup, before warm-up and capture.
+      if (previous === 0) {
+        for (let i = 0; i < 256; i++) {
+          await recover();
+          await unrelated(i);
+        }
+      }
       for (let i = previous * 4; i < scale * 4; i++) {
         await recover();
         await unrelated(256 + i);

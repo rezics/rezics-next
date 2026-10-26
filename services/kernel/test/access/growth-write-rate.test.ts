@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -44,7 +45,7 @@ async function admit(units: 1 | 100) {
 
 test('actual ordinary and batch100 admission use one point statement as unrelated and hot-scope counters grow', async () => {
   for (const units of [1, 100] as const) {
-    await db.admin.query('TRUNCATE access.write_rate_counter');
+    await resetGrowthTables(db.admin, ['access.write_rate_counter']);
     const report = await checkGrowth(db, {
       name: `write-rate-${units}`,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },

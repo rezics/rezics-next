@@ -115,6 +115,21 @@ test('rate tier stays bounded as unrelated accounts and operated accounts grow',
       const target = 1024 + scale * 128;
       const prior = previous === 0 ? 0 : 1024 + previous * 128;
       await addPopulation(database, route, operator.accountId, target - prior);
+      // Permission and replay history also grow during real route calls. Seed
+      // unrelated exact keys before the first sample to avoid small-table scans.
+      const ids = Array.from({ length: target - prior }, () => newId(route));
+      await database.admin.query(
+        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+         SELECT $1,id,id,'account:manage','(,)',id FROM unnest($2::uuid[]) id`,
+        [route, ids],
+      );
+      await database.admin.query(
+        `INSERT INTO core.receipt
+          (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+         SELECT $1,'account',id,'unrelated.rate-tier',id::text,$3,1,1,id,'{}'
+         FROM unnest($2::uuid[]) id`,
+        [route >>> 4, ids, Buffer.alloc(32)],
+      );
       spare = await fixture.automated(`rate-tier-growth-spare-${scale}-${Bun.randomUUIDv7()}`, operator);
       await database.admin.query('VACUUM ANALYZE access.account');
       await database.admin.query('VACUUM ANALYZE access.operator_relation_slot');

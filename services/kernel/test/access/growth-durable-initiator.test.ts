@@ -1,3 +1,4 @@
+import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { nativeModule } from './durable-initiator.test.ts';
 import { checkGrowth, capture } from '../support/growth.ts';
@@ -15,9 +16,12 @@ for (const person of ['other people', 'same person history'] as const) {
       test(`native durable initiator ${mode}: ${person} ${relation}, fixed selected tuple/output/K`, async () => {
         // Each series grows precisely one neighbourhood. None of these decoys
         // can authorize the selected operation or replace its native provenance.
-        await h.db.admin.query(
-          'TRUNCATE durable_test.operation,durable_test.source,core.receipt,access.principal_assignment',
-        );
+        await resetGrowthTables(h.db.admin, [
+          'durable_test.operation',
+          'durable_test.source',
+          'core.receipt',
+          'access.principal_assignment',
+        ]);
         await h.db.admin.query("DELETE FROM auth_client_coverage WHERE client_id LIKE 'durable-decoy-%'");
         await h.db.admin.query("DELETE FROM auth_client WHERE client_id LIKE 'durable-decoy-%'");
         await h.db.admin.query('DELETE FROM "user" WHERE id LIKE \'durable-decoy-%\'');
