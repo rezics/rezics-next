@@ -69,7 +69,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.routeKey).toBe(base.routeKey);
       expect(typeof received.clock).toBe('function');
       expect(Object.keys(received).sort()).toEqual(
-        ['pool', 'routeKey', 'clock', 'tokens', 'access', ...Object.keys(content)].sort(),
+        ['pool', 'routeKey', 'clock', 'tokens', 'access', 'realmParticipation', ...Object.keys(content)].sort(),
       );
       expect(JSON.stringify(kernel.routes.map(({ method, path, hooks }) => ({ method, path, hooks })))).toBe(baseline);
     }
@@ -95,9 +95,24 @@ test('content composition retains lazy access resolution and the validated kerne
     const received = compose.mock.calls.at(-1)![1];
     expect(factory).not.toHaveBeenCalled();
     expect(clock).not.toHaveBeenCalled();
-    expect(received.access).toBe(access);
-    expect(received.access).toBe(access);
+    const wrapped = received.access!;
     expect(factory).toHaveBeenCalledTimes(1);
+    expect(received.access).toBe(wrapped);
+    expect(factory).toHaveBeenCalledTimes(1);
+    // The kernel wraps the Access port with the Realm-aware read gate; calls still reach the factory's access.
+    const client = {} as never;
+    const actor = {} as never;
+    const resource = { route: 1, id: 'resource' } as never;
+    const evidence = {};
+    const time = {} as never;
+    const account = {} as never;
+    access.authenticate.mockResolvedValueOnce(account);
+    access.authorize.mockResolvedValueOnce(true as never);
+    const context = {} as never;
+    expect(await wrapped.authenticate('token', context)).toBe(account);
+    expect(access.authenticate).toHaveBeenCalledWith('token', context);
+    expect(await wrapped.authorize(client, actor, 'media:read', resource, evidence, time)).toBe(true);
+    expect(access.authorize).toHaveBeenCalledWith(client, actor, 'media:read', resource, evidence, time);
     expect(received.clock!()).toBe(instant);
     expect(clock).toHaveBeenCalledTimes(1);
     clock.mockReturnValue(new Date(NaN));
