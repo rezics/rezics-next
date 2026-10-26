@@ -407,13 +407,18 @@ A completed workflow result is private to the caller whose approval started it: 
 
 ### Committed cleanup continuation
 
-A committed continuation is one immutable root row plus its completions. The root lists at most four allowlisted steps
-and a stored expiry; renewal by current governance is the only change to the root. Every step, whether listed on the
-root or proven against an immutable fence page, records one row in `access.committed_continuation_completion`
-(route, continuation, step, target, key, digest, receipt). The row is immutable and route-bound, and replay finds the
-same primary key, so crash and replay record nothing twice. A step is recorded only after the root's digest and the
-stored expiry pass at the command's T. An expired continuation releases no hold and fences nothing by TTL; current
-governance renews it first.
+A committed continuation has an immutable root, derived allowlist entries and completions. Its initial allowlist has
+at most four entries. Each fan-out page atomically adds its derived entries to the root's indexed
+`access.committed_continuation_entry` rows before their effects. The read port exposes both lists, while the sealed
+reference continues to bind the immutable root. Every step checks exact root membership and records one immutable
+row in `access.committed_continuation_completion`, including its business receipt ID, key and digest. The completion
+belongs to the root even when the business receipt belongs to an operated account on another route. Receipt replay
+writes nothing twice and is also refused after the stored expiry.
+
+At barrier commit, the expiry is the earlier of T plus 300 seconds and the resolved approval's expiry minus the
+protected native step's ten-second budget, all on the Access clock. A barrier with no cleanup lifetime left is
+refused. Native barriers without a workflow approval use the 300-second lifetime. An expired continuation releases
+no hold and fences nothing by TTL; current governance can renew its stored live expiry.
 
 `continueCommitted(reference)` dispatches on the allowlisted step kind to the runner that owns it:
 
@@ -427,9 +432,9 @@ governance renews it first.
   the account deleted and fenced, so a subject's release depends only on its terminal slot, and an operator deletes
   only after its subjects' deletions released their responsibilities.
 
-- Touches: one continuation insert in the barrier's transaction; per cleanup step one primary-key read of the root at T and one completion row insert; renewal adds one governance check on the Global Context and one update.
-- Bound: O(log R) per statement and a fixed allowlist of at most four entries for deletion, independent of other accounts and other continuations. A fencing page adds at most 100 child completions, one per effect.
-- Growth check: `growth-committed-continuation.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts and other continuations (live, completed and expired) with the deleted account fixed; constant rows and statements, logarithmic buffers.
+- Touches: one continuation insert in the barrier's transaction; per cleanup step a primary-key root read, an exact derived-entry probe when needed, and one completion insert. Each fan-out page inserts its bounded derived entries in the page transaction. Renewal adds one governance check on the Global Context and one update.
+- Bound: O(log R) per point statement, independent of other accounts and continuations. The allowlist read touches only this root's initial and derived entries, proportional to its own effects. A fencing page adds at most 100 child completions and one next-page entry.
+- Growth check: `growth-committed-continuation.test.ts` checks root lookup at [1, 8, 64] and one actual fan-out page's completion at [256, 1024, 4096] as unrelated continuations and operated accounts grow; constant rows and statements, logarithmic buffers.
 - Behaviour: `committed-continuation-runner.test.ts` runs real deletion and fencing continuations through the runner, including expiry, replay and the immutable completion store.
 
 Permission preparation and the final formula use capped account inverses and exact temporal probes; integrated checks measure constant rows/statements and logarithmic blocks in ACL/history size at fixed admitted membership, and at most linear work through the 1000-per-account cap.

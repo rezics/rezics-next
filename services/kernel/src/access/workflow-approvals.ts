@@ -71,6 +71,7 @@ export type WorkflowApprovalRequest = { operationKey: string; operation: Account
 export type WorkflowApprovalBinding = Readonly<{
   operationKey: string;
   digest: string;
+  expiresAt: string;
   /** Stable across fresh approvals and DBOS attempts. Append a fixed native step
    * name, and keep the native command's complete input digest on every retry. */
   commandKeyPrefix: string;
@@ -595,6 +596,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                       operationKey: row.operationKey,
                       operationDigest: row.digest,
                       commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
+                      approvalExpiresAt: row.expiresAt,
                     },
                   },
                 )
@@ -618,6 +620,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                       operationKey: row.operationKey,
                       operationDigest: row.digest,
                       commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
+                      approvalExpiresAt: row.expiresAt,
                     },
                   },
                 )
@@ -630,6 +633,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       Object.freeze({
         operationKey: row.operationKey,
         digest: row.digest,
+        expiresAt: row.expiresAt,
         commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
       }),
     );

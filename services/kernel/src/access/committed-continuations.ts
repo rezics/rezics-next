@@ -17,13 +17,14 @@ import { seal, unseal } from '../tokens/seal.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import { GrantDeniedError } from './grant-commands.ts';
-import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import { LifecycleDeniedError, lifecycleExecutor, type LifecycleReceipt } from './lifecycle-20261025094010-command.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import completeContinuation from './committed-continuation-complete.sql';
 import insertContinuation from './committed-continuation-insert.sql';
 import loadContinuation from './committed-continuation-load.sql';
 import readContinuation from './committed-continuation-read.sql';
 import renewContinuation from './committed-continuation-renew.sql';
+import readEntry from './committed-continuation-entry-read.sql';
 import { createCommittedDeletionRunner } from './committed-deletion-work.ts';
 import { createOperatorFenceRunner } from './operator-fence-work.ts';
 
@@ -31,6 +32,8 @@ import { createOperatorFenceRunner } from './operator-fence-work.ts';
  * cleanup step and never a caller's result or a later permission. */
 export const COMMITTED_CONTINUATION_PURPOSE = 'access.committed-continuation.v1';
 export const COMMITTED_CONTINUATION_TTL_MS = 5 * 60 * 1000;
+/** The protected native workflow port gives each resumed step ten seconds. */
+export const COMMITTED_CONTINUATION_RESUME_BUDGET_MS = 10_000;
 /** Route-bearing continuation ids. Independent of the lifecycle fence namespace. */
 export const CONTINUATION_NAMESPACE = 'b7c3d1e2-4f50-4a61-8c70-0d1e2f304152';
 export const COMMITTED_CONTINUATION_ACTIONS: ActionCatalogue = new Map([
@@ -50,7 +53,12 @@ export class ContinuationDeniedError extends Error {
 }
 
 export type ContinuationEntry = { step: string; target: string; key: string; digest: string };
-export type ContinuationBinding = { operationKey: string; operationDigest: string; commandKeyPrefix: string };
+export type ContinuationBinding = {
+  operationKey: string;
+  operationDigest: string;
+  commandKeyPrefix: string;
+  approvalExpiresAt?: string;
+};
 export type ContinuationSnapshot = {
   route: number;
   continuationId: string;
@@ -90,6 +98,7 @@ type StoredContinuation = {
   priorOperatorAccountId: string | null;
   priorReservationId: string | null;
   allowlist: unknown;
+  derivedAllowlist?: unknown;
   digest: string;
   createdAt: unknown;
   committedExpiresAt: unknown;
@@ -132,9 +141,9 @@ function entryShape(value: unknown): ContinuationEntry | null {
   if (typeof digest !== 'string' || !DIGEST.test(digest)) return null;
   return { step, target, key, digest };
 }
-function entries(value: unknown): ContinuationEntry[] | null {
+function entries(value: unknown, minimum = 1, maximum = 4): ContinuationEntry[] | null {
   const parsed = jsonValue(value);
-  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 4) return null;
+  if (!Array.isArray(parsed) || parsed.length < minimum || parsed.length > maximum) return null;
   const allowlist: ContinuationEntry[] = [];
   for (const item of parsed) {
     const entry = entryShape(item);
@@ -196,6 +205,16 @@ export function validateContinuationBinding(binding: ContinuationBinding): void 
   )
     throw new LifecycleDeniedError();
 }
+/** Approval lifetime is admission metadata, not part of the replayed business command. */
+export function continuationCommandBinding(binding: ContinuationBinding | undefined) {
+  return binding
+    ? {
+        operationKey: binding.operationKey,
+        operationDigest: binding.operationDigest,
+        commandKeyPrefix: binding.commandKeyPrefix,
+      }
+    : null;
+}
 function snapshotOf(route: number, row: StoredContinuation, allowlist: ContinuationEntry[]): ContinuationSnapshot {
   return {
     route,
@@ -218,6 +237,8 @@ function snapshotOf(route: number, row: StoredContinuation, allowlist: Continuat
 function viewOf(keys: KeyRing, route: number, row: StoredContinuation): ContinuationView | null {
   const allowlist = entries(row.allowlist);
   if (!allowlist || row.digest !== committedContinuationDigest(snapshotOf(route, row, allowlist))) return null;
+  const derived = entries(row.derivedAllowlist ?? [], 0, Infinity);
+  if (!derived) return null;
   return {
     reference: seal(keys, COMMITTED_CONTINUATION_PURPOSE, {
       route,
@@ -229,7 +250,7 @@ function viewOf(keys: KeyRing, route: number, row: StoredContinuation): Continua
     commandKeyPrefix: row.commandKeyPrefix,
     barrierReceiptId: row.barrierReceiptId,
     expiresAt: canonicalInstant(row.expiresAt),
-    allowlist,
+    allowlist: [...allowlist, ...derived],
   };
 }
 
@@ -262,7 +283,14 @@ export async function insertDeletionContinuation(
     });
   if (route === null || !allowlist || routeOf(input.barrierReceiptId) === null) throw new LifecycleDeniedError();
   const createdAt = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
-  const committedExpiresAt = new Date(Date.parse(createdAt) + COMMITTED_CONTINUATION_TTL_MS).toISOString();
+  const expires = Math.min(
+    Date.parse(createdAt) + COMMITTED_CONTINUATION_TTL_MS,
+    input.binding.approvalExpiresAt === undefined
+      ? Infinity
+      : Date.parse(input.binding.approvalExpiresAt) - COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
+  );
+  if (!Number.isFinite(expires) || expires <= Date.parse(createdAt)) throw new LifecycleDeniedError();
+  const committedExpiresAt = new Date(expires).toISOString();
   const continuationId = derivedId(CONTINUATION_NAMESPACE, `${input.accountId}:${input.binding.operationKey}`, route);
   const snapshot: ContinuationSnapshot = {
     route,
@@ -315,17 +343,19 @@ export function isDeletionContinuation(root: ContinuationSnapshot): boolean {
   return root.allowlist.some((entry) => entry.step === 'erase-auth-owner' && entry.target === root.accountId);
 }
 
-/** The one completion path. Every step of a continuation, listed on the root or
- * proven by the runner against an immutable page, passes the digest and the stored
- * expiry at the command's T before its completion row is written, in the effect's
- * own transaction. The receipt is derived from the step, so replay writes nothing. */
+/** Every effect checks an exact root entry and the stored expiry at its command's T.
+ * The completion and the business receipt commit together; receipt replay writes neither twice. */
 export async function recordCompletion(
   tx: CommandTransaction,
   located: { route: number; continuationId: string; digest: string },
   presented: ContinuationEntry,
-  listed: boolean,
+  receiptId: string,
+  receipt: LifecycleReceipt,
 ): Promise<{ continuationId: string; receiptId: string }> {
   refused(presented.digest === continuationEntryDigest(presented));
+  // Exact root/entry and native receipt probes must stay indexed even while
+  // these append-only tables are small; unrelated roots are never their scope.
+  await tx.query('SET LOCAL enable_seqscan = off');
   const row = await oneRow(() =>
     loadContinuation.run(tx, { route: located.route, continuation_id: located.continuationId }),
   );
@@ -335,14 +365,16 @@ export async function recordCompletion(
   refused(allowlist);
   const snapshot = snapshotOf(located.route, stored, allowlist);
   refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
-  if (listed) refused(allowlist.some((item) => sameEntry(item, presented)));
+  refused(
+    allowlist.some((item) => sameEntry(item, presented)) ||
+      (await readEntry.run(tx, {
+        route: located.route,
+        continuation_id: stored.continuationId,
+        ...presented,
+      })),
+  );
   const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
   refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
-  const receiptId = derivedId(
-    CONTINUATION_NAMESPACE,
-    `${stored.continuationId}:${presented.step}:${presented.target}:${presented.key}`,
-    located.route,
-  );
   await completeContinuation.run(tx, {
     route: located.route,
     continuation_id: stored.continuationId,
@@ -351,6 +383,8 @@ export async function recordCompletion(
     key: presented.key,
     digest: presented.digest,
     receipt_id: receiptId,
+    receipt_key: receipt.key,
+    receipt_digest: receipt.digest,
   });
   return { continuationId: stored.continuationId, receiptId };
 }
@@ -414,6 +448,7 @@ export function createCommittedContinuations(config: {
     refused(allowlist);
     const snapshot = snapshotOf(located.route, stored, allowlist);
     refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
+    refused(Date.parse(canonicalInstant(stored.expiresAt)) > clock().getTime());
     return snapshot;
   }
   async function authorizeStep(reference: string, entry: ContinuationEntry) {
@@ -428,6 +463,8 @@ export function createCommittedContinuations(config: {
     refused(presented && presented.digest === continuationEntryDigest(presented));
     const commandKey = `committed:${presented.key}`;
     refused(commandKey.length <= 240);
+    // Core receipt replay skips the body, so expiry also guards admission to replay.
+    await loadRoot(reference);
     try {
       const outcome = await execute()(
         {
@@ -443,7 +480,7 @@ export function createCommittedContinuations(config: {
             digest: presented.digest,
           },
         },
-        (tx) => recordCompletion(tx, sealedReference, presented, true),
+        (tx, transactionId, receipt) => recordCompletion(tx, sealedReference, presented, transactionId, receipt),
       );
       return outcome.value;
     } catch (error) {
@@ -462,12 +499,13 @@ export function createCommittedContinuations(config: {
       refused(isFenceContinuation(snapshot));
       return snapshot;
     },
-    async record(tx, root, entry) {
+    async record(tx, root, entry, receiptId, receipt) {
       await recordCompletion(
         tx,
         { route: root.route, continuationId: root.continuationId, digest: committedContinuationDigest(root) },
         entry,
-        false,
+        receiptId,
+        receipt,
       );
     },
   });
@@ -499,9 +537,18 @@ export function createCommittedContinuations(config: {
       const route = routeOf(accountId);
       if (route === null || typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 128)
         return null;
-      const row = await withConnection(config.pool, (client) =>
-        oneRow(() => readContinuation.run(client, { route, operation_key: operationKey })),
-      );
+      const row = await withConnection(config.pool, async (client) => {
+        await client.query('BEGIN READ ONLY');
+        try {
+          await client.query('SET LOCAL enable_seqscan = off');
+          const result = await oneRow(() => readContinuation.run(client, { route, operation_key: operationKey }));
+          await client.query('COMMIT');
+          return result;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
       return row ? viewOf(config.referenceKeys, route, row as StoredContinuation) : null;
     },
     authorizeStep,

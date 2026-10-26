@@ -9,6 +9,7 @@ import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import {
   continuationEntryDigest,
+  continuationCommandBinding,
   insertDeletionContinuation,
   validateContinuationBinding,
 } from './committed-continuations.ts';
@@ -75,7 +76,7 @@ export function createSessionRevocationCommands(config: { pool: Pool; access: Ac
       const partition = partitionOf(route);
       const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
       const digest = createHash('sha256')
-        .update(canonicalize([route, input.accountId, basis, input.continuation ?? null])!)
+        .update(canonicalize([route, input.accountId, basis, continuationCommandBinding(input.continuation)])!)
         .digest();
       const authorization = resourceAuthorization({
         access: config.access,
