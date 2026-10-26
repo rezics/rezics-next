@@ -80,6 +80,7 @@ if(ref.attempt === 1) {
 } else {
   const previous=store.attempt({taskId:ref.taskId,attempt:1});
   writeFileSync(join(state,'replacement'),String(previous.process && sameProcess(previous.process)));
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
   console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
   store.db.close();
 }
@@ -122,6 +123,7 @@ test('registered CLI dispatch runs against injected landing and inbox adapters',
 
 test('a restarted controller settles a persisted attempt with a kernel process notification', async () => {
   const h = harness(`#!/usr/bin/env bun
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:8,output_tokens:1}}));
 `), requests: LandingRequest[] = [];
   try {

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, QueryConfig } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -34,6 +35,14 @@ import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
 
 const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
+/** The receipt revision for the command response currently being disclosed. */
+const replayedRevision = new AsyncLocalStorage<string>();
+
+/** One exact command replay. GET reads stay outside this scope, so owner roles
+ * and the public floor still cannot authorize erased metadata. */
+export function withReplayedRevision<T>(revisionId: string, read: () => Promise<T>): Promise<T> {
+  return replayedRevision.run(revisionId, read);
+}
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 
 /** Erased slots retain identity without disclosing bytes or a digest of erased text. */
@@ -289,6 +298,7 @@ async function disclose(
   postId?: string,
   revisionId?: string,
   threadDetail = false,
+  replayedRevisionId?: string,
 ): Promise<Anchored<PostEntry | ThreadView | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -335,10 +345,17 @@ async function disclose(
         return null;
     }
     if (!current.revision || !current.posts[0]) return null;
+    // The receipt names one exact revision. That replay is the erased-metadata
+    // proof for that revision alone; taken down and every other check still deny.
+    const replayAuthorizes =
+      replayedRevisionId !== undefined &&
+      revisionId === replayedRevisionId &&
+      current.revision.id === replayedRevisionId;
     if (
       erasedProof &&
       !erasedProof.explicit &&
-      (revisionId || [current.thread, ...current.posts].some((row) => row.visibility === 'taken_down'))
+      ((revisionId && !replayAuthorizes) ||
+        [current.thread, ...current.posts].some((row) => row.visibility === 'taken_down'))
     )
       return null;
     // Logical erasure suppresses retained bytes for both head and exact reads.
@@ -346,7 +363,7 @@ async function disclose(
     const revision = erased ? current.revision : await point(client, 'revision', current.revision.id, threadId, true);
     if (!revision || revision.parent_id !== current.posts[0].id) return null;
     const item =
-      erasedProof && !erasedProof.explicit
+      erasedProof && !erasedProof.explicit && !replayAuthorizes
         ? erasedPlaceholder(current.posts[0])
         : itemView(current.posts[0], revision, erased);
     if (!item) return null;
@@ -552,10 +569,25 @@ export async function readPost(
   context: ReadContext,
   revisionId?: RevisionId,
 ): Promise<Anchored<PostEntry | null>> {
-  if (route(postId) !== route(threadId) || (revisionId && route(revisionId) !== route(threadId))) {
+  // Captured before the first await so the command-response binding survives
+  // later deadline hops. Absent on every ordinary read.
+  const replayedRevisionId = replayedRevision.getStore();
+  if (
+    route(postId) !== route(threadId) ||
+    (revisionId && route(revisionId) !== route(threadId)) ||
+    (replayedRevisionId !== undefined && route(replayedRevisionId) !== route(threadId))
+  ) {
     return snapshot(dependencies, threadId, context, async () => null);
   }
-  return (await disclose(dependencies, threadId, context, postId, revisionId)) as Anchored<PostEntry | null>;
+  return (await disclose(
+    dependencies,
+    threadId,
+    context,
+    postId,
+    revisionId,
+    false,
+    replayedRevisionId,
+  )) as Anchored<PostEntry | null>;
 }
 
 async function list(

@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   createResourceCreationManifest,
   initializeResourceGrants,
@@ -164,15 +165,18 @@ async function thread(client: AccessClient, id: string): Promise<ThreadRow> {
   if (!row || row.availability !== 'available' || row.visibility === 'taken_down') throw new ContentNotFoundError();
   return row;
 }
-async function post(client: AccessClient, id: string, threadId: string): Promise<PostRow> {
+function erasedRow(row: PostRow): boolean {
+  return row.availability === 'erased' || row.revision_availability === 'erased';
+}
+async function post(client: AccessClient, id: string, threadId: string, allowErased = false): Promise<PostRow> {
   if (route(id) !== route(threadId)) throw new ContentNotFoundError();
   const row = await readPost.run(client, { route: route(id), id });
+  if (!row || row.thread_id !== threadId || row.visibility === 'taken_down') throw new ContentNotFoundError();
+  // The row already carries availability. Authorization may observe an erased
+  // chain; a fresh command refuses it in the body before any write.
   if (
-    !row ||
-    row.thread_id !== threadId ||
-    row.availability !== 'available' ||
-    row.revision_availability !== 'available' ||
-    row.visibility === 'taken_down'
+    !(allowErased && erasedRow(row)) &&
+    (row.availability !== 'available' || row.revision_availability !== 'available')
   )
     throw new ContentNotFoundError();
   return row;
@@ -185,9 +189,8 @@ async function chain(client: AccessClient, threadId: string, itemId: string | nu
   while (id !== null) {
     if (seen.has(id) || posts.length >= limit) throw new ContentNotFoundError();
     seen.add(id);
-    const row = await post(client, id, threadId);
-    posts.push(row);
-    id = row.reply_to_post_id;
+    posts.push(await post(client, id, threadId, true));
+    id = posts.at(-1)!.reply_to_post_id;
   }
   return { thread: root, posts };
 }
@@ -247,9 +250,17 @@ function containerAuthorization(
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const limit = revising ? 33 : 32;
+  // A non-author never held a revise receipt. Keep today's not_found ahead of
+  // the authorship denial. The author's fresh key is refused in the body so an
+  // exact replay can pass authorization and return its receipt.
+  function concealErasedRevise(value: Chain): void {
+    if (!revising || !value.posts.some((row) => erasedRow(row))) return;
+    if (value.posts[0]?.author_account_id !== account(actor).accountId) throw new ContentNotFoundError();
+  }
   async function validate(client: AccessClient, time: AuthoritativeTime) {
     current = await chain(client, threadId, itemId, limit);
     if (!sameChain(prepared, current)) throw new ContentNotFoundError();
+    concealErasedRevise(current);
     const board = await mediaParentBoard(client, current.thread.board_id);
     if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), board.realm_id))
       throw new ContentForbiddenError();
@@ -270,6 +281,7 @@ function containerAuthorization(
           prepared = await mediaParentSnapshot(dependencies.pool, r, context.deadline, (client) =>
             chain(client, threadId, itemId, limit),
           );
+          concealErasedRevise(prepared);
           if (revising && prepared.posts[0]?.author_account_id !== account(actor).accountId)
             throw new ContentForbiddenError();
           checks = [];
@@ -321,7 +333,16 @@ function containerAuthorization(
             if (!proof.allowed) throw new ContentForbiddenError();
             participation.set(attempt.time, proof);
           }
-          return base.prepare!(attempt);
+          try {
+            return await base.prepare!(attempt);
+          } catch (error) {
+            // Erasure used to fail closed before the creation grant. A fresh reply
+            // from a persona without post:create stays not_found and writes nothing.
+            // An authorized replay still reaches its receipt.
+            if (!revising && prepared.posts.some((row) => erasedRow(row)) && error instanceof GrantDeniedError)
+              throw new ContentNotFoundError();
+            throw error;
+          }
         },
         async authorize(tx, attempt, evidence) {
           const mode = await base.authorize(tx, attempt, evidence);
@@ -587,6 +608,7 @@ export async function createPost(
     dependencies.pool,
     { ...options(dependencies, actor, r, CREATE_POST, body, context), authorization },
     async (tx, command) => {
+      if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
       const root = container.current.thread;
       if (body.boardId !== undefined && body.boardId !== root.board_id)
         throw new InvalidDocumentError('Board mismatch');
@@ -654,6 +676,9 @@ export async function revisePost(
     { ...options(dependencies, actor, r, REVISE_POST, body, context), authorization },
     async (tx, command) => {
       const previous = container.current.posts[0]!;
+      // A fresh key cannot revise an erased post or any erased ancestor. Replay
+      // never enters this body. updateHead also refuses to advance an erased head.
+      if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
       if (body.expectedRevisionId !== null && body.expectedRevisionId !== previous.head_revision_id)
         throw new RevisionPreconditionError();
       if (body.boardId !== undefined && body.boardId !== container.current.thread.board_id)
