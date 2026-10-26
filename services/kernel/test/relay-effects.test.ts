@@ -110,8 +110,38 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const basePositions = new Map<number, string>();
   const initialPositions = new Map<number, string>();
   const insertedIds: string[] = [];
+  // Settled history outside the measured partitions, so the outbox is large enough at every scale for the planner
+  // to probe outbox_pkey; discovery does not see it as pending because the consumer's checkpoints sit at its heads.
+  const historyFirst = 1000;
+  const historyLast = historyFirst + 39;
+  const historyPerPartition = 125;
+  const historyInitial = new Map<number, string>();
 
   try {
+    const history = await growth.admin.query<{ partition_no: number; previous: string }>(
+      `UPDATE core.partition SET position = position + $3
+       WHERE partition_no BETWEEN $1 AND $2
+       RETURNING partition_no, (position - $3)::text AS previous`,
+      [historyFirst, historyLast, historyPerPartition],
+    );
+    for (const row of history.rows) historyInitial.set(row.partition_no, row.previous);
+    const seeded = await growth.admin.query<{ id: string }>(
+      `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
+       SELECT partition.partition_no, partition.position - $4::int + step, 0, 1, 1, gen_random_uuid(), $3,
+              gen_random_uuid()::text, '{}'::jsonb
+       FROM core.partition AS partition
+       CROSS JOIN generate_series(1, $4::int) AS step
+       WHERE partition.partition_no BETWEEN $1 AND $2
+       RETURNING id`,
+      [historyFirst, historyLast, CREATED, historyPerPartition],
+    );
+    for (const row of seeded.rows) insertedIds.push(row.id);
+    await growth.admin.query(
+      `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+       SELECT partition_no, $3, 1, position FROM core.partition WHERE partition_no BETWEEN $1 AND $2
+       ON CONFLICT (consumer, partition_no) DO UPDATE SET epoch = 1, position = EXCLUDED.position`,
+      [historyFirst, historyLast, EFFECTS_CONSUMER],
+    );
     await growth.admin.query(
       'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no BETWEEN $2 AND $3',
       [EFFECTS_CONSUMER, start, start + 63],
@@ -196,13 +226,14 @@ test('effects relay discovery stays within its bound as outbox history grows', a
     });
   } finally {
     await growth.admin.query(
-      'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no BETWEEN $2 AND $3',
-      [EFFECTS_CONSUMER, start, start + 63],
+      `DELETE FROM core.consumer_checkpoint
+       WHERE consumer = $1 AND (partition_no BETWEEN $2 AND $3 OR partition_no BETWEEN $4 AND $5)`,
+      [EFFECTS_CONSUMER, start, start + 63, historyFirst, historyLast],
     );
     if (insertedIds.length > 0) {
       await growth.admin.query('DELETE FROM core.outbox WHERE id = ANY($1::uuid[])', [insertedIds]);
     }
-    for (const [partition, position] of initialPositions) {
+    for (const [partition, position] of [...initialPositions, ...historyInitial]) {
       await growth.admin.query('UPDATE core.partition SET position = $2 WHERE partition_no = $1', [
         partition,
         position,
