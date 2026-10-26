@@ -106,6 +106,21 @@ Cover variants are served by the website's media route like every other media ob
 
 Every imported cover carries its rights holder, the source it came through and its licence, and is credited where it is shown. A cover comes down on a valid complaint through the media takedown path, and its subject then shows its placeholder. The takedown also fences the source record's cover field, so a later import refresh cannot bring the same cover back.
 
+## Avatars
+
+An avatar is an image media object with purpose `avatar`. Its container and uploader are the same account,
+so it lives in that account's partition. Only the admitted account using the website client may reserve and
+complete it, with the same image types and upload limits as post images. The image job produces the same
+variants, ThumbHash and average colour. Available avatar variants are public; originals and pending, rejected,
+taken-down, erased or collection-pending avatars are never served. Owners erase avatars with the existing
+`DELETE /v1/media/{id}`. Avatar reservation and completion HTTP routes belong to a separate integration.
+
+Access stores the selected media id on the account and calls `checkAvatarMedia(client, mediaId, accountId)`
+inside its set-avatar command. The port checks availability, purpose and container with one primary-key read
+in the account's partition. `readAvatarSummaries(client, ids)` accepts 1–256 input ids, deduplicates them and
+returns a map with one statement per media partition. Each available avatar has the cover summary shape with
+`credit: null`; unknown, unavailable and non-avatar ids map to null. An account upload has no source credit.
+
 ## Cost
 
 These are derivations from the implemented adapters and SQL here, checked against `db/content/migrations/` and `db/content/schema.sql`, not measurements or promises about a particular query plan.
@@ -124,6 +139,19 @@ Exact-key temporal GiST probes and `WITHOUT OVERLAPS` exclusion checks count as 
 Imported-document and cover hooks consume their caller's existing authorization; their storage reads alone never grant disclosure, and the public caller must separately check current semantic authority and source fences.
 
 Board candidates cap `s` at 200 and collection caps it at 100. Post and revision candidate helpers cap `s` at 200 and fetch `s + 1` identities; public pages return at most 100 results and hydrate at most 200 candidates. Accumulated `p` and `r` remain uncapped; enumerating all history still visits O(r) revisions across pages.
+
+### Avatar summaries
+
+- **Touches:** One statement per media partition among the ids; at most one media row plus its variants per id.
+- **Bound:** O(n) rows for n <= 256 ids, independent of the partition's media count.
+- **Growth check:** `test/content/avatar-media.test.ts`, `avatar summaries`: 64, 512 and 4096 media per partition
+  with 256 ids. Rows and statements stay constant.
+
+### Avatar check
+
+- **Touches:** One media primary-key read in the account's partition.
+- **Bound:** Constant rows and statements.
+- **Growth check:** `test/content/avatar-media.test.ts`, `avatar check`: 64, 512 and 4096 media in the partition.
 
 ### Review creation
 

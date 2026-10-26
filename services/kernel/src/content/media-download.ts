@@ -66,6 +66,38 @@ export async function downloadMedia(
     const initial = await snapshot(r, (client) => point(client, mediaId, slot));
     if (!initial || !usable(initial) || routeOf(initial.container_id) !== r) return denied;
     const original = variant === 'original';
+    if (initial.purpose === 'avatar') {
+      if (original || initial.state !== 'available' || initial.container_id !== initial.uploader_id) return denied;
+      const resource = { route: r, id: mediaId };
+      const check = await accessCheck(
+        dependencies.access,
+        actor,
+        'media:read',
+        {
+          ...resource,
+          eligibility: createResourcePublicEligibility({
+            resource,
+            action: 'media:read',
+            async prepare() {
+              return initial;
+            },
+            async verify({ client }) {
+              const current = await point(client, mediaId, slot);
+              if (!current || !usable(current) || signature(current) !== signature(initial))
+                throw new GrantDeniedError();
+              return true;
+            },
+          }),
+        },
+        { pool: dependencies.pool, deadline: context.deadline },
+      );
+      return snapshot(r, async (client) => {
+        const current = await point(client, mediaId, slot);
+        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await check(client)))
+          return denied;
+        return bytesDecision(current, mediaId, variant, true, context.deadline);
+      });
+    }
     if (original) {
       if (
         actor.kind !== 'account' ||

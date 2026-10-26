@@ -20,6 +20,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readThreadTarget from './read-new-thread-target.sql';
+import readAccount from '../access/account-read.sql';
 import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
@@ -40,7 +41,7 @@ import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId
 import { downloadMedia, type DownloadContext } from './media-download.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
 
-export type MediaPurpose = 'post-image' | 'cover';
+export type MediaPurpose = 'post-image' | 'cover' | 'avatar';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
   format: 'webp' | 'avif';
@@ -70,10 +71,10 @@ type MediaMetadataBase = Readonly<{
   decision: string | null;
   variants: readonly MediaVariant[];
 }>;
-/** Browser reservations describe post images with measured-size inputs. Imported covers
+/** Browser reservations describe post images and avatars with measured-size inputs. Imported covers
  * remain unmeasured until the trusted fetch and processing path observes the bytes. */
 export type MediaMetadata =
-  | (MediaMetadataBase & Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number }>)
+  | (MediaMetadataBase & Readonly<{ purpose: 'post-image' | 'avatar'; mediaType: string; byteCount: number }>)
   | (MediaMetadataBase &
       Readonly<{
         purpose: 'cover';
@@ -83,7 +84,7 @@ export type MediaMetadata =
         source: ImportedSource;
       }>);
 type MediaReservationFields = Readonly<{
-  purpose: 'post-image';
+  purpose: 'post-image' | 'avatar';
   mediaType: string;
   byteCount: number;
   sha256?: string;
@@ -91,7 +92,11 @@ type MediaReservationFields = Readonly<{
 export type MediaReservationInput = MediaReservationFields &
   (
     | Readonly<{ containerId: ThreadId | PostId; newThread?: never }>
-    | Readonly<{ newThread: Readonly<{ boardId: string; idempotencyKey: string }>; containerId?: never }>
+    | Readonly<{
+        purpose: 'post-image';
+        newThread: Readonly<{ boardId: string; idempotencyKey: string }>;
+        containerId?: never;
+      }>
   );
 export type NewThreadMediaTarget = Readonly<{ thread: Resource; boardId: string }>;
 export type MediaCompletionInput = Readonly<{
@@ -216,7 +221,10 @@ export async function reserveMedia(
   if (!containerId) throw new TypeError('Missing media container');
   const r = route(containerId);
   if (newThreadTarget && newThreadTarget.thread.route !== r) throw new TypeError('Invalid media target route');
-  if (input.purpose !== 'post-image' || !imageTypes.has(input.mediaType))
+  const avatar = input.purpose === 'avatar';
+  if (avatar && (containerId !== owner.accountId || owner.clientId !== 'rezics-website' || newThreadTarget))
+    throw new GrantDeniedError();
+  if ((input.purpose !== 'post-image' && !avatar) || !imageTypes.has(input.mediaType))
     throw new TypeError('Invalid media purpose or type');
   length(input.byteCount);
   if (input.sha256 !== undefined) digest(input.sha256);
@@ -252,6 +260,10 @@ export async function reserveMedia(
     parent: {
       resource: board ?? { route: r, id: containerId },
       async validate(client, time) {
+        if (avatar) {
+          const current = await readAccount.run(client, { route: r, account_id: containerId });
+          return current !== null && current.state === 'active';
+        }
         if (board) {
           const partition = await readPartition(client, partitionOf(board.route));
           if (!partition || partition.writeState === 'moved') return false;
@@ -309,6 +321,7 @@ export async function reserveMedia(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
+      if (avatar) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
           pool: dependencies.pool,
@@ -463,7 +476,8 @@ export async function completeMedia(
       const row = await read(tx, mediaId);
       if (
         !row ||
-        row.purpose !== 'post-image' ||
+        (row.purpose !== 'post-image' && row.purpose !== 'avatar') ||
+        (row.purpose === 'avatar' && row.container_id !== owner.accountId) ||
         row.uploader_id !== owner.accountId ||
         row.container_id !== body.containerId ||
         row.reservation_request_id !== body.reservationRequestId ||
@@ -560,7 +574,7 @@ export async function readReservation(
     decision: row.decision,
     variants,
   };
-  if (row.purpose === 'post-image' && row.media_type !== null && row.byte_count !== null)
+  if ((row.purpose === 'post-image' || row.purpose === 'avatar') && row.media_type !== null && row.byte_count !== null)
     return { ...metadata, purpose: row.purpose, mediaType: row.media_type, byteCount: Number(row.byte_count) };
   if (row.purpose !== 'cover') return null;
   const source = {
