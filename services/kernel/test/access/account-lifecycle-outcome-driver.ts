@@ -116,7 +116,7 @@ async function refused<T>(work: () => Promise<T>): Promise<T | 'denied'> {
   }
 }
 
-export async function createAccountLifecycleDriver(): Promise<AccountLifecycleDriver> {
+async function openDriver(): Promise<AccountLifecycleDriver> {
   const source = new URL(required(process.env.DATABASE_URL, 'DATABASE_URL must name a migrated kernel database'));
   const template = source.pathname.slice(1);
   if (!/^[a-zA-Z0-9_]+$/.test(template)) throw new Error('Unsafe template database name');
@@ -366,6 +366,8 @@ export async function createAccountLifecycleDriver(): Promise<AccountLifecycleDr
       await admin.end().catch(() => {});
     }
   };
+  let closing: Promise<void> | undefined;
+  const closeOnce = () => (closing ??= close());
   try {
     await admin.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     owned.push(kernelName);
@@ -374,7 +376,7 @@ export async function createAccountLifecycleDriver(): Promise<AccountLifecycleDr
     migrateAuth(connection(authName), fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url)));
     await build();
   } catch (error) {
-    await close();
+    await closeOnce();
     throw error;
   }
 
@@ -485,7 +487,7 @@ export async function createAccountLifecycleDriver(): Promise<AccountLifecycleDr
   }
 
   const driver: AccountLifecycleDriver = {
-    close,
+    close: closeOnce,
     async advanceTo(instant) {
       const target = Date.parse(instant);
       if (!Number.isFinite(target)) throw new Error(`Invalid instant ${instant}`);
@@ -987,4 +989,16 @@ export async function createAccountLifecycleDriver(): Promise<AccountLifecycleDr
     },
   };
   return driver;
+}
+
+let latest: Promise<AccountLifecycleDriver> | undefined;
+/** A namespace whose hook timed out is never closed by its caller; release it before the next one starts. */
+export async function createAccountLifecycleDriver(): Promise<AccountLifecycleDriver> {
+  await latest?.then(
+    (previous) => previous.close(),
+    () => {},
+  );
+  const created = openDriver();
+  latest = created;
+  return created;
 }
