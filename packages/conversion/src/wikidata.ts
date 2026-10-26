@@ -64,6 +64,8 @@ const types = new Map(
     definition.mappings.map((mapping) => [mapping.replace(/^wd:/, ''), id] as const),
   ),
 );
+const claimProperties = [...new Set(['P31', ...mappings.keys()])];
+const referenceProperties = [...new Set(['P854', ...mappings.keys()])];
 const qid = /^Q[1-9][0-9]{0,15}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const fail: (code: string, pointer?: string) => never = (code, pointer = '') => {
@@ -268,7 +270,7 @@ export function convertWikidata(
     const body = object(value, pointer);
     const result = dictionary<Snak[]>();
     let count = 0;
-    for (const property of reference ? ['P854', ...mappings.keys()] : mappings.keys()) {
+    for (const property of reference ? referenceProperties : mappings.keys()) {
       const entries = read(body, property, pointer);
       if (entries === undefined) continue;
       const items = list(entries, wikidataLimits.snaks, pointer);
@@ -292,7 +294,7 @@ export function convertWikidata(
     claims: dictionary<Claim[]>(),
   };
   const claims = object(read(raw, 'claims', '/claims'), '/claims');
-  for (const property of ['P31', ...mappings.keys()]) {
+  for (const property of claimProperties) {
     const value = read(claims, property, '/claims');
     if (value === undefined) continue;
     const pointer = `/claims/${property}`;
