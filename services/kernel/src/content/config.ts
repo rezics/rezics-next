@@ -42,8 +42,8 @@ function turnstile(env: Environment) {
   const hostname = env.CONTENT_TURNSTILE_HOSTNAME;
   if (secret === undefined && hostname === undefined) {
     // Anonymous report admission stays closed until a provider secret and host
-    // are configured. This verifier never accepts a token without Siteverify.
-    return createTurnstileVerifier({ secret: undefined, hostname: undefined, action: 'report' });
+    // are configured; the absence is carried as no verifier, not as an outage.
+    return undefined;
   }
   if (secret === undefined) throw new ConfigError('CONTENT_TURNSTILE_SECRET');
   if (!/^[\x21-\x7e]{1,4096}$/.test(secret)) throw new ConfigError('CONTENT_TURNSTILE_SECRET');
@@ -55,10 +55,11 @@ function turnstile(env: Environment) {
 /** Trusted HTTP composition. Worker storage credentials are deliberately not read here. */
 export function readContentConfig(env: Environment): ContentRuntime {
   const anonymousVerifier = turnstile(env);
-  if (env.CONTENT_SOURCE_HOSTS === undefined) return Object.freeze({ anonymousVerifier });
+  const verifier = anonymousVerifier === undefined ? {} : { anonymousVerifier };
+  if (env.CONTENT_SOURCE_HOSTS === undefined) return Object.freeze(verifier);
   if (!env.CONTENT_SOURCE_HOSTS) throw new ConfigError('CONTENT_SOURCE_HOSTS');
   return Object.freeze({
     fetchConfig: Object.freeze({ allowedHosts: sourceHosts(env.CONTENT_SOURCE_HOSTS) }),
-    anonymousVerifier,
+    ...verifier,
   });
 }

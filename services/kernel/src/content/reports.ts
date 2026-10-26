@@ -264,6 +264,9 @@ export async function createReport(
   // Provider proof is verified exactly once per invocation, before the command
   // boundary. A retry needs fresh proof; it never changes the semantic digest.
   let proof: Awaited<ReturnType<TurnstileVerifier['verify']>> | undefined;
+  // With no verifier configured an anonymous report fails closed like an
+  // ineligible target: no disclosure, no effect, and not a provider outage.
+  if (actor.kind === 'anonymous' && !dependencies.anonymousVerifier) throw new ReportUnavailableError();
   if (context.botToken !== undefined && dependencies.anonymousVerifier) {
     try {
       proof = await dependencies.anonymousVerifier.verify(context.botToken, { deadline: context.deadline });
