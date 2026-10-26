@@ -440,7 +440,7 @@ async function launchSelection(
 
 for (const revocation of ['grant', 'consent'] as const) {
   test(`native ${revocation} revocation at the logical step barrier preserves cleanup and stops later posts`, async () => {
-    const selected = await scope(102, 3);
+    const selected = await scope(102, 3, revocation === 'consent' ? fixture.recipient : fixture.actor);
     const started = await launchSelection(selected, 'logical');
     expect(
       (
