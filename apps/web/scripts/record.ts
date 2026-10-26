@@ -175,6 +175,8 @@ async function retryOverloaded(send: () => Promise<Response>): Promise<Response>
 }
 
 const libraryScopes = [
+  'account:read',
+  'account:update',
   'subject:create',
   'subject:read',
   'exposure:open',
@@ -458,6 +460,12 @@ async function recordLibrary(input: {
     return body;
   };
   const page = 'view=FULL&limit=100';
+  // One change from the defaults, so the settings page shows a level other than the default and a version above zero.
+  await call('set preferences', tokens.me, 'PATCH', `/v1/accounts/${me}/preferences`, 200, {
+    expectedVersion: 0,
+    spoilerLevel: 1,
+  });
+  await read('settings-preferences', tokens.me, `/v1/accounts/${me}/preferences`);
   await read('library-entries', tokens.me, `/v1/libraryEntries?${page}`);
   await read('library-collections', tokens.me, `/v1/collections?${page}&curatorAccountId=${me}`);
   await read('library-collection', null, `/v1/collections/${shelf}?view=FULL`);

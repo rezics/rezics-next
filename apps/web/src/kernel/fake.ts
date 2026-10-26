@@ -34,6 +34,7 @@ import libraryProgressSessionsRecording from './recorded/library-progress-sessio
 import libraryProgressUnitsRecording from './recorded/library-progress-units.json';
 import libraryPublishedLogRecording from './recorded/library-published-log.json';
 import libraryPublishedLogsRecording from './recorded/library-published-logs.json';
+import settingsPreferencesRecording from './recorded/settings-preferences.json';
 
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
@@ -159,6 +160,8 @@ async function selectRecording(
 ): Promise<KernelRecording | undefined> {
   const library = libraryRecording(request.method, pathname, recordings);
   if (library) return library;
+  if (request.method === 'GET' && pathname === `/v1/accounts/${storyViewerId}/preferences`)
+    return recordings['settings-preferences'];
   if (request.method === 'GET') {
     const subject = /^\/v1\/subjects\/([^/]+)$/.exec(pathname);
     if (subject?.[1]) {
@@ -247,6 +250,7 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'search-typed': searchTypedRecording,
     'definitions-active': definitionsActiveRecording,
     'definitions-release': definitionsReleaseRecording,
+    'settings-preferences': settingsPreferencesRecording,
     ...libraryStoryRecordings(),
   });
 }

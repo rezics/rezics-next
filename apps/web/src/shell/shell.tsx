@@ -37,6 +37,7 @@ import {
   Monitor,
   Moon,
   Search,
+  Settings,
   ShieldCheck,
   Sun,
   UserRound,
@@ -282,6 +283,10 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
           <a href={`/${locale}/following`} className={accountMenuLinkClass}>
             <Users aria-hidden="true" className="size-4" />
             {m.library_nav_following()}
+          </a>
+          <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
+            <Settings aria-hidden="true" className="size-4" />
+            {m.settings_heading()}
           </a>
           <a href={securitySettingsHref} data-account-security-settings autoFocus className={accountMenuLinkClass}>
             <ShieldCheck aria-hidden="true" className="size-4" />

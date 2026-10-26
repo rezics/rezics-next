@@ -400,6 +400,7 @@ test(
       "type ProgressUnitsResponse = Data<ReturnType<SessionRoutes['completedUnits']['get']>>;",
       "type PublishedLogsResponse = Data<ReturnType<KernelClient['publishedLogs']['get']>>;",
       "type PublishedLogResponse = Data<ReturnType<ReturnType<KernelClient['publishedLogs']>['get']>>;",
+      "type PreferencesResponse = Data<ReturnType<ReturnType<KernelClient['accounts']>['preferences']['get']>>;",
     ];
     const responseType: Record<string, string> = {
       'missing-subject.json': 'MissingResponse',
@@ -428,6 +429,7 @@ test(
       'library-progress-units.json': 'ProgressUnitsResponse',
       'library-published-log.json': 'PublishedLogResponse',
       'library-published-logs.json': 'PublishedLogsResponse',
+      'settings-preferences.json': 'PreferencesResponse',
     };
     files.forEach((file, index) => {
       const path = join(recorded, file);

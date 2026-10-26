@@ -3,6 +3,9 @@ Run `bun run storybook` to browse the page stories. Run `bun run record` to crea
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
+The settings page at `/settings` shows the signed-in person's spoiler level and cover suitability and saves each change
+when chosen, with the version it read; a stale version keeps the choice on screen and offers a reload. It links to
+security settings on the Auth site and offers sign-out. Its controls stay disabled until the page hydrates.
 
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
@@ -61,7 +64,8 @@ Configure these variables in the environment of `bun run dev`:
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
-  `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`.
+  `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`; the settings page needs
+  `account:read` and `account:update`.
   Offer pages and other public reads need no scope. Sign-in requests
   `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
@@ -111,7 +115,7 @@ const websiteScopes = registration.scopes.join(' ');
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
 `reaction:set`,
-the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`.
+the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`, and the settings page's `account:read` and `account:update`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
@@ -140,7 +144,7 @@ the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'h
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
 Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
 `http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation and checkout routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read`.
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update`.
 From `apps/web`, run:
 
 ```sh
@@ -148,7 +152,7 @@ AUTH_ISSUER=http://127.0.0.1:4200 \
 API_RESOURCE=https://api.rezics.test \
 WEBSITE_CLIENT_ID=rezics-website \
 WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read' \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update' \
 KERNEL_ORIGIN=http://127.0.0.1:4300 \
 bun run dev --host 127.0.0.1 --port 3000 --strictPort
 ```
@@ -392,6 +396,17 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Bound:** Each page uses 1 K, 1 D, 0 R and 0 A and returns at most 100 entries. Unfollow uses at most 1 K and 1 D;
   no page does one read per collection or followed target.
 - **Growth check:** `tests/library-mine-cost.test.ts`: `my collections and following stay within their bound as list size grows`
+
+### Settings page
+
+- **Touches:** One session read and `GET /v1/accounts/<id>/preferences` for the signed-in account. Each change is one
+  `PATCH /v1/accounts/<id>/preferences` after that session read, carrying the version the person read and an
+  idempotency key. A reload after a stale version repeats the page's two reads.
+- **Bound:** A view is 1 D and 1 K, 0 R and 0 A. A change is 1 D and 1 K write, 0 R and 0 A. The account is the
+  session's own, so no cost depends on the number of accounts, preferences or earlier changes.
+- **Growth check:** `tests/settings-page-cost.test.ts`: `the settings page stays within its bound as the stored version grows`,
+  `a settings change is one write however often the settings changed before` and
+  `three repeated loads each cost the same`
 
 ### Personal library
 

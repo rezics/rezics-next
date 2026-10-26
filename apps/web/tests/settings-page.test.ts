@@ -332,6 +332,13 @@ afterAll(async () => {
     } catch {}
 });
 
+async function until(condition: () => boolean) {
+  const deadline = Date.now() + 15_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('the API did not receive the write in time');
+    await Bun.sleep(50);
+  }
+}
 const patches = () => calls.filter((call) => call.method === 'PATCH');
 
 async function openWithoutScripts(path: string, cookie: string): Promise<Page> {
@@ -391,10 +398,10 @@ test(
       expect(stored).toEqual({ spoilerLevel: 1, suitability: 'blur', version: 4 });
 
       await suitability.click();
-      await page.waitForFunction(
-        () => document.querySelector('[role=switch]')?.getAttribute('aria-checked') === 'true',
-      );
+      // The write reaches the API, then the page settles with the controls enabled again.
+      await until(() => stored.version === 5);
       await page.waitForFunction(() => !document.querySelector('[role=switch][disabled]'));
+      expect(await suitability.getAttribute('aria-checked')).toBe('true');
       expect(patches()).toHaveLength(2);
       expect(patches()[1]).toMatchObject({ body: { expectedVersion: 4, suitability: 'show' } });
       expect(patches()[1]!.key).not.toBe(patches()[0]!.key);
@@ -405,9 +412,13 @@ test(
 
     const again = await readWithCookie('/en/settings', first.cookie!);
     expect(again.status).toBe(200);
-    expect(main(again.html)).toMatch(
-      /role="radio"[^>]*aria-checked="true"[^>]*>(?:(?!role="radio")[\s\S])*?Show minor spoilers/,
-    );
+    const html = main(again.html);
+    const titleOf = (id: string) => new RegExp(`id="${id}">([^<]*)<`).exec(html)?.[1];
+    const radios = [...html.matchAll(/role="radio"[^>]*aria-checked="(true|false)"[^>]*aria-labelledby="([^"]+)"/g)];
+    expect(radios.filter((radio) => radio[1] === 'true').map((radio) => titleOf(radio[2]!))).toEqual([
+      'Show minor spoilers',
+    ]);
+    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/);
   },
   timeout,
 );
