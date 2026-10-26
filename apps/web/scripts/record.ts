@@ -248,8 +248,14 @@ async function main(): Promise<void> {
       throw new Error(`Creating ${description} returned ${created.status}: ${JSON.stringify(creation)}`);
     return id;
   };
-  const item = (property: string, id: string) => ({ property: { id: property }, value: { type: 'value', content: id } });
-  const code = (property: string, content: string) => ({ property: { id: property }, value: { type: 'value', content } });
+  const item = (property: string, id: string) => ({
+    property: { id: property },
+    value: { type: 'value', content: id },
+  });
+  const code = (property: string, content: string) => ({
+    property: { id: property },
+    value: { type: 'value', content },
+  });
   const date = (time: string, precision: 9 | 11) => ({
     property: { id: 'schema:datePublished' },
     value: {
@@ -541,7 +547,9 @@ async function main(): Promise<void> {
   const described = Object.keys(objectBody(subjectRecord.descriptions, 'subject descriptions'));
   const aliased = Object.values(objectBody(subjectRecord.aliases, 'subject aliases')).flat();
   if (!['en', 'ja'].every((language) => described.includes(language)) || aliased.length < 2)
-    throw new Error(`The recorded subject needs descriptions in en and ja and two aliases: ${JSON.stringify(subjectRecord)}`);
+    throw new Error(
+      `The recorded subject needs descriptions in en and ja and two aliases: ${JSON.stringify(subjectRecord)}`,
+    );
   const pageReads = Object.values(objectBody(subjectPage.reads, 'subject-page reads')).map((read) =>
     objectBody(objectBody(read, 'subject-page read').body, 'subject-page read body'),
   );
