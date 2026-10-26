@@ -227,18 +227,23 @@ test('an operator-opened session reduces the automated account consent through t
   expect(await accepted(earlier)).toBe(false);
   expect((await request('/token', {}, session)).status).toBeGreaterThanOrEqual(400);
 
-  // A new session cannot carry the removed scope; the retained scope still issues.
-  await expect(operatorSession('agent', 'operator-human', 'automated-ext', ['read', 'write'])).rejects.toThrow();
+  // A new approved opening may grant the removed scope again; the retained scope still issues.
+  const regranted = await issued(await operatorSession('agent', 'operator-human', 'automated-ext', ['read', 'write']));
+  expect(decodeJwt(regranted)).toMatchObject({ sub: 'agent', scope: 'read write' });
+  expect(await accepted(regranted)).toBe(true);
+  expect(await consentOf('agent')).toEqual({ scopes: ['read', 'write'], pending_scopes: null });
   const retained = await operatorSession('agent', 'operator-human', 'automated-ext', ['read']);
   const fresh = await issued(retained);
   expect(decodeJwt(fresh)).toMatchObject({ sub: 'agent', scope: 'read' });
   expect(await accepted(fresh)).toBe(true);
 
-  // Reducing to nothing leaves no scope to issue.
+  // Reducing to nothing removes every scope; a later approved opening grants again.
   expect((await reduce(retained, [])).status).toBe(200);
   expect(await consentOf('agent')).toEqual({ scopes: [], pending_scopes: null });
   expect(await accepted(fresh)).toBe(false);
-  await expect(operatorSession('agent', 'operator-human', 'automated-ext', ['read'])).rejects.toThrow();
+  const again = await issued(await operatorSession('agent', 'operator-human', 'automated-ext', ['read']));
+  expect(decodeJwt(again)).toMatchObject({ sub: 'agent', scope: 'read' });
+  expect(await consentOf('agent')).toEqual({ scopes: ['read'], pending_scopes: null });
 });
 
 test('an operator-opened session cannot grant or widen an automated account consent', async () => {
