@@ -4,6 +4,7 @@ import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { createSpace } from '../../src/community/space.ts';
 import { createRealm } from '../../src/community/realm.ts';
@@ -29,6 +30,7 @@ const extras = [
   'realm:join',
   'realm:read',
   'realm:manage',
+  'realm:ban',
   'realm:publish',
   'space:create',
   'space:read',
@@ -99,6 +101,17 @@ async function reachRows() {
 
 beforeAll(async () => {
   fixture = await standingFixture(extras);
+  const catalogue = resourceRoleCatalogue(fixture.access);
+  if (!catalogue) throw new Error('Fixture Access resource roles are unavailable');
+  const declaredTypes = new Map(catalogue.declaredTypes ?? []);
+  for (const [action, type] of [
+    ['space:create', 'community.space'],
+    ['realm:create', 'community.realm'],
+    ['board:create', 'content.board'],
+    ['media:create', 'content.media'],
+  ] as const)
+    declaredTypes.set(action, [type]);
+  installResourceRoleCatalogue(fixture.access, { ...catalogue, declaredTypes });
   await fixture.reset();
   await bootstrapGovernance(fixture.pool, fixture.actor);
   await setupSemantic(fixture.pool, bundledRelease);

@@ -123,10 +123,6 @@ export const ACCESS_EVENTS = {
   'com.rezics.access.grant.create.v1': grant,
   'com.rezics.access.grant.change.v1': grant,
   'com.rezics.access.grant.revoke.v1': grant,
-  'com.rezics.access.governance-reach-used.v1': Type.Object(
-    { action, resource, actorId: identity },
-    { additionalProperties: false },
-  ),
   'com.rezics.access.role-grant.create.v1': roleGrant,
   'com.rezics.access.role-grant.change.v1': roleGrant,
   'com.rezics.access.role-grant.revoke.v1': roleGrant,
