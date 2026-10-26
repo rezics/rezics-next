@@ -12,6 +12,8 @@ export const createImportLedgerDriver: CreateImportLedgerDriver = async (options
   const importer = new Importer({
     path: join(options.directory, 'imports.sqlite'),
     transport: { batchWrite: (request) => options.bulk.send(request), readFence: (tuple) => options.readFence(tuple) },
+    // This outcome fixture mutates shared fake fence state from response hooks.
+    recordConcurrency: 1,
     onConversionOutput(output) {
       outputs.push({ raw: structuredClone(output), sourceLicensePointer: '/sourceMetadata/license' });
     },

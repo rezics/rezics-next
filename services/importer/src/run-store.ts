@@ -20,6 +20,7 @@ export type SourceProjection = { sourceKind: SourceId; normalizedRecord: unknown
 export type Staged<Projection = BatchStatement[]> = { row: RecordRow; projection: Projection };
 export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: string };
 export type Pending = { after: string; recordKey: string; bytes: string; keys: string[] };
+export type DeferredCover<Projection = SourceProjection> = Staged<Projection> & { kind: Kind };
 export type Seal = {
   status: 'ready' | 'invalid-input' | 'mass-disappearance';
   prior: number;
@@ -66,6 +67,7 @@ type Entry = {
   omissions_json: string;
   pending: number;
   remaining: number;
+  cover_pending: number;
 };
 type Member = { source: string; record_key: string; active: number; seen: number; row_json: string };
 type Command = {
@@ -320,8 +322,17 @@ export class RunStore<Projection = BatchStatement[]> {
         row_json TEXT NOT NULL, projection_json TEXT NOT NULL, kind TEXT,
         resolved INTEGER NOT NULL DEFAULT 0, bytes TEXT, keys_json TEXT NOT NULL DEFAULT '[]',
         omissions_json TEXT NOT NULL DEFAULT '[]', pending INTEGER NOT NULL DEFAULT 0,
-        remaining INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
+        remaining INTEGER NOT NULL DEFAULT 0, cover_pending INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
+      const entryColumns = this.database
+        .query('PRAGMA table_info(run_entries)')
+        .all() as { name: string }[];
+      if (!entryColumns.some((column) => column.name === 'cover_pending'))
+        this.database.exec('ALTER TABLE run_entries ADD COLUMN cover_pending INTEGER NOT NULL DEFAULT 0');
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_pending ON run_entries(source,run_id,pending,record_key)`);
+      this.database.exec(
+        'CREATE INDEX IF NOT EXISTS run_cover_pending ON run_entries(source,run_id,cover_pending,record_key)',
+      );
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_members (
         source TEXT NOT NULL, record_key TEXT NOT NULL, active INTEGER NOT NULL,
         seen INTEGER NOT NULL, row_json TEXT NOT NULL, PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
@@ -619,7 +630,7 @@ export class RunStore<Projection = BatchStatement[]> {
     );
   }
   private resolve(run: Run, entry: Entry) {
-    if (entry.resolved || entry.remaining) return;
+    if (entry.resolved || entry.remaining || entry.cover_pending) return;
     this.write(
       'UPDATE run_entries SET resolved=1,pending=0 WHERE source=? AND run_id=? AND record_key=?',
       run.source,
@@ -668,17 +679,22 @@ export class RunStore<Projection = BatchStatement[]> {
     });
   }
   /** Private record plan; every dispatch still uses the portable one-envelope contract. */
-  prepare(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
+  prepare(
+    run: Run,
+    key: string,
+    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+  ): Kind {
     return this.plan(run, key, input, true);
   }
   private plan(
     run: Run,
     key: string,
-    input: { commands: BatchCommand[]; omissions?: Omission[] },
+    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
     multi: boolean,
   ): Kind {
     keyId(key);
-    exact(input, ['commands'], ['omissions']);
+    exact(input, ['commands'], ['omissions', 'deferredCover']);
+    if (input.deferredCover !== undefined && typeof input.deferredCover !== 'boolean') fail();
     if (!Array.isArray(input.commands) || input.commands.length > (multi ? 300 : 100)) fail();
     const request: ImportBatchRequest = { commands: input.commands };
     const bodies: string[] = [];
@@ -770,7 +786,7 @@ export class RunStore<Projection = BatchStatement[]> {
               : current.row_json === e.row_json && current.projection_json === e.projection_json
                 ? 'unchanged'
                 : 'changed';
-        if (multi && !commands.length && !omissions.length && e.kind !== 'unchanged')
+        if (multi && !commands.length && !omissions.length && !input.deferredCover && e.kind !== 'unchanged')
           throw new Error('Empty record plan requires unchanged or fenced proof');
         // A successful omission can acknowledge a record in an abandoned generation.
         // Snapshot equality must still compare against the complete pointer, not that ack.
@@ -887,8 +903,77 @@ export class RunStore<Projection = BatchStatement[]> {
           key,
         );
       }
+      if (input.deferredCover) {
+        e.cover_pending = 1;
+        this.write(
+          'UPDATE run_entries SET cover_pending=1 WHERE source=? AND run_id=? AND record_key=?',
+          run.source,
+          run.id,
+          key,
+        );
+      }
       if (e.bytes || e.kind === 'unchanged' || saved.length) this.resolve(run, e);
       return e.kind;
+    });
+  }
+  pageDeferredCovers(run: Run, page: { after?: string; limit: number }): DeferredCover<Projection>[] {
+    exact(page, ['limit'], ['after']);
+    pageLimit(page.limit);
+    if (page.after !== undefined) keyId(page.after);
+    const g = this.generation(run, true);
+    if (!['ready', 'finalizing'].includes(g.status)) return [];
+    const rows = this.all<{ row_json: string; projection_json: string; kind: Kind }>(
+      `SELECT row_json,projection_json,kind FROM run_entries INDEXED BY run_cover_pending
+      WHERE source=? AND run_id=? AND cover_pending=1 AND record_key>?
+      ORDER BY record_key LIMIT ?`,
+      run.source,
+      run.id,
+      page.after ?? '',
+      page.limit,
+    );
+    return rows.map((entry) => ({
+      row: JSON.parse(entry.row_json),
+      projection: JSON.parse(entry.projection_json),
+      kind: entry.kind,
+    }));
+  }
+  resolveDeferredCover(
+    run: Run,
+    key: string,
+    input: { omission?: Omission } = {},
+  ): { resolved: boolean; kind: Kind } {
+    validateRun(run);
+    keyId(key);
+    exact(input, [], ['omission']);
+    return this.transaction(() => {
+      const g = this.generation(run, true);
+      if (!['ready', 'finalizing'].includes(g.status)) throw new Error('Run is not ready');
+      const entry = this.entry(run, key);
+      if (!entry?.kind || !entry.cover_pending) throw new Error('Cover is not deferred');
+      const omissions: Omission[] = JSON.parse(entry.omissions_json);
+      if (input.omission) {
+        const omission = input.omission;
+        exact(omission, ['field_group', 'disposition', 'securityRevision']);
+        if (
+          omission.field_group !== 'cover' ||
+          omission.disposition !== 'fenced' ||
+          !/^[1-9][0-9]*$/u.test(omission.securityRevision)
+        )
+          fail();
+        const prior = omissions.findIndex((value) => value.field_group === 'cover');
+        if (prior < 0) omissions.push(omission);
+        else omissions[prior] = omission;
+      }
+      entry.cover_pending = 0;
+      this.write(
+        'UPDATE run_entries SET cover_pending=0,omissions_json=? WHERE source=? AND run_id=? AND record_key=?',
+        JSON.stringify(omissions),
+        run.source,
+        run.id,
+        key,
+      );
+      this.resolve(run, entry);
+      return { resolved: !entry.remaining, kind: entry.kind };
     });
   }
   pagePending(run: Run, page: { after?: string; limit: number }): Pending[] {
@@ -940,6 +1025,35 @@ export class RunStore<Projection = BatchStatement[]> {
       recordKey: e.record_key,
       bytes: e.bytes,
       keys: JSON.parse(e.keys_json),
+    }));
+  }
+  pendingRecord(run: Run, key: string): Pending[] {
+    validateRun(run);
+    keyId(key);
+    const g = this.generation(run, true);
+    if (!['ready', 'finalizing'].includes(g.status)) return [];
+    return this.all<Envelope>(
+      `SELECT record_key,envelope_index,multi,bytes,keys_json FROM run_envelopes
+      WHERE source=? AND run_id=? AND record_key=? AND pending=1
+      ORDER BY envelope_index LIMIT 300`,
+      run.source,
+      run.id,
+      key,
+    ).map((envelope) => ({
+      after: envelope.multi
+        ? '!' +
+          Buffer.from(
+            JSON.stringify({
+              source: run.source,
+              run: run.id,
+              record: envelope.record_key,
+              envelope: envelope.envelope_index,
+            }),
+          ).toString('base64url')
+        : envelope.record_key,
+      recordKey: envelope.record_key,
+      bytes: envelope.bytes,
+      keys: JSON.parse(envelope.keys_json),
     }));
   }
   pageVanished(run: Run, page: { after?: string; limit: number }): RecordRow[] {
@@ -1114,6 +1228,8 @@ export class RunStore<Projection = BatchStatement[]> {
     acknowledged: RecordRow | null;
     staged: Staged<Projection> | null;
     omissions: Omission[];
+    coverPending: boolean;
+    kind: Kind | null;
   } {
     sourceId(source);
     keyId(key);
@@ -1135,6 +1251,8 @@ export class RunStore<Projection = BatchStatement[]> {
       acknowledged: ack ? JSON.parse(ack.row_json) : null,
       staged: e ? { row: JSON.parse(e.row_json), projection: JSON.parse(e.projection_json) } : null,
       omissions: e ? JSON.parse(e.omissions_json) : [],
+      coverPending: e?.cover_pending === 1,
+      kind: e?.kind ?? null,
     };
   }
   close(): void {

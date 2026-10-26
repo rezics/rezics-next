@@ -22,7 +22,7 @@ import { readDump } from './dumps.ts';
 import { ImportSession } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
 import type { RecordRow } from './record-store.ts';
-import type { Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
+import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
 
 export type ImportMediaResolution =
@@ -35,6 +35,7 @@ export interface ImportMediaResolver {
     subject: string;
     mediaImportIntents: readonly MediaImportRequest[];
     signal: AbortSignal;
+    deferPending?: boolean;
   }): Promise<ImportMediaResolution>;
 }
 
@@ -67,16 +68,30 @@ export type ImportRunOptions = {
 export type ImporterOptions = {
   path: string | Database;
   transport: ImportTransport;
+  recordConcurrency?: number;
+  mediaDeadlineMs?: number;
   mediaResolver?: ImportMediaResolver;
   identifierLookup?: ImportIdentifierLookup;
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
   instrumentDatabase?: (database: Database) => Database;
+  now?(): number;
+  sleep?(ms: number, signal: AbortSignal): Promise<void>;
+  observer?: {
+    onRecordActive?(phase: 'staged' | 'vanished' | 'resumed' | 'media', recordKey: string, active: boolean): void;
+    onPageRetained?(
+      phase: 'staged' | 'vanished' | 'resumed' | 'media',
+      records: readonly { recordKey: string; bytes: number }[],
+    ): void;
+    onAcknowledged?(recordKey: string): void;
+  };
 };
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const success = (result: BatchWriteResult['results'][number]) => result.status === 200 || result.status === 201;
 class Interrupted extends Error {}
+type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
+type Planned = { kind: Kind; deferredCover: boolean; conversion?: ImportConversion };
 
 // Native source keys are not normalized into different record identities. Compound
 // planner identities are hashed so their printable public keys remain bounded.
@@ -93,9 +108,20 @@ export class Importer {
   readonly session: ImportSession;
   private readonly running = new Set<Promise<ImportRunResult>>();
   private readonly shutdown = new AbortController();
+  private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
+  private readonly recordConcurrency: number;
+  private readonly mediaDeadlineMs: number;
   private closing = false;
 
   constructor(private readonly options: ImporterOptions) {
+    const concurrency = options.recordConcurrency ?? 16;
+    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64)
+      throw new TypeError('recordConcurrency must be an integer from 1 through 64');
+    const mediaDeadlineMs = options.mediaDeadlineMs ?? 600_000;
+    if (!Number.isFinite(mediaDeadlineMs) || mediaDeadlineMs < 0)
+      throw new TypeError('mediaDeadlineMs must be a non-negative finite number');
+    this.recordConcurrency = concurrency;
+    this.mediaDeadlineMs = mediaDeadlineMs;
     this.session = new ImportSession(
       options.path,
       options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {},
@@ -155,14 +181,16 @@ export class Importer {
     );
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');
-    this.options.onConversionOutput?.(result);
     return result;
   }
 
-  private async fences(owner: Owner): Promise<Omission[]> {
+  private async fences(owner: Owner, signal: AbortSignal): Promise<Omission[]> {
+    if (signal.aborted) throw new Interrupted('Import was interrupted');
     const values = await Promise.all(
       FIELD_GROUPS.map(async (field_group): Promise<Omission | null> => {
+        if (signal.aborted) throw new Interrupted('Import was interrupted');
         const value = await this.options.transport.readFence({ ...owner, field_group });
+        if (signal.aborted) throw new Interrupted('Import was interrupted');
         if (!value || typeof value.fenced !== 'boolean') throw new Error('Invalid fence response');
         if (!value.fenced) {
           if (value.securityRevision !== null) throw new Error('Invalid open fence response');
@@ -201,15 +229,91 @@ export class Importer {
     if (checkBatchWrite(request).length || Buffer.byteLength(JSON.stringify(request)) > 65536)
       throw new Error('Invalid public envelope');
     const response = await this.options.transport.batchWrite(request);
+    if (signal.aborted) throw new Interrupted('Import was interrupted');
     this.validateResult(request, response);
     if (response.results.some(success)) {
       try {
         await this.options.afterBulkSuccess?.(request, response);
       } catch {
+        this.runControllers.get(signal)?.abort();
         throw new Interrupted('Interrupted after remote success before local acknowledgement');
       }
     }
+    if (signal.aborted) throw new Interrupted('Import was interrupted');
     return response;
+  }
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now();
+  }
+
+  private async sleep(ms: number, signal: AbortSignal): Promise<void> {
+    if (ms <= 0) return;
+    if (this.options.sleep) return this.options.sleep(ms, signal);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(done, ms);
+      const abort = () => done(new Interrupted('Import was interrupted'));
+      function done(error?: Error) {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', abort);
+        if (error) reject(error);
+        else resolve();
+      }
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  }
+
+  private retain(phase: Phase, rows: readonly { recordKey: string; value: unknown }[]): void {
+    this.options.observer?.onPageRetained?.(
+      phase,
+      rows.map(({ recordKey, value }) => ({ recordKey, bytes: Buffer.byteLength(JSON.stringify(value)) })),
+    );
+  }
+
+  private async concurrent<T, R>(
+    phase: Phase,
+    values: readonly T[],
+    signal: AbortSignal,
+    key: (value: T) => string,
+    operation: (value: T) => Promise<R>,
+  ): Promise<R[]> {
+    const results = new Array<R>(values.length);
+    let next = 0;
+    let stopped = false;
+    let failure: unknown;
+    const worker = async () => {
+      for (;;) {
+        if (stopped) return;
+        if (signal.aborted) {
+          failure ??= new Interrupted('Import was interrupted');
+          stopped = true;
+          return;
+        }
+        const index = next++;
+        if (index >= values.length) return;
+        const value = values[index]!;
+        const recordKey = key(value);
+        this.options.observer?.onRecordActive?.(phase, recordKey, true);
+        try {
+          results[index] = await operation(value);
+        } catch (error) {
+          failure ??= error;
+          stopped = true;
+          this.runControllers.get(signal)?.abort(error);
+          return;
+        } finally {
+          this.options.observer?.onRecordActive?.(phase, recordKey, false);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(this.recordConcurrency, values.length) }, worker));
+    if (failure !== undefined) throw failure;
+    return results;
+  }
+
+  private acknowledged(recordKey: string): void {
+    this.options.observer?.onAcknowledged?.(recordKey);
   }
 
   private acknowledge(owner: Owner, request: BatchWriteRequest, result: BatchWriteResult): void {
@@ -269,7 +373,7 @@ export class Importer {
 
   private async dispatch(run: Run, pending: Pending, signal: AbortSignal): Promise<boolean> {
     const owner = { source: run.source, external_id: pending.recordKey };
-    const omissions = await this.fences(owner);
+    const omissions = await this.fences(owner, signal);
     // An empty commands argument augments only omission proof, retaining the
     // original immutable journal and each of its public operation bodies.
     this.session.store.prepare(run, pending.recordKey, { commands: [], omissions });
@@ -287,23 +391,36 @@ export class Importer {
     // Returned identities must be durable before RunStore can resolve a record.
     this.acknowledge(owner, request, result);
     this.session.store.acknowledge(run, result, { recordKey: pending.recordKey });
+    if (this.session.store.key(run.source, pending.recordKey, run).acknowledged) this.acknowledged(pending.recordKey);
     return result.results.every(success);
   }
 
-  private async drain(run: Run, signal: AbortSignal): Promise<boolean> {
+  private async drain(run: Run, signal: AbortSignal, phase: Phase): Promise<boolean> {
     let after: string | undefined;
     let complete = true;
     for (;;) {
       const page = this.session.store.pagePending(run, { ...(after ? { after } : {}), limit: 100 });
-      for (const pending of page) {
-        try {
-          if (!(await this.dispatch(run, pending, signal))) complete = false;
-        } catch (error) {
-          if (error instanceof Interrupted) throw error;
-          complete = false;
-        }
-        after = pending.after;
-      }
+      this.retain(
+        phase,
+        page.map((pending) => ({ recordKey: pending.recordKey, value: pending })),
+      );
+      const outcomes = await this.concurrent(
+        phase,
+        page,
+        signal,
+        (pending) => pending.recordKey,
+        async (pending) => {
+          try {
+            return await this.dispatch(run, pending, signal);
+          } catch (error) {
+            if (error instanceof Interrupted) throw error;
+            return false;
+          }
+        },
+      );
+      if (outcomes.some((outcome) => !outcome)) complete = false;
+      if (page.length) after = page.at(-1)!.after;
+      this.options.observer?.onPageRetained?.(phase, []);
       if (page.length < 100) return complete;
     }
   }
@@ -313,21 +430,25 @@ export class Importer {
     run: Run,
     staged: Staged<SourceProjection>,
     signal: AbortSignal,
-  ): Promise<Kind | null> {
+  ): Promise<Planned | null> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     const store = this.session.store;
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };
-    let omissions = await this.fences(owner);
+    let omissions = await this.fences(owner, signal);
     const acknowledged = store.key(row.source, row.recordKey).acknowledged;
     if (isDeepStrictEqual(acknowledged, row)) {
-      return store.classify(run, row.recordKey, { commands: [], omissions });
+      return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
     const candidates = this.current(owner);
     let conversion: ImportConversion | null = null;
+    let observedConversion: ImportConversion | undefined;
     let subject: string | null = null;
+    let deferredCover = false;
+    let skipCover = false;
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
+      observedConversion = conversion;
       const claim = this.session.bindings.claim(owner);
       if (claim?.state === 'bound') subject = claim.subject;
       else if (
@@ -338,7 +459,7 @@ export class Importer {
         if (!subject) return null;
       }
       if (subject) {
-        omissions = await this.fences(owner);
+        omissions = await this.fences(owner, signal);
         const resolvedReferences = await this.options.identifierLookup?.resolve({ owner, conversion, signal });
         const context = { subjectId: subject, ...(resolvedReferences ? { resolvedReferences } : {}) };
         conversion = this.convert(registration, staged, context);
@@ -351,19 +472,28 @@ export class Importer {
             subject,
             mediaImportIntents: intents,
             signal,
+            deferPending: true,
           });
-          if (resolution.status !== 'available') throw new Interrupted('Media resolution is incomplete');
-          const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-          for (const intent of intents)
-            if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
-              throw new Interrupted('Media availability is incomplete');
-          conversion = this.convert(registration, staged, { ...context, mediaIds: resolution.mediaIds });
+          if (resolution.status === 'available') {
+            const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+            for (const intent of intents)
+              if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
+                throw new Error('Media availability is incomplete');
+            conversion = this.convert(registration, staged, { ...context, mediaIds: resolution.mediaIds });
+          } else {
+            skipCover = true;
+            deferredCover = resolution.status === 'pending';
+          }
         }
       }
     }
     const commands: BatchCommand[] = [];
     for (const candidate of candidates) {
-      if (omissions.some((o) => o.field_group === candidate.field_group)) continue;
+      if (
+        omissions.some((o) => o.field_group === candidate.field_group) ||
+        (skipCover && candidate.field_group === 'cover')
+      )
+        continue;
       const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
       if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
       commands.push({
@@ -383,21 +513,178 @@ export class Importer {
       });
     }
     for (const command of conversion?.proposals ?? []) {
-      if (command.op === 'create' || omissions.some((o) => o.field_group === command.source.field_group)) continue;
+      if (
+        command.op === 'create' ||
+        omissions.some((o) => o.field_group === command.source.field_group) ||
+        (skipCover && command.source.field_group === 'cover')
+      )
+        continue;
       if (command.op !== 'propose' || !subject || command.subject !== subject)
         throw new Error('Converter did not produce bound proposals');
       commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
     }
-    if (!commands.length && !omissions.length) {
+    if (!commands.length && !omissions.length && !deferredCover) {
       const kind = store.classify(run, row.recordKey, { commands: [] });
       if (conversion && 'outcome' in conversion && conversion.outcome === 'ignored')
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'converter-ignored' });
       else if (row.state === 'vanished' && !candidates.length)
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'no-owned-candidates' });
       else throw new Error('Conversion has no justified final plan');
-      return kind;
+      this.acknowledged(row.recordKey);
+      return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
     }
-    return store.prepare(run, row.recordKey, { commands, omissions });
+    return {
+      kind: store.prepare(run, row.recordKey, {
+        commands,
+        omissions,
+        ...(deferredCover ? { deferredCover: true } : {}),
+      }),
+      deferredCover,
+      ...(observedConversion ? { conversion: observedConversion } : {}),
+    };
+  }
+
+  private async resolveCover(
+    registration: SourceRegistration,
+    run: Run,
+    deferred: DeferredCover<SourceProjection>,
+    signal: AbortSignal,
+  ): Promise<{ outcome: 'pending' | 'failed' | 'resolved'; kind: Kind }> {
+    const { row } = deferred;
+    const owner = { source: row.source, external_id: row.recordKey };
+    let omissions = await this.fences(owner, signal);
+    const coverOmission = omissions.find((omission) => omission.field_group === 'cover');
+    if (coverOmission) {
+      const result = this.session.store.resolveDeferredCover(run, row.recordKey, { omission: coverOmission });
+      if (result.resolved) this.acknowledged(row.recordKey);
+      return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+    }
+    const claim = this.session.bindings.claim(owner);
+    if (claim?.state !== 'bound') return { outcome: 'failed', kind: deferred.kind };
+    let conversion = this.convert(registration, deferred);
+    const resolvedReferences = await this.options.identifierLookup?.resolve({ owner, conversion, signal });
+    const context = {
+      subjectId: claim.subject,
+      ...(resolvedReferences ? { resolvedReferences } : {}),
+    };
+    conversion = this.convert(registration, deferred, context);
+    const intents = 'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as MediaImportRequest[]) : [];
+    if (!intents.length) {
+      const result = this.session.store.resolveDeferredCover(run, row.recordKey);
+      if (result.resolved) this.acknowledged(row.recordKey);
+      return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+    }
+    if (!this.options.mediaResolver) return { outcome: 'failed', kind: deferred.kind };
+    const resolution = await this.options.mediaResolver.resolve({
+      owner,
+      subject: claim.subject,
+      mediaImportIntents: intents,
+      signal,
+      deferPending: false,
+    });
+    if (resolution.status !== 'available') {
+      if (resolution.status === 'pending') return { outcome: 'pending', kind: deferred.kind };
+      const rejected = this.session.store.resolveDeferredCover(run, row.recordKey);
+      if (rejected.resolved) this.acknowledged(row.recordKey);
+      return { outcome: rejected.resolved ? 'resolved' : 'failed', kind: rejected.kind };
+    }
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    for (const intent of intents)
+      if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
+        return { outcome: 'failed', kind: deferred.kind };
+    omissions = await this.fences(owner, signal);
+    const freshCoverOmission = omissions.find((omission) => omission.field_group === 'cover');
+    if (freshCoverOmission) {
+      const result = this.session.store.resolveDeferredCover(run, row.recordKey, { omission: freshCoverOmission });
+      if (result.resolved) this.acknowledged(row.recordKey);
+      return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+    }
+    conversion = this.convert(registration, deferred, { ...context, mediaIds: resolution.mediaIds });
+    const commands: BatchCommand[] = [];
+    for (const candidate of this.current(owner).filter((value) => value.field_group === 'cover')) {
+      const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
+      if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
+      commands.push({
+        op: 'retract',
+        key: operationKey(owner, `${run.id}:retract:${candidate.candidate}`),
+        source: {
+          source: row.source,
+          external_id: row.recordKey,
+          record_revision: row.recordRevision,
+          converter_revision: row.converter_revision,
+          digest: row.digest,
+          field_group: 'cover',
+        },
+        subject: candidate.subject,
+        candidate: candidate.candidate,
+        references: prior.statement.references,
+      });
+    }
+    for (const command of conversion.proposals) {
+      if (command.op === 'create' || command.source.field_group !== 'cover') continue;
+      if (command.op !== 'propose' || command.subject !== claim.subject)
+        throw new Error('Converter did not produce bound cover proposals');
+      commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
+    }
+    if (commands.length) {
+      const request = { commands };
+      for (const command of commands)
+        this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
+      const result = await this.send(request, signal);
+      this.acknowledge(owner, request, result);
+      if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
+    }
+    const result = this.session.store.resolveDeferredCover(run, row.recordKey);
+    if (result.resolved) this.acknowledged(row.recordKey);
+    return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+  }
+
+  private async resolveCovers(
+    registration: SourceRegistration,
+    run: Run,
+    signal: AbortSignal,
+    deadline: number,
+  ): Promise<boolean> {
+    for (;;) {
+      let after: string | undefined;
+      let pending = false;
+      let failed = false;
+      for (;;) {
+        const page = this.session.store.pageDeferredCovers(run, {
+          ...(after ? { after } : {}),
+          limit: 100,
+        });
+        this.retain(
+          'media',
+          page.map((entry) => ({ recordKey: entry.row.recordKey, value: entry })),
+        );
+        const outcomes = await this.concurrent(
+          'media',
+          page,
+          signal,
+          (entry) => entry.row.recordKey,
+          async (entry) => {
+            try {
+              return await this.resolveCover(registration, run, entry, signal);
+            } catch (error) {
+              if (error instanceof Interrupted) throw error;
+              return { outcome: 'failed' as const, kind: entry.kind };
+            }
+          },
+        );
+        for (const outcome of outcomes) {
+          if (outcome.outcome === 'pending') pending = true;
+          else if (outcome.outcome === 'failed') failed = true;
+        }
+        if (page.length) after = page.at(-1)!.row.recordKey;
+        this.options.observer?.onPageRetained?.('media', []);
+        if (page.length < 100) break;
+      }
+      if (!pending && !failed) return true;
+      const remaining = deadline - this.now();
+      if (remaining <= 0) return false;
+      await this.sleep(Math.min(1000, remaining), signal);
+    }
   }
 
   private async run(
@@ -432,7 +719,14 @@ export class Importer {
       sinks[kind]?.(key);
     };
     const finish = (status: RunStatus, diagnostic: string) => Object.assign(result, { status, diagnostic });
-    const signal = AbortSignal.any([this.shutdown.signal, ...(options.signal ? [options.signal] : [])]);
+    const runController = new AbortController();
+    const signal = AbortSignal.any([
+      this.shutdown.signal,
+      runController.signal,
+      ...(options.signal ? [options.signal] : []),
+    ]);
+    this.runControllers.set(signal, runController);
+    const mediaDeadline = this.now() + this.mediaDeadlineMs;
     const ownership = this.session.acquire(registration.source);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
@@ -474,7 +768,6 @@ export class Importer {
               { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
               { source: registration.source },
             );
-            this.options.onConversionOutput?.(conversion);
             store.stage(run, {
               row: {
                 source: registration.source,
@@ -498,62 +791,105 @@ export class Importer {
         if (seal.status !== 'ready')
           return finish(seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump', seal.diagnostic);
       }
-      if (resumed && !(await this.drain(run, signal)))
+      if (resumed && !(await this.drain(run, signal, 'resumed')))
         return finish('bulk-failed', 'Durable operations remain unresolved');
       let failed = false;
       let after: string | undefined;
       for (;;) {
         const page = store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
-        for (const staged of page) {
-          const { row, projection } = staged;
-          after = row.recordKey;
-          // Prior attempts can already have classified disappeared rows in this
-          // journal. The dedicated vanished index owns that enumeration.
-          if (row.state === 'vanished') continue;
-          try {
-            const configured =
-              projection.sourceKind === registration.sourceKind &&
-              row.converter_revision === registration.converter_revision
-                ? registration
-                : createSourceRegistration(projection.sourceKind, {
-                    source: row.source,
-                    converterRevision: row.converter_revision,
-                  });
-            const kind = await this.plan(configured, run, staged, signal);
-            if (kind) observe(kind, row.recordKey);
-            else failed = true;
-          } catch (error) {
-            if (error instanceof Interrupted) throw error;
-            failed = true;
+        this.retain(
+          'staged',
+          page.map((staged) => ({ recordKey: staged.row.recordKey, value: staged })),
+        );
+        const outcomes = await this.concurrent(
+          'staged',
+          page,
+          signal,
+          (staged) => staged.row.recordKey,
+          async (staged): Promise<Planned | 'failed' | null> => {
+            const { row, projection } = staged;
+            // Prior attempts can already have classified disappeared rows in this
+            // journal. The dedicated vanished index owns that enumeration.
+            if (row.state === 'vanished') return null;
+            const state = store.key(row.source, row.recordKey, run);
+            if (state.coverPending) return state.kind ? { kind: state.kind, deferredCover: true } : 'failed';
+            try {
+              const configured =
+                projection.sourceKind === registration.sourceKind &&
+                row.converter_revision === registration.converter_revision
+                  ? registration
+                  : createSourceRegistration(projection.sourceKind, {
+                      source: row.source,
+                      converterRevision: row.converter_revision,
+                    });
+              const planned = await this.plan(configured, run, staged, signal);
+              if (!planned) return 'failed';
+              for (const pending of store.pendingRecord(run, row.recordKey))
+                if (!(await this.dispatch(run, pending, signal))) return 'failed';
+              return planned;
+            } catch (error) {
+              if (error instanceof Interrupted) throw error;
+              return 'failed';
+            }
+          },
+        );
+        for (let index = 0; index < outcomes.length; index++) {
+          const outcome = outcomes[index];
+          if (outcome === 'failed') failed = true;
+          else if (outcome) {
+            if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
+            observe(outcome.kind, page[index]!.row.recordKey);
           }
         }
+        if (page.length) after = page.at(-1)!.row.recordKey;
+        this.options.observer?.onPageRetained?.('staged', []);
         if (page.length < 100) break;
       }
       after = undefined;
       for (;;) {
         const page = store.pageVanished(run, { ...(after ? { after } : {}), limit: 100 });
-        for (const prior of page) {
-          after = prior.recordKey;
-          try {
-            const kind = await this.plan(
-              registration,
-              run,
-              {
-                row: { ...prior, state: 'vanished' },
-                projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
-              },
-              signal,
-            );
-            if (kind) observe(kind, prior.recordKey);
-            else failed = true;
-          } catch (error) {
-            if (error instanceof Interrupted) throw error;
-            failed = true;
-          }
+        this.retain(
+          'vanished',
+          page.map((prior) => ({ recordKey: prior.recordKey, value: prior })),
+        );
+        const outcomes = await this.concurrent(
+          'vanished',
+          page,
+          signal,
+          (prior) => prior.recordKey,
+          async (prior): Promise<Planned | 'failed'> => {
+            try {
+              const planned = await this.plan(
+                registration,
+                run,
+                {
+                  row: { ...prior, state: 'vanished' },
+                  projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
+                },
+                signal,
+              );
+              if (!planned) return 'failed';
+              for (const pending of store.pendingRecord(run, prior.recordKey))
+                if (!(await this.dispatch(run, pending, signal))) return 'failed';
+              return planned;
+            } catch (error) {
+              if (error instanceof Interrupted) throw error;
+              return 'failed';
+            }
+          },
+        );
+        for (let index = 0; index < outcomes.length; index++) {
+          const outcome = outcomes[index]!;
+          if (outcome === 'failed') failed = true;
+          else observe(outcome.kind, page[index]!.recordKey);
         }
+        if (page.length) after = page.at(-1)!.recordKey;
+        this.options.observer?.onPageRetained?.('vanished', []);
         if (page.length < 100) break;
       }
-      if (!(await this.drain(run, signal))) failed = true;
+      // Inspect durable leftovers without retrying a failed record in the same run.
+      store.pagePending(run, { limit: 100 });
+      if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
       if (failed) return finish('bulk-failed', 'Durable operations remain unresolved');
       let final = store.finalize(run, 100);
       while (final === 'more') final = store.finalize(run, 100);
@@ -567,6 +903,7 @@ export class Importer {
         error instanceof Interrupted ? error.message : 'Import operations remain unresolved',
       );
     } finally {
+      this.runControllers.delete(signal);
       this.session.release(ownership);
     }
   }

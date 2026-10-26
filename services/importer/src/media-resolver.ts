@@ -24,6 +24,8 @@ export interface ResolveMediaInput {
   containerId: string;
   mediaImportIntents: readonly MediaImportRequest[];
   signal: AbortSignal;
+  /** Submit missing jobs without polling; the coordinator owns the later media pass. */
+  deferPending?: boolean;
 }
 
 export type MediaResolution =
@@ -42,7 +44,7 @@ export interface MediaResolverOptions {
   bindings: RecordBindings;
   port: MediaImportPort;
   sleep(ms: number, signal: AbortSignal): Promise<void>;
-  /** Lower only: at most five GETs and four one-second waits per asset. */
+  /** Retained for compatibility; one GET is made per invocation and no inline wait occurs. */
   pollAttempts?: number;
   pollDelayMs?: number;
 }
@@ -124,7 +126,7 @@ function ownValue(input: object, name: string): unknown {
  * A resolved envelope can still contain unfinished assets; it never advances a source baseline.
  */
 export function createMediaResolver(options: MediaResolverOptions): MediaResolver {
-  const { bindings, port, sleep } = options;
+  const { bindings, port } = options;
   const attempts = options.pollAttempts ?? 5;
   const delay = options.pollDelayMs ?? 1000;
   ensure(Number.isInteger(attempts) && attempts >= 1 && attempts <= 5);
@@ -138,6 +140,8 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
       const containerId = ownValue(input, 'containerId');
       ensure(typeof containerId === 'string');
       const signal = ownValue(input, 'signal') as AbortSignal;
+      const deferPending = Object.hasOwn(input, 'deferPending') ? ownValue(input, 'deferPending') : false;
+      ensure(typeof deferPending === 'boolean');
       signal.throwIfAborted();
       const supplied = ownValue(input, 'mediaImportIntents');
       ensure(Array.isArray(supplied) && !types.isProxy(supplied));
@@ -185,6 +189,7 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
         const journal = bindings.mediaPending(owner, key) ?? bindings.prepareMedia(owner, key, signature, request);
         ensure(journal.signature === signature && journal.bytes === JSON.stringify(request));
         let accepted = journal.accepted;
+        let submitted = false;
         if (!accepted) {
           const response = await port.importFromUrl(journal.bytes, journal.key, signal);
           ensure(ownValue(response, 'status') === 202);
@@ -192,22 +197,20 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
           // Validation belongs to the durable boundary; failure leaves the prepared POST replayable.
           bindings.acceptMedia(owner, key, receipt);
           accepted = receipt;
+          submitted = true;
         }
         let status = journal.status;
-        if (status?.media.state !== 'rejected' && status?.media.state !== 'available') {
-          for (let poll = 0; poll < attempts; poll++) {
-            signal.throwIfAborted();
-            if (poll > 0) {
-              await sleep(delay, signal);
-              signal.throwIfAborted();
-            }
-            const response = await port.importStatus(accepted.media.id, signal);
-            ensure(ownValue(response, 'status') === 200);
-            const observation = snapshot(ownValue(response, 'body')) as MediaImportStatus;
-            bindings.observeMedia(owner, key, observation);
-            status = observation;
-            if (status.media.state === 'available' || status.media.state === 'rejected') break;
-          }
+        if (
+          status?.media.state !== 'rejected' &&
+          status?.media.state !== 'available' &&
+          !(deferPending && submitted)
+        ) {
+          signal.throwIfAborted();
+          const response = await port.importStatus(accepted.media.id, signal);
+          ensure(ownValue(response, 'status') === 200);
+          const observation = snapshot(ownValue(response, 'body')) as MediaImportStatus;
+          bindings.observeMedia(owner, key, observation);
+          status = observation;
         }
         signal.throwIfAborted();
         const state = status?.media.state;

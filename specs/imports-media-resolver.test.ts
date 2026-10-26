@@ -396,9 +396,8 @@ test('reserved and uploaded never produce converter image UUID and pending resum
       const result = resolved(await h.run());
       empty(result);
       expect(result.assets[0]?.outcome).toBe('pending');
-      expect(h.reads).toHaveLength(5);
-      expect(h.waits.length).toBeLessThanOrEqual(4);
-      expect(h.waits.reduce((n, ms) => n + ms, 0)).toBeLessThanOrEqual(4000);
+      expect(h.reads).toHaveLength(1);
+      expect(h.waits).toEqual([]);
       expect(h.store.mediaPending(h.owner, result.assets[0]!.key)?.status?.media.state).toBe(state);
       expect(
         conversion().proposals.filter((p) => p.op === 'propose' && p.statement.property.id === 'schema:image'),
@@ -707,13 +706,13 @@ test('cancellation and polling error preserve acceptance and next invocation pol
     expect(h.reads).toEqual([]);
   }));
 
-test('poll configuration only lowers five reads one second delays and four seconds scheduled total', () =>
+test('poll configuration cannot raise one read or introduce an inline wait', () =>
   harness(async (h) => {
     h.state = 'reserved';
     h.reopen({ pollAttempts: 2, pollDelayMs: 25 });
     empty(await h.run());
-    expect(h.reads).toHaveLength(2);
-    expect(h.waits).toEqual([25]);
+    expect(h.reads).toHaveLength(1);
+    expect(h.waits).toEqual([]);
     for (const options of [
       { pollAttempts: 6 },
       { pollDelayMs: 1001 },
@@ -738,9 +737,8 @@ test('poll configuration only lowers five reads one second delays and four secon
           expect(h.waits).toEqual([]);
         }
       }
-      expect(h.reads.length).toBeLessThanOrEqual(5);
-      expect(h.waits.every((ms) => Number.isFinite(ms) && ms <= 1000)).toBe(true);
-      expect(h.waits.reduce((n, ms) => n + ms, 0)).toBeLessThanOrEqual(4000);
+      expect(h.reads.length).toBeLessThanOrEqual(1);
+      expect(h.waits).toEqual([]);
     }
   }));
 
@@ -815,7 +813,7 @@ test(
         const pending = resolved(await h.run());
         const first = [...h.measurements];
         expect(h.posts).toHaveLength(1);
-        expect(h.reads).toHaveLength(5);
+        expect(h.reads).toHaveLength(1);
         h.checkPlans();
         h.reopen();
         h.resetCalls();
@@ -874,17 +872,16 @@ test(
         expect(result.assets).toHaveLength(scale);
         expect(h.fences).toHaveLength(1);
         expect(h.posts).toHaveLength(scale);
-        expect(h.reads).toHaveLength(scale * 5);
+        expect(h.reads).toHaveLength(scale);
         expect(result.assets.map((a) => a.sourceUrl).toSorted()).toEqual(h.assets.map((a) => a.sourceUrl).toSorted());
         expect(new Set(result.assets.map((a) => a.key)).size).toBe(scale);
         expect(new Set(h.posts.map((p) => p.key)).size).toBe(scale);
         expect(h.peakNetwork).toBeLessThanOrEqual(4);
         expect(h.activeNetwork).toBe(0);
-        expect(h.waits.length).toBeLessThanOrEqual(scale * 4);
-        expect(h.posts.length + h.reads.length + h.fences.length).toBeLessThanOrEqual(scale * 6 + 1);
-        expect(h.waits.reduce((n, ms) => n + ms, 0)).toBeLessThanOrEqual(scale * 4000);
+        expect(h.waits).toEqual([]);
+        expect(h.posts.length + h.reads.length + h.fences.length).toBeLessThanOrEqual(scale * 2 + 1);
         for (const job of h.jobs.values())
-          expect(h.reads.filter((id) => id === job.accepted.media.id).length).toBeLessThanOrEqual(5);
+          expect(h.reads.filter((id) => id === job.accepted.media.id).length).toBeLessThanOrEqual(1);
         // Evidence is actual executions and returned rows; blocks unavailable in SQLite.
         const cost = h.measurements.reduce(
           (a, m) => ({ rows: a.rows + m.cost.rows, blocks: 0, statements: a.statements + m.cost.statements }),
@@ -899,7 +896,7 @@ test(
         h.resetCalls();
         empty(await h.run());
         expect(h.posts).toEqual([]);
-        expect(h.reads).toHaveLength(scale * 5);
+        expect(h.reads).toHaveLength(scale);
         h.checkPlans();
         h.reopen();
       }
