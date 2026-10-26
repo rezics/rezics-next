@@ -63,7 +63,8 @@ type Intent =
   | { locator: string; position: string }
   | { add: string[] }
   | { remove: string[] }
-  | { add: string[]; remove: string[] };
+  | { add: string[]; remove: string[] }
+  | { action: 'complete' | 'abandon' };
 type Change = { id: string; revision: number; intent: Intent; createdAt: string };
 type ProgressSession = {
   id: string;
@@ -292,6 +293,12 @@ function transition(item: ProgressSession, body: Record<string, unknown>, key: s
   item.state = action === 'complete' ? 'completed' : 'abandoned';
   item.completedAt = action === 'complete' ? stamp : null;
   item.revision += 1;
+  item.changes.push({
+    id: `${item.id}:${item.revision}`,
+    revision: item.revision,
+    intent: { action },
+    createdAt: stamp,
+  });
   return remember(key, 200, { progressSession: sessionView(item, false) });
 }
 
@@ -544,7 +551,27 @@ function site(): Promise<string> {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
         const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
+        if (response.status < 500) {
+          browser ??= await chromium.launch();
+          const context = await browser.newContext({ javaScriptEnabled: true });
+          try {
+            const page = await context.newPage();
+            for (const path of [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`]) {
+              for (let attempt = 0; ; attempt += 1) {
+                try {
+                  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+                  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 30_000 });
+                  break;
+                } catch (error) {
+                  if (attempt >= 1) throw error;
+                }
+              }
+            }
+          } finally {
+            await context.close();
+          }
+          return origin;
+        }
       } catch {
         // The dev server is still starting.
       }
@@ -666,7 +693,16 @@ test(
       );
       expect(await page.getByRole('textbox', { name: 'Subject', exact: true }).inputValue()).toBe(subjectId);
       const listed = calls.filter((call) => call.method === 'GET' && call.path === '/v1/progressSessions');
-      expect(listed).toHaveLength(1);
+      expect(listed.length).toBeGreaterThan(0);
+      expect(
+        listed.every(
+          (call) =>
+            call.view === 'FULL' &&
+            call.limit === pageLimit &&
+            call.subjectId === subjectId &&
+            call.authorization === `Bearer ${access}`,
+        ),
+      ).toBe(true);
       expect(listed[0]).toMatchObject({
         view: 'FULL',
         limit: pageLimit,

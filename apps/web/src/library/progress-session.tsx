@@ -68,6 +68,8 @@ function progressText(session: ProgressSessionView): string | null {
 }
 
 function changeText(change: ProgressChange): string {
+  if (change.action === 'complete') return stateLabel('completed');
+  if (change.action === 'abandon') return stateLabel('abandoned');
   return [change.amount, change.locator, change.position, ...change.add, ...change.remove].filter(Boolean).join(' ');
 }
 
@@ -141,6 +143,7 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
         id: `${session.id}:${result.session.revision}`,
         revision: result.session.revision,
         createdAt: new Date().toISOString(),
+        action: null,
         amount: 'amount' in intent ? intent.amount : null,
         locator: 'locator' in intent ? intent.locator : null,
         position: 'position' in intent ? intent.position : null,
@@ -197,6 +200,7 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
         id: `${session.id}:${result.session.revision}`,
         revision: result.session.revision,
         createdAt: new Date().toISOString(),
+        action: null,
         amount: null,
         locator: null,
         position: null,
@@ -242,12 +246,24 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
       }
       setKey(crypto.randomUUID());
       setConfirming(null);
+      const change: ProgressChange = {
+        id: `${session.id}:${result.session.revision}`,
+        revision: result.session.revision,
+        createdAt: new Date().toISOString(),
+        action,
+        amount: null,
+        locator: null,
+        position: null,
+        add: [],
+        remove: [],
+      };
       setSession((current) => ({
         ...current,
         revision: result.session.revision,
         amount: result.session.amount,
         state: result.session.state,
         completedAt: result.session.completedAt,
+        changes: [...current.changes, change],
       }));
     } catch {
       setAlert(m.library_progress_invalid());

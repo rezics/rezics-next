@@ -21,6 +21,7 @@ export type ProgressChange = {
   id: string;
   revision: number;
   createdAt: string;
+  action: 'complete' | 'abandon' | null;
   amount: string | null;
   locator: string | null;
   position: string | null;
@@ -97,7 +98,8 @@ type RawIntent =
   | { amount: string }
   | { locator: string; position: string }
   | { add: string[]; remove?: string[] }
-  | { remove: string[]; add?: string[] };
+  | { remove: string[]; add?: string[] }
+  | { action: 'complete' | 'abandon' };
 type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject'> & {
   subject?: RawSubject;
   versionSubject?: RawSubject;
@@ -145,6 +147,7 @@ function presentChange(change: RawChange): ProgressChange {
     id: change.id,
     revision: change.revision,
     createdAt: change.createdAt,
+    action: 'action' in intent ? intent.action : null,
     amount: 'amount' in intent ? intent.amount : null,
     locator: 'locator' in intent ? intent.locator : null,
     position: 'position' in intent ? intent.position : null,
