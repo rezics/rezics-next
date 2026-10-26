@@ -242,7 +242,6 @@ function detail(operationId: string, action: string, write = false) {
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const id = t.String({ format: 'uuid' });
 const source = t.Literal('vndb');
-const bearer = [{ bearerAuth: [] }];
 const closed = { additionalProperties: false } as const;
 const failures = {
   400: problemSchema('invalid_request'),
@@ -261,14 +260,14 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
 
   return app
     .get(
-      '/v1/subjects/:subjectId/source-statistics',
+      '/v1/subjects/:id/source-statistics',
       {
-        params: t.Object({ subjectId: id }, closed),
+        params: t.Object({ id }, closed),
         response: { 200: SourceStatisticListResponseSchema, ...failures },
         detail: detail('rating.source_statistics_get', VOTE_SCOPE),
       },
       async ({ actor, params, admission, job }) => {
-        requireRatingRead(actor, params.subjectId);
+        requireRatingRead(actor, params.id);
         return admission.run('normal', job, async () => {
           const readable = await resolveSubject(
             {
@@ -277,7 +276,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
               ...(dependencies.clock ? { clock: dependencies.clock } : {}),
             },
             actor,
-            params.subjectId,
+            params.id,
           );
           if (!readable) throw new ProblemError('not_found');
           return commands().read(readable.subjectId);
@@ -285,9 +284,9 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       },
     )
     .put(
-      '/v1/subjects/:subjectId/source-statistics/:source',
+      '/v1/subjects/:id/source-statistics/:source',
       {
-        params: t.Object({ subjectId: id, source }, closed),
+        params: t.Object({ id, source }, closed),
         headers,
         body: SourceStatisticInputSchema,
         response: { 200: SourceStatisticResponseSchema, ...failures },
@@ -301,7 +300,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           return await admission.run('normal', job, () =>
             commands().write({
               actor,
-              subjectId: params.subjectId,
+              subjectId: params.id,
               source: params.source,
               value: body,
               idempotencyKey: key,

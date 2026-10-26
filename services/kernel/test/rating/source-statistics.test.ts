@@ -156,8 +156,8 @@ afterAll(async () => {
 
 test('source statistic routes are mounted with distinct read and importer actions', () => {
   const document = openApiDocument(app);
-  expect(document.paths['/v1/subjects/{subjectId}/source-statistics']?.get?.['x-action']).toBe('rating:vote');
-  expect(document.paths['/v1/subjects/{subjectId}/source-statistics/{source}']?.put?.['x-action']).toBe(
+  expect(document.paths['/v1/subjects/{id}/source-statistics']?.get?.['x-action']).toBe('rating:vote');
+  expect(document.paths['/v1/subjects/{id}/source-statistics/{source}']?.put?.['x-action']).toBe(
     'source_statistic:write',
   );
 });

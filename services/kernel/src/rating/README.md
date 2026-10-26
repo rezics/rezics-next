@@ -104,7 +104,7 @@ changing a vote later never rewrites an old review; the review shows the current
 Native rating HTTP routes require an authenticated account with the `rating:vote` action. Vote reads are private to
 the authenticated account; the target and question identify a vote but never select its owner.
 
-- `PUT /v1/subjects/{subjectId}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
+- `PUT /v1/subjects/{id}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
   requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
 - `DELETE` on the same path also requires an `Idempotency-Key`, writes a tombstone for a cleared vote, and returns
   `204 No Content`.
@@ -114,10 +114,10 @@ the authenticated account; the target and question identify a vote but never sel
   `scale` contains integer `min`, `max` and `displayStep` values in stored units. The standard question therefore has
   a scale of `0` through `20` in steps of `1`; its display maps two stored units to one point on the `0` through `10`
   scale.
-- `GET /v1/subjects/{subjectId}/source-statistics` returns each imported source statistic with its source, source
+- `GET /v1/subjects/{id}/source-statistics` returns each imported source statistic with its source, source
   record id, source scale, mean, count, as-of date, licence and attribution. It requires `rating:vote` and discloses
   the subject using the same read rules as other rating reads.
-- `PUT /v1/subjects/{subjectId}/source-statistics/{source}` replaces that source's statistic using a strict JSON body
+- `PUT /v1/subjects/{id}/source-statistics/{source}` replaces that source's statistic using a strict JSON body
   containing the source record id, scale, mean, count, as-of date, licence and attribution. It requires an
   `Idempotency-Key` and `source_statistic:write` on Global Context, held by the importer governance role.
 
@@ -127,7 +127,7 @@ requests, so vote routes do not accept or return floating-point vote values. Err
 Aggregate reads require an authenticated account with `rating:vote` and disclose the subject through the same
 `subject:read` rules as other subject reads.
 
-- `GET /v1/subjects/{subjectId}/ratings?question={id}&population={id}` accepts 1–20 `population` values; repeated
+- `GET /v1/subjects/{id}/ratings?question={id}&population={id}` accepts 1–20 `population` values; repeated
   query parameters request multiple populations, and Global uses the Global Context id. It returns one independent
   figure per requested population. Each figure has `population`, `count` and `freshness` (`asOf` is the latest applied
   shard time, or `null` when no shard has been applied; `updating` reports active Realm membership jobs). A work or
@@ -135,7 +135,7 @@ Aggregate reads require an authenticated account with `rating:vote` and disclose
   includes the mean in stored units, rounded to two decimals, and the histogram over the question's units. Below the
   threshold a positive count includes `remaining`, and no mean or histogram. A zero count has no `remaining`. A
   protected Realm the reader cannot read is returned as zero with no score or update state disclosed.
-- `GET /v1/subjects/{subjectId}/ratings/populations?question={id}&cursor=` pages every population with a positive
+- `GET /v1/subjects/{id}/ratings/populations?question={id}&cursor=` pages every population with a positive
   count, in population-id order, 20 per page. The signed cursor is bound to the subject and question. Global is
   included when it has votes; Realms the reader cannot read are omitted.
 
