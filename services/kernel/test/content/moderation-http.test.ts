@@ -7,6 +7,9 @@ import { customMethod } from '../../src/http/custom-method.ts';
 import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import resourceRoles from '../../src/access/resource-roles.json';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 
@@ -34,7 +37,24 @@ describe('moderation HTTP with migrated storage and current Access', () => {
 
   beforeAll(async () => {
     db = await openGrowthDatabase();
-    fixture = await standingFixture();
+    fixture = await standingFixture([
+      'realm:read',
+      'realm:manage',
+      'realm:ban',
+      'realm:publish',
+      'realm:participate',
+      'realm:join',
+      'board:create',
+    ]);
+    const catalogue = resourceRoleCatalogue(fixture.access);
+    if (!catalogue) throw new Error('Fixture Access has no resource role catalogue');
+    const roles = catalogue.roles as Map<string, readonly string[]>;
+    for (const [role, actions] of Object.entries(resourceRoles.roles))
+      if (role.startsWith('community.realm.')) roles.set(role, actions);
+    (catalogue.types as Map<string, Readonly<{ owner?: string; standing: readonly string[] }>>).set(
+      'community.realm',
+      resourceRoles.types['community.realm'],
+    );
     await fixture.reset();
     const authenticate = fixture.access.authenticate;
     let issued = '';
@@ -91,17 +111,96 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     );
     return { response, body: await response.json() };
   }
-  async function create(text = 'Authored erasure sentinel') {
+  async function create(text = 'Authored erasure sentinel', targetBoard = boardId) {
     const result = await call('POST', '/v1/threads', {
       title: 'Erasure title sentinel',
       body: snapshot(text),
       licence: 'MIT',
       subjectIds: [],
-      boardId,
+      boardId: targetBoard,
       visibility: 'published',
     });
     expect(result.response.status).toBe(201);
     return result.body.thread;
+  }
+  async function createRealmBoard(title: string) {
+    const route = 0x4321;
+    const spaceId = newId(route);
+    const spaceRevisionId = newId(route);
+    const realmId = newId(route);
+    const realmRevisionId = newId(route);
+    const realmBoardId = newId(route);
+    const transactionId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const client = await db.admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET CONSTRAINTS ALL DEFERRED');
+      await client.query(
+        `INSERT INTO community.space (route,space_id,state,head_revision_id,created_at,creator)
+         VALUES ($1,$2,'active',$3,$4,$5)`,
+        [route, spaceId, spaceRevisionId, createdAt, fixture.actor],
+      );
+      await client.query(
+        `INSERT INTO community.space_revision
+         (route,space_id,revision_id,predecessor,title,summary,created_at,author)
+         VALUES ($1,$2,$3,NULL,$4,$5,$6,$7)`,
+        [route, spaceId, spaceRevisionId, `${title} host`, `${title} host`, createdAt, fixture.actor],
+      );
+      await client.query(
+        `INSERT INTO community.realm
+         (route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+         VALUES ($1,$2,$3,'active','public',$4,$5,$6,$7)`,
+        [route, realmId, spaceId, GLOBAL_CONTEXT, realmRevisionId, createdAt, fixture.actor],
+      );
+      await client.query(
+        `INSERT INTO community.realm_revision
+         (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+         VALUES ($1,$2,$3,NULL,$4,$5,'public',$6,$7,$8)`,
+        [route, realmId, realmRevisionId, title, `${title} summary`, GLOBAL_CONTEXT, createdAt, fixture.actor],
+      );
+      await client.query(
+        `INSERT INTO access.resource_initialization (route,resource_id,resource_type,creator_id,initialized_at)
+         VALUES ($1,$2,'community.realm',$3,$4)`,
+        [route, realmId, fixture.actor, createdAt],
+      );
+      await client.query(
+        `INSERT INTO access.resource_role_grant
+         (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+         VALUES ($1,$2,'identity',$3,'','community.realm.owner','(,)',$4)`,
+        [route, realmId, fixture.actor, transactionId],
+      );
+      await client.query(
+        `INSERT INTO content.board
+         (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id,realm_id)
+         VALUES ($1,$2,$3,$4,'published',1,$5,$6)`,
+        [route, realmBoardId, newId(route), `${title} board`, transactionId, realmId],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    const realmRoute = routeOf(realmId)!;
+    await fixture.grant(fixture.actor, 'realm:participate', { route: realmRoute, id: realmId });
+    await grant(realmBoardId, 'board:read', fixture.actor);
+    await grant(realmBoardId, 'thread:create', fixture.actor);
+    return { realmId, route: realmRoute, boardId: realmBoardId };
+  }
+  async function grantRealmRole(
+    realmId: string,
+    accountId: string,
+    role: 'community.realm.member' | 'community.realm.moderator',
+  ) {
+    const result = await call('POST', '/v1/roleGrants', {
+      resource: { route: routeOf(realmId)!, id: realmId },
+      subject: { kind: 'account', id: accountId },
+      role,
+      valid: '(,)',
+    });
+    expect(result.response.status).toBe(201);
   }
   async function grant(id: string, action: string, subject = fixture.principal) {
     await fixture.grant(subject, action, { route: routeOf(id)!, id });
@@ -172,6 +271,94 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     expect(result.response.status).toBe(200);
     expect(result.body).toEqual({ securityRevision: expect.stringMatching(/^[1-9][0-9]*$/) });
     expect(result.response.headers.get(SESSION_HEADER)).toBeTruthy();
+  });
+
+  test('Realm owners and moderators can take down only content in their Realm', async () => {
+    const realmA = await createRealmBoard('Moderation Realm A');
+    const realmB = await createRealmBoard('Moderation Realm B');
+    await grantRealmRole(realmA.realmId, fixture.principal, 'community.realm.moderator');
+    await grantRealmRole(realmA.realmId, fixture.recipient, 'community.realm.member');
+
+    const ownerThread = await create('Realm owner target', realmA.boardId);
+    const ownerThreadTakedown = await call(
+      'POST',
+      `/v1/threads/${ownerThread.id}:takeDown`,
+      reason,
+      undefined,
+      fixture.actor,
+    );
+    expect(ownerThreadTakedown.response.status).toBe(200);
+    const ownerPostTakedown = await call(
+      'POST',
+      `/v1/posts/${ownerThread.firstPost.id}:takeDown`,
+      reason,
+      undefined,
+      fixture.actor,
+    );
+    expect(ownerPostTakedown.response.status).toBe(200);
+
+    const moderatorThread = await create('Realm moderator target', realmA.boardId);
+    const memberThread = await create('Realm member target', realmA.boardId);
+    for (const target of [memberThread.id, memberThread.firstPost.id]) {
+      const denied = await call(
+        'POST',
+        `/v1/${target === memberThread.id ? 'threads' : 'posts'}/${target}:takeDown`,
+        reason,
+        undefined,
+        fixture.recipient,
+      );
+      expect(denied.response.status).toBe(403);
+    }
+    const moderatorThreadTakedown = await call(
+      'POST',
+      `/v1/threads/${moderatorThread.id}:takeDown`,
+      reason,
+      undefined,
+      fixture.principal,
+    );
+    expect(moderatorThreadTakedown.response.status).toBe(200);
+    const moderatorPostTakedown = await call(
+      'POST',
+      `/v1/posts/${moderatorThread.firstPost.id}:takeDown`,
+      reason,
+      undefined,
+      fixture.principal,
+    );
+    expect(moderatorPostTakedown.response.status).toBe(200);
+
+    const outsideThread = await create('Realm B readable target', realmB.boardId);
+    await grant(realmB.realmId, 'realm:read', fixture.principal);
+    for (const [id, action] of [
+      [realmB.boardId, 'board:read'],
+      [outsideThread.id, 'thread:read'],
+      [outsideThread.firstPost.id, 'post:read'],
+    ] as const)
+      await grant(id, action, fixture.principal);
+    for (const [kind, id] of [
+      ['threads', outsideThread.id],
+      ['posts', outsideThread.firstPost.id],
+    ] as const) {
+      const denied = await call('POST', `/v1/${kind}/${id}:takeDown`, reason, undefined, fixture.principal);
+      expect(denied.response.status).toBe(403);
+    }
+    const readableThread = await call(
+      'GET',
+      `/v1/threads/${outsideThread.id}`,
+      undefined,
+      undefined,
+      fixture.principal,
+    );
+    expect(readableThread.response.status).toBe(200);
+    expect(readableThread.body.thread.visibility).toBe('published');
+    const readablePost = await call(
+      'GET',
+      `/v1/posts/${outsideThread.firstPost.id}`,
+      undefined,
+      undefined,
+      fixture.principal,
+    );
+    expect(readablePost.response.status).toBe(200);
+    expect(readablePost.body.post.visibility).toBe('published');
   });
 
   test('revoked replay returns no stored response', async () => {
@@ -262,12 +449,13 @@ describe('moderation HTTP with migrated storage and current Access', () => {
   });
 
   test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
-    const thread = await create('Fixed measured content');
-    await grant(thread.id, 'moderation:takedown');
+    const realm = await createRealmBoard('Growth measurement Realm');
+    await grantRealmRole(realm.realmId, fixture.principal, 'community.realm.moderator');
+    const thread = await create('Fixed measured content', realm.boardId);
     const bytes = Buffer.from(JSON.stringify(snapshot('Unrelated distractor bytes')));
     const digest = createHash('sha256').update(bytes).digest();
     const report = await checkGrowth(db, {
-      name: 'moderation HTTP exact target including current Access and same-partition history',
+      name: 'Realm-authorized moderation HTTP point command including current Access and same-partition history',
       scales: [32, 256, 2048],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
@@ -290,7 +478,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
               `INSERT INTO content.revision
                (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
                VALUES ($1,$2,$3,$4,$5,$6,'Unrelated distractor bytes','MIT','{}',$7,'available',$8)`,
-              [thread.route, thread.id, postId, revisionId, bytes, digest, boardId, transaction],
+              [thread.route, thread.id, postId, revisionId, bytes, digest, realm.boardId, transaction],
             );
             await client.query(
               `INSERT INTO access.resource_grant
@@ -323,6 +511,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
     for (const { cost } of report.samples) {
       expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.statements).toBeLessThanOrEqual(4096);
       expect(cost.rows).toBeGreaterThan(0);
       expect((cost as typeof cost & { plans: number }).plans).toBeGreaterThan(0);
     }

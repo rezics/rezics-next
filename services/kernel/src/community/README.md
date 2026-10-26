@@ -52,7 +52,10 @@ metadata and rechecks any supplied Context. Visibility and classification on the
 identity must agree with its head; a deferred foreign key enforces this in PostgreSQL.
 Realm identity, host and creation provenance are immutable, and revisions are append-only.
 
-`community.realm.owner` grants `realm:read` and `realm:manage`. The standing role grants
+`community.realm.owner` grants `realm:read`, `realm:manage`, `realm:ban`, `realm:publish`,
+`board:create`, `access:grant` and `moderation:takedown`. `community.realm.moderator` grants
+`realm:read`, `realm:ban`, `realm:publish`, `board:create` and `moderation:takedown`.
+The takedown action applies to threads and posts in that Realm. The standing role grants
 active accounts `realm:participate`; `community.realm.member` grants both `realm:read`
 and `realm:participate` through the Realm's `member` group. `realmReadEligibility`
 supplies public read eligibility only while the current Realm is public.

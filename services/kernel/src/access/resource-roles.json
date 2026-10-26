@@ -7,10 +7,11 @@
       "realm:ban",
       "realm:publish",
       "board:create",
-      "access:grant"
+      "access:grant",
+      "moderation:takedown"
     ],
     "community.realm.member": ["realm:read", "realm:participate"],
-    "community.realm.moderator": ["realm:read", "realm:ban", "realm:publish", "board:create"],
+    "community.realm.moderator": ["realm:read", "realm:ban", "realm:publish", "board:create", "moderation:takedown"],
     "community.space.owner": ["space:read", "space:manage"],
     "community.space.standing": ["space:read"],
     "content.board.owner": ["board:read", "thread:create"],
