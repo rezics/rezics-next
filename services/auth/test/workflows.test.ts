@@ -25,6 +25,9 @@ let beforeRevoke: (() => Promise<void>) | undefined;
 const accounts = new Map<string, AccessAccount>();
 const calls: string[] = [];
 const pageCalls: { operatorAccountId: string; limit?: number; cursor?: string }[] = [];
+const continuationReads: { operationKey: string; accountId: string }[] = [];
+const continuationAuthorizations: { reference: string; step: string; target: string }[] = [];
+let suspensionCalls = 0;
 const fanoutRows = Array.from({ length: 65 }, (_, i) => ({
   subjectAccountId: `workflow-fanout-${i}`,
   reservationId: `fixture-reservation-${i}`,
@@ -49,7 +52,43 @@ const value = async <T>(kind: string, key: string, data: T) => {
 const ports: AccountWorkflowPorts = {
   async authorizeOperation(reference) {
     if (reference !== 'approved-fanout') throw new Error('Operation denied');
-    return { actor: { accountId: 'approved-human' } };
+    return {
+      actor: { accountId: 'approved-human' },
+      async suspendOperator() {
+        suspensionCalls++;
+        return {
+          accountId: 'workflow-fanout-operator',
+          state: 'suspended' as const,
+          receiptId: 'fixture-suspension-receipt',
+          minimumAuthnEpoch: '2',
+          continuationOperationKey: 'fixture-fanout-continuation',
+        };
+      },
+    };
+  },
+  async readContinuation(operationKey, accountId) {
+    continuationReads.push({ operationKey, accountId });
+    if (operationKey !== 'fixture-fanout-continuation' || accountId !== 'workflow-fanout-operator') return null;
+    return {
+      reference: 'fixture-continuation-reference',
+      operationKey,
+      operationDigest: 'fixture-operation-digest',
+      commandKeyPrefix: 'fixture-command',
+      barrierReceiptId: 'fixture-suspension-receipt',
+      expiresAt: new Date(instant + 1800000).toISOString(),
+      allowlist: [
+        {
+          step: 'revoke-auth-sessions',
+          target: accountId,
+          key: 'fixture-revoke-sessions',
+          digest: 'fixture-revoke-digest',
+        },
+      ],
+    };
+  },
+  async authorizeContinuation(reference, entry) {
+    continuationAuthorizations.push({ reference, step: entry.step, target: entry.target });
+    return { receiptId: 'fixture-continuation-receipt' };
   },
   async responsibilityPage(input) {
     pageCalls.push(input);
@@ -372,7 +411,7 @@ test('public signup binds credentials atomically and cannot take over a trusted 
   expect(serialized).not.toContain(payload.email);
 }, 30000);
 
-test('operator fanout passes opaque cursors across bounded pages and resumes effects once after restart', async () => {
+test('operator fencing delegates fanout to a committed continuation and resumes Auth revocation once', async () => {
   const operator = 'workflow-fanout-operator';
   for (const id of [operator, ...fanoutRows.map((row) => row.subjectAccountId)]) {
     accounts.set(id, { accountId: id, kind: 'actor', state: 'active', automated: false, authnEpoch: 1 });
@@ -382,25 +421,51 @@ test('operator fanout passes opaque cursors across bounded pages and resumes eff
     workflows.fenceOperator({ key: 'denied-fanout', accountId: operator, authorization: fanoutCursor }),
   ).rejects.toThrow();
   expect(pageCalls).toHaveLength(0);
-  const start = calls.length;
+  expect(suspensionCalls).toBe(0);
+  let revokeAttempts = 0;
   beforeRevoke = async () => {
-    if (accounts.get(fanoutRows[1]!.subjectAccountId)!.fenced) throw new Error('Injected mid-page outage');
+    revokeAttempts++;
   };
+  failRevoke = true;
   await expect(
     workflows.fenceOperator({ key: 'cursor-fanout', accountId: operator, authorization: 'approved-fanout' }),
   ).rejects.toThrow();
-  expect(pageCalls).toEqual([{ operatorAccountId: operator, limit: 64 }]);
-  expect(accounts.get(fanoutRows[64]!.subjectAccountId)!.fenced).not.toBe(true);
-  beforeRevoke = undefined;
-  await restart();
-  await workflows.resumeOperation('cursor-fanout');
-  expect(pageCalls).toEqual([
-    { operatorAccountId: operator, limit: 64 },
-    { operatorAccountId: operator, limit: 64, cursor: fanoutCursor },
+  expect(suspensionCalls).toBe(1);
+  expect(revokeAttempts).toBe(1);
+  expect(pageCalls).toHaveLength(0);
+  expect(continuationReads).toEqual([{ operationKey: 'fixture-fanout-continuation', accountId: operator }]);
+  expect(continuationAuthorizations).toEqual([
+    { reference: 'fixture-continuation-reference', step: 'revoke-auth-sessions', target: operator },
   ]);
-  expect(fanoutRows.every((row) => accounts.get(row.subjectAccountId)!.fenced)).toBe(true);
-  expect(calls.slice(start).filter((kind) => kind === 'fence')).toHaveLength(66);
-  const completed = calls.length;
-  await workflows.resumeOperation('cursor-fanout');
-  expect(calls).toHaveLength(completed);
+  expect(fanoutRows.every((row) => accounts.get(row.subjectAccountId)!.fenced !== true)).toBe(true);
+  failRevoke = false;
+  await restart();
+  expect(await workflows.resumeOperation('cursor-fanout')).toEqual({
+    accountId: operator,
+    state: 'suspended',
+    receiptId: 'fixture-suspension-receipt',
+    minimumAuthnEpoch: '2',
+  });
+  expect(suspensionCalls).toBe(1);
+  expect(revokeAttempts).toBe(2);
+  expect(pageCalls).toHaveLength(0);
+  const completed = {
+    suspensionCalls,
+    revokeAttempts,
+    continuationReads: continuationReads.length,
+    continuationAuthorizations: continuationAuthorizations.length,
+  };
+  expect(await workflows.resumeOperation('cursor-fanout')).toEqual({
+    accountId: operator,
+    state: 'suspended',
+    receiptId: 'fixture-suspension-receipt',
+    minimumAuthnEpoch: '2',
+  });
+  expect({
+    suspensionCalls,
+    revokeAttempts,
+    continuationReads: continuationReads.length,
+    continuationAuthorizations: continuationAuthorizations.length,
+  }).toEqual(completed);
+  beforeRevoke = undefined;
 }, 30000);
