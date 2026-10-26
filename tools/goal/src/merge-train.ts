@@ -646,6 +646,16 @@ export class MergeTrain {
         result.passed = true;
         result.stage = 'merge';
         result.mergedCommit = candidate;
+        this.notifyOwnersOfOutsideChanges(
+          request,
+          outsideScope(
+            (result.changedFiles ?? []).filter((path) => !derivedForPath(path, derivedFiles).length),
+            request.declaredPaths,
+          ),
+          candidate,
+          targetBranch,
+          logPath,
+        );
         if (stabilize)
           this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
         return result;
@@ -793,6 +803,72 @@ export class MergeTrain {
     const refused = protectedPaths.length ? outside.filter((path) => !outsideScope([path], protectedPaths).length) : [];
     if (refused.length) throw new Error(`Changes in undeclared risk areas: ${refused.join(', ')}`);
     appendFileSync(logPath, `Changed outside declared paths (allowed): ${outside.join(', ')}\n`);
+  }
+
+  /**
+   * A worker may change files outside its declared paths, and its landing runs only its own acceptance, so another
+   * Goal's tests may break without that Goal knowing why. Each Goal whose tasks declare such a file most specifically
+   * is told at once, with the commit. A file the landing task's own Goal declares most specifically is its own.
+   */
+  private notifyOwnersOfOutsideChanges(
+    request: LandingRequest,
+    files: readonly string[],
+    commit: string,
+    branch: string,
+    logPath: string,
+  ): void {
+    if (!files.length) return;
+    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
+    const path = join(this.options.stateDirectory, 'goal.sqlite');
+    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const db = shared ?? owned;
+    if (!db) return;
+    try {
+      type Row = { id: string; state?: string; brief?: { goal?: string; manager?: string; paths?: string[] } };
+      const tasks = (db.query('SELECT body FROM worker_tasks').all() as { body: string }[])
+        .map((row) => JSON.parse(row.body) as Row)
+        .filter((task) => task.state !== 'cancelled' && task.brief?.goal && task.brief.paths?.length);
+      const own = tasks.find((task) => task.id === request.taskId)?.brief?.goal;
+      const literal = (pattern: string) => pattern.split(/[*?[{]/, 1)[0]!.length;
+      const byManager = new Map<string, string[]>();
+      for (const file of files) {
+        let best = -1;
+        let owners = new Set<string>();
+        let goals = new Set<string>();
+        for (const task of tasks) {
+          for (const pattern of task.brief!.paths!) {
+            if (!matchesPath(file, [pattern])) continue;
+            const specificity = literal(pattern);
+            if (specificity > best) {
+              best = specificity;
+              owners = new Set();
+              goals = new Set();
+            }
+            if (specificity === best) {
+              owners.add(task.brief!.manager ?? task.brief!.goal!);
+              goals.add(task.brief!.goal!);
+            }
+          }
+        }
+        if (own && goals.has(own)) continue;
+        for (const manager of owners) byManager.set(manager, [...(byManager.get(manager) ?? []), file]);
+      }
+      if (!byManager.size) return;
+      const inbox = new SqliteManagerInbox(
+        db,
+        this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+      );
+      for (const [manager, changed] of byManager) {
+        const summary = `Task ${request.taskId}${own ? ` (${own})` : ''} changed files your tasks declare, outside its own paths, now on ${branch} ${commit}: ${changed.join(', ')}. Its landing ran only its own acceptance: check these against your tests.`.replace(
+          /[\r\n]+/g,
+          ' ',
+        );
+        inbox.deliver({ managerId: manager, taskId: request.taskId, kind: 'instruction', summary });
+        appendFileSync(logPath, `Told ${manager} of changes to its files: ${changed.join(', ')}\n`);
+      }
+    } finally {
+      owned?.close();
+    }
   }
 
   private notifyStabilizeConflict(
