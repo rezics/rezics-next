@@ -11,9 +11,19 @@ declare const productEventTypes: {
         open: Type.TLiteral<boolean>;
         changed: Type.TBoolean;
     }>;
+    readonly 'com.rezics.access.operator.fence-page.v1': Type.TObject<{
+        pageKey: Type.TString;
+        count: Type.TInteger;
+    }>;
+    readonly 'com.rezics.access.operator.subject-fenced.v1': Type.TObject<{
+        accountId: Type.TString;
+        fenced: Type.TBoolean;
+        receiptId: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
     readonly 'com.rezics.access.account.suspended.v1': Type.TObject<{
         accountId: Type.TString;
         state: Type.TLiteral<"suspended">;
+        continuationOperationKey: Type.TOptional<Type.TString>;
         minimumAuthnEpoch: Type.TString;
         receiptId: Type.TString;
     }>;
@@ -502,6 +512,20 @@ declare const productEventTypes: {
     readonly 'com.rezics.community.realm.updated.v1': Type.TObject<{
         realmId: Type.TString;
         revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.ban.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reason: Type.TString;
+        actor: Type.TString;
+        at: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.unban.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        at: Type.TString;
+        transactionId: Type.TString;
     }>;
     readonly 'com.rezics.community.realm.membership.v1': Type.TObject<{
         realmId: Type.TString;

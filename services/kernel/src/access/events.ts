@@ -102,10 +102,19 @@ const exposure = (open: boolean) =>
 export const ACCESS_EVENTS = {
   'com.rezics.access.exposure.opened.v1': exposure(true),
   'com.rezics.access.exposure.closed.v1': exposure(false),
+  'com.rezics.access.operator.fence-page.v1': Type.Object(
+    { pageKey: digest, count: Type.Integer({ minimum: 0, maximum: 100 }) },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.operator.subject-fenced.v1': Type.Object(
+    { accountId: identity, fenced: Type.Boolean(), receiptId: Type.Union([identity, Type.Null()]) },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.account.suspended.v1': Type.Object(
     {
       accountId: identity,
       state: Type.Literal('suspended'),
+      continuationOperationKey: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
       minimumAuthnEpoch: Type.String({ pattern: '^[1-9][0-9]{0,18}$', maxLength: 19 }),
       receiptId: identity,
     },

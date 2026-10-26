@@ -40,6 +40,17 @@ import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
 
 type Command = { accountId: string; key: string };
+type OperatorSuspension = {
+  accountId: string;
+  state: 'suspended';
+  receiptId: string;
+  minimumAuthnEpoch: string;
+};
+/** Live server capability carried by the resolved operator-fencing approval.
+ * This context is never persisted as workflow input. */
+type OperatorSuspensionContext = {
+  suspendOperator(): Promise<OperatorSuspension & { continuationOperationKey?: string }>;
+};
 type Reservation = { handle: string; accountId: string; reservationId: string; expiresAt: string };
 
 export interface AccountWorkflowOptions<Context = WorkflowContext> {
@@ -291,7 +302,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
 
   // Functions are registered on start, and recreated after a clean SDK shutdown.
   let registration: (input: RegistrationInput) => Promise<{ accountId: string; expired?: true }>;
-  let operation: (input: AccountOperation) => Promise<{ accountId: string }>;
+  let operation: (input: AccountOperation) => Promise<{ accountId: string } | OperatorSuspension>;
   type ReductionInput = Extract<AccountOperation, { kind: 'client-reduction' }> & {
     operationId?: string;
     after?: string;
@@ -516,13 +527,36 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
 
     const fence = step(
       'fence',
-      async (accountId: string) =>
-        (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value,
+      async (accountId: string, request?: Extract<AccountOperation, { kind: 'fence-operator' }>) => {
+        if (request) {
+          const context = await approved(request);
+          if (
+            !context ||
+            typeof context !== 'object' ||
+            !('suspendOperator' in context) ||
+            typeof context.suspendOperator !== 'function'
+          )
+            denied();
+          const value = await (context as OperatorSuspensionContext).suspendOperator();
+          return { ...value, kind: 'fence', priorOperatorAccountId: null };
+        }
+        return (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value;
+      },
     );
-    const revoke = step('revoke-auth-sessions', async (accountId: string, request?: AccountOperation) => {
-      if (request) await approved(request);
-      return auth.internal.revokeSessions(accountId);
-    });
+    const revoke = step(
+      'revoke-auth-sessions',
+      async (accountId: string, request?: AccountOperation, operationKey?: string) => {
+        if (operationKey) {
+          const root = required(await required(access.readContinuation)(operationKey, accountId));
+          const entry = root.allowlist.find(
+            (item) => item.step === 'revoke-auth-sessions' && item.target === accountId,
+          );
+          if (!entry) denied();
+          await required(access.authorizeContinuation)(root.reference, entry);
+        } else if (request) await approved(request);
+        return auth.internal.revokeSessions(accountId);
+      },
+    );
     const hold = step('hold-new-handle', async (input: WorkflowHandleTransition, request?: AccountOperation) => {
       await required(access.holdHandle)({ ...input, key: await authorizedKey(request, 'hold-handle') });
     });
@@ -783,9 +817,6 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         });
       },
     );
-    const page = step('operator-responsibility-page', async (operatorAccountId: string, cursor?: string) =>
-      required(access.responsibilityPage)({ operatorAccountId, limit: 64, ...(cursor ? { cursor } : {}) }),
-    );
     const authorize = step('authorize-account-operation', async (input: AccountOperation) => {
       await approved(input);
     });
@@ -919,19 +950,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         }
         if (input.kind === 'fence-operator') {
           await authorize(input);
-          await fence(input.accountId);
-          await revoke(input.accountId);
-          let cursor: string | undefined;
-          while (true) {
-            const batch = await page(input.accountId, cursor);
-            for (const item of batch.operators) {
-              await fence(item.subjectAccountId);
-              await revoke(item.subjectAccountId);
-            }
-            if (batch.next === null) break;
-            cursor = batch.next;
-          }
-          return { accountId: input.accountId };
+          const barrier = await fence(input.accountId, input);
+          const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
+          if (typeof operationKey !== 'string') denied();
+          await revoke(input.accountId, undefined, operationKey);
+          return {
+            accountId: barrier.accountId,
+            state: 'suspended' as const,
+            minimumAuthnEpoch: barrier.minimumAuthnEpoch,
+            receiptId: barrier.receiptId,
+          };
         }
         if (input.kind === 'consent') {
           await authorize(input);
@@ -1292,12 +1320,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         ...(input.responsibility ? { responsibility: responsibility(input.responsibility) } : {}),
       });
     },
-    fenceOperator: (input: Omit<Extract<AccountOperation, { kind: 'fence-operator' }>, 'kind'> & { key: string }) => {
-      return runOperation(input.key, {
+    fenceOperator: async (
+      input: Omit<Extract<AccountOperation, { kind: 'fence-operator' }>, 'kind'> & { key: string },
+    ) => {
+      const result = await runOperation(input.key, {
         kind: 'fence-operator',
         authorization: input.authorization,
         accountId: input.accountId,
       });
+      if (!('state' in result)) denied();
+      return result;
     },
     reduceConsent: (input: Omit<Extract<AccountOperation, { kind: 'consent' }>, 'kind'> & { key: string }) => {
       return runOperation(input.key, {

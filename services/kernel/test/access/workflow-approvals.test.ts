@@ -344,7 +344,7 @@ test('native mappings require action grants for rename, delete and membership; o
   };
   const m = await approvals.approve(f.bearer, { operationKey: 'membership', operation: membership }, context());
   expect(await approvals.resolve(m.reference, membership, context())).toHaveProperty('actor.accountId', f.actor);
-  for (const kind of ['automated', 'revoke', 'fence-operator', 'consent', 'client-reduction', 'opening', 'unknown']) {
+  for (const kind of ['automated', 'revoke', 'consent', 'client-reduction', 'opening', 'unknown']) {
     await denied(
       approvals.approve(f.bearer, { operationKey: 'unavailable', operation: { kind } as AccountOperation }, context()),
     );

@@ -274,6 +274,19 @@ $$;
 
 
 --
+-- Name: operator_fence_page_immutable(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.operator_fence_page_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Operator fence pages are immutable';
+END;
+$$;
+
+
+--
 -- Name: workflow_approval_immutable(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -597,6 +610,22 @@ CREATE TABLE access.membership_inverse_terminal (
     transaction_id uuid NOT NULL,
     CONSTRAINT membership_inverse_terminal_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT membership_inverse_terminal_kind_check CHECK ((kind = ANY (ARRAY['organization'::text, 'realm'::text])))
+);
+
+
+--
+-- Name: operator_fence_page; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.operator_fence_page (
+    route integer NOT NULL,
+    continuation_id uuid NOT NULL,
+    page_key text NOT NULL,
+    cursor text,
+    next_cursor text,
+    allowlist jsonb NOT NULL,
+    CONSTRAINT operator_fence_page_allowlist_check CHECK (access.committed_continuation_entries(allowlist, 0, 101, false)),
+    CONSTRAINT operator_fence_page_page_key_check CHECK ((page_key ~ '^[0-9a-f]{64}$'::text))
 );
 
 
@@ -965,6 +994,14 @@ ALTER TABLE ONLY access.membership_inverse_terminal
 
 
 --
+-- Name: operator_fence_page operator_fence_page_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.operator_fence_page
+    ADD CONSTRAINT operator_fence_page_pkey PRIMARY KEY (route, continuation_id, page_key);
+
+
+--
 -- Name: operator_opening_receipt operator_opening_receipt_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1186,6 +1223,13 @@ CREATE TRIGGER membership_inverse_terminal_guard BEFORE DELETE OR UPDATE ON acce
 
 
 --
+-- Name: operator_fence_page operator_fence_page_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER operator_fence_page_immutable BEFORE DELETE OR UPDATE ON access.operator_fence_page FOR EACH ROW EXECUTE FUNCTION access.operator_fence_page_immutable();
+
+
+--
 -- Name: account operator_relation_version; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -1205,6 +1249,14 @@ CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_appr
 
 ALTER TABLE ONLY access.committed_continuation
     ADD CONSTRAINT committed_continuation_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id);
+
+
+--
+-- Name: operator_fence_page operator_fence_page_route_continuation_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.operator_fence_page
+    ADD CONSTRAINT operator_fence_page_route_continuation_id_fkey FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id);
 
 
 --

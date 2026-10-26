@@ -22,6 +22,7 @@ import insertContinuation from './committed-continuation-insert.sql';
 import loadContinuation from './committed-continuation-load.sql';
 import readContinuation from './committed-continuation-read.sql';
 import renewContinuation from './committed-continuation-renew.sql';
+import { createOperatorFenceRunner } from './operator-fence-work.ts';
 
 /** Distinct from workflow approvals. A sealed reference authorizes one allowlisted
  * cleanup step and never a caller's result or a later permission. */
@@ -271,17 +272,20 @@ export async function insertDeletionContinuation(
     barrierReceiptId: string;
     minimumAuthnEpoch: string;
     transactionId: string;
+    allowlist?: ContinuationEntry[];
   },
 ): Promise<void> {
   validateContinuationBinding(input.binding);
   const route = routeOf(input.accountId);
-  const allowlist = deletionAllowlist({
-    accountId: input.accountId,
-    commandKeyPrefix: input.binding.commandKeyPrefix,
-    handle: input.handle,
-    operatorAccountId: input.operatorAccountId,
-    reservationId: input.reservationId,
-  });
+  const allowlist =
+    input.allowlist ??
+    deletionAllowlist({
+      accountId: input.accountId,
+      commandKeyPrefix: input.binding.commandKeyPrefix,
+      handle: input.handle,
+      operatorAccountId: input.operatorAccountId,
+      reservationId: input.reservationId,
+    });
   if (route === null || !allowlist || routeOf(input.barrierReceiptId) === null) throw new LifecycleDeniedError();
   const createdAt = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
   const committedExpiresAt = new Date(Date.parse(createdAt) + COMMITTED_CONTINUATION_TTL_MS).toISOString();
@@ -328,6 +332,14 @@ export async function insertDeletionContinuation(
 }
 
 export type CommittedContinuations = {
+  /** Trusted kernel recovery port. Each iteration commits one bounded page. */
+  continueCommitted(reference: string): Promise<void>;
+  continueCommittedPage(
+    reference: string,
+    cursor?: string,
+    previous?: string,
+  ): Promise<{ next: string | null; pageKey: string }>;
+
   read(operationKey: string, accountId: string): Promise<ContinuationView | null>;
   authorizeStep(reference: string, entry: ContinuationEntry): Promise<{ continuationId: string; receiptId: string }>;
   renew(
@@ -342,6 +354,7 @@ export function createCommittedContinuations(config: {
   access: Access;
   referenceKeys: KeyRing;
   clock?: () => Date;
+  pageSize?: number;
 }): CommittedContinuations {
   const execute = (clock?: () => Date) => lifecycleExecutor(config.pool, clock ?? config.clock);
   function unsealed(reference: string): { route: number; continuationId: string; digest: string } {
@@ -360,7 +373,36 @@ export function createCommittedContinuations(config: {
     );
     return { route, continuationId, digest };
   }
+  const runner = createOperatorFenceRunner({
+    pool: config.pool,
+    referenceKeys: config.referenceKeys,
+    ...(config.clock ? { clock: config.clock } : {}),
+    ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
+    async root(reference) {
+      const located = unsealed(reference);
+      const row = await withConnection(config.pool, (client) =>
+        oneRow(() =>
+          loadContinuation.run(client, {
+            route: located.route,
+            continuation_id: located.continuationId,
+          }),
+        ),
+      );
+      refused(row);
+      const stored = row as StoredContinuation;
+      const allowlist = entries(stored.allowlist);
+      refused(allowlist);
+      const snapshot = snapshotOf(located.route, stored, allowlist);
+      refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
+      refused(
+        allowlist.some((entry) => entry.step === 'operator-responsibility-page' && entry.target === stored.accountId),
+      );
+      return snapshot;
+    },
+  });
   return {
+    continueCommitted: runner.continueCommitted,
+    continueCommittedPage: runner.page,
     async read(operationKey, accountId) {
       const route = routeOf(accountId);
       if (route === null || typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 128)

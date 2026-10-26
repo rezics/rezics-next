@@ -72,8 +72,15 @@ export declare function insertDeletionContinuation(tx: CommandTransaction, input
     barrierReceiptId: string;
     minimumAuthnEpoch: string;
     transactionId: string;
+    allowlist?: ContinuationEntry[];
 }): Promise<void>;
 export type CommittedContinuations = {
+    /** Trusted kernel recovery port. Each iteration commits one bounded page. */
+    continueCommitted(reference: string): Promise<void>;
+    continueCommittedPage(reference: string, cursor?: string, previous?: string): Promise<{
+        next: string | null;
+        pageKey: string;
+    }>;
     read(operationKey: string, accountId: string): Promise<ContinuationView | null>;
     authorizeStep(reference: string, entry: ContinuationEntry): Promise<{
         continuationId: string;
@@ -91,4 +98,5 @@ export declare function createCommittedContinuations(config: {
     access: Access;
     referenceKeys: KeyRing;
     clock?: () => Date;
+    pageSize?: number;
 }): CommittedContinuations;

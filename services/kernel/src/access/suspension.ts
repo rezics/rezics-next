@@ -9,14 +9,22 @@ import globalRead from './bootstrap-governance-read.sql';
 import { GrantDeniedError } from './grant-commands.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import suspendStatement from './suspension-update.sql';
+import probe from './operator-fence-probe.sql';
+import {
+  continuationEntryDigest,
+  insertDeletionContinuation,
+  validateContinuationBinding,
+  type ContinuationBinding,
+} from './committed-continuations.ts';
 
 export type SuspensionContext = AccessContext & { actor: Actor };
-export type SuspensionInput = { accountId: string; key: string; reason?: string };
+export type SuspensionInput = { accountId: string; key: string; reason?: string; continuation?: ContinuationBinding };
 export type SuspensionValue = {
   accountId: string;
   state: 'suspended';
   minimumAuthnEpoch: string;
   receiptId: string;
+  continuationOperationKey?: string;
 };
 
 /** Active accounts only. A lifecycle coordination row, including an operator
@@ -28,8 +36,8 @@ export type SuspensionValue = {
  * Cost: one actor admission seek and the native Global Context formula cost
  * O((1 + K) log G), K <= 1000. The subject transaction locks one account,
  * advances its floor and fence, and inserts one fence receipt, O(log R),
- * R = N + U*t + M. It does not probe coordination, organization, or
- * responsibility history.
+ * R = N + U*t + M. It adds one bounded responsibility probe and, for operators, one immutable
+ * continuation insert in this same transaction.
  */
 export function createSuspensionCommands(config: { pool: Pool; access: Access; clock: () => Date }) {
   return {
@@ -46,13 +54,14 @@ export function createSuspensionCommands(config: { pool: Pool; access: Access; c
         input.key.length > 255 ||
         (input.reason !== undefined &&
           (typeof input.reason !== 'string' || input.reason.length < 1 || input.reason.length > 2000)) ||
-        Object.keys(input).some((key) => !['accountId', 'key', 'reason'].includes(key))
+        Object.keys(input).some((key) => !['accountId', 'key', 'reason', 'continuation'].includes(key))
       )
         throw new GrantDeniedError();
+      if (input.continuation) validateContinuationBinding(input.continuation);
       const partition = partitionOf(route);
       const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
       const digest = createHash('sha256')
-        .update(canonicalize([route, input.accountId, basis, input.reason ?? null])!)
+        .update(canonicalize([route, input.accountId, basis, input.reason ?? null, input.continuation ?? null])!)
         .digest();
       const authorization = resourceAuthorization({
         access: config.access,
@@ -96,6 +105,30 @@ export function createSuspensionCommands(config: { pool: Pool; access: Access; c
             minimumAuthnEpoch: receipt.minimumAuthnEpoch,
             receiptId,
           };
+          const responsible = await probe.run(tx, { route, operator_id: input.accountId });
+          if (responsible.responsible || input.continuation) {
+            const binding = input.continuation ?? {
+              operationKey: `suspend:${receiptId}`,
+              operationDigest: digest.toString('hex'),
+              commandKeyPrefix: `wf:${createHash('sha256').update(receiptId).digest('hex')}`,
+            };
+            const allowlist = ['revoke-auth-sessions', 'operator-responsibility-page'].map((step) => {
+              const entry = { step, target: input.accountId, key: `${binding.commandKeyPrefix}:${step}` };
+              return { ...entry, digest: continuationEntryDigest(entry) };
+            });
+            await insertDeletionContinuation(tx, {
+              accountId: input.accountId,
+              handle: null,
+              operatorAccountId: null,
+              reservationId: null,
+              binding,
+              barrierReceiptId: receiptId,
+              minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+              transactionId,
+              allowlist,
+            });
+            value.continuationOperationKey = binding.operationKey;
+          }
           return {
             value,
             events: [{ type: 'com.rezics.access.account.suspended.v1', subject: input.accountId, data: value }],

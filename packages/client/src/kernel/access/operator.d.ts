@@ -44,6 +44,19 @@ export type OperatorConfig = {
  * Auth may issue for value.subjectAccountId only after successful consumption.
  */
 export declare function createOperatorCommands(config: OperatorConfig): {
+    /** Committed mechanical work only. Lock relation and slot with the account,
+     * then use the native fence mutation in that same subject transaction. */
+    fenceOperatedSubject(input: OperatorResponsibility & {
+        key: string;
+    }): Promise<CommandOutcome<{
+        accountId: string;
+        fenced: boolean;
+        receiptId: null;
+    } | {
+        accountId: string;
+        fenced: boolean;
+        receiptId: string;
+    }>>;
     /** Explicit trusted registration/organization step. Not called by approval.
      * Owners exercise a normal owner-role grant, including ordinary denials and
      * client scope intersection. Revocation never gets repaired by a read path.

@@ -1,3 +1,4 @@
+import { createSuspensionCommands } from './suspension.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
@@ -98,6 +99,7 @@ const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
 
 type NativeKind =
+  | 'fence-operator'
   | 'rename'
   | 'delete'
   | 'membership'
@@ -112,7 +114,6 @@ type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organ
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
   revoke: 'Auth session revocation',
-  'fence-operator': 'operator fence',
   consent: 'Auth consent reduction',
 } as const satisfies Record<Exclude<AccountOperation['kind'], NativeKind>, string>;
 
@@ -125,6 +126,11 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
   let descriptor: Descriptor;
   let fields: string[];
   switch (operation.kind) {
+    case 'fence-operator':
+      requireAllowed(id(operation.accountId));
+      fields = ['kind', 'accountId', 'authorization'];
+      descriptor = { action: 'account:suspend', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
+      break;
     case 'client-reduction':
       requireAllowed(
         text(operation.clientId, 1024) &&
@@ -480,7 +486,36 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     );
     const deadline = Math.min(bounded.deadline, Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
     await authorizeActor(actor, descriptor, bounded, deadline);
-    const request: LifecycleRequest = Object.freeze({ actor, deadline });
+    // A resolved approval is a live, server-owned context. Expose the native
+    // barrier only for this closed operation, bound to its target and stable
+    // command key. Auth never supplies an arbitrary suspension command or actor.
+    const request: LifecycleRequest = Object.freeze({
+      actor,
+      deadline,
+      ...(operation.kind === 'fence-operator'
+        ? {
+            suspendOperator: async () =>
+              (
+                await createSuspensionCommands({
+                  pool: config.pool,
+                  access: config.access,
+                  clock: () => new Date(),
+                }).suspend(
+                  { actor, pool: config.pool, deadline },
+                  {
+                    accountId: operation.accountId,
+                    key: `wf:${hash([actor.accountId, row.operationKey])}:fence`,
+                    continuation: {
+                      operationKey: row.operationKey,
+                      operationDigest: row.digest,
+                      commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
+                    },
+                  },
+                )
+              ).value,
+          }
+        : {}),
+    });
     bindings.set(
       request,
       Object.freeze({

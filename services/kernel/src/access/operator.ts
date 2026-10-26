@@ -42,6 +42,9 @@ import memberRead from './operator-member.sql';
 import defaults from './operator-defaults.sql';
 import openingInsert from './operator-opening-insert.sql';
 import openingConsume from './operator-opening-consume.sql';
+import fenceSubject from './operator-fence-subject.sql';
+import nativeFence from './lifecycle-fence.sql';
+import { lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 
 export const OPERATOR_RECEIPT_TTL_MS = 60_000;
 const EVIDENCE_TTL_MS = 1000;
@@ -302,6 +305,42 @@ export function createOperatorCommands(config: OperatorConfig) {
     live(facts.deadline);
   }
   return {
+    /** Committed mechanical work only. Lock relation and slot with the account,
+     * then use the native fence mutation in that same subject transaction. */
+    async fenceOperatedSubject(input: OperatorResponsibility & { key: string }) {
+      input = structuredClone(input);
+      const subjectRoute = route(input.subjectAccountId);
+      return lifecycleExecutor(pool)(
+        {
+          route: subjectRoute,
+          id: input.subjectAccountId,
+          kind: 'operator.subject-fenced',
+          key: input.key,
+          input,
+        },
+        async (tx, transactionId) => {
+          const related = await fenceSubject.run(tx, {
+            route: subjectRoute,
+            subject_id: input.subjectAccountId,
+            operator_id: input.operatorAccountId,
+            reservation_id: input.reservationId,
+          });
+          if (!related) return { accountId: input.subjectAccountId, fenced: false, receiptId: null };
+          const receiptId = derivedId(NAMESPACE, `${transactionId}:fence`, subjectRoute);
+          const receipt = await nativeFence.run(tx, {
+            route: subjectRoute,
+            account_id: input.subjectAccountId,
+            receipt_id: receiptId,
+            tombstone: false,
+            kind: 'fence',
+            prior_operator_id: '',
+            transaction_id: transactionId,
+          });
+          requireAllowed(receipt[0]);
+          return { accountId: input.subjectAccountId, fenced: true, receiptId };
+        },
+      );
+    },
     /** Explicit trusted registration/organization step. Not called by approval.
      * Owners exercise a normal owner-role grant, including ordinary denials and
      * client scope intersection. Revocation never gets repaired by a read path.

@@ -229,7 +229,7 @@ Touches: `workflow-approvals.ts` verifies the real JWT/JWKS, reads the exact act
 
 Bound: with `R=N+U*t+M` (subjects/history, activity and media), exact approval lookup returns at most one row, with fixed account/receipt reads plus the installed formula `O((1+K)log G+matches)`, K<=1000 per actor/principal. Rows/statements are constant beyond formula matches, with logarithmic buffers; creation writes one approval row and native receipts/outbox. Expiry sweep B<=1000 costs `O((1+B)log R)`. Strict expiry survives restart/GC delay.
 
-Growth: `test/access/growth-workflow-approvals.test.ts` captures native approve/resolve/denied replay/sweep at 1/8/64.
+- Growth check: `test/access/growth-workflow-approvals.test.ts`, exact `checkGrowth` names `approve: same-actor history`, `resolve: same-actor history`, `denied replay: same-actor history`, `expiry sweep: same-actor history`, `approve: unrelated accounts and resources`, `resolve: unrelated accounts and resources`, `denied replay: unrelated accounts and resources`, and `expiry sweep: unrelated accounts and resources`, at [1, 8, 64].
 
 ### Committed cleanup continuation
 
@@ -249,3 +249,18 @@ Bearer verification scales with raw JWT/JWKS inputs and cache misses while datab
 The account/public projection is a point read and tombstoning scrubs its account row while retaining authority/coordination history; no denial-projection writer or bulk erasure implementation is present to derive an additional bound.
 Access SQL keeps assignment/account and inverse/hold/account joins on their principal/member anchor, releases independent group/authority reads before target checkout, and has no cross-partition join or global lock/counter.
 The shared executor serializes writes through one `core.partition.position` counter per partition, so contention can grow within that partition without requiring all partitions on one machine.
+
+### Operator fencing
+
+- Touches: the suspension's existing rows plus one responsibility probe and one continuation insert. The committed
+  suspension event starts the kernel worker; Auth's `fence` barrier calls that same suspension through its resolved
+  approval context and revokes only the operator's own sessions under the continuation. Each durable step reads one
+  signed keyset range of at most P+1 responsibility rows and the partition point, writes one immutable child allowlist
+  before effects, then checks each subject's relation and slot and applies the native fence in its partition. Pending,
+  unpublished reservations remain held. Connections are released before the next page is scheduled.
+- Bound: per page O(P log R), P <= 100; total work proportional to the operator's affected accounts, never to unrelated
+  accounts or the operator's completed history. Native command receipts make worker retries and trusted
+  `continueCommitted(reference)` recovery idempotent.
+- Growth check: `test/access/growth-operator-fencing.test.ts` with `checkGrowth` at [1, 8, 64]: unrelated accounts with
+  the operator fixed; completed and pending history with fixed first and late page seeks; and affected accounts with
+  P fixed. Per-page rows and statements stay constant and buffers logarithmic; total work is linear in affected accounts.

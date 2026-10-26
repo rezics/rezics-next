@@ -1,3 +1,4 @@
+import { registerOperatorFenceWork } from './operator-fence-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import {
   MEMBERSHIP_WORKFLOW_NAME,
@@ -200,6 +201,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
     async register(context) {
       const config = options.authorize ? undefined : readMembershipWorkConfig(context.env);
       registerAccounts(context, membershipWorkPorts(context, options, config));
+      if (config) registerOperatorFenceWork(context, config.referenceKeys);
       await writeRateExpiryWorkModule.register(context);
     },
   };
