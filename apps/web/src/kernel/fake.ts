@@ -42,14 +42,17 @@ async function pageRecording(
   recordings: Record<string, KernelRecording>,
 ): Promise<KernelRecording | undefined> {
   let subject: unknown;
+  let route: unknown;
   try {
     const body = (await request.json()) as { target?: unknown };
     const target = body.target;
     if (!target || typeof target !== 'object' || Array.isArray(target)) return undefined;
     subject = (target as { subject?: unknown }).subject;
+    route = (target as { route?: unknown }).route;
   } catch {
     return undefined;
   }
+  if (typeof route === 'string') return route === '/' ? recordings['home-page'] : undefined;
   if (typeof subject !== 'string') return undefined;
   if (subject === missingSubjectId) return recordings['missing-subject-page'];
   return subject === knownSubjectId(recordings) ? recordings['subject-page'] : undefined;

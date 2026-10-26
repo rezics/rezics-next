@@ -237,6 +237,7 @@ test(
     const responseType: Record<string, string> = {
       'missing-subject.json': 'MissingResponse',
       'missing-subject-page.json': 'PageMissingResponse',
+      'home-page.json': 'PageResponse',
       'subject.json': 'SubjectResponse',
       'subject-page.json': 'PageResponse',
       'board.json': 'BoardResponse',

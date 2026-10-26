@@ -1,6 +1,6 @@
 {
   "subject": {
-    "id": "01a175c5-b220-70fb-b3c5-6a5b405f6541",
+    "id": "01a175df-4a49-7502-8ec6-4f0631b9bd23",
     "type": "schema:Book",
     "revision": 1,
     "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
@@ -8,13 +8,13 @@
     "resolution": {},
     "labels": {
       "zh-Hans": "小王子",
-      "zh-Hant": "小王子",
       "ko": "어린 왕자",
-      "en": "The Little Prince",
-      "ja": "星の王子さま",
       "de": "Der kleine Prinz",
-      "es": "El Principito",
-      "fr": "Le Petit Prince"
+      "fr": "Le Petit Prince",
+      "ja": "星の王子さま",
+      "en": "The Little Prince",
+      "zh-Hant": "小王子",
+      "es": "El Principito"
     },
     "descriptions": {},
     "aliases": {},

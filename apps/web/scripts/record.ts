@@ -364,6 +364,17 @@ async function main(): Promise<void> {
   };
   if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
     throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
+  if ((await savePost('home-page', { target: { route: '/' } })) !== 200)
+    throw new Error(`home-page returned ${JSON.stringify(recorded.get('home-page'))}`);
+  const homePage = objectBody(recorded.get('home-page'), 'home-page');
+  const homeTemplate = objectBody(homePage.template, 'home-page template');
+  if (
+    typeof homePage.profile !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(homePage.profile) ||
+    homeTemplate.scope !== 'route' ||
+    homeTemplate.key !== '/'
+  )
+    throw new Error(`home-page is not a page for the home route: ${JSON.stringify(homePage)}`);
   const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
   const template = objectBody(subjectPage.template, 'subject-page template');
   if (

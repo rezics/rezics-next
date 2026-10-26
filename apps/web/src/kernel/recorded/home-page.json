@@ -1,0 +1,212 @@
+{
+  "profile": "sha256:860534b8356dab814f365ef3284ab9f836f16c1576e42166720479be4ac4115f",
+  "template": { "scope": "route", "key": "/" },
+  "document": {
+    "root": { "props": {} },
+    "content": [
+      {
+        "type": "SearchBox",
+        "props": {
+          "id": "search",
+          "placeholder": {
+            "de": "Nach Büchern, Anime, Visual Novels und Rezepten suchen",
+            "en": "Search books, anime, visual novels and recipes",
+            "es": "Buscar libros, anime, novelas visuales y recetas",
+            "fr": "Rechercher des livres, des anime, des visual novels et des recettes",
+            "ja": "書籍、アニメ、ビジュアルノベル、レシピを検索",
+            "ko": "도서, 애니메이션, 비주얼 노벨, 레시피 검색",
+            "zh-Hans": "搜索图书、动画、视觉小说和食谱",
+            "zh-Hant": "搜尋書籍、動畫、視覺小說和食譜"
+          }
+        }
+      },
+      {
+        "type": "LinkGrid",
+        "props": {
+          "id": "verticals",
+          "links": [
+            {
+              "href": "/search?type=schema%3ABook",
+              "label": {
+                "de": "Bücher",
+                "en": "Books",
+                "es": "Libros",
+                "fr": "Livres",
+                "ja": "書籍",
+                "ko": "도서",
+                "zh-Hans": "图书",
+                "zh-Hant": "書籍"
+              }
+            },
+            {
+              "href": "/search?type=schema%3ATVSeries",
+              "label": {
+                "de": "Anime",
+                "en": "Anime",
+                "es": "Anime",
+                "fr": "Anime",
+                "ja": "アニメ",
+                "ko": "애니메이션",
+                "zh-Hans": "动画",
+                "zh-Hant": "動畫"
+              }
+            },
+            {
+              "href": "/search?type=wd%3AQ689445",
+              "label": {
+                "de": "Visual Novels",
+                "en": "Visual novels",
+                "es": "Novelas visuales",
+                "fr": "Visual novels",
+                "ja": "ビジュアルノベル",
+                "ko": "비주얼 노벨",
+                "zh-Hans": "视觉小说",
+                "zh-Hant": "視覺小說"
+              }
+            },
+            {
+              "href": "/search?type=schema%3ARecipe",
+              "label": {
+                "de": "Rezepte",
+                "en": "Recipes",
+                "es": "Recetas",
+                "fr": "Recettes",
+                "ja": "レシピ",
+                "ko": "레시피",
+                "zh-Hans": "食谱",
+                "zh-Hant": "食譜"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "books",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Bücher",
+            "en": "Books",
+            "es": "Libros",
+            "fr": "Livres",
+            "ja": "書籍",
+            "ko": "도서",
+            "zh-Hans": "图书",
+            "zh-Hant": "書籍"
+          },
+          "types": ["schema:Book"]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "anime",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Anime",
+            "en": "Anime",
+            "es": "Anime",
+            "fr": "Anime",
+            "ja": "アニメ",
+            "ko": "애니메이션",
+            "zh-Hans": "动画",
+            "zh-Hant": "動畫"
+          },
+          "types": ["schema:TVSeries", "schema:Movie"]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "visual-novels",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Visual Novels",
+            "en": "Visual novels",
+            "es": "Novelas visuales",
+            "fr": "Visual novels",
+            "ja": "ビジュアルノベル",
+            "ko": "비주얼 노벨",
+            "zh-Hans": "视觉小说",
+            "zh-Hant": "視覺小說"
+          },
+          "types": ["wd:Q689445"]
+        }
+      },
+      {
+        "type": "TypeList",
+        "props": {
+          "id": "recipes",
+          "sort": "collections",
+          "limit": 12,
+          "title": {
+            "de": "Rezepte",
+            "en": "Recipes",
+            "es": "Recetas",
+            "fr": "Recettes",
+            "ja": "レシピ",
+            "ko": "레시피",
+            "zh-Hans": "食谱",
+            "zh-Hant": "食譜"
+          },
+          "types": ["schema:Recipe"]
+        }
+      }
+    ]
+  },
+  "reads": {
+    "r0": {
+      "status": 503,
+      "body": {
+        "type": "https://rezics.com/problems/index_not_ready",
+        "title": "Search Index Not Ready",
+        "status": 503,
+        "code": "index_not_ready",
+        "retryable": true,
+        "effect_status": "not_applicable",
+        "request_id": "01a175df-4b67-70d4-8a53-29ecbacfe36f"
+      }
+    },
+    "r1": {
+      "status": 503,
+      "body": {
+        "type": "https://rezics.com/problems/index_not_ready",
+        "title": "Search Index Not Ready",
+        "status": 503,
+        "code": "index_not_ready",
+        "retryable": true,
+        "effect_status": "not_applicable",
+        "request_id": "01a175df-4b67-70d5-8c59-408c7daaeb70"
+      }
+    },
+    "r2": {
+      "status": 503,
+      "body": {
+        "type": "https://rezics.com/problems/index_not_ready",
+        "title": "Search Index Not Ready",
+        "status": 503,
+        "code": "index_not_ready",
+        "retryable": true,
+        "effect_status": "not_applicable",
+        "request_id": "01a175df-4b67-70d6-a644-37287a9446d8"
+      }
+    },
+    "r3": {
+      "status": 503,
+      "body": {
+        "type": "https://rezics.com/problems/index_not_ready",
+        "title": "Search Index Not Ready",
+        "status": 503,
+        "code": "index_not_ready",
+        "retryable": true,
+        "effect_status": "not_applicable",
+        "request_id": "01a175df-4b67-70d7-b684-99fe8eab8ec3"
+      }
+    }
+  },
+  "status": 200
+}
