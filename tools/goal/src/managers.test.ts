@@ -214,6 +214,22 @@ test('a Claude manager whose session exited is resumed in its window when an eve
   } finally { await s.close(); }
 });
 
+test('a live Claude manager that ended its turn is woken by a prompt typed into its window, once per event', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start({ ...s.spec, engine: 'claude' });
+    const prompts: string[] = [];
+    Object.assign(s.services.windows, { alive: () => true, prompt: (_id: string, text: string) => { prompts.push(text); } });
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake Claude' }); await s.managers.wake(manager.id);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain(`inbox read ${manager.id}`);
+    await s.managers.wake(manager.id);
+    expect(prompts).toHaveLength(1);
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Again' }); await s.managers.wake(manager.id);
+    expect(prompts).toHaveLength(2);
+  } finally { await s.close(); }
+});
+
 test('JSON-RPC errors propagate and an exiting app-server rejects pending requests', async () => {
   const s = await setup();
   try {

@@ -16,6 +16,8 @@ export interface ManagerWindows {
   alive?(manager: string): boolean;
   /** Run argv in the manager's window again, replacing whatever it holds. */
   respawn?(manager: string, argv: string[], cwd: string): void;
+  /** Type a message into the manager's live session and submit it; the session queues it if a turn is running. */
+  prompt?(manager: string, text: string): void;
 }
 
 /** Resolve termspaces' stable session option; do not inspect or kill unrelated windows. */
@@ -58,6 +60,12 @@ export class TermspacesWindows implements ManagerWindows {
     const id = this.find(this.session(), manager);
     if (!id) { this.register(manager, argv, cwd); return; }
     this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
+  }
+  prompt(manager: string, text: string): void {
+    const id = this.find(this.session(), manager);
+    if (!id) throw new Error(`Missing manager window: ${manager}`);
+    this.tmux(['send-keys', '-t', id, '-l', text.replace(/[\r\n]+/g, ' ')]);
+    this.tmux(['send-keys', '-t', id, 'Enter']);
   }
   unregister(manager: string): void {
     const session = this.lookupSession();
