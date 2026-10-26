@@ -17,8 +17,11 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { platformRootAnchor } from '../commerce/catalogue.ts';
-import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
+import { withConnection } from '../database/pool.ts';
+import type { Access, AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
+import { readRealm } from './realm.ts';
+import realmSpace from './realm-space.sql';
 import read from './space-read.sql';
 import insert from './space-insert.sql';
 import append from './space-revision.sql';
@@ -113,6 +116,33 @@ export async function readSpace(client: AccessClient, spaceId: string, time: str
     revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
     author: row.author,
   };
+}
+
+/** Read the Space and its exact Realm slot together. Callers supply Space authorization;
+ * the derived Realm id always uses the ordinary Realm reader and its own authorization.
+ */
+export async function readSpaceForViewer(
+  deps: Pick<SpaceDependencies, 'pool' | 'access'>,
+  actor: Actor,
+  spaceId: string,
+  time: string,
+  context: { deadline: number },
+  check?: AccessCheck,
+): Promise<(Space & { realmId: string | null }) | null> {
+  const route = routeOf(spaceId);
+  if (route === null) return null;
+  const current = await withConnection(deps.pool, async (client) => {
+    if (check && !(await check(client))) return null;
+    const space = await readSpace(client, spaceId, time);
+    if (!space) return null;
+    const slot = await realmSpace.run(client, { route, space: spaceId, at: time });
+    return { space, realmId: slot?.realm_id ?? null };
+  });
+  if (!current) return null;
+  // Release the Space connection before Access prepares separately anchored evidence.
+  // In particular, a pool of one must never need a nested checkout.
+  const realm = current.realmId ? await readRealm(deps, actor, current.realmId, context) : null;
+  return { ...current.space, realmId: realm?.realmId ?? null };
 }
 
 export function spaceReadEligibility(identity: Resource): ResourceEligibility {

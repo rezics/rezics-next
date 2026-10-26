@@ -248,6 +248,7 @@ test.serial('a Space owner claims, resolves and changes an address while the old
   const initial = await claim(String(first.space.spaceId), first.etag, creator, address);
   expect(initial.response.status).toBe(200);
   expect((initial.value.space as Record<string, unknown>).address).toBe(address);
+  expect((initial.value.space as Record<string, unknown>).realmId).toBeNull();
 
   const resolved = await call('GET', `/v1/spaceAddresses/${address}`);
   expect(resolved.response.status).toBe(200);

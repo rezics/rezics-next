@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import { closeCommunityDrivers, createCommunityDriver } from './community-driver.ts';
+import { closeCommunityDrivers, createCommunityDriver, queryCommunityDatabase } from './community-driver.ts';
 import type { Account, CommunityDriver, CommunityGrowth, Fixture } from '../../../../specs/community-driver.ts';
 import { partitionOf, newId, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
@@ -332,3 +332,181 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
   const refused = await driver.request({ actor: fixture.outsider, method: 'GET', path: '/v1/me/realms' });
   expect(refused.status).toBe(401);
 });
+
+test.serial(
+  'Space representations expose only the carried Realm the same viewer can read',
+  async () => {
+    const driver = await createCommunityDriver();
+    try {
+      const fixture = await driver.provision();
+      const request = (
+        actor: Account | null,
+        method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+        path: string,
+        body?: unknown,
+        ifMatch?: string,
+      ) =>
+        driver.request({
+          actor,
+          method,
+          path,
+          ...(method === 'GET' ? {} : { key: JSON.stringify(crypto.randomUUID()) }),
+          ...(body === undefined ? {} : { body }),
+          ...(ifMatch === undefined ? {} : { ifMatch }),
+        });
+      const creation = {
+        actor: fixture.owner,
+        method: 'POST' as const,
+        path: '/v1/spaces',
+        body: { title: 'Realm host' },
+        key: key(),
+      };
+      const created = await driver.request(creation);
+      expect(created.status).toBe(201);
+      const initial = (await created.json()) as {
+        space: { spaceId: string; headRevisionId: string; realmId: string | null };
+      };
+      expect(initial.space.realmId).toBeNull();
+      const path = `/v1/spaces/${initial.space.spaceId}`;
+      expect(
+        (await request(fixture.owner, 'POST', '/v1/spaces', { title: 'Invalid carry', realmId: null })).status,
+      ).toBe(400);
+      expect(
+        (await request(fixture.owner, 'PATCH', path, { realmId: null }, JSON.stringify(initial.space.headRevisionId)))
+          .status,
+      ).toBe(400);
+      const viewers = [null, fixture.owner, fixture.member, fixture.outsider];
+      const empty = await Promise.all(
+        viewers.map(async (actor) => {
+          const response = await request(actor, 'GET', path);
+          return { status: response.status, headers: [...response.headers], text: await response.text() };
+        }),
+      );
+      const realmResponse = await request(fixture.owner, 'POST', '/v1/realms', {
+        spaceId: initial.space.spaceId,
+        title: 'Carried Realm',
+        visibility: 'protected',
+        contextId: fixture.contextId,
+      });
+      expect(realmResponse.status).toBe(201);
+      let { realm } = (await realmResponse.json()) as {
+        realm: { realmId: string; headRevisionId: string };
+      };
+      const realmPath = `/v1/realms/${realm.realmId}`;
+      // The same Space before it carries a Realm is the byte-for-byte no-Realm control.
+      for (const index of [0, 2, 3]) {
+        const response = await request(viewers[index]!, 'GET', path);
+        expect({ status: response.status, headers: [...response.headers], text: await response.text() }).toEqual(
+          empty[index]!,
+        );
+        expect((await request(viewers[index]!, 'GET', realmPath)).status).toBe(404);
+      }
+      const visible = async (actor: Account | null) => {
+        const response = await request(actor, 'GET', path);
+        expect(response.status).toBe(200);
+        expect((await response.json()).space.realmId).toBe(realm.realmId);
+        expect(response.headers.get('etag')).toBe(JSON.stringify(initial.space.headRevisionId));
+        expect((await request(actor, 'GET', realmPath)).status).toBe(200);
+      };
+      await visible(fixture.owner);
+      const replay = await driver.request(creation);
+      expect(replay.status).toBe(201);
+      expect((await replay.json()).space.realmId).toBe(realm.realmId);
+      expect(replay.headers.get('etag')).toBe(JSON.stringify(initial.space.headRevisionId));
+      expect(
+        (await request(fixture.owner, 'POST', `${realmPath}/members`, { accountId: fixture.member.id })).status,
+      ).toBe(202);
+      await driver.settle();
+      await visible(fixture.member);
+      expect(
+        (await request(fixture.owner, 'PUT', `${realmPath}/bans/${fixture.member.id}`, { reason: 'Remove membership' }))
+          .status,
+      ).toBe(200);
+      await driver.settle();
+      const banned = await request(fixture.member, 'GET', path);
+      expect({ status: banned.status, headers: [...banned.headers], text: await banned.text() }).toEqual(empty[2]!);
+      expect((await request(fixture.member, 'GET', realmPath)).status).toBe(404);
+
+      // Removing Realm ownership leaves Space management intact.
+      const realmResource = { route: routeOf(realm.realmId)!, id: realm.realmId };
+      const [nativeOwner] = await queryCommunityDatabase<{ valid: string }>(
+        `SELECT valid::text FROM access.resource_role_grant
+         WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='community.realm.owner'`,
+        [realmResource.route, realm.realmId, fixture.owner.id],
+      );
+      const ownerRole = (account: Account, valid: string) => ({
+        resource: realmResource,
+        subject: { kind: 'account', id: account.id },
+        role: 'community.realm.owner',
+        valid,
+      });
+      expect((await request(fixture.owner, 'POST', '/v1/roleGrants', ownerRole(fixture.moderator, '(,)'))).status).toBe(
+        201,
+      );
+      expect(
+        (await request(fixture.owner, 'POST', '/v1/roleGrants:revoke', ownerRole(fixture.owner, nativeOwner!.valid)))
+          .status,
+      ).toBe(200);
+      expect((await request(fixture.owner, 'GET', realmPath)).status).toBe(404);
+      const hiddenUpdate = await request(
+        fixture.owner,
+        'PATCH',
+        path,
+        { summary: 'Hidden carry' },
+        JSON.stringify(initial.space.headRevisionId),
+      );
+      expect(hiddenUpdate.status).toBe(200);
+      const hiddenNext = (await hiddenUpdate.json()).space;
+      expect(hiddenNext.realmId).toBeNull();
+      const hiddenAddress = await request(
+        fixture.owner,
+        'PUT',
+        `${path}/address`,
+        { address: 'hidden-carried-host' },
+        JSON.stringify(hiddenNext.headRevisionId),
+      );
+      expect(hiddenAddress.status).toBe(200);
+      const hiddenAddressed = (await hiddenAddress.json()).space;
+      expect(hiddenAddressed.realmId).toBeNull();
+      expect((await request(fixture.moderator, 'POST', '/v1/roleGrants', ownerRole(fixture.owner, '(,)'))).status).toBe(
+        201,
+      );
+      const updated = await request(
+        fixture.owner,
+        'PATCH',
+        path,
+        { summary: 'Changed' },
+        JSON.stringify(hiddenAddressed.headRevisionId),
+      );
+      expect(updated.status).toBe(200);
+      const next = (await updated.json()).space;
+      expect(next.realmId).toBe(realm.realmId);
+      const addressed = await request(
+        fixture.owner,
+        'PUT',
+        `${path}/address`,
+        { address: 'carried-realm-host' },
+        JSON.stringify(next.headRevisionId),
+      );
+      expect(addressed.status).toBe(200);
+      expect((await addressed.json()).space.realmId).toBe(realm.realmId);
+      const publicResponse = await request(
+        fixture.owner,
+        'PATCH',
+        realmPath,
+        { visibility: 'public' },
+        JSON.stringify(realm.headRevisionId),
+      );
+      expect(publicResponse.status).toBe(200);
+      realm = (await publicResponse.json()).realm;
+      for (const actor of viewers) {
+        const response = await request(actor, 'GET', path);
+        expect((await response.json()).space.realmId).toBe(realm.realmId);
+        expect((await request(actor, 'GET', realmPath)).status).toBe(200);
+      }
+    } finally {
+      await driver.close();
+    }
+  },
+  120_000,
+);

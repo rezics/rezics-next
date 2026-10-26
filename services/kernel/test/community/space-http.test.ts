@@ -222,6 +222,7 @@ test.serial('anonymous reads a Space and cannot create or update one', async () 
     creator: creator.accountId,
     author: creator.accountId,
     predecessor: null,
+    realmId: null,
   });
   const head = space.headRevisionId;
   expect(created.response.headers.get('etag')).toBe(JSON.stringify(head));
@@ -323,6 +324,7 @@ test.serial(
     expect(next).toMatchObject({
       spaceId: space.spaceId,
       title: updatedTitle,
+      realmId: null,
       summary,
       predecessor: space.headRevisionId,
       creator: creator.accountId,

@@ -20,6 +20,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   createSpace,
   readSpace,
+  readSpaceForViewer,
   spaceReadEligibility,
   SpaceConflictError,
   SpaceInputError,
@@ -72,6 +73,11 @@ const summary = t.String({ maxLength: 4096 });
 const space = t.Object(
   {
     spaceId: id,
+    realmId: t.Union([id, t.Null()], {
+      readOnly: true,
+      description:
+        'The active Realm carried by this Space, if the viewer passes its ordinary realm:read check; otherwise null. Derived per viewer and outside the Space revision chain. The Space ETag remains its head revision id, the If-Match token for Space writes.',
+    }),
     state: t.Literal('active'),
     headRevisionId: id,
     createdAt: instant,
@@ -291,10 +297,11 @@ function matchHead(header: string): string {
   return value;
 }
 
-function published(space: Space) {
+function published(space: Space, realmId: string | null = null) {
   if (space.state !== 'active') throw new ProblemError('not_found');
   return {
     spaceId: space.spaceId,
+    realmId,
     state: 'active' as const,
     headRevisionId: space.headRevisionId,
     createdAt: space.createdAt,
@@ -434,9 +441,15 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               { title: body.title, ...(body.summary === undefined ? {} : { summary: body.summary }) },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readSpace(dependencies.pool, result.value.spaceId, observedAt());
+            const current = result.replayed
+              ? await readSpaceForViewer(spaceDependencies(), actor, result.value.spaceId, observedAt(), {
+                  deadline: job.deadline,
+                })
+              : await readSpace(dependencies.pool, result.value.spaceId, observedAt()).then(
+                  (space) => space && { ...space, realmId: null },
+                );
             if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
-            const representation = published(current);
+            const representation = published(current, current.realmId);
             session.record(result);
             set.status = 201;
             set.headers.location = `/v1/spaces/${representation.spaceId}`;
@@ -463,19 +476,16 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           security: readSecurity,
         },
       },
-      async ({ params: { spaceId }, authorize, admission, job, set }) => {
+      async ({ params: { spaceId }, actor, authorize, admission, job, set }) => {
         const route = routeOf(spaceId);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: spaceId };
         const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
         const current = await admission.run('normal', job, () =>
-          withConnection(dependencies.pool, async (client) => {
-            if (!(await check(client))) return null;
-            return readSpace(client, spaceId, observedAt());
-          }),
+          readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check),
         );
         if (!current) throw new ProblemError('not_found');
-        const representation = published(current);
+        const representation = published(current, current.realmId);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
         return { space: representation };
       },
@@ -512,9 +522,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               { spaceId, expectedHead, address: body.address },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readSpace(dependencies.pool, result.value.spaceId, observedAt());
+            const current = await readSpaceForViewer(spaceDependencies(), actor, result.value.spaceId, observedAt(), {
+              deadline: job.deadline,
+            });
             if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
-            const representation = published(current);
+            const representation = published(current, current.realmId);
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
             return { space: representation };
@@ -600,9 +612,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readSpace(dependencies.pool, result.value.spaceId, observedAt());
+            const current = await readSpaceForViewer(spaceDependencies(), actor, result.value.spaceId, observedAt(), {
+              deadline: job.deadline,
+            });
             if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
-            const representation = published(current);
+            const representation = published(current, current.realmId);
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
             return { space: representation };
