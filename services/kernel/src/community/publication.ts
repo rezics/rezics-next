@@ -13,13 +13,7 @@ import {
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import {
-  accessCheck,
-  type AccessCheck,
-  type AccessClient,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
+import { accessCheck, type AccessCheck, type AccessClient, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
