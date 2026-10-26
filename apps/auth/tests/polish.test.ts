@@ -261,7 +261,13 @@ test(
     page.on('dialog', (dialog) => dialog.accept());
     try {
       const sections = page.getByRole('heading', { level: 2 });
-      expect(await sections.allTextContents()).toEqual(['Password', 'Passkeys', 'Sessions']);
+      expect(await sections.allTextContents()).toEqual([
+        'Password',
+        'Passkeys',
+        'Sessions',
+        'Organizations',
+        'Delete account',
+      ]);
       const list = page.getByRole('list', { name: 'Sessions' });
       const rows = list.getByRole('listitem');
       expect(await rows.count()).toBe(4);

@@ -158,22 +158,30 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         const previous = results.get(operationKey);
         if (!previous && (!approved || approved.reference !== payload.reference))
           return Response.json({ error: 'account_operation_denied' }, { status: 403, headers });
-        if (previous) return Response.json(previous.result, { headers });
         const operation = payload.operation as { kind?: string; accountId?: string } | undefined;
-        if (JSON.stringify(approved.operation) !== JSON.stringify(payload.operation))
+        if (
+          JSON.stringify(previous?.operation ?? approved?.operation) !== JSON.stringify(payload.operation) ||
+          (approved && approved.reference !== payload.reference)
+        )
           return Response.json({ error: 'account_operation_denied' }, { status: 403, headers });
+        if (previous) {
+          if (operation?.kind === 'delete') {
+            state.signedOut = true;
+            headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+          }
+          return Response.json(previous.result, { headers });
+        }
         const result = {
           accountId: operation?.kind === 'delete' ? (operation.accountId ?? accountId) : 'created-account',
         };
         results.set(operationKey, { operation: payload.operation, result });
-        if (operation?.kind === 'delete') {
-          state.signedOut = true;
-          headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
-        }
+        if (operation?.kind === 'delete') state.signedOut = true;
         if (state.dropFirstExecuteResponse && !droppedExecuteResponse) {
           droppedExecuteResponse = true;
           return Response.json({ error: 'unavailable' }, { status: 503, headers });
         }
+        if (operation?.kind === 'delete')
+          headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
         return Response.json(result, { headers });
       }
 

@@ -130,6 +130,46 @@ body {
   color: var(--muted-foreground);
 }
 
+.auth-account-operation-copy {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  text-align: start;
+}
+
+.auth-account-operation-copy p {
+  margin: 0;
+}
+
+.auth-account-operation-requirements {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-inline-start: 1.5rem;
+  color: var(--muted-foreground);
+}
+
+.auth-account-operation-success {
+  margin-top: 2rem;
+  text-align: start;
+}
+
+.auth-account-operation-success p {
+  margin: 0 0 1rem;
+}
+
+.auth-account-operation-success a,
+.auth-security-page nav a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.auth-account-operation-success a:focus-visible,
+.auth-security-page nav a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
 .auth-card h1 {
   margin: 0;
   color: var(--foreground);

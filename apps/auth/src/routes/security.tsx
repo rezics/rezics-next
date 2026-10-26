@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Badge } from '@rezics/ui/badge';
-import { Button } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/item';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
+import { Trash2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -407,6 +408,29 @@ function SecurityPage() {
                   );
                 })}
               </ItemGroup>
+            </section>
+
+            <section aria-labelledby="security-organizations-heading">
+              <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>
+              <nav>
+                <a className={buttonVariants({ variant: 'outline' })} href="/organizations/new">
+                  {m.auth_organization_security_create()}
+                </a>
+              </nav>
+            </section>
+
+            <section aria-labelledby="security-delete-account-heading">
+              <h2 id="security-delete-account-heading">{m.auth_account_delete_submit()}</h2>
+              <p>{m.auth_account_delete_security_description()}</p>
+              <nav>
+                <a
+                  className={`${buttonVariants({ variant: 'outline' })} border-destructive/50 hover:border-destructive/70`}
+                  href="/account/delete"
+                >
+                  <Trash2 aria-hidden="true" className="text-destructive" />
+                  {m.auth_account_delete_submit()}
+                </a>
+              </nav>
             </section>
           </>
         )}

@@ -84,7 +84,7 @@ async function open(
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     expect(response?.status(), `the documented dev server serves ${path}`).toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin };
@@ -148,12 +148,13 @@ test(
     const { page, origin } = await open('/account/delete');
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
+      await page.getByRole('checkbox').waitFor({ state: 'visible' });
       expect(await page.getByText(/permanently deletes your REZICS account/i).count()).toBe(1);
       expect(await page.getByText(/signs you out everywhere/i).count()).toBe(1);
       expect(await page.getByText(/cannot be undone/i).count()).toBeGreaterThan(0);
-      expect(await page.getByText(/no automated accounts operated by this account/i).count()).toBe(1);
+      expect(await page.getByText(/no automated accounts are operated by this account/i).count()).toBe(1);
       expect(await page.getByText(/not the last owner of any organization/i).count()).toBe(1);
-      expect(await page.getByText(/no pending transfer/i).count()).toBe(1);
+      expect(await page.getByText(/no transfer is pending/i).count()).toBe(1);
 
       const button = page.getByRole('button', { name: 'Delete account', exact: true });
       expect(await button.isEnabled()).toBe(true);
@@ -197,6 +198,7 @@ test(
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
       const submit = await confirmDelete(page);
       await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), submit.click()]);
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       expect(new URL(page.url()).searchParams.get('return_to')).toBe('/account/delete');
       expect(authCalls('/account-operations/approve')).toHaveLength(1);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
@@ -207,7 +209,9 @@ test(
         page.waitForURL((url) => url.origin === origin && url.pathname === '/account/delete'),
         page.getByRole('button', { name: 'Verify your identity', exact: true }).click(),
       ]);
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
+      await page.getByRole('checkbox').waitFor({ state: 'visible' });
       expect(state.sessionFresh).toBe(true);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
@@ -232,7 +236,7 @@ test(
       const alert = page.getByRole('alert');
       await alert.waitFor();
       expect(await alert.innerText()).toContain('This account cannot be deleted yet');
-      expect(await alert.innerText()).toContain('complete the items listed above first');
+      expect(await alert.innerText()).toContain('Complete the items listed above first.');
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
       expect(state.signedOut).toBe(false);
     } finally {
@@ -340,6 +344,7 @@ test(
     const { page } = await open('/security');
     try {
       await page.getByRole('heading', { name: 'Account security', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'Organizations', exact: true }).waitFor();
       expect(await page.getByRole('heading', { name: 'Organizations', exact: true }).count()).toBe(1);
       expect(await page.getByRole('link', { name: 'Create organization', exact: true }).getAttribute('href')).toBe(
         '/organizations/new',

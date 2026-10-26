@@ -7,7 +7,7 @@ import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTri
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
-import { createSignupKey, explainSignIn, submitSignup } from '../signup';
+import { createSignupKey, explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
 import { signInTarget } from '../sign-in';
 import { readTurnstileConfig } from '../turnstile.ts';
 import { TurnstileWidget, type TurnstileHandle } from '../turnstile.tsx';
@@ -67,11 +67,11 @@ function SignupPage() {
     event.preventDefault();
     if (submitting.current || pending) return;
     clearErrors();
-    const invalidHandle = !handle.trim();
+    const invalidHandle = normalizeSignupHandle(handle) === null;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     const passwordLength = Array.from(password).length;
     const invalidPassword = passwordLength < 8 || passwordLength > 128;
-    setHandleError(invalidHandle ? m.auth_form_required() : '');
+    setHandleError(invalidHandle ? (handle ? m.auth_signup_handle_invalid() : m.auth_form_required()) : '');
     setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
     setPasswordError(invalidPassword ? (password ? m.auth_signup_password_invalid() : m.auth_form_required()) : '');
     if (invalidHandle || invalidEmail || invalidPassword) return;

@@ -27,6 +27,11 @@ export function passwordAccepted(password: string): boolean {
   return length >= 8 && length <= 128;
 }
 
+// Matches the kernel's handle contract; the server applies the same normalization on signup.
+export function normalizeSignupHandle(handle: string): string | null {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(handle) ? handle.toLowerCase() : null;
+}
+
 export async function submitSignup(input: SignupBody): Promise<SignupSubmission> {
   if (!passwordAccepted(input.password)) {
     return { ok: false, failure: { field: 'password', message: m.auth_signup_password_invalid() } };

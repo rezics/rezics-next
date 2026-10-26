@@ -93,7 +93,9 @@ development. Auth's response returns unchanged, without page headers.
 
 ## Security
 
-The security page has Password, Passkeys and Sessions sections in a content column up to 42rem wide. It reads the
+The security page has Password, Passkeys, Sessions and Organizations sections, followed by Delete account, in a
+content column up to 42rem wide. Organizations links to `/organizations/new`; Delete account explains the result and
+links to `/account/delete` with a destructive outline control. It reads the
 signed-in account from `GET /session`, its sessions from one `GET /sessions`, with at most 64 session rows, and its
 passkeys from one `GET /passkeys`. The view makes no kernel reads. A password change uses three Auth calls and signing out one session uses one. A signed-out response
 offers a link to `/login`.
@@ -124,6 +126,30 @@ browser has no WebAuthn the section is absent and `GET /passkeys` is not request
 section only.
 
 The page heading has the same space below it as the sections have between them.
+
+## Delete account
+
+`/account/delete` reads the signed-in account id from one `GET /session`. The page explains that deletion is permanent,
+signs the person out everywhere and cannot be undone. Before submitting, the person must confirm with a required
+checkbox and review the three prerequisites: no operated automated accounts, not the last owner of an organization,
+and no pending transfer. The server does not identify which precondition failed.
+
+Each attempt uses one operation key for `POST /account-operations/approve` and
+`POST /account-operations/execute`. A 401 `step_up_required` goes to `/step-up?return_to=%2Faccount%2Fdelete`; the page
+keeps the operation key so the person can submit again after confirming their identity. A 409 shows the prerequisites
+again and performs no deletion. Other failures show a retry using the same key, so an execute that completed before its
+response was lost is replayed without repeating its effect. Success shows a confirmation without session-dependent
+actions. The flow makes three Auth requests for its initial page and submit, independent of the number of sessions,
+organizations or operated accounts.
+
+## Create organization
+
+`/organizations/new` reads the current session once and asks for one handle. It applies the same 1–64 character
+letter/number/underscore/hyphen rule and lowercase normalization as sign-up. Creation uses one operation key for the
+approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a
+localized message without exposing gate details. A 409 says the handle may be taken, leaves it in the field and focuses
+it. Success names `@<handle>` and links back to Security. The page uses at most three Auth requests regardless of the
+person's existing sessions or organizations.
 
 ## Step-up
 

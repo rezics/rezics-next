@@ -16,6 +16,8 @@ const states = [
   'recovery-request',
   'recovery-password',
   'security',
+  'account-delete',
+  'organization-new',
   'step-up',
 ] as const;
 const desktop = { width: 1280, height: 900 };
@@ -178,6 +180,10 @@ async function prepareState(page: Page, state: (typeof states)[number]): Promise
     await page.locator('input[type="password"]').waitFor({ state: 'visible' });
   } else if (state === 'security') {
     await page.locator('main li article').nth(2).waitFor({ state: 'visible' });
+  } else if (state === 'account-delete') {
+    await page.getByRole('checkbox').waitFor({ state: 'visible' });
+  } else if (state === 'organization-new') {
+    await page.locator('input[name="handle"]').waitFor({ state: 'visible' });
   }
   await waitForCaptureReady(page);
 }
@@ -189,6 +195,8 @@ function pathFor(state: (typeof states)[number]): string {
   if (state === 'recovery-request') return '/recovery';
   if (state === 'recovery-password') return '/recovery#account_id=screenshot-account&token=screenshot-token';
   if (state === 'security') return '/security';
+  if (state === 'account-delete') return '/account/delete';
+  if (state === 'organization-new') return '/organizations/new';
   return '/step-up?return_to=%2Fsecurity';
 }
 

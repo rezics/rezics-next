@@ -13,6 +13,8 @@ const states = [
   'recovery-request',
   'recovery-password',
   'security',
+  'account-delete',
+  'organization-new',
   'step-up',
 ] as const;
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;

@@ -2,7 +2,16 @@ import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/
 import { paraglideMiddleware } from './paraglide/server.js';
 import { defineCustomServerStrategy, extractLocaleFromRequestWithStrategies, locales } from './paraglide/runtime.js';
 
-const pagePaths = new Set(['/login', '/signup', '/consent', '/recovery', '/security', '/step-up']);
+const pagePaths = new Set([
+  '/login',
+  '/signup',
+  '/consent',
+  '/recovery',
+  '/security',
+  '/step-up',
+  '/account/delete',
+  '/organizations/new',
+]);
 const assetPrefix = '/auth-assets/';
 
 defineCustomServerStrategy('custom-accept-language', {

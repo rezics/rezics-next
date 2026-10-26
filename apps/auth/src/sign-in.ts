@@ -5,7 +5,7 @@ export const SIGN_IN_CLIENT_ID = 'login';
 export const SIGN_IN_SCOPE: string[] = [];
 export const AUTHORIZATION_DROPPED_PARAMETERS = ['sig', 'exp', 'prompt', 'return_to'] as const;
 // Auth pages that step-up may return to when there is no authorization request.
-export const STEP_UP_RETURN_PATHS = ['/security'] as const;
+export const STEP_UP_RETURN_PATHS = ['/security', '/account/delete', '/organizations/new'] as const;
 const DEFAULT_RETURN_PATH = '/security';
 
 export type SignInResult =

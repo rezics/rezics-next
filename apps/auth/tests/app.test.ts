@@ -7,7 +7,16 @@ import type { Browser } from 'playwright';
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
-const pages = ['/login', '/signup', '/consent', '/recovery', '/security', '/step-up'];
+const pages = [
+  '/login',
+  '/signup',
+  '/consent',
+  '/recovery',
+  '/security',
+  '/step-up',
+  '/account/delete',
+  '/organizations/new',
+];
 const cookies = [
   'auth_session=opaque-session; Path=/; HttpOnly; SameSite=Lax',
   'auth_flow=opaque-flow; Path=/; Expires=Wed, 01 Jan 2031 00:00:00 GMT; HttpOnly',
