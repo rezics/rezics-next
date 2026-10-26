@@ -23,7 +23,7 @@ import { appendFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
-const result = spawnSync(${JSON.stringify(docker)}, args, { stdio: 'inherit', timeout: 30_000 });
+const result = spawnSync(${JSON.stringify(docker)}, args, { stdio: 'inherit', timeout: ${timeout} });
 if (result.error) throw result.error;
 if (args.includes('pg_dump') && process.env.AUTH_DUMP_TRACE_STOP === '1' && result.status === 0) {
   console.error('Stopped after real check dump');
@@ -185,7 +185,7 @@ test(
             AUTH_DATABASE_CONTAINER: 'must-not-be-inferred',
             KERNEL_DATABASE_CONTAINER: 'must-not-be-inferred',
           },
-          timeout: 30_000,
+          timeout,
         });
         expect(result.stderr.toString()).toBe('');
         expect(result.exitCode).toBe(0);
