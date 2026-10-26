@@ -279,20 +279,34 @@ test('creator owns Space and Realm and stale If-Match updates return 412', async
   );
 });
 
-test('member joins posts reacts and follows Space then leave immediately revokes participation without unfollowing', async () => {
+test('member joins posts reacts and follows Space then settled leave preserves public participation but hides protected threads without unfollowing', async () => {
   const c = await community();
+  await json(await post(c.thread), 201);
+  expect((await get(`${realmPath(c.realm)}/participation`, fixture.member)).status).toBe(204);
   await join(c.realm);
   await json(await post(c.thread), 201);
   await success(await send('PUT', `/v1/threads/${c.thread.id}/reaction`, { kind: 'upvote' }, fixture.member));
   const before = await follow(c.space);
   await json(await send('DELETE', `${realmPath(c.realm)}/membership`, undefined, fixture.member), 202);
-  // No worker drain between leave acknowledgement and the next authorization.
-  await problem(await post(c.thread), 403);
-  await problem(await get(`${realmPath(c.realm)}/participation`, fixture.member), 403, 'not_applicable');
   await driver.settle();
   expect(await json(await get(`${realmPath(c.realm)}/members/me`, fixture.member))).toMatchObject({ state: 'none' });
   expect(await follow(c.space)).toEqual(before);
   expect((await get(`/v1/threads/${c.thread.id}`, fixture.member)).status).toBe(200);
+  await json(await post(c.thread), 201);
+  expect((await get(`${realmPath(c.realm)}/participation`, fixture.member)).status).toBe(204);
+
+  const protectedRealm = await community('protected');
+  await json(await send('POST', `${realmPath(protectedRealm.realm)}/members`, { accountId: fixture.member.id }), 202);
+  await driver.settle();
+  expect((await get(`/v1/threads/${protectedRealm.thread.id}`, fixture.member)).status).toBe(200);
+  await json(await post(protectedRealm.thread), 201);
+  expect((await get(`${realmPath(protectedRealm.realm)}/participation`, fixture.member)).status).toBe(204);
+  await json(await send('DELETE', `${realmPath(protectedRealm.realm)}/membership`, undefined, fixture.member), 202);
+  await driver.settle();
+  const missing = await get(`/v1/threads/${fixture.unknown.thread}`, fixture.member);
+  await same404(await post(protectedRealm.thread), missing);
+  await same404(await get(`${realmPath(protectedRealm.realm)}/participation`, fixture.member), missing);
+  await same404(await get(`/v1/threads/${protectedRealm.thread.id}`, fixture.member), missing);
 });
 
 test('protected Realm non-member sees unknown-equivalent 404 and owner addition enables reading and posting', async () => {
@@ -330,8 +344,8 @@ test('Realm moderator ban removes membership denies join participation and repla
   expect(before.receipts.length).toBe(1);
   await success(await driver.grantModerator(c.realm.realmId, fixture.moderator));
   const path = `${realmPath(c.realm)}/bans/${fixture.member.id}`;
-  await problem(await send('PUT', path, {}, fixture.outsider), 403);
-  await success(await send('PUT', path, {}, fixture.moderator));
+  await problem(await send('PUT', path, { reason: 'Community outcome ban' }, fixture.outsider), 403);
+  await success(await send('PUT', path, { reason: 'Community outcome ban' }, fixture.moderator));
   expect(await json(await get(`${realmPath(c.realm)}/members/me`, fixture.member))).toMatchObject({ state: 'none' });
   await problem(await send('POST', `${realmPath(c.realm)}/membership`, undefined, fixture.member), 403);
   await problem(await get(`${realmPath(c.realm)}/participation`, fixture.member), 403, 'not_applicable');
@@ -568,7 +582,7 @@ test('suspended account receives 401 on every community write with active positi
   await control(command('POST', `${realmPath(protectedRealm.realm)}/members`, { accountId: fixture.outsider.id }));
   await success(await driver.grantModerator(c.realm.realmId, actor));
   await join(c.realm);
-  await control(command('PUT', `${realmPath(c.realm)}/bans/${fixture.member.id}`, {}));
+  await control(command('PUT', `${realmPath(c.realm)}/bans/${fixture.member.id}`, { reason: 'Community outcome ban' }));
   await control(command('DELETE', `${realmPath(c.realm)}/bans/${fixture.member.id}`));
   const doomed = await createThread(c.board);
   await control(command('POST', `/v1/threads/${doomed.id}:takeDown`, { reason: 'spam' }));
