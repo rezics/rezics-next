@@ -20,4 +20,12 @@ export const RATING_EVENTS = {
     { applied: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.rating.source_statistic.changed.v1': Type.Object(
+    {
+      subjectId: Type.String({ pattern: UUID }),
+      source: Type.Literal('vndb'),
+      sourceRecordId: Type.String({ minLength: 1, maxLength: 1024 }),
+    },
+    { additionalProperties: false },
+  ),
 } as const;

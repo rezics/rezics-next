@@ -17,6 +17,7 @@ import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
 import { ratingRoutes } from '../rating/routes.ts';
+import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
@@ -314,14 +315,21 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(collections), realmRoleReader }),
   });
   let ratings: ReturnType<typeof ratingRoutes>;
+  let sourceStatistics: ReturnType<typeof sourceStatisticRoutes>;
   ratings = ratingRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(ratings), realmRoleReader }),
+    access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
   });
   declareKernelWriteRates(ratings);
+  sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
+  });
+  declareKernelWriteRates(sourceStatistics);
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
-  for (const route of ratings.routes) {
+  for (const route of sourceStatistics.routes) {
     const segments = route.path.split('/');
     const shape = segments.map((segment) => (segment.startsWith(':') ? ':' : segment));
     for (const [position, segment] of segments.entries()) {
@@ -344,8 +352,9 @@ export function createKernel(dependencies: KernelDependencies) {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  assertDeclaredResourceTypes(ratings);
-  return ratings as typeof ratings &
+  assertDeclaredResourceTypes(sourceStatistics);
+  return sourceStatistics as typeof sourceStatistics &
+    typeof ratings &
     typeof collections &
     typeof personal &
     typeof community &

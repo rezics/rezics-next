@@ -34,3 +34,42 @@ export const RatingQuestionResponseSchema = t.Object(
   },
   closed,
 );
+
+const sourceScale = t.Object(
+  {
+    min: t.Integer({ minimum: 0, maximum: 4096 }),
+    max: t.Integer({ minimum: 1, maximum: 4096 }),
+  },
+  closed,
+);
+
+export const SourceStatisticInputSchema = strictContentSchema(
+  t.Object(
+    {
+      sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+      scale: sourceScale,
+      mean: t.Number(),
+      count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+      asOf: t.String({ format: 'date' }),
+      licence: t.String({ minLength: 1, maxLength: 1024 }),
+      attribution: t.String({ minLength: 1, maxLength: 2000 }),
+    },
+    closed,
+  ),
+);
+
+export const SourceStatisticResponseSchema = t.Object(
+  {
+    source: t.Literal('vndb'),
+    sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+    scale: sourceScale,
+    mean: t.Number(),
+    count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+    asOf: t.String({ format: 'date' }),
+    licence: t.String({ minLength: 1, maxLength: 1024 }),
+    attribution: t.String({ minLength: 1, maxLength: 2000 }),
+  },
+  closed,
+);
+
+export const SourceStatisticListResponseSchema = t.Array(SourceStatisticResponseSchema);

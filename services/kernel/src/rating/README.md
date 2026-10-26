@@ -96,8 +96,8 @@ changing a vote later never rewrites an old review; the review shows the current
 
 ## HTTP
 
-All rating HTTP routes require an authenticated account with the `rating:vote` action. Vote reads are private to the
-authenticated account; the target and question identify a vote but never select its owner.
+Native rating HTTP routes require an authenticated account with the `rating:vote` action. Vote reads are private to
+the authenticated account; the target and question identify a vote but never select its owner.
 
 - `PUT /v1/subjects/{subjectId}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
   requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
@@ -109,6 +109,12 @@ authenticated account; the target and question identify a vote but never select 
   `scale` contains integer `min`, `max` and `displayStep` values in stored units. The standard question therefore has
   a scale of `0` through `20` in steps of `1`; its display maps two stored units to one point on the `0` through `10`
   scale.
+- `GET /v1/subjects/{subjectId}/source-statistics` returns each imported source statistic with its source, source
+  record id, source scale, mean, count, as-of date, licence and attribution. It requires `rating:vote` and discloses
+  the subject using the same read rules as other rating reads.
+- `PUT /v1/subjects/{subjectId}/source-statistics/{source}` replaces that source's statistic using a strict JSON body
+  containing the source record id, scale, mean, count, as-of date, licence and attribution. It requires an
+  `Idempotency-Key` and `source_statistic:write` on Global Context, held by the importer governance role.
 
 Vote request bodies reject unknown fields and non-integer values. The question scale carries the units used by vote
 requests, so vote routes do not accept or return floating-point vote values. Errors use RFC 9457 problem responses.
