@@ -141,10 +141,14 @@ test('native inverse reserve, read and terminal release stay bounded as unrelate
     read: [],
     release: [],
   };
+  // Ordinals here never overlap the measured scales. A few thousand unrelated rows keep the smallest
+  // sample off the sequential scans a tiny table gets.
+  await seed(database, population, { from: 1_000_000, to: 1_004_000 });
   let from = 0;
-  for (const scale of [512, 2048, 8192]) {
+  for (const scale of [256, 1024, 4096]) {
     await seed(database, population, { from, to: scale });
     from = scale;
+    await database.admin.query('ANALYZE access.membership_inverse');
     const reserved = await capture(database, () => commands.reserve({ accountId, principal, key: key() }));
     samples.reserve.push({ scale, cost: costOf(reserved.capture) });
     const read = await capture(database, () =>

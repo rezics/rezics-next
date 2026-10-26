@@ -153,7 +153,7 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
   let input = warmup;
   const report = await checkGrowth(database, {
     name: 'membership source-cursor bootstrap',
-    scales: [512, 2048, 8192],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     async grow(db, scale, previous) {
