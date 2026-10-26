@@ -131,6 +131,9 @@ test('a proposal is a pending candidate with its references and leaves the adopt
         statement: original,
         release: bundledDigest,
         revision: 1,
+        source: null,
+        retracted: null,
+        retraction: null,
         decision: 'accepted',
         head: 1,
         rank: 'preferred',
@@ -146,6 +149,9 @@ test('a proposal is a pending candidate with its references and leaves the adopt
         },
         release: bundledDigest,
         revision: 2,
+        source: null,
+        retracted: null,
+        retraction: null,
         decision: null,
         head: null,
         rank: null,
@@ -322,8 +328,8 @@ test('revisions and candidates page in order and every command is one revision o
   expect(first.response.status).toBe(200);
   expect(first.body).toEqual({
     revisions: [
-      { revision: 3, kind: 'propose', release: bundledDigest },
-      { revision: 2, kind: 'propose', release: bundledDigest },
+      { revision: 3, kind: 'propose', release: bundledDigest, source: null },
+      { revision: 2, kind: 'propose', release: bundledDigest, source: null },
     ],
     next: expect.any(String),
   });
@@ -331,7 +337,10 @@ test('revisions and candidates page in order and every command is one revision o
     'GET',
     `/v1/subjects/${book.id}/revisions?limit=2&cursor=${encodeURIComponent(first.body.next)}`,
   );
-  expect(rest.body).toEqual({ revisions: [{ revision: 1, kind: 'create', release: bundledDigest }], next: null });
+  expect(rest.body).toEqual({
+    revisions: [{ revision: 1, kind: 'create', release: bundledDigest, source: null }],
+    next: null,
+  });
   const page = await listed(book.id, 'schema:author', '&limit=2');
   expect(page.next).toEqual(expect.any(String));
   const tail = await listed(book.id, 'schema:author', `&limit=2&cursor=${encodeURIComponent(page.next)}`);
