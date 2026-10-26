@@ -1106,9 +1106,14 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       const receipt = await pool.query(
         `SELECT transaction_id::text, position::text, response
          FROM core.receipt
-         WHERE partition_no = $1 AND principal_kind = 'account' AND principal_id = $2
+         WHERE partition_no = $1 AND principal_kind = $4 AND principal_id = $2
            AND command_kind = 'content.author-erasure' AND idempotency_key = $3`,
-        [partition, accountId(persona), key],
+        [
+          partition,
+          persona === 'anonymous' ? '00000000-0000-0000-0000-000000000000' : accountId(persona),
+          key,
+          persona === 'anonymous' ? 'anonymous' : 'account',
+        ],
       );
       const operation = await pool.query(
         `SELECT operation.operation_id::text, operation.native_workflow_id,
