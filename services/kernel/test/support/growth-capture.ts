@@ -94,7 +94,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
 
   client.query = ((...args: Parameters<PoolClient['query']>) => {
     const text = statementText(args[0]);
-    if (text !== undefined) state.active?.statements.push(text);
+    if (explain && text !== undefined) state.active?.statements.push(text);
     if (state.seeding) state.seeding.statements++;
     if (explain) {
       if (text === undefined || !ENDS_TRANSACTION.test(text)) {
@@ -112,7 +112,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
     if (typeof callback === 'function') {
       const wrapped = (error: unknown, result?: unknown, ...rest: unknown[]): unknown => {
         done(Boolean(error), result);
-        return callback(error, result, ...rest);
+        return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
       };
       return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
     }

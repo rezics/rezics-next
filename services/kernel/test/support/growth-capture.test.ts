@@ -129,6 +129,16 @@ test('records nothing outside a capture and refuses overlapping captures', async
   expect(result.capture.plans).toHaveLength(1);
 });
 
+test('a capture records the statements of instrumented pools only, not admin', async () => {
+  const database = db!;
+  const result = await capture(database, async () => {
+    await database.admin.query('SELECT 64 AS seeding');
+    await withConnection(database.pool, (client) => client.query('SELECT 65 AS application'));
+  });
+  expect(result.capture.statements).toEqual(['SELECT 65 AS application']);
+  expect(result.capture.plans).toHaveLength(1);
+});
+
 async function explainThreshold(client: Pick<PoolClient, 'query'>): Promise<string> {
   const result = await client.query<{
     'auto_explain.log_min_duration': string;
