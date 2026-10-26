@@ -59,6 +59,8 @@
   "editor_url": "URL",
   "error_heading": "エラーが発生しました",
   "error_message": "もう一度お試しください。",
+  "home_continue_heading": "続きから",
+  "home_continue_progress": "進捗",
   "home_heading": "大切なことを、もっと明確に",
   "library_account_deleted": "削除されたアカウント",
   "library_change_state": "状態",

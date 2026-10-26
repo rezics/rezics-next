@@ -337,6 +337,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   `pages read the signed-in state without contacting Auth or refreshing tokens` asserts zero A;
   `tests/request-cost.test.ts`: `home page stays within its bound as s grows` for D/K
 
+### Home Continue row
+
+- **Touches:** for a signed-in visitor, one `GET /v1/libraryEntries?state=in_progress&view=FULL` with a limit of 6,
+  started together with the home page read; none for a signed-out visitor.
+- **Bound:** signed in, 1 more K per home view returning at most 6 entries with their embedded subjects, whatever the
+  size of the library, and 1 more D for the credential the read sends; signed out, 0. No R or A beyond the home page's
+  existing session read; no per-entry reads.
+- **Growth check:** `tests/home-continue-cost.test.ts`: the home page reads the library once per view whatever the size of the library
+
 ### Board page (`/<locale>/boards/<id>`)
 
 - **Touches:** Root preferences/D and public board plus thread-page K reads; preserve kernel thread order and pass

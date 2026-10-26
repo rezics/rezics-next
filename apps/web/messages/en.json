@@ -59,6 +59,8 @@
   "editor_url": "URL",
   "error_heading": "Something went wrong",
   "error_message": "Please try again.",
+  "home_continue_heading": "Continue",
+  "home_continue_progress": "Progress",
   "home_heading": "A clearer view of what matters",
   "library_account_deleted": "Deleted account",
   "library_change_state": "State",

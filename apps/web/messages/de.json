@@ -59,6 +59,8 @@
   "editor_url": "URL",
   "error_heading": "Ein Fehler ist aufgetreten",
   "error_message": "Bitte versuchen Sie es erneut.",
+  "home_continue_heading": "Weitermachen",
+  "home_continue_progress": "Fortschritt",
   "home_heading": "Klarer sehen, was zählt",
   "library_account_deleted": "Gelöschtes Konto",
   "library_change_state": "Status",

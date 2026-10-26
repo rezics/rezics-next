@@ -110,14 +110,16 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
   return viewerCredential(request);
 }
 
-async function readEntryPage(
+/** One FULL page of the viewer's entries, newest update first, optionally of one state and shorter than a list page. */
+export async function readEntryPage(
   client: KernelClient,
   authorization: string,
   cursor: string | undefined,
   state: LibraryEntryState | undefined,
+  limit?: number,
 ) {
   const result = await client.libraryEntries.get({
-    query: { ...libraryListQuery(cursor), ...(state ? { state } : {}) },
+    query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}) },
     headers: { authorization },
   });
   return readLibraryResult(result);

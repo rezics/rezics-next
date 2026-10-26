@@ -1,17 +1,24 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { kernelClient } from '../kernel/client';
-import { loadRoutePage, RoutePage, routePageJsonLd } from '../features/pages/route';
+import { RoutePage, routePageJsonLd } from '../features/pages/route';
+import { ContinueRow } from '../library/continue';
+import { loadHome } from '../library/continue-read';
+import type { SessionEnv } from '../session/client';
 import { PageHeading } from '../shell/page-heading';
 
-const loadHome = createServerFn({ method: 'GET' }).handler(async () => loadRoutePage(kernelClient(), '/'));
+const readHome = createServerFn({ method: 'GET' }).handler(async () =>
+  loadHome(kernelClient(), getRequest(), env as Partial<SessionEnv>),
+);
 
 export const Route = createFileRoute('/')({
-  loader: () => loadHome(),
+  loader: () => readHome(),
   head: ({ loaderData }) => {
-    const jsonLd = loaderData?.kind === 'page' ? routePageJsonLd(loaderData.page, getLocale()) : undefined;
+    const jsonLd = loaderData?.page.kind === 'page' ? routePageJsonLd(loaderData.page.page, getLocale()) : undefined;
     return {
       meta: [{ title: m.home_heading() }],
       ...(jsonLd ? { scripts: [{ type: 'application/ld+json', children: jsonLd }] } : {}),
@@ -21,7 +28,7 @@ export const Route = createFileRoute('/')({
 });
 
 function Home() {
-  const loaded = Route.useLoaderData();
+  const { page: loaded, continue: resume } = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
   if (loaded.kind === 'missing') return <PageHeading>{m.home_heading()}</PageHeading>;
   return (
@@ -31,6 +38,7 @@ function Home() {
       heading={m.home_heading()}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
+      {...(resume.length > 0 ? { personal: <ContinueRow entries={resume} locale={getLocale()} /> } : {})}
       messages={{
         unknown: m.subject_value_unknown(),
         none: m.subject_value_none(),
