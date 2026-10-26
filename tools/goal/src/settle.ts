@@ -8,7 +8,7 @@ import type { RunningWorker } from './launch.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
 
-/** Await the OS child notification. No model, interval, or sleep loop participates in settlement. */
+/** Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. */
 export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'attempt' | 'exited'>, landing: LandingQueue, startTrain: () => Promise<void> = async () => {}): Promise<void> {
   const ref = worker.attempt;
   let code: number | null;

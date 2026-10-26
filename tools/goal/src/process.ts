@@ -47,6 +47,20 @@ export async function waitForProcessGroup(identity: ProcessIdentity): Promise<vo
     await new Promise<void>(resolve => setTimeout(resolve, 1000));
   }
 }
+/** What the launch wrapper records when the worker CLI ends; a missing file means the wrapper itself was killed. */
+export type WorkerExit = { code: number | null; signal: NodeJS.Signals | null };
+export const workerExitPath = (logPath: string): string => `${logPath}.exit`;
+export function readWorkerExit(logPath: string): WorkerExit {
+  try {
+    const value = JSON.parse(readFileSync(workerExitPath(logPath), 'utf8')) as { code?: unknown; signal?: unknown };
+    return { code: Number.isInteger(value.code) ? value.code as number : null, signal: typeof value.signal === 'string' ? value.signal as NodeJS.Signals : null };
+  } catch { return { code: null, signal: null }; }
+}
+/** Wait until a worker's wrapper has exited, then read the exit it recorded just before. */
+export async function waitForWorkerExit(identity: ProcessIdentity | null, logPath: string): Promise<WorkerExit> {
+  if (identity) await waitForProcess(identity);
+  return readWorkerExit(logPath);
+}
 /** Linux pidfds let a restarted controller wait for non-children without polling or a model. */
 export async function waitForProcess(identity: ProcessIdentity, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted || !sameProcess(identity)) return;

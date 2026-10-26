@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
-import { liveGroups, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
+import { liveGroups, readWorkerExit, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcessGroup, waitForWorkerExit } from './process.ts';
 import { markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
@@ -260,7 +260,7 @@ export class WorkerJob implements GateOutcomeSink {
         follows.push((async () => {
           try {
             if (attempt.process) await waitForProcessGroup(attempt.process);
-            await this.followAttempt({ attempt, exited: Promise.resolve({ code: null, signal: null }) });
+            await this.followAttempt({ attempt, exited: Promise.resolve(readWorkerExit(attempt.logPath)) });
           } catch (error) { await this.endAsEnvironment(ref, error, true); }
           finally { lease.release(); }
         })());
@@ -493,9 +493,7 @@ export class WorkerJob implements GateOutcomeSink {
     if (this.tasks.store.events(taskId).some(event => event.attempt === ref.attempt && event.kind === 'landing-requested')) { await this.afterSettle(); return; }
     const attempt = this.tasks.store.attempt(ref);
     if (!['running', 'exited'].includes(attempt.state)) throw new Error('only a running or exited attempt can be recovered');
-    const exited = attempt.process ? waitForProcess(attempt.process).then(() => ({ code: null, signal: null }))
-      : Promise.resolve({ code: null, signal: null });
-    await this.follow({ attempt, exited });
+    await this.follow({ attempt, exited: waitForWorkerExit(attempt.process, attempt.logPath) });
   }
   async consultTask(taskId: string): Promise<void> {
     const task = this.tasks.store.task(taskId), ref = { taskId, attempt: task.currentAttempt };

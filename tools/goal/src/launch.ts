@@ -1,10 +1,10 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { spawnSync, type ChildProcess } from 'node:child_process';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { NO_COMPILE_CACHE } from './merge.ts';
-import { processIdentity } from './process.ts';
+import { processIdentity, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 
@@ -72,35 +72,63 @@ export function workerPrompt(task: Task, evidence: string | undefined, consultat
 export function attemptEnvironment(task: Pick<Task, 'id' | 'base'>, attempt: Pick<Attempt, 'attempt'>): Record<string, string> {
   return { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), KERNEL_CHECK_AFFECTED: task.base };
 }
-export type RunningWorker = { child: ChildProcess; exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>; attempt: Attempt };
+export type RunningWorker = { child?: ChildProcess; exited: Promise<WorkerExit>; attempt: Attempt };
+/**
+ * A manager's tool sandbox kills the whole process tree of the command that launched a worker, and a new process
+ * group does not leave that tree. The wrapper forks twice, so the worker is reparented away from its launcher, and
+ * becomes a session leader. The intermediate process publishes the wrapper's pid before it exits. When the CLI ends,
+ * the wrapper records its exit code or signal beside the run log.
+ */
+const WRAPPER = `import os,sys,json,signal,subprocess
+exit_path,pid_path=sys.argv[1:3]
+r,w=os.pipe()
+if os.fork():
+ os.close(w)
+ pid=os.read(r,32)
+ if not pid: sys.exit(1)
+ open(pid_path,'w').write(pid.decode())
+ os._exit(0)
+os.close(r)
+os.setsid()
+os.write(w,str(os.getpid()).encode())
+os.close(w)
+code,sig=None,None
+try:
+ status=subprocess.Popen(sys.argv[3:]).wait()
+ if status<0: sig=signal.Signals(-status).name
+ else: code=status
+except OSError:
+ code=127
+open(exit_path+'.tmp','w').write(json.dumps({'code':code,'signal':sig}))
+os.rename(exit_path+'.tmp',exit_path)
+`;
 export async function launch(store: WorkerStore, task: Task, attempt: Attempt, pool: Pool, prompt: string, codex?: Settings['codex']): Promise<RunningWorker> {
   store.assertCurrent(attempt);
   mkdirSync(dirname(attempt.logPath), { recursive: true });
+  const exitPath = workerExitPath(attempt.logPath), pidPath = `${attempt.logPath}.pid`;
+  for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
   const out = openSync(attempt.logPath, 'w'), err = openSync(`${attempt.logPath}.err`, 'w');
   const [program, args] = launchCommand({ profile: attempt.profile, pool, worktree: task.worktree, prompt, logPath: attempt.logPath, ...(codex ? { codex } : {}),
     ...(task.taskClass === 'research' ? { readOnly: true, research: true } : {}) });
-  let child: ChildProcess;
+  const env = workerEnvironment(pool, attemptEnvironment(task, attempt));
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
-    child = store.write(attempt, () => {
+    store.write(attempt, () => {
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
-      const started = spawn(program, args, { cwd: task.worktree, detached: true, stdio: ['ignore', out, err], env: workerEnvironment(pool, {
-        ...attemptEnvironment(task, attempt),
-      }) });
-      const identity = started.pid ? processIdentity(started.pid) : null;
+      // The wrapper cannot report a missing program to the launcher, so refuse it here.
+      if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree })) throw new Error(`Worker CLI not found: ${program}`);
+      const started = spawnSync('python3', ['-c', WRAPPER, exitPath, pidPath, program, ...args], { cwd: task.worktree, stdio: ['ignore', out, err], env });
+      if (started.error) throw started.error;
+      const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
+      const identity = processIdentity(pid);
+      if (started.status !== 0 || !identity) throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
       store.updateAttempt(attempt, current => { current.driver = driver; current.process = identity; current.state = 'running'; });
       store.updateTask(attempt, current => { current.state = 'running'; });
-      return started;
     });
   } finally { closeSync(out); closeSync(err); }
-  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
-    child.once('error', reject); child.once('close', (code, signal) => resolve({ code, signal }));
-  });
-  void exited.catch(() => {});
-  // Register exit listeners before awaiting spawn; even a very short fake CLI is observable.
-  await new Promise<void>((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
   const saved = store.attempt(attempt);
-  if (!saved.process && child.pid) store.updateAttempt(attempt, current => { current.process = processIdentity(child.pid!); });
-  return { child, exited, attempt: store.attempt(attempt) };
+  const exited = waitForWorkerExit(saved.process, attempt.logPath);
+  void exited.catch(() => {});
+  return { exited, attempt: saved };
 }
