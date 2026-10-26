@@ -12,8 +12,10 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
+import { realmParticipationReadableAt, type RealmParticipationCheck } from '../community/participation.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { REACTION_KINDS } from './events.ts';
+import { ContentNotFoundError } from './commands.ts';
 import {
   mediaParentBoard,
   mediaParentSnapshot,
@@ -21,7 +23,6 @@ import {
   realmParticipationMatches,
   type RealmParticipationProof,
 } from './media-parent.ts';
-import type { RealmParticipationCheck } from '../community/participation.ts';
 import type { RequestContext } from './model.ts';
 import slotStatement from './reaction-slot.sql';
 import targetStatement from './reaction-target.sql';
@@ -91,8 +92,8 @@ async function mutate(
       );
       const thread = rows[0],
         last = rows.at(-1);
+      if (!thread) throw new ContentNotFoundError();
       if (
-        !thread ||
         thread.kind !== 'thread' ||
         !thread.board_id ||
         rows.length < 2 ||
@@ -176,6 +177,11 @@ async function mutate(
           attempt.time,
           context.deadline,
         );
+        if (
+          boardRealmId !== null &&
+          realmParticipationReadableAt(attempt.time, boardRealmId) === false
+        )
+          throw new ContentNotFoundError();
         if (!proof.allowed) throw new GrantDeniedError();
         participation.set(attempt.time, proof);
       }

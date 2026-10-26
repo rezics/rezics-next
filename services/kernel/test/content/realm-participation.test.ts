@@ -41,6 +41,7 @@ let service: AuthService;
 let kernel: ReturnType<typeof createKernel>;
 let work: WorkClient;
 let worker: Bun.Subprocess | undefined;
+let kernelWorkerEnvironment: Record<string, string>;
 let governance: Person;
 let owner: Person;
 let moderator: Person;
@@ -321,7 +322,7 @@ beforeAll(async () => {
   // Auth's current consent, served over HTTPS from this process: the worker restores initiators from it.
   const consentReader = createCurrentConsentReader({ database: authPool });
   consent = await startConsentServer(async (input) => (await consentReader.readCurrentConsent(input))?.scopes ?? null);
-  const workerEnv = {
+  kernelWorkerEnvironment = {
     DATABASE_URL: url,
     KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
     KERNEL_SESSION_KEYS: `1:${Buffer.from(sessionKey).toString('base64url')}`,
@@ -340,7 +341,7 @@ beforeAll(async () => {
     ...consent.env,
     OPENSEARCH_URL: '',
   };
-  worker = await startKernelWorker(workerEnv);
+  worker = await startKernelWorker(kernelWorkerEnvironment);
   work = await createWorkClient(url);
   kernel = createKernel({
     pool,
@@ -442,6 +443,26 @@ afterAll(async () => {
 
 function contentBody(text: string) {
   return { body: fromPlainText(text), licence: 'MIT', subjectIds: [] };
+}
+
+function problemSnapshot(result: CallResult) {
+  const { request_id: _requestId, ...body } = result.value;
+  return {
+    status: result.response.status,
+    headers: [...result.response.headers.entries()].sort(([left], [right]) => left.localeCompare(right)),
+    body,
+  };
+}
+
+async function expectUnknownEquivalent(
+  targetRequest: Promise<CallResult>,
+  missingRequest: Promise<CallResult>,
+  expectedStatus = 404,
+) {
+  const [target, missing] = await Promise.all([targetRequest, missingRequest]);
+  expect(target.response.status).toBe(expectedStatus);
+  expect(missing.response.status).toBe(expectedStatus);
+  expect(problemSnapshot(target)).toEqual(problemSnapshot(missing));
 }
 
 test.serial('public Realm participants write content while a banned account keeps public reads', async () => {
@@ -556,6 +577,147 @@ test.serial('protected Realm members write and anonymous callers and nonmembers 
   );
   await expectAnonymousAndNonmemberHidden(`/v1/threads/${threadId}`, `/v1/threads/${newId(routeOf(threadId)!)}`);
   await expectAnonymousAndNonmemberHidden(`/v1/posts/${postId}`, `/v1/posts/${newId(routeOf(postId)!)}`);
+});
+
+test.serial('protected Realm content writes hide unreadable targets and owner addition enables them', async () => {
+  const created = await call('POST', '/v1/threads', {
+    bearer: protectedMember.bearer,
+    key: crypto.randomUUID(),
+    body: {
+      title: 'Protected thread for write concealment',
+      ...contentBody('A member creates a thread for the write concealment check.'),
+      boardId: protectedBoard.id,
+      visibility: 'published',
+    },
+  });
+  expect(created.response.status).toBe(201);
+  const threadId = created.value.thread.id as string;
+  const unknownBoardId = newId(protectedBoard.route);
+  const unknownThreadId = newId(routeOf(threadId)!);
+
+  await expectUnknownEquivalent(
+    call('POST', '/v1/threads', {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: {
+        title: 'Outsider thread attempt',
+        ...contentBody('An outsider tries to create a thread.'),
+        boardId: protectedBoard.id,
+        visibility: 'published',
+      },
+    }),
+    call('POST', '/v1/threads', {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: {
+        title: 'Unknown board thread attempt',
+        ...contentBody('An outsider tries to create a thread on an unknown board.'),
+        boardId: unknownBoardId,
+        visibility: 'published',
+      },
+    }),
+  );
+  await expectUnknownEquivalent(
+    call('POST', `/v1/threads/${threadId}/posts`, {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: contentBody('An outsider replies to a protected thread.'),
+    }),
+    call('POST', `/v1/threads/${unknownThreadId}/posts`, {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: contentBody('An outsider replies to an unknown thread.'),
+    }),
+  );
+  await expectUnknownEquivalent(
+    call('PUT', `/v1/threads/${threadId}/reaction`, {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: { kind: 'like' },
+    }),
+    call('PUT', `/v1/threads/${unknownThreadId}/reaction`, {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: { kind: 'like' },
+    }),
+  );
+  await expectUnknownEquivalent(
+    call('POST', '/v1/reports', {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: { target: { kind: 'thread', id: threadId }, reason: 'spam' },
+    }),
+    call('POST', '/v1/reports', {
+      bearer: protectedNonmember.bearer,
+      key: crypto.randomUUID(),
+      body: { target: { kind: 'thread', id: unknownThreadId }, reason: 'spam' },
+    }),
+  );
+
+  const publiclyReadable = await call('POST', '/v1/threads', {
+    bearer: member.bearer,
+    key: crypto.randomUUID(),
+    body: {
+      title: 'Public thread for banned writer',
+      ...contentBody('A member creates a public thread for the ban check.'),
+      boardId: publicBoard.id,
+      visibility: 'published',
+    },
+  });
+  expect(publiclyReadable.response.status).toBe(201);
+  const publicThreadId = publiclyReadable.value.thread.id as string;
+  expect((await call('GET', `/v1/threads/${publicThreadId}`, { bearer: banned.bearer })).response.status).toBe(200);
+  const bannedReply = await call('POST', `/v1/threads/${publicThreadId}/posts`, {
+    bearer: banned.bearer,
+    key: crypto.randomUUID(),
+    body: contentBody('A banned member cannot reply in a readable Realm.'),
+  });
+  expect(bannedReply.response.status).toBe(403);
+  worker = await startKernelWorker(kernelWorkerEnvironment);
+  try {
+    await addProtectedMember(protectedRealm, protectedNonmember);
+  } finally {
+    await stopKernelWorker(worker);
+    worker = undefined;
+  }
+  const admittedThread = await call('POST', '/v1/threads', {
+    bearer: protectedNonmember.bearer,
+    key: crypto.randomUUID(),
+    body: {
+      title: 'Owner-added member thread',
+      ...contentBody('An owner-added member can create a thread.'),
+      boardId: protectedBoard.id,
+      visibility: 'published',
+    },
+  });
+  expect(admittedThread.response.status).toBe(201);
+  expect(
+    (
+      await call('POST', `/v1/threads/${threadId}/posts`, {
+        bearer: protectedNonmember.bearer,
+        key: crypto.randomUUID(),
+        body: contentBody('An owner-added member can reply.'),
+      })
+    ).response.status,
+  ).toBe(201);
+  expect(
+    (
+      await call('PUT', `/v1/threads/${threadId}/reaction`, {
+        bearer: protectedNonmember.bearer,
+        key: crypto.randomUUID(),
+        body: { kind: 'like' },
+      })
+    ).response.status,
+  ).toBe(200);
+  expect(
+    (
+      await call('POST', '/v1/reports', {
+        bearer: protectedNonmember.bearer,
+        key: crypto.randomUUID(),
+        body: { target: { kind: 'thread', id: threadId }, reason: 'spam' },
+      })
+    ).response.status,
+  ).toBe(201);
 });
 
 test.serial('a content write has constant participation cost as unrelated Realms, members and bans grow', async () => {

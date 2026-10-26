@@ -13,6 +13,23 @@ export type RealmParticipationCheck = (
   time?: AuthoritativeTime,
 ) => Promise<boolean>;
 
+const readabilityByTime = new WeakMap<AuthoritativeTime, Map<string, boolean>>();
+
+function rememberReadability(time: AuthoritativeTime | undefined, realmId: string, readable: boolean): void {
+  if (!time) return;
+  let realms = readabilityByTime.get(time);
+  if (!realms) {
+    realms = new Map();
+    readabilityByTime.set(time, realms);
+  }
+  realms.set(realmId, readable);
+}
+
+/** Returns the protected Realm read decision observed by a command at its T. */
+export function realmParticipationReadableAt(time: AuthoritativeTime, realmId: string): boolean | undefined {
+  return readabilityByTime.get(time)?.get(realmId);
+}
+
 /** Checks participation and the independent Realm read anchor at one T.
  * The participation action uses its exact denial check. A protected Realm also
  * requires realm:read, while the single Realm head read supplies public eligibility.
@@ -49,9 +66,19 @@ export function createRealmParticipationCheck(input: {
       context,
     );
     const checkedTime = time ?? commandTime(client) ?? (await mintReadTime(client, input.clock));
-    if (!(await participationCheck(client, checkedTime))) return false;
-    if (visibility === 'public') return true;
-    if (visibility !== 'protected') return false;
+    const participates = await participationCheck(client, checkedTime);
+    if (visibility === 'public') {
+      rememberReadability(time, realmId, true);
+      return participates;
+    }
+    if (visibility !== 'protected') {
+      rememberReadability(time, realmId, false);
+      return false;
+    }
+    // The standalone participation route performs its own ordinary read after
+    // a denial. Commands already have T and need the same read decision here
+    // to conceal an unreadable protected Realm before choosing 404 or 403.
+    if (!participates && !time) return false;
 
     const readEligibility = createResourcePublicEligibility({
       resource,
@@ -70,7 +97,9 @@ export function createRealmParticipationCheck(input: {
       { ...resource, eligibility: readEligibility },
       context,
     );
-    return readCheck(client, checkedTime);
+    const readable = await readCheck(client, checkedTime);
+    rememberReadability(time, realmId, readable);
+    return participates && readable;
   };
 }
 

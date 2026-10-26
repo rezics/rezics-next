@@ -288,7 +288,35 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  return moderationRoutes(
+  app.onBeforeHandle('local', async ({ request, body, actor, job, admission }) => {
+    if (
+      request.method !== 'POST' ||
+      new URL(request.url).pathname !== '/v1/reports'
+    )
+      return;
+    const target = (body as { target?: { kind?: unknown; id?: unknown } } | null)?.target;
+    if (
+      !target ||
+      (target.kind !== 'board' && target.kind !== 'thread' && target.kind !== 'post') ||
+      typeof target.id !== 'string' ||
+      routeOf(target.id) === null
+    )
+      return;
+
+    await admission.run('normal', job, async () => {
+      const context = { actor, deadline: job.deadline };
+      if (target.kind === 'board') {
+        if (!(await readRealmBoard(dependencies, target.id, context)).value) throw new ProblemError('not_found');
+      } else if (target.kind === 'thread') {
+        if (!(await readThread(dependencies, target.id, context)).value) throw new ProblemError('not_found');
+      } else {
+        const threadId = await containingThread(target.id, context);
+        if (!(await readPost(dependencies, threadId, target.id, context)).value) throw new ProblemError('not_found');
+      }
+    });
+  });
+
+  const routes = moderationRoutes(
     reportRoutes(
       documentRoutes(
         mediaImportRoutes(
@@ -821,6 +849,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         set.status = 204;
       },
     );
+
+  return routes;
 }
 
 async function writeReaction(

@@ -22,7 +22,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
-import type { RealmParticipationCheck } from '../community/participation.ts';
+import { realmParticipationReadableAt, type RealmParticipationCheck } from '../community/participation.ts';
 import { readPartition } from '../partition/partition.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
@@ -233,6 +233,26 @@ function document(body: unknown, licence: string, subjectIds: readonly (string |
   return validateContentDocument({ body, licence, subjectIds });
 }
 
+async function prepareContentParticipation(
+  dependencies: ContentCommandDependencies,
+  actor: Actor,
+  realmId: string | null,
+  time: AuthoritativeTime,
+  deadline: number,
+): Promise<RealmParticipationProof> {
+  const proof = await prepareRealmParticipation(
+    dependencies.pool,
+    dependencies.realmParticipation,
+    actor,
+    realmId,
+    time,
+    deadline,
+  );
+  if (realmId !== null && realmParticipationReadableAt(time, realmId) === false)
+    throw new ContentNotFoundError();
+  return proof;
+}
+
 /** Private read checks compose Access. No grant rows or ownership policy are
  * interpreted by content, and no connection is held during evidence preparation. */
 function containerAuthorization(
@@ -322,9 +342,8 @@ function containerAuthorization(
             const board = await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, (client) =>
               mediaParentBoard(client, boardId),
             );
-            const proof = await prepareRealmParticipation(
-              dependencies.pool,
-              dependencies.realmParticipation,
+            const proof = await prepareContentParticipation(
+              dependencies,
               actor,
               board.realm_id,
               attempt.time,
@@ -495,12 +514,16 @@ export async function createThread(
         deadline: context.deadline,
       });
       if (dependencies.realmParticipation) {
-        const current = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
-          mediaParentBoard(client, board.id),
-        );
-        const proof = await prepareRealmParticipation(
-          dependencies.pool,
-          dependencies.realmParticipation,
+        const current = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, async (client) => {
+          try {
+            return await mediaParentBoard(client, board.id);
+          } catch (error) {
+            if (error instanceof GrantDeniedError) throw new ContentNotFoundError();
+            throw error;
+          }
+        });
+        const proof = await prepareContentParticipation(
+          dependencies,
           actor,
           current.realm_id,
           attempt.time,
