@@ -263,6 +263,8 @@ async function applicationHost(): Promise<RpcHost> {
       },
     });
     const app = createKernel({
+      // Match the shared test kernel's request deadline.
+      requestDeadlineMs: 30_000,
       pool: f.database.pool,
       access: f.access,
       routeKey: f.routeKey,
