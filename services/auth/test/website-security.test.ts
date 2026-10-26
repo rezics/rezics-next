@@ -51,6 +51,9 @@ beforeAll(async () => {
     },
     siteActions: new Map(scopes.filter((s) => s.includes(':')).map((s) => [s, { anonymous: false }])),
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         if (!available) throw new Error('Unavailable');
         return accounts.get(id) ?? null;

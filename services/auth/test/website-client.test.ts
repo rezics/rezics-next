@@ -50,6 +50,9 @@ beforeAll(async () => {
     secret: 'isolated-website-issuer-secret-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(accountId) {
         return accounts.get(accountId) ?? null;
       },

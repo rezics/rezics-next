@@ -115,16 +115,13 @@ function translate(account: Account | null, mode: ReadMode = 'open'): AccessAcco
   };
 }
 
-/** Cleanup after a barrier reads every account the barrier fenced, automated accounts included. */
-export type FencedAccountPort = { readFencedAccount(accountId: string): Promise<AccessAccount | null> };
-
 /** Production Auth/Access seam. Reads use Access's existing account anchor; no local
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
 export function createAuthBindings(
   config: { pool: Pool; access?: Access } & AuthBindingCapabilities,
-): PasskeyTrustedAccessPorts & FencedAccountPort {
+): PasskeyTrustedAccessPorts {
   const {
     pool,
     verifyPendingIdentity,

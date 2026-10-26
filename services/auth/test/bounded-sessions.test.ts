@@ -142,6 +142,9 @@ if (process.env.NODE_ENV !== 'production') {
       secret,
       signing: { activeKid: jwk.kid, privateKeys: [jwk] },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         async readAccount(id) {
           if (unavailable) throw new Error('Access unavailable');
           return accounts.get(id) ?? null;
@@ -377,6 +380,9 @@ if (process.env.NODE_ENV !== 'production') {
         },
       },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         async readAccount(id) {
           const account = accounts.get(id);
           return account ? { ...account } : null;

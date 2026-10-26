@@ -6,6 +6,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { AuthenticationError } from '../../src/request/access.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -70,7 +71,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         audience,
         secret: 'local-issuer-test-secret-with-at-least-32-bytes',
         signing: { activeKid: 'local', privateKeys: [key] },
-        trustedAccess: {
+        trustedAccess: trustedAccessPorts({
           async readAccount(id) {
             const account = await readAccount(pool, route, id);
             return (
@@ -89,7 +90,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
             approved = false;
             return { accountId: person };
           },
-        },
+        }),
       });
       await pool.query(
         `INSERT INTO access.account (route,account_id,kind,state,transaction_id)

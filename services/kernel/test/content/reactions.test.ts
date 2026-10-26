@@ -11,6 +11,7 @@ import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 export const request = () => ({
   idempotencyKey: crypto.randomUUID(),
@@ -46,7 +47,7 @@ export async function reactionFixture() {
     audience: 'https://api.rezics.test',
     secret: 'reactions-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -63,7 +64,7 @@ export async function reactionFixture() {
         if (!approvals.delete(reference)) throw new Error('Missing fixture approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   const access = createAccess({

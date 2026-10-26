@@ -236,6 +236,9 @@ beforeAll(async () => {
       },
     },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         if (outage) throw new Error('Access unavailable');
         const account = fence ? null : (accounts.get(id) ?? null);
@@ -574,6 +577,7 @@ test('approved credential effects toggle independent automated signin and enforc
   const noPorts = await createAuthService({
     ...options,
     trustedAccess: {
+      readFencedAccount: options.trustedAccess.readFencedAccount,
       readAccount: options.trustedAccess.readAccount,
       authorizeProvisioning: options.trustedAccess.authorizeProvisioning,
     },

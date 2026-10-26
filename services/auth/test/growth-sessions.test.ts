@@ -126,6 +126,9 @@ async function setup(name: string, axes: readonly Axis[]) {
       secret,
       signing: { activeKid: signingKid, privateKeys: [{ ...privateJwk, kid: signingKid }] },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         async readAccount(accountId) {
           const account = accounts.get(accountId);
           // Auth compares the epoch it read before the floor hook with the receipt.

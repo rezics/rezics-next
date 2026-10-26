@@ -18,6 +18,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const action = 'source_fence:read';
 const routeKey = new Uint8Array(32).fill(7);
@@ -64,7 +65,7 @@ beforeAll(async () => {
     audience: 'https://api.rezics.test',
     secret: 'source-fence-test-only-secret-at-least-32-bytes',
     signing: { activeKid: signing.kid, privateKeys: [signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -81,7 +82,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   for (const clientId of ['bulk-import', 'governance'])
     await auth.internal.registerClient({ clientId, firstParty: true, scopes: [action] });

@@ -14,6 +14,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const issuer = 'https://realm-boards.auth.test';
 const audience = 'https://realm-boards.api.test';
@@ -236,7 +237,7 @@ beforeAll(async () => {
     audience,
     secret: 'realm-boards-auth-persistent-secret-32bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(db.pool, routeOf(id)!, id);
         return account
@@ -253,7 +254,7 @@ beforeAll(async () => {
         if (!provisioned.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   const rateLimit = createWriteRateLimiter({
     secret: 'realm-boards-private-write-rate-secret-32bytes',

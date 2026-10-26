@@ -57,6 +57,9 @@ async function service(db: GrowthDatabase) {
     secret: 'natural-reduction-secret-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (accountId) => ({
         accountId,
         kind: 'actor',

@@ -94,6 +94,9 @@ beforeAll(async () => {
     secret: 'proof-only-persistent-secret-at-least-32-bytes',
     signing: { activeKid: 'proof-key', privateKeys: [{ ...(await exportJWK(key.privateKey)), kid: 'proof-key' }] },
     trustedAccess: {
+      async readFencedAccount(id: string) {
+        return this.readAccount(id);
+      },
       async readAccount(id: string) {
         const row = await readAccount(pool, routeOf(id)!, id);
         return (

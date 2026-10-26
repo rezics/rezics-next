@@ -155,6 +155,9 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
       secret: 'native-erasure-growth-secret-at-least-32-bytes',
       signing: { activeKid: jwk.kid, privateKeys: [jwk] },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         async readAccount(id) {
           accessReads.push(id);
           return { accountId: id, kind: 'actor', state: 'deleted', fenced: true, automated: false, authnEpoch: 2 };

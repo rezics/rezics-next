@@ -19,6 +19,7 @@ import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const db = await openGrowthDatabase();
 let authDatabase: ReturnType<typeof testDatabase>;
@@ -124,7 +125,7 @@ beforeAll(async () => {
     audience: 'https://api.example.test',
     secret: 'operations-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(accountId) {
         const account = await readAccount(db.pool, routeOf(accountId)!, accountId);
         return (
@@ -142,7 +143,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'operations-test', firstParty: true, scopes: actions });
   access = createAccess({

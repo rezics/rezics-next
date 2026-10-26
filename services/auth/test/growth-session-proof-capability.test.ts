@@ -37,6 +37,9 @@ test('checkGrowth live proof signing uses constant native evidence at 1x/8x/64x;
         privateKeys: [{ ...(await exportJWK(key.privateKey)), kid: 'growth-proof' }],
       },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         async readAccount(id) {
           return (
             (

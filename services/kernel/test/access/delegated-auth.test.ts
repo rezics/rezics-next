@@ -12,6 +12,7 @@ import { createDelegationCommands, readAssignment } from '../../src/access/deleg
 import { runCommand, IdempotencyConflictError } from '../../src/command/command.ts';
 import { accessCheck, accessCommandAuthorization, AuthenticationError } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -146,7 +147,7 @@ beforeAll(async () => {
     audience,
     secret: 'delegation-test-secret-at-least-thirty-two-characters',
     signing: { activeKid: key.kid!, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(reader, routeOf(id)!, id);
         return (
@@ -171,7 +172,7 @@ beforeAll(async () => {
           return readAssignment(reader, requestedBy, assignedActorId);
         },
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });

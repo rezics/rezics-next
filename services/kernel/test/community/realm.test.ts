@@ -12,6 +12,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { accessCheck, type AccountActor, type AccessContext } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
@@ -54,7 +55,7 @@ async function fixture(pool: Pool, admin: Pool) {
     audience: 'https://community.api.test',
     secret: 'community-test-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -71,7 +72,7 @@ async function fixture(pool: Pool, admin: Pool) {
         if (!approvals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'community-test', firstParty: true, scopes: actions });
   const access = createAccess({

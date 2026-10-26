@@ -16,6 +16,7 @@ import {
   type Actor,
   type Resource,
 } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -156,7 +157,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid!, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(pool, routeOf(id), id);
         return (
@@ -173,7 +174,7 @@ beforeAll(async () => {
         if (![person, robot].includes(reference)) throw new Error('Unknown provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await service.internal.registerClient({
     clientId: 'web',

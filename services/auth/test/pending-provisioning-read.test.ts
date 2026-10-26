@@ -58,6 +58,9 @@ test('both operations authorize first and use the dedicated reader exclusively',
     expect(
       await provision(
         {
+          async readFencedAccount(id) {
+            return this.readAccount(id);
+          },
           authorizeProvisioning: async (command) => {
             expect(command).toBe('approved-command');
             calls.push('authorize');
@@ -107,6 +110,9 @@ test('present reader denial and invalid pending fields never fall back or create
       await expect(
         provision(
           {
+            async readFencedAccount(id) {
+              return this.readAccount(id);
+            },
             authorizeProvisioning: async () => ({ accountId: approved.accountId }),
             readAccount: async () => {
               ordinaryReads++;
@@ -124,6 +130,9 @@ test('present reader denial and invalid pending fields never fall back or create
     await expect(
       provision(
         {
+          async readFencedAccount(id) {
+            return this.readAccount(id);
+          },
           authorizeProvisioning: async () => {
             throw new Error('unapproved');
           },
@@ -145,6 +154,9 @@ test('absent optional reader retains strict pending compatibility for isolated t
     const { registrationId, expiresAt, ...account }: AccessAccount & { registrationId: string; expiresAt: string } =
       pending(automated);
     const ports: TrustedAccessPorts = {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       authorizeProvisioning: async () => ({ accountId: account.accountId }),
       readAccount: async () => account,
     };

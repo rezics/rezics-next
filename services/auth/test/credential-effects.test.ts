@@ -52,6 +52,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
     signing: { activeKid: signing.kid, privateKeys: [signing] },
     trustedAccess: {
       readAccount,
+      readFencedAccount: readAccount,
       authorizeProvisioning: async (accountId: string) => ({ accountId }),
       async approveCredentialEffect(input: { stage: CredentialEffectBinding; human: SessionProof }) {
         if (!allowed) throw new Error('Fixture authority revoked');
@@ -438,6 +439,7 @@ test('Auth host transports only closed credential commands and redacts every den
     const unavailable = await createAuthService({
       ...f.options,
       trustedAccess: {
+        readFencedAccount: f.options.trustedAccess.readFencedAccount,
         readAccount: f.options.trustedAccess.readAccount,
         authorizeProvisioning: f.options.trustedAccess.authorizeProvisioning,
       },

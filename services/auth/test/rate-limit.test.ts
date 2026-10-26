@@ -452,6 +452,9 @@ export async function attemptFixture() {
     secret: 'attempt-only-persistent-secret-with-at-least-32-bytes',
     signing: { activeKid: jwk.kid, privateKeys: [jwk] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         return id === account.accountId ? account : null;
       },

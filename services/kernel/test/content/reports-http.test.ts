@@ -15,6 +15,7 @@ import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const routeKey = new Uint8Array(32).fill(47);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(48)]]) };
@@ -150,7 +151,7 @@ describe('real migrated report HTTP and shared admission', () => {
       audience,
       secret: 'report-auth-test-secret-at-least-32-bytes',
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           const row = await readAccount(db.admin, routeOf(id)!, id);
           return (
@@ -167,7 +168,7 @@ describe('real migrated report HTTP and shared admission', () => {
           if (!approvals.delete(reference)) throw new Error('Missing fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
     const access = (config: Parameters<typeof createAccess>[0]) =>

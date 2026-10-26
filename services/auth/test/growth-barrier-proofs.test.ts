@@ -202,6 +202,9 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
         secret,
         signing: { activeKid: key.kid, privateKeys: [key] },
         trustedAccess: {
+          async readFencedAccount(id) {
+            return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+          },
           readAccount,
           readRecoveryAccount: readAccount,
           authorizeProvisioning: async (authorization) => ({

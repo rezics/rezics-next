@@ -23,6 +23,7 @@ import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { capture, costOf, openGrowthDatabase } from '../../support/growth.ts';
 import { startFakeStripe } from './fake-stripe.ts';
+import { trustedAccessPorts } from '../../support/trusted-access.ts';
 
 // A separate process owns DBOS's process-global registrations for each isolated driver.
 // Only its scheduling clock advances: command T and snapshot ordering still come from PostgreSQL.
@@ -128,7 +129,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     audience,
     secret: 'commerce-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -145,7 +146,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   let access: ReturnType<typeof createAccess>;
   function kernel() {

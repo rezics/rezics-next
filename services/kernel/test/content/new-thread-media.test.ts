@@ -17,6 +17,7 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { threadTarget } from '../../src/content/commands.ts';
 import { openGrowthDatabase, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const audience = 'https://kernel.new-thread-media.example.test';
 const password = 'correct horse battery staple';
@@ -156,7 +157,7 @@ beforeAll(async () => {
     secret: 'new-thread-media-auth-fixture-secret-at-least-32-bytes',
     signing: { activeKid: issuerKey.kid, privateKeys: [issuerKey] },
     siteActions: new Map(actionNames.map((action) => [action, { anonymous: false }])),
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(accountId) {
         return accounts.get(accountId) ?? null;
       },
@@ -164,7 +165,7 @@ beforeAll(async () => {
         if (!approvals.delete(accountId)) throw new Error('Missing trusted account provisioning approval');
         return { accountId };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'thread-media-login', firstParty: true, scopes: loginScopes });
   await auth.internal.registerWebsiteClient({

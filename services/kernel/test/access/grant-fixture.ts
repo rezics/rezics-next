@@ -6,6 +6,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function grantFixture(extraActions: readonly string[] = []) {
@@ -42,7 +43,7 @@ export async function grantFixture(extraActions: readonly string[] = []) {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(reader, routeOf(id)!, id);
         return (
@@ -59,7 +60,7 @@ export async function grantFixture(extraActions: readonly string[] = []) {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   await auth.internal.registerClient({ clientId: 'other-client', firstParty: true, scopes: actions });

@@ -13,6 +13,7 @@ import { tupleRoute } from '../../src/content/imported-contract.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const root = '00000000-0000-8000-8000-000000000000';
 const route = 42000;
@@ -85,7 +86,7 @@ beforeAll(async () => {
     audience: 'https://api.rezics.test',
     secret: 'media-finalize-fixture-secret-at-least-thirty-two-characters',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -104,7 +105,7 @@ beforeAll(async () => {
         provisioning = false;
         return { accountId };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'importer', firstParty: true, scopes: actions });
   await auth.internal.provisionPassword({

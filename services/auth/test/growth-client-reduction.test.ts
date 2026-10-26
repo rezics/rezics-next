@@ -55,6 +55,9 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
       secret: 'growth-reduction-secret-with-at-least-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
       trustedAccess: {
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         readAccount: async (accountId) => ({
           accountId,
           kind: 'actor',

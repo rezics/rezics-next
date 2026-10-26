@@ -127,6 +127,9 @@ beforeAll(async () => {
     secret: 'persistent-native-recovery-secret-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       readAccount,
       readRecoveryAccount: readAccount,
       authorizeProvisioning: async (id) => ({ accountId: id }),

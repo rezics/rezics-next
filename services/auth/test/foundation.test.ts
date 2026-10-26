@@ -28,6 +28,9 @@ beforeAll(async () => {
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: 'fixture-signing-key', privateKeys: [privateJwk] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         if (unavailable) throw new Error('Access unavailable');
         return accounts.get(id) ?? null;

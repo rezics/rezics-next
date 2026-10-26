@@ -86,6 +86,9 @@ try {
     secret,
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         return id === account.accountId ? account : null;
       },

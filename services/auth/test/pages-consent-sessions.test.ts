@@ -57,6 +57,9 @@ beforeAll(async () => {
     secret: 'pages-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: prefix, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         return accounts.get(id) ?? null;
       },

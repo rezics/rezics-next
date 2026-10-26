@@ -21,6 +21,7 @@ import type { Access, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -81,7 +82,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-media-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -98,7 +99,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('Missing fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({
     clientId: 'web',

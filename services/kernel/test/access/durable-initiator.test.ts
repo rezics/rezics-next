@@ -27,6 +27,7 @@ import {
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, capture } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const action = 'subject:write';
@@ -65,7 +66,7 @@ export async function nativeModule() {
     audience,
     secret: 'durable-test-secret-at-least-thirty-two-bytes',
     signing: { activeKid: jwk.kid, privateKeys: [jwk] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const a = await readAccount(db.pool, routeOf(id)!, id);
         return (
@@ -87,7 +88,7 @@ export async function nativeModule() {
         if (!approvals.delete(reference)) throw new Error('Denied');
         return { accountId: reference };
       },
-    },
+    }),
   });
   const edgeKey = await generateKeyPair('RS256', { extractable: true });
   const edgeJwk = { ...(await exportJWK(edgeKey.publicKey)), kid: 'edge-test' };

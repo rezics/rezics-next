@@ -64,7 +64,7 @@ async function runGrowth() {
     audience: 'https://api.test',
     secret: randomBytes(48).toString('hex'),
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: { readAccount: unused, authorizeProvisioning: unused },
+    trustedAccess: { readAccount: unused, readFencedAccount: unused, authorizeProvisioning: unused },
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
   const workflows = createAccountWorkflows({

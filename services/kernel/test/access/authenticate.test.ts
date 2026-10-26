@@ -6,6 +6,7 @@ import { createAccess, createResourcePublicEligibility } from '../../src/access/
 import { readAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -127,7 +128,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid!, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(pool, routeOf(id), id);
         return (
@@ -145,7 +146,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   };
   const approvals = new Set([person, robot, principal]);
   service = await createAuthService(options);

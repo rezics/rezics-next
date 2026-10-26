@@ -22,6 +22,7 @@ import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
+import { trustedAccessPorts } from '../../support/trusted-access.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -346,7 +347,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       audience,
       secret: 'library-fixture-secret-with-at-least-32-bytes',
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           if (!db) throw new Error('The isolated kernel database is closed');
           const row = await readAccount(db.admin, routeOf(id)!, id);
@@ -364,7 +365,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
           if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
 
     const app = createKernel({

@@ -39,6 +39,9 @@ beforeAll(async () => {
     secret: 'refresh-growth-secret-with-at-least-32-bytes',
     signing: { activeKid: 'refresh-growth-signing', privateKeys: [{ ...signing, kid: 'refresh-growth-signing' }] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(accountId) {
         return accountId === person ? { ...account } : null;
       },

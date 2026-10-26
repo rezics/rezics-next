@@ -37,6 +37,9 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
         secret: 'growth-pages-secret-with-at-least-32-bytes',
         signing: { activeKid: signingKid, privateKeys: [signingKey] },
         trustedAccess: {
+          async readFencedAccount(id) {
+            return this.readAccount(id);
+          },
           async readAccount(id) {
             return id === person.accountId ? person : null;
           },

@@ -1,4 +1,5 @@
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -61,7 +62,7 @@ if (process.argv.includes('--erased-post-worker')) {
       audience,
       secret: 'erased-post-cleanup-test-only-secret-at-least-32',
       signing: { activeKid: signing.kid, privateKeys: [signing] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           const account = await readAccount(pool, routeOf(id)!, id);
           return (
@@ -78,7 +79,7 @@ if (process.argv.includes('--erased-post-worker')) {
           if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
     for (const id of authors) {

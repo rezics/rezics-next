@@ -82,6 +82,9 @@ beforeAll(async () => {
     secret: 'reduction-only-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: {
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         if (id === pausedOwner) {
           pausedOwner = undefined;
