@@ -890,15 +890,6 @@ function bindOperationFixture(caller: string, work: Work): Fixture | undefined {
 }
 
 async function executeWorkflow(authReference: string, work: Work): Promise<unknown> {
-  try {
-    return await startWorkflow(authReference, work);
-  } catch (error) {
-    if (!deniedError(error) || work.operation.kind === 'opening') throw error;
-    return workflows().resumeOperation(work.operationKey);
-  }
-}
-
-async function startWorkflow(authReference: string, work: Work): Promise<unknown> {
   const request = { key: work.operationKey, authorization: authReference };
   switch (work.operation.kind) {
     case 'organization':

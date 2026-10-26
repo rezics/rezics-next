@@ -1299,6 +1299,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const key = requestKey(input.key);
     const request = {
       kind: 'opening' as const,
+      operationKey: key,
       authorization: input.authorization,
       operatorAccountId: input.operatorAccountId,
       subjectAccountId: input.subjectAccountId,
