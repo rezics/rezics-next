@@ -205,7 +205,9 @@ test(
           external.push(url.href);
           await route.abort();
         });
-        await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
+        // The a11y addon runs axe after every story unless its manual global is set; two runs in one page collide, so
+        // this page is checked by AxeBuilder alone.
+        await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale};a11y.manual:!true`, {
           waitUntil: 'networkidle',
         });
         await page.locator('html[data-hydrated]').waitFor();
