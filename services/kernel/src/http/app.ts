@@ -35,6 +35,7 @@ import {
 import healthCheck from './health.sql';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
 export const REQUEST_DEADLINE_MS = DEFAULT_REQUEST_DEADLINE_MS;
 
@@ -69,7 +70,6 @@ export function createApp({
   let socketPeer: (request: Request) => string | undefined = () => undefined;
   const originalRequests = new WeakMap<Request, Request>();
   const requestIds = new WeakMap<Request, string>();
-  const arrivals = new WeakMap<Request, number>();
   const jsonBodyChecks = new Map<string, ReturnType<typeof Compile>>();
   const invalidJsonBodies = new WeakMap<Request, ValidationError>();
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
@@ -100,7 +100,6 @@ export function createApp({
   const app = new Elysia()
     .onRequest(({ request }) => {
       idFor(request);
-      arrivals.set(request, Date.now());
     })
     .onError('global', ({ error, request, route }) => {
       let action: string | undefined;
@@ -183,7 +182,7 @@ export function createApp({
       if (error) throw error;
     })
     .derive(async ({ request, route, set }) => {
-      const job = { deadline: (arrivals.get(request) ?? Date.now()) + requestDeadlineMs, signal: request.signal };
+      const job = { deadline: deadlineFor(requestDeadlineMs), signal: request.signal };
       const actor =
         request.headers.get('authorization') === null || invalidJsonBodies.has(request)
           ? { kind: 'anonymous' as const }
@@ -331,6 +330,23 @@ export function createApp({
       }
       return handle(request);
     };
+  });
+
+  const handle = app.handle;
+  Object.defineProperty(app, 'handle', {
+    configurable: true,
+    value: (request: string | Request, options?: RequestInit) =>
+      withRequestDeadline(Date.now() + requestDeadlineMs, () => handle(request, options)),
+  });
+  const fetchGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(app), 'fetch')?.get;
+  if (!fetchGetter) throw new TypeError('Elysia fetch method is unavailable');
+  Object.defineProperty(app, 'fetch', {
+    configurable: true,
+    value: (request: Request) =>
+      withRequestDeadline(Date.now() + requestDeadlineMs, () => {
+        const fetch = fetchGetter.call(app) as (request: Request) => Response | Promise<Response>;
+        return fetch(request);
+      }),
   });
   return app;
 }
