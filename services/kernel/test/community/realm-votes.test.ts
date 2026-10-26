@@ -16,6 +16,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-votes.auth.test';
 const audience = 'https://realm-votes.api.test';
@@ -257,13 +258,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await host?.stop();
   if (authDatabaseName) {
-    // Let the auth host's connections close on their own; a forced drop would kill them while they are still draining.
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const open = await admin?.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [authDatabaseName]);
-      if (!open.rowCount) break;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+    await dropTestDatabase(admin!, authDatabaseName);
   }
   await pool?.end();
   await admin?.end();

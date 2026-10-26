@@ -16,6 +16,7 @@ import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://board-scheme.auth.test';
 const audience = 'https://board-scheme.api.test';
@@ -260,13 +261,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await host?.stop();
   if (authDatabaseName) {
-    // Let the auth host's connections close on their own; a forced drop would kill them while they are still draining.
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const open = await admin?.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [authDatabaseName]);
-      if (!open.rowCount) break;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+    await dropTestDatabase(admin!, authDatabaseName);
   }
   await db?.close();
 });

@@ -21,6 +21,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -34,7 +35,6 @@ let admin: Pool;
 let pool: Pool;
 let authPool: Pool;
 let consent: ConsentServer;
-const authConnectionsClosed: Promise<void>[] = [];
 let authDatabaseName = '';
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -245,9 +245,6 @@ beforeAll(async () => {
   authUrl.pathname = `/${authDatabaseName}`;
   migrateAuth(authUrl.href);
   authPool = new Pool({ connectionString: authUrl.href });
-  authPool.on('connect', (client) => {
-    authConnectionsClosed.push(new Promise<void>((resolve) => client.connection.stream.once('close', () => resolve())));
-  });
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'realm-ban',
@@ -341,10 +338,7 @@ afterAll(async () => {
   await work?.close();
   await host?.stop();
   if (!host) await authPool?.end();
-  // pg.Pool.end resolves before idle sockets finish closing. Let Auth disconnect
-  // before dropping its database so those sockets cannot receive a forced-close error.
-  await Promise.all(authConnectionsClosed);
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(admin!, authDatabaseName);
   await db?.close();
 });
 

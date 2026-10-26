@@ -21,6 +21,7 @@ import type { Access, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -143,7 +144,7 @@ afterAll(async () => {
   await observer.close();
   await pool.end();
   await authPool?.end();
-  await admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  await dropTestDatabase(admin, authDatabase);
   await admin.end();
 });
 

@@ -11,6 +11,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { type AccountActor } from '../../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
@@ -115,14 +116,7 @@ async function fixture(pool: Pool, admin: Pool) {
     grant,
     async close() {
       await authPool.end();
-      // Pool.end() returns before the server has seen every Terminate; forcing the drop in that window sends
-      // the closing clients an unhandled administrator shutdown.
-      for (let attempt = 0; attempt < 100; attempt++) {
-        const { rowCount } = await admin.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [database]);
-        if (rowCount === 0) break;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
+      await dropTestDatabase(admin, database);
     },
   };
 }

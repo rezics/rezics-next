@@ -13,6 +13,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://space-address.auth.test';
 const audience = 'https://space-address.api.test';
@@ -235,7 +236,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await authPool?.end();
-  if (authDatabase) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  if (authDatabase) await dropTestDatabase(admin!, authDatabase);
   await pool?.end();
   await admin?.end();
 });

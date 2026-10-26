@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createPool } from '../src/database/pool.ts';
 import { ANONYMOUS_PRINCIPAL_ID, principalCommandIdentity, runCommand } from '../src/command/command.ts';
+import { dropTestDatabase } from './support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -71,7 +72,7 @@ test('forward migration preserves existing account identities, outcomes and rete
     });
   } finally {
     await pool.end();
-    await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
+    await dropTestDatabase(admin, database);
   }
 });
 

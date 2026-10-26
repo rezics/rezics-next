@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import pg from 'pg';
 import { migrate, schemaDump, schemaDumps } from '../scripts/database.ts';
+import { dropTestDatabase } from './support/drop-test-database.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -23,7 +24,7 @@ beforeAll(async () => {
   await admin.query(`CREATE DATABASE ${name}`);
 });
 afterAll(async () => {
-  await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+  await dropTestDatabase(admin, name);
   await admin.end();
   rmSync(root, { recursive: true, force: true });
 });

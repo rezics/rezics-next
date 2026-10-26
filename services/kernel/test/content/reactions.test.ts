@@ -11,6 +11,7 @@ import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 export const request = () => ({
   idempotencyKey: crypto.randomUUID(),
@@ -192,7 +193,7 @@ export async function reactionFixture() {
     effects,
     async close() {
       await authPool.end();
-      await db.admin.query(`DROP DATABASE ${authName} WITH (FORCE)`);
+      await dropTestDatabase(db.admin, authName);
       await db.close();
     },
   };

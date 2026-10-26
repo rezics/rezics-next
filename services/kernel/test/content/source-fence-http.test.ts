@@ -18,6 +18,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql, permissionResourceId } from './support/sql-observer.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const action = 'source_fence:read';
 const routeKey = new Uint8Array(32).fill(7);
@@ -153,7 +154,7 @@ afterAll(async () => {
   await observer?.close();
   await authPool?.end();
   if (db) {
-    await db.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+    await dropTestDatabase(db.admin, authDatabase);
     await db.close();
   }
 });

@@ -18,6 +18,7 @@ import type { ActionCatalogue } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://reactions-http.auth.test';
 const audience = 'https://reactions-http.api.test';
@@ -247,22 +248,9 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  const total = authPool?.totalCount ?? 0;
-  const removed = new Promise<void>((resolve) => {
-    if (total === 0) return resolve();
-    let remaining = total;
-    const onRemove = () => {
-      remaining -= 1;
-      if (remaining !== 0) return;
-      authPool.off('remove', onRemove);
-      resolve();
-    };
-    authPool.on('remove', onRemove);
-  });
   await host?.stop();
   if (authPool && !authPool.ending) await authPool.end();
-  await removed;
-  if (authDatabaseName) await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
+  if (authDatabaseName) await dropTestDatabase(db!.admin, authDatabaseName);
   await db?.close();
 });
 

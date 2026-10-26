@@ -17,6 +17,7 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { threadTarget } from '../../src/content/commands.ts';
 import { openGrowthDatabase, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const audience = 'https://kernel.new-thread-media.example.test';
 const password = 'correct horse battery staple';
@@ -256,7 +257,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await authPool?.end();
-  if (authAdmin && authDatabaseName) await authAdmin.query(`DROP DATABASE ${authDatabaseName} WITH (FORCE)`);
+  if (authAdmin && authDatabaseName) await dropTestDatabase(authAdmin, authDatabaseName);
   await authAdmin?.end();
   await db?.close();
 });

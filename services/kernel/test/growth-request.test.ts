@@ -14,6 +14,7 @@ import { encodeSession, type SessionComponent } from '../src/tokens/session.ts';
 import type { KeyRing } from '../src/tokens/seal.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { dropTestDatabase } from './support/drop-test-database.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -378,7 +379,7 @@ afterEach(async () => {
     await db?.close();
   } finally {
     if (fixtureDatabase) {
-      await databases.query(`DROP DATABASE ${fixtureDatabase} WITH (FORCE)`);
+      await dropTestDatabase(databases, fixtureDatabase);
       fixtureDatabase = undefined;
     }
   }

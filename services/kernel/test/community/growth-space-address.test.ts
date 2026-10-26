@@ -12,6 +12,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://growth-space-address.auth.test';
 const audience = 'https://growth-space-address.api.test';
@@ -341,13 +342,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await authPool?.end();
   if (authDatabase) {
-    // Let the auth host's connections close on their own; a forced drop would kill them while they are still draining.
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const open = await db?.admin.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [authDatabase]);
-      if (!open.rowCount) break;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    await db?.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+    await dropTestDatabase(db!.admin, authDatabase);
   }
   await db?.close();
 });

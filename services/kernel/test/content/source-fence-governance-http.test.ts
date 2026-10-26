@@ -25,6 +25,7 @@ import { observeSql } from './support/sql-observer.ts';
 import { createKernelClient } from '@rezics/client';
 import type { AccountActor, Access } from '../../src/request/access.ts';
 import type { ImportedFieldGroup } from '../../src/content/imported-contract.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const contractPool = createPool('postgres://kernel.invalid/source-fence-contract');
 afterAll(() => contractPool.end());
@@ -251,7 +252,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await observer?.close();
   await authPool?.end();
-  if (authDatabase) await db.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  if (authDatabase) await dropTestDatabase(db.admin, authDatabase);
   await db?.close();
 });
 async function call(
