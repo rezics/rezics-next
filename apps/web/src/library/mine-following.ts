@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { LIBRARY_PAGE_LIMIT, libraryListQuery, readLibraryResult, StaleCursorError } from './reads';
+import { libraryLabel, LIBRARY_PAGE_LIMIT, libraryListQuery, readLibraryResult, StaleCursorError } from './reads';
 
 type FollowRead = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>;
 type RawFollow = FollowRead['follows'][number];
@@ -27,7 +27,9 @@ function present(follow: RawFollow): MineFollow {
     targetType: follow.targetType,
     state: follow.state,
     reason: follow.reason,
-    target: follow.target ?? null,
+    target: follow.target
+      ? { id: follow.target.id, type: follow.target.type, label: libraryLabel(follow.target.label, follow.target.id) }
+      : null,
     idempotencyKey: crypto.randomUUID(),
   };
 }

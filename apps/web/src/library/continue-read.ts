@@ -3,6 +3,7 @@ import type { RoutePageLoad } from '../features/pages/route';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { readEntryPage } from './entries-read';
+import { libraryLabel } from './reads';
 
 /** The Continue row shows at most this many subjects. */
 export const CONTINUE_LIMIT = 6;
@@ -24,7 +25,7 @@ export async function loadContinue(
     if (!authorization) return [];
     const page = await readEntryPage(client, authorization, undefined, 'in_progress', CONTINUE_LIMIT);
     return page.libraryEntries.flatMap((entry) =>
-      entry.subject ? [{ subjectId: entry.subjectId, label: entry.subject.label }] : [],
+      entry.subject ? [{ subjectId: entry.subjectId, label: libraryLabel(entry.subject.label, entry.subject.id) }] : [],
     );
   } catch {
     return [];

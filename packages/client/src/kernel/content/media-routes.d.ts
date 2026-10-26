@@ -327,6 +327,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                     };
                     query: {
                         context?: string;
+                        language?: string;
                     };
                     headers: unknown;
                     response: {
@@ -393,9 +394,73 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     };
                                 }[]>;
                             };
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             related: Record<string, {
                                 labels: Record<string, string>;
                                 redirect?: string;
+                                type?: string;
+                                types?: string[];
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
                             }>;
                         };
                         308: {
@@ -2113,6 +2178,42 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     statement: string;
                                     type?: string;
                                     label?: string;
+                                    summary?: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                 }[];
                                 count?: {
                                     value: number;
@@ -2562,13 +2663,12 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
         media: {
             post: {
                 body: {
-                    purpose: "post-image";
                     mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
                     byteCount: number;
                     sha256?: string;
                     containerId: string;
+                    purpose: "avatar" | "post-image";
                 } | {
-                    purpose: "post-image";
                     mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
                     byteCount: number;
                     sha256?: string;
@@ -2576,6 +2676,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         boardId: string;
                         idempotencyKey: string;
                     };
+                    purpose: "post-image";
                 };
                 params: {};
                 query: unknown;
@@ -2594,6 +2695,17 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             uploaderId: string;
                             key: string;
                             reservationRequestId: string;
+                        } | {
+                            id: string;
+                            state: "available" | "erased" | "rejected" | "reserved" | "uploaded";
+                            byteCount: number;
+                            mediaType: string;
+                            sha256: string | null;
+                            containerId: string;
+                            uploaderId: string;
+                            key: string;
+                            reservationRequestId: string;
+                            purpose: "avatar";
                         };
                     };
                     400: {
@@ -2750,6 +2862,17 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 uploaderId: string;
                                 key: string;
                                 reservationRequestId: string;
+                            } | {
+                                id: string;
+                                state: "available" | "erased" | "rejected" | "reserved" | "uploaded";
+                                byteCount: number;
+                                mediaType: string;
+                                sha256: string | null;
+                                containerId: string;
+                                uploaderId: string;
+                                key: string;
+                                reservationRequestId: string;
+                                purpose: "avatar";
                             };
                         };
                         400: {

@@ -2,7 +2,15 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { libraryFullQuery, libraryListQuery, readLibraryResult, StaleCursorError, type LibrarySubject } from './reads';
+import {
+  libraryLabel,
+  type LibraryLabel,
+  libraryFullQuery,
+  libraryListQuery,
+  readLibraryResult,
+  StaleCursorError,
+  type LibrarySubject,
+} from './reads';
 
 export const libraryEntryStates = ['planned', 'in_progress', 'completed', 'paused', 'dropped'] as const;
 export type LibraryEntryState = (typeof libraryEntryStates)[number];
@@ -60,7 +68,7 @@ export type LibraryRemoveInput = {
   idempotencyKey: string;
 };
 
-type RawSubject = { id: string; type: string; label: string };
+type RawSubject = { id: string; type: string; label: LibraryLabel };
 type RawEntry = {
   subjectId: string;
   state: LibraryEntryState;
@@ -72,7 +80,7 @@ type RawEntry = {
 
 function presentSubject(subject: RawSubject | null | undefined): LibrarySubject | null {
   if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: subject.label };
+  return { id: subject.id, type: subject.type, label: libraryLabel(subject.label, subject.id) };
 }
 
 function presentEntry(entry: RawEntry): ReloadedLibraryEntry {

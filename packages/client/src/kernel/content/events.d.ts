@@ -127,6 +127,13 @@ export declare const CONTENT_EVENTS: {
         previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
         kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
     }>;
+    readonly 'com.rezics.content.author-item.projected.v1': Type.TObject<{
+        authorAccountId: Type.TString;
+        itemKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        itemId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
     readonly 'com.rezics.content.subject-thread.projected.v1': Type.TObject<{
         subjectId: Type.TString;
         threadId: Type.TString;

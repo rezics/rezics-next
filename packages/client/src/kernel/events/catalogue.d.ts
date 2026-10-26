@@ -731,6 +731,13 @@ declare const productEventTypes: {
         previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
         kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
     }>;
+    readonly 'com.rezics.content.author-item.projected.v1': Type.TObject<{
+        authorAccountId: Type.TString;
+        itemKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        itemId: Type.TString;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
     readonly 'com.rezics.content.subject-thread.projected.v1': Type.TObject<{
         subjectId: Type.TString;
         threadId: Type.TString;
@@ -794,7 +801,30 @@ declare const productEventTypes: {
     readonly 'com.rezics.rating.aggregate.applied.v1': Type.TObject<{
         applied: Type.TInteger;
     }>;
-    readonly 'com.rezics.rating.segment.page.v1': Type.TObject<{
+    readonly 'com.rezics.rating.segment.page.v1': Type.TUnion<[Type.TObject<{
+        voterId: Type.TString;
+        direction: Type.TLiteral<"rekey">;
+        at: Type.TString;
+        allowMissing: Type.TBoolean;
+        votes: Type.TArray<Type.TObject<{
+            questionId: Type.TString;
+            targetId: Type.TString;
+            units: Type.TUnion<[Type.TInteger, Type.TNull]>;
+            revision: Type.TInteger;
+            populations: Type.TArray<Type.TString>;
+            changedAt: Type.TString;
+        }>>;
+    }>, Type.TObject<{
+        voterId: Type.TString;
+        direction: Type.TUnion<[Type.TLiteral<"adding">, Type.TLiteral<"removing">]>;
+        votes: Type.TArray<Type.TObject<{
+            questionId: Type.TString;
+            targetId: Type.TString;
+            units: Type.TUnion<[Type.TInteger, Type.TNull]>;
+            revision: Type.TInteger;
+            populations: Type.TArray<Type.TString>;
+        }>>;
+    }>, Type.TObject<{
         voterId: Type.TString;
         realmId: Type.TString;
         direction: Type.TUnion<[Type.TLiteral<"adding">, Type.TLiteral<"removing">]>;
@@ -804,6 +834,9 @@ declare const productEventTypes: {
             units: Type.TUnion<[Type.TInteger, Type.TNull]>;
             revision: Type.TInteger;
         }>>;
+    }>]>;
+    readonly 'com.rezics.rating.eligibility.changed.v1': Type.TObject<{
+        voterId: Type.TString;
     }>;
     readonly 'com.rezics.rating.population.pending.v1': Type.TObject<{
         populationId: Type.TString;

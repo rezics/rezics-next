@@ -1,0 +1,46 @@
+import { expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
+import { loadCollectionPage } from '../src/library/reads.ts';
+
+test('a collection presents localized subject summary labels while hidden subjects remain absent', async () => {
+  const summaries = [
+    { id: 'localized', type: 'book', label: { value: 'Localized title', language: 'en' } },
+    { id: 'unlabeled', type: 'book', label: null },
+    null,
+  ];
+  const paths: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const path = new URL(new Request(input, init).url).pathname;
+      paths.push(path);
+      if (path.endsWith('/members'))
+        return Response.json({
+          members: summaries.map((subject, index) => ({
+            id: `member-${index}`,
+            note: null,
+            addedAt: '2026-04-02T15:04:05Z',
+            subject,
+          })),
+          next: null,
+        });
+      return Response.json({
+        collection: {
+          id: 'collection',
+          curatorAccountId: 'owner',
+          title: 'Shelf',
+          description: null,
+          visibility: 'public',
+          memberCount: summaries.length,
+          updatedAt: '2026-04-02T15:04:05Z',
+        },
+      });
+    }) as typeof fetch,
+  });
+  const page = await loadCollectionPage(client, new Request('https://web.test/collection'), {}, { id: 'collection' });
+  expect(page.members.map(({ subject }) => subject)).toEqual([
+    { id: 'localized', type: 'book', label: 'Localized title' },
+    { id: 'unlabeled', type: 'book', label: 'unlabeled' },
+    null,
+  ]);
+  expect(paths.sort()).toEqual(['/v1/collections/collection', '/v1/collections/collection/members']);
+});

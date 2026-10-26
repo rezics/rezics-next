@@ -334,6 +334,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     };
                     query: {
                         context?: string;
+                        language?: string;
                     };
                     headers: unknown;
                     response: {
@@ -400,9 +401,73 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     };
                                 }[]>;
                             };
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             related: Record<string, {
                                 labels: Record<string, string>;
                                 redirect?: string;
+                                type?: string;
+                                types?: string[];
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
                             }>;
                         };
                         308: {
@@ -2120,6 +2185,42 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     statement: string;
                                     type?: string;
                                     label?: string;
+                                    summary?: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                 }[];
                                 count?: {
                                     value: number;
@@ -2583,6 +2684,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             subject?: {
                                 id: string;
                                 type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | {
+                                id: string;
+                                type: string;
                                 label: string;
                             } | null;
                             subjectId: string;
@@ -2713,6 +2849,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         200: {
                             libraryEntry: {
                                 subject?: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | {
                                     id: string;
                                     type: string;
                                     label: string;
@@ -3255,6 +3426,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             subject?: {
                                 id: string;
                                 type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | {
+                                id: string;
+                                type: string;
                                 label: string;
                             } | null;
                             id: string;
@@ -3389,6 +3595,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         200: {
                             copy: {
                                 subject?: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | {
                                     id: string;
                                     type: string;
                                     label: string;
@@ -4039,6 +4280,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 target?: {
                                     id: string;
                                     type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | {
+                                    id: string;
+                                    type: string;
                                     label: string;
                                 } | null;
                                 targetId: string;
@@ -4287,6 +4563,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
                     label: import("typebox").TString;
                 }>, import("typebox").TNull]>>;
             }>>;
@@ -4415,6 +4726,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 target?: {
                     id: string;
                     type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | {
+                    id: string;
+                    type: string;
                     label: string;
                 } | null;
                 targetId: string;
@@ -4528,6 +4874,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         200: {
             follows: {
                 target?: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | {
                     id: string;
                     type: string;
                     label: string;
@@ -4657,6 +5038,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                         id: import("typebox").TString;
                         type: import("typebox").TString;
+                        types: import("typebox").TArray<import("typebox").TString>;
+                        label: import("typebox").TUnion<[import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>, import("typebox").TNull]>;
+                        creativeWork: import("typebox").TBoolean;
+                        cover: import("typebox").TUnion<[import("typebox").TObject<{
+                            media: import("typebox").TString;
+                            width: import("typebox").TInteger;
+                            height: import("typebox").TInteger;
+                            placeholder: import("typebox").TObject<{
+                                thumbhash: import("typebox").TString;
+                                color: import("typebox").TString;
+                            }>;
+                            variants: import("typebox").TArray<import("typebox").TObject<{
+                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                width: import("typebox").TInteger;
+                            }>>;
+                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                x: import("typebox").TNumber;
+                                y: import("typebox").TNumber;
+                            }>, import("typebox").TNull]>;
+                            credit: import("typebox").TObject<{
+                                rightsHolder: import("typebox").TString;
+                                via: import("typebox").TObject<{
+                                    name: import("typebox").TString;
+                                    url: import("typebox").TString;
+                                }>;
+                                license: import("typebox").TString;
+                                obligations: import("typebox").TArray<import("typebox").TString>;
+                            }>;
+                        }>, import("typebox").TNull]>;
+                    }>, import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
                         label: import("typebox").TString;
                     }>, import("typebox").TNull]>>;
                 }>>;
@@ -4722,11 +5138,11 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         reason: import("./follow-model.ts").FollowReason;
         updatedAt: string;
     } & object & {
-        target?: {
+        target?: (import("../semantic/summaries.ts").SubjectSummary | {
             id: string;
             label: string;
             type: string;
-        } | null;
+        }) | null;
     })[];
     next: string | null;
 } & object>, {
@@ -4843,6 +5259,41 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 updatedAt: import("typebox").TString;
             } & {
                 target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     label: import("typebox").TString;

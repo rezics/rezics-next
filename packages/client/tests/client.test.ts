@@ -41,13 +41,13 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
   });
 
 test('a subject read answers like an Eden Treaty call, with the JSON as the kernel sent it', async () => {
-  const { sent, fetch } = kernel([() => json(200, { subject, related: {} })]);
+  const { sent, fetch } = kernel([() => json(200, { subject, summary: null, related: {} })]);
   const client = createKernelClient(ORIGIN, { fetch });
   const { data, error, status } = await client.subjects({ id: ID }).get();
   expect(sent.map(({ url, method }) => [url, method])).toEqual([[`${ORIGIN}/v1/subjects/${ID}`, 'GET']]);
   expect(status).toBe(200);
   expect(error).toBeNull();
-  expect(data).toEqual({ subject, related: {} });
+  expect(data).toEqual({ subject, summary: null, related: {} });
   expect(typeof data?.subject.descriptions.en).toBe('string');
 });
 
@@ -70,10 +70,10 @@ test('a problem is the error value and no data', async () => {
 
 test('the client sends back the session token the kernel last gave it', async () => {
   const { sent, fetch } = kernel([
-    () => json(200, { subject, related: {} }, { [SESSION_HEADER]: 'first' }),
-    () => json(200, { subject, related: {} }),
-    () => json(200, { subject, related: {} }, { [SESSION_HEADER]: 'second' }),
-    () => json(200, { subject, related: {} }),
+    () => json(200, { subject, summary: null, related: {} }, { [SESSION_HEADER]: 'first' }),
+    () => json(200, { subject, summary: null, related: {} }),
+    () => json(200, { subject, summary: null, related: {} }, { [SESSION_HEADER]: 'second' }),
+    () => json(200, { subject, summary: null, related: {} }),
   ]);
   const tokens: string[] = [];
   const client = createKernelClient(ORIGIN, {

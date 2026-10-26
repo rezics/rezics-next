@@ -1,4 +1,5 @@
 import type { Release } from '@rezics/definitions';
+import { type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { Relay } from '../events/relays.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -11,6 +12,7 @@ export type SubjectLink = {
     statement: string;
     type?: string;
     label?: string;
+    summary?: SubjectSummary | null;
 };
 export type SubjectLinksPage = {
     links: SubjectLink[];
@@ -39,6 +41,7 @@ export declare function listSubjectLinks(pool: Pool, ring: KeyRing, options: {
     type?: string;
     language?: string;
     includeLabels?: boolean;
+    authorizeSummary?: SummaryDependencies['authorize'];
     release?: Release;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;

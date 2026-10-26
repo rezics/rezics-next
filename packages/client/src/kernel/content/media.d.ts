@@ -5,7 +5,7 @@ import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { type DownloadContext } from './media-download.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
-export type MediaPurpose = 'post-image' | 'cover';
+export type MediaPurpose = 'post-image' | 'cover' | 'avatar';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
     format: 'webp' | 'avif';
@@ -35,10 +35,10 @@ type MediaMetadataBase = Readonly<{
     decision: string | null;
     variants: readonly MediaVariant[];
 }>;
-/** Browser reservations describe post images with measured-size inputs. Imported covers
+/** Browser reservations describe post images and avatars with measured-size inputs. Imported covers
  * remain unmeasured until the trusted fetch and processing path observes the bytes. */
 export type MediaMetadata = (MediaMetadataBase & Readonly<{
-    purpose: 'post-image';
+    purpose: 'post-image' | 'avatar';
     mediaType: string;
     byteCount: number;
 }>) | (MediaMetadataBase & Readonly<{
@@ -49,7 +49,7 @@ export type MediaMetadata = (MediaMetadataBase & Readonly<{
     source: ImportedSource;
 }>);
 type MediaReservationFields = Readonly<{
-    purpose: 'post-image';
+    purpose: 'post-image' | 'avatar';
     mediaType: string;
     byteCount: number;
     sha256?: string;
@@ -58,6 +58,7 @@ export type MediaReservationInput = MediaReservationFields & (Readonly<{
     containerId: ThreadId | PostId;
     newThread?: never;
 }> | Readonly<{
+    purpose: 'post-image';
     newThread: Readonly<{
         boardId: string;
         idempotencyKey: string;
