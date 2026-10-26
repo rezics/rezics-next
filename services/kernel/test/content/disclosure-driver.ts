@@ -251,6 +251,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   const boards: Board[] = [];
   const moderation = new Map<string, 'allow' | 'deny' | 'revoke'>();
   let serial = 0;
+  let editCount = 0;
   let definitionsReady = false;
   let paused = false;
   let governanceBearerValue: string | undefined;
@@ -258,6 +259,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   let workerStarting: Promise<void> | undefined;
   let workClient: WorkClient | undefined;
   let workerStop: (() => Promise<void>) | undefined;
+  let workerAbort: (() => Promise<void>) | undefined;
   let storageServer: { stop(closeActiveConnections?: boolean): void; url: URL } | undefined;
   let consentServer: { stop(closeActiveConnections?: boolean): void; url: URL } | undefined;
   let closing: Promise<void> | undefined;
@@ -747,6 +749,8 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     if (!threadId) throw new Error(`Post ${target.id} has no captured containing thread`);
     projectionPartitions.add(partitionOf(requiredRoute(threadId)));
     rememberCommand(threadId, headerKey, 'author', 'content.post.revise', partitionOf(requiredRoute(postId)));
+    editCount += 1;
+    if (editCount >= 2) void ensureWorker().catch(() => {});
     return revisionFromView(post);
   }
 
@@ -771,18 +775,11 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   }
 
   async function needles(target: Target): Promise<string[]> {
-    if (target.kind === 'post') {
-      const { rows } = await pool.query<{ thread_id: string }>(
-        'SELECT thread_id::text AS thread_id FROM content.post WHERE route = $1 AND post_id = $2',
-        [requiredRoute(target.id), target.id],
-      );
-      return [target.id, rows[0]?.thread_id].filter((id): id is string => typeof id === 'string');
-    }
-    if (target.kind === 'board') return [target.id];
     return [target.id];
   }
 
   async function inspectCommandCopies(target: Target): Promise<{ receipts: unknown[]; events: unknown[] }> {
+    void ensureWorker().catch(() => {});
     const threadId = threadFor(target);
     if (!threadId) throw new Error(`Target ${target.id} has no captured thread command scope`);
     const references = [...(commandsByThread.get(threadId)?.values() ?? [])];
@@ -1014,12 +1011,16 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         stdout: 'pipe',
         stderr: 'pipe',
       });
+      workerAbort = async () => {
+        if (child.exitCode === null) child.kill('SIGKILL');
+        await child.exited;
+      };
       let output = '';
       const readOutput = (async () => {
         for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
       })();
       const errors = new Response(child.stderr).text();
-      const readyDeadline = Date.now() + 20_000;
+      const readyDeadline = Date.now() + 50_000;
       while (!output.includes('ready')) {
         if (child.exitCode !== null || Date.now() >= readyDeadline) {
           child.kill('SIGKILL');
@@ -1323,7 +1324,6 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     };
   }
 
-
   async function close(): Promise<void> {
     closing ??= (async () => {
       const errors: unknown[] = [];
@@ -1335,6 +1335,8 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         }
       };
       if (workerStop) await release(workerStop);
+      else if (workerAbort) await release(workerAbort);
+      await workerStarting?.catch(() => {});
       await release(() => {
         storageServer?.stop(true);
       });
@@ -1365,6 +1367,11 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     async grantRead(persona, target) {
       if (persona === 'anonymous') throw new Error('Anonymous read grants have no account');
       await createGrant(accountId(persona), target, [READ_ACTION[target.kind]]);
+      if (target.kind === 'thread') {
+        const postId = await firstPostId(target.id);
+        if (!postId) throw new Error('Thread first post is missing');
+        await createGrant(accountId(persona), { kind: 'post', id: postId }, [READ_ACTION.post]);
+      }
     },
     async setModeration(_persona, target, mode) {
       const key = moderationKey(target);
