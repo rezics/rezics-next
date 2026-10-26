@@ -30,10 +30,10 @@ const audience = 'https://gate-admission.api.test';
 const password = 'native platform gate registration password';
 const routeKey = new Uint8Array(32).fill(91);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) };
-const operationAction = 'context:create';
+const operationAction = 'fixture:create';
 const groupAction = 'gate:fixture_group';
 const group = 'fixture_group';
-const clientScopes = ['access:grant', 'context:create', 'exposure:open', 'exposure:close', 'gate:any', groupAction];
+const clientScopes = ['access:grant', operationAction, 'exposure:open', 'exposure:close', 'gate:any', groupAction];
 
 type Person = { accountId: string; email: string; bearer: string };
 const pool = createPool(databaseUrl);
@@ -250,9 +250,9 @@ beforeAll(async () => {
   await host.start();
 
   staff = await person('gate_platform_staff', clientScopes);
-  ordinary = await person('gate_ordinary_account', ['context:create']);
-  gated = await person('gate_group_tester', ['context:create']);
-  principal = await person('gate_ungranted_principal', ['context:create']);
+  ordinary = await person('gate_ordinary_account', [operationAction]);
+  gated = await person('gate_group_tester', [operationAction]);
+  principal = await person('gate_ungranted_principal', [operationAction]);
 
   const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', staff.accountId], {
     cwd: root,
