@@ -70,7 +70,7 @@ export function createApp({
   let socketPeer: (request: Request) => string | undefined = () => undefined;
   const originalRequests = new WeakMap<Request, Request>();
   const requestIds = new WeakMap<Request, string>();
-  const jsonBodyChecks = new Map<string, ReturnType<typeof Compile>>();
+  const jsonBodyChecks = new Map<string, () => ReturnType<typeof Compile>>();
   const invalidJsonBodies = new WeakMap<Request, ValidationError>();
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
   let catalogue: MountedRouteCatalogue;
@@ -165,7 +165,7 @@ export function createApp({
       const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
       if (mediaType !== 'application/json' && !mediaType?.endsWith('+json')) return;
       const mounted = mountedFor(request, route);
-      const check = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`);
+      const check = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`)?.();
       if (check && !check.Check(body))
         invalidJsonBodies.set(request, new ValidationError('body', body, check.Errors(body), check.Type()));
     })
@@ -281,7 +281,8 @@ export function createApp({
   socketPeer = (request) => app.server?.requestIP(request)?.address;
   app.wrap((handle) => {
     // Elysia 2.0.0-rc.0 applies coerceBody even with normalize:false.
-    // Compile original schemas once, then check parsed JSON before its coercing validation.
+    // Compile each route's original schemas on first use, before its coercing validation.
+    // The first request must not spend its deadline compiling every unrelated route.
     const routes = app.routes;
     jsonBodyChecks.clear();
     for (const { method, path, hooks } of routes) {
@@ -297,11 +298,13 @@ export function createApp({
         }
         schemas.push(schema as TSchema);
       }
-      if (schemas.length)
+      if (schemas.length) {
+        let check: ReturnType<typeof Compile> | undefined;
         jsonBodyChecks.set(
           `${method} ${path}`,
-          Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas)),
+          () => (check ??= Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas))),
         );
+      }
     }
     catalogue = mountedRouteCatalogue(mountedApp, routes);
     const verbs = new Set(

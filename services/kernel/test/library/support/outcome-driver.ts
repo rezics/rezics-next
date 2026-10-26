@@ -1,7 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAuthService } from '@rezics/auth';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { exportJWK, generateKeyPair } from 'jose';
+import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -311,6 +311,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       kid: 'library-outcomes',
       alg: 'ES256',
     };
+    const tokenSigningKey = await importJWK(signingKey, 'ES256');
     let auth!: Awaited<ReturnType<typeof createAuthService>>;
     authServer = Bun.serve({
       hostname: '127.0.0.1',
@@ -841,6 +842,20 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       },
       async setTime(value) {
         fixedInstant = new Date(value).toISOString();
+        // Keep the fixture's authenticated credentials on the same timeline as Access.
+        const issuedAt = Math.floor(Date.parse(fixedInstant) / 1000);
+        for (const [id, token] of tokens) {
+          const claims = decodeJwt(token);
+          const shift = issuedAt - claims.iat!;
+          tokens.set(
+            id,
+            await new SignJWT({ ...claims, auth_time: Number(claims.auth_time) + shift })
+              .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
+              .setIssuedAt(issuedAt)
+              .setExpirationTime(claims.exp! + shift)
+              .sign(tokenSigningKey),
+          );
+        }
       },
       now: scenarioNow,
       provisionSubject,

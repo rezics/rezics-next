@@ -409,6 +409,20 @@ CREATE INDEX collection_curator_listing ON library.collection USING btree (route
 
 
 --
+-- Name: collection_curator_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_curator_page ON library.collection USING btree (route, curator_account_id, updated_at DESC, collection_id DESC) WHERE (state = 'active'::text);
+
+
+--
+-- Name: collection_curator_public_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_curator_public_page ON library.collection USING btree (route, curator_account_id, updated_at DESC, collection_id DESC) WHERE ((state = 'active'::text) AND (visibility = 'public'::text));
+
+
+--
 -- Name: collection_member_subject; Type: INDEX; Schema: library; Owner: -
 --
 

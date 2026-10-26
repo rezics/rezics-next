@@ -14,6 +14,7 @@ import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { readableSubjects, resolveSubject } from './subject-anchor.ts';
 import collectionRead from './collection-reads-collection.sql';
+import curatorPublicPage from './collection-reads-curator-public.sql';
 import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 
@@ -259,10 +260,10 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
         if (!partition) throw new ProblemError('partition_unavailable');
         throw new ProblemError('stale_cursor');
       }
-      const rows = await curatorPage.run(queryOf(client), {
+      const statement = fullView ? curatorPage : curatorPublicPage;
+      const rows = await statement.run(queryOf(client), {
         route,
         curator_account_id: options.curatorAccountId,
-        public_only: !fullView,
         after_updated_at: after?.updatedAt ?? ABSENT_UPDATED_AT,
         after_id: after?.id ?? ABSENT_ID,
         has_cursor: after !== null,
