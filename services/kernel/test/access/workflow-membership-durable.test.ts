@@ -132,8 +132,13 @@ test('DBOS sequences actual member and organization commands and resumes a lost 
   expect(history).toContain('accounts.change-membership');
   expect(history).toContain('accounts.release-membership');
   fixture.approve('member', await token(member));
-  await fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member });
+  // The committed continuation authorizes cleanup, but cannot disclose a
+  // result through the initiating bearer after its account was deleted.
+  await expect(
+    fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
   expect(await fixture.read(member)).toMatchObject({ state: 'deleted', fenced: true });
+  expect((await fixture.database.query('SELECT id FROM "user" WHERE id=$1', [member])).rows).toEqual([]);
 }, 60000);
 
 test('active hold and last owner cannot be released through the durable workflow', async () => {
