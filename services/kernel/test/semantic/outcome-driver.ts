@@ -226,9 +226,13 @@ async function startDriver(entry: Tracked): Promise<SemanticDriver> {
       return { accountId: result.accountId, bearer: await issue(email) };
     }
 
-    const [governor, editor, acceptor, steward, suspended] = await Promise.all(
-      ['governor', 'editor', 'acceptor', 'steward', 'suspended'].map(person),
-    );
+    const [governor, editor, acceptor, steward, suspended] = await Promise.all([
+      person('governor'),
+      person('editor'),
+      person('acceptor'),
+      person('steward'),
+      person('suspended'),
+    ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
 
     await setupSemantic(pool, bundledRelease);
