@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import type { Brief, Profile, TaskClass } from './types.ts';
 
-// fallbacks are tried in order when no pool of the first profile's CLI has quota.
-export type Route = { first: Profile; fallbacks?: Profile[]; maxSteps: number; maxMs: number };
+// fallbacks are tried in order when no pool of the first profile's CLI has quota. A new task of a paced class goes to
+// the allowed profile whose allowance most needs spending; `paced: false` keeps the order, for work that belongs on its
+// first engine while that has quota.
+export type Route = { first: Profile; fallbacks?: Profile[]; maxSteps: number; maxMs: number; paced?: boolean };
 export type RoutingTable = {
   version: string; classes: Record<Exclude<TaskClass, 'mechanical'>, Route>;
   experiments: { name: string; class: TaskClass; open: boolean; profiles: Profile[] }[]; consultation: Profile;
@@ -18,6 +20,7 @@ export function readRouting(file: string): RoutingTable {
   for (const key of ['implementation', 'interface', 'bulk-text', 'claim', 'specification', 'critical-path', 'research'] as const) {
     const route = table.classes[key];
     if (!route || !(route.maxSteps > 0) || !(route.maxMs > 0)) throw new Error(`invalid route: ${key}`);
+    if (route.paced !== undefined && typeof route.paced !== 'boolean') throw new Error(`invalid route paced: ${key}`);
     profile(route.first);
     (route.fallbacks ?? []).forEach(profile);
   }

@@ -355,7 +355,9 @@ export class WorkerTasks {
         .attempts()
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
-      const fallbacks = options.profile ? [] : retryFallbacks(readRouting(this.settings.routingFile), nextTaskClass);
+      const routing = readRouting(this.settings.routingFile);
+      const fallbacks = options.profile ? [] : retryFallbacks(routing, nextTaskClass);
+      const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
       const { profile, pool } = choosePoolWithFallback(
         options.profile ?? route.profile,
         fallbacks,
@@ -366,8 +368,9 @@ export class WorkerTasks {
           ...(old ? { preferred: old.pool } : {}),
           ...(options.excludePools ? { exclude: options.excludePools } : {}),
         },
-        // A new task goes to the allowance that would otherwise expire unused first; an explicit profile is kept.
-        options.profile
+        // A new task goes to the allowance that would otherwise expire unused first; an explicit profile, or a class
+        // routed with paced: false, keeps its order.
+        options.profile || !paced
           ? undefined
           : (candidate) => {
               const reading = readings.find((value) => value.pool === candidate.name);
