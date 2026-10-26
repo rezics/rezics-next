@@ -778,23 +778,29 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
   const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
   const db = await openGrowthDatabase();
   let selected: Awaited<ReturnType<typeof scope>>;
+  let spare: Awaited<ReturnType<typeof scope>>;
   let paused: Awaited<ReturnType<typeof launchSelection>> | undefined;
+  let sparePaused: Awaited<ReturnType<typeof launchSelection>> | undefined;
+  async function finish(run: Awaited<ReturnType<typeof launchSelection>> | undefined): Promise<void> {
+    if (!run) return;
+    await client.send(run.workflowId, true, 'continue');
+    await run.handle.getResult();
+  }
   try {
     measuredPool = db.pool;
     const report = await checkGrowth(db, {
       name: 'native logical author page',
       scales: [2048, 8192, 32768],
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(target, scale, previous) {
-        if (paused) {
-          await client.send(paused.workflowId, true, 'continue');
-          await paused.handle.getResult();
-        }
+        await finish(paused);
+        paused = undefined;
         // Logical erasure is irreversible. Each sample gets a fresh author with
         // the same 205-post, three-revision shape outside the measured boundary.
+        // The warm-up author is seeded the same way and erased before the sample.
         selected = await scope(205, 3);
+        spare = await scope(205, 3);
         await seed(
           target,
           {
@@ -907,6 +913,12 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
           { from: previous, to: scale },
         );
       },
+      // The logical page consumes its posts, so warm that page on the spare author first.
+      async warmup() {
+        sparePaused = await launchSelection(spare, 'logical');
+        await finish(sparePaused);
+        sparePaused = undefined;
+      },
       async operation() {
         paused = await launchSelection(selected, 'logical');
       },
@@ -919,10 +931,11 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
     console.info('Native logical page growth', JSON.stringify(report.samples));
   } finally {
     measuredPool = undefined;
-    if (paused) {
-      await client.send(paused.workflowId, true, 'continue');
-      await paused.handle.getResult();
+    try {
+      await finish(sparePaused);
+      await finish(paused);
+    } finally {
+      await db.close();
     }
-    await db.close();
   }
-}, 120_000);
+}, 240_000);

@@ -393,7 +393,6 @@ test.serial(
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,
-      warmups: 0,
       grow: async (growthDb, scale, previous) =>
         seed({ pool: growthDb.pool, admin: growthDb.admin }, pagePopulation, { from: previous, to: scale }),
       operation: async (growthDb) => {
@@ -420,9 +419,17 @@ test.serial(
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,
-      warmups: 0,
       grow: async (growthDb, scale, previous) =>
         seed({ pool: growthDb.pool, admin: growthDb.admin }, refreshPopulation, { from: previous, to: scale }),
+      // One batch clears the rows it selects. Warm the same refresh on a spare stale batch.
+      warmup: async (growthDb) => {
+        await seed({ pool: growthDb.pool, admin: growthDb.admin }, growthPopulation(1), { from: 0, to: 500 });
+        const result = await growthDb.pool.query<{ refreshed: number }>(
+          'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
+          [new Date().toISOString()],
+        );
+        expect(result.rows[0]?.refreshed).toBe(500);
+      },
       operation: async (growthDb) => {
         const result = await growthDb.pool.query<{ refreshed: number }>(
           'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
