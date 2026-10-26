@@ -21,8 +21,11 @@ LEFT JOIN LATERAL (
     SELECT DISTINCT ON (language) language, body
     FROM (
       SELECT language, body, log_seq FROM semantic.fact
+      CROSS JOIN input
       WHERE route = page.route AND subject_id = page.subject_id
         AND kind = 'label' AND operation = 'assert'
+        AND route >= input.partition_no * 16
+        AND route < (input.partition_no + 1) * 16
       OFFSET 0
     ) scanned
     ORDER BY language, log_seq DESC

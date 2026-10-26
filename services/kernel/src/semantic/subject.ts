@@ -25,6 +25,7 @@ import readLabelsStatement from './read-labels.sql';
 import readRelatedStatement from './read-related.sql';
 import readSubjectStatement from './read-subject.sql';
 import readTypesStatement from './read-item-types.sql';
+import readHiddenStatement from './subject-read-hidden.sql';
 import { readRelease as getRelease } from './definitions.ts';
 import { writeFacts } from './write-facts.ts';
 
@@ -234,19 +235,13 @@ async function withoutFencedFacts(
     ...new Set(facts.flatMap((fact) => (fact.statement_id && fact.fact_revision ? [fact.fact_revision] : []))),
   ];
   // Always probe, including an empty list, so hiding the last shown statement does not drop a statement.
-  const result = await client.query<{ revision: number; source: Source | null }>(
-    `SELECT probed.revision, probed.source
-     FROM unnest($3::int[]) AS wanted(revision)
-     JOIN LATERAL (
-       SELECT revision, source FROM semantic.revision
-       WHERE route = $1 AND subject_id = $2 AND revision = wanted.revision
-       OFFSET 0
-       LIMIT 1
-     ) probed ON true`,
-    [route, subjectId, revisions],
-  );
+  const rows = (await readHiddenStatement.run(client, {
+    route,
+    subject_id: subjectId,
+    revisions,
+  })) as { revision: number; source: Source | null }[];
   if (!revisions.length) return facts;
-  const sources = new Map(result.rows.map((row) => [row.revision, row.source]));
+  const sources = new Map(rows.map((row) => [row.revision, row.source]));
   const gone = await fencedIds(
     client,
     routeKey,
@@ -352,8 +347,9 @@ function groupsOf(ids: readonly string[]): Map<number, string[]> {
 export async function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>> {
   assertBatch(ids, 'An item type check accepts at most 256 ids');
   const types = new Map<string, string>();
-  for (const subjectIds of groupsOf(ids).values()) {
+  for (const [partition, subjectIds] of groupsOf(ids)) {
     const rows = (await readTypesStatement.run(client, {
+      partition_no: partition,
       routes: subjectIds.map((id) => routeOf(id)!),
       subject_ids: subjectIds,
     })) as { id: string; type: string }[];
@@ -366,8 +362,9 @@ export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Ma
   assertBatch(ids, 'A label fill accepts at most 256 ids');
   const labels = new Map<string, Item['labels']>();
   await Promise.all(
-    [...groupsOf(ids).values()].map(async (subjectIds) => {
+    [...groupsOf(ids)].map(async ([partition, subjectIds]) => {
       const rows = (await readLabelsStatement.run(pool, {
+        partition_no: partition,
         routes: subjectIds.map((id) => routeOf(id)!),
         subject_ids: subjectIds,
       })) as { id: string; labels: Record<string, string> }[];
@@ -390,8 +387,9 @@ const relatedLoads = new WeakMap<object, RelatedCache>();
 
 async function queryRelated(client: Queryable, ids: readonly string[]): Promise<Map<string, RelatedState>> {
   const states = new Map<string, RelatedState>();
-  for (const subjectIds of groupsOf(ids).values()) {
+  for (const [partition, subjectIds] of groupsOf(ids)) {
     const rows = (await readRelatedStatement.run(client, {
+      partition_no: partition,
       routes: subjectIds.map((id) => routeOf(id)!),
       subject_ids: subjectIds,
     })) as RelatedState[];
