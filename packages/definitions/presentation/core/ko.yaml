@@ -35,3 +35,17 @@ properties:
   wdt:P179: '시리즈'
   rezics:spoilerLevel: '스포일러 수준'
   schema:alternateName: 다른 이름
+  rezics:representativeEdition: "대표 판본"
+inverseProperties:
+  schema:author: "집필한 작품"
+  schema:illustrator: "삽화를 그린 작품"
+  schema:director: "연출한 작품"
+  schema:musicBy: "작곡한 작품"
+  schema:producer: "제작한 작품"
+  schema:productionCompany: "제작에 참여한 작품"
+  wdt:P58: "각본을 쓴 작품"
+  wdt:P178: "개발한 작품"
+  wdt:P725: "목소리로 출연한 작품"
+  schema:contributor: "참여한 작품"
+  schema:character: "등장 작품"
+  wdt:P179: "시리즈 구성 작품"

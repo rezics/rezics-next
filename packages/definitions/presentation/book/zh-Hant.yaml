@@ -7,3 +7,7 @@ properties:
   schema:publisher: 出版者
   schema:numberOfPages: 頁數
   schema:translator: 譯者
+inverseProperties:
+  schema:exampleOfWork: "版本"
+  schema:publisher: "出版作品"
+  schema:translator: "翻譯作品"

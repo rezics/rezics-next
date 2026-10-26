@@ -66,6 +66,44 @@ presentation group for the schema file that defines the property. Types may carr
 inherits the nearest annotated base's ratio when a type has no annotation of its
 own.
 
+The relation groups are `order`, `derivation`, `world`, `membership`, and
+`association` for the Relations view; `credit` for staff and cast in Credits and
+Works; `appearance` for characters in Characters and Appearances; and
+`classification` for concept-valued facts such as genre, tags, platform, gender,
+and form. Every bundled item property declares a relation, including item
+qualifiers. Qualifier-only role properties use `inverse: none`; they do not
+create standalone inbound relations.
+
+Bundled facts are stored on the later work (`wdt:P155`), derived work
+(`wdt:P144`, `rezics:spinOffOf`, `wdt:P8646`), edition
+(`schema:exampleOfWork`), member (`wdt:P179`), contained work
+(`wdt:P361`, `schema:isPartOf`, `wdt:P1433`), or credited work
+(credits and `schema:character`). Their reverse terms are metadata, never
+additional properties. `wdt:P1889` is symmetric. Credits admit credited-as,
+position and detailed role, sort by position, and filter by `wdt:P3831`;
+appearances filter by that role and sort by name. Series members sort by
+position; follows and edition-of reads sort by date. Other bundled relations
+sort by name without inventing a source ordinal. Episode, edition and release
+profiles admit the credit properties with the same qualifiers as works.
+
+Source inventory mappings may declare `inverse: true`: `term` names the
+canonical bundled property, and the related subject holds the statement whose
+value is the source subject. Without that field, the source subject holds it.
+The external `mapping` or `wikidata`, meaning and citations retain the source
+direction. In a vocabulary map keyed by a source term, an explicit `term`
+overrides that key as the canonical property. Omitted mappings remain omitted.
+Reverse terms without a standard equivalent use `rezics:` with labels in all
+eight locales; `rezics:spinOffOf` is the canonical reverse of `wdt:P2512`.
+
+Work profiles admit multivalued `rezics:representativeEdition`, targeting the
+book edition and software release classes that hold `schema:exampleOfWork`.
+Its `schema:inLanguage` qualifier distinguishes the chosen edition for each
+language. It is a holder-only derivation relation: a cover read follows that
+choice directly rather than scanning editions. Work classes without a more
+specific cover ratio inherit 2:3; other subjects inherit 1:1. Character and
+person portraits use 3:4, games and their releases use 3:4, music releases use
+1:1, and recipes use 4:3. Books, manga, volumes and anime inherit 2:3.
+
 `schema:inLanguage` is the BCP 47 language tag of the resource. The catalogue stores
 the canonical case of the subtags it uses: a lowercase language, an optional
 title-case script, and an optional region. Its pattern is

@@ -3,6 +3,7 @@ name: game
 version: 1.0.0
 description: Video game works, platform and language releases, and independently referable add-ons.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -25,6 +26,8 @@ classes:
       Sources: https://schema.org/VideoGame and https://www.wikidata.org/wiki/Q7889.
     slots:
       - alternateName
+    annotations:
+      cover_ratio: 3:4
   VideoGameRelease:
     class_uri: wd:Q20631656
     description: >-
@@ -34,6 +37,16 @@ classes:
       Platform and language distinguish releases when the source identifies them; a work's lists of
       platforms and languages do not imply a Cartesian product of releases.
     slots:
+      - translator
+      - contributor
+      - voiceActor
+      - screenwriter
+      - productionCompany
+      - producer
+      - musicBy
+      - director
+      - illustrator
+      - author
       - alternateName
       - datePublished
       - developer
@@ -51,7 +64,8 @@ classes:
       - distributionFormat
       - vndbId
     annotations:
-      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage
+      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage author director illustrator musicBy screenwriter voiceActor contributor
+      cover_ratio: 3:4
   BangumiVideoGame:
     is_a: VideoGame
     class_uri: schema:VideoGame
@@ -115,6 +129,7 @@ classes:
       - expansionOf
     annotations:
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf author director musicBy producer productionCompany developer publisher character partOfSeries
+      cover_ratio: 3:4
 slots:
   gamePlatform:
     slot_uri: schema:gamePlatform
@@ -125,6 +140,9 @@ slots:
       - wd:P400
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:gameOnPlatform
+      relation_order: name
   gtin:
     slot_uri: schema:gtin
     description: Global Trade Item Number for the release.
@@ -153,6 +171,9 @@ slots:
       - wd:P31
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:releaseOfType
+      relation_order: name
   distributionFormat:
     slot_uri: wdt:P437
     description: A distribution format or physical medium for the release.
@@ -162,6 +183,9 @@ slots:
       - wd:P437
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:releaseInFormat
+      relation_order: name
   follows:
     slot_uri: wdt:P155
     description: A prior work or release that this work or release follows.
@@ -171,6 +195,10 @@ slots:
       - wd:P155
     annotations:
       datatype: wikibase-item
+      relation_group: order
+      inverse: wdt:P156
+      relation_order: date
+      acyclic: true
   softwareEngine:
     slot_uri: wdt:P408
     description: >-
@@ -182,6 +210,9 @@ slots:
       - wd:P408
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:gameUsingEngine
+      relation_order: name
   numberOfPlayers:
     slot_uri: schema:numberOfPlayers
     description: >-
@@ -221,3 +252,6 @@ slots:
       - wd:P8646
     annotations:
       datatype: wikibase-item
+      relation_group: derivation
+      inverse: rezics:expansion
+      relation_order: name

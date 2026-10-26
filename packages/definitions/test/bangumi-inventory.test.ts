@@ -228,6 +228,7 @@ const enumerations: Record<string, (string | number)[]> = {
 type Decision = {
   status: 'existing' | 'proposed' | 'omitted';
   term?: string;
+  inverse?: true;
   on?: string;
   qualifies?: string;
   wikidata?: string;
@@ -376,11 +377,24 @@ function validate(mapping: Decision) {
   }
   expect(mapping.meaning?.trim().length).toBeGreaterThan(10);
   expect(mapping.wikidata).toMatch(/^wd:[PQ][1-9][0-9]*$/);
-  expect(primaryTerms[mapping.term ?? '']).toContain(mapping.wikidata);
+  let sourceTerm = mapping.term ?? '';
+  if (mapping.inverse !== undefined) {
+    expect(mapping.inverse).toBe(true);
+    const property = bundledRelease.properties[sourceTerm];
+    expect(property?.datatype).toBe('wikibase-item');
+    expect(property?.relation?.inverse).toBeDefined();
+    expect(property?.relation?.inverse).not.toBe('none');
+    expect(mapping.qualifies).toBeUndefined();
+    sourceTerm = property!.relation!.inverse!;
+  }
+  expect(primaryTerms[sourceTerm]).toContain(mapping.wikidata);
   if (mapping.status === 'existing') {
     const type = bundledRelease.types[mapping.on ?? ''];
     expect(type).toBeDefined();
-    if (mapping.qualifies) {
+    if (mapping.inverse) {
+      const targets = bundledRelease.properties[mapping.term!]!.targets!;
+      expect([mapping.on!, ...type!.bases].some((term) => targets.includes(term))).toBe(true);
+    } else if (mapping.qualifies) {
       expect(type!.properties).toContain(mapping.qualifies);
       expect(bundledRelease.properties[mapping.qualifies]?.qualifiers).toContain(mapping.term);
     } else {
@@ -393,9 +407,9 @@ function validate(mapping: Decision) {
     );
     const wikidataPage = `https://www.wikidata.org/wiki/${mapping.wikidata!.replace('wd:P', 'Property:P').replace('wd:Q', 'Q')}`;
     expect(mapping.sources).toContain(wikidataPage);
-    if (mapping.term!.startsWith('schema:'))
-      expect(mapping.sources).toContain(`https://schema.org/${mapping.term!.slice(7)}`);
-    if (mapping.term!.startsWith('wdt:')) expect(mapping.wikidata).toBe(mapping.term!.replace('wdt:', 'wd:'));
+    if (sourceTerm.startsWith('schema:'))
+      expect(mapping.sources).toContain(`https://schema.org/${sourceTerm.slice(7)}`);
+    if (sourceTerm.startsWith('wdt:')) expect(mapping.wikidata).toBe(sourceTerm.replace('wdt:', 'wd:'));
     if (mapping.term!.startsWith('wd:')) expect(mapping.wikidata).toBe(mapping.term);
     if (mapping.term!.startsWith('skos:'))
       expect(mapping.sources).toContain(`https://www.w3.org/2004/02/skos/core#${mapping.term!.slice(5)}`);
@@ -411,6 +425,22 @@ function validate(mapping: Decision) {
   if (mapping.value) validate(mapping.value);
   for (const qualifier of Object.values(mapping.qualifiers ?? {})) validate(qualifier);
 }
+
+test('reverse Bangumi relations retain their source meaning through canonical mappings', () => {
+  const data = inventory();
+  for (const [group, id, term, wikidata] of [
+    ['relation.2', 3, 'wdt:P155', 'wd:P156'],
+    ['relation.1', 1006, 'wdt:P155', 'wd:P156'],
+    ['relation.4', 4003, 'wdt:P155', 'wd:P156'],
+    ['relation.4', 4016, 'schema:exampleOfWork', 'wd:P747'],
+  ] as const) {
+    const mapping = data.enumerations
+      .find((entry) => entry.id === group)!
+      .values.find((entry) => entry.id === id)!.mapping;
+    expect(mapping).toMatchObject({ term, inverse: true, wikidata });
+    expect(mapping.meaning).toBeTruthy();
+  }
+});
 
 test('every inventoried Bangumi term is bundled, proposed by the vocabulary rules, or omitted with a reason', () => {
   const data = inventory();

@@ -35,3 +35,17 @@ properties:
   wdt:P179: 'Teil der Reihe oder Serie'
   rezics:spoilerLevel: 'Spoilerstufe'
   schema:alternateName: Alternativname
+  rezics:representativeEdition: "Repräsentative Ausgabe"
+inverseProperties:
+  schema:author: "Verfasste Werke"
+  schema:illustrator: "Illustrierte Werke"
+  schema:director: "Regiearbeiten"
+  schema:musicBy: "Kompositionen"
+  schema:producer: "Produzierte Werke"
+  schema:productionCompany: "Produktionen"
+  wdt:P58: "Drehbucharbeiten"
+  wdt:P178: "Entwickelte Werke"
+  wdt:P725: "Sprechrollen in"
+  schema:contributor: "Mitwirkung an"
+  schema:character: "Auftritte in"
+  wdt:P179: "Serienmitglieder"

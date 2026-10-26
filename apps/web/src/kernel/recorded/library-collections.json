@@ -1,28 +1,28 @@
 {
   "collections": [
     {
-      "id": "01a178a7-5a12-741d-8f10-f4205eff86bc",
-      "curatorAccountId": "01a178a6-76e9-701c-8f5b-f420dfbe9db5",
+      "id": "01a17973-17bd-742f-8cbf-55920c0a61c5",
+      "curatorAccountId": "01a17972-7eab-7516-90e0-55928f8396cc",
       "title": "To read this winter",
       "description": null,
       "visibility": "private",
       "revision": 1,
       "memberCount": 2,
-      "createdAt": "2026-10-26T14:39:55.922Z",
-      "updatedAt": "2026-10-26T14:39:55.954Z",
-      "curator": { "id": "01a178a6-76e9-701c-8f5b-f420dfbe9db5", "handle": "mira", "displayName": "Mira Okabe" }
+      "createdAt": "2026-10-26T18:22:28.286Z",
+      "updatedAt": "2026-10-26T18:22:28.309Z",
+      "curator": { "id": "01a17972-7eab-7516-90e0-55928f8396cc", "handle": "mira", "displayName": "Mira Okabe" }
     },
     {
-      "id": "01a178a7-5999-7636-8a0c-f42080bec1be",
-      "curatorAccountId": "01a178a6-76e9-701c-8f5b-f420dfbe9db5",
+      "id": "01a17973-1748-713c-aaf4-559206d941a4",
+      "curatorAccountId": "01a17972-7eab-7516-90e0-55928f8396cc",
       "title": "Books I come back to",
       "description": "Short novels I reread every few years, in the order I would hand them to a friend.",
       "visibility": "public",
       "revision": 1,
       "memberCount": 4,
-      "createdAt": "2026-10-26T14:39:55.808Z",
-      "updatedAt": "2026-10-26T14:39:55.912Z",
-      "curator": { "id": "01a178a6-76e9-701c-8f5b-f420dfbe9db5", "handle": "mira", "displayName": "Mira Okabe" }
+      "createdAt": "2026-10-26T18:22:28.174Z",
+      "updatedAt": "2026-10-26T18:22:28.276Z",
+      "curator": { "id": "01a17972-7eab-7516-90e0-55928f8396cc", "handle": "mira", "displayName": "Mira Okabe" }
     }
   ],
   "next": null,

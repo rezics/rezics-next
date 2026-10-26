@@ -35,3 +35,17 @@ properties:
   wdt:P179: 'serie'
   rezics:spoilerLevel: 'nivel de destripe'
   schema:alternateName: nombre alternativo
+  rezics:representativeEdition: "Edición representativa"
+inverseProperties:
+  schema:author: "Obras escritas"
+  schema:illustrator: "Obras ilustradas"
+  schema:director: "Obras dirigidas"
+  schema:musicBy: "Obras compuestas"
+  schema:producer: "Obras producidas"
+  schema:productionCompany: "Producciones"
+  wdt:P58: "Guiones escritos"
+  wdt:P178: "Obras desarrolladas"
+  wdt:P725: "Papeles de voz en"
+  schema:contributor: "Contribuciones a"
+  schema:character: "Aparece en"
+  wdt:P179: "Miembros de la serie"

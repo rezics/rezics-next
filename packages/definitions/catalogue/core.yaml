@@ -22,6 +22,8 @@ classes:
       - image
       - name
       - sameAs
+    annotations:
+      cover_ratio: 1:1
   CreativeWork:
     abstract: true
     is_a: Thing
@@ -32,15 +34,21 @@ classes:
       - genre
       - keywords
       - partOfSeries
+    annotations:
+      cover_ratio: 2:3
   Character:
     abstract: true
     is_a: Thing
     description: A character represented in a creative work.
+    annotations:
+      cover_ratio: 3:4
   CreativeWorkSeries:
     abstract: true
     is_a: CreativeWork
     class_uri: schema:CreativeWorkSeries
     description: A series of creative works.
+    slots:
+      - representativeEdition
   Person:
     is_a: Thing
     class_uri: schema:Person
@@ -53,6 +61,8 @@ classes:
       - openLibraryId
       - bangumiPersonId
       - vndbId
+    annotations:
+      cover_ratio: 3:4
   Organization:
     is_a: Thing
     slots:
@@ -125,6 +135,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole openLibraryId bangumiPersonId vndbId sameAs
+      relation_group: credit
+      inverse: rezics:authorOf
+      relation_order: position
+      relation_filter: wdt:P3831
   position:
     slot_uri: schema:position
     description: The one-based order of a credit or the ordinal of a member in a series.
@@ -217,6 +231,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:illustratorOf
+      relation_order: position
+      relation_filter: wdt:P3831
   director:
     slot_uri: schema:director
     description: A person or organization credited with direction.
@@ -229,6 +247,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:directorOf
+      relation_order: position
+      relation_filter: wdt:P3831
   musicBy:
     slot_uri: schema:musicBy
     description: A person or organization credited with composing the music.
@@ -241,6 +263,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:musicByOf
+      relation_order: position
+      relation_filter: wdt:P3831
   producer:
     slot_uri: schema:producer
     description: A person or organization credited with production.
@@ -253,6 +279,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:producerOf
+      relation_order: position
+      relation_filter: wdt:P3831
   productionCompany:
     slot_uri: schema:productionCompany
     description: A person or organization credited as a production company.
@@ -265,6 +295,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:productionCompanyOf
+      relation_order: position
+      relation_filter: wdt:P3831
   screenwriter:
     slot_uri: wdt:P58
     description: A person or organization credited with writing the screenplay.
@@ -277,6 +311,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:screenwriterOf
+      relation_order: position
+      relation_filter: wdt:P3831
   developer:
     slot_uri: wdt:P178
     description: A person or organization credited with development.
@@ -289,6 +327,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:developerOf
+      relation_order: position
+      relation_filter: wdt:P3831
   voiceActor:
     slot_uri: wdt:P725
     description: A person or organization credited with a voice performance.
@@ -301,6 +343,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole characterRole
+      relation_group: credit
+      inverse: rezics:voiceActorOf
+      relation_order: position
+      relation_filter: wdt:P3831
   contributor:
     slot_uri: schema:contributor
     description: A person or organization credited in any other job, specified by its detailed role.
@@ -313,6 +359,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole
+      relation_group: credit
+      inverse: rezics:contributorOf
+      relation_order: position
+      relation_filter: wdt:P3831
   creditedAs:
     slot_uri: wdt:P1932
     description: The name as it appears in the credit.
@@ -324,12 +374,18 @@ slots:
     range: Concept
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: none
+      relation_order: name
   characterRole:
     slot_uri: wdt:P453
     description: The character portrayed in a voice performance.
     range: Character
     annotations:
       datatype: wikibase-item
+      relation_group: appearance
+      inverse: none
+      relation_order: name
   character:
     slot_uri: schema:character
     description: A character appearing in a creative work.
@@ -340,6 +396,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: detailedRole creditedAs spoilerLevel
+      relation_group: appearance
+      inverse: rezics:appearsIn
+      relation_order: name
+      relation_filter: wdt:P3831
   spoilerLevel:
     slot_uri: rezics:spoilerLevel
     description: Disclosure level from 0 (no spoiler) through 2 (major spoiler).
@@ -357,3 +417,20 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: position
+      relation_group: membership
+      inverse: rezics:seriesMember
+      relation_order: position
+      acyclic: true
+  representativeEdition:
+    slot_uri: rezics:representativeEdition
+    description: The edition or release chosen to represent this work in the qualified language, with one value per language.
+    any_of:
+      - range: Edition
+      - range: VideoGameRelease
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: inLanguage
+      relation_group: derivation
+      inverse: none
+      relation_order: name

@@ -6,3 +6,6 @@ properties:
   schema:weight: 质量
   wdt:P1853: 血型
   wdt:P6296: Bangumi角色标识符
+inverseProperties:
+  schema:gender: "此性别的主体"
+  wdt:P1853: "此血型的主体"

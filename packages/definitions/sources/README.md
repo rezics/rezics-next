@@ -17,6 +17,12 @@ Each column entry has one of these statuses:
   `citations` to the relevant schema.org term page, when used, and Wikidata mapping page.
 - `omitted`: `reason` explains why the field does not become a profile statement.
 
+A relation mapping may set `inverse: true`. Its `term` names the canonical bundled property, and the related subject
+holds the statement pointing to the source subject. `on` still identifies the source subject's profile; it must be an
+admitted target of the canonical property. Without `inverse`, the source subject holds the statement. The external
+`mapping` or `wikidata`, meaning and citations describe the source direction. A `table_types` entry keyed by a source
+term may supply an explicit canonical `term` alongside `inverse: true`. Omitted mappings are not converted.
+
 A column may also have `licence` when its data has a licence or source condition different from the dump's default.
 Enumerated fields include a `values` list with every source value, its term, Wikidata mapping, meaning, and citations.
 Shared YAML anchors keep repeated enumerations identical across columns. The `table_types` section describes the type
@@ -27,7 +33,8 @@ SKOS concept or relation.
 
 Propose a schema.org class or property when its meaning matches the source field. Otherwise propose the matching
 Wikidata class (`wd:Q…`) or property (`wdt:P…`). Every proposal includes its Wikidata mapping and citations to the
-relevant schema.org and Wikidata pages. Use `rezics:` only for platform mechanisms; the source-specific
+relevant schema.org and Wikidata pages. Use `rezics:` for platform mechanisms and inverse relations with no matching
+standard term; the source-specific
 `rezics:spoilerLevel` qualifier records spoiler disclosure because no standard property covers that platform
 mechanism.
 

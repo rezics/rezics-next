@@ -73,7 +73,16 @@ const languagePattern = new RegExp(Object.keys(releaseSchema.$defs.labels.patter
 const presentationGroup = (file: string) => posix.basename(file).replace(/\.ya?ml$/u, '');
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const filterName = /^[a-z][a-z0-9-]{0,63}$(?![\s\S])/u;
-const relationGroups = ['order', 'derivation', 'world', 'membership', 'association'] as const;
+const relationGroups = [
+  'order',
+  'derivation',
+  'world',
+  'membership',
+  'association',
+  'credit',
+  'appearance',
+  'classification',
+] as const;
 const relationOrders = ['position', 'date', 'name'] as const;
 const relationAnnotationKeys = [
   'relation_group',
@@ -360,11 +369,6 @@ export async function compileCatalogue(input: {
       sourceClasses.set(name, { value: object(definition), location: { file, pointer: at('/classes', name) } });
       if (typeof object(definition).is_a === 'string') parents.set(name, object(definition).is_a as string);
     }
-  const sourceClassesByCurie = new Map<string, { name: string; value: Node }>();
-  for (const [name, definition] of sourceClasses) {
-    const classUri = definition.value.class_uri;
-    if (typeof classUri === 'string') sourceClassesByCurie.set(classUri, { name, value: definition.value });
-  }
   // Use induced attributes for properties used by concrete classes. A global
   // property cannot represent two different class-specific value contracts.
   const effective = new Map<string, string>();
@@ -459,16 +463,12 @@ export async function compileCatalogue(input: {
       seenBases.add(classUri);
       bases.push(classUri);
     }
-    const ownCoverRatio = object(sourceClasses.get(term.name)?.value.annotations).cover_ratio;
-    let effectiveCoverRatio = typeof ownCoverRatio === 'string' ? ownCoverRatio : undefined;
-    if (effectiveCoverRatio === undefined) {
-      for (const base of bases) {
-        const baseClass = sourceClassesByCurie.get(base);
-        const inherited = object(baseClass?.value.annotations).cover_ratio;
-        if (typeof inherited === 'string') {
-          effectiveCoverRatio = inherited;
-          break;
-        }
+    let effectiveCoverRatio: string | undefined;
+    for (const ancestor of classChain(term.name)) {
+      const ratio = object(sourceClasses.get(ancestor)?.value.annotations).cover_ratio;
+      if (typeof ratio === 'string') {
+        effectiveCoverRatio = ratio;
+        break;
       }
     }
     const facets: string[] = [];

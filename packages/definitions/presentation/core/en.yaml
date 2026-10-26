@@ -35,3 +35,17 @@ properties:
   wdt:P179: 'part of the series'
   rezics:spoilerLevel: 'spoiler level'
   schema:alternateName: alternate name
+  rezics:representativeEdition: "Representative edition"
+inverseProperties:
+  schema:author: "Author of"
+  schema:illustrator: "Illustrator of"
+  schema:director: "Director of"
+  schema:musicBy: "Composer of"
+  schema:producer: "Producer of"
+  schema:productionCompany: "Productions"
+  wdt:P58: "Screenwriter of"
+  wdt:P178: "Developer of"
+  wdt:P725: "Voice roles in"
+  schema:contributor: "Contributed to"
+  schema:character: "Appears in"
+  wdt:P179: "Members"

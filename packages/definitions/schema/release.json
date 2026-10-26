@@ -187,7 +187,16 @@
       "additionalProperties": false,
       "properties": {
         "group": {
-          "enum": ["order", "derivation", "world", "membership", "association"]
+          "enum": [
+            "order",
+            "derivation",
+            "world",
+            "membership",
+            "association",
+            "credit",
+            "appearance",
+            "classification"
+          ]
         },
         "inverse": {
           "anyOf": [{ "const": "none" }, { "$ref": "#/$defs/curie" }]

@@ -7,3 +7,7 @@ properties:
   schema:publisher: editorial
   schema:numberOfPages: número de páginas
   schema:translator: traductor
+inverseProperties:
+  schema:exampleOfWork: "Ediciones"
+  schema:publisher: "Obras publicadas"
+  schema:translator: "Obras traducidas"

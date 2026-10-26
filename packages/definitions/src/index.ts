@@ -38,7 +38,15 @@ export type TypeDefinition = {
   facets: string[];
   coverRatio?: string;
 };
-export type RelationGroup = 'order' | 'derivation' | 'world' | 'membership' | 'association';
+export type RelationGroup =
+  | 'order'
+  | 'derivation'
+  | 'world'
+  | 'membership'
+  | 'association'
+  | 'credit'
+  | 'appearance'
+  | 'classification';
 export type RelationDefinition = {
   group: RelationGroup;
   inverse?: string;

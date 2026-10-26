@@ -1,8 +1,8 @@
 {
   "copies": [
     {
-      "id": "01a178a7-5a5a-7321-8584-f420a9f9d5df",
-      "subjectId": "01a178a7-06ca-75b0-b60b-4671af4ce6b5",
+      "id": "01a17973-17f5-714e-8a24-55924e20cd22",
+      "subjectId": "01a17972-cf6a-744f-aff2-67e3a1c29953",
       "status": "owned",
       "revision": 1,
       "location": "Hallway shelf, second row",
@@ -10,11 +10,11 @@
       "acquiredOn": "2024-03-16",
       "disposedOn": null,
       "note": "Paperback with the original watercolours.",
-      "subject": { "id": "01a178a7-06ca-75b0-b60b-4671af4ce6b5", "type": "schema:Book", "label": "The Little Prince" }
+      "subject": { "id": "01a17972-cf6a-744f-aff2-67e3a1c29953", "type": "schema:Book", "label": "The Little Prince" }
     },
     {
-      "id": "01a178a7-5a6d-7784-b724-f42049d59b92",
-      "subjectId": "01a178a7-58d1-750d-bbf2-d4780e6c3ef9",
+      "id": "01a17973-1806-7729-ae8c-55925c3c5b87",
+      "subjectId": "01a17973-16a7-7485-ad5f-692b696c34bc",
       "status": "owned",
       "revision": 1,
       "location": "Kobo library, e-book",
@@ -22,7 +22,7 @@
       "acquiredOn": "2025-11-02",
       "disposedOn": null,
       "note": "EPUB, Meredith McKinney translation.",
-      "subject": { "id": "01a178a7-58d1-750d-bbf2-d4780e6c3ef9", "type": "schema:Book", "label": "Kokoro" }
+      "subject": { "id": "01a17973-16a7-7485-ad5f-692b696c34bc", "type": "schema:Book", "label": "Kokoro" }
     }
   ],
   "next": null,

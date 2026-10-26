@@ -3,6 +3,7 @@ name: visual-novel
 version: 1.0.0
 description: Visual novel work profile terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -28,24 +29,13 @@ classes:
       - translator
       - voiceActor
       - follows
-      - followedByWork
       - partOfWork
       - alternativeWork
       - basedOnWork
-      - derivativeWork
-      - spinOffWork
+      - spinOffOf
     annotations:
       facets: genre keywords character contributor author director illustrator musicBy translator voiceActor partOfSeries inLanguage
 slots:
-  followedByWork:
-    slot_uri: wdt:P156
-    description: A work that follows this visual novel.
-    range: VisualNovel
-    multivalued: true
-    exact_mappings:
-      - wd:P156
-    annotations:
-      datatype: wikibase-item
   partOfWork:
     slot_uri: wdt:P361
     description: A related work in whose set, series or shared setting this visual novel belongs.
@@ -55,6 +45,10 @@ slots:
       - wd:P361
     annotations:
       datatype: wikibase-item
+      relation_group: membership
+      inverse: wdt:P527
+      relation_order: name
+      acyclic: true
   alternativeWork:
     slot_uri: wdt:P1889
     description: An alternative work in the same setting or continuity.
@@ -64,6 +58,9 @@ slots:
       - wd:P1889
     annotations:
       datatype: wikibase-item
+      relation_group: world
+      symmetric: true
+      relation_order: name
   basedOnWork:
     slot_uri: wdt:P144
     description: A work this visual novel is based on.
@@ -73,21 +70,17 @@ slots:
       - wd:P144
     annotations:
       datatype: wikibase-item
-  derivativeWork:
-    slot_uri: wdt:P4969
-    description: A work derived from this visual novel.
+      relation_group: derivation
+      inverse: wdt:P4969
+      relation_order: name
+      acyclic: true
+  spinOffOf:
+    slot_uri: rezics:spinOffOf
+    description: The original work from which this spin-off was derived.
     range: VisualNovel
     multivalued: true
-    exact_mappings:
-      - wd:P4969
     annotations:
       datatype: wikibase-item
-  spinOffWork:
-    slot_uri: wdt:P2512
-    description: A spin-off work related to this visual novel.
-    range: VisualNovel
-    multivalued: true
-    exact_mappings:
-      - wd:P2512
-    annotations:
-      datatype: wikibase-item
+      relation_group: derivation
+      inverse: wdt:P2512
+      relation_order: name

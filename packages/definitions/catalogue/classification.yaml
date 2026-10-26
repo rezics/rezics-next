@@ -3,6 +3,7 @@ name: classification
 version: 1.0.0
 description: Classification profile terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -33,6 +34,9 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:schemeConcept
+      relation_order: name
   broader:
     slot_uri: skos:broader
     description: A broader concept in the classification hierarchy.
@@ -40,12 +44,19 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: skos:narrower
+      relation_order: name
+      acyclic: true
   focus:
     slot_uri: foaf:focus
     description: The subject that this concept stands for.
     range: Thing
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:focusOf
+      relation_order: name
   genre:
     slot_uri: schema:genre
     description: A genre concept classifying the creative work.
@@ -56,6 +67,9 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: spoilerLevel
+      relation_group: classification
+      inverse: rezics:workInGenre
+      relation_order: name
   keywords:
     slot_uri: schema:keywords
     description: A tag concept classifying the creative work.
@@ -64,3 +78,6 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: spoilerLevel
+      relation_group: classification
+      inverse: rezics:taggedSubject
+      relation_order: name

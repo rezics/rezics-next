@@ -13,3 +13,10 @@ properties:
   schema:numberOfPlayers: プレイ人数
   schema:minValue: 最小値
   wdt:P8646: 以下の拡張パック
+inverseProperties:
+  schema:gamePlatform: "このプラットフォームのゲーム"
+  wdt:P31: "この種類のリリース"
+  wdt:P437: "この媒体のリリース"
+  wdt:P155: "続編"
+  wdt:P408: "このエンジンを使うゲーム"
+  wdt:P8646: "拡張作品"

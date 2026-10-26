@@ -5772,7 +5772,8 @@ enumerations:
         label: Sequel
         mapping:
           status: proposed
-          term: wdt:P156
+          term: wdt:P155
+          inverse: true
           'on': schema:CreativeWork
           wikidata: wd:P156
           meaning: The related work is the sequel of this work.
@@ -5888,7 +5889,8 @@ enumerations:
         label: Sequel
         mapping:
           status: proposed
-          term: wdt:P156
+          term: wdt:P155
+          inverse: true
           'on': schema:CreativeWork
           wikidata: wd:P156
           meaning: The related work is the sequel of this book.
@@ -5965,7 +5967,8 @@ enumerations:
         label: Sequel
         mapping:
           status: proposed
-          term: wdt:P156
+          term: wdt:P155
+          inverse: true
           'on': schema:CreativeWork
           wikidata: wd:P156
           meaning: The related game follows this game in the series.
@@ -6008,7 +6011,8 @@ enumerations:
         label: Version
         mapping:
           status: proposed
-          term: schema:workExample
+          term: schema:exampleOfWork
+          inverse: true
           'on': schema:CreativeWork
           wikidata: wd:P747
           meaning: The related game is a different version of this original game.
