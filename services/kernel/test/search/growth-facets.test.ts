@@ -31,6 +31,18 @@ if (!databaseUrl || !searchUrl)
   throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
 
 const hotPartition = 2048;
+const unit = 500;
+// The relations unrelatedPopulation seeds, in the order it inserts them.
+const seededRelations = [
+  'semantic.subject',
+  'semantic.revision',
+  'semantic.fact',
+  'semantic.redirect',
+  'semantic.candidate',
+  'semantic.adoption',
+  'semantic.hidden_candidate',
+  'semantic.definition_release',
+] as const;
 const prefix = `facets-growth-${randomUUID().slice(0, 8)}`;
 const cursors: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(31)]]) };
 const actor: AccountActor = {
@@ -64,6 +76,40 @@ let kernel: ReturnType<typeof createKernel> | undefined;
 let probe: Probe | undefined;
 let authorIds: string[] = [];
 let bookIds: string[] = [];
+// semantic.partition_subjects holds one counter row per partition from its migration on, so it is reset, not emptied.
+type Counts = Record<(typeof seededRelations)[number] | 'visible', number>;
+const starts: Counts[] = [];
+const fixtureRows: Counts[] = [];
+const finishes: Counts[] = [];
+
+async function seededCounts(database: GrowthDatabase): Promise<Counts> {
+  const counts = {} as Counts;
+  for (const relation of seededRelations) {
+    const { rows } = await database.admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${relation}`);
+    counts[relation] = rows[0]!.n;
+  }
+  const { rows } = await database.admin.query<{ n: number }>(
+    'SELECT coalesce(sum(visible), 0)::int AS n FROM semantic.partition_subjects',
+  );
+  counts.visible = rows[0]!.n;
+  return counts;
+}
+
+async function checkSeeded(database: GrowthDatabase, check: Parameters<typeof checkGrowth>[1]) {
+  const report = await checkGrowth(database, {
+    ...check,
+    grow: async (target, scale, previous) => {
+      if (previous === 0) {
+        const start = await seededCounts(target);
+        starts.push(start);
+        fixtureRows.push(start);
+      }
+      await check.grow(target, scale, previous);
+    },
+  });
+  finishes.push(await seededCounts(database));
+  return report;
+}
 
 async function addSubject(route: number, item: unknown): Promise<string> {
   if (!db) throw new Error('Growth database is not open');
@@ -400,7 +446,7 @@ afterAll(async () => {
 test('Facet counts stays within its bound as N grows', async () => {
   if (!db || !kernel) throw new Error('Growth fixtures are not ready');
   const selectedPartitions = new Set(authorIds.map(subjectPartition));
-  const report = await checkGrowth(db, {
+  const report = await checkSeeded(db, {
     name: 'Facet counts stays within its bound as N grows',
     scales: [1, 8, 64],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -466,7 +512,7 @@ test('Search hit facts stay within their bound as N grows', async () => {
   const selectedPartitions = new Set(authorIds.map(subjectPartition));
   const allowedIds = new Set([...bookIds, ...authorIds]);
   const authorsByBook = [[0], [0, 1], [0], [1]];
-  const report = await checkGrowth(db, {
+  const report = await checkSeeded(db, {
     name: 'Search hit facts',
     scales: [1, 8, 64],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -523,4 +569,25 @@ test('Search hit facts stay within their bound as N grows', async () => {
     );
     expect(scans).toEqual([]);
   }
+}, 90_000);
+
+test('every growth-facets check starts empty and seeds at most sixteen scale units of 500', async () => {
+  expect(starts).toHaveLength(2);
+  expect(fixtureRows).toHaveLength(2);
+  expect(finishes).toHaveLength(2);
+  const sample = unrelatedPopulation('facet-counts-bound');
+  const written = Object.fromEntries([...seededRelations, 'visible'].map((relation) => [relation, 0])) as Counts;
+  for (let ordinal = 0; ordinal < 16 * unit; ordinal++) {
+    const place = placement(sample, ordinal);
+    written.visible++;
+    for (const [relation, rows] of Object.entries(sample.rows!(place)))
+      written[relation as keyof Counts] += rows.length;
+  }
+  const empty = Object.fromEntries([...seededRelations, 'visible'].map((relation) => [relation, 0])) as Counts;
+  for (const start of starts) expect(start).toEqual(empty);
+  // The fixtures every check builds around the seeded rows are not part of the ordinals' units.
+  finishes.forEach((finish, check) => {
+    for (const relation of [...seededRelations, 'visible'] as const)
+      expect(finish[relation]).toBeLessThanOrEqual(written[relation] + fixtureRows[check]![relation]);
+  });
 }, 90_000);
