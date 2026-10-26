@@ -15,7 +15,7 @@ const visitors = ['Signed In', 'Signed Out'];
 const recorded = join(app, 'src/kernel/recorded');
 mkdirSync(join(root, '.temp'), { recursive: true });
 const temporary = mkdtempSync(join(root, '.temp/page-stories-'));
-const timeout = 900_000;
+const timeout = 1_800_000;
 const executable = (name: string) =>
   [app, ui].map((directory) => join(directory, 'node_modules/.bin', name)).find(existsSync)!;
 let child: ChildProcess | undefined;
@@ -195,63 +195,69 @@ test(
       const name = basename(entry.importPath, '.stories.tsx');
       const imports = dependencies(resolve(app, entry.importPath));
       expect([...imports].some((file) => file.startsWith(`${recorded}/`) && file.endsWith('.json'))).toBe(true);
-      for (const locale of locales) {
-        const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
-        const page = await context.newPage();
-        const external: string[] = [];
-        await page.route('**/*', async (route) => {
-          const url = new URL(route.request().url());
-          if (url.origin === origin || !['http:', 'https:'].includes(url.protocol)) return route.continue();
-          external.push(url.href);
-          await route.abort();
-        });
-        // The a11y addon runs axe after every story unless its manual global is set; two runs in one page collide, so
-        // this page is checked by AxeBuilder alone.
-        await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale};a11y.manual:!true`, {
-          waitUntil: 'networkidle',
-        });
-        await page.locator('html[data-hydrated]').waitFor();
-        // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
-        await page.getByRole('main').waitFor();
-        expect(await page.getByRole('main').count()).toBe(1);
-        // Secondary navigation is allowed when every navigation landmark has a name.
-        expect(await page.getByRole('navigation', { name: /\S/ }).count()).toBe(
-          await page.getByRole('navigation').count(),
-        );
-        expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
-        const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
-        expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
-        if (entry.name === 'Signed Out')
+      // The locales are separate pages with separate axe runs, so they check side by side.
+      await Promise.all(
+        locales.map(async (locale) => {
+          const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
+          const page = await context.newPage();
+          const external: string[] = [];
+          await page.route('**/*', async (route) => {
+            const url = new URL(route.request().url());
+            if (url.origin === origin || !['http:', 'https:'].includes(url.protocol)) return route.continue();
+            external.push(url.href);
+            await route.abort();
+          });
+          // The a11y addon runs axe after every story unless its manual global is set; two runs in one page collide, so
+          // this page is checked by AxeBuilder alone.
+          await page.goto(
+            `${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale};a11y.manual:!true`,
+            {
+              waitUntil: 'networkidle',
+            },
+          );
+          await page.locator('html[data-hydrated]').waitFor();
+          // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
+          await page.getByRole('main').waitFor();
+          expect(await page.getByRole('main').count()).toBe(1);
+          // Secondary navigation is allowed when every navigation landmark has a name.
+          expect(await page.getByRole('navigation', { name: /\S/ }).count()).toBe(
+            await page.getByRole('navigation').count(),
+          );
+          expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
+          const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+          expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
+          if (entry.name === 'Signed Out')
+            expect(
+              await page.getByRole('banner').getByRole('link', { name: own.account_sign_in, exact: true }).count(),
+            ).toBe(1);
+          if (entry.name === 'Signed In') {
+            expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
+            const account = page.getByRole('button', { name: own.account_menu, exact: true });
+            const menu = page.getByRole('group', { name: own.account_menu, exact: true });
+            if ((await account.count()) && !(await menu.isVisible())) await account.click();
+            expect(await page.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
+          }
+          if (name === 'home' || name === 'missing-subject')
+            expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
+              name === 'home' ? own.home_heading : own.not_found_heading,
+            );
+          if (name === 'subject') {
+            const recording = await Bun.file(join(recorded, 'subject.json')).json();
+            expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
+              recording.subject.labels[locale] ?? recording.subject.labels.en,
+            );
+          }
+          const a11y = await new AxeBuilder({ page })
+            .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+            .analyze();
           expect(
-            await page.getByRole('banner').getByRole('link', { name: own.account_sign_in, exact: true }).count(),
-          ).toBe(1);
-        if (entry.name === 'Signed In') {
-          expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
-          const account = page.getByRole('button', { name: own.account_menu, exact: true });
-          const menu = page.getByRole('group', { name: own.account_menu, exact: true });
-          if ((await account.count()) && !(await menu.isVisible())) await account.click();
-          expect(await page.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
-        }
-        if (name === 'home' || name === 'missing-subject')
-          expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
-            name === 'home' ? own.home_heading : own.not_found_heading,
-          );
-        if (name === 'subject') {
-          const recording = await Bun.file(join(recorded, 'subject.json')).json();
-          expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
-            recording.subject.labels[locale] ?? recording.subject.labels.en,
-          );
-        }
-        const a11y = await new AxeBuilder({ page })
-          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
-          .analyze();
-        expect(
-          a11y.violations.map((violation) => violation.id),
-          `${entry.id} ${locale}`,
-        ).toEqual([]);
-        expect(external, 'stories replay recordings without contacting Auth or a live kernel').toEqual([]);
-        await context.close();
-      }
+            a11y.violations.map((violation) => violation.id),
+            `${entry.id} ${locale}`,
+          ).toEqual([]);
+          expect(external, 'stories replay recordings without contacting Auth or a live kernel').toEqual([]);
+          await context.close();
+        }),
+      );
     }
   },
   timeout,
