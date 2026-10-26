@@ -154,9 +154,11 @@ refusal advances nothing. An exact replay of a committed floor advance returns i
 Cost: the decision is the opening's own evidence, one human, operator, subject and membership point read plus the
 evaluator's anchored reads, O(log R) with R = N + U*t + M, and one locked account read for the operator.
 
-Both barriers fence the account in the same update that advances its floor, so Access holds the new floor, the fence
-and the receipt before Auth applies any effect. A consent reduction needs an unfenced account: the fence it raises is
-its own, and an earlier fence is never cleared by it. Recovery needs the fence it already holds.
+Both barriers advance the floor and fence the account in the same update, so Access holds the new floor, the fence
+and the receipt before Auth applies any effect. A barrier always advances the floor: a reduction is possible on an
+account that is already fenced, such as an owner an operator fenced. It raises the fence and sets its receipt only when
+the account is not fenced; a fence it did not raise keeps its own receipt. Recovery needs the fence it already holds
+and replaces that fence's receipt with its own, because completing the recovery is what clears it.
 
 Auth applies nothing until Access confirms the receipt. Auth calls `trustedAccess.confirmBarrier` with the account,
 purpose, operation key, receipt id and floor, and refuses unless it returns true. Access answers with one anchored read:
@@ -167,10 +169,11 @@ establishment row; consent confirms before it reduces the stored consent or revo
 
 The fence clears only by completion with that receipt. After a consent reduction and its session revocation commit,
 Auth calls `trustedAccess.completeBarrier`; `lifecycle.completeConsentBarrier` clears the fence only while the account's
-current fence receipt and floor are that barrier's, and an exact repeat returns the committed completion. Until then a
-retry of the same consent request resumes the barrier and completes it. Recovery completes through `completeRecovery`:
-only existing `clearFence` with trusted new establishment evidence bound to the exact account, receipt and current
-floor can clear a recovery fence. Both ports are optional on Auth's trusted access object; the factory always
+fence receipt and floor are that barrier's. Otherwise the fence stays and the completion still commits, so Auth's
+effects apply either way, and an exact repeat returns the committed completion. Until then a retry of the same consent
+request resumes the barrier and completes it. Recovery completes through `completeRecovery`: only existing
+`clearFence` with trusted new establishment evidence bound to the exact account, receipt and current floor can clear a
+recovery fence. Both ports are optional on Auth's trusted access object; the factory always
 supplies them, and only isolated fixtures omit them.
 The focused tests exercise Auth's real HTTP consent/recovery flows and concrete proof verifier against native
 PostgreSQL lifecycle commands. This establishes the barrier seam; provisioning and fence-clear evidence readers

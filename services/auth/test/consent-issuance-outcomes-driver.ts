@@ -50,7 +50,7 @@ export type Evidence = {
   proof: { reference: string; operationKey: string; digest: string; previousEpoch: number; applied: boolean };
   /** Committed native Access fence receipt that Access returned to Auth. */
   receipt: { receiptId: string; accountId: string; minimumAuthnEpoch: string };
-  /** Native Access authentication floor of the reducing account. */
+  /** Native Access authentication floor of the reducing account: fenced from the barrier until Auth completes it. */
   account: { accountId: string; minimumAuthnEpoch: string; fenced: boolean; receiptId: string | null };
   /** Auth's recorded application of that receipt, absent until the consent CAS commits. */
   applied: { receiptId: string; purpose: string; minimumAuthnEpoch: number } | null;
@@ -443,7 +443,7 @@ export function createReferenceDriver(behavior: 'correct' | 'stale' | 'deny-all'
       applied: false,
     },
     receipt: { receiptId: 'reference-receipt', accountId: 'reference-account', minimumAuthnEpoch: '2' },
-    account: { accountId: 'reference-account', minimumAuthnEpoch: '2', fenced: false, receiptId: 'reference-receipt' },
+    account: { accountId: 'reference-account', minimumAuthnEpoch: '2', fenced: true, receiptId: 'reference-receipt' },
     applied: null,
     consent: { revision: '2', scopes: [retained, removed] },
     events: ['committed-auth-proof', 'committed-access-receipt', 'paused-before-consent-cas'],
@@ -451,15 +451,21 @@ export function createReferenceDriver(behavior: 'correct' | 'stale' | 'deny-all'
   return {
     startReduction: async () => structuredClone(evidence),
     beginAttempt(identity, scopes) {
+      // The reducing account is fenced until the reduction completes, whatever the client.
+      const fenced = !finished && identity !== 'other-account';
       const denied =
-        behavior === 'deny-all' || (behavior !== 'stale' && identity === 'target' && scopes.includes(removed));
+        behavior === 'deny-all' ||
+        fenced ||
+        (behavior !== 'stale' && identity === 'target' && scopes.includes(removed));
       const jwt = denied ? null : `reference-token-${++issued}`;
       if (jwt) tokens.set(jwt, { identity, scopes });
       evidence.events.push('signin-http-start', 'signin-http-complete');
       if (!denied) evidence.events.push('token-http-complete');
       return {
         result: Promise.resolve({
-          signin: new Response('{}', { status: denied ? 401 : 200 }),
+          signin: new Response(denied ? JSON.stringify({ error: 'authentication_denied' }) : '{}', {
+            status: denied ? 401 : 200,
+          }),
           token: denied ? null : new Response(JSON.stringify({ access_token: jwt }), { status: 200 }),
           jwt,
         }),
@@ -469,6 +475,7 @@ export function createReferenceDriver(behavior: 'correct' | 'stale' | 'deny-all'
     async finish(mode) {
       finished = true;
       evidence.proof.applied = true;
+      evidence.account.fenced = false;
       evidence.applied = { receiptId: evidence.receipt.receiptId, purpose: 'consent-reduction', minimumAuthnEpoch: 2 };
       evidence.consent = { revision: '3', scopes: [retained] };
       if (mode === 'restart')

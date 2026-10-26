@@ -330,9 +330,17 @@ test('durable consent point reader honors native pending reduction ceiling befor
       WHERE "userId"=$1 AND "clientId"='web'`,
       [accountId],
     );
+    let abandoned!: Parameters<typeof barriers.trustedAccess.completeBarrier>[0];
     options.trustedAccess.invalidateAccount = async (actual) => {
       reference = actual.proofReference!;
-      await barriers.trustedAccess.invalidateAccount!(actual);
+      const receipt = await barriers.trustedAccess.invalidateAccount!(actual);
+      abandoned = {
+        accountId,
+        purpose: 'consent-reduction',
+        operationKey: actual.operationKey!,
+        receiptId: receipt.receiptId,
+        minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+      };
       throw new Error('Lost acknowledgement');
     };
     expect((await grant(['read'])).status).toBe(503);
@@ -356,6 +364,12 @@ test('durable consent point reader honors native pending reduction ceiling befor
     expect((await marker()).pending_reference).toBe(reference);
     expect(await read()).toEqual({ ...selected, scopes: ['read'] });
     expect((await grant(['read'])).status).toBe(401);
+    // The abandoned barrier fenced the account: it signs in again only once Auth completes the barrier.
+    expect(
+      (await request('/signin', { account_id: accountId, password, client_id: 'web', scope: scopes })).status,
+    ).toBe(401);
+    await barriers.trustedAccess.completeBarrier(abandoned);
+    expect((await lifecycle.readFenceState(accountId))?.fenced).toBe(false);
     session = await login();
     expect((await grant(scopes)).status).toBe(200);
     expect((await marker()).pending_reference).toBeNull();

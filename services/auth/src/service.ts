@@ -1999,8 +1999,6 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   [account.accountId, clientId],
                 )
               ).rows[0];
-              // A fenced account only finishes the consent reduction whose barrier fenced it.
-              if (account.fenced && !previous?.pending_reference) throw new Denied();
               if (operated && (!previous || granted.some((scope) => !previous.scopes.includes(scope))))
                 throw new Denied();
               if (!previous?.scopes.some((scope) => !granted.includes(scope))) {

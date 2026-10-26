@@ -240,9 +240,9 @@ test('the fence clears only when Auth completes the barrier with that receipt', 
   // An exact repeat reads the committed completion; it neither raises nor clears anything else.
   await access.completeBarrier(completion);
   expect(await floor()).toMatchObject({ fenced: false, receiptId: fenced.receiptId });
-  // A later fence is not this barrier's to clear.
+  // A later fence is not this barrier's to clear; the repeat is still the committed completion.
   await lifecycle.raiseFence({ accountId: human, key: 'later-fence' });
-  await expect(access.completeBarrier(completion)).rejects.toThrow();
+  await access.completeBarrier(completion);
   expect((await floor())!.fenced).toBe(true);
   // Restore the unfenced fixture for the next scenario.
   await pool.query('UPDATE access.account SET authn_fenced=false WHERE route=$1 AND account_id=$2', [

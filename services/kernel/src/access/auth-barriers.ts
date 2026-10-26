@@ -135,8 +135,9 @@ export function createAuthBarrierCapabilities({
         receipt.minimumAuthnEpoch === String(previousEpoch + 1) &&
         state &&
         state.minimumAuthnEpoch === receipt.minimumAuthnEpoch &&
-        state.receiptId === receipt.receiptId &&
-        state.fenced,
+        state.fenced &&
+        // A consent barrier on an already fenced account leaves that fence and its receipt in place.
+        (purpose === 'consent-reduction' || state.receiptId === receipt.receiptId),
     );
     return receipt;
   }

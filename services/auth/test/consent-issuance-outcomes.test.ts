@@ -6,6 +6,7 @@ import {
   retained,
   type ConsentIssuanceDriver,
   type Evidence,
+  type PendingAttempt,
 } from './consent-issuance-outcomes-driver.ts';
 
 // Outcome specification for a personal consent reduction racing a fresh
@@ -31,17 +32,27 @@ function gapEvidence(gap: Evidence) {
   expect(gap.account).toMatchObject({
     minimumAuthnEpoch: gap.receipt.minimumAuthnEpoch,
     receiptId: gap.receipt.receiptId,
-    fenced: false,
+    fenced: true,
   });
   expect(gap.applied).toBeNull();
   expect(gap.consent.scopes).toEqual([retained, removed]);
   expect(gap.events).toEqual(['committed-auth-proof', 'committed-access-receipt', 'paused-before-consent-cas']);
 }
 
+// The reducing account is fenced exactly as it is in a recovery gap: sign-in is refused with no token.
+async function refused(attempt: PendingAttempt) {
+  const result = await attempt.result;
+  expect(result.signin.status).toBe(401);
+  expect(await result.signin.clone().json()).toEqual({ error: 'authentication_denied' });
+  expect(result.token).toBeNull();
+  expect(result.jwt).toBeNull();
+}
+
 function completedEvidence(gap: Evidence, end: Evidence, mode: 'resume' | 'restart') {
   expect(end.proof).toEqual({ ...gap.proof, applied: true });
   expect(end.receipt).toEqual(gap.receipt);
-  expect(end.account).toEqual(gap.account);
+  // Auth completed the barrier with its receipt: the fence is clear, the receipt and floor stay.
+  expect(end.account).toEqual({ ...gap.account, fenced: false });
   expect(end.applied).toEqual({
     receiptId: gap.receipt.receiptId,
     purpose: 'consent-reduction',
@@ -83,36 +94,34 @@ for (const mode of ['resume', 'restart'] as const) {
         gapEvidence(gap);
         const pending = d.beginAttempt('target', [retained, removed]);
         const scheduling = await d.atGap(pending);
-        let during;
-        if (scheduling === 'completed') {
-          const raced = await pending.result;
-          if (raced.jwt) during = await d.use(raced.jwt, removed);
-        }
+        // The account is fenced in the gap, so no token can carry the removed scope out of it.
+        expect(scheduling).toBe('completed');
+        await refused(pending);
         expect((await d.finish(mode)).status).toBe(200);
-        const issued = await pending.result;
         const end = await d.inspect();
         expect(end.consent.scopes).toEqual([retained]);
         expect(end.account.minimumAuthnEpoch).toBe(gap.receipt.minimumAuthnEpoch);
-        const after = issued.jwt ? await d.use(issued.jwt, removed) : null;
+        expect(end.account.fenced).toBe(false);
         // Report nonsecret facts only, never cookies or JWT material.
         if (!process.env.CONSENT_OUTCOME_REFERENCE)
           console.info('Native consent race outcome', {
             mode,
             scheduling,
-            signin: issued.signin.status,
-            token: issued.token?.status ?? null,
-            during: during ?? null,
-            after,
             floor: { before: gap.proof.previousEpoch, after: end.account.minimumAuthnEpoch },
             consent: end.consent,
           });
-        expect(after?.allowed ?? false, 'removed scope remained usable after completed consent reduction').toBe(false);
         // A retained scope may survive: the contract never requires wholesale invalidation.
+        // After the barrier completes, a fresh sign-in succeeds at the new floor.
         const fresh = await d.beginAttempt('target', [retained]).result;
+        expect(fresh.signin.status).toBe(200);
         expect(fresh.jwt).not.toBeNull();
         expect((await d.use(fresh.jwt!, retained)).allowed).toBe(true);
         const forbidden = await d.beginAttempt('target', [removed]).result;
-        if (forbidden.jwt) expect((await d.use(forbidden.jwt, removed)).allowed).toBe(false);
+        if (forbidden.jwt)
+          expect(
+            (await d.use(forbidden.jwt, removed)).allowed,
+            'removed scope remained usable after completed consent reduction',
+          ).toBe(false);
       } finally {
         await d.close();
       }
@@ -122,18 +131,34 @@ for (const mode of ['resume', 'restart'] as const) {
 }
 
 for (const identity of ['other-account', 'other-client'] as const) {
-  test(`unaffected ${identity} makes progress during the exact consent gap`, async () => {
+  test(`unaffected ${identity} makes progress around the exact consent gap`, async () => {
     const d = await driver();
     try {
       gapEvidence(await d.startReduction());
       const pending = d.beginAttempt(identity, [retained, removed]);
       expect(await d.atGap(pending), 'unaffected identity was serialized behind personal consent').toBe('completed');
-      const issued = await pending.result;
-      expect(issued.signin.status).toBe(200);
-      expect(issued.token?.status).toBe(200);
-      expect(issued.jwt).not.toBeNull();
-      expect((await d.use(issued.jwt!, removed)).allowed).toBe(true);
+      let issued;
+      if (identity === 'other-account') {
+        // Another account is not fenced: it signs in inside the gap.
+        issued = await pending.result;
+      } else {
+        // The reducing account is fenced for every client until Auth completes the barrier.
+        await refused(pending);
+      }
+      if (issued) {
+        expect(issued.signin.status).toBe(200);
+        expect(issued.token?.status).toBe(200);
+        expect(issued.jwt).not.toBeNull();
+        expect((await d.use(issued.jwt!, removed)).allowed).toBe(true);
+      }
       expect((await d.finish('resume')).status).toBe(200);
+      if (!issued) {
+        // The other client's consent is untouched, so its fresh sign-in keeps the unreduced scope.
+        issued = await d.beginAttempt(identity, [retained, removed]).result;
+        expect(issued.signin.status).toBe(200);
+        expect(issued.token?.status).toBe(200);
+        expect(issued.jwt).not.toBeNull();
+      }
       expect((await d.use(issued.jwt!, removed)).allowed, 'unaffected identity lost an unreduced scope').toBe(true);
     } finally {
       await d.close();

@@ -1242,7 +1242,8 @@ export function createLifecycleInternals(
         : null;
     },
     /** Trusted Auth composition only, after the consent reduction and its session revocation committed.
-     * Clears the fence that exact consent barrier raised; a recovery fence needs its establishment evidence.
+     * Clears the fence that exact consent barrier raised. A fence the barrier did not raise, or one a later floor
+     * moved past, stays and the completion still commits; a recovery fence needs its establishment evidence.
      */
     async completeConsentBarrier(value: AuthenticationBarrierReceipt) {
       const input = { ...value };
@@ -1264,30 +1265,21 @@ export function createLifecycleInternals(
             async authorize(tx, _attempt, verified) {
               requireAllowed(verified === true);
               const account = await locked(tx, input.accountId);
-              requireAllowed(
-                account.state === 'active' &&
-                  account.kind === 'actor' &&
-                  account.receiptId === input.receiptId &&
-                  account.minimumAuthnEpoch === minimum,
-              );
-              return account.fenced ? 'execute' : 'receipt-only';
+              requireAllowed(account.state === 'active' && account.kind === 'actor');
+              return 'execute';
             },
             denied: () => new LifecycleDeniedError(),
           },
         },
         async (tx, transactionId) => {
-          requireAllowed(
-            affected(
-              await fenceClear.run(tx, {
-                route,
-                account_id: input.accountId,
-                receipt_id: input.receiptId,
-                minimum_authn_epoch: minimum,
-                authn_epoch: minimum,
-                transaction_id: transactionId,
-              }),
-            ),
-          );
+          await fenceClear.run(tx, {
+            route,
+            account_id: input.accountId,
+            receipt_id: input.receiptId,
+            minimum_authn_epoch: minimum,
+            authn_epoch: minimum,
+            transaction_id: transactionId,
+          });
           return { accountId: input.accountId, receiptId: input.receiptId, minimumAuthnEpoch: minimum };
         },
       );
