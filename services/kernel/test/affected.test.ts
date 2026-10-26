@@ -104,10 +104,27 @@ describe('affected test selection', () => {
     write('services/kernel/test/computed.test.ts', 'await import(process.env.TARGET!);\n');
     expect(select()).toEqual({ kind: 'tests', tests: [] });
     expect(select('README.md', 'docs/guide.md', 'services/kernel/README.md')).toEqual({ kind: 'tests', tests: [] });
-    expect(select('README.md', 'assets/logo.png', 'services/kernel/src/notes.txt')).toEqual({
-      kind: 'tests',
-      tests: [],
+    expect(select('README.md', 'assets/logo.png', 'apps/site/notes.txt')).toEqual({ kind: 'tests', tests: [] });
+  });
+
+  test('a changed data file under the kernel, packages or specs that no import reaches selects the whole suite', () => {
+    for (const path of [
+      'services/kernel/test/fixtures/catalogue.yaml',
+      'services/kernel/src/notes.txt',
+      'services/kernel/src/unreached.json',
+      'packages/lib/presentation/home.json',
+      'packages/lib/assets/cover.png',
+      'specs/vocabulary/terms.ttl',
+    ]) {
+      expect(select(path)).toEqual({ kind: 'all', reason: path });
+    }
+    expect(select('services/kernel/src/b.sql', 'specs/vocabulary/terms.ttl')).toEqual({
+      kind: 'all',
+      reason: 'specs/vocabulary/terms.ttl',
     });
+    expect(select('packages/lib/README.md', 'specs/README.md')).toEqual({ kind: 'tests', tests: [] });
+    expect(select('apps/site/data.json', 'assets/logo.png')).toEqual({ kind: 'tests', tests: [] });
+    expect(select('packages/lib/src/data.json')).toEqual({ kind: 'tests', tests: ['test/nested/b.test.ts'] });
   });
 });
 
