@@ -45613,7 +45613,8 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-replay-authorization": "self-account-read"
       },
       "get": {
         "operationId": "post.get",
@@ -52996,7 +52997,8 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-replay-authorization": "self-account-read"
       }
     },
     "/v1/posts/{id}:takeDown": {
@@ -111706,7 +111708,8 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-replay-authorization": "self-account-read"
       }
     },
     "/v1/threads/{id}:takeDown": {

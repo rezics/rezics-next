@@ -14,7 +14,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   AuthorErasureDependencies,
@@ -67,6 +67,8 @@ export async function beginAuthorErasure(
   type Endpoints = NonNullable<Awaited<ReturnType<typeof readEndpoints.run>>>;
   let endpoints: Endpoints | undefined;
   let captured: Awaited<ReturnType<typeof captureDurableInitiator>> | undefined;
+  type Check = Awaited<ReturnType<typeof accessCheck>>;
+  type AuthorizationEvidence = { postErase: Check; selfRead?: Check };
   const authorization: CommandAuthorization = {
     action: 'post:erase',
     resource: {
@@ -100,20 +102,34 @@ export async function beginAuthorErasure(
       // Empty selection has no actual post on which to establish post:erase.
       if (!endpoints) throw new GrantDeniedError();
       firstPostId = endpoints.post_id;
-      return accessCheck(deps.access, actor, 'post:erase', { route, id: firstPostId }, preparation);
+      const postErase = await accessCheck(deps.access, actor, 'post:erase', { route, id: firstPostId }, preparation);
+      const selfRead =
+        deps.access.replayAuthorization?.('post:erase') === 'self-account-read'
+          ? await accessCheck(
+              deps.access,
+              actor,
+              'account:read',
+              { route: accountRoute, id: actor.accountId },
+              preparation,
+            )
+          : undefined;
+      return { postErase, ...(selfRead === undefined ? {} : { selfRead }) } satisfies AuthorizationEvidence;
     },
     async authorize(tx, attempt, evidence) {
       if (
         attempt.basis?.actorAccountId !== snapshot.accountId ||
         attempt.basis.clientId !== snapshot.clientId ||
         attempt.basis.requestedBy !== snapshot.requestedBy ||
-        typeof evidence !== 'function'
+        typeof evidence !== 'object' ||
+        evidence === null
       )
         throw new GrantDeniedError();
-      // Evidence is this attempt's prepared AccessCheck, never request data.
-      const check = evidence as Awaited<ReturnType<typeof accessCheck>>;
-      if (!(await check(tx, attempt.time))) throw new GrantDeniedError();
-      return 'execute';
+      // Evidence is this attempt's prepared AccessChecks, never request data.
+      const checks = evidence as AuthorizationEvidence;
+      if (typeof checks.postErase !== 'function') throw new GrantDeniedError();
+      if (await checks.postErase(tx, attempt.time)) return 'execute';
+      if (checks.selfRead && (await checks.selfRead(tx, attempt.time))) return 'receipt-only';
+      throw new GrantDeniedError();
     },
   };
   const outcome = await runCommand<AuthorErasureReceipt>(
@@ -166,6 +182,7 @@ export async function beginAuthorErasure(
         initiator_id: snapshot.accountId,
         author_id: selection.authorId,
         thread_id: selection.threadId,
+        anchor_post_id: firstPostId,
         client_id: snapshot.clientId,
         scopes: snapshot.scopes,
         requested_by: snapshot.requestedBy,
@@ -264,21 +281,32 @@ export async function readOperation(
   );
   const row = rows;
   if (!row || row.initiator_account_id !== actor.accountId) return null;
-  const check = await accessCheck(
+  const anchorRoute = routeOf(row.anchor_post_id);
+  if (anchorRoute !== route) return null;
+  const accountCheck = await accessCheck(
     deps.access,
     actor,
     'account:read',
     { route: accountRoute, id: actor.accountId },
     { pool: deps.pool, deadline: context.deadline },
   );
+  const postCheck = await accessCheck(
+    deps.access,
+    actor,
+    'post:erase',
+    { route: anchorRoute, id: row.anchor_post_id },
+    { pool: deps.pool, deadline: context.deadline },
+  );
   const allowed = await withConnection(deps.pool, async (client) => {
     await client.query('BEGIN READ ONLY');
     try {
       const bounded = deadlineClient(client, context.deadline);
-      await readPartition(bounded, partitionOf(accountRoute));
-      const result = await check(bounded);
+      const partitions = new Set([partitionOf(accountRoute), partitionOf(anchorRoute)]);
+      for (const partition of partitions) await readPartition(bounded, partition);
+      const accountAllowed = await accountCheck(bounded);
+      const postAllowed = await postCheck(bounded);
       await client.query('COMMIT');
-      return result;
+      return accountAllowed && postAllowed;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -294,4 +322,80 @@ export async function readOperation(
     }
   }
   return view(operationId, row.thread_id, row.author_account_id, status);
+}
+
+/** Post erasure is irreversible. When its current post:erase grant has been
+ * revoked, an erased post may authorize lookup of its existing receipt through
+ * the route's declared self-account-read permission. A missing receipt still
+ * reaches the existing mutation guard, which rejects an already erased post.
+ */
+export function postEraseReceiptAccess(access: Access): Access {
+  type Evidence = {
+    actor: Actor;
+    action: string;
+    resource: Resource;
+    actionEvidence: unknown;
+    accountResource?: Resource;
+    accountEvidence?: unknown;
+  };
+  const prepared = new WeakMap<object, Evidence>();
+  return {
+    authenticate: (token, context) => access.authenticate(token, context),
+    replayAuthorization(action) {
+      // This adapter handles the action-denied receipt path itself so the
+      // generic helper does not prepare or execute a duplicate self-read check.
+      return action === 'post:erase' ? undefined : access.replayAuthorization?.(action);
+    },
+    async prepare(actor, action, resource, context) {
+      const actionEvidence = await access.prepare?.(actor, action, resource, context);
+      let accountResource: Resource | undefined;
+      let accountEvidence: unknown;
+      if (
+        action === 'post:erase' &&
+        actor.kind === 'account' &&
+        access.replayAuthorization?.(action) === 'self-account-read' &&
+        access.prepare
+      ) {
+        const route = routeOf(actor.accountId);
+        if (route !== null) {
+          accountResource = { route, id: actor.accountId };
+          accountEvidence = await access.prepare(actor, 'account:read', accountResource, context);
+        }
+      }
+      const proof = Object.freeze({});
+      prepared.set(proof, {
+        actor,
+        action,
+        resource,
+        actionEvidence,
+        ...(accountResource === undefined ? {} : { accountResource, accountEvidence }),
+      });
+      return proof;
+    },
+    async authorize(client, actor, action, resource, evidence, time) {
+      const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
+      if (
+        !facts ||
+        facts.actor !== actor ||
+        facts.action !== action ||
+        facts.resource.route !== resource.route ||
+        facts.resource.id !== resource.id
+      )
+        return false;
+      const allowed = await access.authorize(client, actor, action, resource, facts.actionEvidence, time);
+      if (
+        allowed ||
+        action !== 'post:erase' ||
+        facts.accountResource === undefined ||
+        facts.accountEvidence === undefined
+      )
+        return allowed;
+      const post = await client.query<{ availability: string }>(
+        'SELECT availability FROM content.post WHERE route=$1 AND post_id=$2',
+        [resource.route, resource.id],
+      );
+      if (post.rows[0]?.availability !== 'erased') return false;
+      return access.authorize(client, actor, 'account:read', facts.accountResource, facts.accountEvidence, time);
+    },
+  };
 }

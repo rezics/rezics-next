@@ -8,7 +8,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { erasePost, takedown } from './moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
-import { beginAuthorErasure, readOperation } from './operations.ts';
+import { beginAuthorErasure, postEraseReceiptAccess, readOperation } from './operations.ts';
 import type { AuthorErasureDependencies, Operation } from './operation-contract.ts';
 import type { reportRoutes } from './report-routes.ts';
 import type { ContentRuntime } from './runtime.ts';
@@ -55,6 +55,7 @@ function detail(operationId: string, action: 'moderation:takedown' | 'post:erase
     'x-exposure': 'public' as const,
     'x-action': action,
     'x-rate-limit': writeRate,
+    ...(action === 'post:erase' ? { 'x-replay-authorization': 'self-account-read' as const } : {}),
     security: [{ bearerAuth: [] }],
   };
 }
@@ -194,7 +195,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
         return command(() =>
           admission.run('normal', job, async () => {
             const result = await erasePost(
-              deps,
+              { ...deps, access: postEraseReceiptAccess(deps.access) },
               actor,
               { postId: id, reason: body.reason },
               context(request, job.deadline),

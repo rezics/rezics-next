@@ -4,6 +4,7 @@ import { t } from 'elysia';
 import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { erasePostLogical } from './erase-post.ts';
+import { postEraseReceiptAccess } from './operations.ts';
 import { moderationRoutes } from './moderation-routes.ts';
 import { withConnection } from '../database/pool.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -531,6 +532,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           operationId: 'post.erase',
           'x-exposure': 'public',
           'x-action': 'post:erase',
+          'x-replay-authorization': 'self-account-read',
           'x-rate-limit': writeRate,
           security: writeSecurity,
         },
@@ -541,7 +543,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         const context = requestContext(request, job.deadline);
         try {
           const result = await admission.run('normal', job, () =>
-            erasePostLogical(dependencies, actor, { postId: id, reason: 'Author deletion' }, context),
+            erasePostLogical(
+              { ...dependencies, access: postEraseReceiptAccess(dependencies.access) },
+              actor,
+              { postId: id, reason: 'Author deletion' },
+              context,
+            ),
           );
           session.record(result);
           set.status = 204;
