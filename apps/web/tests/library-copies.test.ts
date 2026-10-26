@@ -582,13 +582,15 @@ test(
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       expect(await main.innerText()).toContain('First copy');
       expect(await main.innerText()).toContain('Zebra story');
-      expect(await main.innerText()).not.toContain('Waiting');
-      expect(await main.innerText()).not.toContain('Second shelf');
+      // The kernel does not accept a subject filter, so a subject URL pre-fills
+      // the add form while the list remains the viewer's unfiltered page.
+      expect(await main.innerText()).toContain('Waiting');
+      expect(await main.innerText()).toContain('Second shelf');
       expect(await main.getByRole('form', { name: 'Add a copy' }).getByLabel('Edition').inputValue()).toBe(edition);
-      const filtered = lists().at(-1);
-      expect(filtered?.view).toBe('FULL');
-      expect(filtered?.limit).toBe(pageLimit);
-      expect(new URLSearchParams(filtered?.search ?? '').has('subjectId')).toBe(false);
+      const unfiltered = lists().at(-1);
+      expect(unfiltered?.view).toBe('FULL');
+      expect(unfiltered?.limit).toBe(pageLimit);
+      expect(new URLSearchParams(unfiltered?.search ?? '').has('subjectId')).toBe(false);
     } finally {
       await page.context().close();
     }
