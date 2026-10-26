@@ -1,5 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, realpathSync, statSync } from 'node:fs';
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
@@ -9,6 +20,10 @@ const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
 let container = '';
 let searchContainer = '';
+let reyloDirectory = '';
+
+// Cloned from the migrated template once and never used as a template; Reylo reads every analysis from it.
+const ANALYSIS_DATABASE = 'kernel_analysis';
 
 type CheckPlan = { files: string[] | null; tests: string[] };
 
@@ -86,6 +101,29 @@ export function ownDiagnostics(output: string, files: string[]): string[] {
   }
   flush();
   return diagnostics;
+}
+
+/**
+ * Writes the Reylo project file that points every analysis at `analysisUrl`, in `directory`, which then holds `.reylo/`.
+ * Reylo keys its entries by database name, so analysing in each file's own copy re-describes every statement there.
+ */
+export function writeReyloProject(directory: string, analysisUrl: string): string {
+  const file = resolve(directory, '.reylo.yaml');
+  writeFileSync(file, `direct_url: ${JSON.stringify(analysisUrl)}\n`);
+  return file;
+}
+
+/** The environment of every process one test file starts: its own database copy, the shared search node and Reylo's analysis database. */
+export function fileEnvironment(
+  base: NodeJS.ProcessEnv,
+  file: { url: string; database: string; searchUrl: string; reyloConfig: string },
+): NodeJS.ProcessEnv {
+  return {
+    ...base,
+    DATABASE_URL: file.url.replace(/\/rezics(?=\?)/, `/${file.database}`),
+    OPENSEARCH_URL: file.searchUrl,
+    REYLO_CONFIG: file.reyloConfig,
+  };
 }
 
 type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
@@ -294,6 +332,7 @@ export function cleanup(
       console.error(error);
     }
   }
+  if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
 }
 
 function logPostgresIfStopped(containerId: string): void {
@@ -408,6 +447,13 @@ async function main(): Promise<void> {
     }
   }
 
+  // The copies share the template's schema and object ids, so one analysis holds for all of them.
+  await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);
+  const temporaryRoot = resolve(directory, '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
+  const reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
+
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
   const oxlint = resolve(directory, '../../node_modules/.bin/oxlint');
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
@@ -443,11 +489,11 @@ async function main(): Promise<void> {
     create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
     run: async (file, database) => {
       // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
-      const result = await capture('bun', ['test', '--timeout', '60000', `./${file}`], {
-        ...env,
-        DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
-        OPENSEARCH_URL: searchUrl,
-      });
+      const result = await capture(
+        'bun',
+        ['test', '--timeout', '60000', `./${file}`],
+        fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
+      );
       if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
       return result.output;
     },
@@ -457,6 +503,8 @@ async function main(): Promise<void> {
       if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
     },
   });
+  const queries = resolve(reyloDirectory, '.reylo/queries');
+  process.stderr.write(`Reylo analyses written: ${existsSync(queries) ? readdirSync(queries).length : 0}\n`);
   const failedFiles = outcomes.filter((outcome) => outcome.error).map((outcome) => outcome.file);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }
