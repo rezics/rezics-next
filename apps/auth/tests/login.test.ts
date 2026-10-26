@@ -391,7 +391,7 @@ test(
         expect(await address.count(), `${own.locale}: the email field has a localized label`).toBe(1);
         expect(await secret.count(), `${own.locale}: the password field has a localized label`).toBe(1);
         expect(await address.getAttribute('type')).toBe('email');
-        expect(await address.getAttribute('autocomplete')).toBe('username');
+        expect(await address.getAttribute('autocomplete')).toBe('username webauthn');
         expect(await secret.getAttribute('type')).toBe('password');
         expect(await secret.getAttribute('autocomplete')).toBe('current-password');
         await visibleLabel(address, own.email);
