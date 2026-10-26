@@ -1,0 +1,1930 @@
+{
+  "recorded": "2026-10-26T22:57:49.249Z",
+  "files": {
+    "tests/page-stories.test.ts": {
+      "wall": 520.9633,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.6937,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "every page story renders from recorded kernel responses and passes as an accessible browser test",
+          "time": 499.330412
+        },
+        {
+          "name": "the board story renders the board route for signed-in and signed-out visitors in English and Traditional Chinese",
+          "time": 8.38478
+        },
+        {
+          "name": "the thread story renders the thread route for signed-in and signed-out visitors in English and Traditional Chinese",
+          "time": 8.385841
+        },
+        {
+          "name": "the subject story shows its description, its statements with linked values, and its editions",
+          "time": 1.948398
+        },
+        {
+          "name": "each recorded response type-checks against the kernel client",
+          "time": 2.220161
+        }
+      ]
+    },
+    "tests/browser-tests.test.ts": {
+      "wall": 0.0554,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0466,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "every browser test that interacts with a page waits for the hydration mark",
+          "time": 0.008808
+        }
+      ]
+    },
+    "tests/library-copies-cost.test.ts": {
+      "wall": 0.1488,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1279,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "copies stay within their bound as the copy list grows",
+          "time": 0.020917
+        }
+      ]
+    },
+    "tests/library-collection-cost.test.ts": {
+      "wall": 0.1538,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1423,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "collection page stays within its bound as its member page grows",
+          "time": 0.011511
+        }
+      ]
+    },
+    "tests/composition-imports.test.ts": {
+      "wall": 0.1435,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0811,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the website imports composition only through its package entry",
+          "time": 0.062385
+        }
+      ]
+    },
+    "tests/curate-presentation.test.ts": {
+      "wall": 0.1494,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1376,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a curator sees every template of the active profile",
+          "time": 0.000236
+        },
+        {
+          "name": "editing a template replaces or inserts it in order and never mutates the profile",
+          "time": 0.000951
+        },
+        {
+          "name": "publishing sends the profile, then activates it at the head the curator loaded",
+          "time": 0.005501
+        },
+        {
+          "name": "a stale head, an invalid profile and a refusal come back as reasons",
+          "time": 0.003779
+        },
+        {
+          "name": "the curation route is mounted and its scopes are documented",
+          "time": 0.001322
+        }
+      ]
+    },
+    "tests/home-page.test.ts": {
+      "wall": 0.3477,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3205,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the home is the platform route template from one page read",
+          "time": 0.025278
+        },
+        {
+          "name": "a kernel without a home page falls back to the static home",
+          "time": 0.000824
+        },
+        {
+          "name": "the home route renders the route page",
+          "time": 0.001133
+        }
+      ]
+    },
+    "tests/library-entries-cost.test.ts": {
+      "wall": 0.1284,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1151,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "personal library view and state change stay within their bounds as entries grow",
+          "time": 0.013267
+        }
+      ]
+    },
+    "tests/home-continue-cost.test.ts": {
+      "wall": 0.3312,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3204,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the home page reads the library once per view whatever the size of the library",
+          "time": 0.010816
+        }
+      ]
+    },
+    "tests/library-mine-cost.test.ts": {
+      "wall": 0.145,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1347,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "my collections and following stay within their bound as list size grows",
+          "time": 0.01035
+        }
+      ]
+    },
+    "tests/home-story.test.ts": {
+      "wall": 0.3577,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3234,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the recorded home read replays as the kernel answered it",
+          "time": 0.034269
+        }
+      ]
+    },
+    "tests/home-heading.test.ts": {
+      "wall": 0.3403,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3125,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a level-1 heading is the page heading, and a page has at most one",
+          "time": 0.003758
+        },
+        {
+          "name": "the platform home opens with its heading and keeps a personal slot for signed-in visitors",
+          "time": 0.005583
+        },
+        {
+          "name": "the route page shows the template heading as its only h1 and lets the host fill the personal slot",
+          "time": 0.018452
+        }
+      ]
+    },
+    "tests/library-logs-cost.test.ts": {
+      "wall": 0.1091,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0997,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "published log reads and writes stay within their bound as an account log list grows",
+          "time": 0.009413
+        }
+      ]
+    },
+    "tests/home-lists-story.test.ts": {
+      "wall": 0.3571,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3301,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the recorded home answers every vertical list with indexed subjects",
+          "time": 0.026988
+        }
+      ]
+    },
+    "tests/messages.test.ts": {
+      "wall": 0.0829,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0774,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "every locale's site messages have the same keys, sorted by key",
+          "time": 0.005497
+        }
+      ]
+    },
+    "tests/media-client.test.ts": {
+      "wall": 0.0588,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0546,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the media routes call the kernel only through its client",
+          "time": 0.004227
+        }
+      ]
+    },
+    "tests/library-progress-cost.test.ts": {
+      "wall": 0.1297,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1144,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "reading progress stays within its bound as its pages and unit batches grow",
+          "time": 0.01527
+        }
+      ]
+    },
+    "tests/library-subject-slot-cost.test.ts": {
+      "wall": 0.122,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1142,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "subject library slot stays within its bound as its collections grow",
+          "time": 0.007816
+        }
+      ]
+    },
+    "tests/pages-jsonld.test.ts": {
+      "wall": 0.0497,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0478,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a subject's public representation becomes schema.org JSON-LD",
+          "time": 0.000821
+        },
+        {
+          "name": "only values the representation discloses are emitted",
+          "time": 0.000638
+        },
+        {
+          "name": "types outside schema.org keep their meaning as an additional type",
+          "time": 0.000179
+        },
+        {
+          "name": "the serialized JSON-LD cannot close its script element",
+          "time": 0.000259
+        }
+      ]
+    },
+    "tests/pages-editor-home.test.ts": {
+      "wall": 0.1766,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1725,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the editor edits link lists and type lists",
+          "time": 0.00412
+        }
+      ]
+    },
+    "tests/pages-editor.test.ts": {
+      "wall": 0.1672,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1619,
+      "result": "fail",
+      "tests": [
+        {
+          "name": "the editor's fields come from the registry",
+          "time": 0.000852
+        },
+        {
+          "name": "an edited page becomes a composition document",
+          "time": 0.003487
+        },
+        {
+          "name": "publishing refuses a document the platform would refuse",
+          "time": 0.000958
+        }
+      ]
+    },
+    "tests/pages-render.test.ts": {
+      "wall": 0.2091,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1176,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a composition renders through Puck with named slot content in document order",
+          "time": 0.010104
+        },
+        {
+          "name": "a node whose type has no component renders nothing and the rest of the page still renders",
+          "time": 0.000828
+        },
+        {
+          "name": "the render path's initial load stays within 24 KiB",
+          "time": 0.080537
+        }
+      ]
+    },
+    "tests/post-editing-cost.test.ts": {
+      "wall": 0.1044,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0979,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "post edits keep K/D/R/A fixed as post data grows",
+          "time": 0.005723
+        },
+        {
+          "name": "post deletions keep K/D/R/A fixed as post data grows",
+          "time": 0.000809
+        }
+      ]
+    },
+    "tests/pages-data.test.ts": {
+      "wall": 0.3559,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.2848,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "data components render the subject read in the reader's locale",
+          "time": 0.055657
+        },
+        {
+          "name": "failed and empty reads leave their components out",
+          "time": 0.007372
+        },
+        {
+          "name": "values are text and links stay safe",
+          "time": 0.008073
+        }
+      ]
+    },
+    "tests/pages-actions.test.ts": {
+      "wall": 0.3323,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3007,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the site renders its subject controls in the header actions slot",
+          "time": 0.025879
+        },
+        {
+          "name": "without site controls the actions slot leaves no markup",
+          "time": 0.00573
+        }
+      ]
+    },
+    "tests/reactions-cost.test.ts": {
+      "wall": 0.121,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1097,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "thread page reads stay within their bound as s grows",
+          "time": 0.007202
+        },
+        {
+          "name": "setting or clearing a reaction stays within its bound as s grows",
+          "time": 0.004088
+        }
+      ]
+    },
+    "tests/platform-closed-cost.test.ts": {
+      "wall": 0.1766,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1707,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "closed page reads keep K/D/R/A fixed as existing page data grows",
+          "time": 0.005873
+        }
+      ]
+    },
+    "tests/report-cost.test.ts": {
+      "wall": 0.0708,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0635,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "report submission keeps K/D/R/A fixed as stored reports and sessions grow",
+          "time": 0.007336
+        }
+      ]
+    },
+    "tests/pages-layout.test.ts": {
+      "wall": 0.2322,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.196,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the page definitions come from the platform registry",
+          "time": 0.014263
+        },
+        {
+          "name": "a layout page renders landmarks, headings and text with the appearance tokens",
+          "time": 0.020412
+        },
+        {
+          "name": "unknown tokens, slot names and levels fall back instead of reaching the markup",
+          "time": 0.001512
+        }
+      ]
+    },
+    "tests/subject-route.test.ts": {
+      "wall": 0.0613,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0601,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the subject route renders the page model",
+          "time": 0.001235
+        }
+      ]
+    },
+    "tests/workspace-imports.test.ts": {
+      "wall": 0.2025,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0931,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "workspace imports apps/web declares every @rezics package it imports",
+          "time": 0.0469
+        },
+        {
+          "name": "workspace imports apps/auth declares every @rezics package it imports",
+          "time": 0.00694
+        },
+        {
+          "name": "workspace imports packages/ui declares every @rezics package it imports",
+          "time": 0.049945
+        },
+        {
+          "name": "workspace imports packages/document declares every @rezics package it imports",
+          "time": 0.005017
+        },
+        {
+          "name": "workspace imports the scan sees static, dynamic and side-effect imports and re-exports",
+          "time": 0.000569
+        }
+      ]
+    },
+    "tests/format.test.ts": {
+      "wall": 0.7579,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.1124,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "apps/web follows the repository format",
+          "time": 0.297596
+        },
+        {
+          "name": "apps/web checks the format in its own check",
+          "time": 0.001146
+        },
+        {
+          "name": "packages/ui follows the repository format",
+          "time": 0.224027
+        },
+        {
+          "name": "packages/ui checks the format in its own check",
+          "time": 0.000499
+        },
+        {
+          "name": "packages/document follows the repository format",
+          "time": 0.121953
+        },
+        {
+          "name": "packages/document checks the format in its own check",
+          "time": 0.000289
+        }
+      ]
+    },
+    "tests/subject-page-read.test.ts": {
+      "wall": 0.3415,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.3096,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a subject page is one page read rendered from its template",
+          "time": 0.03083
+        },
+        {
+          "name": "merged and missing subjects are told apart",
+          "time": 0.001087
+        }
+      ]
+    },
+    "tests/subject-story.test.ts": {
+      "wall": 0.363,
+      "create": 0.0001,
+      "drop": 0,
+      "outsideTests": 0.321,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the recorded page read replays as the kernel answered it",
+          "time": 0.004583
+        },
+        {
+          "name": "the subject story renders the real subject page",
+          "time": 0.037379
+        }
+      ]
+    },
+    "tests/check-lanes.test.ts": {
+      "wall": 1.5912,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0829,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "runs fake files longest first in separate browser and unit pools, then records their wall times",
+          "time": 0.247053
+        },
+        {
+          "name": "bounds browser lanes separately while unit files use a wider pool",
+          "time": 1.145611
+        },
+        {
+          "name": "reports a failed fake file with its own output",
+          "time": 0.11563
+        }
+      ]
+    },
+    "tests/checkout-cost.test.ts": {
+      "wall": 18.1518,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1066,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "checkout start stays within its bound as s grows",
+          "time": 0.006723
+        },
+        {
+          "name": "order status read stays within its bound as s grows",
+          "time": 0.003388
+        },
+        {
+          "name": "read rate limits stay within their bound as s grows",
+          "time": 0.002871
+        },
+        {
+          "name": "offer page stays within its bound as s grows",
+          "time": 18.032181
+        }
+      ]
+    },
+    "tests/board-sort.test.ts": {
+      "wall": 16.1683,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.3816,
+      "result": "fail",
+      "tests": [
+        {
+          "name": "a board offers Active, Hot and New sorts, defaults to Active, and keeps the chosen sort in the URL",
+          "time": 14.84226
+        },
+        {
+          "name": "the next page of threads keeps the chosen sort",
+          "time": 0.245759
+        },
+        {
+          "name": "an unknown sort in the URL falls back to Active",
+          "time": 0.463186
+        },
+        {
+          "name": "the sort choice is a set of links that works without JavaScript and marks the current one",
+          "time": 0.235518
+        }
+      ]
+    },
+    "tests/bylines.test.ts": {
+      "wall": 19.8901,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.6527,
+      "result": "fail",
+      "tests": [
+        {
+          "name": "each post on a thread page shows its author and when it was posted, in the page's language",
+          "time": 17.765587
+        },
+        {
+          "name": "a board's thread list shows who started each thread and when",
+          "time": 0.356461
+        },
+        {
+          "name": "a page reads all of its authors in one request, whatever the number of posts",
+          "time": 0.56055
+        },
+        {
+          "name": "a deleted or unknown author is shown without a handle",
+          "time": 0.278123
+        },
+        {
+          "name": "when the identity read fails, the page still shows its posts",
+          "time": 0.27672
+        }
+      ]
+    },
+    "tests/home-continue.test.ts": {
+      "wall": 19.2744,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1846,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in visitor with subjects in progress sees them on the home page, most recently updated first, each linking to its subject and its progress",
+          "time": 17.444011
+        },
+        {
+          "name": "a signed-out visitor, or one with nothing in progress, sees no Continue row and the home page makes no library read",
+          "time": 1.068462
+        },
+        {
+          "name": "when the library read fails, the home page still renders without the row",
+          "time": 0.577279
+        }
+      ]
+    },
+    "tests/csrf.test.ts": {
+      "wall": 41.4971,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4397,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an unsafe request that carries the session is refused unless its Origin is exactly one of the site's origins",
+          "time": 32.351459
+        },
+        {
+          "name": "an unsafe request that carries the session is refused without that session's CSRF token",
+          "time": 2.43471
+        },
+        {
+          "name": "a signed-in page carries its session's CSRF token and a signed-out page carries none",
+          "time": 3.3974
+        },
+        {
+          "name": "the CSRF token changes with the session and is never in a cookie",
+          "time": 2.873786
+        }
+      ]
+    },
+    "tests/dev-inspector.test.ts": {
+      "wall": 28.6331,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0484,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the dev server opens no Worker inspector unless asked, so concurrent servers never race for its port",
+          "time": 11.641507
+        },
+        {
+          "name": "WORKER_INSPECTOR_PORT opens the Worker inspector on exactly that port",
+          "time": 10.923472
+        },
+        {
+          "name": "a WORKER_INSPECTOR_PORT that is not a port stops the dev server and names the variable",
+          "time": 6.019712
+        }
+      ]
+    },
+    "tests/library-collection.test.ts": {
+      "wall": 20.7356,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0785,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "anyone can read a public or unlisted collection with its curator, description and members in order, paged by cursor",
+          "time": 19.412442
+        },
+        {
+          "name": "members show their subject's label linked to its page, and an unreadable subject shows as unavailable",
+          "time": 0.193752
+        },
+        {
+          "name": "a private collection, or one the viewer may not see, shows the not-found page",
+          "time": 0.572587
+        },
+        {
+          "name": "a stale cursor restarts from the first page",
+          "time": 0.17961
+        },
+        {
+          "name": "a closed collections gate shows the not-open-yet page",
+          "time": 0.298665
+        }
+      ]
+    },
+    "tests/library-copies.test.ts": {
+      "wall": 30.2523,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4013,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in person lists their copies and adds one with its status, location, source, dates and note",
+          "time": 23.806584
+        },
+        {
+          "name": "two copies of one edition stay separate through edits and deletion",
+          "time": 3.550104
+        },
+        {
+          "name": "a stale revision keeps the edit and explains it",
+          "time": 2.494329
+        }
+      ]
+    },
+    "tests/library-entries.test.ts": {
+      "wall": 25.792,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4327,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in person sees their library newest first, filtered by state, paged",
+          "time": 19.3446
+        },
+        {
+          "name": "a person changes an entry's state or removes it, and a stale revision is explained",
+          "time": 5.499281
+        },
+        {
+          "name": "the account menu links to the library",
+          "time": 0.322956
+        },
+        {
+          "name": "signed out, the library offers sign-in",
+          "time": 0.192437
+        }
+      ]
+    },
+    "tests/library-copies-filter.test.ts": {
+      "wall": 47.857,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.6101,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "with a subject in the URL, the copies page lists only the person's copies of that subject, paged",
+          "time": 27.321828
+        },
+        {
+          "name": "the filtered list says which subject it shows and links back to all copies",
+          "time": 5.601519
+        },
+        {
+          "name": "a stale or foreign cursor restarts the filtered list from its first page",
+          "time": 8.514258
+        },
+        {
+          "name": "a malformed subject id in the URL shows all copies instead of an error",
+          "time": 5.809272
+        }
+      ]
+    },
+    "tests/composer-media.test.ts": {
+      "wall": 33.1566,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4622,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a member adds an image to a reply, which uploads through the site and is sent with its media id",
+          "time": 18.666188
+        },
+        {
+          "name": "a refused or rejected upload removes the image and says why",
+          "time": 9.852862
+        },
+        {
+          "name": "the editor's menus, commands and touch bar are labelled in the page's locale",
+          "time": 4.175306
+        }
+      ]
+    },
+    "tests/hydration.test.ts": {
+      "wall": 24.0739,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.3305,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the document marks itself hydrated only in the browser",
+          "time": 15.002007
+        },
+        {
+          "name": "once the document is marked hydrated, controls answer the first click even on a slow processor",
+          "time": 5.690067
+        },
+        {
+          "name": "once the document is marked hydrated, following a link is a client-side navigation even on a slow processor",
+          "time": 3.051291
+        }
+      ]
+    },
+    "tests/checkout.test.ts": {
+      "wall": 43.7157,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4117,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an offer page shows its title and price in the visitor's locale",
+          "time": 17.640652
+        },
+        {
+          "name": "a signed-in buyer starts checkout and is sent to Stripe's checkout URL",
+          "time": 2.820354
+        },
+        {
+          "name": "a signed-out visitor is sent to sign in and back to the offer",
+          "time": 2.907221
+        },
+        {
+          "name": "a delisted offer says it is unavailable and starts nothing",
+          "time": 3.430916
+        },
+        {
+          "name": "an unavailable kernel lets the buyer retry with the same idempotency key",
+          "time": 5.369142
+        },
+        {
+          "name": "the return page shows a paid order and rechecks a pending one until it settles",
+          "time": 6.211436
+        },
+        {
+          "name": "a canceled checkout returns to the offer with a note",
+          "time": 2.595184
+        },
+        {
+          "name": "another person's order is not found",
+          "time": 2.329057
+        }
+      ]
+    },
+    "tests/library-mine.test.ts": {
+      "wall": 24.2039,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4619,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in person sees their own collections of every visibility, newest first, paged",
+          "time": 18.470841
+        },
+        {
+          "name": "a signed-in person sees what they follow (subjects, collections and spaces), and can unfollow",
+          "time": 4.988506
+        },
+        {
+          "name": "signed out, both pages offer sign-in",
+          "time": 0.28265
+        }
+      ]
+    },
+    "tests/media-reserve.test.ts": {
+      "wall": 22.0308,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0702,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in uploader reserves through the site and uploads to the address it returns",
+          "time": 16.195732
+        },
+        {
+          "name": "reservations are read through the site by their uploader only",
+          "time": 2.39395
+        },
+        {
+          "name": "the reserve route refuses malformed or oversized bodies before calling the kernel",
+          "time": 2.023888
+        },
+        {
+          "name": "a future thread is reserved in place of a container, and any other target is refused",
+          "time": 1.346998
+        }
+      ]
+    },
+    "tests/network-isolation.test.ts": {
+      "wall": 0.4113,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0682,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "apps/web runs a command in a private network namespace where only loopback exists and works",
+          "time": 0.070057
+        },
+        {
+          "name": "apps/web passes the command's exit code through",
+          "time": 0.052265
+        },
+        {
+          "name": "apps/web runs the command on the host network, and says so, where it cannot isolate it",
+          "time": 0.058759
+        },
+        {
+          "name": "apps/web runs its tests through the isolation script, in its check too",
+          "time": 0.000942
+        },
+        {
+          "name": "packages/ui runs a command in a private network namespace where only loopback exists and works",
+          "time": 0.042887
+        },
+        {
+          "name": "packages/ui passes the command's exit code through",
+          "time": 0.027255
+        },
+        {
+          "name": "packages/ui runs the command on the host network, and says so, where it cannot isolate it",
+          "time": 0.090529
+        },
+        {
+          "name": "packages/ui runs its tests through the isolation script, in its check too",
+          "time": 0.000376
+        }
+      ]
+    },
+    "tests/new-thread-media-cost.test.ts": {
+      "wall": 0.0927,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0793,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a new thread's opening image keeps K/D/R/A fixed as stored media grows",
+          "time": 0.013393
+        }
+      ]
+    },
+    "tests/library-logs.test.ts": {
+      "wall": 37.4853,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4148,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a person publishes a log from their session with an optional note, and anyone can read it",
+          "time": 25.118938
+        },
+        {
+          "name": "a published log does not change when its session changes later",
+          "time": 4.034008
+        },
+        {
+          "name": "only its owner can delete a log",
+          "time": 5.65432
+        },
+        {
+          "name": "a person's published logs are listed newest first, paged",
+          "time": 2.263195
+        }
+      ]
+    },
+    "tests/library-progress.test.ts": {
+      "wall": 38.6434,
+      "create": 0.0002,
+      "drop": 0,
+      "outsideTests": 0.6582,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a person starts a progress session in each mode (amount, cursor position, completed units) with a unit and optional total",
+          "time": 27.711241
+        },
+        {
+          "name": "a person records progress, and a stale session revision keeps the input and explains it",
+          "time": 2.105899
+        },
+        {
+          "name": "completed units are added and removed in batches of at most one hundred",
+          "time": 2.303983
+        },
+        {
+          "name": "a person completes or abandons a session, and sees its change history",
+          "time": 4.02907
+        },
+        {
+          "name": "elapsed minutes never complete a session by themselves",
+          "time": 1.834997
+        }
+      ]
+    },
+    "tests/media.test.ts": {
+      "wall": 18.5568,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0482,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an upload streams the reserved bytes to storage and completes the reservation with what the Worker measured",
+          "time": 17.297238
+        },
+        {
+          "name": "an upload is refused before completion unless the caller holds a reserved object of that length, type and digest",
+          "time": 0.631581
+        },
+        {
+          "name": "a download asks the kernel on every request and serves ranges, validators and the decided cache policy",
+          "time": 0.57975
+        }
+      ]
+    },
+    "tests/library-subject-slot.test.ts": {
+      "wall": 30.5404,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.6113,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in person without an entry adds the subject to their library by choosing a state, which saves at once",
+          "time": 19.212057
+        },
+        {
+          "name": "a signed-in person changes or removes their library state from the same control, and a refused change goes back and says why",
+          "time": 2.863991
+        },
+        {
+          "name": "a person adds the subject to one of their collections, and a full collection is explained",
+          "time": 2.22753
+        },
+        {
+          "name": "the subject page lists the public collections that include it, with how many times",
+          "time": 1.608089
+        },
+        {
+          "name": "a person starts progress or sees their copies of the subject from its page",
+          "time": 2.304418
+        },
+        {
+          "name": "signed out, the slot shows the public collections and offers sign-in for the rest",
+          "time": 1.712969
+        }
+      ]
+    },
+    "tests/library-stories.test.ts": {
+      "wall": 54.0133,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.5073,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "every library page has a story that renders its real route with recorded content",
+          "time": 39.64547
+        },
+        {
+          "name": "the public collection and published log stories render for a signed-out visitor",
+          "time": 13.860576
+        }
+      ]
+    },
+    "tests/page-heading.test.ts": {
+      "wall": 31.0302,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4539,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the board, thread, search, library and not-found pages draw their main heading with the same font, size and weight",
+          "time": 27.304976
+        },
+        {
+          "name": "the not-found, error and not-open-yet pages say what happened and offer the home page and search",
+          "time": 3.271345
+        }
+      ]
+    },
+    "tests/new-thread-media.test.ts": {
+      "wall": 34.0303,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4479,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a member adds an image to a new thread's opening post, and the thread is created with its media id",
+          "time": 24.004985
+        },
+        {
+          "name": "the site's reservation accepts a future thread in place of a container, and nothing else",
+          "time": 1.479272
+        },
+        {
+          "name": "the draft keeps one idempotency key for its uploads and its creation",
+          "time": 3.989647
+        },
+        {
+          "name": "a reservation for a thread that already exists is retried with that thread",
+          "time": 4.1085
+        }
+      ]
+    },
+    "tests/post-editing.test.ts": {
+      "wall": 34.0453,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4329,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an author edits their post from its more-actions menu and sees the new revision",
+          "time": 19.884069
+        },
+        {
+          "name": "another member's post offers no edit or delete",
+          "time": 1.984228
+        },
+        {
+          "name": "a refused or stale edit keeps the draft and says why",
+          "time": 3.096265
+        },
+        {
+          "name": "cancelling an edit restores the post unchanged",
+          "time": 2.616386
+        },
+        {
+          "name": "an author deletes their post after confirming, and its slot stays as removed",
+          "time": 3.829563
+        },
+        {
+          "name": "a revised post shows when it was edited",
+          "time": 2.201866
+        }
+      ]
+    },
+    "tests/refresh-errors.test.ts": {
+      "wall": 20.5803,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0739,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a refresh that Auth refuses with invalid_grant ends the session",
+          "time": 18.291828
+        },
+        {
+          "name": "a refresh that fails for any other reason keeps the session and answers unavailable",
+          "time": 2.214539
+        }
+      ]
+    },
+    "tests/platform-closed.test.ts": {
+      "wall": 33.2716,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.5754,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a closed read renders the localized page in English and Japanese with status 403",
+          "time": 14.881498
+        },
+        {
+          "name": "subject, board, thread, search and offer pages share the closed read page",
+          "time": 1.087985
+        },
+        {
+          "name": "a closed thread start or reply keeps its draft and says it is not open yet",
+          "time": 10.878502
+        },
+        {
+          "name": "a closed media reservation or checkout start says it is not open yet",
+          "time": 3.471762
+        },
+        {
+          "name": "an ordinary forbidden reply keeps its existing message",
+          "time": 2.37647
+        }
+      ]
+    },
+    "tests/reactions.test.ts": {
+      "wall": 24.3977,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4007,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in member reacts to a thread and a post, replacing and clearing the reaction",
+          "time": 18.959471
+        },
+        {
+          "name": "a signed-out visitor sees counts and a sign-in link instead of reacting",
+          "time": 1.647505
+        },
+        {
+          "name": "a refused reaction rolls back and says why",
+          "time": 2.433578
+        },
+        {
+          "name": "a thread page reads reactions with its existing two reads",
+          "time": 0.95641
+        }
+      ]
+    },
+    "tests/posting.test.ts": {
+      "wall": 83.4561,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.7322,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-in member starts a thread from its board and lands on it",
+          "time": 22.960555
+        },
+        {
+          "name": "a signed-in member replies to a thread and sees the reply",
+          "time": 3.799638
+        },
+        {
+          "name": "a signed-out visitor is offered sign-in instead of a composer",
+          "time": 7.288631
+        },
+        {
+          "name": "an empty draft cannot be sent",
+          "time": 4.155213
+        },
+        {
+          "name": "a refused write keeps the draft, says why and retries with the same idempotency key",
+          "time": 44.519905
+        }
+      ]
+    },
+    "tests/scaffold.test.ts": {
+      "wall": 17.2931,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0751,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the documented dev command serves server-rendered pages from the Worker",
+          "time": 15.362821
+        },
+        {
+          "name": "every launch locale renders its own messages under its path prefix",
+          "time": 1.497757
+        },
+        {
+          "name": "every locale carries every English message and nothing else",
+          "time": 0.004913
+        },
+        {
+          "name": "the root redirects to the negotiated locale",
+          "time": 0.269394
+        },
+        {
+          "name": "an unknown page is a localized not-found page",
+          "time": 0.083137
+        }
+      ]
+    },
+    "tests/screenshots.test.ts": {
+      "wall": 10.7436,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0724,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the screenshot script captures every chosen story in each chosen locale and theme",
+          "time": 10.670327
+        },
+        {
+          "name": "a story render error fails capture with its story id and the page error",
+          "time": 0.000883
+        }
+      ]
+    },
+    "tests/request-cost.test.ts": {
+      "wall": 19.808,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1525,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "locale resolution stays within its bound as s grows",
+          "time": 11.587846
+        },
+        {
+          "name": "home page stays within its bound as s grows",
+          "time": 0.669092
+        },
+        {
+          "name": "subject page stays within its bound as s grows",
+          "time": 0.969955
+        },
+        {
+          "name": "board page stays within its bound as s grows",
+          "time": 2.02572
+        },
+        {
+          "name": "thread page stays within its bound as s grows",
+          "time": 1.541851
+        },
+        {
+          "name": "search page stays within its bound as s grows",
+          "time": 1.989207
+        },
+        {
+          "name": "suggestions stay within their bound as s grows",
+          "time": 0.842787
+        },
+        {
+          "name": "credential resolution stays within its bound as s grows",
+          "time": 0.001361
+        },
+        {
+          "name": "sign-in stays within its bound as s grows",
+          "time": 0.005047
+        },
+        {
+          "name": "callback stays within its bound as s grows",
+          "time": 0.001216
+        },
+        {
+          "name": "sign-out stays within its bound as s grows",
+          "time": 0.001413
+        },
+        {
+          "name": "upload stays within its bound as s grows",
+          "time": 0.015973
+        },
+        {
+          "name": "download stays within its bound as s grows",
+          "time": 0.004028
+        }
+      ]
+    },
+    "tests/search-story.test.ts": {
+      "wall": 17.1325,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.5874,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the search story shows each result's type name and description",
+          "time": 12.859224
+        },
+        {
+          "name": "the story of a search filtered to one type shows the result's leading facts",
+          "time": 3.685903
+        }
+      ]
+    },
+    "tests/search-facets.test.ts": {
+      "wall": 26.025,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4401,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an unrestricted search offers type choices, and a chosen type shows its facets with counts",
+          "time": 20.271965
+        },
+        {
+          "name": "choosing facet values narrows results with one filter sent to search and facets, without JavaScript",
+          "time": 1.135493
+        },
+        {
+          "name": "types, properties and values are labelled in the page locale",
+          "time": 1.531787
+        },
+        {
+          "name": "a failed facet read still shows the results",
+          "time": 1.397835
+        },
+        {
+          "name": "searches read the definitions release once per digest and make two kernel reads each",
+          "time": 1.247796
+        }
+      ]
+    },
+    "tests/security-headers.test.ts": {
+      "wall": 35.7203,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.528,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the built site's pages hydrate under a nonce-based content security policy with no violations",
+          "time": 32.31875
+        },
+        {
+          "name": "every page response carries a fresh nonce, and only nonced scripts run",
+          "time": 2.089165
+        },
+        {
+          "name": "only the curator page editor route relaxes styles, and nothing else",
+          "time": 0.002457
+        },
+        {
+          "name": "the policy admits exactly the outside origins the site uses",
+          "time": 0.043097
+        },
+        {
+          "name": "pages send HSTS, nosniff, referrer and permissions policies, and refuse framing",
+          "time": 0.733124
+        },
+        {
+          "name": "media downloads keep their own sandbox policy",
+          "time": 0.005707
+        }
+      ]
+    },
+    "tests/report.test.ts": {
+      "wall": 56.9018,
+      "create": 0.0002,
+      "drop": 0,
+      "outsideTests": 0.6652,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a reader reports a post from the more-actions menu with a reason, verification and details",
+          "time": 35.804778
+        },
+        {
+          "name": "a report cannot be sent before verification",
+          "time": 2.390258
+        },
+        {
+          "name": "illegal and other reasons require details of at most 4096 characters",
+          "time": 2.274754
+        },
+        {
+          "name": "a refused report keeps the input, says why and retries with the same idempotency key",
+          "time": 13.82376
+        },
+        {
+          "name": "the author's own post offers no report",
+          "time": 1.94302
+        }
+      ]
+    },
+    "tests/search-results.test.ts": {
+      "wall": 44.7036,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4185,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "each search result shows its title, its type's name and a short description in the page's language",
+          "time": 19.05117
+        },
+        {
+          "name": "a search filtered to one type shows that type's leading facts on each result",
+          "time": 4.072615
+        },
+        {
+          "name": "an unfiltered search asks for no facts and still shows type names and descriptions",
+          "time": 4.771584
+        },
+        {
+          "name": "the next page sends the same result fields as the first",
+          "time": 9.069458
+        },
+        {
+          "name": "a result without a description or facts shows only its title and type",
+          "time": 7.320239
+        }
+      ]
+    },
+    "tests/search.test.ts": {
+      "wall": 55.3722,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4532,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the search page lists matching subjects and pages with the cursor",
+          "time": 19.282127
+        },
+        {
+          "name": "an empty query shows the search form without calling the kernel",
+          "time": 25.056603
+        },
+        {
+          "name": "a query with no matches says so",
+          "time": 2.551578
+        },
+        {
+          "name": "the shell search box suggests subjects as you type and opens the one chosen",
+          "time": 2.795853
+        },
+        {
+          "name": "typing quickly sends one suggestion request per pause, not one per keystroke",
+          "time": 3.109037
+        },
+        {
+          "name": "pressing Enter in the search box opens the search page for the query",
+          "time": 2.123809
+        }
+      ]
+    },
+    "tests/session.test.ts": {
+      "wall": 27.3313,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.0846,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "signing in runs the authorization code flow with PKCE and keeps the tokens on the server",
+          "time": 11.892578
+        },
+        {
+          "name": "a callback that does not match the sign-in it answers is refused",
+          "time": 3.314608
+        },
+        {
+          "name": "the session refreshes its tokens once under concurrent requests, and ends when refresh fails",
+          "time": 7.831546
+        },
+        {
+          "name": "unsafe requests that carry the session need the site's own Origin",
+          "time": 0.598201
+        },
+        {
+          "name": "signing out revokes the tokens at Auth, deletes the session and ends the Auth session",
+          "time": 0.728091
+        },
+        {
+          "name": "every grant names the API resource, so access tokens carry the API audience",
+          "time": 2.88172
+        }
+      ]
+    },
+    "tests/shell-frame.test.ts": {
+      "wall": 29.4074,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.524,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the skip link stays out of sight and takes no space until it is focused",
+          "time": 22.341401
+        },
+        {
+          "name": "the desktop navigation collapses to icons that keep their names, and the first paint remembers it",
+          "time": 2.267964
+        },
+        {
+          "name": "the collapsed navigation has no accessibility violations in either theme",
+          "time": 4.274072
+        }
+      ]
+    },
+    "tests/rate-limit.test.ts": {
+      "wall": 225.9412,
+      "create": 0.0004,
+      "drop": 0,
+      "outsideTests": 0.1629,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "site reads beyond a window's limit answer 429 with Retry-After",
+          "time": 135.758591
+        },
+        {
+          "name": "a signed-in person's reads share one limit across their sessions",
+          "time": 16.094435
+        },
+        {
+          "name": "a signed-out visitor's reads are limited by their session cookie, or by IP without one",
+          "time": 36.018477
+        },
+        {
+          "name": "unsafe requests are not counted against the read limits",
+          "time": 37.906845
+        }
+      ]
+    },
+    "tests/shell-polish.test.ts": {
+      "wall": 27.2943,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.3017,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the site loads Tailwind once",
+          "time": 13.726436
+        },
+        {
+          "name": "the navigation rail's edge is drawn in the border colour in both themes",
+          "time": 5.472114
+        },
+        {
+          "name": "the logo link is named after the site in every locale",
+          "time": 7.794065
+        }
+      ]
+    },
+    "tests/subject-polish.test.ts": {
+      "wall": 59.4888,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.5891,
+      "result": "fail",
+      "tests": [
+        {
+          "name": "a subject page lists each property once, as one term followed by its values",
+          "time": 27.387036
+        },
+        {
+          "name": "the phone navigation sheet names the site, outside the navigation's landmark",
+          "time": 31.512618
+        }
+      ]
+    },
+    "tests/threads-read.test.ts": {
+      "wall": 24.3583,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4988,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a board page lists its threads in the kernel's order and pages with the cursor",
+          "time": 19.953945
+        },
+        {
+          "name": "a thread page shows its posts in order with their rendered bodies",
+          "time": 0.987062
+        },
+        {
+          "name": "an erased post says it was erased and shows no body",
+          "time": 0.553094
+        },
+        {
+          "name": "a missing board or thread answers the site's not-found page with 404",
+          "time": 0.804082
+        },
+        {
+          "name": "a thread page makes at most two kernel reads, issued together",
+          "time": 1.561284
+        }
+      ]
+    },
+    "tests/upload-memory.test.ts": {
+      "wall": 0.9231,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.1329,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an upload holds a bounded number of bytes ahead of storage as the file grows",
+          "time": 0.790236
+        }
+      ]
+    },
+    "tests/session-controls.test.ts": {
+      "wall": 65.0245,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.6321,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a signed-out page offers sign-in that returns to the page it was opened from",
+          "time": 15.18513
+        },
+        {
+          "name": "signing in returns to the same page signed in, and signing out revokes the session and ends it at Auth",
+          "time": 4.479339
+        },
+        {
+          "name": "the signed-in header keeps sign-out and security settings in an account menu that opens without JavaScript",
+          "time": 5.945581
+        },
+        {
+          "name": "pages read the signed-in state without contacting Auth or refreshing tokens",
+          "time": 7.850371
+        },
+        {
+          "name": "the session controls have no accessibility violations signed in or out, in either theme at phone and desktop widths",
+          "time": 30.931936
+        }
+      ]
+    },
+    "tests/shell-phone.test.ts": {
+      "wall": 85.7344,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.4613,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "signed in or out, in English or Japanese, no page is wider than a 320 or 390 pixel phone screen",
+          "time": 75.49182
+        },
+        {
+          "name": "on a phone the header holds the logo, language, theme and account controls, and the bottom navigation carries every destination",
+          "time": 6.56828
+        },
+        {
+          "name": "on a desktop the header keeps the search field and the account button keeps its label",
+          "time": 3.213008
+        }
+      ]
+    },
+    "tests/subject.test.ts": {
+      "wall": 74.0304,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.6595,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the kernel client reads the local fixtures as the kernel serves them",
+          "time": 0.004222
+        },
+        {
+          "name": "a subject page renders the subject in the page language on the server",
+          "time": 15.852794
+        },
+        {
+          "name": "labels fall back to English and keep their own language",
+          "time": 3.772291
+        },
+        {
+          "name": "unknown and absent values are stated, never invented",
+          "time": 3.368157
+        },
+        {
+          "name": "a merged subject redirects to its survivor, so pages link and cache only the survivor",
+          "time": 1.040982
+        },
+        {
+          "name": "an unknown subject is a localized not-found page",
+          "time": 0.192634
+        },
+        {
+          "name": "following a related subject is a client-side navigation to its page",
+          "time": 3.227834
+        },
+        {
+          "name": "a subject page has no accessibility violations in either theme at phone and desktop widths",
+          "time": 45.911948
+        }
+      ]
+    },
+    "tests/shell.test.ts": {
+      "wall": 70.326,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.6563,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the server-rendered shell has a skip link, one labelled navigation and one main landmark",
+          "time": 28.645566
+        },
+        {
+          "name": "every locale renders the shell in its own language",
+          "time": 6.538851
+        },
+        {
+          "name": "every page has one URL without a trailing slash and names its other locales for search engines",
+          "time": 1.594156
+        },
+        {
+          "name": "the theme choice renders on the first paint and persists",
+          "time": 3.842705
+        },
+        {
+          "name": "the language choice moves to the same page in that language and remembers it",
+          "time": 1.482923
+        },
+        {
+          "name": "a client-side navigation keeps the document and moves focus to the new page",
+          "time": 1.370505
+        },
+        {
+          "name": "the shell has no accessibility violations in either theme at phone and desktop widths",
+          "time": 26.195043
+        }
+      ]
+    },
+    "tests/shell-navigation.test.ts": {
+      "wall": 122.7772,
+      "create": 0.0004,
+      "drop": 0,
+      "outsideTests": 0.7517,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the navigation offers Home and Search to everyone and Library to signed-in visitors, and marks the current one",
+          "time": 67.097901
+        },
+        {
+          "name": "the phone bottom navigation offers the same destinations",
+          "time": 18.636853
+        },
+        {
+          "name": "the header search is left out on the home and search pages and shown on every other page",
+          "time": 36.290732
+        }
+      ]
+    }
+  }
+}

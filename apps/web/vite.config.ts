@@ -7,6 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
+const testStateDirectory = process.env.WEB_TEST_STATE_DIR;
 let inspectorPort: number | false = false;
 if (configuredInspectorPort !== undefined) {
   const parsedInspectorPort = Number(configuredInspectorPort);
@@ -45,6 +46,10 @@ export default defineConfig({
     tanstackStart(),
     react(),
     tailwindcss(),
-    ...cloudflare({ viteEnvironment: { name: 'ssr' }, inspectorPort }),
+    ...cloudflare({
+      viteEnvironment: { name: 'ssr' },
+      inspectorPort,
+      ...(testStateDirectory ? { persistState: { path: testStateDirectory } } : {}),
+    }),
   ],
 });

@@ -1,3 +1,5 @@
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { withStackSlot } from '../../../scripts/stack-lease.ts';
 
 const command = process.argv.slice(2);
@@ -21,6 +23,18 @@ if (command.length === 0) {
   process.stderr.write('Usage: bun scripts/isolated.ts <command> [arguments...]\n');
   process.exitCode = 2;
 } else {
+  const app = resolve(import.meta.dir, '..');
+  const root = resolve(app, '../..');
+  const stateRoot = process.env.WEB_TEST_STATE_DIR;
+  let temporary: string | undefined;
+  if (!stateRoot) {
+    mkdirSync(join(root, '.temp'), { recursive: true });
+    temporary = mkdtempSync(join(root, '.temp/web-test-'));
+  }
+  const childEnvironment = {
+    ...process.env,
+    WEB_TEST_STATE_DIR: stateRoot ?? join(temporary!, 'cloudflare-state'),
+  };
   const invocation = isolated
     ? ['unshare', '--user', '--map-root-user', '--net', 'sh', '-c', 'ip link set lo up && exec "$@"', 'sh', ...command]
     : command;
@@ -31,25 +45,34 @@ if (command.length === 0) {
     );
   }
 
-  process.exitCode = await withStackSlot('web isolated', async (env) => {
-    const child = Bun.spawn(invocation, {
-      env: { ...process.env, ...env },
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-
-    let exited = false;
-    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-      process.on(signal, () => {
-        if (!exited) child.kill(signal);
+  try {
+    process.exitCode = await withStackSlot('web isolated', async (slotEnvironment) => {
+      const child = Bun.spawn(invocation, {
+        env: { ...childEnvironment, ...slotEnvironment },
+        stdin: 'inherit',
+        stdout: 'inherit',
+        stderr: 'inherit',
       });
-    }
 
-    const code = await child.exited;
-    exited = true;
-    return code;
-  });
+      let exited = false;
+      const forwarders = (['SIGINT', 'SIGTERM'] as const).map((signal) => {
+        const forward = () => {
+          if (!exited) child.kill(signal);
+        };
+        process.on(signal, forward);
+        return [signal, forward] as const;
+      });
+
+      try {
+        return await child.exited;
+      } finally {
+        exited = true;
+        for (const [signal, forward] of forwarders) process.off(signal, forward);
+      }
+    });
+  } finally {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  }
 }
 
 export {};

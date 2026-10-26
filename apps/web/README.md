@@ -10,6 +10,13 @@ security settings on the Auth site and offers sign-out. Its controls stay disabl
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
 
+`bun run check` runs each non-host test file in its own isolated `bun test` process. Browser and dev-server tests use a
+separate pool with six lanes by default, matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to
+change that bound. Pure unit tests use a wider ten-lane pool by default, configurable with
+`WEB_UNIT_CHECK_CONCURRENCY`. Both pools schedule files by their latest recorded wall time, longest first, and update
+[`check-timings.json`](check-timings.json) after the run. Each isolated test also gets private temporary Cloudflare
+Durable Object state, so parallel servers do not share SQLite data.
+
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
 Set the `TURNSTILE_SITE_KEY` text binding to the public Turnstile site key for the site's hostname.
