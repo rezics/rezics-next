@@ -71,7 +71,8 @@ export class PublicationConflictError extends Error {
 }
 export class PublicationOccupiedSlotError extends PublicationConflictError {
   constructor() {
-    super('Publication slot is already occupied');
+    super();
+    this.message = 'Publication slot is already occupied';
     this.name = 'PublicationOccupiedSlotError';
   }
 }
