@@ -187,7 +187,7 @@ checks leave that branch disabled and read the same grant and denial keys as bef
 
 ### Platform governance reach
 
-- Touches: the same formula statement includes one exact Global Context candidate for a listed action and uses it only when the requested resource denies. A command authorized through Global adds one Access record row.
+- Touches: preparation probes the page and the Global Context on separately anchored reads, as for a single check. The sole formula statement includes one exact Global Context candidate for a listed action and uses it only when the requested resource denies. That statement documents its partition-binding exemption: the requested single-route page and the fixed Global Context must be decided together at T. A command authorized through Global adds one Access record row.
 - Bound: `O((1 + K) log G)` added, the same shape as `gate:any`, independent of the requested resource, other resources and other grants.
 - Growth check: `test/access/growth-governance-reach.test.ts` at [1, 8, 64], growing unrelated resources, their grants and Global grants to other accounts; default warm-up; constant rows and statements, logarithmic buffers.
 

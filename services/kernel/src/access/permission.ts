@@ -30,6 +30,8 @@ import {
   setGovernanceReach,
   governanceReachUse,
   isGlobalReachAction,
+  isPlatformResource,
+  PLATFORM_RESOURCE,
   recordGovernanceReachUse,
 } from './governance-reach.ts';
 import { prepareAnonymousEligibility } from './eligibility.ts';
@@ -360,29 +362,32 @@ export function createAccess(config: PermissionConfig): Access {
                 valid: 'empty',
               });
         }
-        const candidates = isGlobalReachAction(action)
-          ? await governanceReachCandidatesRead.run(context.pool, {
-              route: resource.route,
-              resource_ids: [...(page?.ids ?? [resource.id])],
-              action,
-              grant_roles: grantRoles,
-              actor_id: actor.accountId,
-              principal_id: principalId ?? '',
-              roles,
-              at,
-              include_global: true,
-            })
-          : await candidatesRead.run(context.pool, {
-              route: resource.route,
-              resource_ids: [...(page?.ids ?? [resource.id])],
-              action,
-              grant_roles: grantRoles,
-              actor_id: actor.accountId,
-              principal_id: principalId ?? '',
-              roles,
-              at,
-            });
-        // Only hits from the single bounded probe cause an anchored role read.
+        const candidateInput = {
+          route: resource.route,
+          resource_ids: [...(page?.ids ?? [resource.id])],
+          action,
+          grant_roles: grantRoles,
+          actor_id: actor.accountId,
+          principal_id: principalId ?? '',
+          roles,
+          at,
+        };
+        // Preparation keeps the page and Global Context reads separately anchored.
+        // The final formula still evaluates both at T in its sole statement.
+        const candidates =
+          isGlobalReachAction(action) && !isPlatformResource(resource)
+            ? (
+                await Promise.all([
+                  governanceReachCandidatesRead.run(context.pool, candidateInput),
+                  governanceReachCandidatesRead.run(context.pool, {
+                    ...candidateInput,
+                    route: PLATFORM_RESOURCE.route,
+                    resource_ids: [PLATFORM_RESOURCE.id],
+                  }),
+                ])
+              ).flat()
+            : await candidatesRead.run(context.pool, candidateInput);
+        // Only hits from these bounded probes cause an anchored role read.
         const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
         const groups = new Map<string, RoleEvidence[]>();
         for (const row of roles) {
@@ -515,3 +520,44 @@ export function createAccess(config: PermissionConfig): Access {
       if (use && hasLiveCommandTransaction(client) && !recordGovernanceReachUse(client, use))
         return { allowed: false, explicit: false };
       return decision;
+    },
+    async authorize(client, actor, action, resource, evidence, time) {
+      const allowed = await checkPermission(client, actor, action, resource, evidence, time, config.clock);
+      const use = allowed ? governanceReachUse(evidence, actor, action, resource) : undefined;
+      // Standalone checks have no write effect. Command authorizers that prove
+      // on another connection must retain this same use and record it later.
+      if (use && hasLiveCommandTransaction(client) && !recordGovernanceReachUse(client, use)) return false;
+      return allowed;
+    },
+  };
+  installResourceRoleCatalogue(access, catalogue);
+  return access;
+}
+
+/** Prepare each proposed permission before checkout, then check all of them on
+ * every attempt. This deliberately provides no grant mutation or HTTP helper.
+ * The command separately checks its registered grant-management action.
+ */
+export async function checkDelegationBounds(
+  access: Access,
+  actor: Actor,
+  actions: readonly string[],
+  resource: Resource,
+  context: AccessContext,
+): Promise<AccessCheck> {
+  try {
+    if (actions.length === 0) return async () => false;
+    const checks: AccessCheck[] = [];
+    for (const action of new Set(actions)) checks.push(await accessCheck(access, actor, action, resource, context));
+    return async (client, time) => {
+      try {
+        for (const check of checks) if (!(await check(client, time))) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    };
+  } catch {
+    return async () => false;
+  }
+}

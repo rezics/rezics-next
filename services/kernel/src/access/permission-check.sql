@@ -1,3 +1,4 @@
+-- unbound: one permission formula probes the bounded single-route page and the fixed Global Context for governance reach.
 -- Scalar counts are bounded by exact identity/action and native valid-range
 -- keys (one grant per key, at most three denial reasons). They cannot become
 -- an alternative hashed EXISTS subplan that enumerates the resource ACL.

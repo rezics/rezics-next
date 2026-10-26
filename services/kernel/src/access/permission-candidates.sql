@@ -20,18 +20,18 @@ WITH input AS NOT MATERIALIZED (
 ), authority AS MATERIALIZED (SELECT :at::timestamptz AS at), probes AS MATERIALIZED (
   SELECT k.*,
     ((SELECT count(*) FROM access.resource_grant g
-      WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.action = i.action
+      WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.action = i.action
         AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
         AND g.valid @> (SELECT at FROM authority)
     ) > 0 OR (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
       WHERE (SELECT count(*) FROM access.resource_role_grant g
-        WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
+        WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
           AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
           AND g.valid @> (SELECT at FROM authority)
       ) > 0
     ) > 0) AS granted,
     (k.subject_kind = 'identity' AND (SELECT count(*) FROM access.resource_denial d
-      WHERE d.route = target.route AND d.resource_id = target.resource_id AND d.action = i.action
+      WHERE d.route = i.route AND d.resource_id = target.resource_id AND d.action = i.action
         AND d.subject_id = k.subject_id AND d.subject_role = k.subject_role AND d.valid @> (SELECT at FROM authority)
     ) > 0) AS denied
   FROM keys k CROSS JOIN targets target CROSS JOIN input i
