@@ -3,6 +3,7 @@ import { systemClock } from '../clock.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
+import type { CommandTransaction } from '../command/command.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -40,7 +41,8 @@ function allow(value: unknown): asserts value {
   if (!value) throw new ContinuationDeniedError();
 }
 
-/** The root and every child snapshot commit before effects. Page receipts and
+/** The root and every child snapshot commit before effects. Each page and child effect
+ * records its one completion on the root in its own transaction. Page receipts and
  * subject receipts are independent: a failed page effect replays its immutable
  * allowlist and native subject keys, without repeating any fence advance. */
 export function createOperatorFenceRunner(config: {
@@ -49,6 +51,8 @@ export function createOperatorFenceRunner(config: {
   clock?: () => Date;
   pageSize?: number;
   root(reference: string): Promise<ContinuationSnapshot>;
+  /** Records the effect's one completion on the root, in the effect's transaction, after the expiry check. */
+  record(tx: CommandTransaction, root: ContinuationSnapshot, entry: ContinuationEntry): Promise<void>;
 }) {
   const pageSize = config.pageSize ?? PAGE_SIZE;
   allow(Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= PAGE_SIZE);
@@ -124,6 +128,7 @@ export function createOperatorFenceRunner(config: {
         input: { continuationId: root.continuationId, cursor: cursor ?? null },
       },
       async (tx) => {
+        await config.record(tx, root, pageEntry);
         allow(batch);
         const allowlist = batch.operators.map((subject) =>
           entry(
@@ -174,6 +179,7 @@ export function createOperatorFenceRunner(config: {
             input: { continuationId: root.continuationId, subjectAccountId, reservationId },
           },
           async (tx, transactionId) => {
+            await config.record(tx, root, child);
             const subject = await unfenceSubject.run(tx, {
               route,
               subject_id: subjectAccountId,
@@ -206,6 +212,7 @@ export function createOperatorFenceRunner(config: {
             input: { operatorAccountId: root.accountId, subjectAccountId, reservationId, key: child.key },
           },
           async (tx, transactionId) => {
+            await config.record(tx, root, child);
             const related = await fenceSubject.run(tx, {
               route,
               subject_id: subjectAccountId,

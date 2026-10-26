@@ -23,6 +23,7 @@ import insertContinuation from './committed-continuation-insert.sql';
 import loadContinuation from './committed-continuation-load.sql';
 import readContinuation from './committed-continuation-read.sql';
 import renewContinuation from './committed-continuation-renew.sql';
+import { createCommittedDeletionRunner } from './committed-deletion-work.ts';
 import { createOperatorFenceRunner } from './operator-fence-work.ts';
 
 /** Distinct from workflow approvals. A sealed reference authorizes one allowlisted
@@ -75,7 +76,6 @@ export type ContinuationView = {
   expiresAt: string;
   allowlist: ContinuationEntry[];
 };
-type Completion = ContinuationEntry & { receiptId: string };
 type StoredContinuation = {
   continuationId: string;
   accountId: string;
@@ -89,7 +89,6 @@ type StoredContinuation = {
   priorOperatorAccountId: string | null;
   priorReservationId: string | null;
   allowlist: unknown;
-  completions: unknown;
   digest: string;
   createdAt: unknown;
   committedExpiresAt: unknown;
@@ -121,54 +120,27 @@ export function canonicalInstant(value: unknown): string {
 function jsonValue(value: unknown): unknown {
   return typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
 }
-function entryShape(value: unknown, completed: boolean): (ContinuationEntry & { receiptId?: string }) | null {
+function entryShape(value: unknown): ContinuationEntry | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  const expected = completed ? ['digest', 'key', 'receiptId', 'step', 'target'] : ['digest', 'key', 'step', 'target'];
-  if (keys.join(',') !== expected.join(',')) return null;
-  const step = record.step;
-  const target = record.target;
-  const key = record.key;
-  const digest = record.digest;
+  if (Object.keys(record).sort().join(',') !== 'digest,key,step,target') return null;
+  const { step, target, key, digest } = record;
   if (typeof step !== 'string' || !STEP.test(step)) return null;
   if (typeof target !== 'string' || target.length < 1 || target.length > 128) return null;
   if (typeof key !== 'string' || key.length < 1 || key.length > 240) return null;
   if (typeof digest !== 'string' || !DIGEST.test(digest)) return null;
-  const entry: ContinuationEntry & { receiptId?: string } = { step, target, key, digest };
-  if (completed) {
-    if (typeof record.receiptId !== 'string' || routeOf(record.receiptId) === null) return null;
-    entry.receiptId = record.receiptId;
-  }
-  return entry;
+  return { step, target, key, digest };
 }
 function entries(value: unknown): ContinuationEntry[] | null {
   const parsed = jsonValue(value);
   if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 4) return null;
   const allowlist: ContinuationEntry[] = [];
   for (const item of parsed) {
-    const entry = entryShape(item, false);
+    const entry = entryShape(item);
     if (!entry) return null;
-    allowlist.push({ step: entry.step, target: entry.target, key: entry.key, digest: entry.digest });
+    allowlist.push(entry);
   }
   return allowlist;
-}
-function completions(value: unknown): Completion[] | null {
-  const parsed = jsonValue(value);
-  if (!Array.isArray(parsed) || parsed.length > 4) return null;
-  const recorded: Completion[] = [];
-  for (const item of parsed) {
-    const entry = entryShape(item, true);
-    if (!entry?.receiptId) return null;
-    recorded.push({
-      step: entry.step,
-      target: entry.target,
-      key: entry.key,
-      digest: entry.digest,
-      receiptId: entry.receiptId,
-    });
-  }
-  return recorded;
 }
 export function continuationEntryDigest(entry: Pick<ContinuationEntry, 'step' | 'target' | 'key'>): string {
   return createHash('sha256')
@@ -332,6 +304,56 @@ export async function insertDeletionContinuation(
   if (!inserted) throw new LifecycleDeniedError();
 }
 
+export function isFenceContinuation(root: ContinuationSnapshot): boolean {
+  return root.allowlist.some(
+    (entry) =>
+      ['operator-responsibility-page', 'operator-unfence-page'].includes(entry.step) && entry.target === root.accountId,
+  );
+}
+export function isDeletionContinuation(root: ContinuationSnapshot): boolean {
+  return root.allowlist.some((entry) => entry.step === 'erase-auth-owner' && entry.target === root.accountId);
+}
+
+/** The one completion path. Every step of a continuation, listed on the root or
+ * proven by the runner against an immutable page, passes the digest and the stored
+ * expiry at the command's T before its completion row is written, in the effect's
+ * own transaction. The receipt is derived from the step, so replay writes nothing. */
+export async function recordCompletion(
+  tx: CommandTransaction,
+  located: { route: number; continuationId: string; digest: string },
+  presented: ContinuationEntry,
+  listed: boolean,
+): Promise<{ continuationId: string; receiptId: string }> {
+  refused(presented.digest === continuationEntryDigest(presented));
+  const row = await oneRow(() =>
+    loadContinuation.run(tx, { route: located.route, continuation_id: located.continuationId }),
+  );
+  refused(row);
+  const stored = row as StoredContinuation;
+  const allowlist = entries(stored.allowlist);
+  refused(allowlist);
+  const snapshot = snapshotOf(located.route, stored, allowlist);
+  refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
+  if (listed) refused(allowlist.some((item) => sameEntry(item, presented)));
+  const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
+  refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
+  const receiptId = derivedId(
+    CONTINUATION_NAMESPACE,
+    `${stored.continuationId}:${presented.step}:${presented.target}:${presented.key}`,
+    located.route,
+  );
+  await completeContinuation.run(tx, {
+    route: located.route,
+    continuation_id: stored.continuationId,
+    step: presented.step,
+    target: presented.target,
+    key: presented.key,
+    digest: presented.digest,
+    receipt_id: receiptId,
+  });
+  return { continuationId: stored.continuationId, receiptId };
+}
+
 export type CommittedContinuations = {
   /** Trusted kernel recovery port. Each iteration commits one bounded page. */
   continueCommitted(reference: string): Promise<void>;
@@ -375,40 +397,103 @@ export function createCommittedContinuations(config: {
     );
     return { route, continuationId, digest };
   }
-  const runner = createOperatorFenceRunner({
+  async function loadRoot(reference: string): Promise<ContinuationSnapshot> {
+    const located = unsealed(reference);
+    const row = await withConnection(config.pool, (client) =>
+      oneRow(() =>
+        loadContinuation.run(client, {
+          route: located.route,
+          continuation_id: located.continuationId,
+        }),
+      ),
+    );
+    refused(row);
+    const stored = row as StoredContinuation;
+    const allowlist = entries(stored.allowlist);
+    refused(allowlist);
+    const snapshot = snapshotOf(located.route, stored, allowlist);
+    refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
+    return snapshot;
+  }
+  async function authorizeStep(reference: string, entry: ContinuationEntry) {
+    let sealedReference: { route: number; continuationId: string; digest: string };
+    try {
+      sealedReference = unsealed(reference);
+    } catch (error) {
+      if (error instanceof ContinuationDeniedError) throw error;
+      throw deny();
+    }
+    const presented = entryShape(entry);
+    refused(presented && presented.digest === continuationEntryDigest(presented));
+    const commandKey = `committed:${presented.key}`;
+    refused(commandKey.length <= 240);
+    try {
+      const outcome = await execute()(
+        {
+          route: sealedReference.route,
+          id: sealedReference.continuationId,
+          kind: 'cleanup-continuation.recorded',
+          key: commandKey,
+          input: {
+            continuationId: sealedReference.continuationId,
+            step: presented.step,
+            target: presented.target,
+            key: presented.key,
+            digest: presented.digest,
+          },
+        },
+        (tx) => recordCompletion(tx, sealedReference, presented, true),
+      );
+      return outcome.value;
+    } catch (error) {
+      if (error instanceof ContinuationDeniedError) throw error;
+      if (error instanceof IdempotencyConflictError) throw deny();
+      throw error;
+    }
+  }
+  const fenceWork = createOperatorFenceRunner({
     pool: config.pool,
     referenceKeys: config.referenceKeys,
     clock,
     ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
     async root(reference) {
-      const located = unsealed(reference);
-      const row = await withConnection(config.pool, (client) =>
-        oneRow(() =>
-          loadContinuation.run(client, {
-            route: located.route,
-            continuation_id: located.continuationId,
-          }),
-        ),
-      );
-      refused(row);
-      const stored = row as StoredContinuation;
-      const allowlist = entries(stored.allowlist);
-      refused(allowlist);
-      const snapshot = snapshotOf(located.route, stored, allowlist);
-      refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
-      refused(
-        allowlist.some(
-          (entry) =>
-            ['operator-responsibility-page', 'operator-unfence-page'].includes(entry.step) &&
-            entry.target === stored.accountId,
-        ),
-      );
+      const snapshot = await loadRoot(reference);
+      refused(isFenceContinuation(snapshot));
       return snapshot;
+    },
+    async record(tx, root, entry) {
+      await recordCompletion(
+        tx,
+        { route: root.route, continuationId: root.continuationId, digest: committedContinuationDigest(root) },
+        entry,
+        false,
+      );
+    },
+  });
+  const deletionWork = createCommittedDeletionRunner({
+    pool: config.pool,
+    clock,
+    async root(reference) {
+      const snapshot = await loadRoot(reference);
+      refused(isDeletionContinuation(snapshot));
+      return snapshot;
+    },
+    authorizeStep,
+    async live(root) {
+      const row = await withConnection(config.pool, (client) =>
+        oneRow(() => loadContinuation.run(client, { route: root.route, continuation_id: root.continuationId })),
+      );
+      refused(row && Date.parse(canonicalInstant((row as StoredContinuation).expiresAt)) > clock().getTime());
     },
   });
   return {
-    continueCommitted: runner.continueCommitted,
-    continueCommittedPage: runner.page,
+    async continueCommitted(reference) {
+      const root = await loadRoot(reference);
+      if (isFenceContinuation(root)) return fenceWork.continueCommitted(reference);
+      refused(isDeletionContinuation(root));
+      return deletionWork.continueCommitted(reference);
+    },
+    continueCommittedPage: fenceWork.page,
     async read(operationKey, accountId) {
       const route = routeOf(accountId);
       if (route === null || typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 128)
@@ -418,83 +503,7 @@ export function createCommittedContinuations(config: {
       );
       return row ? viewOf(config.referenceKeys, route, row as StoredContinuation) : null;
     },
-    async authorizeStep(reference, entry) {
-      let sealedReference: { route: number; continuationId: string; digest: string };
-      try {
-        sealedReference = unsealed(reference);
-      } catch (error) {
-        if (error instanceof ContinuationDeniedError) throw error;
-        throw deny();
-      }
-      const presented = entryShape(entry, false);
-      refused(presented && presented.digest === continuationEntryDigest(presented));
-      const commandKey = `committed:${presented.key}`;
-      refused(commandKey.length <= 240);
-      const receiptId = derivedId(
-        CONTINUATION_NAMESPACE,
-        `${sealedReference.continuationId}:${presented.step}:${presented.target}:${presented.key}`,
-        sealedReference.route,
-      );
-      try {
-        const outcome = await execute()(
-          {
-            route: sealedReference.route,
-            id: sealedReference.continuationId,
-            kind: 'cleanup-continuation.recorded',
-            key: commandKey,
-            input: {
-              continuationId: sealedReference.continuationId,
-              step: presented.step,
-              target: presented.target,
-              key: presented.key,
-              digest: presented.digest,
-            },
-          },
-          async (tx) => {
-            const row = await oneRow(() =>
-              loadContinuation.run(tx, {
-                route: sealedReference.route,
-                continuation_id: sealedReference.continuationId,
-              }),
-            );
-            refused(row);
-            const stored = row as StoredContinuation;
-            const allowlist = entries(stored.allowlist);
-            const recorded = completions(stored.completions);
-            refused(allowlist && recorded);
-            const snapshot = snapshotOf(sealedReference.route, stored, allowlist);
-            refused(
-              stored.digest === sealedReference.digest && stored.digest === committedContinuationDigest(snapshot),
-            );
-            const match = allowlist.find((item) => sameEntry(item, presented));
-            refused(match);
-            const prior = recorded.find((item) => sameEntry(item, presented));
-            if (prior) return { continuationId: stored.continuationId, receiptId: prior.receiptId };
-            const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
-            refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
-            const updated = await oneRow(() =>
-              completeContinuation.run(tx, {
-                route: sealedReference.route,
-                continuation_id: stored.continuationId,
-                step: presented.step,
-                target: presented.target,
-                key: presented.key,
-                digest: presented.digest,
-                receipt_id: receiptId,
-                at,
-              }),
-            );
-            refused(updated);
-            return { continuationId: stored.continuationId, receiptId };
-          },
-        );
-        return outcome.value;
-      } catch (error) {
-        if (error instanceof ContinuationDeniedError) throw error;
-        if (error instanceof IdempotencyConflictError) throw deny();
-        throw error;
-      }
-    },
+    authorizeStep,
     async renew(token, continuationId) {
       const route = routeOf(continuationId);
       if (route === null) throw new GrantDeniedError();

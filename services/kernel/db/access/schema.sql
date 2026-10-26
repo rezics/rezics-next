@@ -86,6 +86,19 @@ $$;
 
 
 --
+-- Name: committed_continuation_completion_immutable(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.committed_continuation_completion_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Committed continuation completions are immutable';
+END;
+$$;
+
+
+--
 -- Name: committed_continuation_entries(jsonb, integer, integer, boolean); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -390,6 +403,28 @@ CREATE TABLE access.committed_continuation (
     CONSTRAINT committed_continuation_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 128))),
     CONSTRAINT committed_continuation_prior_handle_check CHECK (((prior_handle IS NULL) OR (prior_handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text))),
     CONSTRAINT committed_continuation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: committed_continuation_completion; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.committed_continuation_completion (
+    route integer NOT NULL,
+    continuation_id uuid NOT NULL,
+    step text NOT NULL,
+    target text NOT NULL,
+    key text NOT NULL,
+    digest text NOT NULL,
+    receipt_id uuid NOT NULL,
+    CONSTRAINT committed_continuation_completion_check CHECK ((route = ((get_byte(uuid_send(continuation_id), 10) * 256) + get_byte(uuid_send(continuation_id), 11)))),
+    CONSTRAINT committed_continuation_completion_check1 CHECK ((route = ((get_byte(uuid_send(receipt_id), 10) * 256) + get_byte(uuid_send(receipt_id), 11)))),
+    CONSTRAINT committed_continuation_completion_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_completion_key_check CHECK (((length(key) >= 1) AND (length(key) <= 240))),
+    CONSTRAINT committed_continuation_completion_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT committed_continuation_completion_step_check CHECK ((step ~ '^[a-z][a-z0-9-]{0,63}$'::text)),
+    CONSTRAINT committed_continuation_completion_target_check CHECK (((length(target) >= 1) AND (length(target) <= 128)))
 );
 
 
@@ -904,6 +939,14 @@ ALTER TABLE ONLY access.account
 
 
 --
+-- Name: committed_continuation_completion committed_continuation_completion_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation_completion
+    ADD CONSTRAINT committed_continuation_completion_pkey PRIMARY KEY (route, continuation_id, step, target, key);
+
+
+--
 -- Name: committed_continuation committed_continuation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1232,6 +1275,13 @@ CREATE TRIGGER assignment_identity BEFORE INSERT OR UPDATE ON access.principal_a
 
 
 --
+-- Name: committed_continuation_completion committed_continuation_completion_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER committed_continuation_completion_immutable BEFORE DELETE OR UPDATE ON access.committed_continuation_completion FOR EACH ROW EXECUTE FUNCTION access.committed_continuation_completion_immutable();
+
+
+--
 -- Name: committed_continuation committed_continuation_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -1285,6 +1335,14 @@ CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EAC
 --
 
 CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
+
+
+--
+-- Name: committed_continuation_completion committed_continuation_completion_route_continuation_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation_completion
+    ADD CONSTRAINT committed_continuation_completion_route_continuation_id_fkey FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id);
 
 
 --

@@ -318,9 +318,30 @@ Bound: with `R=N+U*t+M` (subjects/history, activity and media), exact approval l
 
 ### Committed cleanup continuation
 
-- Touches: one continuation insert in the barrier's transaction; per cleanup step one primary-key read of the row at T and one completion update; renewal adds one governance check on the Global Context and one update.
-- Bound: O(log R) per statement and a fixed allowlist of at most four entries for deletion, independent of other accounts and other continuations.
+A committed continuation is one immutable root row plus its completions. The root lists at most four allowlisted steps
+and a stored expiry; renewal by current governance is the only change to the root. Every step, whether listed on the
+root or proven against an immutable fence page, records one row in `access.committed_continuation_completion`
+(route, continuation, step, target, key, digest, receipt). The row is immutable and route-bound, and replay finds the
+same primary key, so crash and replay record nothing twice. A step is recorded only after the root's digest and the
+stored expiry pass at the command's T. An expired continuation releases no hold and fences nothing by TTL; current
+governance renews it first.
+
+`continueCommitted(reference)` dispatches on the allowlisted step kind to the runner that owns it:
+
+- Fencing and reinstatement roots (`operator-responsibility-page`, `operator-unfence-page`) run signed pages. Each page
+  and each child fence or unfence records its completion in its own transaction, before its effect.
+- Deletion roots (`erase-auth-owner`) run the kernel-owned steps in allowlist order: `retire-operator`,
+  `release-operator` and `redirect-deleted-handle`. Each is recorded through the same expiry-checked authorization,
+  checked live again, then executed by its native command under the step's committed key. Each target must match the
+  account's recorded operator, reservation and handle. Auth owns `erase-auth-owner` and `revoke-auth-sessions` and
+  records them itself through `authorizeStep`; the runner leaves them alone. The tombstone transaction already made
+  the account deleted and fenced, so a subject's release depends only on its terminal slot, and an operator deletes
+  only after its subjects' deletions released their responsibilities.
+
+- Touches: one continuation insert in the barrier's transaction; per cleanup step one primary-key read of the root at T and one completion row insert; renewal adds one governance check on the Global Context and one update.
+- Bound: O(log R) per statement and a fixed allowlist of at most four entries for deletion, independent of other accounts and other continuations. A fencing page adds at most 100 child completions, one per effect.
 - Growth check: `growth-committed-continuation.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts and other continuations (live, completed and expired) with the deleted account fixed; constant rows and statements, logarithmic buffers.
+- Behaviour: `committed-continuation-runner.test.ts` runs real deletion and fencing continuations through the runner, including expiry, replay and the immutable completion store.
 
 Permission preparation and the final formula use capped account inverses and exact temporal probes; integrated checks measure constant rows/statements and logarithmic blocks in ACL/history size at fixed admitted membership, and at most linear work through the 1000-per-account cap.
 Command freshness adds only the shared attempt seek to the installed actor-side formula `O((1+K)log G+matches)`, K<=1000 per actor/principal; bounded container/parent anchors, creation manifests and actual command changes retain their existing costs.
