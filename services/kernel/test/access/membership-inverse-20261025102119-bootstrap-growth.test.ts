@@ -147,20 +147,18 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
       holdTransactionId,
     };
   }
-  const warmup = await item();
-  await commands.bootstrapStep(warmup);
-  let input = warmup;
+  const inputs: Awaited<ReturnType<typeof item>>[] = [];
   const report = await checkGrowth(database, {
     name: 'membership source-cursor bootstrap',
-    scales: [512, 2048, 8192],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
-    warmups: 0,
     async grow(db, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
-      input = await item();
+      inputs.push(await item(), await item());
     },
     async operation() {
+      const input = inputs.shift()!;
       const outcome = await commands.bootstrapStep(input);
       expect(outcome.value.reservationId).toBe(input.reservationId);
       expect(outcome.value.sourceTransactionId).toBe(input.sourceTransactionId);
