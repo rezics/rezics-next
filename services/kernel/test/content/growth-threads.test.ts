@@ -659,7 +659,6 @@ async function runCheck(
         to: scale * ordinalsPerScale,
       });
       if (previous === 0) await assertAnchorRelations(recorded);
-      await recorded.admin.query('CHECKPOINT');
     },
     operation,
   });
