@@ -17,7 +17,7 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
-import { setupRequest } from './setup-retry.ts';
+import { assertSetupResponse } from './setup-response.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
@@ -55,7 +55,6 @@ async function createNativeContentSystemWithOptions(
   options: ContentSystemOptions,
   writeRateOverrides: string,
 ): Promise<NativeContentSystem> {
-  const setupDeadline = Date.now() + 60_000;
   const source = new URL(options.databaseUrl);
   const template = decodeURIComponent(source.pathname.slice(1));
   if (!template) throw new Error('A migrated application template database is required');
@@ -202,16 +201,18 @@ async function createNativeContentSystemWithOptions(
     await nativeAuth.internal.registerClient({ clientId: ordinaryClient.id, firstParty: true, scopes });
     await host.start();
 
-    const requestAuth = async (path: string, body: unknown, cookie = '', deadline = Date.now() + 10_000) => {
-      return setupRequest(
-        (request) => nativeAuth.handler(request),
-        new Request(`${issuer}${path}`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json', cookie },
-          body: JSON.stringify(body),
-        }),
-        { deadline },
-      );
+    const requestAuth = async (path: string, body: unknown, cookie = '') => {
+      const request = new Request(`${issuer}${path}`, {
+        method: 'POST',
+        headers: {
+          origin: issuer,
+          'content-type': 'application/json',
+          cookie,
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+        body: JSON.stringify(body),
+      });
+      return assertSetupResponse(await nativeAuth.handler(request), request);
     };
     const credential = async (response: Response): Promise<ContentCredential> => {
       const { access_token: bearer } = (await response.json()) as { access_token: string };
@@ -220,10 +221,7 @@ async function createNativeContentSystemWithOptions(
       return { bearer, actor };
     };
     const password = crypto.randomUUID() + crypto.randomUUID();
-    const issue = async (
-      input: Parameters<NativeContentSystem['auth']['issue']>[0],
-      deadline = Date.now() + 10_000,
-    ): Promise<ContentCredential> => {
+    const issue = async (input: Parameters<NativeContentSystem['auth']['issue']>[0]): Promise<ContentCredential> => {
       // Auth checks current identity, registered client and consent itself. The
       // supplied delegation reference is resolved by its native assignment reader.
       const signed = await requestAuth(
@@ -235,19 +233,13 @@ async function createNativeContentSystemWithOptions(
           scope: input.scopes,
         },
         '',
-        deadline,
       );
       const cookie = signed.headers
         .getSetCookie()
         .map((value) => value.split(';')[0])
         .join('; ');
       return credential(
-        await requestAuth(
-          '/token',
-          input.requestedBy === undefined ? {} : { requested_by: input.requestedBy },
-          cookie,
-          deadline,
-        ),
+        await requestAuth('/token', input.requestedBy === undefined ? {} : { requested_by: input.requestedBy }, cookie),
       );
     };
     const person = async (name: string) => {
@@ -257,7 +249,7 @@ async function createNativeContentSystemWithOptions(
         email: `${name}@content.test`,
         password,
       });
-      return issue({ accountId, clientId: ordinaryClient.id, scopes }, setupDeadline);
+      return issue({ accountId, clientId: ordinaryClient.id, scopes });
     };
     const governance = await person('governance');
     await bootstrapGovernance(pool, governance.actor.accountId);
@@ -267,19 +259,16 @@ async function createNativeContentSystemWithOptions(
     const suspended = await person('suspended');
     const capture = async (request: Request) => ({ request, response: await kernel.handle(request) });
     const command = async (path: string, body: unknown, status: number) => {
-      await setupRequest(
-        (request) => kernel.handle(request),
-        new Request(`${audience}${path}`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${governance.bearer}`,
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(crypto.randomUUID()),
-          },
-          body: JSON.stringify(body),
-        }),
-        { deadline: setupDeadline, status },
-      );
+      const request = new Request(`${audience}${path}`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${governance.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+        body: JSON.stringify(body),
+      });
+      await assertSetupResponse(await kernel.handle(request), request, status);
     };
     // Parent creation permissions only. Product resource ownership/standing
     // remains the responsibility of each real creation command.

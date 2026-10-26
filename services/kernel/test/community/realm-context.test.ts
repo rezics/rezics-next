@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -16,7 +16,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { setupRequest } from '../content/support/setup-retry.ts';
+import { assertSetupResponse } from '../content/support/setup-response.ts';
 
 type Person = { accountId: string; bearer: string };
 type Subject = {
@@ -48,15 +48,8 @@ let member: Person;
 let unrelated: Person;
 let contextId: string;
 let realmId: string;
-let setupDeadline: number;
 
-async function call(
-  method: string,
-  path: string,
-  actor?: Person,
-  body?: unknown,
-  setup?: { deadline: number; status: number },
-) {
+async function call(method: string, path: string, actor?: Person, body?: unknown, setup?: { status: number }) {
   const headers = new Headers();
   if (actor) headers.set('authorization', `Bearer ${actor.bearer}`);
   if (body !== undefined) {
@@ -68,9 +61,8 @@ async function call(
     headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  const response = await (setup === undefined
-    ? kernel.handle(request)
-    : setupRequest((input) => kernel.handle(input), request, setup));
+  const response = await kernel.handle(request);
+  if (setup !== undefined) await assertSetupResponse(response, request, setup.status);
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
 
@@ -81,35 +73,38 @@ function setupCall(
   body?: unknown,
   status = method === 'GET' ? 200 : 201,
 ) {
-  return call(method, path, actor, body, { deadline: setupDeadline, status });
+  return call(method, path, actor, body, { status });
 }
 
 async function person(name: string, scopes: string[]): Promise<Person> {
   const email = `${name}@realm-context.test`;
   const registered = await host.workflows.register({ key: name, handle: name, email, password });
-  const signed = await setupRequest(
-    (request) => service.handler(request),
-    new Request(`${issuer}/signin`, {
-      method: 'POST',
-      headers: { origin: issuer, 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password, client_id: 'realm-context-client', scope: scopes }),
-    }),
-    { deadline: setupDeadline, status: 200 },
-  );
+  const signInRequest = new Request(`${issuer}/signin`, {
+    method: 'POST',
+    headers: {
+      origin: issuer,
+      'content-type': 'application/json',
+      [IDEMPOTENCY_HEADER]: JSON.stringify(crypto.randomUUID()),
+    },
+    body: JSON.stringify({ email, password, client_id: 'realm-context-client', scope: scopes }),
+  });
+  const signed = await assertSetupResponse(await service.handler(signInRequest), signInRequest, 200);
   expect(signed.status).toBe(200);
   const cookie = signed.headers
     .getSetCookie()
     .map((value) => value.split(';')[0])
     .join('; ');
-  const issued = await setupRequest(
-    (request) => service.handler(request),
-    new Request(`${issuer}/token`, {
-      method: 'POST',
-      headers: { origin: issuer, 'content-type': 'application/json', cookie },
-      body: '{}',
-    }),
-    { deadline: setupDeadline, status: 200 },
-  );
+  const tokenRequest = new Request(`${issuer}/token`, {
+    method: 'POST',
+    headers: {
+      origin: issuer,
+      'content-type': 'application/json',
+      cookie,
+      [IDEMPOTENCY_HEADER]: JSON.stringify(crypto.randomUUID()),
+    },
+    body: '{}',
+  });
+  const issued = await assertSetupResponse(await service.handler(tokenRequest), tokenRequest, 200);
   expect(issued.status).toBe(200);
   return { accountId: registered.accountId, bearer: ((await issued.json()) as { access_token: string }).access_token };
 }
@@ -131,7 +126,6 @@ async function grant(
 }
 
 beforeAll(async () => {
-  setupDeadline = Date.now() + 60_000;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is required');
   admin = new Pool({ connectionString: url });
@@ -240,10 +234,6 @@ beforeAll(async () => {
   expect(read.status).toBe(200);
   expect(read.body.realm.contextId).toBe(contextId);
 }, 60_000);
-
-beforeEach(() => {
-  setupDeadline = Date.now() + 60_000;
-});
 
 afterAll(async () => {
   if (host) await host.stop();

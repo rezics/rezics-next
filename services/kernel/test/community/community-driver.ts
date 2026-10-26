@@ -28,7 +28,7 @@ import {
   type ContentSystem,
 } from '../content/support/system.ts';
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
-import { setupRequest } from '../content/support/setup-retry.ts';
+import { assertSetupResponse } from '../content/support/setup-response.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { startConsentServer } from './membership-fixture.ts';
 
@@ -274,7 +274,6 @@ export async function queryCommunityDatabase<T extends QueryResultRow>(
 
 function bindDriver(base: SharedCommunity): CommunityDriver {
   const { system, kernel, worker, work, observer } = base;
-  const setupDeadline = Date.now() + 180_000;
   const pending = new Set<string>();
   let fixture: Fixture | undefined;
   let governanceAccount: Account | undefined;
@@ -293,6 +292,9 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
     const headers = new Headers();
     if (command.actor) headers.set('authorization', `Bearer ${command.actor.bearer}`);
     if (command.key !== undefined) headers.set(IDEMPOTENCY_HEADER, scopedKey(command.key));
+    else if (setup && !['GET', 'HEAD'].includes(command.method)) {
+      headers.set(IDEMPOTENCY_HEADER, JSON.stringify(crypto.randomUUID()));
+    }
     if (command.ifMatch !== undefined) headers.set('if-match', command.ifMatch);
     const init: RequestInit = { method: command.method, headers };
     if (command.body !== undefined) {
@@ -300,9 +302,8 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
       init.body = JSON.stringify(command.body);
     }
     const input = new Request(`${AUDIENCE}${command.path}`, init);
-    const response = await (setup
-      ? setupRequest((request) => (growthKernel ?? kernel).handle(request), input, { deadline: setupDeadline })
-      : (growthKernel ?? kernel).handle(input));
+    const response = await (growthKernel ?? kernel).handle(input);
+    if (setup) await assertSetupResponse(response, input);
     trace = observer.records.slice(mark);
     const body = (await response
       .clone()
