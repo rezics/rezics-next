@@ -51,7 +51,8 @@ async function runIntegrationChecks(
 }
 
 // While dev already fails a check, a branch is still refused for error lines that dev does not have. Source
-// positions and durations are dropped so that a moved line or a slower run compares equal; repeats count.
+// positions, durations and TypeScript's elided member counts are dropped so that a moved line, a slower run or a grown
+// type compares equal; repeats count.
 export function newErrorLines(output: string, baseline: string): string[] {
   const errors = (text: string) =>
     text
@@ -62,6 +63,8 @@ export function newErrorLines(output: string, baseline: string): string[] {
         line
           .replace(/\(\d+,\s*\d+\)|:\d+:\d+\b/g, '')
           .replace(/\b\d+(?:\.\d+)?\s*m?s\b/g, '')
+          // TypeScript elides long types as '... N more ...'; a branch that grows the type keeps the same error.
+          .replace(/\.\.\. \d+ more \.\.\./g, '... more ...')
           .trim(),
       );
   const remaining = new Map<string, number>();

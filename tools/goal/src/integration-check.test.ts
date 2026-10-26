@@ -269,3 +269,10 @@ test("a failure's excerpt shows the failing line with its real file even after l
   expect(failure.excerpt.startsWith('src/community/publication.ts(74,11): error TS2554')).toBe(true);
   expect(failure.excerpt.endsWith('exited with code 2\n')).toBe(true);
 });
+
+test("an error dev already has is not new when the branch only grows the type TypeScript elides in it", () => {
+  const line = (more: number) =>
+    `test/semantic/outcome-driver.ts(186,7): error TS2741: Property 'readAccount' is missing in type '{ registrationTarget(key: string): string; ... ${more} more ...; provisioningEvidence: () => Promise<...>; }' but required in type 'AccountWorkflowPorts<WorkflowContext>'.`;
+  expect(newErrorLines(line(28), line(26))).toEqual([]);
+  expect(newErrorLines(`${line(28)}\nsrc/other.ts(1,1): error TS2304: Cannot find name 'x'.`, line(26))).toHaveLength(1);
+});
