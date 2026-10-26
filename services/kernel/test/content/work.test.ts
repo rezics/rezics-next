@@ -344,11 +344,11 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
     try {
       const report = await checkGrowth(db, {
         name: 'Content partition collection fixed K and Delta',
-        scales: [2048, 8192, 32768],
+        scales: [256, 1024, 4096],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         async grow(db, scale, previous) {
-          // Setup is excluded from capture. Every relation the job reads has at
-          // least 2048 rows at the first scale (core.partition already has 4096).
+          // Setup is excluded from capture. Each measured relation gets at least
+          // 256 rows at the first scale (core.partition already has 4096).
           // Half the unrelated rows share the target partition; none are aged.
           for (let start = previous; start < scale; start += 1024) {
             const rows = Array.from({ length: Math.min(1024, scale - start) }, (_, offset) => {

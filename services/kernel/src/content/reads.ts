@@ -243,7 +243,7 @@ async function prepare(
           throw new ContentNotFoundError();
         // Erased public slots still require the requested scope from account tokens.
         if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action))
-          throw new ContentNotFoundError();
+          return false;
         return (
           current.visibility === 'published' && ((!tombstone && current.availability === 'available') || placeholder)
         );

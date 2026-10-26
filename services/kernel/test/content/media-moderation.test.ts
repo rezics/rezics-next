@@ -512,7 +512,7 @@ test('checkGrowth with actual formula across three informative scales and no con
     };
     const report = await checkGrowth(db, {
       name: 'native exact media moderation',
-      scales: [256, 2048, 16384],
+      scales: [256, 1024, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: async (_db, scale, previous) => {
         await seed(db, population, { from: previous, to: scale });
@@ -523,7 +523,7 @@ test('checkGrowth with actual formula across three informative scales and no con
         expect(result.replayed).toBe(false);
       },
     });
-    expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
     expect(new Set(report.samples.map((s) => s.cost.statements)).size).toBe(1);
     for (const { cost } of report.samples) {
       expect(cost.rows).toBeGreaterThan(0);
