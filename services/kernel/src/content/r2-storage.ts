@@ -132,11 +132,13 @@ export class R2Storage implements MediaStorage {
     consume: (response: Response, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.#timeout);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let response: Response | undefined;
     try {
       const request = await this.#aws.sign(url, { ...init, redirect: 'manual', signal: controller.signal });
-      controller.signal.throwIfAborted();
+      // Local signing is not remote work: the deadline covers the transport and the body, so a slow
+      // signer can never time a request out before it exists, and every timed-out response is owned here.
+      timer = setTimeout(() => controller.abort(), this.#timeout);
       response = await this.#fetch(request);
       controller.signal.throwIfAborted();
       return await consume(response, controller.signal);
