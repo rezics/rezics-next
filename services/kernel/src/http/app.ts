@@ -140,11 +140,28 @@ export function createApp({
       }
       // Native validation can fail before beforeHandle; retain the original body pointers.
       const bodyError = error instanceof ValidationError ? invalidJsonBodies.get(request) : undefined;
-      return problemResponse(bodyError ?? error, {
+      const problem = problemResponse(bodyError ?? error, {
         method: request.method,
         id: idFor(request),
         ...(action ? { action } : {}),
       });
+      // internal_error is the only 500 problem; log the cause the response hides, never request content.
+      if (problem.status === 500) {
+        const cause = bodyError ?? error;
+        const code = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
+        console.error(
+          JSON.stringify({
+            event: 'internal_error',
+            request_id: idFor(request),
+            method: request.method,
+            route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
+            name: cause instanceof Error ? cause.name : typeof cause,
+            ...(code === undefined ? {} : { code }),
+            stack: cause instanceof Error ? cause.stack : undefined,
+          }),
+        );
+      }
+      return problem;
     })
     .onTransform('global', ({ body, request, route }) => {
       const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
