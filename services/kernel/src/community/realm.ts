@@ -9,6 +9,7 @@ import {
 } from '../access/index.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -225,9 +226,7 @@ function requirements(
   validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
 ) {
   const deadlines = new WeakMap<AuthoritativeTime, number>();
-  const combined: Access = {
-    authenticate: access.authenticate.bind(access),
-    authorize: access.authorize.bind(access),
+  const combined = deriveAccess(access, {
     async prepare(actor, action, resource, context) {
       const attempt = accessCommandAttempt(context);
       if (!attempt) throw new GrantDeniedError();
@@ -252,7 +251,7 @@ function requirements(
       deadlines.set(attempt.time, deadline);
       return primary;
     },
-  };
+  });
   const roles = resourceRoleCatalogue(access);
   if (roles) installResourceRoleCatalogue(combined, roles);
   return {

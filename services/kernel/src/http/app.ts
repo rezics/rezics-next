@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
+import { deriveAccess } from '../access/derived-access.ts';
 import { createAccess } from '../access/index.ts';
 import { admitExposure, PlatformClosedError } from '../access/gates/admission.ts';
 import { withConnection } from '../database/pool.ts';
@@ -167,9 +168,7 @@ export function createApp({
         const action = actionOfMountedRoute(mountedFor(request, route));
         const context = { pool, deadline: job.deadline };
         const prepare = currentAccess.prepare;
-        const checkedAccess: Access = {
-          authenticate: (token, received) => currentAccess.authenticate(token, received),
-          replayAuthorization: (checkedAction) => currentAccess.replayAuthorization?.(checkedAction),
+        const checkedAccess = deriveAccess(currentAccess, {
           ...(prepare
             ? {
                 prepare: (preparedActor, preparedAction, preparedResource, received) =>
@@ -178,9 +177,7 @@ export function createApp({
                   ),
               }
             : {}),
-          authorize: (client, checkedActor, checkedAction, checkedResource, evidence, time) =>
-            currentAccess.authorize(client, checkedActor, checkedAction, checkedResource, evidence, time),
-        };
+        });
         return { checkedAccess, action, context };
       };
       return {

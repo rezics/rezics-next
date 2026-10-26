@@ -5,6 +5,7 @@ import { initializeResourceGrants, parentCreationAuthorization } from '../access
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';
 import {
@@ -102,9 +103,7 @@ export async function createBoard(
     eligibility: subjectReadEligibility({ route: conceptRoute, id: input.conceptId }),
   };
   const concepts = new WeakMap<AuthoritativeTime, { subject: Item; deadline: number }>();
-  const access: Access = {
-    authenticate: dependencies.access.authenticate.bind(dependencies.access),
-    authorize: dependencies.access.authorize.bind(dependencies.access),
+  const access = deriveAccess(dependencies.access, {
     async prepare(principal, action, target, preparation) {
       const attempt = accessCommandAttempt(preparation);
       if (!attempt || action !== 'board:create' || target.id !== input.realmId || target.route !== realmRoute)
@@ -135,7 +134,7 @@ export async function createBoard(
       concepts.set(attempt.time, { subject: result.subject, deadline });
       return primary;
     },
-  };
+  });
   const roles = resourceRoleCatalogue(dependencies.access);
   if (roles) installResourceRoleCatalogue(access, roles);
 

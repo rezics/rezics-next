@@ -3,6 +3,7 @@ import canonicalize from 'canonicalize';
 import { resourceAuthorization } from '../access/index.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
@@ -14,7 +15,6 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import {
   accessCheck,
-  type Access,
   type AccessCheck,
   type AccessClient,
   type Actor,
@@ -231,9 +231,7 @@ function decide(
   const publicationId = newId(realmRoute);
   const subject = subjectResource(input.subjectId);
   const checks = new WeakMap<AuthoritativeTime, AccessCheck>();
-  const wrapped: Access = {
-    authenticate: deps.access.authenticate.bind(deps.access),
-    authorize: deps.access.authorize.bind(deps.access),
+  const wrapped = deriveAccess(deps.access, {
     async prepare(preparedActor, action, resource, preparedContext) {
       const attempt = accessCommandAttempt(preparedContext);
       if (!attempt) throw new GrantDeniedError();
@@ -242,7 +240,7 @@ function decide(
       checks.set(attempt.time, await accessCheck(deps.access, preparedActor, 'subject:read', subject, preparedContext));
       return primary;
     },
-  };
+  });
   const authorization = resourceAuthorization({
     access: wrapped,
     actor,

@@ -3,6 +3,7 @@ import canonicalize from 'canonicalize';
 import { createResourcePublicEligibility, resourceAuthorization } from '../access/index.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';
 import {
@@ -13,7 +14,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Actor, type Access } from '../request/access.ts';
+import { accessCheck, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readSubject } from '../semantic/subject.ts';
@@ -104,9 +105,7 @@ export async function setBoardScheme(
   const current = new WeakMap<AuthoritativeTime, Realm>();
   // Semantic owns its subject/statement read. Prepare it before the Realm anchor
   // checks out a connection, retaining the exact command T and admission evidence.
-  const access: Access = {
-    authenticate: deps.access.authenticate.bind(deps.access),
-    authorize: deps.access.authorize.bind(deps.access),
+  const access = deriveAccess(deps.access, {
     async prepare(principal, action, resource, preparation) {
       const attempt = accessCommandAttempt(preparation);
       if (!attempt) throw new GrantDeniedError();
@@ -134,7 +133,7 @@ export async function setBoardScheme(
       checked.set(attempt.time, deadline);
       return primary;
     },
-  };
+  });
   const authorization = resourceAuthorization({
     access,
     actor,

@@ -4,6 +4,7 @@ import { commandAccessContext, requireCommandAdmission } from '../access/command
 import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
@@ -336,8 +337,7 @@ export function postEraseReceiptAccess(access: Access): Access {
     accountEvidence?: unknown;
   };
   const prepared = new WeakMap<object, Evidence>();
-  return {
-    authenticate: (token, context) => access.authenticate(token, context),
+  return deriveAccess(access, {
     replayAuthorization(action) {
       // This adapter handles the action-denied receipt path itself so the
       // generic helper does not prepare or execute a duplicate self-read check.
@@ -394,5 +394,5 @@ export function postEraseReceiptAccess(access: Access): Access {
       if (post.rows[0]?.availability !== 'erased') return false;
       return access.authorize(client, actor, 'account:read', facts.accountResource, facts.accountEvidence, time);
     },
-  };
+  });
 }

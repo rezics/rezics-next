@@ -1,4 +1,5 @@
 import { deadlineClient, within } from '../access/authenticate.ts';
+import { deriveAccess } from '../access/derived-access.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -140,15 +141,12 @@ async function pageHotBoardCandidates(
 
 function indexedReadAccess(access: Access): Access {
   if (indexedAccesses.has(access)) return access;
-  const indexed: Access = {
-    authenticate: access.authenticate.bind(access),
-    ...(access.prepare ? { prepare: access.prepare.bind(access) } : {}),
-    ...(access.replayAuthorization ? { replayAuthorization: access.replayAuthorization.bind(access) } : {}),
+  const indexed = deriveAccess(access, {
     async authorize(client, actor, action, resource, evidence, time) {
       await client.query('SET LOCAL enable_seqscan = off');
       return access.authorize(client, actor, action, resource, evidence, time);
     },
-  };
+  });
   indexedAccesses.add(indexed);
   return indexed;
 }
