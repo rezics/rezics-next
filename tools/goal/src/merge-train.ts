@@ -25,6 +25,7 @@ import {
 
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export type IntegrationCheck = { paths: string[]; command: string[] };
+import { resolveImportConflicts } from './import-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
@@ -233,9 +234,7 @@ export function rebaseOnto(
 ): void {
   const upstream = rebaseUpstream(cwd, base, originalBase);
   const head = git(cwd, 'rev-parse', 'HEAD');
-  const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`)
-    .split('\n')
-    .filter(Boolean);
+  const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
   const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
   if (initialConflict === undefined) return;
 
@@ -250,7 +249,10 @@ export function rebaseOnto(
   git(cwd, 'commit', '--allow-empty', '-m', message);
   if (allowedPaths) {
     const changed = git(cwd, 'diff', '--name-only', upstream, 'HEAD').split('\n').filter(Boolean);
-    const outside = outsideScope(changed.filter((path) => !derivedForPath(path, files).length), allowedPaths);
+    const outside = outsideScope(
+      changed.filter((path) => !derivedForPath(path, files).length),
+      allowedPaths,
+    );
     if (outside.length) {
       git(cwd, 'reset', '--hard', head);
       throw new Error(`A squash would change files outside the brief: ${outside.slice(0, 20).join(', ')}`);
@@ -446,7 +448,9 @@ export class MergeTrain {
             .split('\n')
             .some((path) => path && !frozenPaths.has(path));
         if (!worked)
-          throw new Error('No committed changes beyond the base and the frozen acceptance files: commit the work before finishing');
+          throw new Error(
+            'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
+          );
         rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
@@ -473,7 +477,10 @@ export class MergeTrain {
         const outside = outsideScope(scopeCheckedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
         if (integratesIntoDev) {
-          const formatCommand = o.formatCommand ?? [resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
+          const formatCommand = o.formatCommand ?? [
+            resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
+            ...FORMAT_FLAGS,
+          ];
           const formatFiles = result.changedFiles.filter((path) => existsSync(join(trainTree, path)));
           // Small isolated Git fixtures do not carry the repository's installed formatter.
           const formatterAvailable =
@@ -664,17 +671,24 @@ export class MergeTrain {
           git(trainTree, 'merge', '--no-ff', '--no-edit', candidate);
         } catch (error) {
           const files = unmergedFiles(trainTree);
-          try {
-            git(trainTree, 'merge', '--abort');
-          } catch {
-            /* Already cleared. */
+          if (files.length && this.resolveImportConflicts(trainTree, files)) {
+            appendFileSync(
+              logPath,
+              `Stabilize ${candidate} merged into ${devBranch} keeping both sides' imports: ${files.join(', ')}\n`,
+            );
+          } else {
+            try {
+              git(trainTree, 'merge', '--abort');
+            } catch {
+              /* Already cleared. */
+            }
+            appendFileSync(
+              logPath,
+              `Stabilize ${candidate} did not merge into ${devBranch}: ${files.join(', ') || error}\n`,
+            );
+            this.notifyStabilizeConflict(taskId, managerId, candidate, files);
+            return;
           }
-          appendFileSync(
-            logPath,
-            `Stabilize ${candidate} did not merge into ${devBranch}: ${files.join(', ') || error}\n`,
-          );
-          this.notifyStabilizeConflict(taskId, managerId, candidate, files);
-          return;
         }
         const merged = git(trainTree, 'rev-parse', 'HEAD');
         if (merged === expected) return;
@@ -724,6 +738,28 @@ export class MergeTrain {
       }
       return main;
     }
+  }
+
+  /** Finish a merge whose every conflict is two sides adding imports; false leaves the merge for a person. */
+  private resolveImportConflicts(tree: string, files: readonly string[]): boolean {
+    const resolved = new Map<string, string>();
+    for (const file of files) {
+      const path = join(tree, file);
+      if (!existsSync(path)) return false;
+      const text = resolveImportConflicts(readFileSync(path, 'utf8'));
+      if (text === undefined) return false;
+      resolved.set(path, text);
+    }
+    for (const [path, text] of resolved) writeFileSync(path, text);
+    const formatCommand = this.options.formatCommand ?? [
+      resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
+      ...FORMAT_FLAGS,
+    ];
+    if (!formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!))
+      spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...files], { cwd: tree, encoding: 'utf8' });
+    git(tree, 'add', '--', ...files);
+    git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
+    return true;
   }
 
   private notifyStabilizeConflict(
