@@ -499,6 +499,66 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
             Array.from({ length: Math.min(8, count - first) }, (_, offset) => person(`baseline_${first + offset}`)),
           );
         for (let index = 0; index < count; index++) await installKey(`baseline-${index}`);
+        // Keep unrelated native-shaped rows beyond PostgreSQL's small-table
+        // crossover, so the measured robot's exact owner seeks retain stable plans.
+        const fillerKey = (
+          await authDatabase!.admin.query<{ public_jwk: unknown }>(
+            'SELECT public_jwk FROM auth_public_key WHERE account_id=$1 LIMIT 1',
+            [result.bulk.accountId],
+          )
+        ).rows[0]?.public_jwk;
+        if (!fillerKey) throw new Error('Missing native key for identity growth fixture');
+        const seededAccounts = 2_048;
+        const accountId = `(md5('import-identity-growth-' || i)::uuid)::text`;
+        await authDatabase!.admin.query(
+          `INSERT INTO public."user" (id,name,email,"emailVerified",image)
+          SELECT ${accountId},'',NULL,false,NULL FROM generate_series(1,$1::integer) AS i`,
+          [seededAccounts],
+        );
+        await authDatabase!.admin.query(
+          `INSERT INTO public.account (id,"accountId","providerId","userId",password,"updatedAt")
+          SELECT 'growth-credential-'||i,${accountId},'credential',${accountId},'growth-fixture-unusable-hash',statement_timestamp()
+          FROM generate_series(1,$1::integer) AS i`,
+          [seededAccounts],
+        );
+        await authDatabase!.admin.query(
+          `INSERT INTO public.session (id,token,"userId","expiresAt","updatedAt","clientId","grantedScope","authnEpoch","authTime","authMethods")
+          SELECT 'growth-session-'||i,'growth-token-'||i,${accountId},statement_timestamp()+interval '1 day',
+            statement_timestamp(),$2,array_to_string($3::text[],' '),1,1,'private_key_jwt'
+          FROM generate_series(1,$1::integer) AS i`,
+          [seededAccounts, client.clientId, client.scopes],
+        );
+        await authDatabase!.admin.query(
+          `INSERT INTO public.auth_consent (account_id,client_id,scopes)
+          SELECT ${accountId},$2,$3::text[] FROM generate_series(1,$1::integer) AS i`,
+          [seededAccounts, client.clientId, client.scopes],
+        );
+        await authDatabase!.admin.query(
+          `INSERT INTO public.auth_public_key (account_id,kid,public_jwk)
+          SELECT ${accountId},'growth-key-'||i,jsonb_set($2::jsonb,'{kid}',to_jsonb('growth-key-'||i),true)
+          FROM generate_series(1,$1::integer) AS i`,
+          [seededAccounts, fillerKey],
+        );
+        await authDatabase!.admin.query(
+          `INSERT INTO public.auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch)
+          SELECT 'growth-receipt-'||i,${accountId},'session',1
+          FROM generate_series(1,$1::integer) AS i`,
+          [seededAccounts],
+        );
+        await database.admin.query(
+          `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
+          SELECT get_byte(uuid_send(id),10)*256+get_byte(uuid_send(id),11),id,'actor','active',
+            md5('import-identity-growth-tx-'||i)::uuid
+          FROM (SELECT ${accountId}::uuid AS id,i FROM generate_series(1,$1::integer) AS i) seeded`,
+          [seededAccounts],
+        );
+        await database.admin.query(
+          `INSERT INTO access.resource_grant (route,resource_id,subject_id,subject_role,action,valid,transaction_id)
+          SELECT get_byte(uuid_send(id),10)*256+get_byte(uuid_send(id),11),id,id,'','account:read','(,)',
+            md5('import-identity-growth-tx-'||i)::uuid
+          FROM (SELECT ${accountId}::uuid AS id,i FROM generate_series(1,$1::integer) AS i) seeded`,
+          [seededAccounts],
+        );
         // Reach the native bounded session-history capacity before measurement,
         // so every measured issuance performs the same real eviction path.
         for (let index = 0; index < 64; index++) await issue(robot.accountId, COMMON_ACTIONS);

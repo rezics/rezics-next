@@ -39,11 +39,33 @@ test('fixed public bulk grant changes and reduced-scope native Auth/Access remai
           'public."user"',
           'public.account',
           'public.session',
+          'auth_consent',
           'auth_registration_stage',
           'auth_effect_receipt',
           'auth_public_key',
         ])
           await native.authDatabase.admin.query(`VACUUM (ANALYZE) ${table}`);
+        if (scale === 1) {
+          for (const table of [
+            'public."user"',
+            'public.account',
+            'public.session',
+            'public.auth_consent',
+            'public.auth_public_key',
+            'public.auth_effect_receipt',
+          ]) {
+            const result = await native.authDatabase.admin.query<{ rows: string }>(
+              `SELECT count(*)::text AS rows FROM ${table}`,
+            );
+            expect(Number(result.rows[0]?.rows ?? 0), `${table} live row floor`).toBeGreaterThanOrEqual(2_000);
+          }
+          for (const table of ['access.account', 'access.resource_grant']) {
+            const result = await f.database.admin.query<{ rows: string }>(
+              `SELECT count(*)::text AS rows FROM ${table}`,
+            );
+            expect(Number(result.rows[0]?.rows ?? 0), `${table} live row floor`).toBeGreaterThanOrEqual(2_000);
+          }
+        }
       },
       operation: async (_db, scale) => {
         const observed = await capture(native.authDatabase, async () => {
