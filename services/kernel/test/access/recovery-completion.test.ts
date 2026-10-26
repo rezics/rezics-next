@@ -24,6 +24,7 @@ let service: AuthService;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let bindings: ReturnType<typeof createNativeAccountBindings>;
 let delivery = '';
+const deliveries = new Map<string, ReturnType<typeof Promise.withResolvers<string>>>();
 let fault: 'before' | 'after' | undefined;
 const crashProcess = process.env.RECOVERY_CRASH_PHASE;
 const key: JWK & { kid: string } = process.env.RECOVERY_CRASH_KEY
@@ -88,8 +89,8 @@ async function build() {
     },
     access: bindings.workflowPorts,
     recoveryDelivery: {
-      async deliver({ token }) {
-        delivery = token;
+      async deliver({ accountId, token }) {
+        deliveries.get(accountId)?.resolve(token);
       },
     },
     maintenanceSchedule: '0 0 1 1 *',
@@ -119,6 +120,17 @@ const cookieOf = (r: Response) =>
     .getSetCookie()
     .map((c) => c.split(';')[0])
     .join('; ');
+async function startRecovery(accountId: string, email: string) {
+  const pending = Promise.withResolvers<string>();
+  deliveries.set(accountId, pending);
+  try {
+    expect((await request('/recovery/start', { email })).status).toBe(200);
+    // The non-disclosing response deliberately precedes lookup and delivery.
+    delivery = await pending.promise;
+  } finally {
+    deliveries.delete(accountId);
+  }
+}
 async function person(name: string) {
   const email = `${name}@recovery.test`;
   const { accountId } = await host.workflows.register({
@@ -173,7 +185,7 @@ if (crashProcess) {
     const human = await person('native_recovery');
     const other = await person('unrelated_recovery');
     await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-    expect((await request('/recovery/start', { email: human.email })).status).toBe(200);
+    await startRecovery(human.accountId, human.email);
     const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
     expect((await request('/recovery/complete', { ...body, token: 'wrong' })).status).toBe(401);
     expect((await request('/recovery/complete', { ...body, account_id: other.accountId })).status).toBe(401);
@@ -209,21 +221,24 @@ if (crashProcess) {
       const name = `resume_${phase}`;
       const human = await person(name);
       await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-      expect((await request('/recovery/start', { email: human.email })).status).toBe(200);
+      await startRecovery(human.accountId, human.email);
       const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
       await host.stop();
-      const child = Bun.spawn([process.execPath, 'test', 'test/access/recovery-completion.test.ts'], {
-        cwd: import.meta.dir + '/../..',
-        env: {
-          ...process.env,
-          RECOVERY_CRASH_PHASE: phase,
-          RECOVERY_CRASH_DATABASE: database.url,
-          RECOVERY_CRASH_KEY: JSON.stringify(key),
-          RECOVERY_CRASH_BODY: JSON.stringify(body),
+      const child = Bun.spawn(
+        [process.execPath, 'test', '--timeout', '60000', 'test/access/recovery-completion.test.ts'],
+        {
+          cwd: import.meta.dir + '/../..',
+          env: {
+            ...process.env,
+            RECOVERY_CRASH_PHASE: phase,
+            RECOVERY_CRASH_DATABASE: database.url,
+            RECOVERY_CRASH_KEY: JSON.stringify(key),
+            RECOVERY_CRASH_BODY: JSON.stringify(body),
+          },
+          stdout: 'pipe',
+          stderr: 'pipe',
         },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      });
+      );
       try {
         const reader = child.stdout.getReader();
         let output = '';
@@ -284,7 +299,7 @@ if (crashProcess) {
   test('failed or superseded Auth success cannot clear later floor or changed current authority', async () => {
     const human = await person('failed_native_recovery');
     await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-    expect((await request('/recovery/start', { email: human.email })).status).toBe(200);
+    await startRecovery(human.accountId, human.email);
     const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
     const before = await snapshot(human.accountId);
     await authPool.query(`ALTER TABLE auth_recovery_establishment ADD CONSTRAINT test_fail_establishment
@@ -322,7 +337,7 @@ if (crashProcess) {
     for (const change of ['suspended', 'operator'] as const) {
       const id = (await person(`authority_${change}`)).accountId;
       await bindings.internalLifecycle.raiseFence({ accountId: id, key: `${id}:initial` });
-      expect((await request('/recovery/start', { email: `authority_${change}@recovery.test` })).status).toBe(200);
+      await startRecovery(id, `authority_${change}@recovery.test`);
       fault = 'before';
       expect(
         (await request('/recovery/complete', { account_id: id, token: delivery, new_password: nextPassword })).status,
