@@ -5,18 +5,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type {
-  Anchor,
-  CollectionView,
-  CopyView,
-  EntryView,
-  FollowView,
-  LibraryDriver,
-  LibraryInspection,
-  Persona,
-  PublishedLogView,
-  SessionView,
-} from '../../../../../specs/library-driver.ts';
+import type { Anchor, LibraryDriver, LibraryInspection, Persona } from '../../../../../specs/library-driver.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
@@ -32,6 +21,11 @@ import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
+
+// Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
+// missing outbox rows are never a gap, and real commands never reach these positions.
+const GROWTH_POSITION_BASE = 1_000_000_000_000;
 
 const autoExplainSetup = [
   "LOAD 'auto_explain'",
@@ -438,12 +432,6 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       return { ...person, email };
     }
 
-    async function createPerson(route: number): Promise<AccountAnchor> {
-      const person = { id: newId(route), route, partition: partitionOf(route) };
-      approvals.add(person.id);
-      return provisionAccount(person);
-    }
-
     for (const person of knownPeople) await provisionAccount(person);
 
     const byRoute = async (
@@ -531,7 +519,6 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       logId: newId(ownerAccount.route),
     };
     const initialSubjectIds = new Set<string>();
-    let seedActors: Anchor[] = [seedSamePartition, seedOtherPartition, ...seedParallelPeople];
     let seedSubjects = 0;
     let measurementScale = -1;
     let measurementIndex = 0;
@@ -891,20 +878,22 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       async seedMembers(input) {
         const route = routeOf(input.collectionId);
         if (route === null) throw new Error(`Collection ${input.collectionId} has no route`);
+        if (input.count < 1) return;
+        const stored = input.count - 1;
         // db.admin is outside statement capture, so seeding never reaches the measured pool.
         const last = await db!.admin.query<{ ordinal_key: string }>(
           'SELECT ordinal_key FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY ordinal_key DESC, member_id DESC LIMIT 1',
           [route, input.collectionId],
         );
-        const keys = last.rows[0] ? [] : respacedKeys(input.count);
+        const keys = last.rows[0] ? [] : respacedKeys(stored);
         let previous = last.rows[0]?.ordinal_key ?? null;
-        while (keys.length < input.count) {
+        while (keys.length < stored) {
           previous = keyBetween(previous, null);
           if (previous === null) throw new Error('Seeded members exhausted the ordinal key length');
           keys.push(previous);
         }
         const time = scenarioNow();
-        for (let index = 0; index < input.count; index += 200) {
+        for (let index = 0; index < stored; index += 200) {
           const client = await db!.admin.connect();
           try {
             await client.query('BEGIN');
@@ -927,120 +916,283 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
             client.release();
           }
         }
+        const curator = await db!.admin.query<{ curator_account_id: string }>(
+          'SELECT curator_account_id FROM library.collection WHERE route=$1 AND collection_id=$2',
+          [route, input.collectionId],
+        );
+        const person = knownPeople.find((candidate) => candidate.id === curator.rows[0]?.curator_account_id);
+        if (!person) throw new Error(`Collection ${input.collectionId} has no fixture curator`);
+        const response = await byRoute(
+          tokenFor(person),
+          'POST',
+          `/v1/collections/${input.collectionId}/members`,
+          { subjectId: input.subjectId },
+          { 'Idempotency-Key': key() },
+        );
+        await expectJson(`Seeding the last member of collection ${input.collectionId}`, response, 201);
       },
       async seed(scale) {
         if (!Number.isSafeInteger(scale) || scale < seedSubjects) throw new RangeError('Seed scales must increase');
         measurementScale = scale;
         measurementIndex = 0;
-        if (scale > 0 && initialSubjectIds.size > 0) {
-          const firstSubject = [...initialSubjectIds][0]!;
-          const subjectRoute = routeOf(firstSubject)!;
-          if (!seedActors.some((person) => person.partition === partitionOf(subjectRoute))) {
-            const person = await createPerson(subjectRoute);
-            await grantSeedSubjectCreation(person);
-            seedActors = [...seedActors, person];
-          }
-        }
-        while (seedSubjects < scale) {
-          const start = seedSubjects;
-          const count = Math.min(seedActors.length, scale - start);
-          await Promise.all(
-            Array.from({ length: count }, async (_, offset) => {
-              const index = start + offset;
-              const account = seedActors[index % seedActors.length]!;
-              const subject = await provisionSubject({}, account);
-              const token = tokenFor(account);
-              const collectionResponse = await byRoute(
-                token,
-                'POST',
-                '/v1/collections',
+        if (scale === seedSubjects) return;
+        const range = { from: seedSubjects, to: scale };
+        const time = scenarioNow();
+        const subjectRouteOf = (ordinal: number) => (ordinal * 40_503 + 0x1357) % 65_536;
+        const population: Population = {
+          name: `library-growth-${suffix}`,
+          hotPartition: accounts.owner.partition,
+          rows(placement) {
+            const route = placement.route;
+            const subjectRoute = subjectRouteOf(placement.ordinal);
+            const account = newId(route);
+            const subjectId = newId(subjectRoute);
+            const collectionId = newId(route);
+            const memberId = newId(route);
+            const sessionId = newId(route);
+            const copyId = newId(route);
+            const logId = newId(route);
+            const transactions = Array.from({ length: 9 }, () => Bun.randomUUIDv7());
+            const [subjectTx, collectionTx, entryTx, sessionTx, copyTx, followTx, memberTx, recordTx, logTx] =
+              transactions as [string, string, string, string, string, string, string, string, string];
+            const commands: { partition: number; kind: string; transactionId: string; response: unknown }[] = [
+              {
+                partition: subjectRoute >>> 4,
+                kind: 'subject.create',
+                transactionId: subjectTx,
+                response: { id: subjectId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'library.collection.create',
+                transactionId: collectionTx,
+                response: { id: collectionId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'library.entry.put',
+                transactionId: entryTx,
+                response: { created: true },
+              },
+              {
+                partition: placement.partition,
+                kind: 'progress_session.start',
+                transactionId: sessionTx,
+                response: { id: sessionId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'library.copy.create',
+                transactionId: copyTx,
+                response: { id: copyId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'library.follow',
+                transactionId: followTx,
+                response: { targetId: subjectId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'library.collection.member.add',
+                transactionId: memberTx,
+                response: { id: memberId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'progress_session.record',
+                transactionId: recordTx,
+                response: { id: sessionId },
+              },
+              {
+                partition: placement.partition,
+                kind: 'published_log.create',
+                transactionId: logTx,
+                response: { id: logId },
+              },
+            ];
+            const positionOf = (index: number) => GROWTH_POSITION_BASE + placement.ordinal * 16 + index;
+            return {
+              'access.resource_initialization': [
                 {
-                  title: `Growth shelf ${index}`,
+                  route,
+                  resource_id: collectionId,
+                  resource_type: 'library.collection',
+                  creator_id: account,
+                  initialized_at: time,
+                },
+              ],
+              'access.resource_role_grant': [
+                {
+                  route,
+                  resource_id: collectionId,
+                  subject_kind: 'identity',
+                  subject_id: account,
+                  subject_role: '',
+                  grant_role: 'library.collection.owner',
+                  valid: `[${time},)`,
+                  transaction_id: collectionTx,
+                },
+              ],
+              'library.collection': [
+                {
+                  route,
+                  collection_id: collectionId,
+                  curator_account_id: account,
+                  title: `Growth shelf ${placement.ordinal}`,
+                  description: null,
                   visibility: 'private',
+                  state: 'active',
+                  revision: 1,
+                  member_count: 1,
+                  order_epoch: 0,
+                  created_at: time,
+                  updated_at: time,
+                  transaction_id: memberTx,
                 },
-                { 'Idempotency-Key': key() },
-              );
-              const collection = (
-                await expectJson<{ collection: CollectionView }>(`Seeding collection ${index}`, collectionResponse, 201)
-              ).collection;
-              const entryResponse = await byRoute(
-                token,
-                'PUT',
-                `/v1/libraryEntries/${subject.id}`,
-                { state: 'planned' },
+              ],
+              'library.collection_member': [
                 {
-                  'Idempotency-Key': key(),
+                  route,
+                  collection_id: collectionId,
+                  member_id: memberId,
+                  subject_id: subjectId,
+                  note: null,
+                  ordinal_key: 'a0',
+                  added_at: time,
+                  transaction_id: memberTx,
                 },
-              );
-              await expectJson<{ libraryEntry: EntryView }>(`Seeding entry ${index}`, entryResponse, 201);
-              const sessionResponse = await byRoute(
-                token,
-                'POST',
-                '/v1/progressSessions',
+              ],
+              'library.entry': [
                 {
-                  subjectId: subject.id,
+                  route,
+                  account_id: account,
+                  subject_id: subjectId,
+                  requested_subject_id: null,
+                  state: 'planned',
+                  revision: 1,
+                  created_at: time,
+                  updated_at: time,
+                  transaction_id: entryTx,
+                },
+              ],
+              'library.progress_session': [
+                {
+                  route,
+                  session_id: sessionId,
+                  account_id: account,
+                  subject_id: subjectId,
+                  version_subject_id: null,
                   mode: 'completed_units',
                   unit: 'chapter',
+                  total: null,
+                  amount: null,
+                  locator: null,
+                  position: null,
+                  completed_unit_count: 1,
+                  state: 'active',
+                  revision: 2,
+                  started_at: time,
+                  completed_at: null,
+                  transaction_id: recordTx,
                 },
-                { 'Idempotency-Key': key() },
-              );
-              const session = (
-                await expectJson<{ progressSession: SessionView }>(`Seeding session ${index}`, sessionResponse, 201)
-              ).progressSession;
-              const copyResponse = await byRoute(
-                token,
-                'POST',
-                '/v1/copies',
+              ],
+              'library.progress_unit': [
+                { route, session_id: sessionId, unit_id: `growth-unit:${placement.ordinal}`, added_at: time },
+              ],
+              'library.progress_change': [
                 {
-                  subjectId: subject.id,
+                  route,
+                  session_id: sessionId,
+                  change_no: 2,
+                  intent: { add: [`growth-unit:${placement.ordinal}`] },
+                  recorded_at: time,
+                  transaction_id: recordTx,
+                },
+              ],
+              'library.copy': [
+                {
+                  route,
+                  copy_id: copyId,
+                  account_id: account,
+                  subject_id: subjectId,
                   status: 'ordered',
+                  location: null,
+                  source: null,
+                  acquired_on: null,
+                  disposed_on: null,
+                  note: null,
+                  revision: 1,
+                  created_at: time,
+                  updated_at: time,
+                  transaction_id: copyTx,
                 },
-                { 'Idempotency-Key': key() },
-              );
-              await expectJson<{ copy: CopyView }>(`Seeding copy ${index}`, copyResponse, 201);
-              const followResponse = await byRoute(token, 'PUT', `/v1/follows/${subject.id}`, undefined, {
-                'Idempotency-Key': key(),
-              });
-              await expectJson<{ follow: FollowView }>(`Seeding follow ${index}`, followResponse, 200);
-              const memberResponse = await byRoute(
-                token,
-                'POST',
-                `/v1/collections/${collection.id}/members`,
+              ],
+              'library.follow': [
                 {
-                  subjectId: subject.id,
+                  route,
+                  account_id: account,
+                  target_id: subjectId,
+                  target_type: 'subject',
+                  state: 'following',
+                  reason: 'explicit',
+                  created_at: time,
+                  updated_at: time,
+                  transaction_id: followTx,
                 },
-                { 'Idempotency-Key': key() },
-              );
-              await expectJson(`Seeding collection member ${index}`, memberResponse, 201);
-              const recordResponse = await byRoute(
-                token,
-                'POST',
-                `/v1/progressSessions/${session.id}:record`,
+              ],
+              'library.published_log': [
                 {
-                  revision: session.revision,
-                  add: [`growth-unit:${index}`],
+                  route,
+                  log_id: logId,
+                  account_id: account,
+                  session_id: sessionId,
+                  subject_id: subjectId,
+                  session_state: 'active',
+                  started_at: time,
+                  completed_at: null,
+                  note: null,
+                  published_at: time,
+                  transaction_id: logTx,
                 },
-                { 'Idempotency-Key': key() },
-              );
-              await expectJson(`Seeding completed unit ${index}`, recordResponse, 200);
-              const publishedResponse = await byRoute(
-                token,
-                'POST',
-                '/v1/publishedLogs',
-                {
-                  sessionId: session.id,
-                },
-                { 'Idempotency-Key': key() },
-              );
-              await expectJson<{ publishedLog: PublishedLogView }>(
-                `Seeding published log ${index}`,
-                publishedResponse,
-                201,
-              );
-            }),
-          );
-          seedSubjects += count;
+              ],
+              'core.receipt': commands.map((command, index) => ({
+                partition_no: command.partition,
+                principal_kind: 'account',
+                principal_id: account,
+                command_kind: command.kind,
+                idempotency_key: Bun.randomUUIDv7(),
+                request_digest: crypto.getRandomValues(new Uint8Array(32)),
+                epoch: 1,
+                position: positionOf(index),
+                transaction_id: command.transactionId,
+                response: command.response,
+              })),
+              'editorial.write_basis': commands.map((command, index) => ({
+                partition_no: command.partition,
+                transaction_id: command.transactionId,
+                epoch: 1,
+                position: positionOf(index),
+                principal_kind: 'account',
+                principal_id: account,
+                client_id: 'web',
+                requested_by: null,
+              })),
+            };
+          },
+        };
+        // Receipts and write bases reference their partitions.
+        const partitions = new Set<number>();
+        for (let ordinal = range.from; ordinal < range.to; ordinal++) {
+          partitions.add(placement(population, ordinal).partition);
+          partitions.add(subjectRouteOf(ordinal) >>> 4);
         }
+        await db!.admin.query(
+          'INSERT INTO core.partition (partition_no, node) SELECT unnest($1::int[]), (SELECT node FROM core.partition LIMIT 1) ON CONFLICT DO NOTHING',
+          [[...partitions]],
+        );
+        await seedRows({ pool: db!.pool, admin: db!.admin }, population, range);
+        seedSubjects = scale;
       },
       async measure<T>(operation: () => Promise<T>) {
         await holdExecutor();

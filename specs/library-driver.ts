@@ -163,16 +163,17 @@ export interface LibraryDriver {
   inspect(): Promise<LibraryInspection>;
   settle(): Promise<void>;
   /**
-   * Append this many members through the library store in batched transactions; seeded members emit no events. A
-   * scenario that needs member events adds members through the API.
+   * Append this many members: all but the last through the library store in batched transactions, the last through
+   * the production member command. Seeded store members emit no events.
    */
   seedMembers(input: { collectionId: string; subjectId: string; count: number }): Promise<void>;
   /**
    * Grow unrelated data to this total in each relevant relation: collections,
    * members/order keys, entries, sessions, completed units, copies, follows, logs,
-   * receipts and outbox history. Include unrelated accounts sharing owner/subject
+   * receipts. Include unrelated accounts sharing owner/subject
    * partitions as well as other partitions. Preserve all tested accounts' visible
-   * data and tested collections, sessions and subjects; use production commands.
+   * data and tested collections, sessions and subjects; use bulk rows through test/support/growth-seed.ts that
+   * reproduce what the production commands write, except semantic and outbox rows.
    */
   seed(scale: number): Promise<void>;
   /** Request SQL only; exclude seed/inspection SQL and asynchronous worker work. */
