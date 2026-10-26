@@ -17,6 +17,8 @@ import {
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { accessCheck } from '../../src/request/access.ts';
+import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
+import { createCommittedContinuations } from '../../src/access/committed-continuations.ts';
 
 export type FixtureConfiguration = {
   kernelUrl: string;
@@ -46,8 +48,8 @@ export async function handleFixture(
     if (!row?.reservation_id) throw new Error('No durable pending registration');
     const route = routeOf(row.account_id)!;
     const automated = (
-      await database.query<{ workflow_id: string }>(
-        "SELECT workflow_id FROM auth_workflow_request WHERE request->>'kind'='automated' AND request->>'registrationId'=$1",
+      await database.query<{ workflow_id: string; request: Extract<AccountOperation, { kind: 'automated' }> }>(
+        "SELECT workflow_id,request FROM auth_workflow_request WHERE request->>'kind'='automated' AND request->>'registrationId'=$1",
         [reference],
       )
     ).rows[0];
@@ -56,9 +58,16 @@ export async function handleFixture(
       `accounts:${createHash('sha256')
         .update(JSON.stringify(`registration:${row.request_key}`))
         .digest('hex')}`;
+    const prefix = automated
+      ? `wf:${createHash('sha256')
+          .update(
+            JSON.stringify([automated.request.operatorAccountId, automated.request.authorization, automated.request]),
+          )
+          .digest('hex')}`
+      : `wf:${workflow}`;
     const receipt = await kernel.query<{ response: { accountId: string; registrationId: string } }>(
       "SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
-      [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:wf:${workflow}:pending-account`],
+      [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:${prefix}:pending-account`],
     );
     if (
       receipt.rows[0]?.response.accountId !== row.account_id ||
@@ -155,9 +164,16 @@ export async function handleFixture(
     accountEvidence: (actor) => verifier.identity(actor)?.account,
   });
   const commands = createLifecycleCommands({ pool: kernel, access });
+  const continuations = createCommittedContinuations({
+    pool: kernel,
+    access,
+    referenceKeys: { current: 1, keys: new Map([[1, Buffer.from(config.stagingKey, 'hex')]]) },
+    clock,
+  });
   operators = createOperatorCommands({ pool: kernel, access, actions, managementAction: 'account:manage' });
   const approvals = new Map<string, { token: string; operation?: AccountOperation }>();
   const commandKeyPrefixes = new WeakMap<object, string>();
+  const operationDigests = new WeakMap<object, string>();
   let fault: string | undefined;
   let beforeRevoke: ((accountId: string) => Promise<void>) | undefined;
   const effects: { phase: string; transactionId: string; replayed: boolean }[] = [];
@@ -205,7 +221,9 @@ export async function handleFixture(
       if (!approval || (approval.operation && JSON.stringify(approval.operation) !== JSON.stringify(operation)))
         throw new Error('Approval mismatch');
       const context = { pool: kernel, deadline: Date.now() + 5000 };
-      const actor = await verifier.authenticate(approval.token, context);
+      const actor = await verifier.authenticate(approval.token, context).catch(() => {
+        throw new AuthBindingDeniedError();
+      });
       if (actor.kind !== 'account') throw new Error('No authenticated actor');
       const target =
         operation.kind === 'automated' || operation.kind === 'opening'
@@ -237,6 +255,7 @@ export async function handleFixture(
           .update(JSON.stringify([actor.accountId, reference, operation]))
           .digest('hex')}`,
       );
+      operationDigests.set(approved, createHash('sha256').update(JSON.stringify(operation)).digest('hex'));
       return approved;
     },
     actorAccountId: (context) => context.actor.accountId,
@@ -245,6 +264,13 @@ export async function handleFixture(
       if (!prefix) throw new Error('Workflow command key requires an approved operation');
       return `${prefix}:${phase}`;
     },
+    approvalBinding(context) {
+      const commandKeyPrefix = commandKeyPrefixes.get(context);
+      const digest = operationDigests.get(context);
+      return commandKeyPrefix && digest ? { operationKey: digest, digest, commandKeyPrefix } : undefined;
+    },
+    readContinuation: (key, accountId) => continuations.read(key, accountId),
+    authorizeContinuation: (reference, entry) => continuations.authorizeStep(reference, entry),
   };
   const native = {
     reserveHandle: internal.reserveHandle,
