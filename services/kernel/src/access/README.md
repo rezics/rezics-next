@@ -171,6 +171,7 @@ through `accessRoot`, including for derived adapters, and returns a check yieldi
 resource grant roles; direct action grants, including grants to verified membership roles, still require
 current actor, principal, delegation, client scope, temporal, fence and denial evidence. Missing explicit
 support fails closed. Content uses this port to decide whether erased metadata may be disclosed.
+Adapters must use this port rather than intercept SQL text or reconstruct the permission formula.
 
 `Access.authorizeExplicit` also accepts a prepared homogeneous page; each returned field requires that
 field's decision to hold for every id. The two fields are evaluated independently; callers must retain
