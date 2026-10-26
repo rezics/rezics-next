@@ -8,6 +8,6 @@ properties:
   schema:numberOfPages: Anzahl der Seiten
   schema:translator: Übersetzer
 inverseProperties:
-  schema:exampleOfWork: "Ausgaben"
-  schema:publisher: "Veröffentlichte Werke"
-  schema:translator: "Übersetzte Werke"
+  schema:exampleOfWork: 'Ausgaben'
+  schema:publisher: 'Veröffentlichte Werke'
+  schema:translator: 'Übersetzte Werke'

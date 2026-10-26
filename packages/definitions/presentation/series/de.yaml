@@ -5,4 +5,4 @@ properties:
   wdt:P2635: 'Anzahl der Teile dieses Werks'
   wdt:P1433: 'veröffentlicht in'
 inverseProperties:
-  wdt:P1433: "Enthaltene Werke"
+  wdt:P1433: 'Enthaltene Werke'

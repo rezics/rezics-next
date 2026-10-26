@@ -8,8 +8,8 @@ properties:
   schema:keywords: '标签'
   schema:genre: '类型'
 inverseProperties:
-  skos:inScheme: "此概念体系的概念"
-  skos:broader: "下位概念"
-  foaf:focus: "指向此主体的概念"
-  schema:genre: "此类型的作品"
-  schema:keywords: "使用此标签的主体"
+  skos:inScheme: '此概念体系的概念'
+  skos:broader: '下位概念'
+  foaf:focus: '指向此主体的概念'
+  schema:genre: '此类型的作品'
+  schema:keywords: '使用此标签的主体'

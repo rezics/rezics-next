@@ -35,17 +35,17 @@ properties:
   wdt:P179: 'série'
   rezics:spoilerLevel: 'niveau de divulgation'
   schema:alternateName: autre nom
-  rezics:representativeEdition: "Édition représentative"
+  rezics:representativeEdition: 'Édition représentative'
 inverseProperties:
-  schema:author: "Œuvres écrites"
-  schema:illustrator: "Œuvres illustrées"
-  schema:director: "Œuvres réalisées"
-  schema:musicBy: "Œuvres composées"
-  schema:producer: "Œuvres produites"
-  schema:productionCompany: "Productions"
-  wdt:P58: "Scénarios écrits"
-  wdt:P178: "Œuvres développées"
-  wdt:P725: "Rôles vocaux dans"
-  schema:contributor: "Contributions à"
-  schema:character: "Apparaît dans"
-  wdt:P179: "Membres de la série"
+  schema:author: 'Œuvres écrites'
+  schema:illustrator: 'Œuvres illustrées'
+  schema:director: 'Œuvres réalisées'
+  schema:musicBy: 'Œuvres composées'
+  schema:producer: 'Œuvres produites'
+  schema:productionCompany: 'Productions'
+  wdt:P58: 'Scénarios écrits'
+  wdt:P178: 'Œuvres développées'
+  wdt:P725: 'Rôles vocaux dans'
+  schema:contributor: 'Contributions à'
+  schema:character: 'Apparaît dans'
+  wdt:P179: 'Membres de la série'

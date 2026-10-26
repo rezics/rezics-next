@@ -7,5 +7,5 @@ properties:
   wdt:P1853: Blutgruppe
   wdt:P6296: Bangumi-Charakterkennung
 inverseProperties:
-  schema:gender: "Subjekte dieses Geschlechts"
-  wdt:P1853: "Subjekte dieser Blutgruppe"
+  schema:gender: 'Subjekte dieses Geschlechts'
+  wdt:P1853: 'Subjekte dieser Blutgruppe'

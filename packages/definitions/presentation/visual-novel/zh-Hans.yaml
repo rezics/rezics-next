@@ -4,8 +4,8 @@ properties:
   wdt:P144: 改编自
   wdt:P1889: 区别于
   wdt:P361: 所属实体
-  rezics:spinOffOf: "外传原作"
+  rezics:spinOffOf: '外传原作'
 inverseProperties:
-  wdt:P144: "衍生作品"
-  wdt:P361: "组成作品"
-  rezics:spinOffOf: "外传作品"
+  wdt:P144: '衍生作品'
+  wdt:P361: '组成作品'
+  rezics:spinOffOf: '外传作品'

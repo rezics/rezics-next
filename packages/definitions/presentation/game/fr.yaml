@@ -14,9 +14,9 @@ properties:
   schema:minValue: valeur minimale
   wdt:P8646: extension de
 inverseProperties:
-  schema:gamePlatform: "Jeux sur cette plateforme"
-  wdt:P31: "Sorties de ce type"
-  wdt:P437: "Sorties dans ce format"
-  wdt:P155: "Suite"
-  wdt:P408: "Jeux utilisant ce moteur"
-  wdt:P8646: "Extensions"
+  schema:gamePlatform: 'Jeux sur cette plateforme'
+  wdt:P31: 'Sorties de ce type'
+  wdt:P437: 'Sorties dans ce format'
+  wdt:P155: 'Suite'
+  wdt:P408: 'Jeux utilisant ce moteur'
+  wdt:P8646: 'Extensions'

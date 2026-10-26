@@ -5,4 +5,4 @@ properties:
   wdt:P2635: '作品部分数量'
   wdt:P1433: '发表于'
 inverseProperties:
-  wdt:P1433: "收录作品"
+  wdt:P1433: '收录作品'

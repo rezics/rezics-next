@@ -8,8 +8,8 @@ properties:
   schema:keywords: '태그'
   schema:genre: '장르'
 inverseProperties:
-  skos:inScheme: "이 체계의 개념"
-  skos:broader: "하위 개념"
-  foaf:focus: "이 대상을 나타내는 개념"
-  schema:genre: "이 장르의 작품"
-  schema:keywords: "이 태그의 대상"
+  skos:inScheme: '이 체계의 개념'
+  skos:broader: '하위 개념'
+  foaf:focus: '이 대상을 나타내는 개념'
+  schema:genre: '이 장르의 작품'
+  schema:keywords: '이 태그의 대상'

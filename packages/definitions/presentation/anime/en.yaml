@@ -15,6 +15,6 @@ properties:
   wdt:P7937: form of creative work
   wdt:P973: described at URL
 inverseProperties:
-  schema:isPartOf: "Episodes"
-  wdt:P449: "Original broadcasts"
-  wdt:P7937: "Works in this form"
+  schema:isPartOf: 'Episodes'
+  wdt:P449: 'Original broadcasts'
+  wdt:P7937: 'Works in this form'

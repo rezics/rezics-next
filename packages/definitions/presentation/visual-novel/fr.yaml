@@ -4,8 +4,8 @@ properties:
   wdt:P144: basé sur
   wdt:P1889: à ne pas confondre avec
   wdt:P361: partie de
-  rezics:spinOffOf: "Dérivé de"
+  rezics:spinOffOf: 'Dérivé de'
 inverseProperties:
-  wdt:P144: "Adaptations"
-  wdt:P361: "Parties"
-  rezics:spinOffOf: "Œuvres dérivées"
+  wdt:P144: 'Adaptations'
+  wdt:P361: 'Parties'
+  rezics:spinOffOf: 'Œuvres dérivées'

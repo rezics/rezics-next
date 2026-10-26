@@ -5,4 +5,4 @@ properties:
   wdt:P2635: '作品中の区分の数'
   wdt:P1433: 'この作品が含まれる作品'
 inverseProperties:
-  wdt:P1433: "掲載作品"
+  wdt:P1433: '掲載作品'

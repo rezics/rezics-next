@@ -7,5 +7,5 @@ properties:
   wdt:P1853: blood type
   wdt:P6296: bgm.tv character ID
 inverseProperties:
-  schema:gender: "Subjects with this gender"
-  wdt:P1853: "Subjects with this blood type"
+  schema:gender: 'Subjects with this gender'
+  wdt:P1853: 'Subjects with this blood type'

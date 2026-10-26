@@ -15,6 +15,6 @@ properties:
   wdt:P7937: forma artística
   wdt:P973: descrito en la URL
 inverseProperties:
-  schema:isPartOf: "Episodios"
-  wdt:P449: "Emisiones originales"
-  wdt:P7937: "Obras de esta forma"
+  schema:isPartOf: 'Episodios'
+  wdt:P449: 'Emisiones originales'
+  wdt:P7937: 'Obras de esta forma'

@@ -8,6 +8,6 @@ properties:
   schema:numberOfPages: ページ数
   schema:translator: 翻訳者
 inverseProperties:
-  schema:exampleOfWork: "版"
-  schema:publisher: "出版作品"
-  schema:translator: "翻訳作品"
+  schema:exampleOfWork: '版'
+  schema:publisher: '出版作品'
+  schema:translator: '翻訳作品'

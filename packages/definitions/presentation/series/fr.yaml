@@ -5,4 +5,4 @@ properties:
   wdt:P2635: "nombre de parties de l'œuvre"
   wdt:P1433: 'publié dans'
 inverseProperties:
-  wdt:P1433: "Œuvres publiées ici"
+  wdt:P1433: 'Œuvres publiées ici'

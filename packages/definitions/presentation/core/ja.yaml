@@ -35,17 +35,17 @@ properties:
   wdt:P179: 'シリーズ'
   rezics:spoilerLevel: 'ネタバレ度'
   schema:alternateName: 別名
-  rezics:representativeEdition: "代表版"
+  rezics:representativeEdition: '代表版'
 inverseProperties:
-  schema:author: "著作"
-  schema:illustrator: "イラスト担当作品"
-  schema:director: "監督作品"
-  schema:musicBy: "作曲作品"
-  schema:producer: "プロデュース作品"
-  schema:productionCompany: "制作作品"
-  wdt:P58: "脚本担当作品"
-  wdt:P178: "開発作品"
-  wdt:P725: "声の出演作品"
-  schema:contributor: "参加作品"
-  schema:character: "登場作品"
-  wdt:P179: "シリーズの構成作品"
+  schema:author: '著作'
+  schema:illustrator: 'イラスト担当作品'
+  schema:director: '監督作品'
+  schema:musicBy: '作曲作品'
+  schema:producer: 'プロデュース作品'
+  schema:productionCompany: '制作作品'
+  wdt:P58: '脚本担当作品'
+  wdt:P178: '開発作品'
+  wdt:P725: '声の出演作品'
+  schema:contributor: '参加作品'
+  schema:character: '登場作品'
+  wdt:P179: 'シリーズの構成作品'

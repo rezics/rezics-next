@@ -35,17 +35,17 @@ properties:
   wdt:P179: '系列'
   rezics:spoilerLevel: '剧透程度'
   schema:alternateName: 别名
-  rezics:representativeEdition: "代表版本"
+  rezics:representativeEdition: '代表版本'
 inverseProperties:
-  schema:author: "著作"
-  schema:illustrator: "插画作品"
-  schema:director: "执导作品"
-  schema:musicBy: "作曲作品"
-  schema:producer: "制作作品"
-  schema:productionCompany: "参与制作的作品"
-  wdt:P58: "编剧作品"
-  wdt:P178: "开发作品"
-  wdt:P725: "配音作品"
-  schema:contributor: "参与作品"
-  schema:character: "登场作品"
-  wdt:P179: "系列成员"
+  schema:author: '著作'
+  schema:illustrator: '插画作品'
+  schema:director: '执导作品'
+  schema:musicBy: '作曲作品'
+  schema:producer: '制作作品'
+  schema:productionCompany: '参与制作的作品'
+  wdt:P58: '编剧作品'
+  wdt:P178: '开发作品'
+  wdt:P725: '配音作品'
+  schema:contributor: '参与作品'
+  schema:character: '登场作品'
+  wdt:P179: '系列成员'

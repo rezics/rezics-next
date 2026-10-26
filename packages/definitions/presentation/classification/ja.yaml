@@ -8,8 +8,8 @@ properties:
   schema:keywords: 'タグ'
   schema:genre: 'ジャンル'
 inverseProperties:
-  skos:inScheme: "この体系の概念"
-  skos:broader: "下位概念"
-  foaf:focus: "この対象を表す概念"
-  schema:genre: "このジャンルの作品"
-  schema:keywords: "このタグの対象"
+  skos:inScheme: 'この体系の概念'
+  skos:broader: '下位概念'
+  foaf:focus: 'この対象を表す概念'
+  schema:genre: 'このジャンルの作品'
+  schema:keywords: 'このタグの対象'

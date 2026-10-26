@@ -15,6 +15,6 @@ properties:
   wdt:P7937: 作品形式
   wdt:P973: 详情描述网址
 inverseProperties:
-  schema:isPartOf: "集数"
-  wdt:P449: "首播作品"
-  wdt:P7937: "此形式的作品"
+  schema:isPartOf: '集数'
+  wdt:P449: '首播作品'
+  wdt:P7937: '此形式的作品'

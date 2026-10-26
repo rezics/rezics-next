@@ -15,6 +15,6 @@ properties:
   wdt:P7937: 創作物の形式
   wdt:P973: 詳細情報URL
 inverseProperties:
-  schema:isPartOf: "エピソード"
-  wdt:P449: "初回放送作品"
-  wdt:P7937: "この形式の作品"
+  schema:isPartOf: 'エピソード'
+  wdt:P449: '初回放送作品'
+  wdt:P7937: 'この形式の作品'

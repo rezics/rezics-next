@@ -15,6 +15,6 @@ properties:
   wdt:P7937: forme de l’œuvre
   wdt:P973: décrit à l’URL
 inverseProperties:
-  schema:isPartOf: "Épisodes"
-  wdt:P449: "Premières diffusions"
-  wdt:P7937: "Œuvres de cette forme"
+  schema:isPartOf: 'Épisodes'
+  wdt:P449: 'Premières diffusions'
+  wdt:P7937: 'Œuvres de cette forme'

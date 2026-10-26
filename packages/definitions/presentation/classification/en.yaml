@@ -8,8 +8,8 @@ properties:
   schema:keywords: 'keywords'
   schema:genre: 'genre'
 inverseProperties:
-  skos:inScheme: "Concepts in this scheme"
-  skos:broader: "Narrower concepts"
-  foaf:focus: "Concepts for this subject"
-  schema:genre: "Works in this genre"
-  schema:keywords: "Tagged subjects"
+  skos:inScheme: 'Concepts in this scheme'
+  skos:broader: 'Narrower concepts'
+  foaf:focus: 'Concepts for this subject'
+  schema:genre: 'Works in this genre'
+  schema:keywords: 'Tagged subjects'

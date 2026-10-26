@@ -4,8 +4,8 @@ properties:
   wdt:P144: based on
   wdt:P1889: different from
   wdt:P361: part of
-  rezics:spinOffOf: "Spin-off of"
+  rezics:spinOffOf: 'Spin-off of'
 inverseProperties:
-  wdt:P144: "Adaptations"
-  wdt:P361: "Parts"
-  rezics:spinOffOf: "Spin-offs"
+  wdt:P144: 'Adaptations'
+  wdt:P361: 'Parts'
+  rezics:spinOffOf: 'Spin-offs'

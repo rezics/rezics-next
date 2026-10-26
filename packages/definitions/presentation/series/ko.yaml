@@ -5,4 +5,4 @@ properties:
   wdt:P2635: '작품의 부수'
   wdt:P1433: '다음에 실림'
 inverseProperties:
-  wdt:P1433: "게재 작품"
+  wdt:P1433: '게재 작품'
