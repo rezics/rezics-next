@@ -83,8 +83,9 @@ async function fixture(route: number) {
         [partition, route, accountId],
       )
     ).rows[0];
-  const start = (deadline = Date.now() + 1800) =>
-    commands
+  const started: Promise<unknown>[] = [];
+  const start = (deadline = Date.now() + 1800) => {
+    const run = commands
       .updateAccount(
         { actor, account, deadline },
         { accountId, key: Bun.randomUUIDv7(), patch: { displayName: 'written' } },
@@ -93,17 +94,31 @@ async function fixture(route: number) {
         (value) => ({ value, error: null }),
         (error: unknown) => ({ value: null, error }),
       );
+    started.push(run);
+    return run;
+  };
+  const settle = async () => {
+    await Promise.all(started);
+  };
   await state('fenced');
-  return { counts, rolledBack: rolledBack.promise, state, snapshot, start, accountId, route };
+  return { counts, rolledBack: rolledBack.promise, state, snapshot, start, settle, accountId, route };
+}
+
+async function idleBy(deadline: number) {
+  while (pool.totalCount !== pool.idleCount) {
+    if (Date.now() >= deadline) throw new Error('connections were still held at the command deadline');
+    await Bun.sleep(5);
+  }
 }
 
 test('known fence waits past evidence expiry as availability without repeating authorization or body', async () => {
   const f = await fixture(0xd100);
   const before = await f.snapshot();
   try {
-    const pending = f.start(Date.now() + 1400);
+    const deadline = Date.now() + 1400;
+    const pending = f.start(deadline);
     await f.rolledBack;
-    await Bun.sleep(60);
+    await idleBy(deadline);
     expect(pool.totalCount).toBe(pool.idleCount);
     const result = await pending;
     expect(result.error).toBeInstanceOf(CommandUnavailableError);
@@ -113,6 +128,7 @@ test('known fence waits past evidence expiry as availability without repeating a
     expect(trace.body).toBe(1);
     expect(await f.snapshot()).toEqual(before);
   } finally {
+    await f.settle();
     await f.state('active');
   }
 });
@@ -130,6 +146,7 @@ test('known fence reports the moved node without another real attempt', async ()
     expect(trace.body).toBe(1);
     expect(await f.snapshot()).toEqual(before);
   } finally {
+    await f.settle();
     await f.state('active');
   }
 });
@@ -149,6 +166,7 @@ test('writable recovery reauthorizes current grants before any receipt or body',
     expect(trace.body).toBe(1);
     expect(await f.snapshot()).toEqual(before);
   } finally {
+    await f.settle();
     await f.state('active');
   }
 });
@@ -175,6 +193,7 @@ test('evidence expires during fence wait and refreshes only after becoming writa
       name: 'written',
     });
   } finally {
+    await f.settle();
     await f.state('active');
   }
 });
@@ -198,6 +217,7 @@ test('writable recovery executes exactly one effect after the rolled back attemp
       name: 'written',
     });
   } finally {
+    await f.settle();
     await f.state('active');
   }
 });
