@@ -770,7 +770,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       'account-before-deletion',
       async (id: string, request: AccountOperation): Promise<WorkflowAccount> => {
         await approved(request);
-        const value = required(await required(access.readAccount)(id));
+        const value = required(await access.readAccount(id));
         return {
           accountId: value.accountId,
           handle: value.handle,
@@ -850,7 +850,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       'client-reduction-owner-fence',
       async (clientId: string, operationId: string, accountId: string) => {
         const completeDeleted = () =>
-          completeDeletedClientReductionOwner(database, required(access.readAccount), {
+          completeDeletedClientReductionOwner(database, access.readAccount, {
             clientId,
             operationId,
             accountId,

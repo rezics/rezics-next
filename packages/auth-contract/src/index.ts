@@ -352,7 +352,7 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
   cancelHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
   releaseHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
   provisionManagementDefaults?(input: { operatorAccountId: string; key: string }): Result<unknown>;
-  readAccount?(accountId: string): Promise<WorkflowAccount | null>;
+  readAccount(accountId: string): Promise<WorkflowAccount | null>;
   setMembership?(
     context: Context,
     input: WorkflowMembership & { role: 'owner' | 'member' | null; key: string },

@@ -50,6 +50,18 @@ const value = async <T>(kind: string, key: string, data: T) => {
   return { value: result.rows[0]!.value, partition: 1, epoch: '1', position: '1', transactionId: key, replayed: false };
 };
 const ports: AccountWorkflowPorts = {
+  async readAccount(id) {
+    const account = accounts.get(id) ?? null;
+    return (
+      account && {
+        accountId: account.accountId,
+        handle: null,
+        operatorAccountId: null,
+        state: account.state,
+        fenced: account.fenced ?? false,
+      }
+    );
+  },
   async authorizeOperation(reference) {
     if (reference !== 'approved-fanout') throw new Error('Operation denied');
     return {

@@ -94,6 +94,13 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
       provisioningReference: denied,
       provisioningEvidence: denied,
       authorizeOperation: async () => ({ actor: { accountId: 'admin' } }),
+      readAccount: async (accountId) => ({
+        accountId,
+        handle: null,
+        operatorAccountId: null,
+        state: 'active',
+        fenced: true,
+      }),
       async raiseFence({ accountId, key }) {
         const row = (
           await db.pool.query(
