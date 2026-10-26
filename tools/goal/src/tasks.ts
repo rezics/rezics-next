@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -168,14 +169,32 @@ export class WorkerTasks {
   private commitRetryLeftovers(task: Task, attempt: number): void {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
     // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
+    const gitPath = (name: string) => resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]));
+    // A git process killed under load leaves its index lock behind. The attempt has ended and this retry holds the
+    // task's lease, so a lock a minute old belongs to nobody.
+    const lock = gitPath('index.lock');
+    if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > 60_000) rmSync(lock, { force: true });
     for (const [state, operation] of [
       ['rebase-merge', 'rebase'],
       ['rebase-apply', 'rebase'],
       ['MERGE_HEAD', 'merge'],
     ] as const) {
-      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state]))))
+      if (!existsSync(gitPath(state))) continue;
+      try {
         git(task.worktree, [operation, '--abort']);
+      } catch (error) {
+        if (operation !== 'rebase') throw error;
+      }
+      // A rebase interrupted while starting cannot always abort (no head-name yet); it never moved the branch.
+      if (operation === 'rebase') rmSync(gitPath(state), { recursive: true, force: true });
     }
+    // A setup that failed mid-rebase leaves HEAD detached at the commit it rebased onto. With no commit there that a
+    // branch lacks, the branch checkout is the attempt's state.
+    if (
+      !git(task.worktree, ['branch', '--show-current']) &&
+      !git(task.worktree, ['rev-list', 'HEAD', '--not', '--branches'])
+    )
+      git(task.worktree, ['checkout', '-f', task.branch]);
     const branch = git(task.worktree, ['branch', '--show-current']);
     if (branch !== task.branch)
       throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);

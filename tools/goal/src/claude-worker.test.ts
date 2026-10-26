@@ -96,3 +96,20 @@ test('a finished Claude log refreshes the shared reading, which outlives a refus
   expect(readPool(local, at + 19 * 60_000).windows.map((w) => w.usedPercent)).toEqual([10, 46]);
   expect(readPool(local, at + 21 * 60_000).windows).toEqual([]);
 });
+
+test('a Claude worker woken by its own background command after reporting keeps the report as its final answer', () => {
+  const report = '{"status":"success","summary":"done"}';
+  const woken = measureLog(stream(
+    { type: 'system', subtype: 'init', session_id: 's' },
+    { type: 'result', is_error: false, result: report, session_id: 's' },
+    { type: 'result', is_error: false, result: 'That notification is the earlier rerun finishing; my report above stands.', session_id: 's' },
+  ));
+  expect(woken.result).toBe(report);
+  expect(woken.failureKind).toBeNull();
+
+  const changed = measureLog(stream(
+    { type: 'result', is_error: false, result: report, session_id: 's' },
+    { type: 'result', is_error: false, result: 'BLOCKER: the rerun failed after all', session_id: 's' },
+  ));
+  expect(changed.blocker).toBe('the rerun failed after all');
+});
