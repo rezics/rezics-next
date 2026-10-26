@@ -1,5 +1,7 @@
 import type { PropertyDefinition, Release } from './index.ts';
 import { Compile } from 'typebox/schema';
+import { checkDocument, serializeDocument } from '@rezics/document';
+import spdxLicenseIds from 'spdx-license-ids';
 
 export type Violation = {
   pointer: string;
@@ -237,6 +239,18 @@ export function issuePointers(issue: RawIssue): { pointer: string; code: Violati
 
 export type ItemTarget = { pointer: string; id: string; targets: readonly string[] };
 
+const licenceIds = new Set(spdxLicenseIds);
+const authoredDocument = Compile({
+  type: 'object',
+  required: ['document', 'licence', 'language'],
+  additionalProperties: false,
+  properties: {
+    document: {},
+    licence: { type: 'string', minLength: 1, maxLength: 128 },
+    language: { type: 'string', minLength: 1, maxLength: 128 },
+  },
+});
+
 const validators = new WeakMap<Release, Map<string, ReturnType<typeof Compile>>>();
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -308,6 +322,7 @@ export function checkSubjectRelease(
   release: Release,
   rejectContent?: (property: PropertyDefinition) => boolean,
   catalogueOnly = false,
+  authoredDocuments = false,
 ): { violations: Violation[]; items: ItemTarget[] } {
   const violations: Violation[] = [];
   const items: ItemTarget[] = [];
@@ -336,11 +351,31 @@ export function checkSubjectRelease(
       for (const error of limits) add(error.pointer, error.code);
       return;
     }
-    const compiled = validator(release, id, property);
+    const authored = authoredDocuments && property.datatype === 'document';
+    const compiled = authored ? authoredDocument : validator(release, id, property);
     if (!compiled.Check(content)) {
       const [, errors] = compiled.Errors(content);
       for (const error of errors) for (const field of issuePointers(error)) add(pointer + field.pointer, field.code);
       return;
+    }
+    if (authored && record(content)) {
+      if (!record(content.document) || content.document.profile !== 'text' || !checkDocument(content.document))
+        add(`${pointer}/document`, 'invalid_format');
+      else if (new TextEncoder().encode(serializeDocument(content.document)).byteLength > 2 * 1024 * 1024)
+        add(`${pointer}/document`, 'out_of_range');
+      if (
+        typeof content.licence === 'string' &&
+        !licenceIds.has(content.licence) &&
+        !/^LicenseRef-[A-Za-z0-9.-]+$/.test(content.licence)
+      )
+        add(`${pointer}/licence`, 'invalid_format');
+      try {
+        if (typeof content.language !== 'string' || /[\u0000-\u001f\u007f-\u009f]/u.test(content.language))
+          throw new Error();
+        new Intl.Locale(content.language);
+      } catch {
+        add(`${pointer}/language`, 'invalid_format');
+      }
     }
     if (property.datatype === 'quantity' && record(content) && typeof content.amount === 'string') {
       if (
@@ -425,9 +460,10 @@ export function checkSubjectInput(
   input: unknown,
   release: Release,
   rejectContent?: (property: PropertyDefinition) => boolean,
+  authoredDocuments = false,
 ): { violations: Violation[]; targets: ItemTarget[] } {
   const structural = checkSubjectStructure(input);
-  const typed = checkSubjectRelease(input, release, rejectContent);
+  const typed = checkSubjectRelease(input, release, rejectContent, false, authoredDocuments);
   return { violations: combine(structural.violations, typed.violations), targets: typed.items };
 }
 
@@ -435,7 +471,7 @@ export function checkSubjectInput(
 export function checkStatementInput(
   raw: unknown,
   release: Release | undefined,
-  options: { rejectContent?: (property: PropertyDefinition) => boolean } = {},
+  options: { rejectContent?: (property: PropertyDefinition) => boolean; authoredDocuments?: boolean } = {},
 ): { violations: Violation[]; targets: ItemTarget[] } {
   const property =
     isObject(raw) && isObject(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
@@ -451,7 +487,7 @@ export function checkStatementInput(
   // A proposal's subject type must be checked by the caller against its database.
   const input = { type: '', labels: { en: 'Validation' }, statements: { [property]: [raw] } };
   const typed = release
-    ? checkSubjectRelease(input, release, options.rejectContent, true)
+    ? checkSubjectRelease(input, release, options.rejectContent, true, options.authoredDocuments)
     : { violations: [], items: [] };
   const violations = typed.violations.map(remap);
   if (!isObject(raw) || !Array.isArray(raw.references) || !raw.references.length)

@@ -223,6 +223,28 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 - Bound: Rows, blocks and statements constant in M. No iteration of the release. A cold release read is linear in release bytes, once per digest per process. A route key adds one `readFences` per tuple partition among the candidates shown, T probes chunked at 100, independent of N and of the subject's history.
 - Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
 
+### Authored documents
+
+Single-subject creation and statement proposals accept document values as
+`{ document, licence, language }`: a text-profile snapshot, an SPDX licence or
+`LicenseRef-` identifier, and a BCP 47 language tag. Validation happens before the
+command. Media values remain `unsupported`, including qualifiers and references.
+Bulk summary and cover rules are unchanged.
+
+The containing statement allocates the candidate and revision before content's
+`appendAuthoredField` runs in the same transaction. Creation uses its compact
+statement ID at revision 1. Semantic stores only `{ language, document: id, digest }`;
+content keeps the body, licence and command's acting account. Each append emits
+`com.rezics.content.authored-field.created.v1`. Qualifier and reference documents
+share their containing candidate. Disclosure follows that candidate's visibility.
+Install hooks return replacement values and facts are written from copies, so a
+serialization retry cannot replace a request snapshot with a stored document ID.
+A failed append or later write rolls back the entire command.
+
+The append adds one exact insert per document with at most 2 MiB of canonical
+bytes; there is no history scan or cleanup command. The API and retry checks are
+in `test/semantic/authored-documents.test.ts`.
+
 ### Sourced bulk write
 
 - Proposal install hooks return replacement values and never mutate command input.

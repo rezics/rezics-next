@@ -14,7 +14,8 @@ import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { fencedIds } from './fences.ts';
 import { factDataTypes, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
-import { rejectContent } from './rules.ts';
+import { rejectBulkContent, rejectContent } from './rules.ts';
+import { authoredAuthorization, installAuthoredStatement } from './authored.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { contextSnapshot } from './context.ts';
 import { LINKS_CHANGED } from './events.ts';
@@ -74,8 +75,9 @@ export async function createSubject(
     clock?: () => Date;
   },
 ): Promise<CreateSubjectResult> {
-  const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
+  const checked = checkSubjectInput(options.item, options.release.release, rejectContent, true);
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
+  const item = structuredClone(options.item);
   const { route, id: subjectId } = options.target;
   if (routeOf(subjectId) !== route) throw new RangeError('Subject target id must carry its route');
   const partition = partitionOf(route);
@@ -95,19 +97,23 @@ export async function createSubject(
         clientId: options.actor.clientId,
         requestedBy: options.actor.requestedBy,
       },
-      authorization: options.authorization ?? {
-        action: 'subject:create',
-        resource: options.target,
-        denied: () => new SubjectAccessDeniedError(),
-        async authorize(tx, attempt) {
-          if (!options.authorize || !(await options.authorize(tx, attempt.time))) throw new SubjectAccessDeniedError();
-          return 'execute';
+      authorization: authoredAuthorization(
+        options.authorization ?? {
+          action: 'subject:create',
+          resource: options.target,
+          denied: () => new SubjectAccessDeniedError(),
+          async authorize(tx, attempt) {
+            if (!options.authorize || !(await options.authorize(tx, attempt.time)))
+              throw new SubjectAccessDeniedError();
+            return 'execute';
+          },
         },
-      },
+        options.target,
+      ),
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeSubject(tx, transactionId, options);
+      return writeSubject(tx, transactionId, { ...options, item });
     },
   );
   return {
@@ -125,7 +131,13 @@ export async function writeSubject(
 ) {
   const { route, id: subjectId } = options.target;
   const input = options.item as Record<string, unknown>;
-  const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
+  const authored = options.source === undefined;
+  const checked = checkSubjectInput(
+    options.item,
+    options.release.release,
+    authored ? rejectContent : rejectBulkContent,
+    authored,
+  );
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
   const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
   const dataTypes = factDataTypes(options.release.release, facts);
@@ -155,6 +167,25 @@ export async function writeSubject(
     transaction_id: transactionId,
     source: options.source ?? null,
   });
+  const events: { type: string; subject: string; data: unknown }[] = [
+    { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
+  ];
+  for (const fact of facts) {
+    if (!authored || fact.kind !== 'statement') continue;
+    const installed = await installAuthoredStatement(
+      tx,
+      subjectId,
+      options.release.release,
+      {
+        candidate: fact.statement_id!,
+        revision: 1,
+        body: fact.body,
+      },
+      fact.property!,
+    );
+    fact.body = installed.body;
+    events.push(...installed.events);
+  }
   await writeFacts(tx, {
     route,
     subject_id: subjectId,
@@ -162,9 +193,6 @@ export async function writeSubject(
     facts: facts.map((fact) => ({ ...fact, release: fact.kind === 'statement' ? options.release.digest : null })),
   });
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
-  const events: { type: string; subject: string; data: unknown }[] = [
-    { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
-  ];
   const changes = linkChanges([], facts, dataTypes, { release: options.release.release, type: String(input.type) });
   if (changes.length > 0) {
     events.push({

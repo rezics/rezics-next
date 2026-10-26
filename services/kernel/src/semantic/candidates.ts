@@ -18,7 +18,8 @@ import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Statemen
 import { holderFacts } from './link-keys.ts';
 import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
-import { rejectContent } from './rules.ts';
+import { rejectBulkContent, rejectContent } from './rules.ts';
+import { authoredAuthorization, installAuthoredStatement, type ProposalInstall } from './authored.ts';
 import {
   candidateFact,
   currentAcceptance,
@@ -70,6 +71,7 @@ function validatedStatement(
   release: { digest: string; release: Release },
   raw: unknown,
   allowContent = false,
+  authoredDocuments = true,
 ) {
   const property = record(raw) && record(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
   const definition = Object.hasOwn(release.release.types, type) ? release.release.types[type] : undefined;
@@ -81,13 +83,41 @@ function validatedStatement(
   const checked = checkStatementInput(
     raw,
     subjectErrors.length ? undefined : release.release,
-    allowContent ? {} : { rejectContent },
+    allowContent ? {} : { rejectContent: authoredDocuments ? rejectContent : rejectBulkContent, authoredDocuments },
   );
   const violations = [...subjectErrors, ...checked.violations];
   if (violations.length) throw new SubjectInputError(violations);
   const input = { type, labels: { en: 'Validation' }, statements: { [property]: [raw] } };
   const facts = itemFacts(subject, input, type);
   return { property, fact: facts.find((fact) => fact.kind === 'statement')!, items: checked.targets };
+}
+
+/** Only authored values are checked before the receipt; other proposal errors retain receipt ordering. */
+function checkAuthoredValues(statement: unknown, release: Release) {
+  const snaks: [unknown, string][] = [[statement, '/statement']];
+  if (record(statement)) {
+    if (Array.isArray(statement.qualifiers))
+      statement.qualifiers.forEach((snak, i) => snaks.push([snak, `/statement/qualifiers/${i}`]));
+    if (Array.isArray(statement.references))
+      statement.references.forEach((reference, i) => {
+        if (record(reference) && Array.isArray(reference.parts))
+          reference.parts.forEach((snak, j) => snaks.push([snak, `/statement/references/${i}/parts/${j}`]));
+      });
+  }
+  const paths = snaks.flatMap(([snak, path]) =>
+    record(snak) &&
+    record(snak.property) &&
+    typeof snak.property.id === 'string' &&
+    release.properties[snak.property.id]?.datatype === 'document'
+      ? [`${path}/value/content`]
+      : [],
+  );
+  if (!paths.length) return;
+  const checked = checkStatementInput(statement, release, { rejectContent, authoredDocuments: true });
+  const errors = checked.violations.filter((error) =>
+    paths.some((path) => error.pointer === path || error.pointer.startsWith(`${path}/`)),
+  );
+  if (errors.length) throw new SubjectInputError(errors);
 }
 
 export async function proposeStatement(
@@ -106,6 +136,8 @@ export async function proposeStatement(
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  const statement = structuredClone(options.statement);
+  checkAuthoredValues(statement, options.release.release);
   const command = await runCommand(
     pool,
     {
@@ -122,11 +154,11 @@ export async function proposeStatement(
         clientId: options.actor.clientId,
         requestedBy: options.actor.requestedBy,
       },
-      authorization: options.authorization,
+      authorization: authoredAuthorization(options.authorization, { route, id: options.subject }),
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeProposal(tx, transactionId, options);
+      return writeProposal(tx, transactionId, { ...options, statement });
     },
   );
   return {
@@ -144,7 +176,7 @@ export async function writeProposal(
     /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
     allowContent?: boolean;
     /** Runs after the candidate id and revision are allocated and before the candidate row is inserted. */
-    install?: (allocated: { candidate: string; revision: number; body: unknown }) => Promise<unknown | undefined>;
+    install?: ProposalInstall;
   },
 ) {
   const route = routeOf(options.subject)!;
@@ -158,6 +190,7 @@ export async function writeProposal(
     options.release,
     options.statement,
     options.allowContent === true,
+    options.source === undefined,
   );
   const types = await readItemTypes(
     tx,
@@ -173,7 +206,7 @@ export async function writeProposal(
   const candidate = derivedId(CANDIDATE_NS, `${options.subject}\n${revision}`, route);
   const body = structuredClone(input.fact.body);
   const replacement = options.install ? await options.install({ candidate, revision, body }) : undefined;
-  const factBody =
+  let factBody =
     replacement === undefined
       ? body
       : {
@@ -183,6 +216,18 @@ export async function writeProposal(
             content: replacement,
           },
         };
+  const authoredEvents: { type: string; subject: string; data: unknown }[] = [];
+  if (!options.allowContent && options.source === undefined) {
+    const installed = await installAuthoredStatement(
+      tx,
+      options.subject,
+      options.release.release,
+      { candidate, revision, body: factBody },
+      input.property,
+    );
+    factBody = installed.body;
+    authoredEvents.push(...installed.events);
+  }
   try {
     await expandSlot(tx, options.subject, input.property, transactionId);
     await insertProposalRevision.run(tx, {
@@ -229,6 +274,7 @@ export async function writeProposal(
         data: { id: options.subject, revision, kind: 'propose' },
       },
       { type: 'com.rezics.statement.proposed.v1', subject: options.subject, data: { candidate, revision } },
+      ...authoredEvents,
     ],
   };
 }
