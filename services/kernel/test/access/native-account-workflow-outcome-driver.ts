@@ -706,12 +706,11 @@ async function makeFixture(
       otherSession: other.session,
     });
   }
-  // Workflow approvals use the same current principal assignment for every
-  // human caller. Auth session openings still consume the personal session
-  // proof directly, without carrying that assignment into session issuance.
-  const principalAssignment = await selfDelegate(callerPerson);
-  const requestedBy = principalAssignment.requestedBy;
-  const caller = principalAssignment.bearer;
+  // Auth session openings consume a personal human session proof without an
+  // assignment. The other workflow families exercise delegated human authority.
+  const principalAssignment = family === 'opening' ? null : await selfDelegate(callerPerson);
+  const requestedBy = principalAssignment?.requestedBy ?? null;
+  const caller = principalAssignment?.bearer ?? callerPerson.bearer;
   const otherClientCaller = callerPerson.otherBearer;
   const authenticatedCaller = await required(accessPort, 'Access is not composed').authenticate(caller, context());
   const identity = identityOf(callerPerson, requestedBy, String(authenticatedCaller.authnEpoch));
@@ -800,6 +799,7 @@ async function makeFixture(
       operatorId = organization.accountId;
       const backup = await person('opening-backup-owner');
       await addOrganizationOwner(operatorId, owner, backup);
+      await addOrganizationOwner(operatorId, owner, callerPerson);
     }
     await grantActions(
       nextOperator.accountId,
@@ -1385,7 +1385,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             {
               organizationId: f.ownerId,
               memberAccountId: f.identity.actorId,
-              role: 'member',
+              role: null,
               reservationId: old.rows[0].reservation_id,
               key: reference('remove-member'),
             },
