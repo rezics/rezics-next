@@ -1,7 +1,7 @@
 {
   "subjects": [
     {
-      "id": "01a1774e-95dc-728e-b59c-f053c1fe672f",
+      "id": "01a17842-2203-76a4-a140-34d8147c116f",
       "type": "schema:Book",
       "labels": {
         "de": "Der kleine Prinz",
@@ -23,7 +23,7 @@
         "schema:author": [
           {
             "kind": "item",
-            "id": "01a1774e-9500-7354-8e49-2e8d096b067a",
+            "id": "01a17842-2101-727c-abbe-23d0229b84c2",
             "labels": {
               "de": "Antoine de Saint-Exupéry",
               "en": "Antoine de Saint-Exupéry",
@@ -39,7 +39,7 @@
         "schema:genre": [
           {
             "kind": "item",
-            "id": "01a1774e-95c5-74fb-9be4-9f7942192733",
+            "id": "01a17842-21d6-75c3-9991-44e4bf15f77b",
             "labels": {
               "de": "Fabel",
               "en": "Fable",
@@ -57,7 +57,7 @@
   ],
   "total": { "value": 1, "relation": "exact" },
   "next": null,
-  "as_of": "2026-10-26T08:22:49.351Z",
+  "as_of": "2026-10-26T12:48:24.669Z",
   "status": 200,
   "query": "Prince",
   "filterType": "schema:Book"

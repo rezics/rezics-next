@@ -212,7 +212,10 @@ test(
         // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
         await page.getByRole('main').waitFor();
         expect(await page.getByRole('main').count()).toBe(1);
-        expect(await page.getByRole('navigation').count()).toBe(1);
+        // Secondary navigation is allowed when every navigation landmark has a name.
+        expect(await page.getByRole('navigation', { name: /\S/ }).count()).toBe(
+          await page.getByRole('navigation').count(),
+        );
         expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
         const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
         expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
@@ -374,6 +377,21 @@ test(
       "type PageReadResult = Awaited<ReturnType<KernelClient['pages']['$read']['post']>>;",
       "type PageResponse = NonNullable<PageReadResult['data']>;",
       "type PageMissingResponse = Extract<NonNullable<PageReadResult['error']>, { status: 404 | '404' }>['value'];",
+      "type Data<T extends Promise<{ data: unknown }>> = NonNullable<Awaited<T>['data']>;",
+      "type SessionRoutes = ReturnType<KernelClient['progressSessions']>;",
+      "type CollectionRoutes = ReturnType<KernelClient['collections']>;",
+      "type LibraryEntriesResponse = Data<ReturnType<KernelClient['libraryEntries']['get']>>;",
+      "type CollectionsResponse = Data<ReturnType<KernelClient['collections']['get']>>;",
+      "type CollectionResponse = Data<ReturnType<CollectionRoutes['get']>>;",
+      "type CollectionMembersResponse = Data<ReturnType<CollectionRoutes['members']['get']>>;",
+      "type CopiesResponse = Data<ReturnType<KernelClient['copies']['get']>>;",
+      "type FollowsResponse = Data<ReturnType<KernelClient['follows']['get']>>;",
+      "type ProgressSessionsResponse = Data<ReturnType<KernelClient['progressSessions']['get']>>;",
+      "type ProgressSessionResponse = Data<ReturnType<SessionRoutes['get']>>;",
+      "type ProgressChangesResponse = Data<ReturnType<SessionRoutes['changes']['get']>>;",
+      "type ProgressUnitsResponse = Data<ReturnType<SessionRoutes['completedUnits']['get']>>;",
+      "type PublishedLogsResponse = Data<ReturnType<KernelClient['publishedLogs']['get']>>;",
+      "type PublishedLogResponse = Data<ReturnType<ReturnType<KernelClient['publishedLogs']>['get']>>;",
     ];
     const responseType: Record<string, string> = {
       'missing-subject.json': 'MissingResponse',
@@ -390,6 +408,18 @@ test(
       'search-typed.json': 'SearchResponse',
       'definitions-active.json': 'DefinitionsActiveResponse',
       'definitions-release.json': 'DefinitionsReleaseResponse',
+      'library-entries.json': 'LibraryEntriesResponse',
+      'library-collections.json': 'CollectionsResponse',
+      'library-collection.json': 'CollectionResponse',
+      'library-collection-members.json': 'CollectionMembersResponse',
+      'library-copies.json': 'CopiesResponse',
+      'library-follows.json': 'FollowsResponse',
+      'library-progress-sessions.json': 'ProgressSessionsResponse',
+      'library-progress-session.json': 'ProgressSessionResponse',
+      'library-progress-changes.json': 'ProgressChangesResponse',
+      'library-progress-units.json': 'ProgressUnitsResponse',
+      'library-published-log.json': 'PublishedLogResponse',
+      'library-published-logs.json': 'PublishedLogsResponse',
     };
     files.forEach((file, index) => {
       const path = join(recorded, file);

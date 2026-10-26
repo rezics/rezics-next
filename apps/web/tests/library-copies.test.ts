@@ -633,7 +633,7 @@ test(
     try {
       expect(await page.locator('main').getByRole('link', { name: 'Zebra story' }).count()).toBe(2);
       const deskArticle = article(page, 'Desk copy');
-      const form = deskArticle.getByRole('form', { name: 'Edit this copy' });
+      const form = deskArticle.locator('form');
       const html = await deskArticle.evaluate((element) => element.outerHTML);
       await form.getByLabel('Status').selectOption({ label: 'Lent' });
       await form.getByLabel('Location').fill('Friend');
@@ -734,7 +734,7 @@ test(
     const { page, access } = await open('/en/library/copies');
     try {
       const card = article(page, 'Shelf note');
-      const form = card.getByRole('form', { name: 'Edit this copy' });
+      const form = card.locator('form');
       const html = await card.evaluate((element) => element.outerHTML);
       shelf.revision = 5;
       await form.getByLabel('Location').fill('Hall');

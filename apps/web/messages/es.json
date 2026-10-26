@@ -84,7 +84,6 @@
   "library_copy_delete_question": "¿Eliminar este ejemplar?",
   "library_copy_disposed": "Cedido el",
   "library_copy_disposed_hint": "El día en que dejaste ir este ejemplar.",
-  "library_copy_edit": "Editar este ejemplar",
   "library_copy_edition": "Edición",
   "library_copy_empty": "Aún no tienes ejemplares aquí.",
   "library_copy_failure": "No se pudo guardar este ejemplar. Inténtalo de nuevo.",

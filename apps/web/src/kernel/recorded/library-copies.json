@@ -1,0 +1,30 @@
+{
+  "copies": [
+    {
+      "id": "01a17842-841f-7466-8cea-4819c7e1ed5e",
+      "subjectId": "01a17842-2203-76a4-a140-34d8147c116f",
+      "status": "owned",
+      "revision": 1,
+      "location": "Hallway shelf, second row",
+      "source": "Kinokuniya Shinjuku",
+      "acquiredOn": "2024-03-16",
+      "disposedOn": null,
+      "note": "Paperback with the original watercolours.",
+      "subject": { "id": "01a17842-2203-76a4-a140-34d8147c116f", "type": "schema:Book", "label": "The Little Prince" }
+    },
+    {
+      "id": "01a17842-8446-74c7-96ce-4819f6366ee0",
+      "subjectId": "01a17842-8251-76e7-84ab-979e2ba4f4ad",
+      "status": "owned",
+      "revision": 1,
+      "location": "Kobo library, e-book",
+      "source": "Kobo",
+      "acquiredOn": "2025-11-02",
+      "disposedOn": null,
+      "note": "EPUB, Meredith McKinney translation.",
+      "subject": { "id": "01a17842-8251-76e7-84ab-979e2ba4f4ad", "type": "schema:Book", "label": "Kokoro" }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

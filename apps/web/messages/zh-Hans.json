@@ -84,7 +84,6 @@
   "library_copy_delete_question": "要删除这份复本吗？",
   "library_copy_disposed": "处置日",
   "library_copy_disposed_hint": "您不再保有这份复本的那天。",
-  "library_copy_edit": "编辑这份复本",
   "library_copy_edition": "版本",
   "library_copy_empty": "这里还没有您的复本。",
   "library_copy_failure": "这份复本无法保存。请重试。",

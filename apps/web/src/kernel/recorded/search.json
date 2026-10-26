@@ -1,7 +1,7 @@
 {
   "subjects": [
     {
-      "id": "01a1774e-95dc-728e-b59c-f053c1fe672f",
+      "id": "01a17842-2203-76a4-a140-34d8147c116f",
       "type": "schema:Book",
       "labels": {
         "de": "Der kleine Prinz",
@@ -23,7 +23,7 @@
   ],
   "total": { "value": 1, "relation": "exact" },
   "next": null,
-  "as_of": "2026-10-26T08:22:49.351Z",
+  "as_of": "2026-10-26T12:48:24.669Z",
   "status": 200,
   "query": "Prince"
 }

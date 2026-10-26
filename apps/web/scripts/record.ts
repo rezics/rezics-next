@@ -165,6 +165,327 @@ function paragraph(id: string, content: unknown[]) {
   return { type: 'paragraph', attrs: { id }, content };
 }
 
+/** Repeats a request the kernel refused as overloaded; a write keeps its idempotency key, so a repeat is safe. */
+async function retryOverloaded(send: () => Promise<Response>): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const response = await send();
+    if (response.status !== 503 || attempt === 20) return response;
+    await Bun.sleep(1000);
+  }
+}
+
+const libraryScopes = [
+  'subject:create',
+  'subject:read',
+  'exposure:open',
+  'library_entry:update',
+  'library_entry:list',
+  'library_entry:read',
+  'collection:create',
+  'collection:update',
+  'collection:read',
+  'follow:create',
+  'follow:list',
+  'follow:read',
+  'copy:create',
+  'copy:list',
+  'copy:read',
+  'progress_session:create',
+  'progress_session:update',
+  'progress_session:list',
+  'progress_session:read',
+  'published_log:create',
+  'published_log:read',
+].join(' ');
+
+async function libraryToken(account: string): Promise<string> {
+  return new SignJWT({
+    client_id: 'web-recorder',
+    scope: libraryScopes,
+    authn_epoch: 1,
+    auth_time: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'web-recorder', typ: 'at+jwt' })
+    .setIssuer(issuer)
+    .setAudience(audience)
+    .setSubject(account)
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(privateJwk);
+}
+
+const librarySubjects = [
+  {
+    key: 'kokoro',
+    labels: {
+      en: 'Kokoro',
+      'zh-Hant': '心',
+      ja: 'こころ',
+      ko: '마음',
+      de: 'Kokoro',
+      es: 'Kokoro',
+    },
+  },
+  {
+    key: 'norwegian-wood',
+    labels: {
+      en: 'Norwegian Wood',
+      'zh-Hant': '挪威的森林',
+      ja: 'ノルウェイの森',
+      ko: '노르웨이의 숲',
+      de: 'Naokos Lächeln',
+    },
+  },
+  {
+    key: 'genji',
+    labels: {
+      en: 'The Tale of Genji',
+      'zh-Hant': '源氏物語',
+      ja: '源氏物語',
+      ko: '겐지 이야기',
+      fr: 'Le Dit du Genji',
+    },
+  },
+  {
+    key: 'cat',
+    labels: { en: 'I Am a Cat', 'zh-Hant': '我是貓', ja: '吾輩は猫である', de: 'Ich der Kater', es: 'Soy un gato' },
+  },
+  {
+    key: 'snow-country',
+    labels: { en: 'Snow Country', 'zh-Hant': '雪國', ja: '雪国', ko: '설국', fr: 'Pays de neige' },
+  },
+] as const;
+
+/**
+ * Seeds a used-looking library through the kernel's public API and records the Library reads the pages make.
+ * The recorded account keeps the library; a second account keeps a public collection that the first one follows.
+ */
+async function recordLibrary(input: {
+  origin: string;
+  pool: Pool;
+  accountId: string;
+  subjectId: string;
+}): Promise<Map<string, JsonObject>> {
+  const { origin, pool: database, accountId: me, subjectId: princeId } = input;
+  const { routeOf } = await import('../../../services/kernel/src/route/route.ts');
+  const other = Bun.randomUUIDv7();
+  const otherRoute = routeOf(other);
+  if (otherRoute === null) throw new Error('The second recording account id is not routable.');
+  await database.query(
+    `INSERT INTO access.account (route, account_id, kind, state, content_preferences, minimum_authn_epoch, transaction_id)
+     VALUES ($1, $2, 'actor', 'active', '{}', 1, $2)`,
+    [otherRoute, other],
+  );
+  // Handles and display names have no public write API yet; the pages show them next to a curator or author.
+  const profiles: [string, string, string][] = [
+    [me, 'mira', 'Mira Okabe'],
+    [other, 'shelfkeeper', 'Daniel Reyes'],
+  ];
+  for (const [account, handle, displayName] of profiles)
+    await database.query(`UPDATE access.account SET handle = $2, display_name = $3 WHERE account_id = $1`, [
+      account,
+      handle,
+      displayName,
+    ]);
+  const tokens = { me: await libraryToken(me), other: await libraryToken(other) };
+
+  const call = async (
+    name: string,
+    token: string | null,
+    method: string,
+    path: string,
+    status: number,
+    body?: unknown,
+  ): Promise<JsonObject> => {
+    const key = `"${Bun.randomUUIDv7()}"`;
+    const response = await retryOverloaded(() =>
+      fetch(new URL(path, origin), {
+        method,
+        headers: {
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(method === 'GET' ? {} : { 'idempotency-key': key }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    const text = await response.text();
+    const parsed = text ? objectBody(JSON.parse(text), name) : {};
+    if (response.status !== status) throw new Error(`${name} returned ${response.status}: ${text}`);
+    return parsed;
+  };
+  const idOf = (body: JsonObject, key: string): string => {
+    const id = objectBody(body[key], key).id;
+    if (typeof id !== 'string') throw new Error(`${key} has no id: ${JSON.stringify(body)}`);
+    return id;
+  };
+
+  // The gates that guard these pages are open in the recording, as they will be once the pages are reviewed.
+  for (const group of ['collections', 'personal_library', 'reading_progress'])
+    await call(`open ${group}`, tokens.me, 'POST', `/v1/platform/exposure/${group}:open`, 200);
+
+  const subjects: Record<string, string> = { prince: princeId };
+  for (const subject of librarySubjects)
+    subjects[subject.key] = idOf(
+      await call(`subject ${subject.key}`, tokens.me, 'POST', '/v1/subjects', 201, {
+        type: 'schema:Book',
+        labels: subject.labels,
+      }),
+      'subject',
+    );
+  const subject = (key: string): string => subjects[key] ?? '';
+
+  const states: [string, string][] = [
+    ['prince', 'completed'],
+    ['kokoro', 'in_progress'],
+    ['norwegian-wood', 'planned'],
+    ['genji', 'paused'],
+    ['cat', 'dropped'],
+  ];
+  for (const [key, state] of states)
+    await call(`entry ${key}`, tokens.me, 'PUT', `/v1/libraryEntries/${subject(key)}`, 201, { state });
+  // A second write moves one entry on, so the revisions differ.
+  await call('entry kokoro update', tokens.me, 'PUT', `/v1/libraryEntries/${subject('kokoro')}`, 200, {
+    state: 'in_progress',
+    revision: 1,
+  });
+
+  const shelf = idOf(
+    await call('public collection', tokens.me, 'POST', '/v1/collections', 201, {
+      title: 'Books I come back to',
+      description: 'Short novels I reread every few years, in the order I would hand them to a friend.',
+      visibility: 'public',
+    }),
+    'collection',
+  );
+  const members: Record<string, string> = {};
+  const noted: Record<string, string> = {
+    prince: 'Read it first as a child, and again whenever I need to be reminded what matters.',
+    kokoro: 'The letter in the third part is the reason this one stays on the shelf.',
+  };
+  for (const key of ['genji', 'prince', 'kokoro', 'snow-country'])
+    members[key] = idOf(
+      await call(`member ${key}`, tokens.me, 'POST', `/v1/collections/${shelf}/members`, 201, {
+        subjectId: subject(key),
+        ...(noted[key] ? { note: noted[key] } : {}),
+      }),
+      'member',
+    );
+  // Added last, moved to the front: the order is chosen, not the order of adding.
+  await call(
+    'move member',
+    tokens.me,
+    'POST',
+    `/v1/collections/${shelf}/members/${members['snow-country']}:move`,
+    200,
+    {
+      after: null,
+    },
+  );
+  await call('private collection', tokens.me, 'POST', '/v1/collections', 201, {
+    title: 'To read this winter',
+    description: null,
+    visibility: 'private',
+  }).then(async (created) => {
+    const id = idOf(created, 'collection');
+    for (const key of ['norwegian-wood', 'cat'])
+      await call(`private member ${key}`, tokens.me, 'POST', `/v1/collections/${id}/members`, 201, {
+        subjectId: subject(key),
+      });
+  });
+
+  await call('physical copy', tokens.me, 'POST', '/v1/copies', 201, {
+    subjectId: subject('prince'),
+    status: 'owned',
+    location: 'Hallway shelf, second row',
+    source: 'Kinokuniya Shinjuku',
+    acquiredOn: '2024-03-16',
+    note: 'Paperback with the original watercolours.',
+  });
+  await call('digital copy', tokens.me, 'POST', '/v1/copies', 201, {
+    subjectId: subject('kokoro'),
+    status: 'owned',
+    location: 'Kobo library, e-book',
+    source: 'Kobo',
+    acquiredOn: '2025-11-02',
+    note: 'EPUB, Meredith McKinney translation.',
+  });
+
+  const session = objectBody(
+    (
+      await call('progress session', tokens.me, 'POST', '/v1/progressSessions', 201, {
+        subjectId: subject('kokoro'),
+        mode: 'cursor_position',
+        unit: 'chapter',
+      })
+    ).progressSession,
+    'progress session',
+  );
+  const sessionId = session.id;
+  if (typeof sessionId !== 'string' || typeof session.revision !== 'number')
+    throw new Error(`Progress session is malformed: ${JSON.stringify(session)}`);
+  await call('progress record', tokens.me, 'POST', `/v1/progressSessions/${sessionId}:record`, 200, {
+    revision: session.revision,
+    locator: 'Part 2, chapter 14',
+    position: '42',
+  });
+  const log = idOf(
+    await call('published log', tokens.me, 'POST', '/v1/publishedLogs', 201, {
+      sessionId,
+      note: 'Halfway through. The summer chapters are slow and exact; I am reading them on the train.',
+    }),
+    'publishedLog',
+  );
+
+  const neighbour = idOf(
+    await call('second collection', tokens.other, 'POST', '/v1/collections', 201, {
+      title: 'Quiet novels for long evenings',
+      description: 'Books that reward a slow read.',
+      visibility: 'public',
+    }),
+    'collection',
+  );
+  await call('second member', tokens.other, 'POST', `/v1/collections/${neighbour}/members`, 201, {
+    subjectId: subject('snow-country'),
+  });
+  await call('follow collection', tokens.me, 'PUT', `/v1/follows/${neighbour}`, 200);
+
+  const recordedLibrary = new Map<string, JsonObject>();
+  const read = async (name: string, token: string | null, path: string) => {
+    const body = await call(name, token, 'GET', path, 200);
+    recordedLibrary.set(name, { ...body, status: 200 });
+    return body;
+  };
+  const page = 'view=FULL&limit=100';
+  await read('library-entries', tokens.me, `/v1/libraryEntries?${page}`);
+  await read('library-collections', tokens.me, `/v1/collections?${page}&curatorAccountId=${me}`);
+  await read('library-collection', null, `/v1/collections/${shelf}?view=FULL`);
+  await read('library-collection-members', null, `/v1/collections/${shelf}/members?${page}`);
+  await read('library-copies', tokens.me, `/v1/copies?${page}`);
+  await read('library-follows', tokens.me, `/v1/follows?${page}`);
+  await read('library-progress-sessions', tokens.me, `/v1/progressSessions?${page}&subjectId=${subject('kokoro')}`);
+  await read('library-progress-session', tokens.me, `/v1/progressSessions/${sessionId}?view=FULL`);
+  await read('library-progress-changes', tokens.me, `/v1/progressSessions/${sessionId}/changes?${page}`);
+  await read('library-progress-units', tokens.me, `/v1/progressSessions/${sessionId}/completedUnits?${page}`);
+  await read('library-published-log', null, `/v1/publishedLogs/${log}?view=FULL`);
+  await read('library-published-logs', tokens.me, `/v1/publishedLogs?${page}&accountId=${me}`);
+
+  const entries = recordedLibrary.get('library-entries')?.libraryEntries;
+  const shelfMembers = recordedLibrary.get('library-collection-members')?.members;
+  const shelfLabels = Array.isArray(shelfMembers)
+    ? shelfMembers.map((member) => objectBody(objectBody(member, 'member').subject, 'member subject').label)
+    : [];
+  if (!Array.isArray(entries) || entries.length !== 5)
+    throw new Error(`The library should hold five entries: ${JSON.stringify(entries)}`);
+  if (shelfLabels.join('|') !== 'Snow Country|The Tale of Genji|The Little Prince|Kokoro')
+    throw new Error(`The public collection is not in the chosen order: ${shelfLabels.join('|')}`);
+  const follows = recordedLibrary.get('library-follows')?.follows;
+  if (!Array.isArray(follows) || !follows.some((follow) => objectBody(follow, 'follow').targetId === neighbour))
+    throw new Error(`The followed collection is missing: ${JSON.stringify(follows)}`);
+  return recordedLibrary;
+}
+
 async function main(): Promise<void> {
   const kernelBase = '../../../services/kernel';
   const { startPostgresContainer } = await import(`${kernelBase}/scripts/check.ts`);
@@ -216,6 +537,15 @@ async function main(): Promise<void> {
       KERNEL_ROUTE_KEY: kernelRouteKey,
       KERNEL_SESSION_KEYS: `1:${sessionKey}`,
       KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
+      // Seeding a used library writes more than a new account's minute budget; the budget is a startup override.
+      KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify(
+        Object.fromEntries(
+          ['new-account', 'member', 'trusted'].map((rateClass) => [
+            rateClass,
+            { write: { maximum: 6000, seconds: 60 } },
+          ]),
+        ),
+      ),
       AUTH_ISSUER: issuer,
       AUTH_AUDIENCE: audience,
       AUTH_JWKS_URL: `${issuer}/jwks`,
@@ -253,15 +583,14 @@ async function main(): Promise<void> {
     es: 'El Principito',
   };
   const create = async (body: JsonObject, description: string): Promise<string> => {
-    const created = await fetch(`${origin}/v1/subjects`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
-      },
-      body: JSON.stringify(body),
-    });
+    const key = JSON.stringify(Bun.randomUUIDv7());
+    const created = await retryOverloaded(() =>
+      fetch(`${origin}/v1/subjects`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify(body),
+      }),
+    );
     const creation = (await created.json()) as { subject?: { id?: string } };
     const id = creation.subject?.id;
     if (created.status !== 201 || !id)
@@ -745,6 +1074,9 @@ async function main(): Promise<void> {
     if (read.status !== 200 || !Array.isArray(listed) || listed.length < 2)
       throw new Error(`Every home list needs status 200 and two subjects: ${JSON.stringify(homePage.reads)}`);
   }
+
+  for (const [name, body] of await recordLibrary({ origin, pool: database, accountId, subjectId }))
+    recorded.set(name, body);
 
   const output = join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });

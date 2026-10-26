@@ -84,7 +84,6 @@
   "library_copy_delete_question": "Supprimer cet exemplaire ?",
   "library_copy_disposed": "Cédé le",
   "library_copy_disposed_hint": "Le jour où vous avez laissé partir cet exemplaire.",
-  "library_copy_edit": "Modifier cet exemplaire",
   "library_copy_edition": "Édition",
   "library_copy_empty": "Vous n’avez pas encore d’exemplaire ici.",
   "library_copy_failure": "Cet exemplaire n’a pas pu être enregistré. Veuillez réessayer.",

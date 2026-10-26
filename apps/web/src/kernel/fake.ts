@@ -22,6 +22,18 @@ import searchEmptyRecording from './recorded/search-empty.json';
 import searchTypedRecording from './recorded/search-typed.json';
 import definitionsActiveRecording from './recorded/definitions-active.json';
 import definitionsReleaseRecording from './recorded/definitions-release.json';
+import libraryCollectionMembersRecording from './recorded/library-collection-members.json';
+import libraryCollectionRecording from './recorded/library-collection.json';
+import libraryCollectionsRecording from './recorded/library-collections.json';
+import libraryCopiesRecording from './recorded/library-copies.json';
+import libraryEntriesRecording from './recorded/library-entries.json';
+import libraryFollowsRecording from './recorded/library-follows.json';
+import libraryProgressChangesRecording from './recorded/library-progress-changes.json';
+import libraryProgressSessionRecording from './recorded/library-progress-session.json';
+import libraryProgressSessionsRecording from './recorded/library-progress-sessions.json';
+import libraryProgressUnitsRecording from './recorded/library-progress-units.json';
+import libraryPublishedLogRecording from './recorded/library-published-log.json';
+import libraryPublishedLogsRecording from './recorded/library-published-logs.json';
 
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
@@ -100,11 +112,53 @@ function filterType(filter: unknown): string | undefined {
   return undefined;
 }
 
+/** The account the story session signs in as. */
+export const storyViewerId = 'story-viewer';
+
+/** Library reads by path. The member, change and unit pages hang off their parent's recorded id. */
+function libraryRecording(
+  method: string,
+  pathname: string,
+  recordings: Record<string, KernelRecording>,
+): KernelRecording | undefined {
+  if (method !== 'GET') return undefined;
+  const lists: Record<string, string> = {
+    '/v1/libraryEntries': 'library-entries',
+    '/v1/collections': 'library-collections',
+    '/v1/copies': 'library-copies',
+    '/v1/follows': 'library-follows',
+    '/v1/progressSessions': 'library-progress-sessions',
+    '/v1/publishedLogs': 'library-published-logs',
+  };
+  const list = lists[pathname];
+  if (list) return recordings[list];
+  const collection = /^\/v1\/collections\/([^/]+)(\/members)?$/.exec(pathname);
+  if (
+    collection?.[1] &&
+    decodeURIComponent(collection[1]) === resourceId(recordings['library-collection'], 'collection')
+  )
+    return recordings[collection[2] ? 'library-collection-members' : 'library-collection'];
+  const session = /^\/v1\/progressSessions\/([^/]+)(?:\/(changes|completedUnits))?$/.exec(pathname);
+  if (
+    session?.[1] &&
+    decodeURIComponent(session[1]) === resourceId(recordings['library-progress-session'], 'progressSession')
+  ) {
+    if (session[2] === 'changes') return recordings['library-progress-changes'];
+    return recordings[session[2] ? 'library-progress-units' : 'library-progress-session'];
+  }
+  const log = /^\/v1\/publishedLogs\/([^/]+)$/.exec(pathname);
+  if (log?.[1] && decodeURIComponent(log[1]) === resourceId(recordings['library-published-log'], 'publishedLog'))
+    return recordings['library-published-log'];
+  return undefined;
+}
+
 async function selectRecording(
   request: Request,
   pathname: string,
   recordings: Record<string, KernelRecording>,
 ): Promise<KernelRecording | undefined> {
+  const library = libraryRecording(request.method, pathname, recordings);
+  if (library) return library;
   if (request.method === 'GET') {
     const subject = /^\/v1\/subjects\/([^/]+)$/.exec(pathname);
     if (subject?.[1]) {
@@ -153,6 +207,29 @@ export function createRecordedKernelFetch(recordings: Record<string, KernelRecor
   }) as typeof fetch;
 }
 
+/**
+ * The Library recordings, with the recorded account standing in for the signed-in story visitor. The owner pages
+ * (my collections, my logs, the owner's own collection) recognise the visitor by account id.
+ */
+function libraryStoryRecordings(): Record<string, KernelRecording> {
+  const recordings: Record<string, KernelRecording> = {
+    'library-collection-members': libraryCollectionMembersRecording,
+    'library-collection': libraryCollectionRecording,
+    'library-collections': libraryCollectionsRecording,
+    'library-copies': libraryCopiesRecording,
+    'library-entries': libraryEntriesRecording,
+    'library-follows': libraryFollowsRecording,
+    'library-progress-changes': libraryProgressChangesRecording,
+    'library-progress-session': libraryProgressSessionRecording,
+    'library-progress-sessions': libraryProgressSessionsRecording,
+    'library-progress-units': libraryProgressUnitsRecording,
+    'library-published-log': libraryPublishedLogRecording,
+    'library-published-logs': libraryPublishedLogsRecording,
+  };
+  const owner = libraryCollectionRecording.collection.curatorAccountId;
+  return JSON.parse(JSON.stringify(recordings).replaceAll(owner, storyViewerId)) as Record<string, KernelRecording>;
+}
+
 /** The browser-only Storybook kernel uses the checked-in responses for the real page routes. */
 export function createStoryRecordedKernelFetch(): typeof fetch {
   return createRecordedKernelFetch({
@@ -170,6 +247,7 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'search-typed': searchTypedRecording,
     'definitions-active': definitionsActiveRecording,
     'definitions-release': definitionsReleaseRecording,
+    ...libraryStoryRecordings(),
   });
 }
 

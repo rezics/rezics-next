@@ -245,7 +245,7 @@ function CopyArticle({
         <SubjectRef subject={copy.subject} />
       </p>
       <CopySummary copy={copy} />
-      <form aria-label={m.library_copy_edit()} className="space-y-4" onSubmit={save}>
+      <form className="space-y-4" onSubmit={save}>
         <StatusField value={status} onChange={setStatus} />
         <TextField label={m.library_copy_location()} value={location} onChange={setLocation} />
         <TextField label={m.library_copy_source()} value={source} onChange={setSource} />

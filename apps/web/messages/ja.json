@@ -84,7 +84,6 @@
   "library_copy_delete_question": "このコピーを削除しますか？",
   "library_copy_disposed": "手放した日",
   "library_copy_disposed_hint": "このコピーを手放した日です。",
-  "library_copy_edit": "このコピーを編集",
   "library_copy_edition": "版",
   "library_copy_empty": "ここにはまだコピーがありません。",
   "library_copy_failure": "このコピーを保存できませんでした。もう一度お試しください。",

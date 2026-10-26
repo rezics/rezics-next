@@ -84,7 +84,6 @@
   "library_copy_delete_question": "Delete this copy?",
   "library_copy_disposed": "Disposed on",
   "library_copy_disposed_hint": "The day you let this copy go.",
-  "library_copy_edit": "Edit this copy",
   "library_copy_edition": "Edition",
   "library_copy_empty": "You have no copies here yet.",
   "library_copy_failure": "This copy could not be saved. Please try again.",

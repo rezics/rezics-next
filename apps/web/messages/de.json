@@ -84,7 +84,6 @@
   "library_copy_delete_question": "Dieses Exemplar löschen?",
   "library_copy_disposed": "Abgegeben am",
   "library_copy_disposed_hint": "Der Tag, an dem Sie dieses Exemplar abgegeben haben.",
-  "library_copy_edit": "Dieses Exemplar bearbeiten",
   "library_copy_edition": "Ausgabe",
   "library_copy_empty": "Hier sind noch keine Exemplare.",
   "library_copy_failure": "Dieses Exemplar konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
