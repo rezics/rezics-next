@@ -308,7 +308,10 @@ const fake = Bun.serve({
 
     if (request.method === 'GET' && url.pathname === '/v1/copies') {
       const full = url.searchParams.get('view') === 'FULL';
-      const owned = copies.filter((copy) => copy.accountId === accountId);
+      const subjectId = url.searchParams.get('subjectId');
+      const owned = copies.filter(
+        (copy) => copy.accountId === accountId && (subjectId === null || copy.subjectId === subjectId),
+      );
       return json({ copies: owned.map((copy) => wire(copy, full)), next: null });
     }
     if (request.method === 'POST' && url.pathname === '/v1/copies') {
@@ -582,15 +585,14 @@ test(
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       expect(await main.innerText()).toContain('First copy');
       expect(await main.innerText()).toContain('Zebra story');
-      // The kernel does not accept a subject filter, so a subject URL pre-fills
-      // the add form while the list remains the viewer's unfiltered page.
-      expect(await main.innerText()).toContain('Waiting');
-      expect(await main.innerText()).toContain('Second shelf');
+      expect(await main.locator('article').count()).toBe(1);
+      expect(await main.innerText()).not.toContain('Waiting');
+      expect(await main.innerText()).not.toContain('Second shelf');
       expect(await main.getByRole('form', { name: 'Add a copy' }).getByLabel('Edition').inputValue()).toBe(edition);
-      const unfiltered = lists().at(-1);
-      expect(unfiltered?.view).toBe('FULL');
-      expect(unfiltered?.limit).toBe(pageLimit);
-      expect(new URLSearchParams(unfiltered?.search ?? '').has('subjectId')).toBe(false);
+      const filtered = lists().at(-1);
+      expect(filtered?.view).toBe('FULL');
+      expect(filtered?.limit).toBe(pageLimit);
+      expect(new URLSearchParams(filtered?.search ?? '').get('subjectId')).toBe(edition);
     } finally {
       await page.context().close();
     }
