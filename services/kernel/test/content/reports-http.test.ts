@@ -365,7 +365,7 @@ describe('real migrated report HTTP and shared admission', () => {
     const key = randomUUID();
     for (const botToken of [undefined, 'invalid-proof', 'provider-unavailable']) {
       const result = await call('POST', '/v1/reports', { ...input(), ...(botToken ? { botToken } : {}) }, { key });
-      expect(result.response.status).toBe(403);
+      expect(result.response.status).toBe(botToken === 'provider-unavailable' ? 503 : 403);
       expect(result.body.effect_status).toBe('not_applied');
       expect(result.body.reportId).toBeUndefined();
       expect(await effects()).toEqual(before);
