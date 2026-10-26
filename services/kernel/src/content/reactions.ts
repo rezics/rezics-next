@@ -18,7 +18,6 @@ import {
   mediaParentBoard,
   mediaParentSnapshot,
   prepareRealmParticipation,
-  realmParticipationCheckFor,
   realmParticipationMatches,
   type RealmParticipationProof,
 } from './media-parent.ts';
@@ -58,7 +57,7 @@ async function mutate(
     targetRoute = route(body.targetId);
   const partition = partitionOf(home);
   const resource = { route: targetRoute, id: body.targetId };
-  const realmParticipation = deps.realmParticipation ?? realmParticipationCheckFor(deps.access);
+  const realmParticipation = deps.realmParticipation;
   let targetBoardId: string | undefined;
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let checks: AccessCheck[] = [];
@@ -169,7 +168,14 @@ async function mutate(
         boardRealmId = (await mediaParentBoard(client, boardId)).realm_id;
       });
       if (realmParticipation) {
-        const proof = await prepareRealmParticipation(deps.pool, realmParticipation, actor, boardRealmId, attempt.time);
+        const proof = await prepareRealmParticipation(
+          deps.pool,
+          realmParticipation,
+          actor,
+          boardRealmId,
+          attempt.time,
+          context.deadline,
+        );
         if (!proof.allowed) throw new GrantDeniedError();
         participation.set(attempt.time, proof);
       }

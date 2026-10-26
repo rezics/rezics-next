@@ -23,7 +23,6 @@ import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
-import { installRealmParticipationCheck, withRealmIndexedReads } from '../content/media-parent.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
@@ -87,9 +86,7 @@ function realmAwareContentAccess(access: Access): Access {
     authenticate: access.authenticate.bind(access),
     ...(access.replayAuthorization ? { replayAuthorization: access.replayAuthorization.bind(access) } : {}),
     async prepare(actor, action, resource, context) {
-      const primary = access.prepare
-        ? await withRealmIndexedReads(context.pool, () => access.prepare!(actor, action, resource, context))
-        : undefined;
+      const primary = access.prepare ? await access.prepare(actor, action, resource, context) : undefined;
       if (action !== 'thread:read' && action !== 'post:read') return primary;
 
       const statement = action === 'thread:read' ? threadRealmRead : postRealmRead;
@@ -118,9 +115,7 @@ function realmAwareContentAccess(access: Access): Access {
           };
           realmResource = preparedResource;
           realmEvidence = access.prepare
-            ? await withRealmIndexedReads(context.pool, () =>
-                access.prepare!(actor, 'realm:read', preparedResource, context),
-              )
+            ? await access.prepare(actor, 'realm:read', preparedResource, context)
             : undefined;
         }
       }
@@ -138,8 +133,6 @@ function realmAwareContentAccess(access: Access): Access {
       return proof;
     },
     async authorize(client, actor, action, resource, evidence, time) {
-      await client.query('SET LOCAL enable_seqscan = off');
-      await client.query('SET LOCAL plan_cache_mode = force_custom_plan');
       const proof = typeof evidence === 'object' && evidence !== null ? proofs.get(evidence) : undefined;
       if (!proof) return access.authorize(client, actor, action, resource, evidence, time);
       if (
@@ -186,23 +179,7 @@ export function createKernel(dependencies: KernelDependencies) {
       if (!access) throw new Error('Realm membership role reader is not installed');
       realmMembership = createRealmMembership({ pool: dependencies.pool, access, referenceKeys: tokens, clock });
     }
-    return (async () => {
-      await client.query('BEGIN READ ONLY');
-      try {
-        await client.query('SET LOCAL enable_seqscan = off');
-        await client.query('SET LOCAL plan_cache_mode = force_custom_plan');
-        const result = await realmMembership!.roleReader(client, input);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original Realm role read failure.
-        }
-        throw error;
-      }
-    })();
+    return realmMembership.roleReader(client, input);
   };
   const resolveAccess = (config: AccessConfig) =>
     (access ??= typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock }) : factory);
@@ -283,10 +260,8 @@ export function createKernel(dependencies: KernelDependencies) {
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
     realmParticipation: checkRealmParticipation,
     get access() {
-      if (!contentAccess) {
+      if (!contentAccess)
         contentAccess = realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(content), realmRoleReader }));
-        installRealmParticipationCheck(contentAccess, checkRealmParticipation);
-      }
       return contentAccess;
     },
   });
@@ -356,13 +331,6 @@ export function createKernel(dependencies: KernelDependencies) {
     }
   }
   assertDeclaredResourceTypes(collections);
-  collections.wrap((fetch) => async (request, ...rest) => {
-    const path = new URL(request.url).pathname;
-    const contentRequest =
-      /^\/v1\/(?:threads|posts|boards|media)(?:\/|$)/.test(path) || /^\/v1\/realms\/[^/]+\/boards(?:\/|$)/.test(path);
-    if (!contentRequest) return fetch(request, ...rest);
-    return withRealmIndexedReads(dependencies.pool, async () => await fetch(request, ...rest));
-  });
   return collections as typeof collections &
     typeof personal &
     typeof community &

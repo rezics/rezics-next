@@ -1,8 +1,6 @@
 import type { Pool } from 'pg';
-import type { PoolClient } from 'pg';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AuthoritativeTime } from '../command/command.ts';
-import type { Access, AccessClient } from '../request/access.ts';
+import type { AccessClient } from '../request/access.ts';
 import type { Actor } from '../request/access.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -23,107 +21,6 @@ export type MediaParent = {
   availability: string;
 };
 export type RealmParticipationProof = Readonly<{ realmId: string | null; allowed: boolean }>;
-const realmParticipationChecks = new WeakMap<Access, RealmParticipationCheck>();
-type PoolConnectCallback = (
-  error: Error | undefined,
-  client: PoolClient | undefined,
-  release: (error?: Error) => void,
-) => void;
-const indexedPools = new AsyncLocalStorage<Pool>();
-const installedIndexedPools = new WeakSet<Pool>();
-
-function installIndexedPool(pool: Pool): void {
-  if (installedIndexedPools.has(pool)) return;
-  installedIndexedPools.add(pool);
-  const connect = pool.connect.bind(pool) as Pool['connect'];
-  const configure = (client: PoolClient, release: (error?: Error) => void) => {
-    let returned = false;
-    const releaseWithReset = (error?: Error) => {
-      if (returned) return;
-      returned = true;
-      if (error) {
-        release(error);
-        return;
-      }
-      client.query('RESET enable_seqscan; RESET plan_cache_mode', (resetError) => release(resetError ?? undefined));
-    };
-    client.release = releaseWithReset;
-    return releaseWithReset;
-  };
-  (pool as Pool & { connect: Pool['connect'] }).connect = ((callback?: PoolConnectCallback) => {
-    if (indexedPools.getStore() !== pool) return connect(callback as never);
-    if (callback) {
-      return connect(((error: Error | undefined, client: PoolClient | undefined, release: (error?: Error) => void) => {
-        if (error || !client) {
-          callback(error, client, release);
-          return;
-        }
-        client.query(
-          'SET enable_seqscan = off; SET plan_cache_mode = force_custom_plan',
-          (settingError: Error | undefined) => {
-            if (settingError) {
-              release(settingError);
-              callback(settingError, undefined, release);
-              return;
-            }
-            callback(undefined, client, configure(client, release));
-          },
-        );
-      }) as never);
-    }
-    return (connect() as Promise<PoolClient>).then(
-      (client) =>
-        new Promise<PoolClient>((resolve, reject) => {
-          client.query('SET enable_seqscan = off; SET plan_cache_mode = force_custom_plan', (error) => {
-            if (error) {
-              client.release(error);
-              reject(error);
-              return;
-            }
-            configure(client, client.release.bind(client));
-            resolve(client);
-          });
-        }),
-    );
-  }) as Pool['connect'];
-}
-
-export function withRealmIndexedReads<T>(pool: Pool, work: () => Promise<T>): Promise<T> {
-  installIndexedPool(pool);
-  return indexedPools.run(pool, work);
-}
-
-function indexedAccessClient(pool: Pool): AccessClient {
-  return {
-    query: (async (...args: unknown[]) =>
-      withConnection(pool, async (client) => {
-        await client.query('BEGIN READ ONLY');
-        try {
-          await client.query('SET LOCAL enable_seqscan = off');
-          await client.query('SET LOCAL plan_cache_mode = force_custom_plan');
-          const result = await (client.query as (...query: unknown[]) => Promise<unknown>)(...args);
-          await client.query('COMMIT');
-          return result;
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      })) as AccessClient['query'],
-  };
-}
-
-export function installRealmParticipationCheck(access: Access, check: RealmParticipationCheck): void {
-  realmParticipationChecks.set(access, check);
-}
-
-export function realmParticipationCheckFor(access: Access): RealmParticipationCheck | undefined {
-  return realmParticipationChecks.get(access);
-}
-
 /** Prepare the Realm action before checking out the content anchor. The anchor
  * compares this T-bound result with its current board relationship. */
 export async function prepareRealmParticipation(
@@ -132,10 +29,18 @@ export async function prepareRealmParticipation(
   actor: Actor,
   realmId: string | null,
   time: AuthoritativeTime,
+  deadline: number,
 ): Promise<RealmParticipationProof> {
   if (realmId === null || !check) return { realmId, allowed: true };
-  const allowed = await withRealmIndexedReads(pool, () => check(indexedAccessClient(pool), { realmId, actor }, time));
-  return { realmId, allowed };
+  return within(deadline, async () => {
+    const client = await pool.connect();
+    try {
+      const allowed = await check(deadlineClient(client, deadline), { realmId, actor }, time);
+      return { realmId, allowed };
+    } finally {
+      client.release();
+    }
+  });
 }
 
 export function realmParticipationMatches(proof: RealmParticipationProof | undefined, realmId: string | null): boolean {

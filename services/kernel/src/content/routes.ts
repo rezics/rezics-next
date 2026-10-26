@@ -808,6 +808,7 @@ async function writeReaction(
   const deps = {
     pool: dependencies.pool,
     access: dependencies.access,
+    ...(dependencies.realmParticipation === undefined ? {} : { realmParticipation: dependencies.realmParticipation }),
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
   };
   const target = { targetKind, targetId };

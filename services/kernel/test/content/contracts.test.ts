@@ -6,6 +6,7 @@ import type { Effect } from '../../src/events/effects.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import type { Partition } from '../../src/partition/partition.ts';
 import type { Access, Actor, Resource } from '../../src/request/access.ts';
+import type { RealmParticipationCheck } from '../../src/community/participation.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import * as commands from '../../src/content/commands.ts';
 import * as reads from '../../src/content/reads.ts';
@@ -302,7 +303,13 @@ function publishedModels(): void {
   same<
     Equal<
       commands.ContentCommandDependencies,
-      Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
+      Readonly<{
+        pool: Pool;
+        access: Access;
+        routeKey: Uint8Array;
+        realmParticipation?: RealmParticipationCheck;
+        clock?: () => Date;
+      }>
     >
   >();
   same<
@@ -311,7 +318,13 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaDependencies,
-      Readonly<{ pool: Pool; access: Access; clock?: () => Date; downloadContext?: DownloadContext }>
+      Readonly<{
+        pool: Pool;
+        access: Access;
+        realmParticipation?: RealmParticipationCheck;
+        clock?: () => Date;
+        downloadContext?: DownloadContext;
+      }>
     >
   >();
   same<Equal<model.ContentCommandValue, Ids>>();

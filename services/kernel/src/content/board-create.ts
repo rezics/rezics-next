@@ -190,6 +190,7 @@ export async function createBoard(
           actor,
           input.realmId,
           attempt.time,
+          context.deadline,
         );
         if (!proof.allowed) throw new GrantDeniedError();
         participation.set(attempt.time, proof);

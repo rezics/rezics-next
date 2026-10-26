@@ -328,6 +328,7 @@ export async function reserveMedia(
             actor,
             current.realm_id,
             attempt.time,
+            context.deadline,
           );
           if (!proof.allowed) throw new GrantDeniedError();
           participation.set(attempt.time, proof);
@@ -377,6 +378,7 @@ export async function reserveMedia(
           actor,
           boardRealmId,
           attempt.time,
+          context.deadline,
         );
         if (!proof.allowed) throw new GrantDeniedError();
         participation.set(attempt.time, proof);

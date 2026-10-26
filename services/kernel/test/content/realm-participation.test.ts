@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
@@ -581,6 +582,8 @@ test.serial('a content write has constant participation cost as unrelated Realms
   const route = routeOf(publicBoard.id)!;
   const growthRoute = route;
   const syntheticAccount = newId(growthRoute);
+  const emptyBody = new Uint8Array();
+  const emptyBodyHash = new Uint8Array(createHash('sha256').update(emptyBody).digest());
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
      VALUES ($1,$2,'actor','active',$3,true)`,
@@ -595,6 +598,9 @@ test.serial('a content write has constant participation cost as unrelated Realms
       const spaceRevisionId = newId(growthRoute);
       const realmId = newId(growthRoute);
       const realmRevisionId = newId(growthRoute);
+      const threadId = newId(growthRoute);
+      const postId = newId(growthRoute);
+      const revisionId = newId(growthRoute);
       const reservationId = newId(growthRoute);
       const transactionId = newId(growthRoute);
       const at = '2020-01-01T00:00:00.000Z';
@@ -618,6 +624,18 @@ test.serial('a content write has constant participation cost as unrelated Realms
             subject_id: realmId,
             subject_role: 'member',
             grant_role: 'community.realm.member',
+            valid: '[2020-01-01 00:00:00+00,infinity)',
+            transaction_id: transactionId,
+          },
+        ],
+        'access.resource_grant': [
+          {
+            route: growthRoute,
+            resource_id: realmId,
+            subject_kind: 'identity',
+            subject_id: syntheticAccount,
+            subject_role: '',
+            action: 'realm:read',
             valid: '[2020-01-01 00:00:00+00,infinity)',
             transaction_id: transactionId,
           },
@@ -701,6 +719,54 @@ test.serial('a content write has constant participation cost as unrelated Realms
             reason: 'Neighbour ban',
             actor: syntheticAccount,
             transaction_id: transactionId,
+          },
+        ],
+        'content.thread': [
+          {
+            route: growthRoute,
+            thread_id: threadId,
+            author_account_id: syntheticAccount,
+            board_id: publicBoard.id,
+            title: `Neighbour thread ${ordinal}`,
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: transactionId,
+            created_at: at,
+            first_post_id: postId,
+            availability: 'available',
+          },
+        ],
+        'content.post': [
+          {
+            route: growthRoute,
+            thread_id: threadId,
+            post_id: postId,
+            reply_to_post_id: null,
+            author_account_id: syntheticAccount,
+            head_revision_id: revisionId,
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: transactionId,
+            created_at: at,
+            availability: 'available',
+          },
+        ],
+        'content.revision': [
+          {
+            route: growthRoute,
+            thread_id: threadId,
+            post_id: postId,
+            revision_id: revisionId,
+            body: emptyBody,
+            body_sha256: emptyBodyHash,
+            search_text: '',
+            licence: 'MIT',
+            subject_ids: [],
+            board_id: publicBoard.id,
+            availability: 'available',
+            recorded_transaction_id: transactionId,
+            recorded_at: at,
+            media_ids: [],
           },
         ],
       };

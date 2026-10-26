@@ -316,6 +316,7 @@ function containerAuthorization(
               actor,
               board.realm_id,
               attempt.time,
+              context.deadline,
             );
             if (!proof.allowed) throw new ContentForbiddenError();
             participation.set(attempt.time, proof);
@@ -482,6 +483,7 @@ export async function createThread(
           actor,
           current.realm_id,
           attempt.time,
+          context.deadline,
         );
         if (!proof.allowed) throw new ContentForbiddenError();
         participation.set(attempt.time, proof);
