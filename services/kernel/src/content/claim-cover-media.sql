@@ -2,7 +2,8 @@
 -- The helper rejects a partial result, rolling back every claim with the failed command.
 UPDATE content.media AS media
 SET claimed_at = COALESCE(media.claimed_at, :at::timestamptz)
-WHERE media.route = :route::integer AND media.media_id = ANY (:media_ids::uuid[])
+FROM unnest(:media_ids::uuid[]) AS requested(media_id)
+WHERE media.route = :route::integer AND media.media_id = requested.media_id
   AND media.uploader_id = :uploader_id::uuid AND media.container_id = :container_id::uuid
   AND media.purpose = 'cover' AND media.state = 'available'
   AND NOT media.erased AND NOT media.collection_pending AND NOT media.taken_down

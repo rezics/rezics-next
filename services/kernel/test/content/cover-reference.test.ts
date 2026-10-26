@@ -384,6 +384,9 @@ test('intentional cover claim batch growth is linear in changed rows and input b
     async operation(database, scale) {
       const mediaIds = ids.slice(0, batchSize(scale));
       await runCommand(database.pool, commandOptions, async (tx) => {
+        // Keep the named claim statement on the generic-plan path, independent of
+        // which pooled connection receives a measured run.
+        await tx.query("SET LOCAL plan_cache_mode = 'force_generic_plan'");
         await claimCoverMedia(tx, { ...claimInput(mediaIds[0]!), mediaIds });
         return { value: null, events: [claimEvent] };
       });
@@ -391,9 +394,12 @@ test('intentional cover claim batch growth is linear in changed rows and input b
   });
   expect(inputBytes[2]! - inputBytes[1]!).toBe(4 * (inputBytes[1]! - inputBytes[0]!));
   for (const sample of report.samples) {
-    const mediaRows = sample.cost.relations?.['content.media']?.rows;
+    const media = sample.cost.relations?.['content.media'];
+    const mediaRows = media?.rows;
     expect(mediaRows).toBeGreaterThanOrEqual(batchSize(sample.scale));
     expect(mediaRows).toBeLessThanOrEqual(2 * batchSize(sample.scale));
+    expect(media?.sequentialScans).toBe(0);
+    expect(media?.blocks).toBeLessThanOrEqual(16 + 24 * batchSize(sample.scale));
     expect(sample.cost.blocks).toBeGreaterThan(0);
   }
   expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
