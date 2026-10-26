@@ -1575,23 +1575,23 @@ test.serial(
   'Membership change stays within its bound as m grows',
   async () => {
     const partition = 1545;
+    // Keep the authorization resource and authority fixed across scales.
+    // Every warm-up and capture still performs a fresh native membership write.
+    const owner = await createActor(partition, 'growth_membership_owner');
+    const organizationId = await organization(owner.accountId, partition);
     const anchors: {
-      owner: Awaited<ReturnType<typeof createActor>>;
       member: Awaited<ReturnType<typeof createActor>>;
-      organizationId: string;
       reservationId: string;
     }[] = [];
     for (let index = 0; index < operationsPerCheck; index++) {
-      const owner = await createActor(partition, `growth_membership_owner_${index}`);
       const member = await createActor(partition, `growth_membership_member_${index}`);
-      const organizationId = await organization(owner.accountId, partition);
       const hold = await internal.reserveCoordination({
         accountId: member.accountId,
         relatedAccountId: organizationId,
         purpose: 'membership',
         key: `growth-membership-hold-${index}`,
       });
-      anchors.push({ owner, member, organizationId, reservationId: hold.value.reservationId });
+      anchors.push({ member, reservationId: hold.value.reservationId });
     }
     const commands = createLifecycleCommands({ pool: db.pool, access });
     const population = membershipPopulation('growth-access-membership-change', partition);
@@ -1599,8 +1599,8 @@ test.serial(
       population,
       async (_growthDb, _scale, repetition) => {
         const target = anchors[repetition]!;
-        return commands.setMembership(contextFor(target.owner.accountId, target.owner.account), {
-          organizationId: target.organizationId,
+        return commands.setMembership(contextFor(owner.accountId, owner.account), {
+          organizationId,
           memberAccountId: target.member.accountId,
           reservationId: target.reservationId,
           role: 'member',
