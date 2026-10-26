@@ -1,6 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import sharp, { type SharpInput, type SharpOptions } from 'sharp';
+import { rgbaToThumbHash, thumbHashToAverageRGBA } from 'thumbhash';
 
 const realSharp = sharp;
 
@@ -105,6 +106,55 @@ test('EXIF 6 rotates pixels and source dimensions before selecting sanitized wid
 
 test('tiny inputs produce two sanitized source-width derivatives without upscaling', async () => {
   await assertOutputs(await source(127, 61), 127, 61, [127]);
+});
+
+test('the fitted RGBA image produces a deterministic ThumbHash and matching average colour', async () => {
+  const input = await source(1200, 800, 6);
+  const decoded = await realSharp(input, { limitInputPixels: 40_000_000, failOn: 'warning', autoOrient: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const pixels = await realSharp(decoded.data, {
+    limitInputPixels: 40_000_000,
+    failOn: 'warning',
+    raw: {
+      width: decoded.info.width,
+      height: decoded.info.height,
+      channels: decoded.info.channels,
+    },
+  })
+    .resize({ width: 100, height: 100, fit: 'inside' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const expectedHash = rgbaToThumbHash(pixels.info.width, pixels.info.height, pixels.data);
+  const average = thumbHashToAverageRGBA(expectedHash);
+  const expectedColor = `#${[average.r, average.g, average.b]
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+
+  const first = await transformImage(input);
+  const second = await transformImage(input);
+  const firstWithMetadata = first as typeof first & { thumbhash: Uint8Array; averageColor: string };
+  const secondWithMetadata = second as typeof second & { thumbhash: Uint8Array; averageColor: string };
+
+  expect(firstWithMetadata).toMatchObject({
+    width: 800,
+    height: 1200,
+    thumbhash: expectedHash,
+    averageColor: expectedColor,
+  });
+  expect([pixels.info.width, pixels.info.height]).toEqual([67, 100]);
+  expect(firstWithMetadata.thumbhash.byteLength).toBeLessThanOrEqual(32);
+  expect(firstWithMetadata.averageColor).toMatch(/^#[0-9a-f]{6}$/);
+  expect(secondWithMetadata.thumbhash).toEqual(firstWithMetadata.thumbhash);
+  expect(secondWithMetadata.averageColor).toBe(firstWithMetadata.averageColor);
+  expect(second.variants.map(({ format, width, sha256 }) => [format, width, sha256])).toEqual(
+    first.variants.map(({ format, width, sha256 }) => [format, width, sha256]),
+  );
 });
 
 test('overpixel, truncated intact-header and malformed bytes reject before derivative work', async () => {

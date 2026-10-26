@@ -6,7 +6,7 @@ import type { MediaId } from './model.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaVariant } from './media.ts';
 import type { MediaEventData } from './media-events.ts';
-import { ImageDecodeRejection, transformImage } from './image-transform.ts';
+import { ImageDecodeRejection, transformImage, type TransformedImage } from './image-transform.ts';
 import lockMedia from './lock-media.sql';
 import finishImage from './finish-image.sql';
 
@@ -103,6 +103,7 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
       if (bytes === null) throw new Error('Uploaded image is not present in storage');
       let rejection: string | null = null;
       let variants: MediaVariant[] = [];
+      let transformed: TransformedImage | undefined;
       if (
         bytes.byteLength > 20 * 1024 * 1024 ||
         bytes.byteLength !== Number(media.actual_byte_count) ||
@@ -110,7 +111,6 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
       ) {
         rejection = 'source-integrity';
       } else {
-        let transformed;
         try {
           transformed = await transformImage(bytes);
         } catch (error) {
@@ -149,6 +149,10 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
         state,
         decision: rejection === null ? null : `${rejection}:${transactionId}`,
         transaction_id: transactionId,
+        width: transformed?.width ?? null,
+        height: transformed?.height ?? null,
+        thumbhash: transformed ? Buffer.from(transformed.thumbhash) : null,
+        average_color: transformed?.averageColor ?? null,
         variants,
       });
       if (changed.length !== 1) throw new Error('Image transition lost its locked source');

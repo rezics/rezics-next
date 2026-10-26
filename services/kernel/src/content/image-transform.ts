@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import sharp, { type OutputInfo } from 'sharp';
+import { rgbaToThumbHash, thumbHashToAverageRGBA } from 'thumbhash';
 
 export interface ImageVariant {
   format: 'avif' | 'webp';
@@ -15,6 +16,8 @@ export interface TransformedImage {
   /** Source dimensions after applying EXIF orientation. */
   width: number;
   height: number;
+  thumbhash: Uint8Array;
+  averageColor: string;
   variants: ImageVariant[];
 }
 
@@ -30,6 +33,14 @@ export class ImageDecodeRejection extends Error {
 
 const inputOptions = { limitInputPixels: 40_000_000, failOn: 'warning' } as const;
 const widths = [320, 640, 960, 1280, 1920, 2560] as const;
+
+type DecodedPixels = { data: Buffer; info: OutputInfo };
+
+/** Start each derivative from the single oriented decode; a future crop belongs before the output resize. */
+function decodedImage(decoded: DecodedPixels) {
+  const { width, height, channels } = decoded.info;
+  return sharp(decoded.data, { ...inputOptions, raw: { width, height, channels } });
+}
 
 function isDecodeFailure(error: unknown): error is Error {
   if (!(error instanceof Error)) return false;
@@ -60,17 +71,28 @@ export async function transformImage(bytes: Uint8Array): Promise<TransformedImag
     throw error;
   }
 
-  const { width, height, channels } = decoded.info;
+  const { width, height } = decoded.info;
   const selectedWidths = width < widths[0] ? [width] : widths.filter((size) => size <= width);
+  const placeholder = await decodedImage(decoded)
+    .resize({ width: 100, height: 100, fit: 'inside' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const thumbhash = rgbaToThumbHash(placeholder.info.width, placeholder.info.height, placeholder.data);
+  const average = thumbHashToAverageRGBA(thumbhash);
+  const averageColor = `#${[average.r, average.g, average.b]
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
   const variants: ImageVariant[] = [];
   // Sequential work bounds encoder memory and ensures no transformation remains
   // active when this function resolves or rejects.
   for (const size of selectedWidths) {
     for (const format of ['avif', 'webp'] as const) {
-      const { data, info } = await sharp(decoded.data, {
-        ...inputOptions,
-        raw: { width, height, channels },
-      })
+      const { data, info } = await decodedImage(decoded)
         .resize({ width: size, withoutEnlargement: true })
         .toFormat(format)
         .toBuffer({ resolveWithObject: true });
@@ -85,5 +107,5 @@ export async function transformImage(bytes: Uint8Array): Promise<TransformedImag
       });
     }
   }
-  return { width, height, variants };
+  return { width, height, thumbhash, averageColor, variants };
 }

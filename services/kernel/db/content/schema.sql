@@ -481,6 +481,10 @@ CREATE TABLE content.media (
     provenance jsonb,
     taken_down boolean DEFAULT false NOT NULL,
     security_revision bigint DEFAULT 0 NOT NULL,
+    width integer,
+    height integer,
+    thumbhash bytea,
+    average_color text,
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
     CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
     CONSTRAINT media_check CHECK ((route = ((get_byte(uuid_send(media_id), 10) * 256) + get_byte(uuid_send(media_id), 11)))),
@@ -848,6 +852,14 @@ ALTER TABLE ONLY content.board_thread
 
 ALTER TABLE ONLY content.imported_field
     ADD CONSTRAINT imported_field_pkey PRIMARY KEY (route, id);
+
+
+--
+-- Name: media media_image_display_metadata_check; Type: CHECK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE content.media
+    ADD CONSTRAINT media_image_display_metadata_check CHECK (((purpose <> 'cover'::text) OR (state <> 'available'::text) OR ((width IS NOT NULL) AND (width > 0) AND (height IS NOT NULL) AND (height > 0) AND (thumbhash IS NOT NULL) AND (octet_length(thumbhash) <= 32) AND (average_color IS NOT NULL) AND (average_color ~ '^#[0-9a-f]{6}$'::text)))) NOT VALID;
 
 
 --

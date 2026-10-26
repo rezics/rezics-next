@@ -2,6 +2,7 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import sharp, { type SharpInput, type SharpOptions } from 'sharp';
+import { thumbHashToAverageRGBA } from 'thumbhash';
 import { Value } from 'typebox/value';
 import { createPool } from '../../src/database/pool.ts';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
@@ -133,7 +134,21 @@ async function assertOutputs(bytes: Uint8Array, width: number, height: number, w
     sha256: hash(bytes),
     decision: null,
     collection_pending: false,
+    width,
+    height,
   });
+  expect(snapshot.media.thumbhash).toBeInstanceOf(Buffer);
+  expect(snapshot.media.thumbhash.byteLength).toBeLessThanOrEqual(32);
+  expect(snapshot.media.average_color).toMatch(/^#[0-9a-f]{6}$/);
+  const average = thumbHashToAverageRGBA(snapshot.media.thumbhash);
+  const expectedColor = `#${[average.r, average.g, average.b]
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+  expect(snapshot.media.average_color).toBe(expectedColor);
   expect(snapshot.variants).toHaveLength(widths.length * 2);
   expect(result.variants.map((variant) => `${variant.format}:${variant.width}`).sort()).toEqual(
     widths.flatMap((size) => [`avif:${size}`, `webp:${size}`]).sort(),
@@ -196,10 +211,64 @@ async function assertOutputs(bytes: Uint8Array, width: number, height: number, w
   ]);
   expect(snapshot.events[0].epoch).toBe(position.rows[0].epoch);
   expect(snapshot.events[0].position).toBe(position.rows[0].position);
-  const writes = [...fixture.store.writes];
+  const publishedMetadata = {
+    width: snapshot.media.width,
+    height: snapshot.media.height,
+    thumbhash: snapshot.media.thumbhash,
+    average_color: snapshot.media.average_color,
+    keys: result.variants.map(({ key }) => key),
+  };
+  await admin.query(
+    `UPDATE content.media SET purpose='cover', source_url='https://source.example.test/cover',
+       credit='{"rightsHolder":"Test artist","via":{"name":"Source","url":"https://source.example.test"},"license":"CC0-1.0","obligations":[]}'::jsonb,
+       provenance='{"source":"test","external_id":"cover-1","record_revision":"1","digest":"0000000000000000000000000000000000000000000000000000000000000000","converter_revision":"1","field_group":"cover","references":[{"url":"https://source.example.test/cover"}]}'::jsonb
+     WHERE route=$1 AND media_id=$2`,
+    [fixture.route, fixture.id],
+  );
+  await expect(
+    admin.query('UPDATE content.media SET average_color=NULL WHERE route=$1 AND media_id=$2', [
+      fixture.route,
+      fixture.id,
+    ]),
+  ).rejects.toMatchObject({
+    code: '23514',
+    constraint: 'media_image_display_metadata_check',
+  });
+  await admin.query('DELETE FROM content.media_variant WHERE route=$1 AND media_id=$2', [fixture.route, fixture.id]);
+  await admin.query(
+    `UPDATE content.media SET state='uploaded', width=NULL, height=NULL, thumbhash=NULL, average_color=NULL
+     WHERE route=$1 AND media_id=$2`,
+    [fixture.route, fixture.id],
+  );
+  const reprocessed = await processImage(pool, fixture.store, fixture.id);
+  expect(reprocessed.state).toBe('available');
+  const repeated = await inspect(fixture);
+  expect({
+    width: repeated.media.width,
+    height: repeated.media.height,
+    thumbhash: repeated.media.thumbhash,
+    average_color: repeated.media.average_color,
+    keys: reprocessed.variants.map(({ key }) => key),
+  }).toEqual(publishedMetadata);
+  expect(
+    repeated.variants.map(({ format, width: variantWidth, sha256: variantHash, key }) => [
+      format,
+      variantWidth,
+      variantHash,
+      key,
+    ]),
+  ).toEqual(
+    snapshot.variants.map(({ format, width: variantWidth, sha256: variantHash, key }) => [
+      format,
+      variantWidth,
+      variantHash,
+      key,
+    ]),
+  );
+  const writesAfterReprocessing = [...fixture.store.writes];
   expect((await processImage(pool, fixture.store, fixture.id)).state).toBe('already_terminal');
-  expect(await inspect(fixture)).toEqual(snapshot);
-  expect(fixture.store.writes).toEqual(writes);
+  expect(await inspect(fixture)).toEqual(repeated);
+  expect(fixture.store.writes).toEqual(writesAfterReprocessing);
 }
 
 test('real Sharp emits exact AVIF WebP width ladder with orientation and metadata removal', async () => {
