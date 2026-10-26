@@ -68,25 +68,9 @@ export function subjectPageTitle(page: SubjectPageData, locale: string): string 
   return read ? pageText(read.subject.labels, locale).text : '';
 }
 
-/** The template document, then schema.org JSON-LD when the subject read succeeded. */
-export function SubjectPage({
-  page,
-  locale,
-  messages,
-  link,
-  actions,
-  nonce,
-}: {
-  page: SubjectPageData;
-  locale: string;
-  messages: PageMessages;
-  link?: ComponentProps<typeof PageData>['link'];
-  actions?: (subject: SubjectActionsInput) => ReactNode;
-  nonce?: string;
-}) {
+export function subjectPageJsonLd(page: SubjectPageData, locale: string): string | undefined {
   const read = subjectBody(page);
-  const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
-  const jsonLd = read
+  return read
     ? serializeJsonLd(
         subjectJsonLd({
           subject: read.subject,
@@ -96,6 +80,29 @@ export function SubjectPage({
         }),
       )
     : undefined;
+}
+
+/** The template document, then schema.org JSON-LD when the subject read succeeded. */
+export function SubjectPage({
+  page,
+  locale,
+  messages,
+  link,
+  actions,
+  nonce,
+  renderJsonLd = true,
+}: {
+  page: SubjectPageData;
+  locale: string;
+  messages: PageMessages;
+  link?: ComponentProps<typeof PageData>['link'];
+  actions?: (subject: SubjectActionsInput) => ReactNode;
+  nonce?: string;
+  renderJsonLd?: boolean;
+}) {
+  const read = subjectBody(page);
+  const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
+  const jsonLd = subjectPageJsonLd(page, locale);
   return (
     <>
       <PageHost actions={renderedActions}>
@@ -115,7 +122,7 @@ export function SubjectPage({
           />
         </PageData>
       </PageHost>
-      {jsonLd !== undefined && (
+      {renderJsonLd && jsonLd !== undefined && (
         <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: jsonLd }} />
       )}
     </>

@@ -22,6 +22,10 @@ export type RoutePageData = {
 
 export type RoutePageLoad = { kind: 'missing' } | { kind: 'page'; page: RoutePageData };
 
+export function routePageJsonLd(page: RoutePageData, locale: string): string | undefined {
+  return page.route === '/' ? serializeJsonLd(homeJsonLd({ origin: 'https://rezics.com', locale })) : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -52,6 +56,7 @@ export function RoutePage({
   messages,
   link,
   nonce,
+  renderJsonLd = true,
 }: {
   page: RoutePageData;
   locale: string;
@@ -59,8 +64,9 @@ export function RoutePage({
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
   nonce?: string;
+  renderJsonLd?: boolean;
 }) {
-  const jsonLd = page.route === '/' ? serializeJsonLd(homeJsonLd({ origin: 'https://rezics.com', locale })) : undefined;
+  const jsonLd = routePageJsonLd(page, locale);
   return (
     <>
       <PageHost>
@@ -81,7 +87,7 @@ export function RoutePage({
           />
         </PageData>
       </PageHost>
-      {jsonLd !== undefined && (
+      {renderJsonLd && jsonLd !== undefined && (
         <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: jsonLd }} />
       )}
     </>

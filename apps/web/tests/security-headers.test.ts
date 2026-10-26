@@ -193,6 +193,19 @@ const fake = Bun.serve({
       body.subject.labels.en = hostile;
       return json(body);
     }
+    if (hostileLabel && request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      const requestBody = (await request.clone().json()) as { target?: { subject?: unknown } };
+      if (requestBody.target?.subject === subjectId) {
+        const body = (await response.json()) as {
+          reads?: Record<string, { body?: { subject?: { id?: unknown; labels?: Record<string, string> } } }>;
+        };
+        for (const read of Object.values(body.reads ?? {})) {
+          const subject = read.body?.subject;
+          if (subject?.id === subjectId && subject.labels) subject.labels.en = hostile;
+        }
+        return json(body);
+      }
+    }
     return response;
   },
 });

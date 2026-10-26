@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound, redirect, useRouter } from '@tanstack/
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import type { ReactNode } from 'react';
-import { loadSubjectPage, SubjectPage, subjectPageTitle } from '../../features/pages/subject';
+import { loadSubjectPage, SubjectPage, subjectPageJsonLd, subjectPageTitle } from '../../features/pages/subject';
 import { kernelClient } from '../../kernel/client';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -32,9 +32,14 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
 
 export const Route = createFileRoute('/subjects/$id')({
   loader: ({ params }) => readSubject({ data: { id: params.id, locale: getLocale() } }),
-  head: ({ loaderData }) => ({
-    meta: [{ title: loaderData ? subjectPageTitle(loaderData, getLocale()) : m.not_found_heading() }],
-  }),
+  head: ({ loaderData }) => {
+    const locale = getLocale();
+    const jsonLd = loaderData ? subjectPageJsonLd(loaderData, locale) : undefined;
+    return {
+      meta: [{ title: loaderData ? subjectPageTitle(loaderData, locale) : m.not_found_heading() }],
+      ...(jsonLd ? { scripts: [{ type: 'application/ld+json', children: jsonLd }] } : {}),
+    };
+  },
   component: SubjectRoute,
 });
 
@@ -70,6 +75,7 @@ function SubjectRoute() {
       }}
       link={SubjectLink}
       {...(nonce !== undefined ? { nonce } : {})}
+      renderJsonLd={false}
     />
   );
 }
