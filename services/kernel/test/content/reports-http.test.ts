@@ -365,7 +365,7 @@ describe('real migrated report HTTP and shared admission', () => {
     const key = randomUUID();
     for (const botToken of [undefined, 'invalid-proof', 'provider-unavailable']) {
       const result = await call('POST', '/v1/reports', { ...input(), ...(botToken ? { botToken } : {}) }, { key });
-      expect([403, 404, 503]).toContain(result.response.status);
+      expect(result.response.status).toBe(403);
       expect(result.body.effect_status).toBe('not_applied');
       expect(result.body.reportId).toBeUndefined();
       expect(await effects()).toEqual(before);
@@ -376,7 +376,7 @@ describe('real migrated report HTTP and shared admission', () => {
       { ...input(), botToken: remote.mint() },
       { key, kernel: noVerifier },
     );
-    expect([403, 404, 503]).toContain(absent.response.status);
+    expect(absent.response.status).toBe(403);
     expect(await effects()).toEqual(before);
     await create(board, key);
   });
