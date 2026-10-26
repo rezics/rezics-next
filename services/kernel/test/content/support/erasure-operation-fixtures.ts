@@ -6,6 +6,7 @@ import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import {
   createResourceCreationManifest,
   initializeResourceGrants,
@@ -126,6 +127,45 @@ export async function grant(
   },
 ): Promise<void> {
   await setupRequest(resources, grantor, 'POST', '/v1/grants', { ...input, valid: input.valid ?? '(,)' });
+}
+
+/** Global access:grant lets the author administer explicit post:read during setup only. */
+export async function ensureAuthorAccessGrant(resources: FixtureResources): Promise<void> {
+  const authorId = resources.accountIds.author;
+  const open = await resources.pool.query(
+    `SELECT 1 FROM access.resource_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+       AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, authorId],
+  );
+  if (open.rows.length > 0) return;
+  const now = await resources.pool.query<{ at: string }>('SELECT clock_timestamp()::text AS at');
+  const at = now.rows[0]?.at;
+  if (!at) throw new Error('Author access:grant restoration has no database time');
+  await grant(resources, 'governance', {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: authorId },
+    actions: ['access:grant'],
+    valid: `[${at},)`,
+  });
+}
+
+/** Drop the setup administration grant before any scenario observes the author. */
+export async function revokeAuthorAccessGrant(resources: FixtureResources): Promise<void> {
+  const authorId = resources.accountIds.author;
+  const open = await resources.pool.query<{ valid: string }>(
+    `SELECT valid::text FROM access.resource_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+       AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, authorId],
+  );
+  for (const row of open.rows)
+    await revokeGrant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: authorId },
+      actions: ['access:grant'],
+      valid: row.valid,
+    });
 }
 
 export async function revokeGrant(
@@ -291,6 +331,43 @@ function phase(name: string, started: number): number {
   console.log(`erasure-setup ${name} ${elapsed}ms`);
   mark(`setup ${name} ${elapsed}ms`);
   return performance.now();
+}
+
+/** Direct post:read, the explicit holder an erased revision discloses to. Batches stay within the creation bound. */
+async function grantExplicitPostRead(
+  resources: FixtureResources,
+  route: number,
+  postIds: readonly string[],
+  authorId: string,
+): Promise<void> {
+  if (postIds.length === 0) return;
+  const bearer = resources.bearer('author');
+  if (!bearer) throw new Error('Author bearer is missing');
+  const deadline = Date.now() + 30_000;
+  const authenticated = await resources.system.access.authenticate(bearer, { pool: resources.pool, deadline });
+  if (authenticated.kind !== 'account') throw new Error('Author bearer did not authenticate an account');
+  const commands = createGrantCommands({
+    pool: resources.pool,
+    access: resources.system.access,
+    managementAction: 'access:grant',
+  });
+  for (let start = 0; start < postIds.length; start += BULK_POSTS) {
+    const batch = postIds.slice(start, start + BULK_POSTS);
+    await Promise.all(
+      batch.map((postId) =>
+        commands.create(
+          { pool: resources.pool, actor: authenticated, deadline: Date.now() + 30_000 },
+          {
+            resource: { route, id: postId },
+            subject: { kind: 'account', id: authorId },
+            actions: ['post:read'],
+            valid: '(,)',
+            key: randomUUID(),
+          },
+        ),
+      ),
+    );
+  }
 }
 
 /** One bulk post and one API post must present the same rows erasure reads. */
@@ -529,6 +606,7 @@ export async function buildBoardAndThreads(
   targetPartition?: number,
 ) {
   const started = performance.now();
+  await ensureAuthorAccessGrant(resources);
   const { system } = resources;
   const otherId = resources.accountIds.unrelated;
   const authorId = resources.accountIds.author;
@@ -660,6 +738,12 @@ export async function buildBoardAndThreads(
     }
     targeted[postIndex] = { id: created.post.id, revisions: history };
   });
+  for (const post of targeted.slice(0, apiCount))
+    await grant(resources, 'author', {
+      resource: { route, id: post!.id },
+      subject: { kind: 'account', id: authorId },
+      actions: ['post:read'],
+    });
   cursor = phase('api-posts', cursor);
   for (let start = apiCount; start < posts; start += BULK_POSTS) {
     const written = await writeBulkPosts(resources, {
@@ -676,6 +760,13 @@ export async function buildBoardAndThreads(
     for (let offset = 0; offset < written.length; offset++) targeted[start + offset] = written[offset]!;
   }
   cursor = phase('bulk-posts', cursor);
+  await grantExplicitPostRead(
+    resources,
+    route,
+    targeted.slice(apiCount).map((post) => post!.id),
+    authorId,
+  );
+  cursor = phase('explicit-read', cursor);
   if (apiCount > 0 && posts > apiCount)
     await assertSameErasureShape(resources.pool, route, targeted[0]!.id, targeted[apiCount]!.id);
   phase('shape', cursor);

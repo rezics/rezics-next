@@ -224,6 +224,7 @@ type WorkerProcessConfig = {
   databaseUrl: string;
   authDatabaseUrl: string;
   routeKey: string;
+  executorId: string;
   initialMode: 'hold' | 'run';
   growthMode: boolean;
 };
@@ -240,7 +241,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
   const databaseUrl = config.databaseUrl;
   const authDatabaseUrl = config.authDatabaseUrl;
   const routeKey = Buffer.from(config.routeKey, 'base64url');
-  if (!databaseUrl || !authDatabaseUrl || routeKey.length !== 32)
+  if (!databaseUrl || !authDatabaseUrl || routeKey.length !== 32 || !config.executorId)
     throw new Error('Native erasure worker configuration is incomplete');
   const authPool = new Pool({ connectionString: authDatabaseUrl, max: 4 });
   const { readCurrentConsent } = createCurrentConsentReader({ database: authPool });
@@ -389,7 +390,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
       };
       work = await composeWork([growthModule], {
         databaseUrl,
-        executorId: `erasure-${randomUUID()}`,
+        executorId: config.executorId,
         pool: growthSystemPool,
         client: workerClient,
         env: process.env,
@@ -424,7 +425,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
       workerClient = await createWorkClient(databaseUrl, growthSystemPool);
       work = await composeWork([module], {
         databaseUrl,
-        executorId: `erasure-${randomUUID()}`,
+        executorId: config.executorId,
         pool: growthSystemPool,
         client: workerClient,
         env: process.env,
@@ -607,6 +608,9 @@ function openNativeWorker() {
   let child: WorkerProcess | undefined;
   let source: WorkerSource | undefined;
   let client: WorkClient | undefined;
+  // DBOS recovers PENDING workflows only for the executor that claimed them.
+  // A restart must launch that same executor, or the parked erasure stays on the dead process.
+  const executorId = `erasure-${randomUUID()}`;
   let held = false;
   let configured = false;
   let retired = false;
@@ -656,6 +660,7 @@ function openNativeWorker() {
         databaseUrl: source.appUrl,
         authDatabaseUrl: source.authUrl,
         routeKey: Buffer.from(source.routeKey).toString('base64url'),
+        executorId,
         initialMode: held ? 'hold' : 'run',
         growthMode,
       })}\n`,
@@ -844,7 +849,9 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       { fromPlainText },
       { runCommand },
       { observeSql },
-      { buildBoardAndThreads, createFixtureResources, grant, request, revokeGrant, setupRequest },
+      { buildBoardAndThreads, createFixtureResources, request, revokeAuthorAccessGrant, revokeGrant, setupRequest },
+      { endResourceDenial, recordResourceDenial },
+      { resourceAuthorization },
       { openGrowthDatabase },
     ] = await Promise.all([
       import('../../src/access/write-rate.ts'),
@@ -853,6 +860,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       import('../../src/command/command.ts'),
       import('./support/sql-observer.ts'),
       import('./support/erasure-operation-fixtures.ts'),
+      import('../../src/access/resource-denials.ts'),
+      import('../../src/access/resource-authorization.ts'),
       import('../support/growth.ts'),
     ]);
     const resources = (ownedResources = await createFixtureResources(databaseUrl, async (system) => {
@@ -912,8 +921,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     const workflowByOperation = new Map<string, string>();
     const observedCheckEvents = new Set<string>();
     const bearerHistory = new Map<Persona, string>();
-    const ownerValidity = new Map<string, string>();
     const accountReadValidity = new Map<string, string[]>();
+    let authorityAt: string | undefined;
     const receiptBaselines = new Map<number, Set<string>>();
     const preparedStock: Fixture[] = [];
     const inspectionCache = new Map<string, { token: string; value: Inspection }>();
@@ -1196,35 +1205,86 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const f = [...fixtureData.values()].at(-1);
         if (!f) throw new Error('No native author-erasure fixture is available');
         const route = routeOf(f.thread)!;
-        for (let start = 0; start < f.targeted.length; start += 2) {
-          await Promise.all(
-            f.targeted.slice(start, start + 2).map(async (post) => {
-              if (operation === 'revoke') {
-                const valid = ownerValidity.get(post.id);
-                if (!valid) throw new Error(`Missing native owner grant for ${post.id}`);
-                await setupRequest(
-                  resources,
-                  'governance',
-                  'POST',
-                  '/v1/roleGrants:revoke',
-                  {
-                    resource: { route, id: post.id },
-                    subject: { kind: 'account', id: accountId },
-                    role: 'content.post.owner',
-                    valid,
+        const governanceBearer = resources.bearer('governance');
+        if (!governanceBearer) throw new Error('Governance bearer is missing');
+        const deadline = Date.now() + 60_000;
+        const governor = await system.access.authenticate(governanceBearer, { pool: resources.pool, deadline });
+        if (governor.kind !== 'account') throw new Error('Governance bearer did not authenticate an account');
+        const write = operation === 'revoke' ? recordResourceDenial : endResourceDenial;
+        const started = performance.now();
+        for (let start = 0; start < f.targeted.length; start += 16) {
+          const batch = f.targeted.slice(start, start + 16);
+          const times = await Promise.all(
+            batch.map(async (post) => {
+              const resource = { route, id: post.id };
+              const authorization = resourceAuthorization({
+                access: system.access,
+                actor: governor,
+                action: 'post:erase',
+                anchor: {
+                  resource,
+                  async validate(client) {
+                    const row = await client.query('SELECT 1 FROM content.post WHERE route=$1 AND post_id=$2', [
+                      route,
+                      post.id,
+                    ]);
+                    return row.rows.length === 1;
                   },
-                  200,
+                },
+                context: { pool: resources.pool, deadline: Date.now() + 30_000, partition: partitionOf(route) },
+              });
+              try {
+                const outcome = await runCommand(
+                  resources.pool,
+                  {
+                    partition: partitionOf(route),
+                    deadline: Date.now() + 30_000,
+                    authorization,
+                    basis: {
+                      actorAccountId: governor.accountId,
+                      clientId: governor.clientId,
+                      requestedBy: governor.requestedBy,
+                    },
+                  },
+                  async (tx, command) => {
+                    await write(tx, {
+                      resource,
+                      subjectId: accountId,
+                      subjectRole: '',
+                      action: 'post:erase',
+                      reason: 'resource',
+                      at: command.time,
+                    });
+                    const at = authoritativeTimeValue(command.time);
+                    return {
+                      value: at,
+                      events: [
+                        {
+                          type: 'com.rezics.access.grant.create.v1',
+                          subject: post.id,
+                          data: {
+                            resource,
+                            subject: { kind: 'account', id: accountId },
+                            actions: ['post:erase'],
+                            valid: `[${at},)`,
+                          },
+                        },
+                      ],
+                    };
+                  },
                 );
-              } else {
-                await grant(resources, 'governance', {
-                  resource: { route, id: post.id },
-                  subject: { kind: 'account', id: accountId },
-                  actions: ['post:erase'],
-                });
+                return outcome.value;
+              } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                throw new Error(`Access refused post:erase ${operation} on ${post.id}: ${detail}`, { cause: error });
               }
             }),
           );
+          for (const at of times) if (!authorityAt || Date.parse(at) >= Date.parse(authorityAt)) authorityAt = at;
         }
+        console.log(
+          `erasure-setup authority post:erase ${operation} ${f.targeted.length} ${Math.round(performance.now() - started)}ms`,
+        );
         return;
       }
       throw new Error(`Unsupported author authority axis: ${axis}`);
@@ -1275,18 +1335,14 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         targeted: data.targeted,
       };
       fixtureData.set(fixture.thread, data);
-      const owners = await readPool.query<{ resource_id: string; valid: string }>(
-        `SELECT resource_id::text, valid::text FROM access.resource_role_grant
+      const owners = await readPool.query<{ resource_id: string }>(
+        `SELECT resource_id::text FROM access.resource_role_grant
          WHERE route=$1 AND resource_id = ANY($2::uuid[]) AND subject_kind='identity' AND subject_id=$3
-           AND subject_role='' AND grant_role='content.post.owner'`,
+           AND subject_role='' AND grant_role='content.post.owner' AND upper_inf(valid)`,
         [data.route, data.targeted.map((post) => post.id), data.authorId],
       );
-      const ownerByPost = new Map(owners.rows.map((row) => [row.resource_id, row.valid]));
-      for (const post of data.targeted) {
-        const valid = ownerByPost.get(post.id);
-        if (!valid) throw new Error(`Published target ${post.id} has no native owner grant`);
-        ownerValidity.set(post.id, valid);
-      }
+      if (owners.rows.length !== data.targeted.length)
+        throw new Error('Published targets are missing native owner grants');
       const direct = await readPool.query<{ valid: string }>(
         `SELECT valid::text FROM access.resource_grant
          WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
@@ -1306,6 +1362,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         data.authorId,
         direct.rows.map((row) => row.valid),
       );
+      // Creation grants are in place. Scenarios must not keep the author's temporary administration grant.
+      await revokeAuthorAccessGrant(resources);
       if (tail) {
         await request(
           resources,
@@ -1322,7 +1380,9 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     const driver: ErasureOperationDriver = {
       async close() {
         const failures: unknown[] = [];
+        resources.stopBootstrap();
         for (const close of [
+          () => resources.bootstrap.catch(() => undefined),
           () => worker!.close(),
           () => observer?.close() ?? Promise.resolve(),
           () => controlClient.close(),
@@ -1503,7 +1563,9 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         mark('finish-done');
       },
       async restart() {
+        const started = performance.now();
         await worker!.restart();
+        console.log(`erasure-setup restart ${Math.round(performance.now() - started)}ms`);
       },
       async authority(actor, axis, operation) {
         mark(`authority-start ${axis} ${operation}`);
@@ -1511,8 +1573,9 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         mark(`authority-done ${axis} ${operation}`);
       },
       async authorityTime() {
+        if (authorityAt) return authorityAt;
         const result = await readPool.query<{ at: string }>('SELECT clock_timestamp()::text AS at');
-        return new Date(result.rows[0]!.at).toISOString();
+        return result.rows[0]!.at;
       },
       async inspect(fixture) {
         const data = fixtureData.get(fixture.thread);
@@ -1626,11 +1689,16 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
           groups.set(key, group);
         }
         const steps = [...groups.values()].map((group) => {
-          const first = group[0]!;
+          // Initiator restoration repeats post:erase on the page's first post inside this step.
+          // The logical page is one current-formula check per post.
+          const byPost = new Map<string, NativeCheck>();
+          for (const entry of group) byPost.set(entry.postId, entry);
+          const page = [...byPost.values()];
+          const first = page[0]!;
           return {
-            postIds: group.map((entry) => entry.postId),
+            postIds: page.map((entry) => entry.postId),
             at: first.at,
-            checks: group.map((entry) => ({
+            checks: page.map((entry) => ({
               postId: entry.postId,
               action: entry.action,
               partition: entry.partition,
