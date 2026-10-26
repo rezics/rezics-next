@@ -12,9 +12,9 @@ WITH input AS NOT MATERIALIZED (
 ), variants AS (
   INSERT INTO content.media_variant
     (route, media_id, format, width, height, media_type, byte_count, sha256, key, transaction_id)
-  SELECT changed.route, changed.media_id, variant.format, variant.width, variant.height,
+  SELECT input.route, changed.media_id, variant.format, variant.width, variant.height,
          variant."mediaType", variant."byteCount", variant.sha256, variant.key, changed.transaction_id
-  FROM changed
+  FROM changed CROSS JOIN input
   CROSS JOIN jsonb_to_recordset(:variants::jsonb) AS variant(
     format text, width integer, height integer, "mediaType" text, "byteCount" bigint, sha256 text, key text
   )

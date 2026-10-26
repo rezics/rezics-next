@@ -11,6 +11,7 @@ import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
 import type { BoardId, ThreadId } from './model.ts';
 import activePage from './board-rank-page.sql';
 import page from './page-board-threads.sql';
+import readSourceActivity from './read-source-activity.sql';
 import upsert from './board-rank-upsert.sql';
 
 export type BoardCandidateKey = Readonly<{ createdAt: string; id: ThreadId }>;
@@ -116,23 +117,13 @@ export function createBoardEffect(pool: Pool): Effect {
       const thread = await snapshot(pool, partitionOf(sourceRoute), async (client, anchor) => {
         if (epoch > anchor.epoch || (epoch === anchor.epoch && position > anchor.position))
           throw new Error('Source envelope is ahead of its partition');
-        const { rows } = await client.query<{
-          board_id: string;
-          created_at: string;
-          item_created_at: string | null;
-        }>(
-          `SELECT thread.board_id,
-                  to_char(thread.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
-                  to_char(post.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS item_created_at
-           FROM content.thread AS thread
-           LEFT JOIN content.post AS post
-             ON post.route = thread.route AND post.thread_id = thread.thread_id AND post.post_id = $3
-           WHERE thread.route = $1 AND thread.thread_id = $2`,
-          [sourceRoute, data.threadId, data.itemId],
-        );
-        return rows[0];
+        return readSourceActivity.run(client, {
+          route: sourceRoute,
+          thread_id: data.threadId,
+          post_id: data.itemId,
+        });
       });
-      if (!thread) throw new Error('Source thread reference is missing');
+      if (!thread?.board_id || !thread.created_at) throw new Error('Source thread reference is missing');
       const activityAt = type === 'com.rezics.content.post.created.v1' ? thread.item_created_at : thread.created_at;
       if (!activityAt) throw new Error('Source post reference is missing');
       // The source snapshot and its checkout are released before the board command starts.

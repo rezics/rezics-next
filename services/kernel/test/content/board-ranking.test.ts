@@ -357,8 +357,8 @@ test.serial('rank refresh skips zero rows and updates no more than 500 rows per 
     ],
   );
 
-  const first = await refreshBoardRankBatch(db.pool, new Date(batchAt));
-  const second = await refreshBoardRankBatch(db.pool, new Date(batchAt));
+  const first = await refreshBoardRankBatch(db.pool, new Date(batchAt), [partitionOf(boardRoute)]);
+  const second = await refreshBoardRankBatch(db.pool, new Date(batchAt), [partitionOf(boardRoute)]);
   expect(first).toBe(500);
   expect(second).toBe(2);
   const stored = await db.admin.query<{ active_rank: number; rank_refreshed_at: Date }>(

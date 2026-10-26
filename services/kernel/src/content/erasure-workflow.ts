@@ -11,10 +11,10 @@ import type { Access, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { erasePostLogicalPageAsInitiator, type ErasureInitiator } from './erase-post.ts';
 import type { ErasureJob } from './erasure-job.ts';
-import { readErasureInitiator } from './erasure-initiator.ts';
+import { readErasureInitiator, readWorkflowErasureOperation } from './erasure-initiator.ts';
 import type { OperationProgress, Status } from './operation-contract.ts';
-import readOperation from './read-workflow-erasure-operation.sql';
 import pagePosts from './page-erasure-posts.sql';
+import pageReceipt from './read-erasure-page-receipt.sql';
 import nullRevisions from './null-erased-revisions.sql';
 import eraseMedia from './page-erasure-media.sql';
 
@@ -68,11 +68,32 @@ async function query<S extends Statement>(client: AccessClient, statement: S, in
 /** Shared by native read steps and cost tests. The supplied client has one
  * independently anchored content partition. No authority is derived here.
  */
-export async function pageAuthorErasurePosts(client: AccessClient, input: (typeof pagePosts)['~reylo']['input']) {
-  return (await query(client, pagePosts, input)).map((row) => {
-    if (row.post_id === null || row.at === null || row.committed === null || row.erased_revisions === null)
-      throw new Error('Invalid erasure page identity');
-    return { post_id: row.post_id, at: row.at, committed: row.committed, erased_revisions: row.erased_revisions };
+export async function pageAuthorErasurePosts(
+  client: AccessClient,
+  input: (typeof pagePosts)['~reylo']['input'] & {
+    partition_no: number;
+    initiator_id: string;
+    operation_id: string;
+  },
+) {
+  const posts = await pagePosts.run(client, input);
+  if (!posts.length) return [];
+  const receipt = await pageReceipt.run(client, {
+    partition_no: input.partition_no,
+    initiator_id: input.initiator_id,
+    operation_id: input.operation_id,
+    after_at: input.after_at,
+    after_id: input.after_id,
+    post_ids: posts.map((post) => post.post_id),
+  });
+  return posts.map((row) => {
+    if (row.post_id === null || row.at === null) throw new Error('Invalid erasure page identity');
+    return {
+      post_id: row.post_id,
+      at: row.at,
+      committed: row.availability === 'erased' && (receipt?.present ?? false),
+      erased_revisions: receipt?.erased_revisions ?? '0',
+    };
   });
 }
 
@@ -130,7 +151,11 @@ export async function runAuthorErasure(
     });
   const source = await step('source', () =>
     read(async (client) => {
-      const [row] = await query(client, readOperation, { partition_no: partition, route, operation_id: operationId });
+      const row = await readWorkflowErasureOperation(client, {
+        partition_no: partition,
+        route,
+        operation_id: operationId,
+      });
       if (!row || !row.native_workflow_id || row.native_workflow_id !== DBOS.workflowID)
         throw new ErasurePermissionDenied();
       return {
@@ -148,7 +173,19 @@ export async function runAuthorErasure(
   const restorer = createInitiatorRestorer({
     pool: deps.pool,
     access: deps.access,
-    readOperation: readErasureInitiator,
+    // The restorer supplies a fresh connection. Both point reads must share
+    // one snapshot, just as the original source/receipt join did.
+    readOperation: async (client, operation, time) => {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try {
+        const record = await readErasureInitiator(client, operation, time);
+        await client.query('COMMIT');
+        return record;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    },
     readConsent: deps.readConsent,
   });
   const initiator: ErasureInitiator = {

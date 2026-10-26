@@ -473,7 +473,7 @@ async function selectCollectable(pool: GrowthDatabase['pool'], partition: number
     const candidates: Awaited<ReturnType<typeof selectCandidates.run>> = [];
     for (let offset = 0; offset < 16; offset++) {
       const route = partition * 16 + offset;
-      candidates.push(...await selectCandidates.run(client, { route, pending_route: route, at: time.at, batch, pending_batch: batch }));
+      candidates.push(...await selectCandidates.run(client, { route, at: time.at, batch, pending_batch: batch }));
     }
     return candidates.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.mediaId.localeCompare(b.mediaId)).slice(0, batch);
   });

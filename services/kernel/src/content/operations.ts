@@ -31,6 +31,7 @@ import type {
 import createOperation from './create-erasure-operation.sql';
 import readEndpoints from './read-first-erasure-post.sql';
 import readIdentity from './read-erasure-operation.sql';
+import readPostAvailability from './read-erasure-post-availability.sql';
 
 /** The first actual affected post supplies authority; the author is selection only.
  * The native command boundary rechecks authorization before reading any receipt.
@@ -296,7 +297,7 @@ export async function readOperation(
     { pool: deps.pool, deadline: context.deadline },
   );
   const allowed = await withConnection(deps.pool, async (client) => {
-    await client.query('BEGIN READ ONLY');
+    await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
     try {
       const bounded = deadlineClient(client, context.deadline);
       const partitions = new Set([partitionOf(accountRoute), partitionOf(anchorRoute)]);
@@ -387,11 +388,8 @@ export function postEraseReceiptAccess(access: Access): Access {
         facts.accountEvidence === undefined
       )
         return allowed;
-      const post = await client.query<{ availability: string }>(
-        'SELECT availability FROM content.post WHERE route=$1 AND post_id=$2',
-        [resource.route, resource.id],
-      );
-      if (post.rows[0]?.availability !== 'erased') return false;
+      const post = await readPostAvailability.run(client, { route: resource.route, post_id: resource.id });
+      if (post?.availability !== 'erased') return false;
       return access.authorize(client, actor, 'account:read', facts.accountResource, facts.accountEvidence, time);
     },
   });

@@ -1,7 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { readRealmVotes, type RealmVotes } from '../community/realm-votes.ts';
+import { PARTITIONS } from '../route/route.ts';
 import refresh from './board-rank-refresh.sql';
+import updateRanks from './board-rank-update.sql';
 import readScores from './board-rank-scores.sql';
 import type { ReactionKind } from './reactions.ts';
 
@@ -84,34 +86,39 @@ async function readBatchScores(client: PoolClient, candidates: readonly Candidat
   return totals;
 }
 
-async function updateBatch(client: PoolClient, updates: readonly RankUpdate[], at: Date): Promise<number> {
-  const result = await client.query<{ thread_id: string }>(
-    `UPDATE content.board_thread AS candidate
-     SET score = batch.score,
-         active_rank = batch.active_rank,
-         hot_rank = batch.hot_rank,
-         rank_refreshed_at = $2::timestamptz
-     FROM jsonb_to_recordset($1::jsonb) AS batch(
-       route integer, board_id uuid, thread_id uuid, score integer,
-       active_rank double precision, hot_rank double precision
-     )
-     WHERE candidate.route = batch.route
-       AND candidate.board_id = batch.board_id
-       AND candidate.thread_id = batch.thread_id
-     RETURNING candidate.thread_id::text AS thread_id`,
-    [JSON.stringify(updates), at.toISOString()],
-  );
-  return result.rowCount ?? 0;
+async function updateBatch(
+  client: PoolClient,
+  partition: number,
+  updates: readonly RankUpdate[],
+  at: Date,
+): Promise<number> {
+  const rows = await updateRanks.run(client, { partition, updates: [...updates], at: at.toISOString() });
+  return rows.length;
 }
 
-/** One due, indexed refresh batch. Candidate locking and the 500-row cap are in SQL. */
-export async function refreshBoardRankBatch(pool: Pool, at = new Date()): Promise<number> {
+/** One indexed refresh batch per partition, each locking at most 500 due candidates. */
+export async function refreshBoardRankBatch(
+  pool: Pool,
+  at = new Date(),
+  partitions: readonly number[] = Array.from({ length: PARTITIONS }, (_, partition) => partition),
+): Promise<number> {
   if (!Number.isFinite(at.getTime())) throw new TypeError('Invalid board rank refresh time');
+  if (
+    new Set(partitions).size !== partitions.length ||
+    partitions.some((partition) => !Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
+  )
+    throw new RangeError('Invalid board rank partitions');
+  let refreshed = 0;
+  for (const partition of partitions) refreshed += await refreshPartition(pool, partition, at);
+  return refreshed;
+}
+
+async function refreshPartition(pool: Pool, partition: number, at: Date): Promise<number> {
   return withConnection(pool, async (client) => {
-    await client.query('BEGIN');
+    await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     try {
       await client.query('SET LOCAL enable_seqscan = off');
-      const candidates = (await refresh.run(client, { at: at.toISOString() })) as Candidate[];
+      const candidates = (await refresh.run(client, { partition, at: at.toISOString() })) as Candidate[];
       if (candidates.length === 0) {
         await client.query('COMMIT');
         return 0;
@@ -131,7 +138,7 @@ export async function refreshBoardRankBatch(pool: Pool, at = new Date()): Promis
           hot_rank: lemmyActiveRank(score, new Date(candidate.created_at), at),
         };
       });
-      const updated = await updateBatch(client, updates, at);
+      const updated = await updateBatch(client, partition, updates, at);
       await client.query('COMMIT');
       return updated;
     } catch (error) {

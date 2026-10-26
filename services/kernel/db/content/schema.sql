@@ -1018,7 +1018,7 @@ CREATE INDEX board_thread_page_idx ON content.board_thread USING btree (route, b
 -- Name: board_thread_rank_refresh_idx; Type: INDEX; Schema: content; Owner: -
 --
 
-CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (rank_refreshed_at, route, board_id, thread_id) WHERE (active_rank <> (0)::double precision);
+CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (route, rank_refreshed_at, board_id, thread_id) WHERE (active_rank <> (0)::double precision);
 
 
 --

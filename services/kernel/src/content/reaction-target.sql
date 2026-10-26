@@ -14,10 +14,10 @@ WITH RECURSIVE input AS NOT MATERIALIZED (
   JOIN content.post p ON p.route=i.route AND p.post_id=CASE WHEN i.kind='thread' THEN t.first_post_id ELSE i.id END
     AND p.thread_id=t.thread_id
   UNION ALL
-  SELECT p.*, a.depth+1 FROM ancestors a
+  SELECT p.*, a.depth+1 FROM ancestors a CROSS JOIN input i
   CROSS JOIN LATERAL (
     SELECT p.* FROM content.post p
-    WHERE p.route=a.route AND p.post_id=a.reply_to_post_id AND p.thread_id=a.thread_id
+    WHERE p.route=i.route AND p.post_id=a.reply_to_post_id AND p.thread_id=a.thread_id
     OFFSET 0
   ) p WHERE a.depth < 33
 )
@@ -28,7 +28,7 @@ FROM root t
 UNION ALL
 SELECT 'post', p.post_id, p.reply_to_post_id, p.thread_id, NULL::uuid, p.author_account_id,
        p.visibility, CASE WHEN p.availability='erased' THEN 'erased' ELSE r.availability END, p.depth
-FROM ancestors p
-JOIN content.revision r ON r.route=p.route AND r.revision_id=p.head_revision_id
+FROM ancestors p CROSS JOIN input i
+JOIN content.revision r ON r.route=i.route AND r.revision_id=p.head_revision_id
   AND r.thread_id=p.thread_id AND r.post_id=p.post_id
 ORDER BY depth;

@@ -16,6 +16,7 @@ import claimMedia from '../../src/content/claim-media.sql';
 import fenceCollection from '../../src/content/fence-collection.sql';
 import selectCandidates from '../../src/content/select-collectable-media.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { checkStatement } from '../support/partition-binding.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { createContentSystem, type ContentCredential, type ContentSystem } from './support/system.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
@@ -82,6 +83,10 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
       await system.close();
     })());
   try {
+    const collectionBinding = await checkStatement(jobPool, {
+      sql: selectCandidates.sql,
+      params: [...selectCandidates.params],
+    });
     const { containers, posts } = await provisionMediaContainers(system);
     const baseline = await pool.query<{ transaction_id: string }>('SELECT transaction_id::text FROM core.receipt');
     const setupTransactions = baseline.rows.map((row) => row.transaction_id);
@@ -226,11 +231,11 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         .filter((record) => record.statement === selectCandidates.sql)
         .map((record) => {
           const route = Number(parameter(record, selectCandidates.params, 'route'));
-          const pendingRoute = Number(parameter(record, selectCandidates.params, 'pending_route'));
+          const hasRouteCondition = collectionBinding.bound && collectionBinding.parameter === 'route';
           return {
             partition: partitionOf(route),
-            bound: Number.isInteger(route) && route === pendingRoute,
-            globalScan: !/WHERE route = \$\d+::integer/.test(record.statement),
+            bound: hasRouteCondition && Number.isInteger(route) && partitionOf(route) === partition,
+            globalScan: !hasRouteCondition,
           };
         });
       return { outcome: result, selections };

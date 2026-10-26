@@ -21,6 +21,8 @@ import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
+import readOperationEnqueue from './read-operation-enqueue.sql';
+import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
 import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
@@ -232,13 +234,25 @@ async function registerWork(
     },
     { name: CONTENT_WORKFLOWS.collect },
   );
-  const refreshRanks = DBOS.registerStep(async () => refreshBoardRankBatch(context.pool, context.clock()), {
-    name: 'content.board-rank.refresh.step',
-    ...RETRY,
-  });
-  DBOS.registerWorkflow(async (_scheduledDate: Date, _context: unknown) => refreshRanks(), {
-    name: BOARD_RANK_WORKFLOW,
-  });
+  const refreshRanks = DBOS.registerStep(
+    async (chunk: readonly number[]) => {
+      const at = context.clock();
+      return Promise.all(chunk.map((partition) => refreshBoardRankBatch(context.pool, at, [partition])));
+    },
+    {
+      name: 'content.board-rank.refresh.step',
+      ...RETRY,
+    },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY)
+        await refreshRanks(partitions.slice(offset, offset + PARTITION_CONCURRENCY));
+    },
+    {
+      name: BOARD_RANK_WORKFLOW,
+    },
+  );
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
@@ -329,35 +343,23 @@ export function createContentOperationClient({
           try {
             const anchor = await readPartition(tx, partitionOf(route));
             if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-            const { rows } = await tx.query<{
-              thread_id: string;
-              author_account_id: string;
-              initiator_account_id: string;
-              actor_client_id: string;
-              actor_requested_by: string | null;
-              actor_authn_epoch: string;
-              actor_scopes: string[];
-              native_workflow_id: string | null;
-              source_epoch: number;
-              source_partition: number;
-              source_position: string;
-              source_event_index: number;
-            }>(
-              `SELECT o.thread_id,o.author_account_id,o.initiator_account_id,o.actor_client_id,
-              o.actor_requested_by,o.actor_authn_epoch,o.actor_scopes,o.native_workflow_id,
-              o.source_epoch,o.source_partition,o.source_position::text,o.source_event_index
-            FROM content.operation o
-            JOIN core.receipt r ON r.partition_no=$3 AND r.principal_kind='account'
-              AND r.principal_id=o.initiator_account_id AND r.command_kind=o.creation_command_kind
-              AND r.idempotency_key=o.creation_idempotency_key AND r.transaction_id=o.recorded_transaction_id
-              AND encode(r.request_digest,'hex')=o.creation_request_digest
-              AND r.response->>'operationId'=o.operation_id::text
-              AND r.response->>'durableInitiator' ~ '^[0-9a-f]{64}$'
-            WHERE o.route=$1 AND o.operation_id=$2`,
-              [route, input.operationId, partitionOf(route)],
-            );
+            const row = await readOperationEnqueue.run(tx, {
+              route,
+              operation_id: input.operationId,
+            });
+            const receipt =
+              row &&
+              (await readOperationEnqueueReceipt.run(tx, {
+                partition_no: partitionOf(route),
+                initiator_account_id: row.initiator_account_id,
+                creation_command_kind: row.creation_command_kind,
+                creation_idempotency_key: row.creation_idempotency_key,
+                recorded_transaction_id: row.recorded_transaction_id,
+                creation_request_digest: row.creation_request_digest,
+                operation_id: row.operation_id,
+              }));
             await tx.query('COMMIT');
-            return rows[0];
+            return receipt ? row : null;
           } catch (error) {
             await connection.query('ROLLBACK');
             throw error;
@@ -365,7 +367,12 @@ export function createContentOperationClient({
         }),
       );
       if (
-        !row?.native_workflow_id ||
+        row === null ||
+        row.native_workflow_id === null ||
+        row.source_epoch === null ||
+        row.source_partition === null ||
+        row.source_position === null ||
+        row.source_event_index === null ||
         row.thread_id !== input.threadId ||
         row.author_account_id !== input.authorId ||
         row.initiator_account_id !== input.actor.accountId ||

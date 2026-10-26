@@ -8,6 +8,11 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import parent from './read-media-parent.sql';
+import board from './read-media-parent-board.sql';
+
+export const parentStatement: string = parent.sql;
+export const boardStatement: string = board.sql;
 
 export type MediaParent = {
   kind: 'post' | 'thread' | 'board';
@@ -47,26 +52,25 @@ export function realmParticipationMatches(proof: RealmParticipationProof | undef
   return proof !== undefined && proof.realmId === realmId && proof.allowed;
 }
 
-// Separate statements keep board storage entirely out of parent validation.
-export const parentStatement = `SELECT 'thread'::text AS kind, t.thread_id AS id, NULL::uuid AS parent_id,
-  t.thread_id, t.board_id, NULL::uuid AS realm_id, t.visibility, t.security_revision::text, 'available'::text AS availability
-  FROM content.thread t WHERE $3::text IN ('container', 'thread') AND t.route=$1 AND t.thread_id=$2
-  UNION ALL
-  SELECT 'post', p.post_id, p.reply_to_post_id, p.thread_id, NULL::uuid,
-  NULL::uuid, p.visibility, p.security_revision::text,
-  CASE WHEN p.availability='erased' THEN 'erased' ELSE r.availability END
-  FROM content.post p JOIN content.revision r ON r.route=$1 AND r.thread_id=p.thread_id
-    AND r.post_id=p.post_id AND r.revision_id=p.head_revision_id
-  WHERE $3::text IN ('container', 'post') AND p.route=$1 AND p.post_id=$2`;
-export const boardStatement = `SELECT 'board'::text AS kind, board_id AS id, NULL::uuid AS parent_id,
-  NULL::uuid AS thread_id, NULL::uuid AS board_id, realm_id, visibility, security_revision::text, 'available'::text AS availability
-  FROM content.board WHERE route=$1 AND board_id=$2`;
 function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new GrantDeniedError();
   return value;
 }
-function existing(rows: MediaParent[], id: string): MediaParent {
+function existing(
+  rows: readonly {
+    kind: string;
+    id: string;
+    parent_id: string | null;
+    thread_id: string | null;
+    board_id: string | null;
+    realm_id: string | null;
+    visibility: string;
+    security_revision: string;
+    availability: string;
+  }[],
+  id: string,
+): MediaParent {
   const row = rows[0];
   if (
     rows.length !== 1 ||
@@ -79,7 +83,17 @@ function existing(rows: MediaParent[], id: string): MediaParent {
     row.availability !== 'available'
   )
     throw new GrantDeniedError();
-  return row;
+  return {
+    kind: row.kind,
+    id: row.id,
+    parent_id: row.parent_id,
+    thread_id: row.thread_id,
+    board_id: row.board_id,
+    realm_id: row.realm_id,
+    visibility: row.visibility,
+    security_revision: row.security_revision,
+    availability: row.availability,
+  };
 }
 
 /** Private storage reads only. The caller prepares all Access evidence before
@@ -125,7 +139,7 @@ export async function mediaParentChain(client: AccessClient, containerId: string
   while (result.length < 34) {
     if (seen.has(id) || route(id) !== r) throw new GrantDeniedError();
     seen.add(id);
-    const { rows } = await client.query<MediaParent>(parentStatement, [r, id, kind]);
+    const rows = await parent.run(client, { route: r, id, kind });
     const row = existing(rows, id);
     result.push(row);
     if (row.kind === 'thread') {
@@ -149,8 +163,8 @@ export async function mediaParentChain(client: AccessClient, containerId: string
 }
 
 export async function mediaParentBoard(client: AccessClient, boardId: string): Promise<MediaParent> {
-  const { rows } = await client.query<MediaParent>(boardStatement, [route(boardId), boardId]);
-  const row = existing(rows, boardId);
+  const found = await board.run(client, { route: route(boardId), id: boardId });
+  const row = existing(found ? [found] : [], boardId);
   if (row.kind !== 'board') throw new GrantDeniedError();
   return row;
 }

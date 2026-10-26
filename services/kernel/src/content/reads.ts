@@ -29,6 +29,7 @@ import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
 import permissionRead from '../access/permission-check.sql';
+import erasedDecision from './read-erased-decision.sql';
 import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
 
@@ -185,32 +186,21 @@ type ErasedReadProof = { explicit: boolean };
  * aliases disabled. Explicit action grants retain all membership, delegation,
  * temporal and denial checks, without adding a statement or a second authority.
  */
-const permissionSql = permissionRead.sql.replace(/;\s*$/, '');
-const explicitPermissionSql = (['floor', 'grant_roles'] as const).reduce(
-  (sql, name) =>
-    sql.replace(
-      new RegExp(`\\$${permissionRead.params.indexOf(name) + 1}\\b`, 'g'),
-      name === 'floor' ? 'false' : "'{}'",
-    ),
-  permissionSql,
-);
-const erasedPermissionSql = `SELECT ordinary.allowed, explicit.allowed AS explicit_read
-  FROM (${permissionSql}) ordinary CROSS JOIN (${explicitPermissionSql}) explicit`;
-
 function erasedReadClient(client: AccessClient, postId: string, proof: ErasedReadProof): AccessClient {
   const projected = Object.create(client) as AccessClient;
   projected.query = (async (query: QueryConfig | string, values?: unknown[]) => {
     const config = typeof query === 'string' ? { text: query, values: values ?? [] } : query;
-    const parameters = config.values;
+    const parameters = config.values ?? [];
     if (
       config.text !== permissionRead.sql ||
-      parameters?.[permissionRead.params.indexOf('resource_id')] !== postId ||
-      parameters?.[permissionRead.params.indexOf('action')] !== 'post:read'
+      parameters[permissionRead.params.indexOf('resource_id')] !== postId ||
+      parameters[permissionRead.params.indexOf('action')] !== 'post:read'
     )
       return client.query(config);
     const result = await client.query<{ allowed: boolean; explicit_read: boolean }>({
       ...config,
-      text: erasedPermissionSql,
+      text: erasedDecision.sql,
+      values: erasedDecision.params.map((name) => parameters[permissionRead.params.indexOf(name)]),
     });
     proof.explicit = result.rows.length === 1 && result.rows[0]?.explicit_read === true;
     return result;

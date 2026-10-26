@@ -346,7 +346,7 @@ test.serial(
     const population = refreshPopulation(baseAt);
     const refresh = async (_growthDb: GrowthDatabase, _scale: number, repetition: number) => {
       const at = new Date(baseAt.getTime() + repetition * 11 * 60_000);
-      const refreshed = await refreshBoardRankBatch(db.pool, at);
+      const refreshed = await refreshBoardRankBatch(db.pool, at, [partitionOf(boardRoute)]);
       expect(refreshed).toBe(500);
       return refreshed;
     };
@@ -409,7 +409,9 @@ test.serial(
        WHERE NOT (board_id = ANY($2::uuid[]))`,
       [at.toISOString(), [outsideBoard, realmBoard]],
     );
-    const refreshed = await refreshBoardRankBatch(db.pool, at);
+    const refreshed = await refreshBoardRankBatch(db.pool, at, [
+      ...new Set([outsideBoard, realmBoard].map((id) => partitionOf(routeOf(id)!))),
+    ]);
     expect(refreshed).toBe(3);
 
     const rows = await rankRows(

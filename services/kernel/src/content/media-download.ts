@@ -6,14 +6,11 @@ import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import subjectExists from '../semantic/subject-exists.sql';
 import { tupleRoute } from './imported-contract.ts';
 import { readFences } from './source-fences.ts';
-import {
-  mediaParentBoard,
-  mediaParentChain,
-  mediaParentSnapshot,
-  boardStatement,
-  parentStatement,
-  type MediaParent,
-} from './media-parent.ts';
+import { mediaParentBoard, mediaParentChain, mediaParentSnapshot, type MediaParent } from './media-parent.ts';
+import readBoardParent from './read-media-parent-board.sql';
+import parent from './read-media-parent.sql';
+import readPostAuthor from './read-post-author.sql';
+import readThreadAuthor from './read-thread-author.sql';
 import type { DownloadDecision, DownloadVariant, MediaDependencies } from './media.ts';
 import read from './read-download-media.sql';
 
@@ -193,7 +190,7 @@ export async function downloadMedia(
               const current =
                 row.kind === 'board'
                   ? await mediaParentBoard(client, row.id)
-                  : (await client.query<MediaParent>(parentStatement, [r, row.id, row.kind])).rows[0];
+                  : (await parent.run(client, { route: r, id: row.id, kind: row.kind }))[0];
               if (
                 !current ||
                 signature(current) !== signature(row) ||
@@ -202,13 +199,13 @@ export async function downloadMedia(
               )
                 throw new GrantDeniedError();
               if (current.visibility === 'draft') {
-                const table = row.kind === 'thread' ? 'thread' : row.kind === 'post' ? 'post' : null;
-                if (!table || actor.kind !== 'account') throw new GrantDeniedError();
-                const author = await client.query<{
-                  author_account_id: string;
-                }>(`SELECT author_account_id FROM content.${table} WHERE route=$1 AND ${table}_id=$2`, [r, row.id]);
-                if (author.rows.length !== 1 || author.rows[0]!.author_account_id !== actor.accountId)
+                if (actor.kind !== 'account' || (row.kind !== 'thread' && row.kind !== 'post'))
                   throw new GrantDeniedError();
+                const author =
+                  row.kind === 'thread'
+                    ? await readThreadAuthor.run(client, { route: r, id: row.id })
+                    : await readPostAuthor.run(client, { route: r, id: row.id });
+                if (!author || author.author_account_id !== actor.accountId) throw new GrantDeniedError();
               }
               return current.visibility === 'published';
             },
@@ -249,8 +246,8 @@ export async function downloadMedia(
     // The remote board is never read on a media/container transaction, including
     // when it happens to live in the same partition. No nested pool checkouts.
     const boardVisible = await snapshot(route(boardId), async (client) => {
-      const current = await client.query<MediaParent>(boardStatement, [route(boardId), boardId]);
-      return current.rows.length === 1 && signature(current.rows[0]) === signature(board) && (await boardCheck(client));
+      const current = await readBoardParent.run(client, { route: route(boardId), id: boardId });
+      return current !== null && signature(current) === signature(board) && (await boardCheck(client));
     });
     if (!boardVisible) return denied;
     return snapshot(r, async (client) => {
