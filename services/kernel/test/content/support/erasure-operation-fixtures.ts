@@ -182,7 +182,9 @@ export async function createFixtureResources(
   databaseUrl: string,
   duringSetup?: (system: NativeContentSystem) => Promise<void>,
 ): Promise<FixtureResources> {
+  const started = performance.now();
   const system = await createNativeContentSystem({ databaseUrl });
+  let cursor = phase('native-system', started);
   const overlapped = duringSetup?.(system) ?? Promise.resolve();
   let bootstrapProcess: ReturnType<typeof Bun.spawn> | undefined;
   try {
@@ -269,7 +271,9 @@ export async function createFixtureResources(
         bearers.set(persona, bearer);
       },
     };
+    cursor = phase('governance-credential', cursor);
     await bootstrapRelease(pool, bundledRelease);
+    cursor = phase('semantic-release', cursor);
 
     // Ordinary API credentials install grants needed to construct a public board.
     // The temporary management grants are revoked before the fixture is returned.
@@ -308,7 +312,9 @@ export async function createFixtureResources(
       subject: { kind: 'account', id: accountIds.legal },
       actions: ['post:erase', 'moderation:takedown'],
     });
+    cursor = phase('governance-grants', cursor);
     await overlapped;
+    phase('worker-ready-wait', cursor);
     return resources;
   } catch (error) {
     bootstrapProcess?.kill();
