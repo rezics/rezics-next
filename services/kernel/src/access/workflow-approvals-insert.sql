@@ -13,7 +13,7 @@ SELECT :route, :approval_id, :actor_id, :client_id, :scopes::text[],
          ELSE LEAST(i.jwt_expires_at, i.at + interval '300 seconds') END,
        i.jwt_expires_at, :transaction_id
 FROM input i
-WHERE i.jwt_expires_at > i.at AND i.jwt_expires_at > clock_timestamp()
+WHERE i.jwt_expires_at > i.at
   AND (i.operation->>'kind' <> 'credential' OR i.evidence_expires_at > clock_timestamp())
 RETURNING route, approval_id AS "approvalId", actor_id AS "actorId", client_id AS "clientId",
        scopes, requested_by AS "requestedBy", authn_epoch::text AS "authnEpoch",
