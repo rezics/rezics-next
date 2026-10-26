@@ -17,6 +17,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
+import boardRealm from './realm-of-board.sql';
 import erase from './erase-content.sql';
 import takedown from './takedown.sql';
 import countRevisions from './erase-post-revisions.sql';
@@ -56,7 +57,7 @@ type Scope = {
   id: string;
   container_id: string | null;
   collection_pending: boolean;
-  realm_id: string | null;
+  board_id: string | null;
 };
 
 /** Shared native point boundary. Callers bind an action and kind in server code;
@@ -89,11 +90,20 @@ async function prepareAuthorizedPoint(
           principal: { kind: 'account' as const, id: actor.accountId },
           basis: { clientId: actor.clientId, requestedBy: actor.requestedBy },
         };
-  const parameters = { route, id: point.id, kind: point.kind, resolve_realm: false };
-  const args = (statement: { params: readonly string[] }, resolveRealm = false) =>
-    statement.params.map((name) =>
-      name === 'resolve_realm' ? resolveRealm : parameters[name as keyof typeof parameters],
+  const parameters = { route, id: point.id, kind: point.kind };
+  const args = (statement: { params: readonly string[] }) =>
+    statement.params.map((name) => parameters[name as keyof typeof parameters]);
+  const readRealm = async (client: AccessClient, current: Scope | undefined) => {
+    if (!current?.board_id) return null;
+    const boardRoute = routeOf(current.board_id);
+    if (boardRoute === null) return null;
+    const parameters = { route: boardRoute, id: current.board_id };
+    const { rows } = await client.query<{ realm_id: string | null }>(
+      boardRealm.sql,
+      boardRealm.params.map((name) => parameters[name as keyof typeof parameters]),
     );
+    return rows[0]?.realm_id ?? null;
+  };
   let scope: Scope | undefined;
   const ordinaryAdmission = (
     verified: Extract<Actor, { kind: 'account' }>,
@@ -158,10 +168,11 @@ async function prepareAuthorizedPoint(
       )
         return { targetProof };
 
-      const rows = await withConnection(deps.pool, (connection) =>
-        deadlineClient(connection, context.deadline).query<Scope>(readScope.sql, args(readScope, true)),
-      );
-      const realmId = rows.rows.length === 1 ? (rows.rows[0]?.realm_id ?? null) : null;
+      const realmId = await withConnection(deps.pool, async (connection) => {
+        const client = deadlineClient(connection, context.deadline);
+        const { rows } = await client.query<Scope>(readScope.sql, args(readScope));
+        return readRealm(client, rows.length === 1 ? rows[0] : undefined);
+      });
       if (realmId === null) return { targetProof };
 
       const realm = await ordinaryAdmission(actor, { route: routeOf(realmId)!, id: realmId }).catch(() => undefined);
@@ -185,11 +196,11 @@ async function prepareAuthorizedPoint(
       }
       if (!targetAllowed) {
         if (!prepared.realm || prepared.realmProof === undefined) throw new GrantDeniedError();
-        const targetRows = await tx.query<Scope>(readScope.sql, args(readScope, true));
+        const targetRows = await tx.query<Scope>(readScope.sql, args(readScope));
         scope = targetRows.rows.length === 1 ? targetRows.rows[0] : undefined;
         if (
           !scope ||
-          scope.realm_id !== prepared.realm.resource.id ||
+          (await readRealm(tx, scope)) !== prepared.realm.resource.id ||
           (point.action === 'media:erase' && scope.collection_pending)
         )
           throw new GrantDeniedError();
