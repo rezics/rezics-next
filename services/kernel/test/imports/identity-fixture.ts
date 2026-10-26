@@ -138,7 +138,13 @@ export type IdentitySupport = {
 export async function openImportIdentity(options: ImportIdentityOptions): Promise<ImportIdentity> {
   const { database, clock } = options;
   const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];
-  const managementScopes = [...importerScopes, 'access:grant', 'source_fence:takedown', 'account:manage'];
+  const managementScopes = [
+    ...importerScopes,
+    'access:grant',
+    'source_fence:takedown',
+    'account:manage',
+    'account:set_rate_tier',
+  ];
   let namespace: Awaited<ReturnType<typeof createIdentityNamespace>> | undefined;
   let authDatabase: GrowthDatabase | undefined;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;

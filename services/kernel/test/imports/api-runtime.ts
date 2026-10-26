@@ -5,7 +5,6 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { RATE_LIMIT_V1 } from '../../src/access/write-rate-budgets.ts';
 import { rateIdentity } from '../../src/access/write-rate-identity.ts';
 import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
@@ -214,12 +213,7 @@ export async function openApiRuntime(options: DriverOptions) {
     await mediaBoundary.source('https://lain.bgm.tv/replacement.jpg');
     work = await time('work client', () => createWorkClient(database.url, database.openPool()));
     const secret = randomUUID();
-    const context = { pool: database.pool, deadline: Date.now() + 10000 };
-    const actor = await access.authenticate(bulk.bearer, context);
-    const importerClass = rateIdentity({ ...context, actor }, secret).rateClass;
-    let overrides = JSON.stringify({
-      [importerClass]: { upload: RATE_LIMIT_V1.service.upload, write: RATE_LIMIT_V1.service.write },
-    });
+    let overrides: string | undefined;
     let limited: Parameters<ImportApiDriver['rateLimit']>[0] | undefined;
     let batchUnits = 0;
     function budget(units: number) {
@@ -227,7 +221,6 @@ export async function openApiRuntime(options: DriverOptions) {
       batchUnits = units;
       overrides = JSON.stringify({
         [importerClass]: {
-          upload: RATE_LIMIT_V1.service.upload,
           write: { maximum: limited.requests * batchUnits, seconds: limited.windowMs / 1000 },
         },
       });
@@ -245,11 +238,6 @@ export async function openApiRuntime(options: DriverOptions) {
       });
     }
     let app = timeSync('kernel composition', kernel);
-    const measurement = createApiCapture(database, identitySupport(identity).authDatabase);
-    const captures: { request: Request; body: string; response: Response }[] = [];
-    const commands = new Map<string, { command: BatchCommand; actor: string }>();
-    let current: { result: Run; controls: Controls; abort: AbortController; lost: boolean } | undefined;
-
     async function request(path: string, body?: unknown, bearer?: string, key = randomUUID()) {
       return app.handle(
         new Request(`${origin}${path}`, {
@@ -264,6 +252,23 @@ export async function openApiRuntime(options: DriverOptions) {
         }),
       );
     }
+
+    const tierKey = randomUUID();
+    const tierResponse = await request(
+      `/v1/accounts/${bulk.accountId}:setRateTier`,
+      { key: tierKey, tier: 'service' },
+      identitySupport(identity).managementBearer,
+      tierKey,
+    );
+    if (tierResponse.status !== 200)
+      throw new Error(`Importer service tier setup: HTTP ${tierResponse.status}: ${await tierResponse.text()}`);
+    const context = { pool: database.pool, deadline: Date.now() + 10000 };
+    const actor = await access.authenticate(bulk.bearer, context);
+    const importerClass = rateIdentity({ ...context, actor }, secret).rateClass;
+    const measurement = createApiCapture(database, identitySupport(identity).authDatabase);
+    const captures: { request: Request; body: string; response: Response }[] = [];
+    const commands = new Map<string, { command: BatchCommand; actor: string }>();
+    let current: { result: Run; controls: Controls; abort: AbortController; lost: boolean } | undefined;
 
     async function receipt(key: string) {
       const known = commands.get(key);
