@@ -48,10 +48,42 @@ test('public identity batches retain request order and disclosure across partiti
         [suspended, deleted, pending, active, missing, active],
       ),
     ).toEqual([
-      { id: suspended, handle: 'identity_fixture', displayName: 'Identity fixture', state: 'active' },
-      { id: deleted, handle: null, displayName: null, state: 'deleted' },
-      { id: active, handle: 'identity_fixture', displayName: 'Identity fixture', state: 'active' },
-      { id: active, handle: 'identity_fixture', displayName: 'Identity fixture', state: 'active' },
+      {
+        id: suspended,
+        kind: 'actor',
+        handle: 'identity_fixture',
+        displayName: 'Identity fixture',
+        state: 'active',
+        automated: false,
+        operatorId: null,
+      },
+      {
+        id: deleted,
+        kind: 'actor',
+        handle: null,
+        displayName: null,
+        state: 'deleted',
+        automated: false,
+        operatorId: null,
+      },
+      {
+        id: active,
+        kind: 'actor',
+        handle: 'identity_fixture',
+        displayName: 'Identity fixture',
+        state: 'active',
+        automated: false,
+        operatorId: null,
+      },
+      {
+        id: active,
+        kind: 'actor',
+        handle: 'identity_fixture',
+        displayName: 'Identity fixture',
+        state: 'active',
+        automated: false,
+        operatorId: null,
+      },
     ]);
   } finally {
     await client.query('ROLLBACK');

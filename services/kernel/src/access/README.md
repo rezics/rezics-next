@@ -247,7 +247,12 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Public identity read
 
-- Touches: one statement; at most 100 `account_pkey(route, account_id)` probes on `access.account`.
+- Returns per visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state` (`active` or
+  `deleted`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
+  every other account is `automated: false` with `operatorId: null`. A deleted account keeps only its `kind`: handle,
+  display name and operator are withheld, and `automated` is false. Pending accounts are absent and no private field is
+  selected.
+- Touches: one statement (`public-identity-page.sql`); at most 100 `account_pkey(route, account_id)` probes on `access.account`.
 - Bound: O(k log N) for k <= 100 requested ids and N accounts; constant statements; rows at most k.
 - Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
   the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,

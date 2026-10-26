@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import accountRead from './account-read.sql';
-import publicPage from './account-public-page.sql';
+import publicPage from './public-identity-page.sql';
 import publicRead from './account-public-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 
@@ -28,9 +28,12 @@ export type PublicAccount =
 
 export type PublicIdentity = {
   id: string;
+  kind: 'actor' | 'organization';
   handle: string | null;
   displayName: string | null;
   state: 'active' | 'deleted';
+  automated: boolean;
+  operatorId: string | null;
 };
 
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
@@ -79,7 +82,11 @@ export async function readPublicIdentities(
   for (const [route, ids] of anchors) {
     const rows = await publicPage.run(client, { route, account_ids: ids });
     for (const row of rows)
-      found.set(`${route}:${row.id}`, { ...row, state: row.state === 'deleted' ? 'deleted' : 'active' });
+      found.set(`${route}:${row.id}`, {
+        ...row,
+        kind: row.kind === 'organization' ? 'organization' : 'actor',
+        state: row.state === 'deleted' ? 'deleted' : 'active',
+      });
   }
   return routes.flatMap((route, index) => {
     const row = found.get(`${route}:${accountIds[index]}`);
