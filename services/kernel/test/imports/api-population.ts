@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import { derivedId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { seed, placement, type Population } from '../support/growth.ts';
@@ -10,10 +11,16 @@ import type { ApiRuntime } from './api-runtime.ts';
 export function createApiPopulation(runtime: ApiRuntime) {
   let catalogue = 0;
   let history = 0;
+  let revisionHistory = 0;
+  let revisionOffset = 0;
+  let historySubjects = false;
   let target = { catalogueRecords: 0, historyRows: 0 };
   const hot = tupleRoute(runtime.identity.routeKey, 'bangumi', '1');
   const accountRoute = routeOf(runtime.identity.bulk.accountId)!;
   const stableId = (route: number, name: string) => derivedId('00000000-0000-8000-8000-000000000099', name, route);
+  // Populate the history relation the native retraction provenance join reads.
+  // Thirty-two revisions per ordinal give it thousands of rows at the first scale.
+  const revisionsPerOrdinal = 32;
   function unrelatedRecord(source: Source, ordinal: number): unknown {
     const n = 1000000 + ordinal;
     if (source === 'bangumi') return { id: n, type: 1, name: `Unrelated ${n}` };
@@ -48,6 +55,29 @@ export function createApiPopulation(runtime: ApiRuntime) {
           recorded_transaction_id: stableId(r, `transaction:${ordinal}:${i}`),
         }));
       }
+      if (ordinal < target.historyRows && ordinal >= revisionHistory) {
+        if (!historySubjects && ordinal === 0)
+          result['semantic.subject'] = [
+            ...(result['semantic.subject'] ?? []),
+            ...historyRoutes.map((route) => ({
+              route,
+              subject_id: stableId(route, 'history-subject'),
+              type: 'schema:Book',
+              recorded_transaction_id: stableId(route, 'history-subject-transaction'),
+            })),
+          ];
+        result['semantic.revision'] = historyRoutes.flatMap((route) =>
+          Array.from({ length: revisionsPerOrdinal }, (_, index) => ({
+            route,
+            subject_id: stableId(route, 'history-subject'),
+            revision: (revisionOffset + ordinal) * revisionsPerOrdinal + index + 1,
+            kind: 'propose',
+            release: bundledDigest,
+            recorded_transaction_id: stableId(route, `history-revision:${revisionOffset + ordinal}:${index}`),
+            source: null,
+          })),
+        );
+      }
       if (ordinal < target.historyRows && ordinal >= history) {
         result['editorial.write_basis'] = [...new Set([route, hot, accountRoute])].map((r, i) => ({
           partition_no: partitionOf(r),
@@ -63,6 +93,13 @@ export function createApiPopulation(runtime: ApiRuntime) {
       return result;
     },
   };
+  // Every record in the bounded five-record catalogue can be the removal
+  // target. Its source tuple places the native subject's provenance join.
+  const historyRoutes = [
+    ...new Set(
+      Array.from({ length: 5 }, (_, index) => tupleRoute(runtime.identity.routeKey, 'bangumi', String(index + 1))),
+    ),
+  ];
   return {
     population,
     async seed(input: { catalogueRecords: number; historyRows: number }) {
@@ -70,6 +107,12 @@ export function createApiPopulation(runtime: ApiRuntime) {
         // Repeated growth checks start at their first scale again. Remove only
         // this population's disjoint setup keys before growing the next sample.
         const db = runtime.importer.session.store.database;
+        // Native revisions are immutable. A new growth sequence appends its own
+        // disjoint range, retaining all history from the preceding sequence.
+        if (input.historyRows < revisionHistory) {
+          revisionOffset += revisionHistory;
+          revisionHistory = 0;
+        }
         for (let ordinal = input.catalogueRecords; ordinal < catalogue; ordinal++) {
           const { route } = placement(population, ordinal);
           for (const [i, r] of [route, hot].entries())
@@ -94,9 +137,11 @@ export function createApiPopulation(runtime: ApiRuntime) {
         history = Math.min(history, input.historyRows);
         target = input;
         await seed(runtime.database, population, {
-          from: Math.min(catalogue, history),
+          from: Math.min(catalogue, history, revisionHistory),
           to: Math.max(input.catalogueRecords, input.historyRows),
         });
+        if (input.historyRows > 0) historySubjects = true;
+        revisionHistory = input.historyRows;
         const registration = createSourceRegistration('bangumi', { source: 'bangumi', converterRevision: 'seed-v1' });
         db.transaction(() => {
           for (let ordinal = catalogue; ordinal < input.catalogueRecords; ordinal++) {

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { RATE_LIMIT_V1 } from '../../src/access/write-rate-budgets.ts';
 import { rateIdentity } from '../../src/access/write-rate-identity.ts';
 import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
@@ -247,9 +248,7 @@ export async function openApiRuntime(options: DriverOptions) {
     const measurement = createApiCapture(database, identitySupport(identity).authDatabase);
     const captures: { request: Request; body: string; response: Response }[] = [];
     const commands = new Map<string, { command: BatchCommand; actor: string }>();
-    let current:
-      | { result: Run; controls: Controls; abort: AbortController; lost: boolean; reading: boolean }
-      | undefined;
+    let current: { result: Run; controls: Controls; abort: AbortController; lost: boolean } | undefined;
 
     async function request(path: string, body?: unknown, bearer?: string, key = randomUUID()) {
       return app.handle(
@@ -306,7 +305,14 @@ export async function openApiRuntime(options: DriverOptions) {
           await current?.controls.beforeWrite?.();
         }
         const response = await time(`HTTP: ${req.method} ${new URL(req.url).pathname}`, () => app.handle(req));
-        captures.push({ request: req, body: bytes, response: response.clone() });
+        // Detach the actual response bytes before a simulated transport loss
+        // aborts the request and its connected response streams.
+        const captured = new Response(await response.clone().arrayBuffer(), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+        captures.push({ request: req, body: bytes, response: captured });
         if (bulk && current) {
           const body = JSON.parse(bytes) as BatchWriteRequest;
           for (const command of body.commands)
@@ -326,7 +332,7 @@ export async function openApiRuntime(options: DriverOptions) {
             response: {
               status: response.status,
               headers: new Headers(response.headers),
-              body: await response.clone().json(),
+              body: await captured.clone().json(),
             },
             atMs,
             receipts:
@@ -353,6 +359,14 @@ export async function openApiRuntime(options: DriverOptions) {
     function openImporter() {
       const next = new Importer({
         path,
+        // Outcome scenarios exercise one account's durable retry sequence. The
+        // separate throughput binding owns concurrency across records.
+        recordConcurrency: 1,
+        now: Date.now,
+        sleep: async (ms, signal) => {
+          current?.result.waits.push({ startedAtMs: Date.now(), durationMs: ms });
+          await sleep(ms, undefined, { signal });
+        },
         instrumentDatabase: measurement.instrument,
         transport: {
           batchWrite: (body) => transport.batch(body, current?.abort.signal),
@@ -363,7 +377,7 @@ export async function openApiRuntime(options: DriverOptions) {
             ),
         },
         onConversionOutput(output) {
-          if (current?.reading) (current.result.conversions as object[]).push(output);
+          if (current) (current.result.conversions as object[]).push(output);
         },
         mediaResolver: {
           async resolve(input) {
@@ -388,6 +402,7 @@ export async function openApiRuntime(options: DriverOptions) {
               containerId: input.subject,
               mediaImportIntents: input.mediaImportIntents,
               signal: input.signal,
+              deferPending: input.deferPending ?? false,
             });
             if (resolved.outcome !== 'resolved' || resolved.assets.some((asset) => asset.outcome !== 'available'))
               return { status: 'pending' };
@@ -404,7 +419,7 @@ export async function openApiRuntime(options: DriverOptions) {
       const started = Date.now();
       const measured = !!measurement.active;
       const result: Run = { outcome: 'interrupted', conversions: [], exchanges: [], waits: [], vanished: [] };
-      current = { result, controls, abort: new AbortController(), lost: false, reading: true };
+      current = { result, controls, abort: new AbortController(), lost: false };
       const counters = createDumpCounters();
       let tableDb: Database | undefined;
       try {
@@ -436,14 +451,6 @@ export async function openApiRuntime(options: DriverOptions) {
           })();
           records = readDump(dump.source, chunks, { maxRecordBytes: options.maxRecordBytes, counters });
         }
-        const inputRecords = records;
-        records = (async function* () {
-          try {
-            yield* inputRecords;
-          } finally {
-            if (current) current.reading = false;
-          }
-        })();
         const native = await importer!.runRecords(
           createSourceRegistration(dump.source, { source: dump.source, converterRevision: dump.converterRevision }),
           records,

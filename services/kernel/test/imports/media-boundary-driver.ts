@@ -495,6 +495,17 @@ async function mediaGrowth(
     if (response.status !== 202) throw new Error(`Growth public import: ${JSON.stringify(response)}`);
     return response.body.media.id;
   };
+  // Container and media-owner checks are native point reads too. Populate their
+  // relations through public creates and reservations before the first scale.
+  // These unrelated pending reservations are the same setup as population.write;
+  // grants come only from native resource initialization, never SQL seeding.
+  for (let batch = 0; batch < 128; batch++)
+    await Promise.all(
+      Array.from({ length: 8 }, async (_, index) => {
+        const containerId = await createContainer();
+        await submit({ ...request, containerId }, `container-baseline-${batch}-${index}`);
+      }),
+    );
   // Native workflow tables need a populated baseline too. Otherwise PostgreSQL's
   // small-table sequential plans count the benchmark's own preceding runs. Each
   // batch is at most sixteen real public reservations and registered jobs, with
@@ -679,15 +690,19 @@ async function workerHost(): Promise<RpcHost> {
     });
     DBOS.registerStep = registerStep;
     DBOS.registerWorkflow = registerWorkflow;
+    // Persist the SDK's real polling configuration before launch discovers its
+    // queues and schedules their first polls in this isolated runtime.
+    const effectsQueue = await client.retrieveQueue('effects');
+    const importQueue = await client.retrieveQueue('import');
+    if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
+    await effectsQueue.setMinPollingIntervalMs(1);
+    await importQueue.setMinPollingIntervalMs(1);
     await work.launch();
     const executor = DBOSExecutor.globalInstance;
     if (!executor) throw new Error('Missing work executor');
     // The timeout sweep issues a statement on a one-second timer. Leaving it on
     // the measured pool makes the statement count follow wall-clock duration.
     executor.systemDatabase.cancelTimedOutWorkflows = async () => [];
-    const effectsQueue = await DBOS.retrieveQueue('effects');
-    const importQueue = await DBOS.retrieveQueue('import');
-    if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
     let queuesQuiet = false;
     const quietQueues = async () => {
       if (queuesQuiet) return;
@@ -732,9 +747,9 @@ async function workerHost(): Promise<RpcHost> {
           const index = source.events.findIndex((event) => event.subject === mediaId && event.type === type);
           if (index < 0) throw new Error('Missing native dispatch event');
           await work!.effects.enqueue([source]);
-          await DBOS.retrieveWorkflow(effectWorkflowId(source, index, effect)).getResult();
+          await DBOS.retrieveWorkflow(effectWorkflowId(source, index, effect)).getResult({ pollingIntervalMs: 1 });
           const id = contentWorkWorkflowId(source, index, kind, kind === 'image' ? undefined : mediaId);
-          return DBOS.retrieveWorkflow(id).getResult();
+          return DBOS.retrieveWorkflow(id).getResult({ pollingIntervalMs: 1 });
         };
         if (method === 'measure') {
           drainStart = calls.length;
