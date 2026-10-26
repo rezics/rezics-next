@@ -221,8 +221,6 @@ beforeAll(async () => {
     stderr: 'pipe',
   });
   expect(await bootstrap.exited).toBe(0);
-  // Auth database provisioning has a 120 s command budget; the three native
-  // registrations each wait up to 30 s for pending, credential and activation.
 }, setupTimeout);
 afterAll(async () => {
   await host?.stop();

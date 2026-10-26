@@ -1,5 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
 import { Pool } from 'pg';
 import type { JWK } from 'jose';
 import { createAuthService, createAccountWorkflows } from '../../../auth/src/index.ts';
@@ -61,7 +62,7 @@ export async function handleFixture(
     const prefix = automated
       ? `wf:${createHash('sha256')
           .update(
-            JSON.stringify([automated.request.operatorAccountId, automated.request.authorization, automated.request]),
+            canonicalize([automated.request.operatorAccountId, automated.request.authorization, automated.request])!,
           )
           .digest('hex')}`
       : `wf:${workflow}`;
@@ -252,10 +253,10 @@ export async function handleFixture(
       commandKeyPrefixes.set(
         approved,
         `wf:${createHash('sha256')
-          .update(JSON.stringify([actor.accountId, reference, operation]))
+          .update(canonicalize([actor.accountId, reference, operation])!)
           .digest('hex')}`,
       );
-      operationDigests.set(approved, createHash('sha256').update(JSON.stringify(operation)).digest('hex'));
+      operationDigests.set(approved, createHash('sha256').update(canonicalize(operation)!).digest('hex'));
       return approved;
     },
     actorAccountId: (context) => context.actor.accountId,
