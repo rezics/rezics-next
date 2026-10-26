@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth/membership-workflows';
+import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth-contract';
 import { enqueueMembership } from '../access/membership-work.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
