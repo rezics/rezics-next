@@ -20,6 +20,8 @@ const executable = (name: string) =>
   [app, ui].map((directory) => join(directory, 'node_modules/.bin', name)).find(existsSync)!;
 let child: ChildProcess | undefined;
 let browser: Browser | undefined;
+let serverPromise: Promise<string> | undefined;
+let browserPromise: Promise<Browser> | undefined;
 
 function recordings() {
   return existsSync(recorded) ? [...new Bun.Glob('**/*.json').scanSync({ cwd: recorded })].sort() : [];
@@ -71,6 +73,44 @@ async function storybook() {
     if (Date.now() > deadline) throw new Error(`Storybook did not serve its index in time:\n${output}`);
     await Bun.sleep(500);
   }
+}
+
+function sharedStorybook(): Promise<string> {
+  serverPromise ??= storybook();
+  return serverPromise;
+}
+
+function sharedBrowser(): Promise<Browser> {
+  browserPromise ??= chromium.launch().then((opened) => {
+    browser = opened;
+    return opened;
+  });
+  return browserPromise;
+}
+
+async function openStory(name: string, visitor: string, locale: string) {
+  const origin = await sharedStorybook();
+  const index = (await (await fetch(`${origin}/index.json`)).json()) as {
+    entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
+  };
+  const entry = Object.values(index.entries).find(
+    (candidate) =>
+      candidate.type === 'story' &&
+      basename(candidate.importPath) === `${name}.stories.tsx` &&
+      candidate.name === visitor,
+  );
+  if (!entry) throw new Error(`Missing ${name} story for ${visitor}.`);
+  const context = await (await sharedBrowser()).newContext({
+    viewport: { width: 1280, height: 860 },
+    reducedMotion: 'reduce',
+  });
+  const page = await context.newPage();
+  await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
+    waitUntil: 'networkidle',
+  });
+  await page.locator('html[data-hydrated]').waitFor();
+  await page.getByRole('main').waitFor();
+  return { context, page };
 }
 
 // Follow local imports, so shared replay helpers may own the recordings instead of each story importing JSON directly.
@@ -138,11 +178,11 @@ test(
     const previewSource = readFileSync(preview!, 'utf8');
     for (const feature of ['globalTypes', 'locale', 'toolbar', ...locales]) expect(previewSource).toContain(feature);
 
-    const origin = await storybook();
+    const origin = await sharedStorybook();
     const index = (await (await fetch(`${origin}/index.json`)).json()) as {
       entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
     };
-    browser = await chromium.launch();
+    await sharedBrowser();
     const entries = Object.values(index.entries).filter((entry) => entry.type === 'story');
     for (const name of pages)
       for (const visitor of visitors)
@@ -202,6 +242,62 @@ test(
         ).toEqual([]);
         expect(external, 'stories replay recordings without contacting Auth or a live kernel').toEqual([]);
         await context.close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  'the board story renders the board route for signed-in and signed-out visitors in English and Traditional Chinese',
+  async () => {
+    for (const locale of ['en', 'zh-Hant']) {
+      const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+      const signedIn = await openStory('board', 'Signed In', locale);
+      try {
+        const main = signedIn.page.getByRole('main');
+        expect(await main.getByRole('link', { name: own.board_start_thread, exact: true }).count()).toBe(1);
+        expect(await main.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
+      } finally {
+        await signedIn.context.close();
+      }
+
+      const signedOut = await openStory('board', 'Signed Out', locale);
+      try {
+        const main = signedOut.page.getByRole('main');
+        expect(await main.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
+        expect(await main.getByRole('link', { name: own.board_start_thread, exact: true }).count()).toBe(0);
+      } finally {
+        await signedOut.context.close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  'the thread story renders the thread route for signed-in and signed-out visitors in English and Traditional Chinese',
+  async () => {
+    for (const locale of ['en', 'zh-Hant']) {
+      const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+      const signedIn = await openStory('thread', 'Signed In', locale);
+      try {
+        const main = signedIn.page.getByRole('main');
+        await main.getByRole('textbox', { name: own.thread_reply_body_label, exact: true }).waitFor();
+        expect(await main.getByRole('button', { name: own.thread_write_send, exact: true }).count()).toBe(1);
+        expect(await main.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
+      } finally {
+        await signedIn.context.close();
+      }
+
+      const signedOut = await openStory('thread', 'Signed Out', locale);
+      try {
+        const main = signedOut.page.getByRole('main');
+        expect(await main.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
+        expect(await main.getByRole('textbox', { name: own.thread_reply_body_label, exact: true }).count()).toBe(0);
+        expect(await main.getByRole('button', { name: own.thread_write_send, exact: true }).count()).toBe(0);
+      } finally {
+        await signedOut.context.close();
       }
     }
   },

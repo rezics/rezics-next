@@ -15,6 +15,19 @@ const names = ['en', 'ja'].flatMap((locale) =>
 );
 const timeout = 600_000;
 
+function screenshotSettle() {
+  const source = readFileSync(join(app, 'scripts/screenshots.ts'), 'utf8');
+  const start = source.indexOf('async function settle(');
+  const end = source.indexOf('\nasync function captureOne(', start);
+  if (start < 0 || end < 0) throw new Error('The screenshot capture settle function is missing.');
+  const compiled = new Bun.Transpiler({ loader: 'ts' }).transformSync(`${source.slice(start, end)}\nreturn settle;`);
+  return new Function(compiled)() as (
+    page: { waitForFunction: (...args: unknown[]) => Promise<unknown>; evaluate: (...args: unknown[]) => Promise<unknown> },
+    id: string,
+    pageErrors?: readonly string[],
+  ) => Promise<void>;
+}
+
 function pngDimensions(bytes: Buffer): { width: number; height: number } | undefined {
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const end = Buffer.from([0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
@@ -100,3 +113,18 @@ test(
   },
   timeout,
 );
+
+test('a story render error fails capture with its story id and the page error', async () => {
+  const id = 'pages-capture-failure--throws-while-rendering';
+  const settle = screenshotSettle();
+  const page = {
+    waitForFunction: async () => undefined,
+    evaluate: async () => 'errored',
+  };
+  const message = await settle(page, id, ['Synthetic render failure']).then(
+    () => '',
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  );
+  expect(message).toContain(id);
+  expect(message).toContain('Synthetic render failure');
+});
