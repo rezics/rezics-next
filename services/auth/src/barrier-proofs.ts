@@ -53,17 +53,18 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
           return null;
         const source = (
           await database.query(
-            `SELECT s."clientId",s."grantedScope",s."authnEpoch",s."authTime",s."authMethods",s."expiresAt",a.scopes,a.first_party,c.scopes AS consent
+            `SELECT s."userId" AS account_id,s."clientId",s."grantedScope",s."authnEpoch",s."authTime",s."authMethods",s."expiresAt",a.scopes,a.first_party,c.scopes AS consent
           FROM session s JOIN auth_client a ON a.client_id=s."clientId"
           LEFT JOIN auth_consent c ON c.account_id=s."userId" AND c.client_id=a.client_id
-          WHERE s.id=$1 AND s."userId"=$2 AND s."expiresAt">statement_timestamp()
+          WHERE s.id=$1 AND s."expiresAt">statement_timestamp()
             AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=a.client_id AND v.ready)
             AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=a.client_id)`,
-            [e[3], expected.accountId],
+            [e[3]],
           )
         ).rows[0];
         if (
           !source ||
+          source.account_id !== expected.accountId ||
           source.authnEpoch !== expected.previousEpoch ||
           !same([source.clientId, source.grantedScope, source.authTime, source.authMethods], e.slice(4, 8)) ||
           row.expires_at > source.expiresAt ||
