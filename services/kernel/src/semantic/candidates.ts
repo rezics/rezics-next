@@ -297,6 +297,13 @@ export async function decideCandidate(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
+      type CandidateRow = {
+        revision: number;
+        release: string;
+        candidate_id: string;
+        property: string;
+        slot_id: string;
+      };
       const found = listed(
         await readDecisionCandidate.run(tx, {
           route,
@@ -304,7 +311,7 @@ export async function decideCandidate(
           candidate_id: options.candidate,
         }),
       );
-      let candidate = found[0];
+      let candidate: CandidateRow | undefined = found[0];
       if (!candidate) {
         candidate = listed(
           await readCompactCandidate.run(tx, {
@@ -312,7 +319,7 @@ export async function decideCandidate(
             subject_id: options.subject,
             candidate_id: options.candidate,
           }),
-        )[0];
+        )[0] as CandidateRow | undefined;
       }
       if (!candidate) throw new SubjectNotFoundError();
       const concealed = await readHidden.run(tx, {
@@ -641,7 +648,7 @@ export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
           before: Number(after?.[0] ?? 2147483647),
           page_limit: options.limit + 1,
         }),
-      );
+      ) as { revision: number; kind: string; release: string; source: Source | null }[];
       const revisions = result.slice(0, options.limit);
       return { value: { revisions }, after: result.length > options.limit ? [revisions.at(-1)!.revision] : null };
     },
@@ -756,7 +763,13 @@ export async function listCandidates(
             revision: row.revision,
             candidate_id: row.candidate_id,
           }),
-        )[0];
+        )[0] as
+          | {
+              source: Source | null;
+              retracted: number | null;
+              retraction: { source: Source; references: BatchReference[] } | null;
+            }
+          | undefined;
         const fact = candidateFact(options.property, row);
         const dataTypes = factDataTypes(releases.get(row.release)!, [fact]);
         const statement = resolveItem(options.subject, [fact], '', dataTypes, {
