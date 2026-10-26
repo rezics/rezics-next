@@ -16,7 +16,7 @@ export type Pool = {
 };
 export type Settings = {
   version: 1; mainCheckout: string; stateDirectory: string; worktreeRoot: string;
-  mainBranch: string; integrationBranch: string; promotionParallelism: number; branchPrefix: string; localFile: string; pools: Pool[];
+  mainBranch: string; integrationBranch: string; stabilizeBranch: string; promotionParallelism: number; branchPrefix: string; localFile: string; pools: Pool[];
   routingFile: string; riskAreasFile: string; gate: string[]; formatCommand: string[];
   terminationGraceMs: number;
   codex: { serviceTier: string; compactTokens: { sol: number; luna: number }; solContextWindow: number; toolOutputTokens: number };
@@ -32,6 +32,8 @@ export type Brief = {
   acceptance: { command: string[]; tests: string[]; failing: boolean };
   estimate: { lines: number; files: number }; criticalPath: boolean; waiting: string[]; after: string[];
   inseparable: boolean; citesSources: boolean; hostileInput: boolean; markdown: string;
+  /** A fix for the frozen promotion candidate bases on and integrates into the stabilize branch. */
+  target?: 'stabilize';
 };
 export type PoolReading = {
   pool: string; allowanceKey: string; at: string; observedAt: string | null;
@@ -55,7 +57,7 @@ export type PromotionGateResult = {
 export type PromotionRun = {
   id: string;
   phase: 'gate-head' | 'classify-main' | 'classify-prefixes' | 'revert-planned' | 'revert-published'
-    | 'route-culprit' | 'gate-remainder' | 'publish-main' | 'report-environment' | 'blocked';
+    | 'route-culprit' | 'gate-remainder' | 'publish-main' | 'report-environment' | 'blocked' | 'stabilize-blocked';
   mainBase: string; devHead: string; taskIds: string[];
   rootGate: string[]; promotionParallelism: number;
   boundaries: { taskId: string; commit: string }[];
