@@ -61,7 +61,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: One active Collection primary-key read and one tombstone primary-key update. Members remain. `listing.changed` is emitted only when the Collection was actively public. The event subject is the Collection id. This command does not delete pair rows.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus `collection:delete` authorization and the envelope. No member fanout in this command.
-- Growth check: No scale sample calls delete. `test/library/collections.test.ts`: `update cost stays constant as unrelated collections grow` is the nearest whole-command point update and does not call delete. `test/library/collection-http.test.ts`: `curator creates replays updates conflicts and deletes with only the contracted public view` deletes a Collection and does not assert a scale bound.
+- Growth check: `test/library/growth-collections.test.ts`: `Delete Collection has constant rows and statements as collections and its members grow`. Whole-operation rows and statements are constant and blocks logarithmic at scales 1, 4 and 16, including authorization and the command envelope. Other accounts' and the curator's own other Collections and members, Access rows, receipts, outbox and write-basis rows grow by 500 x scale per partition; each probe Collection has 250 x scale members (250, 1000 and 4000). Every run uses a fresh probe and idempotency key.
 
 ### Add member
 
@@ -79,19 +79,19 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Touches: One active Collection read, one member primary-key note update, and one Collection touch. The note is at most 1000 characters. The event subject is the Collection id. Listing rows are unchanged.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus authorization and the envelope.
-- Growth check: No scale sample calls note. `test/library/collection-http.test.ts`: `members support duplicate subjects first after last moves notes removal and cursor pages` writes a note and does not assert scale. `test/library/collections.test.ts`: `update cost stays constant as unrelated collections grow` is a point update and does not call note.
+- Growth check: `test/library/growth-collections.test.ts`: `Note member has constant rows and statements as collections and its Collection's members grow`. Whole-operation rows and statements are constant and blocks logarithmic at scales 1, 4 and 16, including authorization and the command envelope. Other accounts' and the curator's own other Collections and members, Access rows, receipts, outbox and write-basis rows grow by 500 x scale per partition; each probe Collection has 250 x scale members (250, 1000 and 4000). Every run uses a fresh probe and idempotency key.
 
 ### Remove member
 
 - Touches: One active Collection read and one statement that deletes the member primary key and decrements `member_count`. The event subject is the Collection id.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus authorization and the envelope.
-- Growth check: `test/library/collections.test.ts`: `remove cost stays constant as unrelated collections grow`. Whole-command rows and blocks are logarithmic and statements are constant as unrelated Collections grow. The target's other members are not scaled.
+- Growth check: `test/library/growth-collections.test.ts`: `Remove member has constant rows and statements as collections and its Collection's members grow`. Whole-operation rows and statements are constant and blocks logarithmic at scales 1, 4 and 16, including authorization and the command envelope. Other accounts' and the curator's own other Collections and members, Access rows, receipts, outbox and write-basis rows grow by 500 x scale per partition; each probe Collection has 250 x scale members (250, 1000 and 4000). Every run uses a fresh probe and idempotency key.
 
 ### Collection read
 
 - Touches: `collection:read`, with public eligibility. Eligibility reads the Collection primary key once into a sink, and the load does not read it again when that sink has seen the row. A repeatable-read transaction may also read the viewer account. Public and unlisted rows are returned. A private row is returned only to a live grant-capable curator.
 - Bound: The Collection point is `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the account read when the viewer is an account, the Access check, and begin and commit.
-- Growth check: `test/library/collection-reads.test.ts`: `reads keep the same statement count as unrelated Collections, members and pairs grow`. It keeps `readCollection` statement counts equal at 1, 8 and 64. It does not classify blocks.
+- Growth check: `test/library/growth-collections.test.ts`: `Collection read has constant rows and statements as collections and its members grow`. Whole-operation rows and statements are constant and blocks logarithmic at scales 1, 4 and 16, including authorization. Other accounts' and the curator's own other Collections and members, Access rows, receipts, outbox and write-basis rows grow by 500 x scale per partition; each probe Collection has 250 x scale members (250, 1000 and 4000). Every run uses a fresh probe.
 
 ### Curator list
 
