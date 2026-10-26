@@ -4,6 +4,10 @@ const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const units = Type.Union([Type.Integer({ minimum: 0, maximum: 20 }), Type.Null()]);
 
 export const RATING_EVENTS = {
+  'com.rezics.rating.voter-realm.changed.v1': Type.Object(
+    { voterId: Type.String({ pattern: UUID }), realmId: Type.String({ pattern: UUID }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.vote.changed.v1': Type.Object(
     {
       voterId: Type.String({ pattern: UUID }),

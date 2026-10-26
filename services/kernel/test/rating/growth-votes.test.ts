@@ -104,3 +104,61 @@ test('putting a vote has constant rows and statements as same-partition votes gr
   expect(result.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   expect(routeOf(actorId)).toBe(route);
 });
+
+test('putting a vote reads only the capped memberships as other voters and waiting Realms grow', async () => {
+  await database.admin.query(
+    `INSERT INTO rating.voter_realm (route, voter_id, realm_id, joined_at, state)
+     SELECT $1, $2::uuid, ('00000000-0000-7000-8000-3a02' || lpad(to_hex(n), 8, '0'))::uuid,
+            '2026-10-27T10:00:00Z', 'counted' FROM generate_series(1, 100) n`,
+    [route, actorId],
+  );
+  const memberships: Population = {
+    name: 'unrelated and uncounted memberships',
+    hotPartition: route >>> 4,
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'rating.voter_realm': [
+        {
+          route,
+          voter_id: id(4_000_000 + ordinal),
+          realm_id: id(5_000_000 + ordinal),
+          joined_at: '2026-10-27T10:00:00Z',
+          state: 'counted',
+        },
+        {
+          route,
+          voter_id: actorId,
+          realm_id: id(6_000_000 + ordinal),
+          joined_at: '2026-10-27T10:00:00Z',
+          state: 'uncounted',
+        },
+      ],
+    }),
+  };
+  let units = 0;
+  const result = await checkGrowth(database, {
+    name: 'rating vote capped memberships',
+    scales: [64, 512, 4096],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (db, scale, previous) =>
+      seed({ pool: db.pool, admin: db.admin }, memberships, { from: previous, to: scale }),
+    operation: async () => {
+      await commands.putVote(
+        actor,
+        { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: ++units },
+        randomUUID(),
+      );
+    },
+    repetitions: 1,
+    warmups: 0,
+  });
+  expect(result.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+  const event = (
+    await database.admin.query(
+      `SELECT data FROM core.outbox WHERE type = 'com.rezics.rating.vote.changed.v1' AND subject = $1
+     ORDER BY position DESC LIMIT 1`,
+      [actorId],
+    )
+  ).rows[0].data;
+  expect(event.populations).toHaveLength(101);
+});

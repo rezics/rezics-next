@@ -157,6 +157,32 @@ CREATE TABLE rating.vote (
 
 
 --
+-- Name: voter_realm; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.voter_realm (
+    route integer NOT NULL,
+    voter_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    joined_at timestamp with time zone NOT NULL,
+    state text NOT NULL,
+    cursor_question_id uuid,
+    cursor_target_id uuid,
+    limit_question_id uuid,
+    limit_target_id uuid,
+    rejoin boolean DEFAULT false NOT NULL,
+    CONSTRAINT voter_realm_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11)))),
+    CONSTRAINT voter_realm_check1 CHECK (((cursor_question_id IS NULL) = (cursor_target_id IS NULL))),
+    CONSTRAINT voter_realm_check2 CHECK (((limit_question_id IS NULL) = (limit_target_id IS NULL))),
+    CONSTRAINT voter_realm_check3 CHECK (((state = ANY (ARRAY['adding'::text, 'removing'::text])) OR (cursor_question_id IS NULL))),
+    CONSTRAINT voter_realm_check4 CHECK (((state = 'removing'::text) OR ((limit_question_id IS NULL) AND (NOT rejoin)))),
+    CONSTRAINT voter_realm_check5 CHECK (((cursor_question_id IS NULL) OR (limit_question_id IS NULL) OR (ROW(cursor_question_id, cursor_target_id) <= ROW(limit_question_id, limit_target_id)))),
+    CONSTRAINT voter_realm_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT voter_realm_state_check CHECK ((state = ANY (ARRAY['adding'::text, 'counted'::text, 'removing'::text, 'uncounted'::text])))
+);
+
+
+--
 -- Name: aggregate_component aggregate_component_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -197,6 +223,14 @@ ALTER TABLE ONLY rating.vote
 
 
 --
+-- Name: voter_realm voter_realm_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.voter_realm
+    ADD CONSTRAINT voter_realm_pkey PRIMARY KEY (route, voter_id, realm_id);
+
+
+--
 -- Name: population_vote_counted_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -208,6 +242,20 @@ CREATE INDEX population_vote_counted_idx ON rating.population_vote USING btree (
 --
 
 CREATE INDEX population_vote_target_page_idx ON rating.population_vote USING btree (route, population_id, target_id, question_id, voter_id);
+
+
+--
+-- Name: voter_realm_capped_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX voter_realm_capped_idx ON rating.voter_realm USING btree (route, voter_id, realm_id) WHERE (state <> 'uncounted'::text);
+
+
+--
+-- Name: voter_realm_waiting_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX voter_realm_waiting_idx ON rating.voter_realm USING btree (route, voter_id, joined_at, realm_id) WHERE (state = 'uncounted'::text);
 
 
 --

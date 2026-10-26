@@ -1,14 +1,14 @@
 import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
+import { readVotePopulations } from './voter-realms.ts';
 import questionRead from './question-read.sql';
 import voteInsert from './vote-insert.sql';
 import voteLock from './vote-lock.sql';
@@ -225,7 +225,12 @@ export function createVoteCommands(config: Dependencies) {
                   previous: previous?.units ?? null,
                   units: vote.units,
                   revision: vote.revision,
-                  populations: [GLOBAL_CONTEXT.id],
+                  populations: await readVotePopulations(tx, {
+                    route,
+                    voterId: owner.accountId,
+                    questionId: question.id,
+                    targetId: resolved.subjectId,
+                  }),
                 },
               },
             ],

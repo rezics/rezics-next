@@ -118,3 +118,34 @@ the authenticated account; the target and question identify a vote but never sel
 
 Vote request bodies reject unknown fields and non-integer values. The question scale carries the units used by vote
 requests, so vote routes do not accept or return floating-point vote values. Errors use RFC 9457 problem responses.
+
+## Voter Realm membership
+
+`rating.voter_realm` belongs to the voter's route. Membership events update it in one command in the voter's
+partition. The first 100 joined Realms occupy the capped set, including rows still `adding` or `removing`.
+Later joins are `uncounted`. Deleting a capped row promotes the earliest-joined uncounted Realm to `adding`;
+equal join timestamps are ordered by Realm id. A pending removal continues to occupy its slot. Duplicate joins
+preserve the original join time, and a rejoin during removal retains its slot and join time.
+
+A new capped membership starts `adding` with a NULL cursor. Leaving a `counted` Realm starts `removing` with
+NULL cursor and limit. Leaving an `adding` Realm with no cursor deletes it immediately; otherwise removal
+starts with a NULL cursor and its former add cursor as the limit. Leaving an uncounted Realm deletes it.
+Joining during removal sets `rejoin`; leaving during removal clears it. On completion, removal deletes the row
+and promotes one waiting Realm, or, when `rejoin` is set, restarts it as `adding` with no cursor or limit.
+`finishVoterRealmRemoval` is the completion operation for the future pager to call in its final page's command.
+
+Vote writes read at most 100 non-uncounted membership rows in their own transaction. Their events list Global,
+every `counted` Realm, `adding` Realms only for keys at or before their cursor, and `removing` Realms only for
+keys in `(cursor, limit]`. Keys are ordered by `(question_id, target_id)`. A NULL add cursor means no keys have
+been applied; a NULL removal cursor or limit means no lower or upper bound respectively. These bounds preserve
+exactly the applied prefix when a member leaves during adding. This stage does not page votes: adding rows keep
+a NULL cursor and removing rows retain their range until paging applies it.
+
+All membership decisions, paging and vote changes must serialize in the voter's partition. The voter's events
+reach the aggregate effect in partition order; paging must apply its pages in that same stream so each vote
+counts exactly once per population. Membership effects use source-event receipts so a retry after a later leave
+cannot resurrect a membership. Their command emits `com.rezics.rating.voter-realm.changed.v1` in that partition.
+
+Membership changes write at most two membership rows: the affected Realm and one promotion. Capped and waiting
+partial indexes bound the membership read and promotion independently of other voters and the waiting set's
+size. Vote writes add at most 100 membership rows to their existing bounded reads.
