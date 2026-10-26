@@ -1,5 +1,5 @@
 types:
-  schema:Person: 'être humain'
+  schema:Person: 'personne'
   schema:Organization: 'organisation'
 properties:
   schema:url: 'site officiel'
@@ -65,3 +65,5 @@ inverseProperties:
   rezics:summaryOf: 'Versions résumées'
   rezics:sideStoryOf: 'Histoires annexes'
   rezics:bangumiRelatedTo: 'Lien depuis (Bangumi)'
+typeDescriptions:
+  schema:Person: 'être humain'

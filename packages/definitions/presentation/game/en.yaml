@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: video game
-  wd:Q20631656: software release
-  wd:Q209163: expansion add-on
+  wd:Q20631656: 'release'
+  wd:Q209163: 'add-on'
 properties:
   schema:gamePlatform: game platform
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: 'Sequel'
   wdt:P408: 'Games using this engine'
   wdt:P8646: 'Expansions'
+typeDescriptions:
+  wd:Q20631656: 'software release'
+  wd:Q209163: 'expansion add-on'

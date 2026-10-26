@@ -2,7 +2,7 @@ types:
   schema:Episode: エピソード
   schema:Movie: 映画
   schema:TVSeason: シーズン
-  schema:TVSeries: テレビ番組シリーズ
+  schema:TVSeries: 'TVアニメ'
 properties:
   schema:copyrightNotice: 著作権表示
   schema:duration: 再生時間
@@ -18,3 +18,5 @@ inverseProperties:
   schema:isPartOf: 'エピソード'
   wdt:P449: '初回放送作品'
   wdt:P7937: 'この形式の作品'
+typeDescriptions:
+  schema:TVSeries: 'テレビ番組シリーズ'

@@ -1,6 +1,6 @@
 types:
-  schema:Book: Schrifttum
-  bf:Instance: Ausgabe oder Version
+  schema:Book: 'Buch'
+  bf:Instance: 'Ausgabe'
 properties:
   schema:exampleOfWork: Ausgabe oder Übersetzung von
   schema:isbn: ISBN-13
@@ -11,3 +11,6 @@ inverseProperties:
   schema:exampleOfWork: 'Ausgaben'
   schema:publisher: 'Veröffentlichte Werke'
   schema:translator: 'Übersetzte Werke'
+typeDescriptions:
+  schema:Book: 'Schrifttum'
+  bf:Instance: 'Ausgabe oder Version'

@@ -726,7 +726,7 @@ export async function compileCatalogue(input: {
       parts.length > 2
     )
       add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
-    allowed(labels, 'types properties inverseProperties', { file, pointer: '' });
+    allowed(labels, 'types properties inverseProperties typeDescriptions', { file, pointer: '' });
     for (const collection of ['types', 'properties'] as const) {
       if (labels[collection] !== undefined && !record(labels[collection]))
         add({ file, pointer: `/${collection}` }, 'invalid', 'Expected a label object');
@@ -742,6 +742,24 @@ export async function compileCatalogue(input: {
             seenLabels.add(identity);
             release[collection][key]!.labels[tag] = label;
           }
+        }
+      }
+    }
+    if (labels.typeDescriptions !== undefined && !record(labels.typeDescriptions))
+      add({ file, pointer: '/typeDescriptions' }, 'invalid', 'Expected a description object');
+    for (const [key, description] of Object.entries(object(labels.typeDescriptions))) {
+      const location = { file, pointer: at('/typeDescriptions', key) };
+      const type = release.types[key];
+      if (!type) add(location, 'invalid', 'Unknown type');
+      else if (typeof description !== 'string' || !description.length || [...description].length > 1500)
+        add(location, 'invalid', 'Description must contain between one and 1500 characters');
+      else {
+        const identity = `${tag}\0typeDescriptions\0${key}`;
+        if (seenLabels.has(identity)) add(location, 'duplicate', 'Term already has a description in this language');
+        else {
+          seenLabels.add(identity);
+          type.descriptions ??= dictionary();
+          type.descriptions[tag] = description;
         }
       }
     }

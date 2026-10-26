@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: コンピュータゲーム
-  wd:Q20631656: ソフトウェア・リリース
-  wd:Q209163: 拡張パック
+  wd:Q20631656: 'リリース'
+  wd:Q209163: '追加コンテンツ'
 properties:
   schema:gamePlatform: ゲームプラットフォーム
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: '続編'
   wdt:P408: 'このエンジンを使うゲーム'
   wdt:P8646: '拡張作品'
+typeDescriptions:
+  wd:Q20631656: 'ソフトウェア・リリース'
+  wd:Q209163: '拡張パック'

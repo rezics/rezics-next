@@ -1,7 +1,7 @@
 types:
   schema:Episode: episodio
   schema:Movie: película
-  schema:TVSeason: temporada televisiva
+  schema:TVSeason: 'temporada'
   schema:TVSeries: serie de televisión
 properties:
   schema:copyrightNotice: aviso de derechos de autor
@@ -18,3 +18,5 @@ inverseProperties:
   schema:isPartOf: 'Episodios'
   wdt:P449: 'Emisiones originales'
   wdt:P7937: 'Obras de esta forma'
+typeDescriptions:
+  schema:TVSeason: 'temporada televisiva'

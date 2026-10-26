@@ -178,6 +178,9 @@
         "coverRatio": {
           "type": "string",
           "pattern": "^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\\s\\S])"
+        },
+        "descriptions": {
+          "$ref": "#/$defs/descriptions"
         }
       }
     },
@@ -335,6 +338,17 @@
         },
         "const": {
           "type": "string"
+        }
+      }
+    },
+    "descriptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "(?:^(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?$|^[xX](?:-[A-Za-z0-9]{1,8})+$|^(?:en-GB-oed|i-(?:ami|bnn|default|enochian|hak|klingon|lux|mingo|navajo|pwn|tao|tay|tsu)|sgn-(?:BE-FR|BE-NL|CH-DE)|art-lojban|cel-gaulish|no-bok|no-nyn|zh-guoyu|zh-hakka|zh-min|zh-min-nan|zh-xiang)$)(?![\\s\\S])": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
         }
       }
     }

@@ -32,6 +32,7 @@ export type DataType = (typeof DATA_TYPES)[number];
 export type TypeDefinition = {
   iri: string;
   labels: Record<string, string>;
+  descriptions?: Record<string, string>;
   mappings: string[];
   bases: string[];
   properties: string[];

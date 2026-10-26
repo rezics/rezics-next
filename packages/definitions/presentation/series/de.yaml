@@ -1,8 +1,10 @@
 types:
-  wd:Q7725310: 'Mehrteiler'
+  wd:Q7725310: 'Reihe'
   schema:BookSeries: 'Buchreihe'
 properties:
   wdt:P2635: 'Anzahl der Teile dieses Werks'
   wdt:P1433: 'veröffentlicht in'
 inverseProperties:
   wdt:P1433: 'Enthaltene Werke'
+typeDescriptions:
+  wd:Q7725310: 'Mehrteiler'

@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: jeu vidéo
-  wd:Q20631656: publication de logiciels
-  wd:Q209163: extension de jeu vidéo
+  wd:Q20631656: 'version'
+  wd:Q209163: 'extension'
 properties:
   schema:gamePlatform: plateforme de jeu
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: 'Suite'
   wdt:P408: 'Jeux utilisant ce moteur'
   wdt:P8646: 'Extensions'
+typeDescriptions:
+  wd:Q20631656: 'publication de logiciels'
+  wd:Q209163: 'extension de jeu vidéo'

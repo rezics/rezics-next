@@ -1,6 +1,6 @@
 types:
-  schema:Book: œuvre écrite
-  bf:Instance: version, édition ou traduction
+  schema:Book: 'livre'
+  bf:Instance: 'édition'
 properties:
   schema:exampleOfWork: édition ou traduction de
   schema:isbn: ISBN-13
@@ -11,3 +11,6 @@ inverseProperties:
   schema:exampleOfWork: 'Éditions'
   schema:publisher: 'Œuvres publiées'
   schema:translator: 'Œuvres traduites'
+typeDescriptions:
+  schema:Book: 'œuvre écrite'
+  bf:Instance: 'version, édition ou traduction'

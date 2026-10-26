@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: videojuego
-  wd:Q20631656: release
-  wd:Q209163: expansión
+  wd:Q20631656: 'versión'
+  wd:Q209163: 'complemento'
 properties:
   schema:gamePlatform: plataforma de juego
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: 'Secuela'
   wdt:P408: 'Juegos que usan este motor'
   wdt:P8646: 'Expansiones'
+typeDescriptions:
+  wd:Q20631656: 'release'
+  wd:Q209163: 'expansión'

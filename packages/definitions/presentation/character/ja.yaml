@@ -1,5 +1,5 @@
 types:
-  wd:Q95074: '架空のキャラクター'
+  wd:Q95074: 'キャラクター'
 properties:
   schema:gender: 性別
   schema:height: 全高
@@ -9,3 +9,5 @@ properties:
 inverseProperties:
   schema:gender: 'このジェンダーの対象'
   wdt:P1853: 'この血液型の対象'
+typeDescriptions:
+  wd:Q95074: '架空のキャラクター'

@@ -1,7 +1,7 @@
 types:
   schema:Episode: episode
   schema:Movie: film
-  schema:TVSeason: television series season
+  schema:TVSeason: 'season'
   schema:TVSeries: television series
 properties:
   schema:copyrightNotice: copyright notice
@@ -18,3 +18,5 @@ inverseProperties:
   schema:isPartOf: 'Episodes'
   wdt:P449: 'Original broadcasts'
   wdt:P7937: 'Works in this form'
+typeDescriptions:
+  schema:TVSeason: 'television series season'

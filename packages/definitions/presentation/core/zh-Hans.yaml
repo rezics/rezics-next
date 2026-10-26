@@ -1,5 +1,5 @@
 types:
-  schema:Person: '人类'
+  schema:Person: '人物'
   schema:Organization: '组织'
 properties:
   schema:url: '官方网站'
@@ -65,3 +65,5 @@ inverseProperties:
   rezics:summaryOf: '总集篇'
   rezics:sideStoryOf: '番外篇'
   rezics:bangumiRelatedTo: '关联来源（Bangumi）'
+typeDescriptions:
+  schema:Person: '人类'

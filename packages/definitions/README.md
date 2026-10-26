@@ -117,10 +117,131 @@ to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
 each term's labels in the group named for the schema file that defines that term.
 Profiles with no current terms can contain only metadata and an import of `core`.
 
+### Type interface words and descriptions
+
+A type label is a short interface word that is true for every subject of that
+type's catalogue contract. A label can be more specific than its external mapping:
+`schema:TVSeries` here means an animated television series, so its Chinese labels
+are `TV 动画` and `TV 動畫`, and its Japanese label is `TVアニメ`. Book editions and
+software releases both use the neutral Chinese word `版本`; their separate type
+identities and properties distinguish them. Manga labels omit the old Japanese
+origin restriction. General series labels also cover nonfiction and different
+media; they do not imply a finite multipart work. Game add-ons include independently
+referable DLC as well as expansions, so their labels use broad store terms such as
+`add-on`, `追加内容` and `追加コンテンツ`, rather than expansion-pack terminology.
+The catalogue still determines which add-ons have their own work identity.
+
+Neither types nor properties previously had localized release descriptions. Type
+presentation files now accept an optional `typeDescriptions` map from type CURIE
+to text, alongside the existing `types` and `properties` label maps. Compilation
+holds that text as `types[curie].descriptions[locale]` in the release. Descriptions
+use the same BCP 47 locale keys as labels, allow one to 1,500 Unicode characters,
+and need no English entry. Omitted descriptions stay omitted, so older releases
+remain valid. Empty, malformed, unknown-type and duplicate descriptions fail
+compilation. Catalogue class descriptions still define the type contract.
+
+Every replaced label is retained verbatim in its locale's `typeDescriptions`,
+including replacements of words that were too broad, not just long glosses. Type
+labels and descriptions live in the presentation group of the schema defining the
+type. All current declarations already had one owner; there was no duplicate to
+remove. The compiler has no special case for any vertical.
+
+The review covered all 21 released types in all eight UI locales. The following
+Chinese and Japanese labels are pinned by `test/type-labels.test.ts`; unchanged
+labels were reviewed too. Ordinary names such as film, recipe, video game, album,
+visual novel, book series and the SKOS vocabulary names remain in the other locales.
+The technical SKOS labels identify classification resources rather than works.
+
+| Type                       | zh-Hans  | zh-Hant  | ja                 |
+| -------------------------- | -------- | -------- | ------------------ |
+| `schema:Episode`           | 集       | 集       | エピソード         |
+| `schema:Movie`             | 电影     | 電影     | 映画               |
+| `schema:TVSeason`          | 季       | 季       | シーズン           |
+| `schema:TVSeries`          | TV 动画  | TV 動畫  | TVアニメ           |
+| `bf:Instance`              | 版本     | 版本     | 版                 |
+| `schema:Book`              | 书籍     | 書籍     | 書籍               |
+| `wd:Q95074`                | 角色     | 角色     | キャラクター       |
+| `skos:Concept`             | 概念     | 概念     | 概念               |
+| `skos:ConceptScheme`       | 概念体系 | 概念體系 | 概念体系           |
+| `schema:Organization`      | 组织     | 組織     | 組織               |
+| `schema:Person`            | 人物     | 人物     | 人物               |
+| `schema:VideoGame`         | 电子游戏 | 電子遊戲 | コンピュータゲーム |
+| `wd:Q209163`               | 追加内容 | 追加內容 | 追加コンテンツ     |
+| `wd:Q20631656`             | 版本     | 版本     | リリース           |
+| `schema:PublicationVolume` | 卷       | 卷       | 巻                 |
+| `schema:ComicSeries`       | 漫画     | 漫畫     | 漫画               |
+| `schema:Recipe`            | 食谱     | 食譜     | レシピ             |
+| `schema:BookSeries`        | 丛书     | 叢書     | 叢書               |
+| `wd:Q7725310`              | 系列     | 系列     | シリーズ           |
+| `wd:Q689445`               | 视觉小说 | 視覺小說 | ビジュアルノベル   |
+| `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム           |
+
+Each changed label below was written by hand. References establish the usage of
+the word in its language; choosing it for a catalogue type is an editorial decision
+from that type's contract. No translation service or character conversion was used.
+For Chinese TV labels, the space separates the Latin abbreviation from the Chinese
+word. Wikipedia's Chinese pages are cited as references, not used to convert labels.
+
+| Type                 | Locale  | Interface label | Usage reference                                                                                                        |
+| -------------------- | ------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `schema:TVSeries`    | zh-Hans | TV 动画         | [Wikipedia: Digimon series, TV animation usage](https://zh.wikipedia.org/wiki/数码宝贝系列)                            |
+| `schema:TVSeries`    | zh-Hant | TV 動畫         | [Bahamut animation interface and news](https://acg.gamer.com.tw/news.php?p=anime)                                      |
+| `schema:TVSeries`    | ja      | TVアニメ        | [Wikipedia: television anime](https://ja.wikipedia.org/wiki/テレビアニメ)                                              |
+| `schema:TVSeason`    | zh-Hans | 季              | [Wikipedia: Happy Heroes season list](https://zh.wikipedia.org/wiki/开心宝贝)                                          |
+| `schema:TVSeason`    | zh-Hant | 季              | [Wikipedia: Is the Order a Rabbit? animation seasons](<https://zh.wikipedia.org/wiki/請問您今天要來點兔子嗎？_(動畫)>) |
+| `schema:TVSeason`    | en      | season          | [Wikipedia: television seasons](<https://en.wikipedia.org/wiki/Season_(television)>)                                   |
+| `schema:TVSeason`    | es      | temporada       | [Wikipedia: Temporada](<https://es.wikipedia.org/wiki/Temporada_(televisión)>)                                         |
+| `schema:TVSeason`    | fr      | saison          | [Wikipedia: Saison](<https://fr.wikipedia.org/wiki/Saison_(télévision)>)                                               |
+| `schema:Book`        | zh-Hans | 书籍            | [Bangumi book browser](https://bgm.tv/book/browser)                                                                    |
+| `schema:Book`        | de      | Buch            | [Wikipedia: Buch](https://de.wikipedia.org/wiki/Buch)                                                                  |
+| `schema:Book`        | es      | libro           | [Wikipedia: Libro](https://es.wikipedia.org/wiki/Libro)                                                                |
+| `schema:Book`        | fr      | livre           | [Wikipedia: Livre](<https://fr.wikipedia.org/wiki/Livre_(document)>)                                                   |
+| `schema:Book`        | ko      | 책              | [Wikipedia: 책](https://ko.wikipedia.org/wiki/책)                                                                      |
+| `bf:Instance`        | zh-Hans | 版本            | [Wikipedia: book versions](https://zh.wikipedia.org/wiki/版本)                                                         |
+| `bf:Instance`        | de      | Ausgabe         | [Wikipedia: Ausgabe of a work](https://de.wikipedia.org/wiki/Ausgabe)                                                  |
+| `bf:Instance`        | es      | edición         | [Wikipedia: Edición de libros](https://es.wikipedia.org/wiki/Edición_de_libros)                                        |
+| `bf:Instance`        | fr      | édition         | [Wikipedia: Édition](<https://fr.wikipedia.org/wiki/Édition_(activité)>)                                               |
+| `schema:Person`      | zh-Hans | 人物            | [Bangumi people navigation](https://bgm.tv/character)                                                                  |
+| `schema:Person`      | de      | Person          | [Wikipedia: Person](https://de.wikipedia.org/wiki/Person)                                                              |
+| `schema:Person`      | es      | persona         | [Wikipedia: Persona](https://es.wikipedia.org/wiki/Persona)                                                            |
+| `schema:Person`      | fr      | personne        | [Wikipedia: Personne](https://fr.wikipedia.org/wiki/Personne)                                                          |
+| `wd:Q95074`          | zh-Hans | 角色            | [Wikipedia: 角色](https://zh.wikipedia.org/wiki/角色)                                                                  |
+| `wd:Q95074`          | zh-Hant | 角色            | [Wikipedia: 角色](https://zh.wikipedia.org/wiki/角色)                                                                  |
+| `wd:Q95074`          | ja      | キャラクター    | [Wikipedia: キャラクター](https://ja.wikipedia.org/wiki/キャラクター)                                                  |
+| `wd:Q95074`          | de      | Figur           | [Wikipedia: Figur in fiction](<https://de.wikipedia.org/wiki/Figur_(Fiktion)>)                                         |
+| `wd:Q95074`          | fr      | personnage      | [Wikipedia: Personnage de fiction](https://fr.wikipedia.org/wiki/Personnage_de_fiction)                                |
+| `wd:Q95074`          | ko      | 캐릭터          | [Wikipedia: character terminology](https://ko.wikipedia.org/wiki/캐릭터)                                               |
+| `schema:ComicSeries` | zh-Hans | 漫画            | [Wikipedia: 漫畫](https://zh.wikipedia.org/wiki/漫畫)                                                                  |
+| `schema:ComicSeries` | zh-Hant | 漫畫            | [Wikipedia: 漫畫](https://zh.wikipedia.org/wiki/漫畫)                                                                  |
+| `schema:ComicSeries` | ja      | 漫画            | [Wikipedia: 漫画](https://ja.wikipedia.org/wiki/漫画)                                                                  |
+| `schema:ComicSeries` | ko      | 만화            | [Wikipedia: 만화](https://ko.wikipedia.org/wiki/만화)                                                                  |
+| `wd:Q7725310`        | zh-Hans | 系列            | [Wikipedia: series of works](https://zh.wikipedia.org/wiki/系列)                                                       |
+| `wd:Q7725310`        | zh-Hant | 系列            | [Wikipedia: series of works](https://zh.wikipedia.org/wiki/系列)                                                       |
+| `wd:Q7725310`        | en      | series          | [Wikipedia: Series fiction](https://en.wikipedia.org/wiki/Series_fiction)                                              |
+| `wd:Q7725310`        | de      | Reihe           | [Wikipedia: Reihe, publication uses](https://de.wikipedia.org/wiki/Reihe)                                              |
+| `wd:Q7725310`        | es      | serie           | [Wikipedia: Serie, cultural uses](https://es.wikipedia.org/wiki/Serie)                                                 |
+| `wd:Q7725310`        | fr      | série           | [Wikipedia: Série, works in different media](https://fr.wikipedia.org/wiki/Série)                                      |
+| `wd:Q20631656`       | zh-Hans | 版本            | [Wikipedia: software and other versions](https://zh.wikipedia.org/wiki/版本)                                           |
+| `wd:Q20631656`       | zh-Hant | 版本            | [Wikipedia: software and other versions](https://zh.wikipedia.org/wiki/版本)                                           |
+| `wd:Q20631656`       | en      | release         | [GitHub: releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | de      | Release         | [GitHub: Releases](https://docs.github.com/de/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | es      | versión         | [GitHub: version details](https://docs.github.com/es/repositories/releasing-projects-on-github/about-releases)         |
+| `wd:Q20631656`       | fr      | version         | [GitHub: versions](https://docs.github.com/fr/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | ja      | リリース        | [GitHub: リリース](https://docs.github.com/ja/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | ko      | 릴리스          | [GitHub: 릴리스](https://docs.github.com/ko/repositories/releasing-projects-on-github/about-releases)                  |
+| `wd:Q209163`         | zh-Hans | 追加内容        | [PlayStation: add-on types](https://www.playstation.com/zh-hans-cn/support/games/add-on-dlc-in-game-currency-support/) |
+| `wd:Q209163`         | zh-Hant | 追加內容        | [PlayStation: add-on types](https://www.playstation.com/zh-hant-hk/support/games/add-on-dlc-in-game-currency-support/) |
+| `wd:Q209163`         | en      | add-on          | [PlayStation: add-on types](https://www.playstation.com/en-us/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | de      | Add-on          | [PlayStation: Add-on types](https://www.playstation.com/de-de/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | es      | complemento     | [PlayStation: complementos](https://www.playstation.com/es-es/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | fr      | extension       | [PlayStation: extensions](https://www.playstation.com/fr-fr/support/games/add-on-dlc-in-game-currency-support/)        |
+| `wd:Q209163`         | ja      | 追加コンテンツ  | [PlayStation: add-on types](https://www.playstation.com/ja-jp/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | ko      | 추가 콘텐츠     | [PlayStation: add-on types](https://www.playstation.com/ko-kr/support/games/add-on-dlc-in-game-currency-support/)      |
+
 Context settings are the defaults a community Context created for that vertical
 starts with. Add them beside the vertical layout as `contexts/<id>.yaml`. The id
-matches `^[a-z][a-z0-9-]{0,63}$`. Presentation keys stay label files only. The
-document has `labels` and `defaults` only. `labels` maps a locale tag to the
+matches `^[a-z][a-z0-9-]{0,63}$`. Presentation files hold labels and type descriptions
+only. The settings document has `labels` and `defaults` only. `labels` maps a locale tag to the
 Context's name under the rules for type labels: a BCP 47 tag, nonempty text of at
 most 256 characters, and an `en` label. `defaults` maps a property CURIE to
 `inherit` or `suppress`. A default must name a property in the release. `replace`
@@ -194,9 +315,10 @@ runtime path changes.
 The following list cites the vocabulary terms and Wikidata mappings used here.
 SKOS and FOAF terms cite their publishing vocabularies. New terms have labels in
 `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr` and `es`, in their respective
-presentation groups. Labels use Wikidata's language-specific labels where available
-or the vocabulary's English label; missing labels are authored locally without a
-translation service. Existing terms retain their current labels.
+presentation groups. Type labels follow the interface-word policy above; external
+Wikidata glosses belong in descriptions when replaced. Property labels use the
+vocabulary's language-specific labels where appropriate. Labels are authored
+locally without a translation service.
 
 | Term                        | Source and meaning                                                                                                                                         |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -298,12 +420,14 @@ Source conventions:
   256 characters, and receive `safe` from recheck's synchronous checker.
 - Each presentation entry uses a BCP 47 language tag or `<group>/<tag>`, where
   group matches `^[a-z][a-z0-9-]{0,63}$`, and contains a YAML object with optional
-  `types`, `properties`, and `inverseProperties` maps, keyed by release CURIE.
+  `types`, `properties`, `inverseProperties`, and `typeDescriptions` maps, keyed by release CURIE.
   Inverse-property labels belong to the group of the schema file that defines the
   property. Files with the same tag merge; a term can be labelled only once per
   tag. Labels must be nonempty strings
   of at most 256 characters. Unknown terms and other keys are refused. Every
   emitted type and property requires an `en` label; other locales may be partial.
+  Type descriptions are optional strings of one to 1,500 characters, with at most
+  one per type per tag and no required English entry.
 - Optional `contexts` supplies Context settings YAML keyed by id. Each id matches
   `^[a-z][a-z0-9-]{0,63}$`. The document allows only `labels` and `defaults`.
   Defaults name properties in the release and use `inherit` or `suppress`. There

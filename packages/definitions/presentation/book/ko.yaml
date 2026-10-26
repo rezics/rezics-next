@@ -1,5 +1,5 @@
 types:
-  schema:Book: 저작물
+  schema:Book: '책'
   bf:Instance: 판
 properties:
   schema:exampleOfWork: 다음의 판 또는 번역본
@@ -11,3 +11,5 @@ inverseProperties:
   schema:exampleOfWork: '판본'
   schema:publisher: '출판한 작품'
   schema:translator: '번역한 작품'
+typeDescriptions:
+  schema:Book: '저작물'

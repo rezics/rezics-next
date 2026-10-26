@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: Computerspiel
-  wd:Q20631656: Softwareveröffentlichung
-  wd:Q209163: Computerspiel-Erweiterung
+  wd:Q20631656: 'Release'
+  wd:Q209163: 'Add-on'
 properties:
   schema:gamePlatform: Spielplattform
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: 'Nachfolger'
   wdt:P408: 'Spiele mit dieser Engine'
   wdt:P8646: 'Erweiterungen'
+typeDescriptions:
+  wd:Q20631656: 'Softwareveröffentlichung'
+  wd:Q209163: 'Computerspiel-Erweiterung'

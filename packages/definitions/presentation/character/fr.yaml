@@ -1,5 +1,5 @@
 types:
-  wd:Q95074: 'personnage de fiction'
+  wd:Q95074: 'personnage'
 properties:
   schema:gender: sexe ou genre
   schema:height: hauteur
@@ -9,3 +9,5 @@ properties:
 inverseProperties:
   schema:gender: 'Sujets de ce genre'
   wdt:P1853: 'Sujets de ce groupe sanguin'
+typeDescriptions:
+  wd:Q95074: 'personnage de fiction'

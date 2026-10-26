@@ -718,6 +718,7 @@ async function main(): Promise<void> {
   const database = pool;
   const { newId, partitionOf } = await import(`${kernelBase}/src/route/route.ts`);
   const { runCommand } = await import(`${kernelBase}/src/command/command.ts`);
+  const { GLOBAL_CONTEXT } = await import(`${kernelBase}/src/semantic/definitions.ts`);
   const { applyBoardCandidate } = await import(`${kernelBase}/src/content/board-projection.ts`);
   const { validateContentDocument } = await import(`${kernelBase}/src/content/document.ts`);
   const documents = [
@@ -800,7 +801,16 @@ async function main(): Promise<void> {
           {
             type: 'com.rezics.content.thread.created.v1',
             subject: threadId,
-            data: { threadId, itemId: opening.post, revisionId: opening.revision, actorId: accountId },
+            data: {
+              threadId,
+              itemId: opening.post,
+              revisionId: opening.revision,
+              actorId: accountId,
+              placeId: GLOBAL_CONTEXT,
+              kind: 'discussion',
+              subjectIds: documents[0]!.subjectIds,
+              activityAt: threadAt,
+            },
           },
         ],
       };
@@ -846,7 +856,7 @@ async function main(): Promise<void> {
 
   const recorded = new Map<string, JsonObject>();
   const save = async (name: string, path: string) => {
-    const response = await fetch(new URL(path, origin));
+    const response = await retryOverloaded(() => fetch(new URL(path, origin)));
     const body = objectBody(await response.json(), `${name} ${path}`);
     recorded.set(name, { ...body, status: response.status });
     return response.status;
@@ -859,12 +869,14 @@ async function main(): Promise<void> {
   await expectStatus('missing-subject', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
   const missingSubjectId = '00000000-0000-4000-8000-000000000000';
   const savePost = async (name: string, payload: unknown) => {
-    const response = await pageKernel.handle(
-      new Request('http://kernel.test/v1/pages:read', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      }),
+    const response = await retryOverloaded(async () =>
+      pageKernel.handle(
+        new Request('http://kernel.test/v1/pages:read', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        }),
+      ),
     );
     const body = objectBody(await response.json(), name);
     recorded.set(name, { ...body, status: response.status });
@@ -1005,12 +1017,14 @@ async function main(): Promise<void> {
   });
   // The page always asks for descriptions and picks its own language from the answer, so no `languages` is sent.
   const searchFor = async (name: string, text: string, extra: JsonObject = {}, request: JsonObject = {}) => {
-    const response = await appHandle.handle(
-      new Request('http://kernel.test/v1/subjects:search', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, limit: 100, descriptions: true, ...extra }),
-      }),
+    const response = await retryOverloaded(async () =>
+      appHandle.handle(
+        new Request('http://kernel.test/v1/subjects:search', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text, limit: 100, descriptions: true, ...extra }),
+        }),
+      ),
     );
     const body = objectBody(await response.json(), name);
     if (response.status !== 200) throw new Error(`${name} returned ${response.status}: ${JSON.stringify(body)}`);
@@ -1045,12 +1059,14 @@ async function main(): Promise<void> {
     throw new Error(`Empty search returned hits: ${JSON.stringify(unmatched)}`);
 
   // The home lists are searches, so the home is read through the kernel that mounts search over the index above.
-  const homeResponse = await appHandle.handle(
-    new Request('http://kernel.test/v1/pages:read', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: { route: '/' } }),
-    }),
+  const homeResponse = await retryOverloaded(async () =>
+    appHandle.handle(
+      new Request('http://kernel.test/v1/pages:read', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { route: '/' } }),
+      }),
+    ),
   );
   recorded.set('home-page', {
     ...objectBody(await homeResponse.json(), 'home-page'),

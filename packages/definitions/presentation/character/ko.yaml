@@ -1,5 +1,5 @@
 types:
-  wd:Q95074: '허구의 캐릭터'
+  wd:Q95074: '캐릭터'
 properties:
   schema:gender: 성별
   schema:height: 높이
@@ -9,3 +9,5 @@ properties:
 inverseProperties:
   schema:gender: '이 젠더의 대상'
   wdt:P1853: '이 혈액형의 대상'
+typeDescriptions:
+  wd:Q95074: '허구의 캐릭터'

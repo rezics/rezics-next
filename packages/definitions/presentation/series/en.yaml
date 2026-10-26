@@ -1,8 +1,10 @@
 types:
-  wd:Q7725310: 'series of creative works'
+  wd:Q7725310: 'series'
   schema:BookSeries: 'book series'
 properties:
   wdt:P2635: 'number of parts of this work'
   wdt:P1433: 'published in'
 inverseProperties:
   wdt:P1433: 'Published works'
+typeDescriptions:
+  wd:Q7725310: 'series of creative works'

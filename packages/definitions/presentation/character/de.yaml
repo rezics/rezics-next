@@ -1,5 +1,5 @@
 types:
-  wd:Q95074: 'fiktiver Charakter'
+  wd:Q95074: 'Figur'
 properties:
   schema:gender: Geschlecht
   schema:height: Höhe
@@ -9,3 +9,5 @@ properties:
 inverseProperties:
   schema:gender: 'Subjekte dieses Geschlechts'
   wdt:P1853: 'Subjekte dieser Blutgruppe'
+typeDescriptions:
+  wd:Q95074: 'fiktiver Charakter'

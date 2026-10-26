@@ -181,13 +181,13 @@
       "iri": "http://schema.org/TVSeason",
       "labels": {
         "de": "Staffel",
-        "en": "television series season",
-        "es": "temporada televisiva",
-        "fr": "saison de série télévisée",
+        "en": "season",
+        "es": "temporada",
+        "fr": "saison",
         "ja": "シーズン",
         "ko": "시즌",
-        "zh-Hans": "编播季",
-        "zh-Hant": "編播季"
+        "zh-Hans": "季",
+        "zh-Hant": "季"
       },
       "mappings": ["wd:Q3464665"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
@@ -255,7 +255,14 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "2:3"
+      "coverRatio": "2:3",
+      "descriptions": {
+        "en": "television series season",
+        "es": "temporada televisiva",
+        "fr": "saison de série télévisée",
+        "zh-Hans": "编播季",
+        "zh-Hant": "編播季"
+      }
     },
     "schema:TVSeries": {
       "iri": "http://schema.org/TVSeries",
@@ -264,10 +271,10 @@
         "en": "television series",
         "es": "serie de televisión",
         "fr": "série télévisée",
-        "ja": "テレビ番組シリーズ",
+        "ja": "TVアニメ",
         "ko": "텔레비전 시리즈",
-        "zh-Hans": "电视系列节目",
-        "zh-Hant": "電視系列節目"
+        "zh-Hans": "TV 动画",
+        "zh-Hant": "TV 動畫"
       },
       "mappings": ["wd:Q5398426"],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
@@ -338,18 +345,23 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "2:3"
+      "coverRatio": "2:3",
+      "descriptions": {
+        "ja": "テレビ番組シリーズ",
+        "zh-Hans": "电视系列节目",
+        "zh-Hant": "電視系列節目"
+      }
     },
     "bf:Instance": {
       "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
       "labels": {
-        "de": "Ausgabe oder Version",
+        "de": "Ausgabe",
         "en": "edition",
-        "es": "edición, traducción o versión",
-        "fr": "version, édition ou traduction",
+        "es": "edición",
+        "fr": "édition",
         "ja": "版",
         "ko": "판",
-        "zh-Hans": "作品版本或翻译",
+        "zh-Hans": "版本",
         "zh-Hant": "版本"
       },
       "mappings": ["wd:Q3331189"],
@@ -415,18 +427,24 @@
         "wdt:P178",
         "wdt:P725"
       ],
-      "coverRatio": "2:3"
+      "coverRatio": "2:3",
+      "descriptions": {
+        "de": "Ausgabe oder Version",
+        "es": "edición, traducción o versión",
+        "fr": "version, édition ou traduction",
+        "zh-Hans": "作品版本或翻译"
+      }
     },
     "schema:Book": {
       "iri": "http://schema.org/Book",
       "labels": {
-        "de": "Schrifttum",
+        "de": "Buch",
         "en": "book",
-        "es": "obra escrita",
-        "fr": "œuvre écrite",
+        "es": "libro",
+        "fr": "livre",
         "ja": "書籍",
-        "ko": "저작물",
-        "zh-Hans": "书面作品",
+        "ko": "책",
+        "zh-Hans": "书籍",
         "zh-Hant": "書籍"
       },
       "mappings": ["wd:Q47461344"],
@@ -473,19 +491,26 @@
         "schema:contributor",
         "schema:inLanguage"
       ],
-      "coverRatio": "2:3"
+      "coverRatio": "2:3",
+      "descriptions": {
+        "de": "Schrifttum",
+        "es": "obra escrita",
+        "fr": "œuvre écrite",
+        "ko": "저작물",
+        "zh-Hans": "书面作品"
+      }
     },
     "wd:Q95074": {
       "iri": "http://www.wikidata.org/entity/Q95074",
       "labels": {
-        "de": "fiktiver Charakter",
+        "de": "Figur",
         "en": "character",
         "es": "personaje",
-        "fr": "personnage de fiction",
-        "ja": "架空のキャラクター",
-        "ko": "허구의 캐릭터",
-        "zh-Hans": "虚构角色",
-        "zh-Hant": "虛構角色"
+        "fr": "personnage",
+        "ja": "キャラクター",
+        "ko": "캐릭터",
+        "zh-Hans": "角色",
+        "zh-Hant": "角色"
       },
       "mappings": ["wd:Q95074"],
       "bases": ["schema:Thing"],
@@ -506,7 +531,15 @@
         "wdt:P6296"
       ],
       "facets": ["schema:keywords", "schema:gender", "wdt:P1853", "schema:birthDate", "schema:height", "schema:weight"],
-      "coverRatio": "3:4"
+      "coverRatio": "3:4",
+      "descriptions": {
+        "de": "fiktiver Charakter",
+        "fr": "personnage de fiction",
+        "ja": "架空のキャラクター",
+        "ko": "허구의 캐릭터",
+        "zh-Hans": "虚构角色",
+        "zh-Hant": "虛構角色"
+      }
     },
     "skos:Concept": {
       "iri": "http://www.w3.org/2004/02/skos/core#Concept",
@@ -573,13 +606,13 @@
     "schema:Person": {
       "iri": "http://schema.org/Person",
       "labels": {
-        "de": "Mensch",
+        "de": "Person",
         "en": "person",
-        "es": "ser humano",
-        "fr": "être humain",
+        "es": "persona",
+        "fr": "personne",
         "ja": "人物",
         "ko": "사람",
-        "zh-Hans": "人类",
+        "zh-Hans": "人物",
         "zh-Hant": "人物"
       },
       "mappings": ["wd:Q5"],
@@ -596,7 +629,13 @@
         "wdt:P648"
       ],
       "facets": [],
-      "coverRatio": "3:4"
+      "coverRatio": "3:4",
+      "descriptions": {
+        "de": "Mensch",
+        "es": "ser humano",
+        "fr": "être humain",
+        "zh-Hans": "人类"
+      }
     },
     "schema:VideoGame": {
       "iri": "http://schema.org/VideoGame",
@@ -682,14 +721,14 @@
     "wd:Q209163": {
       "iri": "http://www.wikidata.org/entity/Q209163",
       "labels": {
-        "de": "Computerspiel-Erweiterung",
-        "en": "expansion add-on",
-        "es": "expansión",
-        "fr": "extension de jeu vidéo",
-        "ja": "拡張パック",
-        "ko": "확장팩",
-        "zh-Hans": "资料片",
-        "zh-Hant": "資料片"
+        "de": "Add-on",
+        "en": "add-on",
+        "es": "complemento",
+        "fr": "extension",
+        "ja": "追加コンテンツ",
+        "ko": "추가 콘텐츠",
+        "zh-Hans": "追加内容",
+        "zh-Hant": "追加內容"
       },
       "mappings": ["wd:Q209163"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
@@ -759,19 +798,29 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "3:4"
+      "coverRatio": "3:4",
+      "descriptions": {
+        "de": "Computerspiel-Erweiterung",
+        "en": "expansion add-on",
+        "es": "expansión",
+        "fr": "extension de jeu vidéo",
+        "ja": "拡張パック",
+        "ko": "확장팩",
+        "zh-Hans": "资料片",
+        "zh-Hant": "資料片"
+      }
     },
     "wd:Q20631656": {
       "iri": "http://www.wikidata.org/entity/Q20631656",
       "labels": {
-        "de": "Softwareveröffentlichung",
-        "en": "software release",
-        "es": "release",
-        "fr": "publication de logiciels",
-        "ja": "ソフトウェア・リリース",
-        "ko": "출시 버전",
-        "zh-Hans": "软件发布",
-        "zh-Hant": "軟體發布"
+        "de": "Release",
+        "en": "release",
+        "es": "versión",
+        "fr": "version",
+        "ja": "リリース",
+        "ko": "릴리스",
+        "zh-Hans": "版本",
+        "zh-Hant": "版本"
       },
       "mappings": [],
       "bases": [],
@@ -821,7 +870,17 @@
         "wdt:P725",
         "schema:contributor"
       ],
-      "coverRatio": "3:4"
+      "coverRatio": "3:4",
+      "descriptions": {
+        "de": "Softwareveröffentlichung",
+        "en": "software release",
+        "es": "release",
+        "fr": "publication de logiciels",
+        "ja": "ソフトウェア・リリース",
+        "ko": "출시 버전",
+        "zh-Hans": "软件发布",
+        "zh-Hant": "軟體發布"
+      }
     },
     "schema:PublicationVolume": {
       "iri": "http://schema.org/PublicationVolume",
@@ -896,10 +955,10 @@
         "en": "manga series",
         "es": "serie de manga",
         "fr": "série de manga",
-        "ja": "日本の連載漫画",
-        "ko": "일본의 만화 시리즈",
-        "zh-Hans": "日本系列漫画",
-        "zh-Hant": "日本系列漫畫"
+        "ja": "漫画",
+        "ko": "만화",
+        "zh-Hans": "漫画",
+        "zh-Hant": "漫畫"
       },
       "mappings": ["wd:Q21198342"],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
@@ -954,7 +1013,13 @@
         "wdt:P179",
         "schema:inLanguage"
       ],
-      "coverRatio": "2:3"
+      "coverRatio": "2:3",
+      "descriptions": {
+        "ja": "日本の連載漫画",
+        "ko": "일본의 만화 시리즈",
+        "zh-Hans": "日本系列漫画",
+        "zh-Hant": "日本系列漫畫"
+      }
     },
     "schema:Recipe": {
       "iri": "http://schema.org/Recipe",
@@ -1047,14 +1112,14 @@
     "wd:Q7725310": {
       "iri": "http://www.wikidata.org/entity/Q7725310",
       "labels": {
-        "de": "Mehrteiler",
-        "en": "series of creative works",
-        "es": "serie de obras creativas",
-        "fr": "série d'œuvres",
+        "de": "Reihe",
+        "en": "series",
+        "es": "serie",
+        "fr": "série",
         "ja": "シリーズ",
         "ko": "시리즈",
-        "zh-Hans": "系列创意作品",
-        "zh-Hant": "系列創意作品"
+        "zh-Hans": "系列",
+        "zh-Hant": "系列"
       },
       "mappings": [],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
@@ -1086,7 +1151,15 @@
         "wdt:P361"
       ],
       "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"],
-      "coverRatio": "2:3"
+      "coverRatio": "2:3",
+      "descriptions": {
+        "de": "Mehrteiler",
+        "en": "series of creative works",
+        "es": "serie de obras creativas",
+        "fr": "série d'œuvres",
+        "zh-Hans": "系列创意作品",
+        "zh-Hant": "系列創意作品"
+      }
     },
     "wd:Q689445": {
       "iri": "http://www.wikidata.org/entity/Q689445",

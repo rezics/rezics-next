@@ -1,5 +1,5 @@
 types:
-  wd:Q95074: '虛構角色'
+  wd:Q95074: '角色'
 properties:
   schema:gender: 性別
   schema:height: 高度
@@ -9,3 +9,5 @@ properties:
 inverseProperties:
   schema:gender: '此性別的主體'
   wdt:P1853: '此血型的主體'
+typeDescriptions:
+  wd:Q95074: '虛構角色'

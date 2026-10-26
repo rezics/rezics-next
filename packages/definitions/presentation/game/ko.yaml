@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: 비디오 게임
-  wd:Q20631656: 출시 버전
-  wd:Q209163: 확장팩
+  wd:Q20631656: '릴리스'
+  wd:Q209163: '추가 콘텐츠'
 properties:
   schema:gamePlatform: 게임 플랫폼
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: '후속작'
   wdt:P408: '이 엔진을 사용하는 게임'
   wdt:P8646: '확장 작품'
+typeDescriptions:
+  wd:Q20631656: '출시 버전'
+  wd:Q209163: '확장팩'

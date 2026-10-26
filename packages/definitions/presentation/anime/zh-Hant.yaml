@@ -1,8 +1,8 @@
 types:
   schema:Episode: 集
   schema:Movie: 電影
-  schema:TVSeason: 編播季
-  schema:TVSeries: 電視系列節目
+  schema:TVSeason: '季'
+  schema:TVSeries: 'TV 動畫'
 properties:
   schema:copyrightNotice: 版權聲明
   schema:duration: 片長
@@ -18,3 +18,6 @@ inverseProperties:
   schema:isPartOf: '集數'
   wdt:P449: '首播作品'
   wdt:P7937: '此形式的作品'
+typeDescriptions:
+  schema:TVSeason: '編播季'
+  schema:TVSeries: '電視系列節目'

@@ -1,7 +1,7 @@
 types:
   schema:VideoGame: 電子遊戲
-  wd:Q20631656: 軟體發布
-  wd:Q209163: 資料片
+  wd:Q20631656: '版本'
+  wd:Q209163: '追加內容'
 properties:
   schema:gamePlatform: 遊戲平台
   schema:gtin: GTIN
@@ -20,3 +20,6 @@ inverseProperties:
   wdt:P155: '續作'
   wdt:P408: '使用此引擎的遊戲'
   wdt:P8646: '擴充作品'
+typeDescriptions:
+  wd:Q20631656: '軟體發布'
+  wd:Q209163: '資料片'

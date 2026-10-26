@@ -1,6 +1,6 @@
 types:
-  schema:Book: 书面作品
-  bf:Instance: 作品版本或翻译
+  schema:Book: '书籍'
+  bf:Instance: '版本'
 properties:
   schema:exampleOfWork: 版本或翻译原作
   schema:isbn: ISBN-13
@@ -11,3 +11,6 @@ inverseProperties:
   schema:exampleOfWork: '版本'
   schema:publisher: '出版作品'
   schema:translator: '翻译作品'
+typeDescriptions:
+  schema:Book: '书面作品'
+  bf:Instance: '作品版本或翻译'
