@@ -1,25 +1,167 @@
 {
   "subject": {
-    "id": "01a1761b-19f4-7043-9131-e4048139fe72",
+    "id": "01a17730-0723-75f7-bf74-b425c427b29f",
     "type": "schema:Book",
     "revision": 1,
     "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
     "context": "00000000-0000-8000-8000-000000000000",
     "resolution": {},
     "labels": {
+      "ja": "星の王子さま",
+      "ko": "어린 왕자",
       "fr": "Le Petit Prince",
       "zh-Hant": "小王子",
-      "ko": "어린 왕자",
-      "es": "El Principito",
-      "ja": "星の王子さま",
-      "en": "The Little Prince",
       "de": "Der kleine Prinz",
-      "zh-Hans": "小王子"
+      "en": "The Little Prince",
+      "zh-Hans": "小王子",
+      "es": "El Principito"
     },
-    "descriptions": {},
-    "aliases": {},
-    "statements": {}
+    "descriptions": {
+      "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
+      "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential.",
+      "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。",
+      "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde."
+    },
+    "aliases": { "en": ["Le Petit Prince"], "ja": ["星の王子様"] },
+    "statements": {
+      "schema:author": [
+        {
+          "id": "1e627f62-c5f6-8427-8afe-b4253864c22f",
+          "rank": "normal",
+          "property": { "id": "schema:author", "data_type": "wikibase-item" },
+          "value": { "type": "value", "content": "01a17730-0628-707c-9a0e-e83be800eba1" },
+          "qualifiers": [],
+          "references": [],
+          "rezics": {
+            "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
+            "revision": 1
+          }
+        }
+      ],
+      "schema:datePublished": [
+        {
+          "id": "ea421ad4-d683-8625-81cb-b4255bf03e3b",
+          "rank": "normal",
+          "property": { "id": "schema:datePublished", "data_type": "time" },
+          "value": {
+            "type": "value",
+            "content": {
+              "time": "+1943-04-06T00:00:00Z",
+              "precision": 11,
+              "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            }
+          },
+          "qualifiers": [],
+          "references": [],
+          "rezics": {
+            "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
+            "revision": 1
+          }
+        }
+      ],
+      "schema:genre": [
+        {
+          "id": "e70481ac-8f55-8c10-a30a-b4253cb688e4",
+          "rank": "normal",
+          "property": { "id": "schema:genre", "data_type": "wikibase-item" },
+          "value": { "type": "value", "content": "01a17730-0710-7761-a8b5-c3754b0e47e1" },
+          "qualifiers": [],
+          "references": [],
+          "rezics": {
+            "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
+            "revision": 1
+          }
+        }
+      ],
+      "schema:inLanguage": [
+        {
+          "id": "ffe0e8ec-2727-8504-8903-b42533fd5af7",
+          "rank": "normal",
+          "property": { "id": "schema:inLanguage", "data_type": "string" },
+          "value": { "type": "value", "content": "fr" },
+          "qualifiers": [],
+          "references": [],
+          "rezics": {
+            "release": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
+            "revision": 1
+          }
+        }
+      ]
+    }
   },
-  "related": {},
+  "related": {
+    "schema:author": {
+      "labels": {
+        "de": "Autor",
+        "en": "author",
+        "es": "autor",
+        "fr": "auteur ou autrice",
+        "ja": "著者",
+        "ko": "저자",
+        "zh-Hans": "作者",
+        "zh-Hant": "作者"
+      }
+    },
+    "schema:datePublished": {
+      "labels": {
+        "de": "Veröffentlichungsdatum",
+        "en": "publication date",
+        "es": "fecha de publicación",
+        "fr": "date de publication",
+        "ja": "出版日",
+        "ko": "출판 날짜",
+        "zh-Hans": "出版日期",
+        "zh-Hant": "出版日期"
+      }
+    },
+    "schema:genre": {
+      "labels": {
+        "de": "Genre",
+        "en": "genre",
+        "es": "género",
+        "fr": "genre",
+        "ja": "ジャンル",
+        "ko": "장르",
+        "zh-Hans": "类型",
+        "zh-Hant": "類型"
+      }
+    },
+    "schema:inLanguage": {
+      "labels": {
+        "de": "Sprache",
+        "en": "language",
+        "es": "idioma",
+        "fr": "langue",
+        "ja": "言語",
+        "ko": "언어",
+        "zh-Hans": "语言",
+        "zh-Hant": "語言"
+      }
+    },
+    "01a17730-0628-707c-9a0e-e83be800eba1": {
+      "labels": {
+        "de": "Antoine de Saint-Exupéry",
+        "en": "Antoine de Saint-Exupéry",
+        "es": "Antoine de Saint-Exupéry",
+        "fr": "Antoine de Saint-Exupéry",
+        "ja": "アントワーヌ・ド・サン＝テグジュペリ",
+        "ko": "앙투안 드 생텍쥐페리",
+        "zh-Hans": "安托万·德·圣埃克苏佩里",
+        "zh-Hant": "安東尼·聖修伯里"
+      }
+    },
+    "01a17730-0710-7761-a8b5-c3754b0e47e1": {
+      "labels": {
+        "de": "Fabel",
+        "en": "Fable",
+        "es": "Fábula",
+        "fr": "Fable",
+        "ja": "寓話",
+        "ko": "우화",
+        "zh-Hans": "寓言",
+        "zh-Hant": "寓言"
+      }
+    }
+  },
   "status": 200
 }

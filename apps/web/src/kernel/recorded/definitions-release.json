@@ -1,0 +1,3104 @@
+{
+  "digest": "sha256:7ff30ee44b26bc5ae8575f8a7467fa3ed1101c5f854b40bf4f5ad1141fade978",
+  "release": {
+    "types": {
+      "wd:Q95074": {
+        "iri": "http://www.wikidata.org/entity/Q95074",
+        "bases": ["schema:Thing"],
+        "facets": [
+          "schema:keywords",
+          "schema:gender",
+          "wdt:P1853",
+          "schema:birthDate",
+          "schema:height",
+          "schema:weight"
+        ],
+        "labels": {
+          "de": "fiktiver Charakter",
+          "en": "character",
+          "es": "personaje",
+          "fr": "personnage de fiction",
+          "ja": "架空のキャラクター",
+          "ko": "허구의 캐릭터",
+          "zh-Hans": "虚构角色",
+          "zh-Hant": "虛構角色"
+        },
+        "mappings": ["wd:Q95074"],
+        "properties": [
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:birthDate",
+          "schema:gender",
+          "schema:height",
+          "schema:image",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "schema:weight",
+          "wdt:P1853",
+          "wdt:P3180",
+          "wdt:P6296"
+        ]
+      },
+      "wd:Q209163": {
+        "iri": "http://www.wikidata.org/entity/Q209163",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:gamePlatform",
+          "schema:genre",
+          "schema:keywords",
+          "schema:datePublished",
+          "wdt:P408",
+          "schema:numberOfPlayers",
+          "wdt:P8646",
+          "schema:author",
+          "schema:director",
+          "schema:musicBy",
+          "schema:producer",
+          "schema:productionCompany",
+          "wdt:P178",
+          "schema:publisher",
+          "schema:character",
+          "wdt:P179"
+        ],
+        "labels": {
+          "de": "Computerspiel-Erweiterung",
+          "en": "expansion add-on",
+          "es": "expansión",
+          "fr": "extension de jeu vidéo",
+          "ja": "拡張パック",
+          "ko": "확장팩",
+          "zh-Hans": "资料片",
+          "zh-Hant": "資料片"
+        },
+        "mappings": ["wd:Q209163"],
+        "properties": [
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:director",
+          "schema:gamePlatform",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:numberOfPlayers",
+          "schema:producer",
+          "schema:productionCompany",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P178",
+          "wdt:P179",
+          "wdt:P408",
+          "wdt:P5732",
+          "wdt:P58",
+          "wdt:P725",
+          "wdt:P8646",
+          "wdt:P973"
+        ]
+      },
+      "wd:Q689445": {
+        "iri": "http://www.wikidata.org/entity/Q689445",
+        "bases": ["schema:VideoGame", "schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:genre",
+          "schema:keywords",
+          "schema:character",
+          "schema:contributor",
+          "schema:author",
+          "schema:director",
+          "schema:illustrator",
+          "schema:musicBy",
+          "schema:translator",
+          "wdt:P725",
+          "wdt:P179",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Visual Novel",
+          "en": "visual novel",
+          "es": "novela visual",
+          "fr": "Visual novel",
+          "ja": "ビジュアルノベル",
+          "ko": "비주얼 노벨",
+          "zh-Hans": "视觉小说",
+          "zh-Hant": "視覺小說"
+        },
+        "mappings": [],
+        "properties": [
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:director",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:sameAs",
+          "schema:translator",
+          "schema:url",
+          "wdt:P144",
+          "wdt:P155",
+          "wdt:P156",
+          "wdt:P179",
+          "wdt:P1889",
+          "wdt:P2512",
+          "wdt:P3180",
+          "wdt:P361",
+          "wdt:P4969",
+          "wdt:P725"
+        ]
+      },
+      "bf:Instance": {
+        "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:exampleOfWork",
+          "schema:author",
+          "schema:translator",
+          "schema:publisher",
+          "schema:datePublished",
+          "schema:numberOfPages",
+          "schema:contributor",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Ausgabe oder Version",
+          "en": "edition",
+          "es": "edición, traducción o versión",
+          "fr": "version, édition ou traduction",
+          "ja": "版",
+          "ko": "판",
+          "zh-Hans": "作品版本或翻译",
+          "zh-Hant": "版本"
+        },
+        "mappings": ["wd:Q3331189"],
+        "properties": [
+          "schema:author",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:exampleOfWork",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:isbn",
+          "schema:keywords",
+          "schema:name",
+          "schema:numberOfPages",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:translator",
+          "schema:url",
+          "wdt:P179",
+          "wdt:P648"
+        ]
+      },
+      "schema:Book": {
+        "iri": "http://schema.org/Book",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:author",
+          "schema:genre",
+          "schema:keywords",
+          "wdt:P179",
+          "schema:datePublished",
+          "schema:contributor",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Schrifttum",
+          "en": "book",
+          "es": "obra escrita",
+          "fr": "œuvre écrite",
+          "ja": "書籍",
+          "ko": "저작물",
+          "zh-Hans": "书面作品",
+          "zh-Hant": "書籍"
+        },
+        "mappings": ["wd:Q47461344"],
+        "properties": [
+          "schema:abstract",
+          "schema:author",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P179",
+          "wdt:P5732",
+          "wdt:P648"
+        ]
+      },
+      "wd:Q7725310": {
+        "iri": "http://www.wikidata.org/entity/Q7725310",
+        "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
+        "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"],
+        "labels": {
+          "de": "Mehrteiler",
+          "en": "series of creative works",
+          "es": "serie de obras creativas",
+          "fr": "série d'œuvres",
+          "ja": "シリーズ",
+          "ko": "시리즈",
+          "zh-Hans": "系列创意作品",
+          "zh-Hant": "系列創意作品"
+        },
+        "mappings": [],
+        "properties": [
+          "schema:contributor",
+          "schema:genre",
+          "schema:image",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P179"
+        ]
+      },
+      "schema:Movie": {
+        "iri": "http://schema.org/Movie",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "wdt:P7937",
+          "schema:genre",
+          "schema:keywords",
+          "schema:datePublished",
+          "schema:author",
+          "schema:illustrator",
+          "schema:director",
+          "schema:musicBy",
+          "schema:producer",
+          "schema:productionCompany",
+          "wdt:P58",
+          "wdt:P178",
+          "wdt:P725",
+          "schema:contributor",
+          "schema:character",
+          "wdt:P179"
+        ],
+        "labels": {
+          "de": "Film",
+          "en": "film",
+          "es": "película",
+          "fr": "film",
+          "ja": "映画",
+          "ko": "영화",
+          "zh-Hans": "电影",
+          "zh-Hant": "電影"
+        },
+        "mappings": ["wd:Q11424"],
+        "properties": [
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:copyrightNotice",
+          "schema:datePublished",
+          "schema:director",
+          "schema:duration",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:producer",
+          "schema:productionCompany",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P178",
+          "wdt:P179",
+          "wdt:P5732",
+          "wdt:P58",
+          "wdt:P725",
+          "wdt:P7937",
+          "wdt:P973"
+        ]
+      },
+      "skos:Concept": {
+        "iri": "http://www.w3.org/2004/02/skos/core#Concept",
+        "bases": ["schema:Thing"],
+        "facets": [],
+        "labels": {
+          "de": "Begriff",
+          "en": "Concept",
+          "es": "Concepto",
+          "fr": "Concept",
+          "ja": "概念",
+          "ko": "개념",
+          "zh-Hans": "概念",
+          "zh-Hant": "概念"
+        },
+        "mappings": [],
+        "properties": [
+          "foaf:focus",
+          "schema:image",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "skos:broader",
+          "skos:inScheme"
+        ]
+      },
+      "wd:Q20631656": {
+        "iri": "http://www.wikidata.org/entity/Q20631656",
+        "bases": [],
+        "facets": [
+          "schema:gamePlatform",
+          "schema:datePublished",
+          "wdt:P2899",
+          "wdt:P437",
+          "wdt:P31",
+          "schema:exampleOfWork",
+          "wdt:P178",
+          "schema:publisher",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Softwareveröffentlichung",
+          "en": "software release",
+          "es": "release",
+          "fr": "publication de logiciels",
+          "ja": "ソフトウェア・リリース",
+          "ko": "출시 버전",
+          "zh-Hans": "软件发布",
+          "zh-Hant": "軟體發布"
+        },
+        "mappings": [],
+        "properties": [
+          "schema:alternateName",
+          "schema:datePublished",
+          "schema:exampleOfWork",
+          "schema:gamePlatform",
+          "schema:gtin",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:name",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P178",
+          "wdt:P2899",
+          "wdt:P31",
+          "wdt:P3180",
+          "wdt:P437"
+        ]
+      },
+      "schema:Person": {
+        "iri": "http://schema.org/Person",
+        "bases": ["schema:Thing"],
+        "facets": [],
+        "labels": {
+          "de": "Mensch",
+          "en": "person",
+          "es": "ser humano",
+          "fr": "être humain",
+          "ja": "人物",
+          "ko": "사람",
+          "zh-Hans": "人类",
+          "zh-Hant": "人物"
+        },
+        "mappings": ["wd:Q5"],
+        "properties": [
+          "schema:birthDate",
+          "schema:deathDate",
+          "schema:image",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P3180",
+          "wdt:P6298",
+          "wdt:P648"
+        ]
+      },
+      "schema:Recipe": {
+        "iri": "http://schema.org/Recipe",
+        "bases": ["schema:Thing"],
+        "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"],
+        "labels": {
+          "de": "Kochrezept",
+          "en": "recipe",
+          "es": "receta de cocina",
+          "fr": "recette de cuisine",
+          "ja": "レシピ",
+          "ko": "요리법",
+          "zh-Hans": "食谱",
+          "zh-Hant": "食譜"
+        },
+        "mappings": ["wd:Q219239"],
+        "properties": [
+          "schema:abstract",
+          "schema:author",
+          "schema:cookTime",
+          "schema:datePublished",
+          "schema:image",
+          "schema:keywords",
+          "schema:name",
+          "schema:recipeIngredient",
+          "schema:recipeYield",
+          "schema:sameAs",
+          "schema:url"
+        ]
+      },
+      "schema:Episode": {
+        "iri": "http://schema.org/Episode",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:isPartOf",
+          "schema:datePublished",
+          "schema:duration",
+          "schema:director",
+          "schema:musicBy",
+          "wdt:P725",
+          "schema:contributor",
+          "schema:character",
+          "wdt:P179",
+          "schema:genre",
+          "schema:keywords",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Episode",
+          "en": "episode",
+          "es": "episodio",
+          "fr": "épisode",
+          "ja": "エピソード",
+          "ko": "에피소드",
+          "zh-Hans": "集",
+          "zh-Hant": "集"
+        },
+        "mappings": ["wd:Q1983062"],
+        "properties": [
+          "schema:abstract",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:director",
+          "schema:duration",
+          "schema:episodeNumber",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:isPartOf",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P179",
+          "wdt:P725"
+        ]
+      },
+      "schema:TVSeason": {
+        "iri": "http://schema.org/TVSeason",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "wdt:P7937",
+          "schema:genre",
+          "schema:keywords",
+          "schema:datePublished",
+          "schema:numberOfEpisodes",
+          "schema:author",
+          "schema:illustrator",
+          "schema:director",
+          "schema:musicBy",
+          "schema:producer",
+          "schema:productionCompany",
+          "wdt:P58",
+          "wdt:P178",
+          "wdt:P725",
+          "schema:character",
+          "wdt:P179"
+        ],
+        "labels": {
+          "de": "Staffel",
+          "en": "television series season",
+          "es": "temporada televisiva",
+          "fr": "saison de série télévisée",
+          "ja": "シーズン",
+          "ko": "시즌",
+          "zh-Hans": "编播季",
+          "zh-Hant": "編播季"
+        },
+        "mappings": ["wd:Q3464665"],
+        "properties": [
+          "schema:abstract",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:director",
+          "schema:endDate",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:numberOfEpisodes",
+          "schema:producer",
+          "schema:productionCompany",
+          "schema:sameAs",
+          "schema:startDate",
+          "schema:url",
+          "wdt:P178",
+          "wdt:P179",
+          "wdt:P5732",
+          "wdt:P58",
+          "wdt:P725",
+          "wdt:P7937",
+          "wdt:P973"
+        ]
+      },
+      "schema:TVSeries": {
+        "iri": "http://schema.org/TVSeries",
+        "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "wdt:P7937",
+          "schema:genre",
+          "schema:keywords",
+          "schema:datePublished",
+          "schema:numberOfEpisodes",
+          "schema:author",
+          "schema:illustrator",
+          "schema:director",
+          "schema:musicBy",
+          "schema:producer",
+          "schema:productionCompany",
+          "wdt:P58",
+          "wdt:P178",
+          "wdt:P725",
+          "schema:character",
+          "wdt:P179"
+        ],
+        "labels": {
+          "de": "Fernsehserie",
+          "en": "television series",
+          "es": "serie de televisión",
+          "fr": "série télévisée",
+          "ja": "テレビ番組シリーズ",
+          "ko": "텔레비전 시리즈",
+          "zh-Hans": "电视系列节目",
+          "zh-Hant": "電視系列節目"
+        },
+        "mappings": ["wd:Q5398426"],
+        "properties": [
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:copyrightNotice",
+          "schema:datePublished",
+          "schema:director",
+          "schema:endDate",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:numberOfEpisodes",
+          "schema:producer",
+          "schema:productionCompany",
+          "schema:sameAs",
+          "schema:startDate",
+          "schema:url",
+          "wdt:P178",
+          "wdt:P179",
+          "wdt:P449",
+          "wdt:P5732",
+          "wdt:P58",
+          "wdt:P725",
+          "wdt:P7937",
+          "wdt:P973"
+        ]
+      },
+      "schema:VideoGame": {
+        "iri": "http://schema.org/VideoGame",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:gamePlatform",
+          "schema:genre",
+          "schema:keywords",
+          "schema:datePublished",
+          "wdt:P408",
+          "schema:numberOfPlayers",
+          "schema:author",
+          "schema:director",
+          "schema:musicBy",
+          "schema:producer",
+          "schema:productionCompany",
+          "wdt:P178",
+          "wdt:P725",
+          "schema:publisher",
+          "schema:character",
+          "wdt:P179"
+        ],
+        "labels": {
+          "de": "Computerspiel",
+          "en": "video game",
+          "es": "videojuego",
+          "fr": "jeu vidéo",
+          "ja": "コンピュータゲーム",
+          "ko": "비디오 게임",
+          "zh-Hans": "电子游戏",
+          "zh-Hant": "電子遊戲"
+        },
+        "mappings": ["wd:Q7889"],
+        "properties": [
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:director",
+          "schema:gamePlatform",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:numberOfPlayers",
+          "schema:producer",
+          "schema:productionCompany",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P178",
+          "wdt:P179",
+          "wdt:P408",
+          "wdt:P5732",
+          "wdt:P58",
+          "wdt:P725",
+          "wdt:P973"
+        ]
+      },
+      "schema:BookSeries": {
+        "iri": "http://schema.org/BookSeries",
+        "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:genre",
+          "schema:keywords",
+          "schema:startDate",
+          "schema:publisher",
+          "schema:contributor",
+          "wdt:P179"
+        ],
+        "labels": {
+          "de": "Buchreihe",
+          "en": "book series",
+          "es": "serie de libros",
+          "fr": "série de livres",
+          "ja": "叢書",
+          "ko": "총서",
+          "zh-Hans": "丛书",
+          "zh-Hant": "叢書"
+        },
+        "mappings": ["wd:Q277759"],
+        "properties": [
+          "schema:alternateName",
+          "schema:contributor",
+          "schema:endDate",
+          "schema:genre",
+          "schema:image",
+          "schema:keywords",
+          "schema:name",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:startDate",
+          "schema:url",
+          "wdt:P1433",
+          "wdt:P179",
+          "wdt:P2635",
+          "wdt:P973"
+        ]
+      },
+      "schema:MusicAlbum": {
+        "iri": "http://schema.org/MusicAlbum",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": ["schema:contributor", "wdt:P179", "schema:genre", "schema:keywords", "schema:inLanguage"],
+        "labels": {
+          "de": "Album",
+          "en": "album",
+          "es": "álbum",
+          "fr": "album",
+          "ja": "アルバム",
+          "ko": "앨범",
+          "zh-Hans": "音乐专辑",
+          "zh-Hant": "音樂專輯"
+        },
+        "mappings": ["wd:Q482994"],
+        "properties": [
+          "schema:abstract",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P179",
+          "wdt:P5732"
+        ]
+      },
+      "schema:ComicSeries": {
+        "iri": "http://schema.org/ComicSeries",
+        "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:keywords",
+          "schema:genre",
+          "schema:datePublished",
+          "schema:author",
+          "schema:illustrator",
+          "wdt:P725",
+          "schema:publisher",
+          "schema:contributor",
+          "schema:character",
+          "wdt:P179",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Mangaserie",
+          "en": "manga series",
+          "es": "serie de manga",
+          "fr": "série de manga",
+          "ja": "日本の連載漫画",
+          "ko": "일본의 만화 시리즈",
+          "zh-Hans": "日本系列漫画",
+          "zh-Hant": "日本系列漫畫"
+        },
+        "mappings": ["wd:Q21198342"],
+        "properties": [
+          "schema:abstract",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:name",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P1433",
+          "wdt:P179",
+          "wdt:P2635",
+          "wdt:P5732",
+          "wdt:P725"
+        ]
+      },
+      "skos:ConceptScheme": {
+        "iri": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
+        "bases": ["schema:Thing"],
+        "facets": [],
+        "labels": {
+          "de": "Begriffssystem",
+          "en": "Concept Scheme",
+          "es": "Esquema de conceptos",
+          "fr": "Schéma de concepts",
+          "ja": "概念体系",
+          "ko": "개념 체계",
+          "zh-Hans": "概念体系",
+          "zh-Hant": "概念體系"
+        },
+        "mappings": [],
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"]
+      },
+      "schema:Organization": {
+        "iri": "http://schema.org/Organization",
+        "bases": ["schema:Thing"],
+        "facets": [],
+        "labels": {
+          "de": "Organisation",
+          "en": "organization",
+          "es": "organización",
+          "fr": "organisation",
+          "ja": "組織",
+          "ko": "단체",
+          "zh-Hans": "组织",
+          "zh-Hant": "組織"
+        },
+        "mappings": ["wd:Q43229"],
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"]
+      },
+      "schema:PublicationVolume": {
+        "iri": "http://schema.org/PublicationVolume",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": [
+          "schema:keywords",
+          "schema:genre",
+          "schema:datePublished",
+          "schema:author",
+          "schema:illustrator",
+          "wdt:P725",
+          "schema:publisher",
+          "schema:contributor",
+          "schema:character",
+          "wdt:P179",
+          "schema:inLanguage"
+        ],
+        "labels": {
+          "de": "Band",
+          "en": "volume",
+          "es": "volumen",
+          "fr": "volume",
+          "ja": "巻",
+          "ko": "권",
+          "zh-Hans": "卷",
+          "zh-Hant": "卷"
+        },
+        "mappings": ["wd:Q1238720"],
+        "properties": [
+          "schema:abstract",
+          "schema:author",
+          "schema:character",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:genre",
+          "schema:illustrator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:isbn",
+          "schema:keywords",
+          "schema:name",
+          "schema:numberOfPages",
+          "schema:publisher",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P179",
+          "wdt:P5732",
+          "wdt:P725"
+        ]
+      }
+    },
+    "format": "https://rezics.com/definitions/release/1",
+    "filters": {
+      "book/all": {
+        "filter": { "type": { "in": ["schema:Book"] } },
+        "labels": {
+          "de": "Alle Bücher",
+          "en": "All books",
+          "es": "Todos los libros",
+          "fr": "Tous les livres",
+          "ja": "すべての書籍",
+          "ko": "모든 도서",
+          "zh-Hans": "全部图书",
+          "zh-Hant": "全部書籍"
+        }
+      },
+      "game/all": {
+        "filter": { "type": { "in": ["schema:VideoGame"] } },
+        "labels": {
+          "de": "Alle Computerspiele",
+          "en": "All video games",
+          "es": "Todos los videojuegos",
+          "fr": "Tous les jeux vidéo",
+          "ja": "すべてのコンピュータゲーム",
+          "ko": "모든 비디오 게임",
+          "zh-Hans": "所有电子游戏",
+          "zh-Hant": "全部電子遊戲"
+        }
+      },
+      "anime/all": {
+        "filter": { "type": { "in": ["schema:Movie", "schema:TVSeries"] } },
+        "labels": {
+          "de": "Alle Anime",
+          "en": "All anime",
+          "es": "Todos los anime",
+          "fr": "Tous les anime",
+          "ja": "すべてのアニメ",
+          "ko": "모든 애니메이션",
+          "zh-Hans": "所有动画",
+          "zh-Hant": "全部動畫"
+        }
+      },
+      "manga/all": {
+        "filter": { "type": { "in": ["schema:ComicSeries"] } },
+        "labels": {
+          "de": "Alle Manga",
+          "en": "All manga",
+          "es": "Todos los mangas",
+          "fr": "Tous les mangas",
+          "ja": "すべての漫画",
+          "ko": "모든 만화",
+          "zh-Hans": "所有漫画",
+          "zh-Hant": "全部漫畫"
+        }
+      },
+      "recipe/all": {
+        "filter": { "type": { "in": ["schema:Recipe"] } },
+        "labels": {
+          "de": "Alle Rezepte",
+          "en": "All recipes",
+          "es": "Todas las recetas",
+          "fr": "Toutes les recettes",
+          "ja": "すべてのレシピ",
+          "ko": "모든 레시피",
+          "zh-Hans": "所有食谱",
+          "zh-Hant": "全部食譜"
+        }
+      },
+      "series/all": {
+        "filter": { "type": { "in": ["wd:Q7725310", "schema:BookSeries"] } },
+        "labels": {
+          "de": "Alle Serien",
+          "en": "All series",
+          "es": "Todas las series",
+          "fr": "Toutes les séries",
+          "ja": "すべてのシリーズ",
+          "ko": "모든 시리즈",
+          "zh-Hans": "所有系列",
+          "zh-Hant": "全部系列"
+        }
+      },
+      "anime/films": {
+        "filter": { "type": { "in": ["schema:Movie"] } },
+        "labels": {
+          "de": "Alle Filme",
+          "en": "All films",
+          "es": "Todas las películas",
+          "fr": "Tous les films",
+          "ja": "すべての映画",
+          "ko": "모든 영화",
+          "zh-Hans": "所有电影",
+          "zh-Hant": "全部電影"
+        }
+      },
+      "anime/series": {
+        "filter": { "type": { "in": ["schema:TVSeries"] } },
+        "labels": {
+          "de": "Alle Fernsehserien",
+          "en": "All television series",
+          "es": "Todas las series de televisión",
+          "fr": "Toutes les séries télévisées",
+          "ja": "すべてのテレビシリーズ",
+          "ko": "모든 텔레비전 시리즈",
+          "zh-Hans": "所有电视系列节目",
+          "zh-Hant": "全部電視系列節目"
+        }
+      },
+      "game/add-ons": {
+        "filter": { "type": { "in": ["wd:Q209163"] } },
+        "labels": {
+          "de": "Alle Computerspiel-Erweiterungen",
+          "en": "All add-ons",
+          "es": "Todas las expansiones de videojuegos",
+          "fr": "Toutes les extensions de jeux vidéo",
+          "ja": "すべての拡張パック",
+          "ko": "모든 확장팩",
+          "zh-Hans": "所有资料片",
+          "zh-Hant": "全部資料片"
+        }
+      },
+      "recipe/quick": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:Recipe"] } },
+            {
+              "statement": {
+                "range": { "lte": 30, "unit": "http://www.wikidata.org/entity/Q7727" },
+                "property": "schema:cookTime"
+              }
+            }
+          ]
+        },
+        "labels": {
+          "de": "Rezepte mit bis zu 30 Minuten Kochzeit",
+          "en": "Recipes ready in 30 minutes",
+          "es": "Recetas listas en 30 minutos",
+          "fr": "Recettes prêtes en 30 minutes",
+          "ja": "30分以内で作れるレシピ",
+          "ko": "30분 안에 만드는 레시피",
+          "zh-Hans": "30分钟内做好的食谱",
+          "zh-Hant": "30 分鐘內完成的食譜"
+        }
+      },
+      "book/editions": {
+        "filter": { "type": { "in": ["bf:Instance"] } },
+        "labels": {
+          "de": "Alle Ausgaben",
+          "en": "All editions",
+          "es": "Todas las ediciones",
+          "fr": "Toutes les éditions",
+          "ja": "すべての版",
+          "ko": "모든 판",
+          "zh-Hans": "所有版本",
+          "zh-Hant": "全部版本"
+        }
+      },
+      "character/all": {
+        "filter": { "type": { "in": ["wd:Q95074"] } },
+        "labels": {
+          "de": "Alle Charaktere",
+          "en": "All characters",
+          "es": "Todos los personajes",
+          "fr": "Tous les personnages",
+          "ja": "すべてのキャラクター",
+          "ko": "모든 캐릭터",
+          "zh-Hans": "所有角色",
+          "zh-Hant": "全部角色"
+        }
+      },
+      "game/releases": {
+        "filter": { "type": { "in": ["wd:Q20631656"] } },
+        "labels": {
+          "de": "Alle Computerspiel-Veröffentlichungen",
+          "en": "All game releases",
+          "es": "Todas las publicaciones de videojuegos",
+          "fr": "Toutes les parutions de jeux vidéo",
+          "ja": "すべてのゲームのリリース",
+          "ko": "모든 게임 출시 버전",
+          "zh-Hans": "所有游戏发行版",
+          "zh-Hant": "全部遊戲發行"
+        }
+      },
+      "manga/volumes": {
+        "filter": { "type": { "in": ["schema:PublicationVolume"] } },
+        "labels": {
+          "de": "Alle Mangabände",
+          "en": "All manga volumes",
+          "es": "Todos los volúmenes de manga",
+          "fr": "Tous les volumes de manga",
+          "ja": "すべての漫画の単行本",
+          "ko": "모든 만화 단행본",
+          "zh-Hans": "所有漫画单行本",
+          "zh-Hant": "全部漫畫單行本"
+        }
+      },
+      "book/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:Book"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 erschienene Bücher",
+          "en": "Books published before 2000",
+          "es": "Libros publicados antes de 2000",
+          "fr": "Livres parus avant 2000",
+          "ja": "2000年より前に出版された書籍",
+          "ko": "2000년 이전에 출판된 도서",
+          "zh-Hans": "2000年以前出版的图书",
+          "zh-Hant": "2000 年前出版的書籍"
+        }
+      },
+      "game/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:VideoGame"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 erschienene Computerspiele",
+          "en": "Games released before 2000",
+          "es": "Videojuegos lanzados antes de 2000",
+          "fr": "Jeux vidéo sortis avant 2000",
+          "ja": "2000年より前に公開されたゲーム",
+          "ko": "2000년 이전에 공개된 게임",
+          "zh-Hans": "2000年以前推出的游戏",
+          "zh-Hant": "2000 年前推出的遊戲"
+        }
+      },
+      "visual-novel/all": {
+        "filter": { "type": { "in": ["wd:Q689445"] } },
+        "labels": {
+          "de": "Alle Visual Novels",
+          "en": "All visual novels",
+          "es": "Todas las novelas visuales",
+          "fr": "Tous les visual novels",
+          "ja": "すべてのビジュアルノベル",
+          "ko": "모든 비주얼 노벨",
+          "zh-Hans": "所有视觉小说",
+          "zh-Hant": "全部視覺小說"
+        }
+      },
+      "anime/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:Movie", "schema:TVSeries"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 erschienene Anime",
+          "en": "Anime released before 2000",
+          "es": "Anime estrenados antes de 2000",
+          "fr": "Anime sortis avant 2000",
+          "ja": "2000年より前に公開されたアニメ",
+          "ko": "2000년 이전에 공개된 애니메이션",
+          "zh-Hans": "2000年以前推出的动画",
+          "zh-Hant": "2000 年前推出的動畫"
+        }
+      },
+      "manga/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:ComicSeries"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 erschienene Manga",
+          "en": "Manga published before 2000",
+          "es": "Mangas publicados antes de 2000",
+          "fr": "Mangas parus avant 2000",
+          "ja": "2000年より前に出版された漫画",
+          "ko": "2000년 이전에 출판된 만화",
+          "zh-Hans": "2000年以前出版的漫画",
+          "zh-Hant": "2000 年前出版的漫畫"
+        }
+      },
+      "recipe/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:Recipe"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 veröffentlichte Rezepte",
+          "en": "Recipes published before 2000",
+          "es": "Recetas publicadas antes de 2000",
+          "fr": "Recettes publiées avant 2000",
+          "ja": "2000年より前に公開されたレシピ",
+          "ko": "2000년 이전에 공개된 레시피",
+          "zh-Hans": "2000年以前发表的食谱",
+          "zh-Hant": "2000 年前發表的食譜"
+        }
+      },
+      "series/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["schema:BookSeries"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:startDate" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 begonnene Buchreihen",
+          "en": "Book series started before 2000",
+          "es": "Series de libros iniciadas antes de 2000",
+          "fr": "Séries de livres commencées avant 2000",
+          "ja": "2000年より前に始まった叢書",
+          "ko": "2000년 이전에 시작된 총서",
+          "zh-Hans": "2000年以前开始的丛书",
+          "zh-Hant": "2000 年前開始的叢書"
+        }
+      },
+      "series/book-series": {
+        "filter": { "type": { "in": ["schema:BookSeries"] } },
+        "labels": {
+          "de": "Alle Buchreihen",
+          "en": "All book series",
+          "es": "Todas las series de libros",
+          "fr": "Toutes les séries de livres",
+          "ja": "すべての叢書",
+          "ko": "모든 총서",
+          "zh-Hans": "所有丛书",
+          "zh-Hant": "全部叢書"
+        }
+      },
+      "character/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["wd:Q95074"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:birthDate" } }
+          ]
+        },
+        "labels": {
+          "de": "Vor 2000 geborene Charaktere",
+          "en": "Characters born before 2000",
+          "es": "Personajes nacidos antes de 2000",
+          "fr": "Personnages nés avant 2000",
+          "ja": "2000年より前に生まれたキャラクター",
+          "ko": "2000년 이전에 태어난 캐릭터",
+          "zh-Hans": "2000年以前出生的角色",
+          "zh-Hant": "2000 年前出生的角色"
+        }
+      },
+      "series/creative-works": {
+        "filter": { "type": { "in": ["wd:Q7725310"] } },
+        "labels": {
+          "de": "Alle Serien von Werken",
+          "en": "All series of creative works",
+          "es": "Todas las series de obras creativas",
+          "fr": "Toutes les séries d'œuvres",
+          "ja": "すべての作品シリーズ",
+          "ko": "모든 창작 시리즈",
+          "zh-Hans": "所有系列创意作品",
+          "zh-Hant": "全部系列創意作品"
+        }
+      },
+      "visual-novel/releases": {
+        "filter": { "type": { "in": ["wd:Q20631656"] } },
+        "labels": {
+          "de": "Alle Visual-Novel-Veröffentlichungen",
+          "en": "All visual novel releases",
+          "es": "Todas las publicaciones de novelas visuales",
+          "fr": "Toutes les parutions de visual novels",
+          "ja": "すべてのビジュアルノベルのリリース",
+          "ko": "모든 비주얼 노벨 출시 버전",
+          "zh-Hans": "所有视觉小说发行版",
+          "zh-Hant": "全部視覺小說發行"
+        }
+      },
+      "visual-novel/before-2000": {
+        "filter": {
+          "and": [
+            { "type": { "in": ["wd:Q20631656"] } },
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+          ]
+        },
+        "labels": {
+          "de": "Veröffentlichungen vor 2000",
+          "en": "Releases published before 2000",
+          "es": "Publicaciones anteriores a 2000",
+          "fr": "Parutions antérieures à 2000",
+          "ja": "2000年より前のリリース",
+          "ko": "2000년 이전에 나온 출시 버전",
+          "zh-Hans": "2000年以前的发行版",
+          "zh-Hant": "2000 年前的發行"
+        }
+      }
+    },
+    "contexts": {
+      "book": {
+        "labels": {
+          "de": "Buchgemeinschaft",
+          "en": "Book community",
+          "es": "Comunidad de libros",
+          "fr": "Communauté des livres",
+          "ja": "書籍コミュニティ",
+          "ko": "도서 커뮤니티",
+          "zh-Hans": "图书社区",
+          "zh-Hant": "書籍社群"
+        },
+        "defaults": {}
+      },
+      "game": {
+        "labels": {
+          "de": "Computerspiel-Gemeinschaft",
+          "en": "Game community",
+          "es": "Comunidad de videojuegos",
+          "fr": "Communauté des jeux vidéo",
+          "ja": "ゲームコミュニティ",
+          "ko": "게임 커뮤니티",
+          "zh-Hans": "游戏社区",
+          "zh-Hant": "遊戲社群"
+        },
+        "defaults": {}
+      },
+      "anime": {
+        "labels": {
+          "de": "Anime-Gemeinschaft",
+          "en": "Anime community",
+          "es": "Comunidad de anime",
+          "fr": "Communauté des anime",
+          "ja": "アニメコミュニティ",
+          "ko": "애니메이션 커뮤니티",
+          "zh-Hans": "动画社区",
+          "zh-Hant": "動畫社群"
+        },
+        "defaults": {}
+      },
+      "manga": {
+        "labels": {
+          "de": "Manga-Gemeinschaft",
+          "en": "Manga community",
+          "es": "Comunidad de manga",
+          "fr": "Communauté des mangas",
+          "ja": "漫画コミュニティ",
+          "ko": "만화 커뮤니티",
+          "zh-Hans": "漫画社区",
+          "zh-Hant": "漫畫社群"
+        },
+        "defaults": {}
+      },
+      "recipe": {
+        "labels": {
+          "de": "Rezeptgemeinschaft",
+          "en": "Recipe community",
+          "es": "Comunidad de recetas",
+          "fr": "Communauté des recettes",
+          "ja": "レシピコミュニティ",
+          "ko": "레시피 커뮤니티",
+          "zh-Hans": "食谱社区",
+          "zh-Hant": "食譜社群"
+        },
+        "defaults": {}
+      },
+      "series": {
+        "labels": {
+          "de": "Serien-Gemeinschaft",
+          "en": "Series community",
+          "es": "Comunidad de series",
+          "fr": "Communauté des séries",
+          "ja": "シリーズコミュニティ",
+          "ko": "시리즈 커뮤니티",
+          "zh-Hans": "系列社区",
+          "zh-Hant": "系列社群"
+        },
+        "defaults": {}
+      },
+      "character": {
+        "labels": {
+          "de": "Charakter-Gemeinschaft",
+          "en": "Character community",
+          "es": "Comunidad de personajes",
+          "fr": "Communauté des personnages",
+          "ja": "キャラクターコミュニティ",
+          "ko": "캐릭터 커뮤니티",
+          "zh-Hans": "角色社区",
+          "zh-Hant": "角色社群"
+        },
+        "defaults": {}
+      },
+      "visual-novel": {
+        "labels": {
+          "de": "Visual-Novel-Gemeinschaft",
+          "en": "Visual novel community",
+          "es": "Comunidad de novelas visuales",
+          "fr": "Communauté des visual novels",
+          "ja": "ビジュアルノベルコミュニティ",
+          "ko": "비주얼 노벨 커뮤니티",
+          "zh-Hans": "视觉小说社区",
+          "zh-Hant": "視覺小說社群"
+        },
+        "defaults": {}
+      }
+    },
+    "prefixes": {
+      "bf": "http://id.loc.gov/ontologies/bibframe/",
+      "wd": "http://www.wikidata.org/entity/",
+      "wdt": "http://www.wikidata.org/prop/direct/",
+      "foaf": "http://xmlns.com/foaf/0.1/",
+      "skos": "http://www.w3.org/2004/02/skos/core#",
+      "rezics": "https://rezics.com/vocab/",
+      "schema": "http://schema.org/"
+    },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.0" },
+    "generator": { "name": "@neverblink/linkml", "version": "0.17.1" },
+    "properties": {
+      "wdt:P31": {
+        "iri": "http://www.wikidata.org/prop/direct/P31",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "ist ein(e)",
+          "en": "instance of",
+          "es": "instancia de",
+          "fr": "nature de l’élément",
+          "ja": "分類",
+          "ko": "다음 종류에 속함",
+          "zh-Hans": "隶属于",
+          "zh-Hant": "隸屬於"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P31"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P58": {
+        "iri": "http://www.wikidata.org/prop/direct/P58",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Drehbuchautor",
+          "en": "screenwriter",
+          "es": "guionista",
+          "fr": "scénariste",
+          "ja": "脚本",
+          "ko": "각본가",
+          "zh-Hans": "编剧",
+          "zh-Hant": "編劇"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P58"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "wdt:P144": {
+        "iri": "http://www.wikidata.org/prop/direct/P144",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "basiert auf",
+          "en": "based on",
+          "es": "basado en",
+          "fr": "basé sur",
+          "ja": "派生元",
+          "ko": "다음에 기반을 두었음",
+          "zh-Hans": "改编自",
+          "zh-Hant": "改編自"
+        },
+        "targets": ["schema:CreativeWork"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P144"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P155": {
+        "iri": "http://www.wikidata.org/prop/direct/P155",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Vorgänger",
+          "en": "follows",
+          "es": "precedido por",
+          "fr": "précédé par",
+          "ja": "前",
+          "ko": "이전",
+          "zh-Hans": "上一项",
+          "zh-Hant": "上一項"
+        },
+        "targets": ["schema:CreativeWork"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P155"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P156": {
+        "iri": "http://www.wikidata.org/prop/direct/P156",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Nachfolger",
+          "en": "followed by",
+          "es": "sucedido por",
+          "fr": "suivi par",
+          "ja": "次",
+          "ko": "다음",
+          "zh-Hans": "下一项",
+          "zh-Hant": "下一項"
+        },
+        "targets": ["wd:Q689445"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P156"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P178": {
+        "iri": "http://www.wikidata.org/prop/direct/P178",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Entwickler",
+          "en": "developer",
+          "es": "desarrollador",
+          "fr": "développé par",
+          "ja": "開発元",
+          "ko": "개발 주체",
+          "zh-Hans": "开发者",
+          "zh-Hant": "開發者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P178"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "wdt:P179": {
+        "iri": "http://www.wikidata.org/prop/direct/P179",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Teil der Reihe oder Serie",
+          "en": "part of the series",
+          "es": "serie",
+          "fr": "série",
+          "ja": "シリーズ",
+          "ko": "시리즈",
+          "zh-Hans": "系列",
+          "zh-Hant": "所屬系列"
+        },
+        "targets": ["schema:CreativeWorkSeries"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": ["schema:position"],
+        "multivalued": true
+      },
+      "wdt:P361": {
+        "iri": "http://www.wikidata.org/prop/direct/P361",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "ist Teil von",
+          "en": "part of",
+          "es": "forma parte de",
+          "fr": "partie de",
+          "ja": "以下の一部分",
+          "ko": "다음의 일부",
+          "zh-Hans": "所属实体",
+          "zh-Hant": "所屬實體"
+        },
+        "targets": ["wd:Q689445"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P361"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P408": {
+        "iri": "http://www.wikidata.org/prop/direct/P408",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Engine",
+          "en": "software engine",
+          "es": "motor",
+          "fr": "moteur logiciel",
+          "ja": "ソフトウェアエンジン",
+          "ko": "소프트웨어 엔진",
+          "zh-Hans": "软件引擎",
+          "zh-Hant": "引擎"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P408"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P437": {
+        "iri": "http://www.wikidata.org/prop/direct/P437",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Auslieferungsmedium",
+          "en": "distribution format",
+          "es": "distribución",
+          "fr": "format de distribution",
+          "ja": "メディア形態",
+          "ko": "유통 방법",
+          "zh-Hans": "发行方式",
+          "zh-Hant": "發行格式"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P437"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P449": {
+        "iri": "http://www.wikidata.org/prop/direct/P449",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Sender der Erstausstrahlung",
+          "en": "original broadcaster",
+          "es": "emisora original",
+          "fr": "diffuseur original",
+          "ja": "放送当初のネットワーク",
+          "ko": "다음에서 본방송을 함",
+          "zh-Hans": "首播平台",
+          "zh-Hant": "首播平台"
+        },
+        "targets": ["schema:Organization"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P449"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P453": {
+        "iri": "http://www.wikidata.org/prop/direct/P453",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Rolle",
+          "en": "character role",
+          "es": "papel del personaje",
+          "fr": "rôle",
+          "ja": "配役",
+          "ko": "맡은 배역",
+          "zh-Hans": "人物角色",
+          "zh-Hant": "人物角色"
+        },
+        "targets": ["wd:Q95074"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P648": {
+        "iri": "http://www.wikidata.org/prop/direct/P648",
+        "value": { "type": "string", "pattern": "^OL[1-9][0-9]*[AMW]$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Open-Library-Kennung",
+          "en": "Open Library ID",
+          "es": "identificador Open Library",
+          "fr": "identifiant Open Library",
+          "ja": "Open Library識別子",
+          "ko": "오픈 라이브러리 ID",
+          "zh-Hans": "开放图书馆标识符",
+          "zh-Hant": "開放圖書館識別碼"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P648"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P725": {
+        "iri": "http://www.wikidata.org/prop/direct/P725",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Sprecher",
+          "en": "voice actor",
+          "es": "actor de voz",
+          "fr": "comédien ou comédienne de doublage",
+          "ja": "声優",
+          "ko": "담당 성우",
+          "zh-Hans": "配音演员",
+          "zh-Hant": "配音員"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P725"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453"],
+        "multivalued": true
+      },
+      "wdt:P973": {
+        "iri": "http://www.wikidata.org/prop/direct/P973",
+        "value": { "type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 1500 },
+        "labels": {
+          "de": "beschrieben in URL",
+          "en": "described at URL",
+          "es": "descrito en la URL",
+          "fr": "décrit à l’URL",
+          "ja": "詳細情報URL",
+          "ko": "기술되어 있는 URL",
+          "zh-Hans": "详情描述网址",
+          "zh-Hant": "詳細描述網址"
+        },
+        "datatype": "url",
+        "mappings": ["wd:P973"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P1433": {
+        "iri": "http://www.wikidata.org/prop/direct/P1433",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "veröffentlicht in",
+          "en": "published in",
+          "es": "publicado en",
+          "fr": "publié dans",
+          "ja": "この作品が含まれる作品",
+          "ko": "다음에 실림",
+          "zh-Hans": "发表于",
+          "zh-Hant": "發表於"
+        },
+        "targets": ["schema:CreativeWork"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P1433"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P1853": {
+        "iri": "http://www.wikidata.org/prop/direct/P1853",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Blutgruppe",
+          "en": "blood type",
+          "es": "grupo sanguíneo",
+          "fr": "groupe sanguin",
+          "ja": "血液型",
+          "ko": "혈액형",
+          "zh-Hans": "血型",
+          "zh-Hant": "血型"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P1853"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P1889": {
+        "iri": "http://www.wikidata.org/prop/direct/P1889",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "verschieden von",
+          "en": "different from",
+          "es": "diferente de",
+          "fr": "à ne pas confondre avec",
+          "ja": "以下と異なる",
+          "ko": "다음과 다름",
+          "zh-Hans": "区别于",
+          "zh-Hant": "相異物"
+        },
+        "targets": ["wd:Q689445"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P1889"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P1932": {
+        "iri": "http://www.wikidata.org/prop/direct/P1932",
+        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "angegeben als",
+          "en": "object of statement named as",
+          "es": "citado como",
+          "fr": "indiqué comme",
+          "ja": "原文表記",
+          "ko": "원문 표기",
+          "zh-Hans": "客体表述为",
+          "zh-Hant": "客體表述為"
+        },
+        "datatype": "string",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P2512": {
+        "iri": "http://www.wikidata.org/prop/direct/P2512",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "hat Ableger",
+          "en": "has spin-off",
+          "es": "serie derivada",
+          "fr": "série dérivée",
+          "ja": "スピンオフ",
+          "ko": "스핀오프",
+          "zh-Hans": "派生作品",
+          "zh-Hant": "派生作品"
+        },
+        "targets": ["wd:Q689445"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P2512"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P2635": {
+        "iri": "http://www.wikidata.org/prop/direct/P2635",
+        "units": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Anzahl der Teile dieses Werks",
+          "en": "number of parts of this work",
+          "es": "número de partes de esta obra",
+          "fr": "nombre de parties de l'œuvre",
+          "ja": "作品中の区分の数",
+          "ko": "작품의 부수",
+          "zh-Hans": "作品部分数量",
+          "zh-Hant": "作品組成部分數量"
+        },
+        "maximum": 10000000,
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": ["wd:P2635"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P2899": {
+        "iri": "http://www.wikidata.org/prop/direct/P2899",
+        "units": ["http://www.wikidata.org/entity/Q577"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q577"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Mindestalter",
+          "en": "minimum age",
+          "es": "edad mínima",
+          "fr": "âge minimal",
+          "ja": "下限年齢",
+          "ko": "이용할 수 있는 최소 연령",
+          "zh-Hans": "最低年龄",
+          "zh-Hant": "最低年齡"
+        },
+        "maximum": 18,
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": ["wd:P2899"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P3180": {
+        "iri": "http://www.wikidata.org/prop/direct/P3180",
+        "value": { "type": "string", "pattern": "^[vrpcs][1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "The-Visual-Novel-Database-ID",
+          "en": "Visual Novel Database ID",
+          "es": "identificador Visual Novel",
+          "fr": "identifiant The Visual Novel Database",
+          "ja": "ビジュアルノベル・データベース識別子",
+          "ko": "비주얼 노벨 데이터베이스 ID",
+          "zh-Hans": "视觉小说数据库标识符",
+          "zh-Hant": "視覺小說數據庫識別碼"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P3180"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P3831": {
+        "iri": "http://www.wikidata.org/prop/direct/P3831",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Objekt der Aussage fungiert als",
+          "en": "object of statement has role",
+          "es": "valor de la declaración tiene el rol de",
+          "fr": "rôle de l'objet de la déclaration",
+          "ja": "当てはまる役割",
+          "ko": "서술의 대상의 역할",
+          "zh-Hans": "客体的角色",
+          "zh-Hant": "客體角色"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P4969": {
+        "iri": "http://www.wikidata.org/prop/direct/P4969",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "abgeleitetes Werk",
+          "en": "derivative work",
+          "es": "obra derivada",
+          "fr": "œuvre dérivée",
+          "ja": "派生作品",
+          "ko": "다음 작품은 이 작품을 바탕으로 함",
+          "zh-Hans": "衍生作品",
+          "zh-Hant": "衍生作品"
+        },
+        "targets": ["wd:Q689445"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P4969"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P5732": {
+        "iri": "http://www.wikidata.org/prop/direct/P5732",
+        "value": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Bangumi-Werkkennung",
+          "en": "Bangumi subject ID",
+          "es": "identificador de tema de Bangumi",
+          "fr": "identifiant Bangumi",
+          "ja": "番組計画主題識別子",
+          "ko": "Bangumi 주제 ID",
+          "zh-Hans": "Bangumi主题标识符",
+          "zh-Hant": "Bangumi主題識別碼"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P5732"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P6296": {
+        "iri": "http://www.wikidata.org/prop/direct/P6296",
+        "value": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Bangumi-Charakterkennung",
+          "en": "bgm.tv character ID",
+          "es": "identificador de personaje en Bangumi",
+          "fr": "identifiant de personnage Bangumi",
+          "ja": "番組計画登場人物識別子",
+          "ko": "Bangumi 캐릭터 ID",
+          "zh-Hans": "Bangumi角色标识符",
+          "zh-Hant": "Bangumi角色識別碼"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P6296"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P6298": {
+        "iri": "http://www.wikidata.org/prop/direct/P6298",
+        "value": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Bangumi-Personenkennung",
+          "en": "bgm.tv person ID",
+          "es": "identificador de persona en bgm.tv",
+          "fr": "identifiant bgm.tv d'une personne",
+          "ja": "番組計画人物識別子",
+          "ko": "bgm.tv 인물 ID",
+          "zh-Hans": "Bangumi人物标识符",
+          "zh-Hant": "Bangumi人物識別碼"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P6298"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "wdt:P7937": {
+        "iri": "http://www.wikidata.org/prop/direct/P7937",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "künstlerische Form",
+          "en": "form of creative work",
+          "es": "forma artística",
+          "fr": "forme de l’œuvre",
+          "ja": "創作物の形式",
+          "ko": "저작물의 형식",
+          "zh-Hans": "作品形式",
+          "zh-Hant": "作品形式"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P7937"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "wdt:P8646": {
+        "iri": "http://www.wikidata.org/prop/direct/P8646",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Erweiterung von",
+          "en": "expansion of",
+          "es": "expansión de",
+          "fr": "extension de",
+          "ja": "以下の拡張パック",
+          "ko": "다음의 확장팩임",
+          "zh-Hans": "资料片原作",
+          "zh-Hant": "資料片原作"
+        },
+        "targets": ["schema:VideoGame"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P8646"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "foaf:focus": {
+        "iri": "http://xmlns.com/foaf/0.1/focus",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Bezugssubjekt",
+          "en": "focus",
+          "es": "sujeto representado",
+          "fr": "sujet représenté",
+          "ja": "指し示す対象",
+          "ko": "가리키는 대상",
+          "zh-Hans": "代表的主体",
+          "zh-Hant": "代表的主體"
+        },
+        "targets": ["schema:Thing"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:url": {
+        "iri": "http://schema.org/url",
+        "value": { "type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 1500 },
+        "labels": {
+          "de": "offizielle Website",
+          "en": "URL",
+          "es": "sitio web oficial",
+          "fr": "site officiel",
+          "ja": "URL",
+          "ko": "공식 웹사이트",
+          "zh-Hans": "官方网站",
+          "zh-Hant": "URL"
+        },
+        "datatype": "url",
+        "mappings": ["wd:P856"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:gtin": {
+        "iri": "http://schema.org/gtin",
+        "value": { "type": "string", "pattern": "^(?:[0-9]{8}|[0-9]{12,14})$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "GTIN",
+          "en": "GTIN",
+          "es": "GTIN",
+          "fr": "GTIN",
+          "ja": "GTIN",
+          "ko": "GTIN",
+          "zh-Hans": "GTIN",
+          "zh-Hant": "GTIN"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P3962"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:isbn": {
+        "iri": "http://schema.org/isbn",
+        "value": { "type": "string", "pattern": "^97[89]-?(?:[0-9]-?){9}[0-9]$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "ISBN-13",
+          "en": "ISBN-13",
+          "es": "ISBN-13",
+          "fr": "ISBN-13",
+          "ja": "ISBN-13",
+          "ko": "ISBN-13",
+          "zh-Hans": "ISBN-13",
+          "zh-Hant": "ISBN-13"
+        },
+        "datatype": "external-id",
+        "mappings": ["wd:P212"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:name": {
+        "iri": "http://schema.org/name",
+        "value": {
+          "type": "object",
+          "required": ["text", "language"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Name",
+          "en": "name",
+          "es": "nombre",
+          "fr": "nom",
+          "ja": "名前",
+          "ko": "명칭",
+          "zh-Hans": "名称",
+          "zh-Hant": "名稱"
+        },
+        "datatype": "monolingualtext",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:genre": {
+        "iri": "http://schema.org/genre",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Genre",
+          "en": "genre",
+          "es": "género",
+          "fr": "genre",
+          "ja": "ジャンル",
+          "ko": "장르",
+          "zh-Hans": "类型",
+          "zh-Hant": "類型"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P136"],
+        "qualifiers": ["rezics:spoilerLevel"],
+        "multivalued": true
+      },
+      "schema:image": {
+        "iri": "http://schema.org/image",
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])"
+        },
+        "labels": {
+          "de": "Bild",
+          "en": "image",
+          "es": "imagen",
+          "fr": "image",
+          "ja": "画像",
+          "ko": "이미지",
+          "zh-Hans": "图像",
+          "zh-Hant": "圖像"
+        },
+        "datatype": "media",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "skos:broader": {
+        "iri": "http://www.w3.org/2004/02/skos/core#broader",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "hat Oberbegriff",
+          "en": "has broader",
+          "es": "tiene concepto más amplio",
+          "fr": "a pour concept générique",
+          "ja": "上位概念",
+          "ko": "상위 개념",
+          "zh-Hans": "上位概念",
+          "zh-Hant": "上位概念"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:author": {
+        "iri": "http://schema.org/author",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Autor",
+          "en": "author",
+          "es": "autor",
+          "fr": "auteur ou autrice",
+          "ja": "著者",
+          "ko": "저자",
+          "zh-Hans": "作者",
+          "zh-Hant": "作者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P50"],
+        "qualifiers": [
+          "schema:position",
+          "schema:sameAs",
+          "wdt:P1932",
+          "wdt:P3180",
+          "wdt:P3831",
+          "wdt:P6298",
+          "wdt:P648"
+        ],
+        "multivalued": true
+      },
+      "schema:gender": {
+        "iri": "http://schema.org/gender",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Geschlecht",
+          "en": "gender",
+          "es": "sexo o género",
+          "fr": "sexe ou genre",
+          "ja": "性別",
+          "ko": "성별",
+          "zh-Hans": "性别",
+          "zh-Hant": "性別"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": ["rezics:spoilerLevel"],
+        "multivalued": false
+      },
+      "schema:height": {
+        "iri": "http://schema.org/height",
+        "units": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Höhe",
+          "en": "height",
+          "es": "altura",
+          "fr": "hauteur",
+          "ja": "全高",
+          "ko": "높이",
+          "zh-Hans": "高度",
+          "zh-Hant": "高度"
+        },
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": ["wd:P2048"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:sameAs": {
+        "iri": "http://schema.org/sameAs",
+        "value": { "type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 1500 },
+        "labels": {
+          "de": "exakte Übereinstimmung",
+          "en": "exact match",
+          "es": "correspondencia exacta",
+          "fr": "correspondance exacte",
+          "ja": "完全に一致",
+          "ko": "정확히 일치",
+          "zh-Hans": "精确匹配",
+          "zh-Hant": "精確匹配"
+        },
+        "datatype": "url",
+        "mappings": ["wd:P2888"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:weight": {
+        "iri": "http://schema.org/weight",
+        "units": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Masse",
+          "en": "weight",
+          "es": "masa",
+          "fr": "masse",
+          "ja": "質量",
+          "ko": "질량",
+          "zh-Hans": "质量",
+          "zh-Hant": "質量"
+        },
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": ["wd:P2067"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "skos:inScheme": {
+        "iri": "http://www.w3.org/2004/02/skos/core#inScheme",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "im Begriffssystem",
+          "en": "is in scheme",
+          "es": "en el esquema",
+          "fr": "dans le schéma",
+          "ja": "所属する概念体系",
+          "ko": "소속 개념 체계",
+          "zh-Hans": "所属概念体系",
+          "zh-Hant": "所屬概念體系"
+        },
+        "targets": ["skos:ConceptScheme"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:endDate": {
+        "iri": "http://schema.org/endDate",
+        "value": {
+          "type": "object",
+          "required": ["time", "precision", "calendarmodel"],
+          "properties": {
+            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
+            "precision": { "enum": [9, 10, 11] },
+            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Endzeitpunkt",
+          "en": "end date",
+          "es": "fecha de finalización",
+          "fr": "date de fin",
+          "ja": "終了日",
+          "ko": "종료일",
+          "zh-Hans": "结束日期",
+          "zh-Hant": "結束日期"
+        },
+        "datatype": "time",
+        "mappings": ["wd:P582"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:musicBy": {
+        "iri": "http://schema.org/musicBy",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Komponist",
+          "en": "composer",
+          "es": "compositor",
+          "fr": "compositeur ou compositrice",
+          "ja": "作曲者",
+          "ko": "작곡가",
+          "zh-Hans": "作曲",
+          "zh-Hant": "作曲者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P86"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:version": {
+        "iri": "http://schema.org/version",
+        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Version",
+          "en": "version",
+          "es": "versión",
+          "fr": "version",
+          "ja": "バージョン",
+          "ko": "버전",
+          "zh-Hans": "版本",
+          "zh-Hant": "版本"
+        },
+        "datatype": "string",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:abstract": {
+        "iri": "http://schema.org/abstract",
+        "value": {
+          "type": "object",
+          "required": ["language", "document"],
+          "properties": {
+            "document": { "type": "object" },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Zusammenfassung",
+          "en": "abstract",
+          "es": "resumen",
+          "fr": "résumé",
+          "ja": "アブストラクト",
+          "ko": "요약",
+          "zh-Hans": "摘要",
+          "zh-Hant": "摘要"
+        },
+        "datatype": "document",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:cookTime": {
+        "iri": "http://schema.org/cookTime",
+        "units": ["http://www.wikidata.org/entity/Q7727"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q7727"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Kochzeit",
+          "en": "cooking time",
+          "es": "tiempo de cocción",
+          "fr": "temps de cuisson",
+          "ja": "調理時間",
+          "ko": "조리 시간",
+          "zh-Hans": "烹饪时间",
+          "zh-Hant": "烹調時間"
+        },
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:director": {
+        "iri": "http://schema.org/director",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Regisseur",
+          "en": "director",
+          "es": "director",
+          "fr": "réalisé(e) ou mis(e) en scène par",
+          "ja": "監督",
+          "ko": "감독",
+          "zh-Hans": "导演",
+          "zh-Hant": "導演"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P57"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:duration": {
+        "iri": "http://schema.org/duration",
+        "units": ["http://www.wikidata.org/entity/Q11574"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q11574"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Dauer",
+          "en": "duration",
+          "es": "duración",
+          "fr": "durée",
+          "ja": "再生時間",
+          "ko": "다음 시간 동안 진행됨",
+          "zh-Hans": "时长",
+          "zh-Hant": "片長"
+        },
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": ["wd:P2047"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:isPartOf": {
+        "iri": "http://schema.org/isPartOf",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "ist Teil von",
+          "en": "part of",
+          "es": "forma parte de",
+          "fr": "partie de",
+          "ja": "以下の一部分",
+          "ko": "다음의 일부",
+          "zh-Hans": "所属实体",
+          "zh-Hant": "所屬實體"
+        },
+        "targets": ["schema:TVSeason", "schema:TVSeries"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P361"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:keywords": {
+        "iri": "http://schema.org/keywords",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Schlagwörter",
+          "en": "keywords",
+          "es": "palabras clave",
+          "fr": "mots-clés",
+          "ja": "タグ",
+          "ko": "태그",
+          "zh-Hans": "标签",
+          "zh-Hant": "標籤"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "qualifiers": ["rezics:spoilerLevel"],
+        "multivalued": true
+      },
+      "schema:minValue": {
+        "iri": "http://schema.org/minValue",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Mindestwert",
+          "en": "minimum value",
+          "es": "valor mínimo",
+          "fr": "valeur minimale",
+          "ja": "最小値",
+          "ko": "최솟값",
+          "zh-Hans": "最小值",
+          "zh-Hant": "最小值"
+        },
+        "minimum": 1,
+        "datatype": "quantity",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:position": {
+        "iri": "http://schema.org/position",
+        "value": { "type": "string", "pattern": "^[1-9][0-9]{0,3}$", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Ordnungsnummer",
+          "en": "position",
+          "es": "orden dentro de la serie",
+          "fr": "rang dans la série",
+          "ja": "順序",
+          "ko": "순번",
+          "zh-Hans": "系列序号",
+          "zh-Hant": "順序"
+        },
+        "datatype": "string",
+        "mappings": ["wd:P1545"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:producer": {
+        "iri": "http://schema.org/producer",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Produzent",
+          "en": "producer",
+          "es": "productor",
+          "fr": "producteur ou productrice",
+          "ja": "プロデューサー",
+          "ko": "제작자",
+          "zh-Hans": "制作人",
+          "zh-Hant": "製作人"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P162"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:birthDate": {
+        "iri": "http://schema.org/birthDate",
+        "value": {
+          "type": "object",
+          "required": ["time", "precision", "calendarmodel"],
+          "properties": {
+            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
+            "precision": { "enum": [9, 10, 11] },
+            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Geburtsdatum",
+          "en": "date of birth",
+          "es": "fecha de nacimiento",
+          "fr": "date de naissance",
+          "ja": "生年月日",
+          "ko": "출생일",
+          "zh-Hans": "出生日期",
+          "zh-Hant": "出生日期"
+        },
+        "datatype": "time",
+        "mappings": ["wd:P569"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:character": {
+        "iri": "http://schema.org/character",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Figuren",
+          "en": "characters",
+          "es": "personajes",
+          "fr": "personnages",
+          "ja": "登場キャラクター",
+          "ko": "등장하는 캐릭터",
+          "zh-Hans": "登场角色",
+          "zh-Hant": "登場角色"
+        },
+        "targets": ["wd:Q95074"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P674"],
+        "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:deathDate": {
+        "iri": "http://schema.org/deathDate",
+        "value": {
+          "type": "object",
+          "required": ["time", "precision", "calendarmodel"],
+          "properties": {
+            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
+            "precision": { "enum": [9, 10, 11] },
+            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Sterbedatum",
+          "en": "date of death",
+          "es": "fecha de fallecimiento",
+          "fr": "date de mort",
+          "ja": "没年月日",
+          "ko": "사망일",
+          "zh-Hans": "死亡日期",
+          "zh-Hant": "逝世日期"
+        },
+        "datatype": "time",
+        "mappings": ["wd:P570"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:publisher": {
+        "iri": "http://schema.org/publisher",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Verlag",
+          "en": "publisher",
+          "es": "editorial",
+          "fr": "publié par",
+          "ja": "出版社",
+          "ko": "발행 주체",
+          "zh-Hans": "出版者",
+          "zh-Hant": "出版者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P123"],
+        "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3180", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:startDate": {
+        "iri": "http://schema.org/startDate",
+        "value": {
+          "type": "object",
+          "required": ["time", "precision", "calendarmodel"],
+          "properties": {
+            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
+            "precision": { "enum": [9, 10, 11] },
+            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Startdatum",
+          "en": "start date",
+          "es": "fecha de inicio",
+          "fr": "date de début",
+          "ja": "開始日",
+          "ko": "시작일",
+          "zh-Hans": "开始日期",
+          "zh-Hant": "開始日期"
+        },
+        "datatype": "time",
+        "mappings": ["wd:P580"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:inLanguage": {
+        "iri": "http://schema.org/inLanguage",
+        "value": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
+        "labels": {
+          "de": "Sprache",
+          "en": "language",
+          "es": "idioma",
+          "fr": "langue",
+          "ja": "言語",
+          "ko": "언어",
+          "zh-Hans": "语言",
+          "zh-Hant": "語言"
+        },
+        "datatype": "string",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:translator": {
+        "iri": "http://schema.org/translator",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Übersetzer",
+          "en": "translator",
+          "es": "traductor",
+          "fr": "traducteur ou traductrice",
+          "ja": "翻訳者",
+          "ko": "번역가",
+          "zh-Hans": "译者",
+          "zh-Hant": "譯者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P655"],
+        "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P648"],
+        "multivalued": true
+      },
+      "schema:contributor": {
+        "iri": "http://schema.org/contributor",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Mitarbeiter des Kreativwerks",
+          "en": "contributor to the creative work or subject",
+          "es": "colaborador",
+          "fr": "collaborateur ou collaboratrice au travail de création",
+          "ja": "作品あるいは主題の貢献者",
+          "ko": "공저자",
+          "zh-Hans": "创作作品或主题贡献者",
+          "zh-Hant": "創作作品或主題貢獻者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P767"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:illustrator": {
+        "iri": "http://schema.org/illustrator",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Illustrator",
+          "en": "illustrator",
+          "es": "ilustrador",
+          "fr": "illustrateur ou illustratrice",
+          "ja": "挿絵画家",
+          "ko": "삽화가",
+          "zh-Hans": "插画家",
+          "zh-Hant": "插畫家"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P110"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      },
+      "schema:recipeYield": {
+        "iri": "http://schema.org/recipeYield",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Portionen",
+          "en": "servings",
+          "es": "raciones",
+          "fr": "portions",
+          "ja": "人数",
+          "ko": "인분",
+          "zh-Hans": "份量",
+          "zh-Hant": "份量"
+        },
+        "minimum": 1,
+        "datatype": "quantity",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "rezics:spoilerLevel": {
+        "iri": "https://rezics.com/vocab/spoilerLevel",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Spoilerstufe",
+          "en": "spoiler level",
+          "es": "nivel de destripe",
+          "fr": "niveau de divulgation",
+          "ja": "ネタバレ度",
+          "ko": "스포일러 수준",
+          "zh-Hans": "剧透程度",
+          "zh-Hant": "劇透程度"
+        },
+        "maximum": 2,
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:dateModified": {
+        "iri": "http://schema.org/dateModified",
+        "value": {
+          "type": "object",
+          "required": ["time", "precision", "calendarmodel"],
+          "properties": {
+            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
+            "precision": { "enum": [9, 10, 11] },
+            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "letzte Aktualisierung",
+          "en": "last update",
+          "es": "última actualización",
+          "fr": "date de mise à jour ou de changement",
+          "ja": "最終更新日",
+          "ko": "마지막 갱신일",
+          "zh-Hans": "最后更新",
+          "zh-Hant": "最後更新"
+        },
+        "datatype": "time",
+        "mappings": ["wd:P5017"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:gamePlatform": {
+        "iri": "http://schema.org/gamePlatform",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Spielplattform",
+          "en": "game platform",
+          "es": "plataforma de juego",
+          "fr": "plateforme de jeu",
+          "ja": "ゲームプラットフォーム",
+          "ko": "게임 플랫폼",
+          "zh-Hans": "游戏平台",
+          "zh-Hant": "遊戲平台"
+        },
+        "targets": ["skos:Concept"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P400"],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:alternateName": {
+        "iri": "http://schema.org/alternateName",
+        "value": {
+          "type": "object",
+          "required": ["text", "language"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Alternativname",
+          "en": "alternate name",
+          "es": "nombre alternativo",
+          "fr": "autre nom",
+          "ja": "別名",
+          "ko": "다른 이름",
+          "zh-Hans": "别名",
+          "zh-Hant": "別名"
+        },
+        "datatype": "monolingualtext",
+        "mappings": [],
+        "qualifiers": ["rezics:spoilerLevel"],
+        "multivalued": true
+      },
+      "schema:datePublished": {
+        "iri": "http://schema.org/datePublished",
+        "value": {
+          "type": "object",
+          "required": ["time", "precision", "calendarmodel"],
+          "properties": {
+            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
+            "precision": { "enum": [9, 10, 11] },
+            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Veröffentlichungsdatum",
+          "en": "publication date",
+          "es": "fecha de publicación",
+          "fr": "date de publication",
+          "ja": "出版日",
+          "ko": "출판 날짜",
+          "zh-Hans": "出版日期",
+          "zh-Hant": "出版日期"
+        },
+        "datatype": "time",
+        "mappings": ["wd:P577"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:episodeNumber": {
+        "iri": "http://schema.org/episodeNumber",
+        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Episodennummer",
+          "en": "episode number",
+          "es": "número de episodio",
+          "fr": "numéro d’épisode",
+          "ja": "話数",
+          "ko": "회차",
+          "zh-Hans": "集数",
+          "zh-Hant": "集數"
+        },
+        "datatype": "string",
+        "mappings": ["wd:P1545"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:exampleOfWork": {
+        "iri": "http://schema.org/exampleOfWork",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Ausgabe oder Übersetzung von",
+          "en": "edition of",
+          "es": "versión, edición o traducción de",
+          "fr": "édition ou traduction de",
+          "ja": "原作品",
+          "ko": "다음의 판 또는 번역본",
+          "zh-Hans": "版本或翻译原作",
+          "zh-Hant": "原作品"
+        },
+        "targets": ["schema:CreativeWork"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P629"],
+        "qualifiers": ["schema:sameAs", "wdt:P648"],
+        "multivalued": false
+      },
+      "schema:numberOfPages": {
+        "iri": "http://schema.org/numberOfPages",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Anzahl der Seiten",
+          "en": "number of pages",
+          "es": "número de páginas",
+          "fr": "nombre de pages",
+          "ja": "ページ数",
+          "ko": "전체 쪽수",
+          "zh-Hans": "总页数",
+          "zh-Hant": "頁數"
+        },
+        "minimum": 1,
+        "datatype": "quantity",
+        "mappings": ["wd:P1104"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:copyrightNotice": {
+        "iri": "http://schema.org/copyrightNotice",
+        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Urheberrechtshinweis",
+          "en": "copyright notice",
+          "es": "aviso de derechos de autor",
+          "fr": "mention de droit d’auteur",
+          "ja": "著作権表示",
+          "ko": "저작권 고지",
+          "zh-Hans": "版权声明",
+          "zh-Hant": "版權聲明"
+        },
+        "datatype": "string",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:numberOfPlayers": {
+        "iri": "http://schema.org/numberOfPlayers",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Spieleranzahl",
+          "en": "number of players",
+          "es": "número de jugadores",
+          "fr": "nombre de joueurs",
+          "ja": "プレイ人数",
+          "ko": "플레이어 수",
+          "zh-Hans": "游玩人数",
+          "zh-Hant": "遊玩人數"
+        },
+        "minimum": 1,
+        "datatype": "quantity",
+        "mappings": ["wd:P1873"],
+        "qualifiers": ["schema:minValue"],
+        "multivalued": false
+      },
+      "schema:numberOfEpisodes": {
+        "iri": "http://schema.org/numberOfEpisodes",
+        "units": ["1"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": { "enum": ["1"] },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Episodenanzahl",
+          "en": "number of episodes",
+          "es": "número de episodios",
+          "fr": "nombre d’épisodes",
+          "ja": "話数",
+          "ko": "에피소드 수",
+          "zh-Hans": "集数",
+          "zh-Hant": "集數"
+        },
+        "minimum": 0,
+        "datatype": "quantity",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "schema:recipeIngredient": {
+        "iri": "http://schema.org/recipeIngredient",
+        "value": {
+          "type": "object",
+          "required": ["text", "language"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Zutat",
+          "en": "ingredient",
+          "es": "ingrediente",
+          "fr": "ingrédient",
+          "ja": "材料",
+          "ko": "재료",
+          "zh-Hans": "食材",
+          "zh-Hant": "食材"
+        },
+        "datatype": "monolingualtext",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": true
+      },
+      "schema:productionCompany": {
+        "iri": "http://schema.org/productionCompany",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Produktionsgesellschaft",
+          "en": "production company",
+          "es": "empresa productora",
+          "fr": "société de production",
+          "ja": "制作会社",
+          "ko": "제작사",
+          "zh-Hans": "制作商",
+          "zh-Hant": "製作商"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": ["wd:P272"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "multivalued": true
+      }
+    }
+  },
+  "status": 200
+}

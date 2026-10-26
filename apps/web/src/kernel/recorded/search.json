@@ -1,23 +1,29 @@
 {
   "subjects": [
     {
-      "id": "01a1761b-19f4-7043-9131-e4048139fe72",
+      "id": "01a17730-0723-75f7-bf74-b425c427b29f",
       "type": "schema:Book",
       "labels": {
-        "fr": "Le Petit Prince",
-        "zh-Hant": "小王子",
-        "ko": "어린 왕자",
-        "es": "El Principito",
-        "ja": "星の王子さま",
-        "en": "The Little Prince",
         "de": "Der kleine Prinz",
-        "zh-Hans": "小王子"
+        "en": "The Little Prince",
+        "es": "El Principito",
+        "fr": "Le Petit Prince",
+        "ja": "星の王子さま",
+        "ko": "어린 왕자",
+        "zh-Hans": "小王子",
+        "zh-Hant": "小王子"
+      },
+      "descriptions": {
+        "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential.",
+        "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde.",
+        "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
+        "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。"
       }
     }
   ],
   "total": { "value": 1, "relation": "exact" },
   "next": null,
-  "as_of": "2026-10-26T02:47:15.687Z",
+  "as_of": "2026-10-26T07:49:31.605Z",
   "status": 200,
   "query": "Prince"
 }

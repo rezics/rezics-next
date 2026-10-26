@@ -19,6 +19,9 @@ import threadRecording from './recorded/thread.json';
 import threadPostsRecording from './recorded/thread-posts.json';
 import searchRecording from './recorded/search.json';
 import searchEmptyRecording from './recorded/search-empty.json';
+import searchTypedRecording from './recorded/search-typed.json';
+import definitionsActiveRecording from './recorded/definitions-active.json';
+import definitionsReleaseRecording from './recorded/definitions-release.json';
 
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
@@ -69,16 +72,32 @@ async function pageRecording(
   return subject === knownSubjectId(recordings) ? recordings['subject-page'] : undefined;
 }
 
+/** Keys of a recording that describe the request it answers; the rest is the response body. */
+const requestKeys = new Set(['status', 'query', 'filterType']);
+
 function recordedResponse(recording: KernelRecording): Response {
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(recording)) {
-    if (key === 'status' || key === 'query') continue;
+    if (requestKeys.has(key)) continue;
     body[key] = value;
   }
   return Response.json(body, {
     status: recording.status,
     headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
   });
+}
+
+/** The type a search filter narrows to, when it has a type clause on its top level or inside `and`. */
+function filterType(filter: unknown): string | undefined {
+  if (!isRecord(filter)) return undefined;
+  const type = filter.type;
+  if (isRecord(type) && Array.isArray(type.in) && typeof type.in[0] === 'string') return type.in[0];
+  if (Array.isArray(filter.and))
+    for (const clause of filter.and) {
+      const found = filterType(clause);
+      if (found) return found;
+    }
+  return undefined;
 }
 
 async function selectRecording(
@@ -103,18 +122,25 @@ async function selectRecording(
     const thread = /^\/v1\/threads\/([^/]+)$/.exec(pathname);
     if (thread?.[1] && decodeURIComponent(thread[1]) === resourceId(recordings.thread, 'thread'))
       return recordings.thread;
+    if (pathname === '/v1/definitions/active') return recordings['definitions-active'];
+    const release = /^\/v1\/definitions\/releases\/([^/]+)$/.exec(pathname);
+    if (release?.[1] && decodeURIComponent(release[1]) === recordings['definitions-release']?.digest)
+      return recordings['definitions-release'];
     return undefined;
   }
   if (request.method === 'POST' && pathname === '/v1/pages:read') return pageRecording(request, recordings);
   if (request.method !== 'POST' || pathname !== '/v1/subjects:search') return undefined;
   let text: unknown;
+  let type: string | undefined;
   try {
-    text = ((await request.json()) as { text?: unknown }).text;
+    const body = (await request.json()) as { text?: unknown; filter?: unknown };
+    text = body.text;
+    type = filterType(body.filter);
   } catch {
     return undefined;
   }
   if (typeof text !== 'string') return undefined;
-  return Object.values(recordings).find((recording) => recording.query === text);
+  return Object.values(recordings).find((recording) => recording.query === text && recording.filterType === type);
 }
 
 /** Replay committed API bodies through the same fetch boundary used by fixture-backed tests. */
@@ -141,6 +167,9 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'thread-posts': threadPostsRecording,
     search: searchRecording,
     'search-empty': searchEmptyRecording,
+    'search-typed': searchTypedRecording,
+    'definitions-active': definitionsActiveRecording,
+    'definitions-release': definitionsReleaseRecording,
   });
 }
 

@@ -368,6 +368,9 @@ test(
       'type ThreadResponse = ThreadNode extends { get: { response: { 200: infer Body } } } ? Body : never;',
       'type PostsResponse = ThreadNode extends { posts: { get: { response: { 200: infer Body } } } } ? Body : never;',
       "type SearchResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;",
+      'type DefinitionRoutes = Routes extends { v1: { definitions: infer Definitions } } ? Definitions : never;',
+      'type DefinitionsActiveResponse = DefinitionRoutes extends { active: { get: { response: { 200: infer Body } } } } ? Body : never;',
+      "type DefinitionsReleaseResponse = DefinitionRoutes extends { releases: { ':digest': { get: { response: { 200: infer Body } } } } } ? Body : never;",
       "type PageReadResult = Awaited<ReturnType<KernelClient['pages']['$read']['post']>>;",
       "type PageResponse = NonNullable<PageReadResult['data']>;",
       "type PageMissingResponse = Extract<NonNullable<PageReadResult['error']>, { status: 404 | '404' }>['value'];",
@@ -384,6 +387,9 @@ test(
       'thread-posts.json': 'PostsResponse',
       'search.json': 'SearchResponse',
       'search-empty.json': 'SearchResponse',
+      'search-typed.json': 'SearchResponse',
+      'definitions-active.json': 'DefinitionsActiveResponse',
+      'definitions-release.json': 'DefinitionsReleaseResponse',
     };
     files.forEach((file, index) => {
       const path = join(recorded, file);

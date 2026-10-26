@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { facetProperties } from '@rezics/filter';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 
@@ -138,6 +139,9 @@ async function stopKernel(): Promise<void> {
 }
 
 type JsonObject = Record<string, unknown>;
+type ReleaseDefinitions = Parameters<typeof facetProperties>[0] & {
+  properties: Record<string, { datatype: string; value?: { pattern?: string } }>;
+};
 
 function objectBody(body: unknown, description: string): JsonObject {
   if (!body || typeof body !== 'object' || Array.isArray(body))
@@ -592,6 +596,30 @@ async function main(): Promise<void> {
   if (!reply) throw new Error('The third post should reply to the opening post.');
 
   const subject = objectBody(objectBody(recorded.get('subject'), 'subject').subject, 'subject record');
+  await expectStatus('definitions-active', '/v1/definitions/active', 200);
+  const digest = objectBody(recorded.get('definitions-active'), 'definitions-active').digest;
+  if (typeof digest !== 'string') throw new Error('The active definitions release has no digest.');
+  await expectStatus('definitions-release', `/v1/definitions/releases/${encodeURIComponent(digest)}`, 200);
+  const definitions = objectBody(recorded.get('definitions-release'), 'definitions-release');
+  if (definitions.digest !== digest)
+    throw new Error(`The release read names ${String(definitions.digest)}, not the active ${digest}.`);
+  const release = objectBody(definitions.release, 'definitions release') as unknown as ReleaseDefinitions;
+  const subjectType = subject.type;
+  if (typeof subjectType !== 'string') throw new Error('The recorded subject has no type.');
+  // What the search page asks for on a search filtered to one type: the first two facets it can show.
+  const properties = facetProperties(release, [subjectType])
+    .filter((property) => {
+      const definition = release.properties[property];
+      if (!definition) return false;
+      return (
+        ['wikibase-item', 'time', 'quantity'].includes(definition.datatype) ||
+        (definition.datatype === 'string' && !!definition.value?.pattern)
+      );
+    })
+    .slice(0, 2);
+  if (properties.length === 0) throw new Error(`The release has no facet to show for ${subjectType}.`);
+  const missing = properties.filter((property) => !(property in objectBody(subject.statements, 'subject statements')));
+  if (missing.length > 0) throw new Error(`The recorded subject has no statement of ${missing.join(', ')}.`);
   const subjectLabels = objectBody(subject.labels, 'subject labels');
   const indexedSubject = (id: string, type: unknown, labels: Record<string, unknown>) => ({
     id,
@@ -606,57 +634,84 @@ async function main(): Promise<void> {
     descriptions: [],
     statements: [],
   });
-  const indexedSubjects = [
-    indexedSubject(subjectId, subject.type, subjectLabels),
-    ...homeSubjects.map(({ id, type, en, ja }) => indexedSubject(id, type, { en, ja })),
-  ];
+  // The recorded subject is indexed and answered from the real source, with its descriptions and statements. The home
+  // subjects exist only here, with labels alone.
+  const homeIndexed = homeSubjects.map(({ id, type, en, ja }) => indexedSubject(id, type, { en, ja }));
   const source = {
     async read(partition: number, ids: readonly string[]) {
+      const real = await realSource.read(partition, ids);
       return {
-        partition,
-        position: 1n,
-        subjects: indexedSubjects.filter((hit) => ids.includes(hit.id) && subjectPartition(hit.id) === partition),
+        ...real,
+        subjects: [
+          ...real.subjects,
+          ...homeIndexed.filter((hit) => ids.includes(hit.id) && subjectPartition(hit.id) === partition),
+        ],
       };
     },
     async count(partition: number) {
-      const count = indexedSubjects.filter((hit) => subjectPartition(hit.id) === partition).length;
-      return count ? { position: 1n, count } : { position: 0n, count: 0 };
+      const real = await realSource.count(partition);
+      const count = real.count + homeIndexed.filter((hit) => subjectPartition(hit.id) === partition).length;
+      return count ? { position: real.position > 0n ? real.position : 1n, count } : { position: 0n, count: 0 };
     },
   };
   await createSubjectIndex(opensearch, searchPrefix, 1);
   const index = subjectIndexName(searchPrefix, 1);
-  for (const hit of indexedSubjects) {
-    const snapshot = await source.read(subjectPartition(hit.id), [hit.id]);
-    await opensearch.bulk(bulkLines(index, documentActions(snapshot, [hit.id])), { query: { refresh: 'wait_for' } });
+  for (const id of [subjectId, ...homeIndexed.map((hit) => hit.id)]) {
+    const snapshot = await source.read(subjectPartition(id), [id]);
+    await opensearch.bulk(bulkLines(index, documentActions(snapshot, [id])), { query: { refresh: 'wait_for' } });
   }
   await opensearch.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(searchPrefix) } }] });
-  const search = createSearchService({ pool: database, client: opensearch, prefix: searchPrefix, source, cursors });
+  const search = createSearchService({
+    pool: database,
+    client: opensearch,
+    prefix: searchPrefix,
+    source,
+    cursors,
+  });
   // The spawned kernel server does not mount search, so these reads use the same database through an in-process kernel.
-  await search.search('anonymous', { text: matchingQuery, limit: 100 });
-  await search.search('anonymous', { text: emptyQuery, limit: 100 });
   const appHandle = createKernel({
     pool: database,
     routeKey: Buffer.from(kernelRouteKey, 'base64url'),
     search,
   });
-  const searchFor = async (name: string, text: string) => {
+  // The page always asks for descriptions and picks its own language from the answer, so no `languages` is sent.
+  const searchFor = async (name: string, text: string, extra: JsonObject = {}, request: JsonObject = {}) => {
     const response = await appHandle.handle(
       new Request('http://kernel.test/v1/subjects:search', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, limit: 100 }),
+        body: JSON.stringify({ text, limit: 100, descriptions: true, ...extra }),
       }),
     );
     const body = objectBody(await response.json(), name);
     if (response.status !== 200) throw new Error(`${name} returned ${response.status}: ${JSON.stringify(body)}`);
-    recorded.set(name, { ...body, status: response.status, query: text });
+    recorded.set(name, { ...body, status: response.status, query: text, ...request });
     return body;
   };
   const matched = await searchFor('search', matchingQuery);
   const unmatched = await searchFor('search-empty', emptyQuery);
+  const typed = await searchFor(
+    'search-typed',
+    matchingQuery,
+    { filter: { and: [{ type: { in: [subjectType] } }] }, properties },
+    { filterType: subjectType },
+  );
   const hits = matched.subjects;
   if (!Array.isArray(hits) || !hits.some((hit) => objectBody(hit, 'search hit').id === subjectId))
     throw new Error(`Search for ${matchingQuery} did not return the recorded subject: ${JSON.stringify(matched)}`);
+  const typedHit = Array.isArray(typed.subjects)
+    ? typed.subjects.map((hit) => objectBody(hit, 'typed search hit')).find((hit) => hit.id === subjectId)
+    : undefined;
+  if (!typedHit || Object.keys(objectBody(typedHit.facts, 'typed search facts')).length === 0)
+    throw new Error(`The typed search did not return facts for the recorded subject: ${JSON.stringify(typed)}`);
+  if (
+    !hits.some(
+      (hit) =>
+        objectBody(hit, 'search hit').id === subjectId &&
+        Object.keys(objectBody(objectBody(hit, 'search hit').descriptions, 'search descriptions')).length > 0,
+    )
+  )
+    throw new Error(`The search hit has no descriptions: ${JSON.stringify(matched)}`);
   if (!Array.isArray(unmatched.subjects) || unmatched.subjects.length !== 0)
     throw new Error(`Empty search returned hits: ${JSON.stringify(unmatched)}`);
 

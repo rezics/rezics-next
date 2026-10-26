@@ -370,7 +370,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
   const hasFilterPanel = Boolean(data?.facetsAvailable && (data.typeChoices.length > 0 || type));
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6 px-4">
+    <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
       <form method="get" action={`/${locale}/search`} className="space-y-5">
         <div className="flex gap-2">

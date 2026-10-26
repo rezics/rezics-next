@@ -9,6 +9,7 @@ import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
 import searchEmptyRecording from '../kernel/recorded/search-empty.json';
 import searchRecording from '../kernel/recorded/search.json';
+import searchTypedRecording from '../kernel/recorded/search-typed.json';
 import subjectRecording from '../kernel/recorded/subject.json';
 import threadRecording from '../kernel/recorded/thread.json';
 import { m } from '../paraglide/messages.js';
@@ -23,6 +24,7 @@ export const pagePaths = {
   board: `/boards/${boardRecording.board.id}`,
   thread: `/threads/${threadRecording.thread.id}`,
   search: `/search?q=${encodeURIComponent(searchRecording.query)}`,
+  'search-typed': `/search?q=${encodeURIComponent(searchTypedRecording.query)}&type=${encodeURIComponent(searchTypedRecording.filterType)}`,
   'search-empty': `/search?q=${encodeURIComponent(searchEmptyRecording.query)}`,
 } as const;
 
@@ -114,7 +116,7 @@ export async function threadReady(context: { canvasElement: HTMLElement }) {
   await expect(view.getByText('The rose was unique')).toBeVisible();
 }
 
-function searchLabel(recording: typeof searchRecording) {
+function searchLabel(recording: typeof searchRecording | typeof searchTypedRecording) {
   const labels = recording.subjects[0]?.labels;
   if (!labels) throw new Error('The recorded search has no subject.');
   return labels[getLocale()] ?? labels.en;
@@ -127,6 +129,15 @@ export async function searchReady(context: { canvasElement: HTMLElement }) {
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
   await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchRecording.query);
   await view.findByRole('button', { name: m.search_submit() });
+  await listItemWithLink(view, label);
+}
+
+export async function searchTypedReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  const label = searchLabel(searchTypedRecording);
+  await view.findByRole('heading', { level: 1, name: m.search_heading() });
+  await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchTypedRecording.query);
   await listItemWithLink(view, label);
 }
 
