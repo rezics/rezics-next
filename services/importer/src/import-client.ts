@@ -32,7 +32,7 @@ export type MediaOutcome =
   | { outcome: 'rejected'; code: string; status: MediaImportStatus }
   | { outcome: 'fenced' };
 export type ImportTransportOptions = Omit<ImportHttpOptions, 'token'> & {
-  tokenProvider: () => Promise<string>;
+  tokenProvider: (fresh?: boolean) => Promise<string>;
   client?: KernelClient;
   importFetch?: typeof fetch;
   session?: string;

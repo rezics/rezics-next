@@ -17,11 +17,16 @@ import { DEFAULT_VNDB_ARCHIVE_BYTES, VndbTablesStore } from './vndb-tables.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
+import {
+  createAccountTokenProvider,
+  CredentialInputError,
+  type CredentialsObserver,
+} from './credentials.ts';
 
-const TOKEN_LIMIT = 16 * 1024;
 const ARCHIVE_METADATA_LIMIT = 4096;
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
-const TOKEN = /^[A-Za-z0-9._~+/-]+=*$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CLIENT = /^[A-Za-z0-9._~-]{1,255}$/;
 
 type SourceKind = SourceId;
 type RawVndbEntry = {
@@ -33,7 +38,9 @@ type RawVndbEntry = {
 };
 
 export type ImportCliObserver = {
+  /** @deprecated Account-key reads are also reported here for older boundary observers. */
   onTokenRead?(path: string, bytes: number): void;
+  onAccountKey?: CredentialsObserver['onAccountKey'];
   onDatabaseOpen?(path: string): void;
   onInputPass?(kind: 'dump' | 'vndb-entries'): void;
   onInputChunk?(kind: 'dump' | 'vndb-entries', bytes: number, backingBytes: number): void;
@@ -74,7 +81,10 @@ type Config = {
   dump: string;
   state: string;
   api: string;
-  tokenFile: string;
+  accountKey: string;
+  account: string;
+  client: string;
+  auth: string;
   sourceAlias?: string;
   disappearanceThreshold?: number;
 };
@@ -84,8 +94,9 @@ class InputFailure extends Error {}
 function usage(): string {
   return [
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
-    '       --api <https-origin> --token-file <path> [--source-alias <name>] [--disappearance-threshold <0..1>]',
-    'Options: --source --dump --state --api --token-file --source-alias --disappearance-threshold --help',
+    '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    '       [--source-alias <name>] [--disappearance-threshold <0..1>]',
+    'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --help',
   ].join('\n');
 }
 
@@ -105,7 +116,10 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--dump',
     '--state',
     '--api',
-    '--token-file',
+    '--account-key',
+    '--account',
+    '--client',
+    '--auth',
     '--source-alias',
     '--disappearance-threshold',
   ]);
@@ -122,18 +136,37 @@ function parse(argv: readonly string[]): Config | 'help' {
   const dump = values.get('--dump');
   const state = values.get('--state');
   const api = values.get('--api');
-  const tokenFile = values.get('--token-file');
-  if (!source || !VALID_SOURCE.test(source) || !dump || !state || !api || !tokenFile) throw new InputFailure();
+  const accountKey = values.get('--account-key');
+  const account = values.get('--account');
+  const client = values.get('--client');
+  const auth = values.get('--auth');
+  if (
+    !source ||
+    !VALID_SOURCE.test(source) ||
+    !dump ||
+    !state ||
+    !api ||
+    !accountKey ||
+    !account ||
+    !UUID.test(account) ||
+    !client ||
+    !CLIENT.test(client) ||
+    !auth
+  )
+    throw new InputFailure();
   if (dump !== '-' && !dump.trim()) throw new InputFailure();
   if (!state.trim() || state === '-') throw new InputFailure();
-  if (!tokenFile.trim()) throw new InputFailure();
+  if (!accountKey.trim()) throw new InputFailure();
 
   const result: Config = {
     source: source as SourceKind,
     dump,
     state,
     api,
-    tokenFile,
+    accountKey,
+    account,
+    client,
+    auth,
   };
   const sourceAlias = values.get('--source-alias');
   if (sourceAlias !== undefined) result.sourceAlias = sourceAlias;
@@ -174,52 +207,6 @@ function validateOrigin(api: string, testOrigin?: string): string {
       throw new InputFailure();
   }
   return url.origin;
-}
-
-function cleanToken(bytes: Uint8Array): string {
-  let value: string;
-  try {
-    value = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    throw new InputFailure();
-  }
-  if (value.endsWith('\r\n')) value = value.slice(0, -2);
-  else if (value.endsWith('\n')) value = value.slice(0, -1);
-  if (!value || value.length > TOKEN_LIMIT || !TOKEN.test(value)) throw new InputFailure();
-  return value;
-}
-
-async function readToken(
-  path: string,
-  observer: ImportCliObserver | undefined,
-  handleCount: { value: number },
-): Promise<string> {
-  let handle: FileHandle;
-  try {
-    handle = await open(path, 'r');
-  } catch {
-    throw new InputFailure();
-  }
-  handleCount.value++;
-  try {
-    const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > TOKEN_LIMIT) throw new InputFailure();
-    const buffer = new Uint8Array(TOKEN_LIMIT + 1);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, 0);
-    if (bytesRead > TOKEN_LIMIT || (await handle.stat()).size > TOKEN_LIMIT) throw new InputFailure();
-    const token = cleanToken(buffer.subarray(0, bytesRead));
-    observer?.onTokenRead?.(path, bytesRead);
-    return token;
-  } catch (error) {
-    if (error instanceof InputFailure) throw error;
-    throw new InputFailure();
-  } finally {
-    try {
-      await handle.close();
-    } finally {
-      handleCount.value--;
-    }
-  }
 }
 
 async function openDump(path: string, handleCount: { value: number }): Promise<FileHandle | undefined> {
@@ -512,6 +499,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     if (parsed === 'help') return { code: 0, stdout: `${usage()}\n`, stderr: '', openHandles: 0 };
     config = parsed;
     validateOrigin(config.api, options.testOrigin);
+    const auth = parseOrigin(config.auth);
+    if (auth.protocol !== 'https:') throw new InputFailure();
+    config.auth = auth.origin;
   } catch {
     return { code: 2, stdout: '', stderr: diagnostic('Invalid importer arguments.'), openHandles: 0 };
   }
@@ -527,10 +517,34 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   const handles = { value: 0 };
   let dumpHandle: FileHandle | undefined;
   let importer: Importer | undefined;
+  let lastHttpStatus: number | undefined;
+  const clock = options.clock ?? {
+    now: () => Date.now(),
+    sleep: async (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  };
+  const guardedFetch = (async (request: Request) => {
+    const response = await (options.fetch ?? globalThis.fetch)(request);
+    lastHttpStatus = response.status;
+    return response;
+  }) as unknown as typeof fetch;
+  let tokenProvider: Awaited<ReturnType<typeof createAccountTokenProvider>>;
   try {
     dumpHandle = await openDump(config.dump, handles);
-    await readToken(config.tokenFile, options.observer, handles);
-  } catch {
+    tokenProvider = await createAccountTokenProvider({
+      accountKeyPath: config.accountKey,
+      account: config.account,
+      client: config.client,
+      authOrigin: config.auth,
+      fetch: guardedFetch,
+      now: () => clock.now(),
+      observer: {
+        onAccountKey(path, observation) {
+          options.observer?.onTokenRead?.(path, observation.bytes);
+          options.observer?.onAccountKey?.(path, observation);
+        },
+      },
+    });
+  } catch (error) {
     if (dumpHandle) {
       try {
         await dumpHandle.close();
@@ -542,22 +556,15 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return {
       code: 2,
       stdout: '',
-      stderr: diagnostic('Input or token file is unavailable or invalid.'),
+      stderr: diagnostic(
+        error instanceof CredentialInputError
+          ? 'Input or account key is unavailable or invalid.'
+          : 'Input is unavailable or invalid.',
+      ),
       openHandles: 0,
     };
   }
 
-  let lastHttpStatus: number | undefined;
-  const clock = options.clock ?? {
-    now: () => Date.now(),
-    sleep: async (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-  };
-  const tokenProvider = () => readToken(config.tokenFile, options.observer, handles);
-  const guardedFetch = (async (request: Request) => {
-    const response = await (options.fetch ?? globalThis.fetch)(request);
-    lastHttpStatus = response.status;
-    return response;
-  }) as unknown as typeof fetch;
   const importTransport = createImportTransport({
     origin: validateOrigin(config.api, options.testOrigin),
     tokenProvider,

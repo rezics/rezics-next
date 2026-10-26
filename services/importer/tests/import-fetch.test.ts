@@ -57,12 +57,16 @@ test('429 waits for Retry-After and retries the exact idempotent request', async
   });
 });
 
-test('denials and unsafe origins are never retried or sent credentials', async () => {
+test('401 renews once while other denials are not retried and unsafe origins receive no credentials', async () => {
   for (const status of [401, 403, 404, 409, 422]) {
     let calls = 0;
+    const tokenCalls: boolean[] = [];
     const client = createImportFetch({
       origin,
-      token: async () => 'token',
+      token: async (fresh) => {
+        tokenCalls.push(fresh === true);
+        return fresh ? 'renewed-token' : 'token';
+      },
       fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
         calls++;
         return new Response('', { status });
@@ -72,7 +76,8 @@ test('denials and unsafe origins are never retried or sent credentials', async (
       },
     });
     expect((await client(request())).status).toBe(status);
-    expect(calls).toBe(1);
+    expect(calls).toBe(status === 401 ? 2 : 1);
+    expect(tokenCalls).toEqual(status === 401 ? [false, true] : [false]);
   }
   let sent = 0,
     credentials = 0;

@@ -203,6 +203,7 @@ function row(key: string) {
 
 export async function createImportCliDriver(options: Options): Promise<CliDriver> {
   let closed = false;
+  let issuedTokens = 0;
   const observedCommands = new Map<string, { source: string; external_id: string; op: Command['op'] }>();
   const active = new Set<Promise<unknown>>();
 
@@ -215,6 +216,8 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
     const input = { bytes: 0, passes: 0, records: 0, peakBufferedBytes: 0, maxPageRecords: 0 };
     let capture: SqliteCapture | undefined;
     let captureStarted = false;
+    let signins = 0;
+    let session = '';
 
     const startCapture = () => {
       if (capture && !captureStarted) {
@@ -273,8 +276,25 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
     };
 
     const fetch = async (request: Request): Promise<Response> => {
-      const captured = await boundedRequest(request);
       const url = new URL(request.url);
+      if (url.origin === 'https://auth.importer.test') {
+        if (url.pathname === '/signin/key') {
+          signins++;
+          if (signins > 1) return new Response('', { status: 401 });
+          session = `imports-cli-session-${issuedTokens + 1}`;
+          return Response.json({}, { headers: { 'set-cookie': `session=${session}; HttpOnly; Secure` } });
+        }
+        if (url.pathname === '/token' && request.headers.get('cookie') === `session=${session}`) {
+          issuedTokens++;
+          return Response.json({
+            access_token: issuedTokens === 1 ? 'CLI_TOKEN_PRIVATE_ONE' : 'CLI_TOKEN_PRIVATE_TWO',
+            token_type: 'Bearer',
+            expires_in: 300,
+          });
+        }
+        return new Response('', { status: 404 });
+      }
+      const captured = await boundedRequest(request);
       const authorization = request.headers.get('authorization');
       requests.push({ url: request.url, authorization, bytes: captured.bytes });
       if (url.pathname === '/v1/subjects:batchWrite') {

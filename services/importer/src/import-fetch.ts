@@ -7,7 +7,7 @@ export const MAX_IMPORT_ATTEMPTS = 5;
 
 export type ImportHttpOptions = {
   origin: string;
-  token: () => Promise<string>;
+  token: (fresh?: boolean) => Promise<string>;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -348,6 +348,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
       const headers = new Headers(request.headers);
       headers.set('authorization', `Bearer ${await abortable(request.signal, options.token)}`);
       let scheduledWait = 0;
+      let renewedAfterDenial = false;
       for (let attempt = 1; ; attempt++) {
         request.signal.throwIfAborted();
         const next = new Request(request, { headers, ...(body === null ? {} : { body }), redirect: 'manual' });
@@ -368,6 +369,13 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
             throw error;
           scheduledWait += delay;
           await sleep(delay, request.signal);
+          continue;
+        }
+        if (response.status === 401 && !renewedAfterDenial && options.token.length > 0) {
+          renewedAfterDenial = true;
+          await abortable(request.signal, () => cancel(response.body));
+          headers.set('authorization', `Bearer ${await abortable(request.signal, () => options.token(true))}`);
+          attempt--;
           continue;
         }
         if (

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
   checkBatchWrite,
@@ -21,7 +21,17 @@ import {
 import type { Entry } from './imports-vndb-tables-driver.ts';
 
 const origin = 'http://127.0.0.1:43179';
+const authOrigin = 'https://auth.importer.test';
 const tokens = ['CLI_TOKEN_PRIVATE_ONE', 'CLI_TOKEN_PRIVATE_TWO'];
+const accountKey = (() => {
+  const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  return JSON.stringify({
+    ...pair.privateKey.export({ format: 'jwk' }),
+    kid: 'imports-cli-key',
+    alg: 'ES256',
+    key_ops: ['sign'],
+  });
+})();
 const markers = [...tokens, 'PRIVATE_SOURCE_MARKER', 'PRIVATE_USER_POST', 'UNLICENSED_DESCRIPTION_SENTINEL'];
 const encode = (text: string) => new TextEncoder().encode(text);
 async function* chunks(text: string, size = 17) {
@@ -132,7 +142,8 @@ async function scenario(body: (h: Harness) => Promise<void>) {
   const h = new Harness(directory);
   let driver: CliDriver | undefined;
   try {
-    await writeFile(h.token, tokens[0]!);
+    await writeFile(h.token, accountKey, { mode: 0o600 });
+    await chmod(h.token, 0o600);
     driver = await create({
       directory,
       fetch: (request) => h.remote.fetch(request),
@@ -166,7 +177,24 @@ class Harness {
     this.state = resolve(directory, 'state.sqlite');
   }
   argv(source: Source = 'wikidata', dump = '-') {
-    return ['--source', source, '--dump', dump, '--state', this.state, '--api', origin, '--token-file', this.token];
+    return [
+      '--source',
+      source,
+      '--dump',
+      dump,
+      '--state',
+      this.state,
+      '--api',
+      origin,
+      '--account-key',
+      this.token,
+      '--account',
+      '6b147e8d-1762-4717-9a65-aeb435cb843e',
+      '--client',
+      'importer-cli-test',
+      '--auth',
+      authOrigin,
+    ];
   }
   async run(source: Source = 'wikidata', options: Invocation = {}) {
     return this.invoke(this.argv(source), {
@@ -209,7 +237,7 @@ test('help is bounded and touches no network state or token even with nonexisten
   await scenario(async (h) => {
     const result = await h.invoke(['--help']);
     expect(result.code).toBe(exit.success);
-    for (const flag of ['--source', '--dump', '--state', '--api', '--token-file'])
+    for (const flag of ['--source', '--dump', '--state', '--api', '--account-key', '--account', '--client', '--auth'])
       expect(result.stdout).toContain(flag);
     noEffects(result);
   });
@@ -223,7 +251,7 @@ test('configuration rejects unknown source extra option bad threshold missing pa
       replace('--source', 'unknown'),
       [...valid, '--extra'],
       ...['-1', '1.01', 'NaN'].map((value) => [...valid, '--disappearance-threshold', value]),
-      ...['--source', '--dump', '--state', '--api', '--token-file'].map((flag) =>
+      ...['--source', '--dump', '--state', '--api', '--account-key', '--account', '--client', '--auth'].map((flag) =>
         valid.filter((_, i) => valid[i] !== flag && valid[i - 1] !== flag),
       ),
       ...[
@@ -245,10 +273,10 @@ test('configuration rejects unknown source extra option bad threshold missing pa
   });
 });
 
-test('missing dump and token files reject before state writes and network access', async () => {
+test('missing dump and account key files reject before state writes and network access', async () => {
   await scenario(async (h) => {
     const missing = resolve(h.directory, 'does-not-exist');
-    for (const flag of ['--dump', '--token-file']) {
+    for (const flag of ['--dump', '--account-key']) {
       const argv = h.argv().map((arg, i, all) => (all[i - 1] === flag ? missing : arg));
       const result = await h.invoke(argv, { testOrigin: origin });
       expect(result.code).toBe(exit.input);
