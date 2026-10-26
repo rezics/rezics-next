@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { openGrowthDatabase, checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  openGrowthDatabase,
+  checkGrowth,
+  placement,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { createSubject, readLabels, readSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { runCommand } from '../../src/command/command.ts';
@@ -108,13 +115,12 @@ let account: Awaited<ReturnType<typeof readAccount>>;
 const cursors = new Map<number, string>();
 const subject = { type: itemType, labels: { en: 'Growth anchor' } };
 
-beforeAll(async () => {
-  db = await openGrowthDatabase(databaseUrl);
-  await bootstrapRelease(db.pool, bundledRelease);
+async function createAnchor() {
   const target = subjectTarget(routeKey, actor.accountId, `growth-anchor-${randomUUID()}`);
   anchor = target.id;
   partition = partitionOf(target.route);
   anchorRoute = target.route;
+  cursors.clear();
   await createSubject(db.pool, {
     actor,
     target,
@@ -125,17 +131,22 @@ beforeAll(async () => {
     authorize: async () => true,
   });
   await db.admin.query(
-    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-     VALUES ($1, $2, 'actor', 'active', $3)`,
-    [Number.parseInt(actor.accountId.slice(24, 28), 16), actor.accountId, randomUUID()],
-  );
-  account = await readAccount(db.pool, Number.parseInt(actor.accountId.slice(24, 28), 16), actor.accountId);
-  await db.admin.query(
     `INSERT INTO access.resource_grant
        (route, resource_id, subject_id, subject_role, action, valid, transaction_id)
      VALUES ($1, $2, $3, '', 'subject:read', '(,)'::tstzrange, $4)`,
     [anchorRoute, anchor, actor.accountId, randomUUID()],
   );
+}
+
+beforeAll(async () => {
+  db = await openGrowthDatabase(databaseUrl);
+  await bootstrapRelease(db.pool, bundledRelease);
+  await db.admin.query(
+    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+     VALUES ($1, $2, 'actor', 'active', $3)`,
+    [Number.parseInt(actor.accountId.slice(24, 28), 16), actor.accountId, randomUUID()],
+  );
+  account = await readAccount(db.pool, Number.parseInt(actor.accountId.slice(24, 28), 16), actor.accountId);
 });
 afterAll(async () => {
   if (db) await db.close();
@@ -150,7 +161,52 @@ async function grow(database: GrowthDatabase, scale: number, previous: number, n
   await database.admin.query('CHECKPOINT');
 }
 
-test('Subject creation stays within its bound as N grows', async () => {
+// Every relation this file seeds or writes through a command, including the command rows.
+const seededRelations = [
+  'semantic.subject',
+  'semantic.fact',
+  'core.receipt',
+  'core.outbox',
+  'editorial.write_basis',
+] as const;
+type RowCounts = Record<(typeof seededRelations)[number], number>;
+type Observation = { title: string; populations: number; before: RowCounts; after?: RowCounts };
+const observations: Observation[] = [];
+// Rows the anchor, warm-ups, measured runs and history commands of one check add beside its seeded populations.
+const fixtureRows = 64;
+const maxScaleUnits = 16;
+
+async function rowCounts(): Promise<RowCounts> {
+  const counts = {} as RowCounts;
+  for (const relation of seededRelations) {
+    const { rows } = await db.admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${relation}`);
+    counts[relation] = rows[0]!.n;
+  }
+  return counts;
+}
+
+async function resetGrowthData() {}
+
+/** Runs one growth check from a fresh anchor; `populations` counts how many times it seeds its scale range. */
+function growthTest(title: string, populations: number, run: () => Promise<void>) {
+  test(
+    title,
+    async () => {
+      await resetGrowthData();
+      const observation: Observation = { title, populations, before: await rowCounts() };
+      observations.push(observation);
+      await createAnchor();
+      try {
+        await run();
+      } finally {
+        observation.after = await rowCounts();
+      }
+    },
+    90_000,
+  );
+}
+
+growthTest('Subject creation stays within its bound as N grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Subject creation stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -170,9 +226,9 @@ test('Subject creation stays within its bound as N grows', async () => {
     },
   });
   expect(report.samples).toHaveLength(3);
-}, 90_000);
+});
 
-test('Command and receipt stays within its bound as N grows', async () => {
+growthTest('Command and receipt stays within its bound as N grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Command and receipt stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -216,9 +272,9 @@ test('Command and receipt stays within its bound as N grows', async () => {
     },
   });
   expect(report.samples).toHaveLength(3);
-}, 90_000);
+});
 
-test('Anchored subject read stays within its bound as N grows', async () => {
+growthTest('Anchored subject read stays within its bound as N grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Anchored subject read stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -226,10 +282,10 @@ test('Anchored subject read stays within its bound as N grows', async () => {
     operation: (database) => readSubject(database.pool, anchor, async () => true),
   });
   expect(report.samples).toHaveLength(3);
-}, 90_000);
+});
 
 // It reads every fact of its partition until the page query is fixed.
-test('Partition keyset page stays within its bound as d grows', async () => {
+growthTest('Partition keyset page stays within its bound as d grows', 2, async () => {
   const report = await checkGrowth(db, {
     name: 'Partition keyset page stays within its bound as d grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -257,9 +313,9 @@ test('Partition keyset page stays within its bound as d grows', async () => {
     },
   });
   expect(report.samples).toHaveLength(3);
-}, 90_000);
+});
 
-test('Item projection and related labels stays within its bound as P grows', async () => {
+growthTest('Item projection and related labels stays within its bound as P grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Item projection and related labels stays within its bound as P grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -271,9 +327,9 @@ test('Item projection and related labels stays within its bound as P grows', asy
   });
   expect(report.samples).toHaveLength(3);
   expect(projectSubject(anchor, itemFacts(anchor, subject)).labels).toEqual(subject.labels);
-}, 90_000);
+});
 
-test('Batch label fill stays within its bound as P grows', async () => {
+growthTest('Batch label fill stays within its bound as P grows', 1, async () => {
   const report = await checkGrowth(db, {
     name: 'Batch label fill stays within its bound as P grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -281,9 +337,9 @@ test('Batch label fill stays within its bound as P grows', async () => {
     operation: async (database) => readLabels(database.pool, [anchor]),
   });
   expect(report.samples).toHaveLength(3);
-}, 90_000);
+});
 
-test('Request authorization stays within its bound as N grows', async () => {
+growthTest('Request authorization stays within its bound as N grows', 1, async () => {
   const access = createAccess({
     actions: new Map([['subject:read', { anonymous: false }]]),
     accountEvidence: () => account!,
@@ -299,4 +355,24 @@ test('Request authorization stays within its bound as N grows', async () => {
     },
   });
   expect(report.samples).toHaveLength(3);
-}, 90_000);
+});
+
+test('every growth-subjects check starts empty and seeds at most sixteen scale units', async () => {
+  const population = subjectPopulation(0);
+  const perOrdinal = Object.fromEntries(
+    Object.entries(population.rows!(placement(population, 0))).map(([relation, rows]) => [relation, rows.length]),
+  ) as Record<(typeof seededRelations)[number], number>;
+  const problems: string[] = [];
+  expect(observations).toHaveLength(7);
+  for (const { title, populations, before, after } of observations) {
+    for (const relation of seededRelations) {
+      if (before[relation] !== 0)
+        problems.push(`${title}: ${relation} holds ${before[relation]} rows before its first grow`);
+      const limit = maxScaleUnits * ordinalsPerScale * perOrdinal[relation] * populations + fixtureRows;
+      const rows = after?.[relation];
+      if (rows === undefined || rows > limit)
+        problems.push(`${title}: ${relation} holds ${rows} rows after its check, more than ${limit}`);
+    }
+  }
+  expect(problems).toEqual([]);
+});
