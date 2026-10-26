@@ -108,6 +108,12 @@ the object, and the object uses `propertyNames` for its keys.
 | `duplicate`    | A repeated `props.id` after its first occurrence                                      |
 | `limit`        | Canonical size, node count, depth, distinct page reads or their total cost            |
 
+A document has at most one page heading. A `SubjectHeader` is the page heading of any
+document that contains one, so every level-1 `Heading` in that document is a `duplicate`
+at its `props/level`. Otherwise the first level-1 `Heading` in document order is the page
+heading and each later one is a `duplicate`. A document with more than one `SubjectHeader`
+gets no heading violations. `validateProfile` applies the rule to each template.
+
 Document order visits a node before its slot children, and slots in registry order. One
 violation is kept per pointer, and `unsafe` wins over `invalid`. Results are sorted by
 pointer in code-unit order and capped at 64.
@@ -125,7 +131,7 @@ REZICS visual language.
 | ---------------- | ------------------------------------------------------------------------------------------------------------------- | -------------- |
 | `Stack`          | `gap`: `sm`, `md` or `lg`                                                                                           | `children`     |
 | `Columns`        | `split`: `even`, `start` or `end`                                                                                   | `start`, `end` |
-| `Heading`        | `text` (localized text, 200), `level`: 2, 3 or 4                                                                    |                |
+| `Heading`        | `text` (localized text, 200), `level`: 1, 2, 3 or 4                                                                 |                |
 | `Text`           | `text` (localized text, 2,000)                                                                                      |                |
 | `Slot`           | `name`: one of `SLOT_NAMES`                                                                                         | `children`     |
 | `SubjectHeader`  | none                                                                                                                |                |
@@ -136,10 +142,13 @@ REZICS visual language.
 | `LinkGrid`       | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
 | `TypeList`       | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
 
-`SLOT_NAMES` is `header`, `hero`, `entity`, `aside`, `footer` and `actions`. The host site
-fills the `actions` slot with its controls for the page subject, before any children the
-template puts there. `Slot` is the platform's rendering; reviewed first-party Zone code may
-wrap or replace it.
+`SLOT_NAMES` is `header`, `hero`, `entity`, `aside`, `footer`, `actions` and `personal`. The
+host site fills the `actions` slot with its controls for the page subject, before any children
+the template puts there. It fills the `personal` slot with content for the signed-in viewer,
+before any children the template puts there; page reads are the same for every viewer, so the
+kernel cannot fill it. Without that content the `personal` slot renders nothing, children
+included. `Slot` is the platform's rendering; reviewed first-party Zone code may wrap or
+replace it.
 
 `SearchBox` and `LinkGrid` read nothing. A `LinkGrid` `href` starting with `/` is a site path
 without the locale; the website renderer adds the locale.

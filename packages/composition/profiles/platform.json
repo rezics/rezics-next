@@ -414,6 +414,23 @@
         "root": { "props": {} },
         "content": [
           {
+            "type": "Heading",
+            "props": {
+              "id": "heading",
+              "level": 1,
+              "text": {
+                "en": "A clearer view of what matters",
+                "zh-Hant": "看清真正重要的事",
+                "zh-Hans": "看清真正重要的事",
+                "ja": "大切なことを、もっと明確に",
+                "ko": "중요한 것을 더 선명하게",
+                "de": "Klarer sehen, was zählt",
+                "fr": "Voir plus clairement l’essentiel",
+                "es": "Una visión más clara de lo importante"
+              }
+            }
+          },
+          {
             "type": "SearchBox",
             "props": {
               "id": "search",
@@ -429,6 +446,7 @@
               }
             }
           },
+          { "type": "Slot", "props": { "id": "personal", "name": "personal", "children": [] } },
           {
             "type": "LinkGrid",
             "props": {

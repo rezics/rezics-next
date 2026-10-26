@@ -55,7 +55,7 @@ export const APPEARANCE = {
   headingScale: ['md', 'lg'],
 } as const;
 
-export const SLOT_NAMES = ['header', 'hero', 'entity', 'aside', 'footer', 'actions'] as const;
+export const SLOT_NAMES = ['header', 'hero', 'entity', 'aside', 'footer', 'actions', 'personal'] as const;
 
 export interface CompositionNode {
   type: string;
@@ -283,7 +283,7 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'Heading',
-      props: Type.Object({ text: localizedText({ maxLength: 200 }), level: enumeration([2, 3, 4]) }, closed),
+      props: Type.Object({ text: localizedText({ maxLength: 200 }), level: enumeration([1, 2, 3, 4]) }, closed),
     },
     {
       type: 'Text',

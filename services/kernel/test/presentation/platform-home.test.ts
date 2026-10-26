@@ -28,7 +28,7 @@ test('the site home is a route page with search, vertical entry points and popul
   expect(page).toMatchObject({ scope: 'route', key: '/' });
   expect(validateComposition(platformRegistry, page.document)).toEqual([]);
   const nodes = [...walk(page.document.content as Node[])];
-  expect(nodes[0]?.type).toBe('SearchBox');
+  expect(nodes.slice(0, 2).map((node) => node.type)).toEqual(['Heading', 'SearchBox']);
   const grid = nodes.find(({ type }) => type === 'LinkGrid')!;
   expect((grid.props.links as { href: string }[]).map(({ href }) => href)).toEqual([
     '/search?type=schema%3ABook',

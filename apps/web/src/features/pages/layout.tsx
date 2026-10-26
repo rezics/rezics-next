@@ -42,15 +42,16 @@ const headerSlotClass = [
 ].join(' ');
 const actionsSlotClass = 'flex flex-wrap items-center gap-2';
 
-const PageHostContext = createContext<ReactNode>(null);
+const PageHostContext = createContext<{ actions: ReactNode; personal: ReactNode }>({ actions: null, personal: null });
 
 const headingClass = {
+  1: 'font-serif text-4xl in-data-[heading-scale=lg]:text-5xl',
   2: 'text-2xl leading-snug in-data-[heading-scale=lg]:text-3xl',
   3: 'text-xl leading-snug in-data-[heading-scale=lg]:text-2xl',
   4: 'text-lg leading-snug in-data-[heading-scale=lg]:text-xl',
 } as const;
 
-const headingTag = { 2: 'h2', 3: 'h3', 4: 'h4' } as const;
+const headingTag = { 1: 'h1', 2: 'h2', 3: 'h3', 4: 'h4' } as const;
 
 const textClass = [
   'max-w-prose space-y-4 text-base leading-7 text-foreground',
@@ -106,9 +107,21 @@ function hasContent(value: ReactNode): boolean {
   return true;
 }
 
-/** Provide controls owned by the page host to its template's actions slot. */
-export function PageHost({ actions, children }: { actions?: ReactNode; children?: ReactNode }) {
-  return <PageHostContext.Provider value={actions ?? null}>{children}</PageHostContext.Provider>;
+/** Provide content owned by the page host to its template's actions and personal slots. */
+export function PageHost({
+  actions,
+  personal,
+  children,
+}: {
+  actions?: ReactNode;
+  personal?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <PageHostContext.Provider value={{ actions: actions ?? null, personal: personal ?? null }}>
+      {children}
+    </PageHostContext.Provider>
+  );
 }
 
 function choice<const Values extends readonly string[]>(
@@ -137,12 +150,13 @@ function Columns(props: Record<string, unknown>) {
 }
 
 function Heading(props: Record<string, unknown>) {
-  const text = pageText(props.text, usePageLocale());
-  const level = props.level === 3 || props.level === 4 ? props.level : 2;
+  const locale = usePageLocale();
+  const text = pageText(props.text, locale);
+  const level = props.level === 1 || props.level === 3 || props.level === 4 ? props.level : 2;
   const Tag = headingTag[level];
   return (
     <Tag
-      lang={text.lang}
+      lang={level === 1 ? (text.lang ?? locale) : text.lang}
       className={`m-0 font-semibold tracking-tight text-balance text-foreground ${headingClass[level]}`}
     >
       {text.text}
@@ -233,7 +247,7 @@ function LinkGrid(props: Record<string, unknown>) {
 }
 
 function Slot(props: Record<string, unknown>) {
-  const actions = useContext(PageHostContext);
+  const { actions, personal } = useContext(PageHostContext);
   const children = content(props.children);
   switch (props.name) {
     case 'header':
@@ -245,6 +259,15 @@ function Slot(props: Record<string, unknown>) {
           {actions}
           {children}
         </div>
+      );
+    }
+    case 'personal': {
+      if (!hasContent(personal)) return null;
+      return (
+        <section className={slotClass} data-slot="personal">
+          {personal}
+          {children}
+        </section>
       );
     }
     case 'hero':

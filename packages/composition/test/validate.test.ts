@@ -242,7 +242,7 @@ test('the platform registry has closed appearance tokens and named slots', () =>
     cover: ['portrait', 'square', 'landscape'],
     headingScale: ['md', 'lg'],
   });
-  expect(SLOT_NAMES).toEqual(['header', 'hero', 'entity', 'aside', 'footer', 'actions']);
+  expect(SLOT_NAMES).toEqual(['header', 'hero', 'entity', 'aside', 'footer', 'actions', 'personal']);
   const page = {
     root: { props: { appearance: { density: 'compact', surface: 'cards' } } },
     content: [

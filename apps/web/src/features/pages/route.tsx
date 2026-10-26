@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { dataComponents, PageData, type PageMessages } from './data';
 import { homeJsonLd, serializeJsonLd } from './jsonld';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
@@ -48,6 +48,20 @@ export async function loadRoutePage(client: KernelClient, route: string): Promis
   throw problemError(result.error?.value);
 }
 
+const slotsByType = new Map(pageDefinitions.map(({ type, slots }) => [type, slots]));
+
+/** Whether the template already carries its page heading: a level-1 `Heading` or a `SubjectHeader`. */
+function hasPageHeading(nodes: unknown): boolean {
+  if (!Array.isArray(nodes)) return false;
+  return nodes.some((node) => {
+    if (!isRecord(node) || typeof node.type !== 'string' || !isRecord(node.props)) return false;
+    if (node.type === 'SubjectHeader' || (node.type === 'Heading' && node.props.level === 1)) return true;
+    return (slotsByType.get(node.type) ?? []).some((slot) =>
+      hasPageHeading((node.props as Record<string, unknown>)[slot]),
+    );
+  });
+}
+
 /** Render a route document through the shared composition and page-read context. */
 export function RoutePage({
   page,
@@ -55,6 +69,7 @@ export function RoutePage({
   heading,
   messages,
   link,
+  personal,
   nonce,
   renderJsonLd = true,
 }: {
@@ -63,14 +78,15 @@ export function RoutePage({
   heading: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
+  personal?: ReactNode;
   nonce?: string;
   renderJsonLd?: boolean;
 }) {
   const jsonLd = routePageJsonLd(page, locale);
   return (
     <>
-      <PageHost>
-        <h1 className="sr-only">{heading}</h1>
+      <PageHost personal={personal}>
+        {!hasPageHeading(page.document.content) && <h1 className="sr-only">{heading}</h1>}
         <PageData
           locale={locale}
           subject={page.subject ?? null}
