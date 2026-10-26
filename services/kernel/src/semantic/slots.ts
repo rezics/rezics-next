@@ -41,13 +41,13 @@ export async function latestAdoption(
   property: string,
   context: string,
 ): Promise<Adoption | null> {
-  const row = await readLatestAdoption.run(tx, {
+  const row = (await readLatestAdoption.run(tx, {
     route: routeOf(subject)!,
     subject_id: subject,
     slot_id: slotId(subject, property),
     context_id: context,
-  });
-  return row ?? null;
+  })) as Adoption | null;
+  return row;
 }
 
 export async function currentAcceptance(
@@ -73,7 +73,10 @@ export async function resolveSlot(tx: CommandTransaction, subject: string, prope
     const adoption = await latestAdoption(tx, subject, property, context);
     return { expanded: true, compact: [] as Candidate[], adoption };
   }
-  const rows = await readCompactFacts.run(tx, { route, subject_id: subject, slot_id: slot });
+  const rows = (await readCompactFacts.run(tx, { route, subject_id: subject, slot_id: slot })) as (Candidate & {
+    operation: string;
+    tx: string;
+  })[];
   const live = new Map<string, Candidate>();
   for (const row of rows) {
     live.delete(row.candidate_id);
@@ -116,11 +119,11 @@ async function selectionFacts(
   selection: Adoption['selection'],
 ): Promise<FactRow[]> {
   if (!selection.length) return [];
-  const rows = await readSelectionFacts.run(tx, {
+  const rows = (await readSelectionFacts.run(tx, {
     route: routeOf(subject)!,
     subject_id: subject,
     selection,
-  });
+  })) as (Candidate & { adopted_rank: Statement['rank'] })[];
   return rows.map((row) => candidateFact(property, row, row.adopted_rank));
 }
 
