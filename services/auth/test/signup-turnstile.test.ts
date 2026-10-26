@@ -51,6 +51,18 @@ const siteverifyFetch: typeof fetch = (async (input: RequestInfo | URL, init?: R
 const verificationForms: Record<string, string>[] = [];
 
 const ports: AccountWorkflowPorts = {
+  async readAccount(id) {
+    const account = accounts.get(id) ?? null;
+    return (
+      account && {
+        accountId: account.accountId,
+        handle: null,
+        operatorAccountId: null,
+        state: account.state,
+        fenced: account.fenced ?? false,
+      }
+    );
+  },
   registrationTarget(key) {
     registrationCalls += 1;
     registrationOrder.push('registration-target');

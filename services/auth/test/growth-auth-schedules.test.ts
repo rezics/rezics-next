@@ -52,6 +52,7 @@ async function runGrowth() {
     provisioningReference: unused,
     provisioningEvidence: unused,
     raiseFence: unused,
+    readAccount: unused,
   };
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),

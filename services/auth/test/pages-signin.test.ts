@@ -47,6 +47,7 @@ const access: AccountWorkflowPorts = {
   provisioningReference: unused,
   provisioningEvidence: unused,
   raiseFence: unused,
+  readAccount: unused,
 };
 
 beforeAll(async () => {

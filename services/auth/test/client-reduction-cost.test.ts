@@ -114,6 +114,18 @@ beforeAll(async () => {
     provisioningEvidence: denied,
     authorizeOperation: async () => ({ actor: { accountId: 'approved-admin' } }),
     authorizeOpening: async () => ({ value: { receiptId: 'native-opening' } }),
+    async readAccount(id) {
+      const account = await readAccount(id);
+      return (
+        account && {
+          accountId: account.accountId,
+          handle: null,
+          operatorAccountId: null,
+          state: account.state,
+          fenced: account.fenced ?? false,
+        }
+      );
+    },
     async raiseFence(input) {
       const connection = await pool.connect();
       try {
@@ -241,7 +253,8 @@ test('bounded production behavior preserves security outcomes through missing se
   await restart();
   await workflows.resumeClientReduction('reduce');
   const floors = (await pool.query('SELECT value FROM reduction_floor')).rows.map((r) => r.value.accountId).sort();
-  expect(floors).toEqual(['a-owner', 'b-owner', 'c-deleted', 'z-late']);
+  // A deleted owner is terminal: the reduction advances past it without a floor.
+  expect(floors).toEqual(['a-owner', 'b-owner', 'z-late']);
   expect((await pool.query('SELECT id FROM session WHERE "clientId"=$1', ['target'])).rows).toHaveLength(0);
   expect((await pool.query('SELECT first_party,scopes FROM auth_client WHERE client_id=$1', ['target'])).rows).toEqual([
     { first_party: false, scopes: ['read'] },

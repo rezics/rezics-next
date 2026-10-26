@@ -1,11 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
-import {
-  createAuthHost,
-  createNativeWorkflowProofPorts,
-  createProvisioningEvidenceVerifier,
-  type AuthService,
-} from '@rezics/auth';
+import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -28,6 +23,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { createRegistrationPorts } from '../support/registration-ports.ts';
 
 const issuer = 'https://suspension-coordination.auth.test';
 const audience = 'https://suspension-coordination.api.test';
@@ -207,35 +203,14 @@ beforeAll(async () => {
     managementAction: 'account:manage',
   });
   lifecycleCommands = createLifecycleCommands({ pool: db.pool, access: lifecycleAccess });
-  const proofs = createNativeWorkflowProofPorts({ database: authPool });
   const registration = createRegistrationProofBindings({ pool: db.pool, referenceKeys: tokens });
-  const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-  const internal = createLifecycleInternals({
+  const { ports: registrationPorts, internal } = createRegistrationPorts({
     pool: db.pool,
+    authPool,
     routeKey,
-    provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-    recoveryEvidence: async () => null,
+    referenceKeys: tokens,
   });
   lifecycle = internal;
-  const registrationPorts = {
-    ...internal,
-    async createPending(input: Parameters<typeof internal.createPending>[0]) {
-      const outcome = await internal.createPending(input);
-      const pair = { accountId: input.accountId, reservationId: input.reservationId };
-      if (!(await proofs.pendingReference(pair))) {
-        const reference = await registration.createProvisioningReference({ input, outcome });
-        if (!reference) throw new Error('Missing native registration reference');
-        await proofs.recordPending({ ...pair, reference });
-      }
-      return outcome;
-    },
-    async provisioningReference(input: { accountId: string; reservationId: string }) {
-      const reference = await proofs.pendingReference(input);
-      if (!reference) throw new Error('Missing persisted registration reference');
-      return reference;
-    },
-    provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
-  };
   host = await createAuthHost({
     database: authPool,
     systemDatabasePool: authPool,
