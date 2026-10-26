@@ -1,17 +1,26 @@
+WITH input AS NOT MATERIALIZED (
+  SELECT :partition_no::integer AS partition_no
+)
 SELECT s.subject_id::text AS id,
        s.visibility,
        s.security_revision::text AS security_revision,
        redirect.target::text AS redirect,
        COALESCE(labels.body, '{}'::jsonb) AS labels
-FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS input(route, id)
+FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS requested(route, id)
 JOIN LATERAL (
   SELECT subject_id, visibility, security_revision FROM semantic.subject
-  WHERE route = input.route AND subject_id = input.id
+  CROSS JOIN input
+  WHERE route = requested.route AND subject_id = requested.id
+    AND route >= input.partition_no * 16
+    AND route < (input.partition_no + 1) * 16
   LIMIT 1
 ) AS s ON true
 LEFT JOIN LATERAL (
   SELECT target FROM semantic.redirect
-  WHERE route = input.route AND subject_id = input.id
+  CROSS JOIN input
+  WHERE route = requested.route AND subject_id = requested.id
+    AND route >= input.partition_no * 16
+    AND route < (input.partition_no + 1) * 16
   ORDER BY sequence DESC
   LIMIT 1
 ) AS redirect ON true
@@ -21,8 +30,11 @@ LEFT JOIN LATERAL (
     SELECT DISTINCT ON (language) language, body
     FROM (
       SELECT language, body, log_seq FROM semantic.fact
-      WHERE route = input.route AND subject_id = input.id
+      CROSS JOIN input
+      WHERE route = requested.route AND subject_id = requested.id
         AND kind = 'label' AND operation = 'assert'
+        AND route >= input.partition_no * 16
+        AND route < (input.partition_no + 1) * 16
       OFFSET 0
     ) scanned
     ORDER BY language, log_seq DESC
