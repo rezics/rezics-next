@@ -3,10 +3,16 @@ import { createHash } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { PoolClient } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { takedown, erasePost, eraseStandaloneMedia } from '../../src/content/moderation.ts';
 import { beginAuthorErasure } from '../../src/content/operations.ts';
-import type { AccountActor } from '../../src/request/access.ts';
+import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
+import type { Access, AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
@@ -23,23 +29,44 @@ let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 let jwks: object;
 let fetches = 0;
 let retry = false;
-const access = createAccess({
-  actions: new Map(actions.map((action) => [action, { anonymous: false }])),
-  auth: {
-    issuer,
-    audience: 'https://api.example.test',
-    jwksUrl: `${issuer}/jwks`,
-    async fetch() {
-      fetches++;
-      return Response.json(jwks);
-    },
-  },
-});
+const scopes = [...actions, 'account:read'];
+const audience = 'https://api.example.test';
+let access: Access;
+let permissionKernel: ReturnType<typeof createKernel>;
+let permissionPool: ReturnType<typeof createPool>;
+let governanceBearer: string;
+let lifecycle: ReturnType<typeof createLifecycleInternals>;
 beforeAll(async () => {
   keys = await generateKeyPair('ES256');
   jwks = { keys: [{ ...(await exportJWK(keys.publicKey)), kid: 'fixture', alg: 'ES256' }] };
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
+  // Fixture grants go through the public grant routes on their own uninstrumented pool.
+  permissionPool = createPool(db.url);
+  permissionKernel = createKernel({
+    pool: permissionPool,
+    routeKey: new Uint8Array(32).fill(93),
+    access: () => access,
+    writeRate: createWriteRateLimiter({
+      secret: 'admission-fixture-write-rate-secret-32bytes',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100_000, seconds: 86_400 } } }),
+    }),
+  });
+  access = createAccess({
+    actions: new Map([
+      ...actionCatalogue(permissionKernel),
+      ...actions.map((action) => [action, { anonymous: false }] as const),
+    ]),
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: `${issuer}/jwks`,
+      async fetch() {
+        fetches++;
+        return Response.json(jwks);
+      },
+    },
+  });
   db.pool.on('connect', (client) => {
     const query = client.query.bind(client);
     client.query = ((...args: Parameters<PoolClient['query']>) => {
@@ -58,8 +85,59 @@ beforeAll(async () => {
   });
   const client = await db.pool.connect();
   client.release(true);
+  // The first governance account comes from the operator bootstrap and holds Global access:grant.
+  const governanceId = newId(actorRoute);
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+     VALUES ($1,$2,'actor','active',$2)`,
+    [actorRoute, governanceId],
+  );
+  await bootstrapGovernance(permissionPool, governanceId);
+  lifecycle = createLifecycleInternals({
+    pool: permissionPool,
+    routeKey: new Uint8Array(32).fill(93),
+    provisioningEvidence: async () => null,
+    recoveryEvidence: async () => null,
+  });
+  governanceBearer = await sign(governanceId, ['access:grant', ...actions]);
 });
-afterAll(async () => db?.close());
+afterAll(async () => {
+  await permissionPool?.end();
+  await db?.close();
+});
+
+async function sign(accountId: string, scope: string[]) {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({
+    iss: issuer,
+    aud: audience,
+    sub: accountId,
+    client_id: 'fixture',
+    scope: scope.join(' '),
+    authn_epoch: 9,
+    iat: now,
+    exp: now + 300,
+    auth_time: now,
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'fixture' })
+    .sign(keys.privateKey);
+}
+
+async function grant(resource: { route: number; id: string }, accountId: string, action: string) {
+  const response = await permissionKernel.handle(
+    new Request('https://content.test/v1/grants', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${governanceBearer}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
+      body: JSON.stringify({ resource, subject: { kind: 'account', id: accountId }, actions: [action], valid: '(,)' }),
+    }),
+  );
+  if (!response.ok) throw new Error(`Fixture grant ${action}: ${response.status} ${await response.text()}`);
+}
 
 async function fixture() {
   const accountId = newId(actorRoute);
@@ -95,31 +173,15 @@ async function fixture() {
     [route, mediaId, threadId, accountId],
   );
   for (const [resource, action] of [
-    [postId, actions[0]],
-    [postId, actions[1]],
-    [mediaId, actions[2]],
+    [postId, actions[0]!],
+    [postId, actions[1]!],
+    [mediaId, actions[2]!],
   ] as const)
-    await db.admin.query(
-      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-       VALUES ($1,$2,$3,$4,'(,)',$3)`,
-      [route, resource, accountId, action],
-    );
+    await grant({ route, id: resource }, accountId, action);
+  // Governance cannot grant account:read; an active account holds it from its own lifecycle.
+  await lifecycle.installSelfReadGrant({ accountId, key: crypto.randomUUID() });
   // Component issuer exercises genuine JWT verification, not provisioning.
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    iss: issuer,
-    aud: 'https://api.example.test',
-    sub: accountId,
-    client_id: 'fixture',
-    scope: actions.join(' '),
-    authn_epoch: 9,
-    iat: now,
-    exp: now + 300,
-    auth_time: now,
-    amr: ['pwd'],
-  })
-    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'fixture' })
-    .sign(keys.privateKey);
+  const token = await sign(accountId, scopes);
   const context = { pool: db.pool, deadline: Date.now() + 180_000 };
   const actor = await access.authenticate(token, context);
   const deps = {
@@ -252,15 +314,8 @@ test('shared admission and native point/author commands stay bounded at three po
        VALUES ($1,$2::uuid,$3,$4,$2::text,'post-image','image/png',1,'reserved','m/'||$2::text||'/original',$3)`,
       [route, mediaId, f.threadId, f.accountId],
     );
-    for (const [id, action] of [
-      [postId, 'post:erase'],
-      [mediaId, 'media:erase'],
-    ])
-      await db.admin.query(
-        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-         VALUES ($1,$2,$3,$4,'(,)',$3)`,
-        [route, id, f.accountId, action],
-      );
+    await grant({ route, id: postId }, f.accountId, 'post:erase');
+    await grant({ route, id: mediaId }, f.accountId, 'media:erase');
     targets.push({ postId, mediaId });
   }
   const population: Population = {
