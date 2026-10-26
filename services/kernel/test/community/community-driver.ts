@@ -200,7 +200,17 @@ async function buildShared(): Promise<SharedCommunity> {
     });
     worker = await startWorker(system);
     observer = observeSql(system.database.pool);
-    return { system, kernel, worker, work, observer, provisioned: undefined, contextModerators: new Set(), retired: false, closing: undefined };
+    return {
+      system,
+      kernel,
+      worker,
+      work,
+      observer,
+      provisioned: undefined,
+      contextModerators: new Set(),
+      retired: false,
+      closing: undefined,
+    };
   } catch (error) {
     const errors: unknown[] = [error];
     for (const release of [() => observer?.close(), () => work?.close(), () => worker?.stop(), () => system.close()]) {
