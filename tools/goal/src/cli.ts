@@ -3,14 +3,32 @@ import { createRuntime, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
-const workerCommands = ['dispatch', 'status', 'retry', 'stop', 'cancel', 'retarget', 'consult', 'attempts', 'report', 'import-attempt', 'event'];
+const workerCommands = [
+  'dispatch',
+  'status',
+  'retry',
+  'stop',
+  'cancel',
+  'retarget',
+  'consult',
+  'attempts',
+  'report',
+  'import-attempt',
+  'event',
+];
 const integrationCommands = ['land', 'train', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 
 /** Runtime injection is confined to the programmatic test entry point. */
-export async function run(argv: string[], factory: () => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime): Promise<number> {
+export async function run(
+  argv: string[],
+  factory: () => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime,
+): Promise<number> {
   const [command, ...args] = argv;
-  if (!command || !commands.includes(command)) { console.error(`usage: goal <${commands.join('|')}> [args]`); return 2; }
+  if (!command || !commands.includes(command)) {
+    console.error(`usage: goal <${commands.join('|')}> [args]`);
+    return 2;
+  }
   let runtime: Runtime | IntegrationRuntime | undefined;
   // Only the train itself and land drain the train in this process; everything else, the host included, hands it
   // off, so a promotion never holds a command or the manager socket.
@@ -34,7 +52,11 @@ export async function run(argv: string[], factory: () => Runtime | IntegrationRu
       return await runWorkerCommand(command, args, { runtime });
     }
     return await runIntegration([command, ...args], runtime);
-  } catch (error) { console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error)); return 1; }
-  finally { runtime?.db.close(); }
+  } catch (error) {
+    console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+    return 1;
+  } finally {
+    runtime?.db.close();
+  }
 }
 if (import.meta.main) process.exit(await run(Bun.argv.slice(2)));

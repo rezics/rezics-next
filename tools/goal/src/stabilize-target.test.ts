@@ -43,7 +43,9 @@ function advance(root: string, state: string, branch: string, file: string, cont
 }
 
 test('a brief target other than stabilize is refused and an absent target stays absent', () => {
-  expect(() => parseBrief(briefText('result.txt').replace('waiting: []', 'waiting: []\ntarget: dev'), ownership())).toThrow(/stabilize/);
+  expect(() =>
+    parseBrief(briefText('result.txt').replace('waiting: []', 'waiting: []\ntarget: dev'), ownership()),
+  ).toThrow(/stabilize/);
   expect(parseBrief(briefText('result.txt', true), ownership()).target).toBe('stabilize');
   expect(parseBrief(markdown, ownership()).target).toBeUndefined();
 });
@@ -71,7 +73,9 @@ test('a brief with target stabilize starts its worktree at the stabilize head an
     expect(retried.base).toBe(moved);
     expect(readFileSync(join(retried.worktree, 'only-stabilize'), 'utf8')).toBe('only-stabilize');
     expect(h.head()).toBe(dev);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('dispatching a target stabilize brief is refused while the stabilize branch does not exist', () => {
@@ -86,7 +90,9 @@ test('dispatching a target stabilize brief is refused while the stabilize branch
     expect(h.store.tasks()).toEqual([]);
     const plain = dispatch(h, 'plain');
     expect(h.store.task(plain.id).base).toBe(h.head());
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('the train integrates a stabilize task into stabilize and then dev contains the new stabilize head', async () => {
@@ -108,7 +114,9 @@ test('the train integrates a stabilize task into stabilize and then dev contains
     expect(git(h.root, 'rev-parse', 'dev^2')).toBe(stabilizeHead);
     expect(git(h.root, 'show', 'dev:fixed.txt')).toBe('fixed.txt');
     expect(h.head('main')).toBe(main);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a stabilize commit that does not merge into dev leaves stabilize advanced and notifies the task manager and the supermanager', async () => {
@@ -128,13 +136,15 @@ test('a stabilize commit that does not merge into dev leaves stabilize advanced 
     expect(() => git(h.root, 'merge-base', '--is-ancestor', stabilizeHead, 'dev')).toThrow();
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     for (const manager of ['kernel', h.settings.integration.supermanager]) {
-      const summaries = inbox.read(manager).map(entry => entry.event.summary);
+      const summaries = inbox.read(manager).map((entry) => entry.event.summary);
       expect(summaries).toHaveLength(1);
       expect(summaries[0]).toContain(task.id);
       expect(summaries[0]).toContain(stabilizeHead);
       expect(summaries[0]).toContain('README.md');
     }
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('retarget moves a task that is not integrated and whose base is an ancestor of stabilize and is refused otherwise', async () => {
@@ -155,13 +165,19 @@ test('retarget moves a task that is not integrated and whose base is an ancestor
     delete process.env.GOAL_TASK_ID;
     delete process.env.GOAL_ATTEMPT;
     try {
-      expect(await run(['retarget', early.id, 'stabilize'], async () => ({
-        db: { close() {}, query: () => ({ get: () => undefined, all: () => [] }) },
-        job: {},
-        tasks: h.tasks,
-        store: h.store,
-        managerSocket: join(h.settings.stateDirectory, 'missing.sock'),
-      } as never))).toBe(0);
+      expect(
+        await run(
+          ['retarget', early.id, 'stabilize'],
+          async () =>
+            ({
+              db: { close() {}, query: () => ({ get: () => undefined, all: () => [] }) },
+              job: {},
+              tasks: h.tasks,
+              store: h.store,
+              managerSocket: join(h.settings.stateDirectory, 'missing.sock'),
+            }) as never,
+        ),
+      ).toBe(0);
     } finally {
       if (previousTrain === undefined) delete process.env.GOAL_TRAIN_MODE;
       else process.env.GOAL_TRAIN_MODE = previousTrain;
@@ -196,10 +212,14 @@ test('retarget moves a task that is not integrated and whose base is an ancestor
 
     const integrated = await h.seed('done');
     expect(() => h.tasks.retarget(integrated.id, 'stabilize')).toThrow(/integrated/);
-    h.store.updateTask({ taskId: integrated.id, attempt: integrated.currentAttempt }, task => { task.state = 'merged'; });
+    h.store.updateTask({ taskId: integrated.id, attempt: integrated.currentAttempt }, (task) => {
+      task.state = 'merged';
+    });
     expect(() => h.tasks.retarget(integrated.id, 'stabilize')).toThrow(/merged/);
     expect(() => h.tasks.retarget(early.id, 'dev')).toThrow(/stabilize/);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('tasks without target integrate into dev exactly as before', async () => {
@@ -220,6 +240,12 @@ test('tasks without target integrate into dev exactly as before', async () => {
     expect(h.head('stabilize')).toBe(stabilizeBefore);
     expect(() => git(h.root, 'rev-parse', 'dev^2')).toThrow();
     expect(h.head('main')).toBe(main);
-    expect(new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory).read(h.settings.integration.supermanager)).toEqual([]);
-  } finally { h.dispose(); }
+    expect(
+      new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory).read(
+        h.settings.integration.supermanager,
+      ),
+    ).toEqual([]);
+  } finally {
+    h.dispose();
+  }
 });
