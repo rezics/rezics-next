@@ -32,7 +32,9 @@ test('stabilize gates its head instead of the integration head and advances to d
     expect(h.head('stabilize')).toBe(dev);
     expect(h.store.task(stable.id).state).toBe('merged');
     expect(h.store.task(later.id).state).toBe('integrated');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a failing stabilize gate blocks that candidate without bisecting or reverting and notifies once', async () => {
@@ -47,11 +49,12 @@ test('a failing stabilize gate blocks that candidate without bisecting or revert
 
     const runGate = async (_command: string[], _cwd: string, log: string) => {
       gates++;
-      const output = 'Workspace @fixture/kernel finished in 1.00s\n'
-        + '$ bun run check  (services/kernel)\n'
-        + 'AssertionError: incompatible fixture\n'
-        + 'error: Kernel tests failed for 1 file(s):\n'
-        + 'test/bad.test.ts\n\nFailed workspaces: services/kernel\n';
+      const output =
+        'Workspace @fixture/kernel finished in 1.00s\n' +
+        '$ bun run check  (services/kernel)\n' +
+        'AssertionError: incompatible fixture\n' +
+        'error: Kernel tests failed for 1 file(s):\n' +
+        'test/bad.test.ts\n\nFailed workspaces: services/kernel\n';
       appendFileSync(log, output);
       return { ...failure, output };
     };
@@ -66,7 +69,9 @@ test('a failing stabilize gate blocks that candidate without bisecting or revert
     expect(h.inbox[0]?.summary).toContain(`${h.settings.stateDirectory}/promotion-${run.id}-head-0.log`);
     expect(h.head('main')).not.toBe(candidate);
     expect(h.head('stabilize')).toBe(candidate);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a blocked stabilize candidate is gated again only after its head moves', async () => {
@@ -89,7 +94,9 @@ test('a blocked stabilize candidate is gated again only after its head moves', a
     git(h.root, 'update-ref', 'refs/heads/stabilize', moved, candidate);
     await h.promote(runGate);
     expect(gates).toBe(2);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a stabilize publish leaves the branch and notifies when dev does not contain main', async () => {
@@ -108,7 +115,9 @@ test('a stabilize publish leaves the branch and notifies when dev does not conta
     expect(h.inbox[0]?.managerId).toBe(h.settings.integration.supermanager);
     expect(h.inbox[0]?.summary).toContain('dev');
     expect(h.inbox[0]?.summary).toContain('main');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('promotion without a stabilize branch keeps its existing failure behavior', async () => {
@@ -119,10 +128,12 @@ test('promotion without a stabilize branch keeps its existing failure behavior',
     const dev = h.head();
     await h.seed('last');
 
-    await h.promote(async (_command, cwd) => existsSync(join(cwd, 'bad')) ? failure : success);
+    await h.promote(async (_command, cwd) => (existsSync(join(cwd, 'bad')) ? failure : success));
 
     expect(h.store.task(first.id).state).toBe('merged');
     expect(h.store.task(bad.id).currentAttempt).toBe(2);
     expect(h.head('main')).not.toBe(dev);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
