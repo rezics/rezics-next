@@ -198,7 +198,7 @@ export async function seedDisclosureDistractors(
     transactionIds.push(crypto.randomUUID());
     reservationIds.push(`disclosure-growth-${crypto.randomUUID()}`);
   }
-  const body = Buffer.from('unrelated disclosure neighbour');
+  const body = Buffer.from(documentBytes('unrelated disclosure neighbour'));
   const digest = hexDigest(body);
   const client = await admin.connect();
   try {

@@ -45,6 +45,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { systemClock } from '../../src/clock.ts';
 import { startWorker } from '../../src/worker.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
 import {
@@ -87,6 +88,14 @@ type RecordedRequest = {
   url: string;
   headers: [string, string][];
   body?: string;
+};
+
+type CommandReference = {
+  partition: number;
+  principalKind: 'account' | 'anonymous';
+  principalId: string;
+  commandKind: string;
+  key: string;
 };
 
 type HttpCall = {
@@ -150,7 +159,7 @@ async function runDisclosureWorker(): Promise<void> {
     {
       databaseUrl: process.env.DATABASE_URL ?? '',
       executorId: 'disclosure-test',
-      poolSize: 4,
+      poolSize: 5,
     },
     [
       {
@@ -159,7 +168,7 @@ async function runDisclosureWorker(): Promise<void> {
           await createContentWork({
             storage,
             collectionPartitions: [0],
-            access: createContentWorkAccess(),
+            access: createContentWorkAccess(systemClock),
             readConsent: createAuthConsentReader({
               url: `${process.env.CONTENT_TEST_CONSENT ?? 'http://127.0.0.1:1'}/internal/v1/consents:read`,
               serviceTokenId: 'fixture.access',
@@ -212,15 +221,15 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   const pool = system.database.pool;
   const turnstile = createDisclosureTurnstile();
   const scopes = [...system.actions.keys()].filter((action) => action !== 'media:complete').sort();
-  let commandInstant: number | undefined;
-  let cursorInstant: number | undefined;
+  let trustedInstant: number | undefined;
+  const clock = () => new Date(trustedInstant ?? Date.now());
   const kernel = createKernel({
     pool,
     routeKey: system.routeKey,
     tokens: system.tokenKeys,
-    clock: () => new Date(commandInstant ?? Date.now()),
+    clock,
     content: {
-      cursorNow: () => cursorInstant ?? Date.now(),
+      cursorNow: () => clock().getTime(),
       anonymousVerifier: turnstile.verifier,
     },
     reports: { anonymousVerifier: turnstile.verifier },
@@ -234,7 +243,11 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   const boardEffect = createBoardEffect(pool);
   const reportEffect = createReportEffect(pool);
   const recordedRequests = new Map<string, RecordedRequest>();
+  const commandsByThread = new Map<string, Map<string, CommandReference>>();
+  const threadByPost = new Map<string, string>();
+  const reportsByTarget = new Map<string, Set<string>>();
   const firstPosts = new Map<string, string>();
+  const projectionPartitions = new Set<number>();
   const boards: Board[] = [];
   const moderation = new Map<string, 'allow' | 'deny' | 'revoke'>();
   let serial = 0;
@@ -245,8 +258,8 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   let workerStarting: Promise<void> | undefined;
   let workClient: WorkClient | undefined;
   let workerStop: (() => Promise<void>) | undefined;
-  let storageServer: { stop(closeActiveConnections?: boolean): void } | undefined;
-  let consentServer: { stop(closeActiveConnections?: boolean): void } | undefined;
+  let storageServer: { stop(closeActiveConnections?: boolean): void; url: URL } | undefined;
+  let consentServer: { stop(closeActiveConnections?: boolean): void; url: URL } | undefined;
   let closing: Promise<void> | undefined;
 
   function bearerFor(persona: Persona): string | undefined {
@@ -277,9 +290,51 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     for (const [name, value] of Object.entries(input.extraHeaders ?? {})) headers.set(name, value);
     const url = `${AUDIENCE}${input.path}`;
     if (input.recordKey !== undefined) {
-      recordedRequests.set(input.recordKey, { method: input.method, url, headers: [...headers.entries()], body });
+      recordedRequests.set(input.recordKey, {
+        method: input.method,
+        url,
+        headers: [...headers.entries()],
+        ...(body === undefined ? {} : { body }),
+      });
     }
-    return kernel.handle(new Request(url, { method: input.method, headers, body }));
+    return kernel.handle(new Request(url, { method: input.method, headers, ...(body === undefined ? {} : { body }) }));
+  }
+
+  function threadFor(target: Target): string | undefined {
+    if (target.kind === 'thread') return target.id;
+    if (target.kind === 'post') return threadByPost.get(target.id);
+    return undefined;
+  }
+
+  function targetKey(target: Target): string {
+    return JSON.stringify([target.kind, target.id]);
+  }
+
+  function rememberCommand(
+    threadId: string,
+    key: string,
+    persona: Persona,
+    commandKind: string,
+    partition: number,
+  ): void {
+    if (!recordedRequests.has(key)) throw new Error(`Content command ${key} has no captured wire request`);
+    const reference: CommandReference = {
+      partition,
+      principalKind: persona === 'anonymous' ? 'anonymous' : 'account',
+      principalId: persona === 'anonymous' ? '00000000-0000-0000-0000-000000000000' : accountId(persona),
+      commandKind,
+      key,
+    };
+    const identity = JSON.stringify([
+      reference.partition,
+      reference.principalKind,
+      reference.principalId,
+      reference.commandKind,
+      reference.key,
+    ]);
+    const commands = commandsByThread.get(threadId) ?? new Map<string, CommandReference>();
+    commands.set(identity, reference);
+    commandsByThread.set(threadId, commands);
   }
 
   async function setup(
@@ -296,7 +351,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       bearer,
       key: randomUUID(),
       body,
-      extraHeaders,
+      ...(extraHeaders === undefined ? {} : { extraHeaders }),
     });
     if (!response.ok) {
       throw new Error(
@@ -496,11 +551,10 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
 
   async function drainProjections(): Promise<void> {
     for (let pass = 0; pass < 12; pass++) {
-      const { rows } = await pool.query<{ partition_no: number }>(
-        'SELECT DISTINCT partition_no FROM core.outbox ORDER BY partition_no',
-      );
       let applied = 0;
-      for (const row of rows) applied += await drainPartition(row.partition_no);
+      for (const partition of [...projectionPartitions].sort((left, right) => left - right)) {
+        applied += await drainPartition(partition);
+      }
       if (applied === 0) return;
     }
     throw new Error('Projection drain did not reach a barrier');
@@ -513,8 +567,8 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     }
     // Standing roles open at the creation command instant. The suite publishes
     // at 2026-01-01, so the container and its parents are created then.
-    const previous = commandInstant;
-    commandInstant = Date.parse('2026-01-01T00:00:00.000Z');
+    const previous = trustedInstant;
+    trustedInstant = Date.parse('2026-01-01T00:00:00.000Z');
     try {
       serial += 1;
       const label = `${BOARD_TITLE} ${serial}`;
@@ -583,7 +637,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       boards.push(result);
       return result;
     } finally {
-      commandInstant = previous;
+      trustedInstant = previous;
     }
   }
 
@@ -599,11 +653,11 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   }): Promise<Content> {
     const persona = input.author ?? 'author';
     const key = input.key ?? randomUUID();
-    const previous = commandInstant;
+    const previous = trustedInstant;
     if (input.createdAt !== undefined) {
       const parsed = Date.parse(input.createdAt);
       if (!Number.isFinite(parsed)) throw new TypeError('Invalid trusted command time');
-      commandInstant = parsed;
+      trustedInstant = parsed;
     }
     // A routed subject id with no semantic row. Existence is not required.
     const subjectIds = input.missingSemanticSubject ? [newId(1)] : [];
@@ -630,7 +684,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         persona,
         key,
         body,
-        recordKey: input.key,
+        recordKey: key,
       });
       if (response.status !== 201) {
         throw new Error(`Content publish failed (${response.status}): ${await response.clone().text()}`);
@@ -640,14 +694,21 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         const thread = asRecord(payload.thread, 'thread');
         const firstPost = asRecord(thread.firstPost, 'first post');
         const id = text(thread, 'id');
-        firstPosts.set(id, text(firstPost, 'id'));
+        const postId = text(firstPost, 'id');
+        firstPosts.set(id, postId);
+        threadByPost.set(postId, id);
+        projectionPartitions.add(partitionOf(requiredRoute(id)));
+        rememberCommand(id, key, persona, 'content.thread.create', partitionOf(requiredRoute(id)));
         return { kind: 'thread', id, partition: partitionOf(requiredRoute(id)), revision: revisionFromView(firstPost) };
       }
       const post = asRecord(payload.post, 'post');
       const id = text(post, 'id');
+      threadByPost.set(id, input.thread.id);
+      projectionPartitions.add(partitionOf(requiredRoute(input.thread.id)));
+      rememberCommand(input.thread.id, key, persona, 'content.post.create', partitionOf(requiredRoute(id)));
       return { kind: 'post', id, partition: partitionOf(requiredRoute(id)), revision: revisionFromView(post) };
     } finally {
-      commandInstant = previous;
+      trustedInstant = previous;
     }
   }
 
@@ -674,7 +735,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       path: `/v1/posts/${postId}/revisions`,
       persona: 'author',
       key: headerKey,
-      recordKey: key,
+      recordKey: headerKey,
       extraHeaders: { 'if-match': JSON.stringify(target.revision.id) },
       body: { body: fromPlainText(body), licence: 'MIT' },
     });
@@ -682,6 +743,10 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       throw new Error(`Content edit failed (${response.status}): ${await response.clone().text()}`);
     }
     const post = asRecord(asRecord(await response.clone().json(), 'edit').post, 'post');
+    const threadId = target.kind === 'thread' ? target.id : threadByPost.get(target.id);
+    if (!threadId) throw new Error(`Post ${target.id} has no captured containing thread`);
+    projectionPartitions.add(partitionOf(requiredRoute(threadId)));
+    rememberCommand(threadId, headerKey, 'author', 'content.post.revise', partitionOf(requiredRoute(postId)));
     return revisionFromView(post);
   }
 
@@ -692,7 +757,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       new Request(recorded.url, {
         method: recorded.method,
         headers: new Headers(recorded.headers),
-        body: recorded.body,
+        ...(recorded.body === undefined ? {} : { body: recorded.body }),
       }),
     );
     if (!response.ok) return { response };
@@ -714,34 +779,37 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       return [target.id, rows[0]?.thread_id].filter((id): id is string => typeof id === 'string');
     }
     if (target.kind === 'board') return [target.id];
-    const { rows } = await pool.query<{ post_id: string }>(
-      'SELECT post_id::text AS post_id FROM content.post WHERE route = $1 AND thread_id = $2 ORDER BY post_id',
-      [requiredRoute(target.id), target.id],
-    );
-    return [target.id, ...rows.map((row) => row.post_id)];
+    return [target.id];
   }
 
   async function inspectCommandCopies(target: Target): Promise<{ receipts: unknown[]; events: unknown[] }> {
-    const ids = await needles(target);
-    const receipts = await pool.query<{ response: unknown }>(
-      `SELECT response
-       FROM core.receipt
-       WHERE EXISTS (
-         SELECT 1 FROM unnest($1::text[]) AS needle(value) WHERE position(value IN response::text) > 0
-       )
-       ORDER BY partition_no, position`,
-      [ids],
-    );
-    const events = await pool.query<{ data: unknown }>(
-      `SELECT data
-       FROM core.outbox
-       WHERE EXISTS (
-         SELECT 1 FROM unnest($1::text[]) AS needle(value) WHERE position(value IN data::text) > 0
-       )
-       ORDER BY partition_no, position, event_seq`,
-      [ids],
-    );
-    return { receipts: receipts.rows.map((row) => row.response), events: events.rows.map((row) => row.data) };
+    const threadId = threadFor(target);
+    if (!threadId) throw new Error(`Target ${target.id} has no captured thread command scope`);
+    const references = [...(commandsByThread.get(threadId)?.values() ?? [])];
+    references.sort((left, right) => left.key.localeCompare(right.key));
+    const receipts: unknown[] = [];
+    const events: unknown[] = [];
+    for (const reference of references) {
+      const receipt = await pool.query<{ position: string; response: unknown }>(
+        `SELECT position::text, response
+         FROM core.receipt
+         WHERE partition_no = $1 AND principal_kind = $2 AND principal_id = $3
+           AND command_kind = $4 AND idempotency_key = $5`,
+        [reference.partition, reference.principalKind, reference.principalId, reference.commandKind, reference.key],
+      );
+      for (const row of receipt.rows) {
+        receipts.push(row.response);
+        const envelope = await pool.query<{ data: unknown }>(
+          `SELECT data
+           FROM core.outbox
+           WHERE partition_no = $1 AND position = $2::bigint
+           ORDER BY event_seq`,
+          [reference.partition, row.position],
+        );
+        events.push(...envelope.rows.map((event) => event.data));
+      }
+    }
+    return { receipts, events };
   }
 
   async function protect(target: Target): Promise<void> {
@@ -786,7 +854,13 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     }
     paused = false;
     if (mode === 'replay') {
-      await pool.query('DELETE FROM core.consumer_checkpoint WHERE consumer = $1', [PROJECTION_CONSUMER]);
+      const partitions = [...projectionPartitions];
+      if (partitions.length > 0) {
+        await pool.query(
+          'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no = ANY($2::integer[])',
+          [PROJECTION_CONSUMER, partitions],
+        );
+      }
     }
     await drainProjections();
   }
@@ -858,6 +932,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       path: `/v1/${collection}/${target.id}:takeDown`,
       persona,
       key,
+      recordKey: key,
       body: {
         reason: 'Disclosure takedown',
         ...(untrusted?.actor === undefined ? {} : { actor: untrusted.actor }),
@@ -867,6 +942,12 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     if (response.status !== 200) return { response };
     const securityRevision = asRecord(await response.clone().json(), 'takedown').securityRevision;
     if (typeof securityRevision !== 'string') throw new Error('Takedown response is missing securityRevision');
+    const threadId = threadFor(target);
+    if (threadId) {
+      const partition = partitionOf(requiredRoute(target.id));
+      rememberCommand(threadId, key, persona, 'content.moderation:takedown', partition);
+      projectionPartitions.add(partition);
+    }
     return { response, value: { securityRevision } };
   }
 
@@ -938,7 +1019,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
       })();
       const errors = new Response(child.stderr).text();
-      const readyDeadline = Date.now() + 12_000;
+      const readyDeadline = Date.now() + 20_000;
       while (!output.includes('ready')) {
         if (child.exitCode !== null || Date.now() >= readyDeadline) {
           child.kill('SIGKILL');
@@ -1003,16 +1084,21 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   }
 
   async function erase(persona: Persona, thread: Target, _author: 'author', key: string): Promise<Reply<unknown>> {
+    const workerReady = persona === 'author' ? ensureWorker() : undefined;
     const response = await call({
       method: 'POST',
       path: `/v1/threads/${thread.id}:erase`,
       persona,
       key,
+      recordKey: key,
       body: { authorId: accountId('author') },
     });
     if (response.status !== 202) return { response };
+    const partition = partitionOf(requiredRoute(thread.id));
+    rememberCommand(thread.id, key, persona, 'content.author-erasure', partition);
+    projectionPartitions.add(partition);
     const value = await response.clone().json();
-    await ensureWorker();
+    await workerReady;
     await settleErasure(thread.id, accountId('author'));
     return { response, value };
   }
@@ -1032,7 +1118,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       method: 'POST',
       path: '/v1/reports',
       persona,
-      key: input.key,
+      ...(input.key === undefined ? {} : { key: input.key, recordKey: input.key }),
       body: {
         target: { kind: input.target.kind, id: input.target.id },
         ...(input.revisionId === undefined ? {} : { revisionId: input.revisionId }),
@@ -1045,6 +1131,15 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     if (response.status !== 201) return { response };
     const reportId = asRecord(await response.clone().json(), 'report').reportId;
     if (typeof reportId !== 'string') throw new Error('Report response is missing reportId');
+    const reportIds = reportsByTarget.get(targetKey(input.target)) ?? new Set<string>();
+    reportIds.add(reportId);
+    reportsByTarget.set(targetKey(input.target), reportIds);
+    const threadId = threadFor(input.target);
+    if (threadId && input.key !== undefined) {
+      const partition = partitionOf(requiredRoute(reportId));
+      rememberCommand(threadId, input.key, persona, 'content.report.create', partition);
+      projectionPartitions.add(partition);
+    }
     if (!paused) await drainProjections();
     return { response, value: { reportId } };
   }
@@ -1152,13 +1247,20 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     const head = await pool.query<{
       visibility: string;
       security_revision: string;
-      recorded_transaction_id: string;
+      transaction_id: string;
       first_post_id: string | null;
     }>(
-      `SELECT visibility, security_revision::text, recorded_transaction_id::text,
-              ${target.kind === 'thread' ? 'first_post_id::text' : 'NULL::text'} AS first_post_id
-       FROM ${table} WHERE route = $1 AND ${column} = $2`,
-      [route, target.id],
+      `SELECT target.visibility, target.security_revision::text,
+              COALESCE(
+                (SELECT receipt.transaction_id::text
+                 FROM core.receipt AS receipt
+                 WHERE receipt.partition_no = $3 AND receipt.xmin = target.xmin
+                 LIMIT 1),
+                target.recorded_transaction_id::text
+              ) AS transaction_id,
+              ${target.kind === 'thread' ? 'target.first_post_id::text' : 'NULL::text'} AS first_post_id
+       FROM ${table} AS target WHERE target.route = $1 AND target.${column} = $2`,
+      [route, target.id, partitionOf(route)],
     );
     const row = head.rows[0];
     if (!row) throw new Error(`Observed ${target.kind} is missing`);
@@ -1168,6 +1270,28 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         : await revisionsFor(route, target.kind === 'thread' ? (row.first_post_id ?? '') : target.id);
     if (target.kind === 'thread' && !row.first_post_id) throw new Error('Observed thread is missing its first post');
     const ids = await needles(target);
+    const reportIds = [...(reportsByTarget.get(targetKey(target)) ?? [])].sort();
+    const reports: Report[] = [];
+    for (const reportId of reportIds) {
+      const reportRoute = requiredRoute(reportId);
+      const result = await pool.query<{
+        report_id: string;
+        target_kind: string;
+        target_id: string;
+        revision_id: string | null;
+        evidence: string | null;
+        recorded_transaction_id: string;
+      }>(
+        `SELECT report_id::text, target_kind, target_id::text, revision_id::text, evidence,
+                recorded_transaction_id::text
+         FROM content.report WHERE route = $1 AND report_id = $2`,
+        [reportRoute, reportId],
+      );
+      reports.push(...result.rows.map(reportFromRow));
+    }
+    const effectPartitions = [
+      ...new Set([partitionOf(route), ...reportIds.map((id) => partitionOf(requiredRoute(id)))]),
+    ];
     const effects = await pool.query<{
       id: string;
       type: string;
@@ -1179,30 +1303,15 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
                WHERE r.partition_no = o.partition_no AND r.position = o.position
                LIMIT 1) AS transaction_id
        FROM core.outbox o
-       WHERE o.type = ANY($2::text[])
+       WHERE o.partition_no = ANY($3::integer[]) AND o.type = ANY($2::text[])
          AND EXISTS (SELECT 1 FROM unnest($1::text[]) AS needle(value) WHERE position(value IN o.data::text) > 0)
        ORDER BY o.partition_no, o.position, o.event_seq`,
-      [ids, EFFECT_TYPES],
-    );
-    const reports = await pool.query<{
-      report_id: string;
-      target_kind: string;
-      target_id: string;
-      revision_id: string | null;
-      evidence: string | null;
-      recorded_transaction_id: string;
-    }>(
-      `SELECT report_id::text, target_kind, target_id::text, revision_id::text, evidence,
-              recorded_transaction_id::text
-       FROM content.report
-       WHERE target_kind = $1 AND target_id = $2
-       ORDER BY report_id`,
-      [target.kind, target.id],
+      [ids, EFFECT_TYPES, effectPartitions],
     );
     return {
       visibility: storedVisibility(row.visibility),
       securityRevision: row.security_revision,
-      transactionId: row.recorded_transaction_id,
+      transactionId: row.transaction_id,
       revisions,
       effects: effects.rows.map((effect) => {
         const kind = effectKind(effect.type);
@@ -1210,7 +1319,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
         if (!effect.transaction_id) throw new Error(`Effect ${effect.id} has no receipt transaction`);
         return { id: effect.id, kind, partition: effect.partition_no, transactionId: effect.transaction_id };
       }),
-      reports: reports.rows.map(reportFromRow),
+      reports,
     };
   }
 
@@ -1226,8 +1335,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     if (!response.ok) return { response };
     const payload = asRecord(await response.clone().json(), 'search');
     if (!Array.isArray(payload.threads)) throw new Error('Search response is missing threads');
-    if (payload.next !== null && typeof payload.next !== 'string')
-      throw new Error('Search response is missing next');
+    if (payload.next !== null && typeof payload.next !== 'string') throw new Error('Search response is missing next');
     return {
       response,
       value: {
@@ -1303,7 +1411,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     failContainer,
     projection,
     async expireCursors() {
-      cursorInstant = Date.now() + 16 * 60 * 1000;
+      trustedInstant = Date.now() + 16 * 60 * 1000;
     },
     list,
     read,
