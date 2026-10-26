@@ -1,6 +1,5 @@
 WITH args AS (
-  SELECT :route::integer AS route,
-         :account_id::uuid AS account_id,
+  SELECT :account_id::uuid AS account_id,
          :subject_id::uuid AS subject_id,
          :after_created_at::nullable(timestamptz) AS after_created_at,
          :after_copy_id::nullable(uuid) AS after_copy_id,
@@ -22,7 +21,7 @@ SELECT copy.route,
        copy.transaction_id AS "transactionId"
 FROM library.copy AS copy
   CROSS JOIN args
-WHERE copy.route = args.route
+WHERE copy.route = :route::integer
   AND copy.account_id = args.account_id
   AND copy.subject_id = args.subject_id
   AND (

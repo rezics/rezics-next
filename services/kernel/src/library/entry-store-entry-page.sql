@@ -1,52 +1,62 @@
 WITH args AS (
-  SELECT :route::integer AS route,
-         :account_id::uuid AS account_id,
+  SELECT :account_id::uuid AS account_id,
          :state::nullable(text) AS state,
          :after_updated_at::timestamptz AS after_updated_at,
          :after_subject_id::uuid AS after_subject_id,
          :has_cursor::boolean AS has_cursor,
          :limit::integer AS page_limit
 ),
-candidates AS (
-(
+scoped AS NOT MATERIALIZED (
   SELECT entry.route,
-         entry.account_id AS "accountId",
-         entry.subject_id AS "subjectId",
-         entry.requested_subject_id AS "requestedSubjectId",
+         entry.account_id,
+         entry.subject_id,
+         entry.requested_subject_id,
          entry.state,
          entry.revision,
-         entry.created_at::text AS "createdAt",
-         entry.updated_at::text AS "updatedAt",
-         entry.transaction_id AS "transactionId"
+         entry.created_at,
+         entry.updated_at,
+         entry.transaction_id
   FROM library.entry AS entry
+  WHERE entry.route = :route::integer
+),
+candidates AS (
+(
+  SELECT scoped.route,
+         scoped.account_id AS "accountId",
+         scoped.subject_id AS "subjectId",
+         scoped.requested_subject_id AS "requestedSubjectId",
+         scoped.state,
+         scoped.revision,
+         scoped.created_at::text AS "createdAt",
+         scoped.updated_at::text AS "updatedAt",
+         scoped.transaction_id AS "transactionId"
+  FROM scoped
   CROSS JOIN args
-  WHERE entry.route = args.route
-    AND entry.account_id = args.account_id
-    AND (args.state IS NULL OR entry.state = args.state)
-    AND (NOT args.has_cursor OR entry.updated_at < args.after_updated_at)
-  ORDER BY entry.updated_at DESC, entry.subject_id
+  WHERE scoped.account_id = args.account_id
+    AND (args.state IS NULL OR scoped.state = args.state)
+    AND (NOT args.has_cursor OR scoped.updated_at < args.after_updated_at)
+  ORDER BY scoped.updated_at DESC, scoped.subject_id
   LIMIT (SELECT page_limit FROM args)
 )
 UNION ALL
 (
-  SELECT entry.route,
-         entry.account_id AS "accountId",
-         entry.subject_id AS "subjectId",
-         entry.requested_subject_id AS "requestedSubjectId",
-         entry.state,
-         entry.revision,
-         entry.created_at::text AS "createdAt",
-         entry.updated_at::text AS "updatedAt",
-         entry.transaction_id AS "transactionId"
-  FROM library.entry AS entry
+  SELECT scoped.route,
+         scoped.account_id AS "accountId",
+         scoped.subject_id AS "subjectId",
+         scoped.requested_subject_id AS "requestedSubjectId",
+         scoped.state,
+         scoped.revision,
+         scoped.created_at::text AS "createdAt",
+         scoped.updated_at::text AS "updatedAt",
+         scoped.transaction_id AS "transactionId"
+  FROM scoped
   CROSS JOIN args
-  WHERE entry.route = args.route
-    AND entry.account_id = args.account_id
-    AND (args.state IS NULL OR entry.state = args.state)
+  WHERE scoped.account_id = args.account_id
+    AND (args.state IS NULL OR scoped.state = args.state)
     AND args.has_cursor
-    AND entry.updated_at = args.after_updated_at
-    AND entry.subject_id > args.after_subject_id
-  ORDER BY entry.updated_at DESC, entry.subject_id
+    AND scoped.updated_at = args.after_updated_at
+    AND scoped.subject_id > args.after_subject_id
+  ORDER BY scoped.updated_at DESC, scoped.subject_id
   LIMIT (SELECT page_limit FROM args)
 )
 )
