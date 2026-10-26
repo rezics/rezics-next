@@ -13,7 +13,7 @@ import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
-import { promote } from './promotion.ts';
+import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
@@ -293,6 +293,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
   const execute = gateRunner(settings.integration.gateTimeoutMs);
   const runGate: GateRunner = options.runGate ?? execute;
+  // Promotion runs the full root gate, which outlasts the integration gate's limit.
+  const promotionGate: GateRunner =
+    options.runGate ?? gateRunner(Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS));
   let train!: MergeTrain;
   const pump = () => train.pump();
   // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
@@ -331,7 +334,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       promote({
         settings,
         job,
-        runGate,
+        runGate: promotionGate,
         derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
         ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
       }),
