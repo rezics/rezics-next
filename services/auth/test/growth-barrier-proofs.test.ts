@@ -21,6 +21,18 @@ async function grow(db: GrowthDatabase, scale: number, previous: number) {
     SELECT 'owner-'||i,'',false FROM generate_series($1::integer,$2::integer) i`,
     range,
   );
+  // Populate every seek relation from the first scale, including the fixture's
+  // Access boundary. Tiny tables otherwise favor scans over the intended seeks.
+  await db.admin.query(
+    `INSERT INTO test_access SELECT 'owner-'||i,1,'active' FROM generate_series($1::integer,$2::integer) i`,
+    range,
+  );
+  await db.admin.query(
+    `INSERT INTO account (id,"accountId","providerId","userId",password,"updatedAt")
+    SELECT 'credential-'||i,'owner-'||i,'credential','owner-'||i,'old',now()
+    FROM generate_series($1::integer,$2::integer) i`,
+    range,
+  );
   await db.admin.query(
     `INSERT INTO auth_client (client_id,first_party,scopes)
     SELECT 'client-'||i,false,ARRAY['read','write'] FROM generate_series($1::integer,$2::integer) i`,
@@ -30,6 +42,22 @@ async function grow(db: GrowthDatabase, scale: number, previous: number) {
     `INSERT INTO auth_consent (account_id,client_id,scopes)
     SELECT owner,'client-'||i,ARRAY['read','write'] FROM generate_series($1::integer,$2::integer) i
     CROSS JOIN LATERAL (VALUES ('hot'),('owner-'||i)) AS owners(owner)`,
+    range,
+  );
+  await db.admin.query(
+    `INSERT INTO auth_client_coverage (client_id,ready)
+    SELECT 'client-'||i,true FROM generate_series($1::integer,$2::integer) i`,
+    range,
+  );
+  await db.admin.query(
+    `INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party)
+    SELECT 'client-'||i,'reduction-'||i,ARRAY['read'],false FROM generate_series($1::integer,$2::integer) i`,
+    range,
+  );
+  await db.admin.query(
+    `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
+    SELECT 'session-'||i,'token-'||i,'owner-'||i,'client-'||i,now()+interval '1 day',now(),'read',1,1,'pwd'
+    FROM generate_series($1::integer,$2::integer) i`,
     range,
   );
   await db.admin.query(
@@ -55,7 +83,43 @@ async function grow(db: GrowthDatabase, scale: number, previous: number) {
     FROM generate_series($1::integer,$2::integer) i`,
     [previous * 2048 + 1, scale * 2048],
   );
-  for (const table of ['"user"', 'auth_client', 'auth_consent', 'auth_recovery', 'verification', 'auth_barrier_proof'])
+  // Sweep's cascading FK probe and recovery completion also seek establishment
+  // history. Keep that history attached to live recovery proofs, outside cleanup.
+  await db.admin.query(
+    `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,expires_at,applied_at)
+    SELECT md5('established-'||owner||i)||md5('established-'||owner||i),owner,'recovery',1,
+      'established-'||owner||i,repeat('0',64),'[]',now()+interval '4 minutes',now()
+    FROM generate_series($1::integer,$2::integer) i CROSS JOIN LATERAL (VALUES ('hot'),('owner-'||i)) owners(owner)`,
+    range,
+  );
+  await db.admin.query(
+    `INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch)
+    SELECT 'effect-'||owner||i,owner,'recovery',2 FROM generate_series($1::integer,$2::integer) i
+    CROSS JOIN LATERAL (VALUES ('hot'),('owner-'||i)) owners(owner)`,
+    range,
+  );
+  await db.admin.query(
+    `INSERT INTO auth_recovery_establishment
+    SELECT md5('established-'||owner||i)||md5('established-'||owner||i),'effect-'||owner||i,owner,
+      'credential-'||i,repeat('0',64),repeat('0',64),'establishment-'||owner||i,2
+    FROM generate_series($1::integer,$2::integer) i CROSS JOIN LATERAL (VALUES ('hot'),('owner-'||i)) owners(owner)`,
+    range,
+  );
+  for (const table of [
+    '"user"',
+    'test_access',
+    'account',
+    'auth_client',
+    'auth_client_coverage',
+    'auth_client_reduction',
+    'session',
+    'auth_consent',
+    'auth_recovery',
+    'verification',
+    'auth_barrier_proof',
+    'auth_effect_receipt',
+    'auth_recovery_establishment',
+  ])
     await db.admin.query(`VACUUM (ANALYZE) ${table}`);
 }
 

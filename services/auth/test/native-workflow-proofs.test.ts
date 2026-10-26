@@ -5,10 +5,13 @@ import { createNativeWorkflowProofPorts } from '../src/index.ts';
 
 let db: ReturnType<typeof testDatabase>;
 let pool: Pool;
+// Fixture inventory, container start, port lookup and migration each have a
+// 120-second command budget under concurrent workspace gates.
+const fixtureSetupTimeout = 4 * 120_000;
 beforeAll(async () => {
   db = testDatabase();
   pool = new Pool({ connectionString: db.url });
-});
+}, fixtureSetupTimeout);
 afterAll(async () => {
   await pool?.end();
   db?.close();
