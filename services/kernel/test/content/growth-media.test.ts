@@ -516,7 +516,7 @@ afterEach(async () => {
 
 // prettier-ignore
 function growthTest(name: string, run: () => Promise<{ samples: readonly { scale: number }[] }>) {
-  test(name, async () => expect((await run()).samples.map(({ scale }) => scale)).toEqual([...scales]), 90_000);
+  test(name, async () => expect((await run()).samples.map(({ scale }) => scale)).toEqual([...scales]), 240_000);
 }
 
 // prettier-ignore

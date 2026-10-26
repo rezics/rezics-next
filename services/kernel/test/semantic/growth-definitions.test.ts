@@ -131,7 +131,8 @@ function commandPopulation(name: string, includeReceipt = true): Population {
             transaction_id: transactionId,
             epoch: 1,
             position,
-            actor_account_id: actor.accountId,
+            principal_kind: 'account',
+            principal_id: actor.accountId,
             client_id: actor.clientId,
             requested_by: actor.requestedBy,
             recorded_at: new Date('2026-01-01T00:00:00.000Z'),
@@ -142,7 +143,8 @@ function commandPopulation(name: string, includeReceipt = true): Population {
               'core.receipt': [
                 {
                   partition_no: 0,
-                  actor_account_id: actor.accountId,
+                  principal_kind: 'account',
+                  principal_id: actor.accountId,
                   command_kind: publishing ? 'definitions.publish' : 'definitions.activate',
                   idempotency_key: `${name}-${ordinal}`,
                   request_digest: Buffer.alloc(32, 4),
