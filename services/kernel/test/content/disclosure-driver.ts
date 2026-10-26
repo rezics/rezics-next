@@ -327,9 +327,55 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     }
   }
 
+  function bearerForAccount(account: string): string | undefined {
+    for (const actor of [system.actors.author, system.actors.other, system.actors.moderator, system.actors.suspended]) {
+      if (actor.actor.accountId === account) return actor.bearer;
+    }
+    return undefined;
+  }
+
+  async function grantorBearers(resourceId: string): Promise<string[]> {
+    const route = requiredRoute(resourceId);
+    const { rows } = await pool.query<{ subject_id: string }>(
+      `SELECT subject_id::text AS subject_id
+       FROM access.resource_role_grant
+       WHERE route = $1 AND resource_id = $2 AND subject_kind = 'identity' AND subject_role = ''
+         AND grant_role LIKE '%.owner'
+       ORDER BY subject_id`,
+      [route, resourceId],
+    );
+    const bearers: string[] = [];
+    const push = (bearer: string | undefined) => {
+      if (bearer && !bearers.includes(bearer)) bearers.push(bearer);
+    };
+    for (const row of rows) push(bearerForAccount(row.subject_id));
+    push(await governanceBearer());
+    push(system.actors.other.bearer);
+    push(system.actors.author.bearer);
+    return bearers;
+  }
+
+  async function submitResourceGrant(path: string, resourceId: string, body: unknown, status: number): Promise<void> {
+    const failures: string[] = [];
+    for (const bearer of await grantorBearers(resourceId)) {
+      const response = await call({
+        method: 'POST',
+        path,
+        persona: 'moderator',
+        bearer,
+        key: randomUUID(),
+        body,
+      });
+      if (response.status === status) return;
+      failures.push(`${response.status} ${await response.clone().text()}`);
+    }
+    throw new Error(`Access ${path} failed: ${failures.join(' || ')}`);
+  }
+
   async function createGrant(subjectId: string, resourceId: string, actions: string[]): Promise<void> {
-    await submitGrant(
+    await submitResourceGrant(
       '/v1/grants',
+      resourceId,
       {
         resource: { route: requiredRoute(resourceId), id: resourceId },
         subject: { kind: 'account', id: subjectId },
@@ -357,8 +403,9 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       grouped.set(row.valid, actionsForRange);
     }
     for (const [valid, rangeActions] of grouped) {
-      await submitGrant(
+      await submitResourceGrant(
         '/v1/grants:revoke',
+        resourceId,
         {
           resource: { route, id: resourceId },
           subject: { kind: 'account', id: subjectId },
@@ -381,8 +428,9 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       [route, resourceId, subjectId, role],
     );
     for (const row of rows) {
-      await submitGrant(
+      await submitResourceGrant(
         '/v1/roleGrants:revoke',
+        resourceId,
         {
           resource: { route, id: resourceId },
           subject: { kind: 'account', id: subjectId },
@@ -481,72 +529,80 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       await bootstrapRelease(pool, bundledRelease);
       definitionsReady = true;
     }
-    serial += 1;
-    const label = `${BOARD_TITLE} ${serial}`;
-    const owner = system.actors.other.bearer;
-    const author = system.actors.author.bearer;
-    const space = asRecord(await setup('POST', '/v1/spaces', owner, { title: label, summary: '' }), 'space').space;
-    const spaceId = text(asRecord(space, 'space'), 'spaceId');
-    const realmBody = asRecord(
-      await setup('POST', '/v1/realms', owner, {
-        spaceId,
-        title: label,
-        summary: '',
-        visibility: 'public',
-        contextId: GLOBAL_CONTEXT,
-      }),
-      'realm',
-    ).realm;
-    const realm = asRecord(realmBody, 'realm');
-    const realmId = text(realm, 'realmId');
-    await submitGrant(
-      '/v1/grants',
-      {
-        resource: { route: requiredRoute(realmId), id: realmId },
-        subject: { kind: 'account', id: accountId('author') },
-        actions: ['board:create'],
-        valid: '(,)',
-      },
-      201,
-      owner,
-    );
-    const scheme = asRecord(
-      await setup('POST', '/v1/subjects', author, { type: 'skos:ConceptScheme', labels: { en: `${label} scheme` } }),
-      'scheme',
-    ).subject;
-    const schemeId = text(asRecord(scheme, 'scheme'), 'id');
-    const concept = asRecord(
-      await setup('POST', '/v1/subjects', author, {
-        type: 'skos:Concept',
-        labels: { en: `${label} concept` },
-        statements: {
-          'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+    // Standing roles open at the creation command instant. The suite publishes
+    // at 2026-01-01, so the container and its parents are created then.
+    const previous = commandInstant;
+    commandInstant = Date.parse('2026-01-01T00:00:00.000Z');
+    try {
+      serial += 1;
+      const label = `${BOARD_TITLE} ${serial}`;
+      const owner = system.actors.other.bearer;
+      const author = system.actors.author.bearer;
+      const space = asRecord(await setup('POST', '/v1/spaces', owner, { title: label, summary: '' }), 'space').space;
+      const spaceId = text(asRecord(space, 'space'), 'spaceId');
+      const realmBody = asRecord(
+        await setup('POST', '/v1/realms', owner, {
+          spaceId,
+          title: label,
+          summary: '',
+          visibility: 'public',
+          contextId: GLOBAL_CONTEXT,
+        }),
+        'realm',
+      ).realm;
+      const realm = asRecord(realmBody, 'realm');
+      const realmId = text(realm, 'realmId');
+      await submitGrant(
+        '/v1/grants',
+        {
+          resource: { route: requiredRoute(realmId), id: realmId },
+          subject: { kind: 'account', id: accountId('author') },
+          actions: ['board:create'],
+          valid: '(,)',
         },
-      }),
-      'concept',
-    ).subject;
-    const conceptId = text(asRecord(concept, 'concept'), 'id');
-    await setup(
-      'PUT',
-      `/v1/realms/${realmId}/boardScheme`,
-      owner,
-      { schemeId },
-      {
-        'if-match': JSON.stringify(text(realm, 'headRevisionId')),
-      },
-    );
-    const created = asRecord(
-      await setup('POST', `/v1/realms/${realmId}/boards`, author, {
-        conceptId,
-        title: label,
-        visibility: 'published',
-      }),
-      'board',
-    ).board;
-    const id = text(asRecord(created, 'board'), 'id');
-    const result: Board = { kind: 'board', id, partition: partitionOf(requiredRoute(id)) };
-    boards.push(result);
-    return result;
+        201,
+        owner,
+      );
+      const scheme = asRecord(
+        await setup('POST', '/v1/subjects', author, { type: 'skos:ConceptScheme', labels: { en: `${label} scheme` } }),
+        'scheme',
+      ).subject;
+      const schemeId = text(asRecord(scheme, 'scheme'), 'id');
+      const concept = asRecord(
+        await setup('POST', '/v1/subjects', author, {
+          type: 'skos:Concept',
+          labels: { en: `${label} concept` },
+          statements: {
+            'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+          },
+        }),
+        'concept',
+      ).subject;
+      const conceptId = text(asRecord(concept, 'concept'), 'id');
+      await setup(
+        'PUT',
+        `/v1/realms/${realmId}/boardScheme`,
+        owner,
+        { schemeId },
+        {
+          'if-match': JSON.stringify(text(realm, 'headRevisionId')),
+        },
+      );
+      const created = asRecord(
+        await setup('POST', `/v1/realms/${realmId}/boards`, author, {
+          conceptId,
+          title: label,
+          visibility: 'published',
+        }),
+        'board',
+      ).board;
+      const id = text(asRecord(created, 'board'), 'id');
+      const result: Board = { kind: 'board', id, partition: partitionOf(requiredRoute(id)) };
+      boards.push(result);
+      return result;
+    } finally {
+      commandInstant = previous;
+    }
   }
 
   async function publish(input: {
