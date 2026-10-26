@@ -308,6 +308,44 @@ test(
   timeout,
 );
 
+test(
+  'the subject story shows its description, its statements with linked values, and its editions',
+  async () => {
+    const recording = await Bun.file(join(recorded, 'subject.json')).json();
+    const page = await Bun.file(join(recorded, 'subject-page.json')).json();
+    const statements = recording.subject.statements;
+    const description: string | undefined = recording.subject.descriptions.en;
+    const author: string | undefined = recording.related[statements['schema:author']?.[0]?.value.content]?.labels.en;
+    const published = statements['schema:datePublished']?.[0]?.value.content;
+    const edition: string | undefined = Object.values<{ body: { subjects?: { labels: Record<string, string> }[] } }>(
+      page.reads,
+    ).find((read) => read.body.subjects)?.body.subjects?.[0]?.labels.en;
+    expect(description, 'the recorded subject has an English description').toBeTruthy();
+    expect(Object.keys(recording.subject.descriptions)).toEqual(expect.arrayContaining(['en', 'ja']));
+    expect(author, 'the recorded subject has a linked author').toBeTruthy();
+    expect(published, 'the recorded subject has a publication date').toBeTruthy();
+    expect(edition, 'the recorded page lists an edition').toBeTruthy();
+    const date = new Intl.DateTimeFormat('en', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(published.time.replace(/^\+/, '').replace('T00:00:00Z', 'T00:00:00.000Z')));
+
+    const opened = await openStory('subject', 'Signed Out', 'en');
+    try {
+      const main = opened.page.getByRole('main');
+      await main.getByText(description!, { exact: true }).first().waitFor({ state: 'visible' });
+      await main.getByRole('link', { name: author!, exact: true }).first().waitFor({ state: 'visible' });
+      await main.getByText(date, { exact: true }).first().waitFor({ state: 'visible' });
+      await main.getByRole('link', { name: edition!, exact: true }).first().waitFor({ state: 'visible' });
+    } finally {
+      await opened.context.close();
+    }
+  },
+  timeout,
+);
+
 // Change to test(...) when every recorded JSON response satisfies its kernel client response contract.
 test(
   'each recorded response type-checks against the kernel client',
