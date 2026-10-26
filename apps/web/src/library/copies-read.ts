@@ -260,7 +260,7 @@ async function readCopyPage(client: KernelClient, authorization: string, cursor?
   }
 }
 
-/** One credential read, then one FULL page of the viewer's copies. A page subject id narrows that page locally. */
+/** One credential read, then one unfiltered FULL page of the viewer's copies. */
 export async function loadCopiesPage(
   client: KernelClient,
   request: Request,
@@ -272,7 +272,7 @@ export async function loadCopiesPage(
   const subjectId = input.subjectId ?? null;
   if (!authorization) return { signedIn: false, subjectId, copies: [], next: null, addKey: crypto.randomUUID() };
   const page = await readCopyPage(client, authorization, input.cursor);
-  const copies = (subjectId ? page.copies.filter((copy) => copy.subjectId === subjectId) : page.copies).map(present);
+  const copies = page.copies.map(present);
   return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID() };
 }
 

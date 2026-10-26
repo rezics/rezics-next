@@ -394,8 +394,9 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Copies
 
 - **Touches:** One session read, then `GET /v1/copies?view=FULL` for one page of the viewer’s copies. A `subjectId`
-  in the page URL filters the request. Adding, editing and deleting each send one write with an
-  `Idempotency-Key`; an edit sends the revision in the body and a deletion sends `?revision=`.
+  in the page URL pre-fills the Edition field in the add form; it does not filter the list. Adding, editing and
+  deleting each send one write with an `Idempotency-Key`; an edit sends the revision in the body and a deletion sends
+  `?revision=`.
 - **Bound:** 1 D and 1 K for a view, which reads at most 100 copies; 1 D and 1 K for each change; 0 R and 0 A with a
   fresh credential.
 - **Growth check:** `tests/library-copies-cost.test.ts`: `copies stay within their bound as the copy list grows`
