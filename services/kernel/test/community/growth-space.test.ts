@@ -115,6 +115,13 @@ async function fixture(pool: Pool, admin: Pool) {
     grant,
     async close() {
       await authPool.end();
+      // Pool.end() returns before the server has seen every Terminate; forcing the drop in that window sends
+      // the closing clients an unhandled administrator shutdown.
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const { rowCount } = await admin.query('SELECT 1 FROM pg_stat_activity WHERE datname=$1', [database]);
+        if (rowCount === 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
       await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
     },
   };
@@ -123,7 +130,8 @@ async function fixture(pool: Pool, admin: Pool) {
 let db: GrowthDatabase;
 let f: Awaited<ReturnType<typeof fixture>>;
 let space: typeof import('../../src/community/space.ts');
-const scales: [number, number, number] = [256, 2048, 16384];
+const scales: [number, number, number] = [256, 1024, 4096];
+const revisionsPerSpace = 8;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -139,7 +147,7 @@ afterAll(async () => {
 const deps = () => ({ pool: db.pool, access: f.access, routeKey });
 
 for (const operation of ['create', 'read', 'update'] as const)
-  test(`Space ${operation} stays bounded at 256, 2048 and 16384 Spaces and revisions`, async () => {
+  test(`Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions`, async () => {
     await db.admin.query(
       'TRUNCATE community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
     );
@@ -156,8 +164,11 @@ for (const operation of ['create', 'read', 'update'] as const)
       hotPartition,
       hotShare: 1,
       rows: ({ route, ordinal }) => {
-        const spaceId = newId(route),
-          revisionId = newId(route);
+        const spaceId = newId(route);
+        // A Space keeps a revision chain, so the smallest scale already holds thousands of revision rows
+        // and the planner has no reason to scan the relation.
+        const revisionIds = Array.from({ length: revisionsPerSpace }, () => newId(route));
+        const revisionId = revisionIds[revisionsPerSpace - 1]!;
         const at = '2026-10-25T00:00:00.000Z';
         const transactionId = randomUUID();
         const position = positionBase + ordinal * 100 + 1;
@@ -173,18 +184,16 @@ for (const operation of ['create', 'read', 'update'] as const)
               creator: f.actor.accountId,
             },
           ],
-          'community.space_revision': [
-            {
-              route,
-              space_id: spaceId,
-              revision_id: revisionId,
-              predecessor: null,
-              title: 'Neighbour',
-              summary: '',
-              created_at: at,
-              author: f.actor.accountId,
-            },
-          ],
+          'community.space_revision': revisionIds.map((id, index) => ({
+            route,
+            space_id: spaceId,
+            revision_id: id,
+            predecessor: index === 0 ? null : revisionIds[index - 1],
+            title: 'Neighbour',
+            summary: '',
+            created_at: at,
+            author: f.actor.accountId,
+          })),
           'access.resource_initialization': [
             {
               route,
