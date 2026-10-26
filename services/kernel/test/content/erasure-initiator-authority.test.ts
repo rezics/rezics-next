@@ -1,25 +1,17 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { fromPlainText, serializeDocument } from '@rezics/document';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createAccess } from '../../src/access/index.ts';
-import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { createKernel } from '../../src/http/kernel.ts';
+import { fromPlainText } from '@rezics/document';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { threadTarget } from '../../src/content/commands.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
-const issuer = 'https://erasure-authority.auth.test';
-const audience = 'https://api.rezics.test';
-const scopes = ['account:read', 'access:grant', 'post:erase'];
-const governorScopes = ['access:grant', 'post:read', 'post:revise', 'post:erase', 'media:create'];
-const routeKey = new Uint8Array(32).fill(41);
-const sessionKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) };
-const nextRoute = { value: 0x6a30 };
-let db: GrowthDatabase;
-let app: ReturnType<typeof createKernel>;
-let privateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
-let jwk: Awaited<ReturnType<typeof exportJWK>> & { kid: string; alg: string };
+let system: NativeContentSystem;
+let app: NativeContentSystem['kernel'];
+let db: { admin: NativeContentSystem['database']['pool'] };
 
 type Scenario = {
   route: number;
@@ -28,124 +20,146 @@ type Scenario = {
   threadId: string;
   postId: string;
   revisionId: string;
+  ownerValid: string;
   boardId: string;
   actorToken: string;
   governorToken: string;
 };
 
-beforeAll(async () => {
-  db = await openGrowthDatabase();
-  db.pool.options.max = 1;
-  const keys = await generateKeyPair('ES256', { extractable: true });
-  privateKey = keys.privateKey;
-  jwk = { ...(await exportJWK(keys.publicKey)), kid: 'erasure-authority', alg: 'ES256' };
-  app = createKernel({
-    pool: db.pool,
-    routeKey,
-    tokens: sessionKeys,
-    writeRate: createWriteRateLimiter({ secret: 'erasure-authority-test-rate-secret-at-least-32-bytes' }),
-    access: (config) =>
-      createAccess({
-        ...config,
-        auth: {
-          issuer,
-          audience,
-          jwksUrl: `${issuer}/jwks`,
-          fetch: async () => Response.json({ keys: [jwk] }),
-        },
-      }),
-  });
-});
-
 afterAll(async () => {
-  await db?.close();
+  await system?.close();
 });
 
-async function token(accountId: string, selectedScopes: readonly string[]) {
-  const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({
-    client_id: 'web',
-    scope: selectedScopes.join(' '),
-    authn_epoch: 1,
-    auth_time: now,
-    amr: ['pwd'],
-  })
-    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
-    .setIssuer(issuer)
-    .setAudience(audience)
-    .setSubject(accountId)
-    .setIssuedAt(now)
-    .setExpirationTime(now + 300)
-    .sign(privateKey);
+async function setup<T>(
+  bearer: string,
+  path: string,
+  body: unknown,
+  status = 201,
+  method = 'POST',
+  head?: string,
+  key = randomUUID(),
+): Promise<T> {
+  const response = await app.handle(
+    new Request(`https://content.test${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${bearer}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(key),
+        ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  const wire = await response.text();
+  if (response.status !== status) throw new Error(`${method} ${path}: ${response.status} ${wire}`);
+  return JSON.parse(wire) as T;
 }
 
 async function fixture(): Promise<Scenario> {
-  const route = nextRoute.value;
-  nextRoute.value += 16;
-  const actorId = newId(route + 1);
-  const governorId = newId(route + 2);
-  const threadId = newId(route);
-  const postId = newId(route);
-  const revisionId = newId(route);
-  const boardId = newId(route);
-  const body = Buffer.from(serializeDocument(fromPlainText('Erasure authority fixture')));
-  const transactionId = newId(route);
-
-  for (const accountId of [actorId, governorId]) {
-    await db.admin.query(
-      `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-      VALUES ($1,$2,'actor','active',$3)`,
-      [routeOf(accountId), accountId, transactionId],
-    );
-  }
-  const client = await db.admin.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('SET CONSTRAINTS ALL DEFERRED');
-    await client.query(
-      `INSERT INTO content.thread
-        (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-        VALUES ($1,$2,$3,$4,'Erasure fixture','published',1,$5)`,
-      [route, threadId, actorId, boardId, transactionId],
-    );
-    await client.query(
-      `INSERT INTO content.post
-        (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id,created_at)
-        VALUES ($1,$2,$3,$4,$5,'published',1,$6,'2020-01-01T00:00:00Z')`,
-      [route, threadId, postId, actorId, revisionId, transactionId],
-    );
-    await client.query(
-      `INSERT INTO content.revision
-        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-        VALUES ($1,$2,$3,$4,$5,sha256($5),'Erasure authority fixture','CC0-1.0','{}',$6,'available',$7)`,
-      [route, threadId, postId, revisionId, body, boardId, transactionId],
-    );
-    await client.query('UPDATE content.thread SET first_post_id=$3 WHERE route=$1 AND thread_id=$2', [
-      route,
-      threadId,
-      postId,
-    ]);
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-  await db.admin.query(
-    `INSERT INTO access.resource_role_grant
-      (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
-      VALUES ($1,$2,'identity',$3,'','content.post.owner','(,)',$4)`,
-    [route, postId, actorId, transactionId],
+  // Each scenario owns its accounts, Global grants, content and command slots.
+  await system?.close();
+  system = await createNativeContentSystem({ databaseUrl: process.env.DATABASE_URL! });
+  app = system.kernel;
+  db = { admin: system.database.pool };
+  await bootstrapRelease(db.admin, bundledRelease);
+  const actor = system.actors.author;
+  const actorId = actor.actor.accountId;
+  const governorId = (await db.admin.query('SELECT account_id FROM access.governance_bootstrap')).rows[0]!
+    .account_id as string;
+  const governor = await system.auth.issue({
+    accountId: governorId,
+    clientId: system.auth.ordinaryClient.id,
+    scopes: [...system.actions.keys()].filter((action) => action !== 'media:complete'),
+  });
+  const actorToken = actor.bearer;
+  const governorToken = governor.bearer;
+  await setup(governorToken, '/v1/grants', {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'account', id: actorId },
+    actions: ['access:grant'],
+    valid: '(,)',
+  });
+  // Retain a separate holder so public grant administration can restore self-read.
+  await setup(actorToken, '/v1/grants', {
+    resource: { route: routeOf(actorId)!, id: actorId },
+    subject: { kind: 'account', id: governorId },
+    actions: ['account:read'],
+    valid: '(,)',
+  });
+  const scheme = await setup<{ subject: { id: string } }>(actorToken, '/v1/subjects', {
+    type: 'skos:ConceptScheme',
+    labels: { en: 'Erasure fixture' },
+  });
+  const concept = await setup<{ subject: { id: string } }>(actorToken, '/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: 'Erasure board' },
+    statements: {
+      'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.subject.id } }],
+    },
+  });
+  const space = await setup<{ space: { spaceId: string } }>(actorToken, '/v1/spaces', { title: 'Erasure fixture' });
+  const realm = await setup<{ realm: { realmId: string; headRevisionId: string } }>(actorToken, '/v1/realms', {
+    spaceId: space.space.spaceId,
+    title: 'Erasure fixture',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
+  });
+  await setup(
+    actorToken,
+    `/v1/realms/${realm.realm.realmId}/boardScheme`,
+    { schemeId: scheme.subject.id },
+    200,
+    'PUT',
+    realm.realm.headRevisionId,
   );
-  await db.admin.query(
-    `INSERT INTO access.resource_grant
-      (route,resource_id,subject_id,action,valid,transaction_id)
-      VALUES ($1,$2,$3,'account:read','(,)',$4),
-        ($5,$6,$7,'access:grant','(,)',$8),($5,$6,$7,'post:read','(,)',$8),
-        ($5,$6,$7,'post:revise','(,)',$8),($5,$6,$7,'post:erase','(,)',$8),
-        ($5,$6,$7,'media:create','(,)',$8)`,
-    [routeOf(actorId), actorId, actorId, transactionId, route, postId, governorId, transactionId],
+  const board = await setup<{ board: { id: string } }>(actorToken, `/v1/realms/${realm.realm.realmId}/boards`, {
+    conceptId: concept.subject.id,
+    title: 'Erasure fixture',
+    visibility: 'published',
+  });
+  let threadKey = randomUUID();
+  while (partitionOf(threadTarget(system.routeKey, actorId, threadKey).route) === partitionOf(routeOf(actorId)!))
+    threadKey = randomUUID();
+  const thread = await setup<{ thread: { id: string; firstPost: { id: string; revisionId: string } } }>(
+    actorToken,
+    '/v1/threads',
+    {
+      title: 'Erasure fixture',
+      body: fromPlainText('Erasure authority fixture'),
+      licence: 'CC0-1.0',
+      subjectIds: [],
+      boardId: board.board.id,
+      visibility: 'published',
+    },
+    201,
+    'POST',
+    undefined,
+    threadKey,
+  );
+  const threadId = thread.thread.id;
+  const postId = thread.thread.firstPost.id;
+  const route = routeOf(threadId)!;
+  if (partitionOf(route) === partitionOf(routeOf(actorId)!))
+    throw new Error('Scenario account and content must have independent command slots');
+  // The governor borrows only the non-Global actions needed to manage this role.
+  // Its access:grant and post:erase come from operator-bootstrapped Global governance.
+  await setup(actorToken, '/v1/grants', {
+    resource: { route, id: postId },
+    subject: { kind: 'account', id: governorId },
+    actions: ['post:read', 'post:revise', 'media:create'],
+    valid: '(,)',
+  });
+  await setup(
+    actorToken,
+    '/v1/grants:revoke',
+    {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: actorId },
+      actions: ['access:grant'],
+      valid: '(,)',
+    },
+    200,
   );
   return {
     route,
@@ -153,10 +167,22 @@ async function fixture(): Promise<Scenario> {
     governorId,
     threadId,
     postId,
-    revisionId,
-    boardId,
-    actorToken: await token(actorId, scopes),
-    governorToken: await token(governorId, governorScopes),
+    revisionId: thread.thread.firstPost.revisionId,
+    ownerValid: (
+      await db.admin.query(
+        "SELECT valid::text FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='content.post.owner'",
+        [route, postId, actorId],
+      )
+    ).rows[0]!.valid as string,
+    boardId: board.board.id,
+    actorToken: (
+      await system.auth.issue({
+        accountId: actorId,
+        clientId: system.auth.ordinaryClient.id,
+        scopes: ['account:read', 'access:grant', 'post:erase'],
+      })
+    ).bearer,
+    governorToken,
   };
 }
 
@@ -202,26 +228,24 @@ async function roleGrant(scenario: Scenario, operation: 'revoke' | 'create') {
       resource: { route: scenario.route, id: scenario.postId },
       subject: { kind: 'account', id: scenario.actorId },
       role: 'content.post.owner',
-      valid: '(,)',
+      valid: scenario.ownerValid,
     },
     'governor',
   );
 }
 
 async function accountRead(scenario: Scenario, present: boolean) {
-  if (present) {
-    await db.admin.query(
-      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-      VALUES ($1,$2,$2,'account:read','(,)',$3) ON CONFLICT DO NOTHING`,
-      [routeOf(scenario.actorId), scenario.actorId, newId(scenario.route)],
-    );
-  } else {
-    await db.admin.query(
-      `DELETE FROM access.resource_grant
-      WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND action='account:read'`,
-      [routeOf(scenario.actorId), scenario.actorId],
-    );
-  }
+  await setup(
+    scenario.governorToken,
+    `/v1/grants${present ? '' : ':revoke'}`,
+    {
+      resource: { route: routeOf(scenario.actorId)!, id: scenario.actorId },
+      subject: { kind: 'account', id: scenario.actorId },
+      actions: ['account:read'],
+      valid: '(,)',
+    },
+    present ? 201 : 200,
+  );
 }
 
 async function effects(scenario: Scenario) {
