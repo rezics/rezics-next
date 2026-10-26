@@ -5,18 +5,36 @@ import { commandAccessContext, requireCommandAdmission } from '../access/command
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
-import { authoritativeTimeValue, principalCommandIdentity, runCommand } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  principalCommandIdentity,
+  runCommand,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { REACTION_KINDS } from './events.ts';
-import { mediaParentBoard, mediaParentSnapshot } from './media-parent.ts';
+import {
+  mediaParentBoard,
+  mediaParentSnapshot,
+  prepareRealmParticipation,
+  realmParticipationCheckFor,
+  realmParticipationMatches,
+  type RealmParticipationProof,
+} from './media-parent.ts';
+import type { RealmParticipationCheck } from '../community/participation.ts';
 import type { RequestContext } from './model.ts';
 import slotStatement from './reaction-slot.sql';
 import targetStatement from './reaction-target.sql';
 
 export { REACTION_KINDS };
 export type ReactionKind = (typeof REACTION_KINDS)[number];
-export type ReactionDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
+export type ReactionDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  realmParticipation?: RealmParticipationCheck;
+  clock?: () => Date;
+}>;
 export type ReactionTarget = Readonly<{ targetKind: 'thread' | 'post'; targetId: string }>;
 export type SetReactionInput = ReactionTarget & Readonly<{ kind: ReactionKind }>;
 class Unchanged extends Error {}
@@ -40,6 +58,9 @@ async function mutate(
     targetRoute = route(body.targetId);
   const partition = partitionOf(home);
   const resource = { route: targetRoute, id: body.targetId };
+  const realmParticipation = deps.realmParticipation ?? realmParticipationCheckFor(deps.access);
+  let targetBoardId: string | undefined;
+  const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let checks: AccessCheck[] = [];
   const base = resourceAuthorization({
     access: deps.access,
@@ -48,6 +69,11 @@ async function mutate(
     anchor: {
       resource,
       async validate(client, time) {
+        if (targetBoardId) {
+          const board = await mediaParentBoard(client, targetBoardId);
+          if (realmParticipation && !realmParticipationMatches(participation.get(time), board.realm_id))
+            throw new GrantDeniedError();
+        }
         for (const check of checks) if (!(await check(client, time))) throw new GrantDeniedError();
         return true;
       },
@@ -111,6 +137,7 @@ async function mutate(
         );
       }
       const boardId = thread.board_id;
+      targetBoardId = boardId;
       const boardResource = { route: route(boardId), id: boardId };
       // Board eligibility and Access run on the board's home, even if co-located.
       const boardAction = 'board:read';
@@ -136,9 +163,16 @@ async function mutate(
         },
         preparation,
       );
+      let boardRealmId: string | null = null;
       await mediaParentSnapshot(deps.pool, boardResource.route, context.deadline, async (client) => {
         if (!(await boardCheck(client, attempt.time))) throw new GrantDeniedError();
+        boardRealmId = (await mediaParentBoard(client, boardId)).realm_id;
       });
+      if (realmParticipation) {
+        const proof = await prepareRealmParticipation(deps.pool, realmParticipation, actor, boardRealmId, attempt.time);
+        if (!proof.allowed) throw new GrantDeniedError();
+        participation.set(attempt.time, proof);
+      }
       return base.prepare!(attempt);
     },
   };

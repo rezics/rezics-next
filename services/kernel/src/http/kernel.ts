@@ -1,10 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { parseExposure } from '../access/gates/declaration.ts';
-import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
 import { createAccess } from '../access/index.ts';
+import { assertDeclaredResourceTypes, installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
+import { createRealmParticipationCheck, type RealmParticipationCheck } from '../community/participation.ts';
+import { realmReadEligibility } from '../community/realm.ts';
 import { communityRoutes } from '../community/routes.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
@@ -16,9 +19,12 @@ import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
+import { installRealmParticipationCheck, withRealmIndexedReads } from '../content/media-parent.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
-import type { Access, AccessConfig, AccessRealmRoleReader } from '../request/access.ts';
+import type { Access, AccessConfig, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
+import { withConnection } from '../database/pool.ts';
+import { routeOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -42,6 +48,123 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   workClient?: WorkClient;
 };
 
+type ContentReadAssociation = Readonly<{ found: boolean; realmId: string | null }>;
+type ContentReadProof = Readonly<{
+  actor: Actor;
+  action: string;
+  resource: Resource;
+  primary: unknown;
+  association: ContentReadAssociation;
+  realmResource?: Resource;
+  realmEvidence?: unknown;
+  valid: boolean;
+}>;
+const realmAwareAccesses = new WeakMap<Access, Access>();
+
+const threadRealmRead = `SELECT b.realm_id
+  FROM content.thread t
+  JOIN content.board b ON b.route=get_byte(uuid_send(t.board_id), 10) * 256 + get_byte(uuid_send(t.board_id), 11)
+    AND b.board_id=t.board_id
+  WHERE t.route=$1 AND t.thread_id=$2`;
+const postRealmRead = `SELECT b.realm_id
+  FROM content.post p
+  JOIN content.thread t ON t.route=p.route AND t.thread_id=p.thread_id
+  JOIN content.board b ON b.route=get_byte(uuid_send(t.board_id), 10) * 256 + get_byte(uuid_send(t.board_id), 11)
+    AND b.board_id=t.board_id
+  WHERE p.route=$1 AND p.post_id=$2`;
+
+/** A Realm's read grant gates every content item on its boards. Bind the
+ * relationship before checkout, then recheck it with both read formulas at T. */
+function realmAwareContentAccess(access: Access): Access {
+  const existing = realmAwareAccesses.get(access);
+  if (existing) return existing;
+  const proofs = new WeakMap<object, ContentReadProof>();
+  const wrapped: Access = {
+    authenticate: access.authenticate.bind(access),
+    ...(access.replayAuthorization ? { replayAuthorization: access.replayAuthorization.bind(access) } : {}),
+    async prepare(actor, action, resource, context) {
+      const primary = access.prepare
+        ? await withRealmIndexedReads(context.pool, () => access.prepare!(actor, action, resource, context))
+        : undefined;
+      if (action !== 'thread:read' && action !== 'post:read') return primary;
+
+      const statement = action === 'thread:read' ? threadRealmRead : postRealmRead;
+      const result = await withConnection(context.pool, (connection) =>
+        within(context.deadline, () =>
+          deadlineClient(connection, context.deadline).query<{ realm_id: string | null }>(statement, [
+            resource.route,
+            resource.id,
+          ]),
+        ),
+      );
+      const row = result.rows[0];
+      const association: ContentReadAssociation =
+        result.rows.length === 1 && row ? { found: true, realmId: row.realm_id } : { found: false, realmId: null };
+      let realmResource: Resource | undefined;
+      let realmEvidence: unknown;
+      let valid = true;
+      if (association.realmId !== null) {
+        const realmRoute = routeOf(association.realmId);
+        valid = realmRoute !== null;
+        if (realmRoute !== null) {
+          const preparedResource: Resource = {
+            route: realmRoute,
+            id: association.realmId,
+            eligibility: realmReadEligibility({ route: realmRoute, id: association.realmId }),
+          };
+          realmResource = preparedResource;
+          realmEvidence = access.prepare
+            ? await withRealmIndexedReads(context.pool, () =>
+                access.prepare!(actor, 'realm:read', preparedResource, context),
+              )
+            : undefined;
+        }
+      }
+      const proof = Object.freeze({});
+      proofs.set(proof, {
+        actor,
+        action,
+        resource,
+        primary,
+        association,
+        ...(realmResource ? { realmResource } : {}),
+        ...(realmEvidence === undefined ? {} : { realmEvidence }),
+        valid,
+      });
+      return proof;
+    },
+    async authorize(client, actor, action, resource, evidence, time) {
+      await client.query('SET LOCAL enable_seqscan = off');
+      await client.query('SET LOCAL plan_cache_mode = force_custom_plan');
+      const proof = typeof evidence === 'object' && evidence !== null ? proofs.get(evidence) : undefined;
+      if (!proof) return access.authorize(client, actor, action, resource, evidence, time);
+      if (
+        proof.actor !== actor ||
+        proof.action !== action ||
+        proof.resource.route !== resource.route ||
+        proof.resource.id !== resource.id ||
+        !proof.valid
+      )
+        return false;
+      const primaryAllowed = await access.authorize(client, actor, action, resource, proof.primary, time);
+      if (!primaryAllowed) return false;
+
+      const statement = action === 'thread:read' ? threadRealmRead : postRealmRead;
+      const current = await client.query<{ realm_id: string | null }>(statement, [resource.route, resource.id]);
+      const row = current.rows[0];
+      if (current.rows.length !== 1 || !row || row.realm_id !== proof.association.realmId || !proof.association.found)
+        return false;
+      if (proof.association.realmId === null) return true;
+      if (!proof.realmResource) return false;
+      return access.authorize(client, actor, 'realm:read', proof.realmResource, proof.realmEvidence, time);
+    },
+  };
+  const catalogue = resourceRoleCatalogue(access);
+  if (catalogue) installResourceRoleCatalogue(wrapped, catalogue);
+  realmAwareAccesses.set(access, wrapped);
+  return wrapped;
+}
+
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies) {
   const sourceClock = dependencies.clock ?? systemClock;
@@ -59,7 +182,23 @@ export function createKernel(dependencies: KernelDependencies) {
       if (!access) throw new Error('Realm membership role reader is not installed');
       realmMembership = createRealmMembership({ pool: dependencies.pool, access, referenceKeys: tokens, clock });
     }
-    return realmMembership.roleReader(client, input);
+    return (async () => {
+      await client.query('BEGIN READ ONLY');
+      try {
+        await client.query('SET LOCAL enable_seqscan = off');
+        await client.query('SET LOCAL plan_cache_mode = force_custom_plan');
+        const result = await realmMembership!.roleReader(client, input);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Preserve the original Realm role read failure.
+        }
+        throw error;
+      }
+    })();
   };
   const resolveAccess = (config: AccessConfig) =>
     (access ??= typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock }) : factory);
@@ -71,11 +210,19 @@ export function createKernel(dependencies: KernelDependencies) {
     opened ??= createWorkClient(url);
     return opened;
   };
-  const subjects = subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens, clock }), {
-    ...dependencies,
-    tokens,
-    access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
-  });
+  const subjects = subjectRoutes(
+    createApp({
+      ...dependencies,
+      access: (config) => realmAwareContentAccess(resolveAccess(config)),
+      tokens,
+      clock,
+    }),
+    {
+      ...dependencies,
+      tokens,
+      access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+    },
+  );
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -111,7 +258,17 @@ export function createKernel(dependencies: KernelDependencies) {
   const searched = searchRoutes(contextual, dependencies);
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
-  const content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
+  let contentAccess: Access | undefined;
+  let realmParticipation: RealmParticipationCheck | undefined;
+  let content: ReturnType<typeof contentRoutes>;
+  const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
+    realmParticipation ??= createRealmParticipationCheck({
+      pool: dependencies.pool,
+      access: resolveAccess({ actions: actionCatalogue(content), realmRoleReader }),
+    });
+    return realmParticipation(client, input, time);
+  };
+  content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
@@ -120,14 +277,20 @@ export function createKernel(dependencies: KernelDependencies) {
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
+    realmParticipation: checkRealmParticipation,
     get access() {
-      return resolveAccess({ actions: actionCatalogue(content), realmRoleReader });
+      if (!contentAccess) {
+        contentAccess = realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(content), realmRoleReader }));
+        installRealmParticipationCheck(contentAccess, checkRealmParticipation);
+      }
+      return contentAccess;
     },
   });
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
     routeKey: dependencies.routeKey,
+    realmParticipation: checkRealmParticipation,
     get access() {
       return resolveAccess({ actions: actionCatalogue(granted), realmRoleReader });
     },
@@ -189,6 +352,13 @@ export function createKernel(dependencies: KernelDependencies) {
     }
   }
   assertDeclaredResourceTypes(collections);
+  collections.wrap((fetch) => async (request, ...rest) => {
+    const path = new URL(request.url).pathname;
+    const contentRequest =
+      /^\/v1\/(?:threads|posts|boards|media)(?:\/|$)/.test(path) || /^\/v1\/realms\/[^/]+\/boards(?:\/|$)/.test(path);
+    if (!contentRequest) return fetch(request, ...rest);
+    return withRealmIndexedReads(dependencies.pool, async () => await fetch(request, ...rest));
+  });
   return collections as typeof collections &
     typeof personal &
     typeof community &

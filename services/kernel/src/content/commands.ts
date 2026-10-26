@@ -21,11 +21,18 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import type { RealmParticipationCheck } from '../community/participation.ts';
 import { readPartition } from '../partition/partition.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
 import { claimMedia, InvalidMediaClaimError } from './media.ts';
-import { mediaParentSnapshot } from './media-parent.ts';
+import {
+  mediaParentBoard,
+  mediaParentSnapshot,
+  prepareRealmParticipation,
+  realmParticipationMatches,
+  type RealmParticipationProof,
+} from './media-parent.ts';
 import type { ContentCommandValue, PostInput, RequestContext, RevisionInput, ThreadInput } from './model.ts';
 import readBoard from './read-board.sql';
 import readThread from './read-thread.sql';
@@ -40,6 +47,7 @@ export type ContentCommandDependencies = Readonly<{
   pool: Pool;
   access: Access;
   routeKey: Uint8Array;
+  realmParticipation?: RealmParticipationCheck;
   clock?: () => Date;
 }>;
 export type ThreadTarget = Resource;
@@ -237,10 +245,14 @@ function containerAuthorization(
   let prepared: Chain;
   let current: Chain;
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
+  const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const limit = revising ? 33 : 32;
   async function validate(client: AccessClient, time: AuthoritativeTime) {
     current = await chain(client, threadId, itemId, limit);
     if (!sameChain(prepared, current)) throw new ContentNotFoundError();
+    const board = await mediaParentBoard(client, current.thread.board_id);
+    if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), board.realm_id))
+      throw new ContentForbiddenError();
     if (revising && current.posts[0]?.author_account_id !== account(actor).accountId) throw new ContentForbiddenError();
     for (const check of checks) if (!(await check(client, time))) throw new ContentNotFoundError();
     return true;
@@ -294,6 +306,20 @@ function containerAuthorization(
             )
               throw new ContentNotFoundError();
           });
+          if (dependencies.realmParticipation) {
+            const board = await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, (client) =>
+              mediaParentBoard(client, boardId),
+            );
+            const proof = await prepareRealmParticipation(
+              dependencies.pool,
+              dependencies.realmParticipation,
+              actor,
+              board.realm_id,
+              attempt.time,
+            );
+            if (!proof.allowed) throw new ContentForbiddenError();
+            participation.set(attempt.time, proof);
+          }
           return base.prepare!(attempt);
         },
         async authorize(tx, attempt, evidence) {
@@ -408,6 +434,7 @@ export async function createThread(
     inserted,
   );
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
+  const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
@@ -424,6 +451,9 @@ export async function createThread(
           (row.visibility !== 'published' && !(await boardCheck(client, time)))
         )
           throw new ContentNotFoundError();
+        const current = await mediaParentBoard(client, board.id);
+        if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
+          throw new ContentForbiddenError();
         return true;
       },
     },
@@ -442,10 +472,24 @@ export async function createThread(
         pool: dependencies.pool,
         deadline: context.deadline,
       });
+      if (dependencies.realmParticipation) {
+        const current = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
+          mediaParentBoard(client, board.id),
+        );
+        const proof = await prepareRealmParticipation(
+          dependencies.pool,
+          dependencies.realmParticipation,
+          actor,
+          current.realm_id,
+          attempt.time,
+        );
+        if (!proof.allowed) throw new ContentForbiddenError();
+        participation.set(attempt.time, proof);
+      }
       return base.prepare!(attempt);
     },
   };
-  return runCommand(
+  const outcome = await runCommand(
     dependencies.pool,
     { ...options(dependencies, actor, target.route, CREATE_THREAD, body, context), authorization },
     async (tx, command) => {
@@ -504,6 +548,7 @@ export async function createThread(
       return result(value, actor, 'thread');
     },
   );
+  return outcome;
 }
 
 export async function createPost(

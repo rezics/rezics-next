@@ -8,6 +8,7 @@ import {
   currentCommand,
   principalCommandIdentity,
   runCommand,
+  type AuthoritativeTime,
   type CommandAuthorization,
   type CommandOutcome,
   type CommandTransaction,
@@ -22,11 +23,20 @@ import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
 import claimStatement from './claim-media.sql';
 import { claimCoverMedia } from './cover-reference.ts';
-import { mediaParentBoard, mediaParentChain, mediaParentSnapshot, type MediaParent } from './media-parent.ts';
+import {
+  mediaParentBoard,
+  mediaParentChain,
+  mediaParentSnapshot,
+  prepareRealmParticipation,
+  realmParticipationMatches,
+  type MediaParent,
+  type RealmParticipationProof,
+} from './media-parent.ts';
 import type { Access, Actor, Resource } from '../request/access.ts';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { downloadMedia, type DownloadContext } from './media-download.ts';
+import type { RealmParticipationCheck } from '../community/participation.ts';
 
 export type MediaPurpose = 'post-image' | 'cover';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
@@ -91,6 +101,7 @@ export type MediaCompletionInput = Readonly<{
 export type MediaDependencies = Readonly<{
   pool: Pool;
   access: Access;
+  realmParticipation?: RealmParticipationCheck;
   clock?: () => Date;
   /** Trusted per-request host context; never supplied by request JSON. */
   downloadContext?: DownloadContext;
@@ -227,6 +238,7 @@ export async function reserveMedia(
   let insertedTransaction: string | undefined;
   let preparedChain: MediaParent[] = [];
   let disclosure: (AccessCheck | null)[] = [];
+  const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let boardRead: AccessCheck | undefined;
   let threadCreate: AccessCheck | undefined;
   const board = newThreadTarget ? { route: route(newThreadTarget.boardId), id: newThreadTarget.boardId } : undefined;
@@ -241,6 +253,8 @@ export async function reserveMedia(
           const partition = await readPartition(client, partitionOf(board.route));
           if (!partition || partition.writeState === 'moved') return false;
           const current = await mediaParentBoard(client, board.id);
+          if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
+            throw new GrantDeniedError();
           if (current.visibility !== 'published' && !(await boardRead!(client, time))) return false;
           return threadCreate!(client, time);
         }
@@ -262,6 +276,13 @@ export async function reserveMedia(
           const check = disclosure[i];
           if (check && !(await check(client, time))) return false;
         }
+        const boardId = current.at(-1)!.board_id!;
+        const currentBoard = await mediaParentBoard(client, boardId);
+        if (
+          dependencies.realmParticipation &&
+          !realmParticipationMatches(participation.get(time), currentBoard.realm_id)
+        )
+          throw new GrantDeniedError();
         return true;
       },
     },
@@ -297,6 +318,20 @@ export async function reserveMedia(
           pool: dependencies.pool,
           deadline: context.deadline,
         });
+        if (dependencies.realmParticipation) {
+          const current = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
+            mediaParentBoard(client, board.id),
+          );
+          const proof = await prepareRealmParticipation(
+            dependencies.pool,
+            dependencies.realmParticipation,
+            actor,
+            current.realm_id,
+            attempt.time,
+          );
+          if (!proof.allowed) throw new GrantDeniedError();
+          participation.set(attempt.time, proof);
+        }
         return base.prepare!(attempt);
       }
       // Prepare private-ancestor formula evidence before the parent checkout.
@@ -328,11 +363,24 @@ export async function reserveMedia(
         { route: route(boardId), id: boardId },
         { pool: dependencies.pool, deadline: context.deadline },
       );
+      let boardRealmId: string | null = null;
       await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, async (client) => {
         const board = await mediaParentBoard(client, boardId);
+        boardRealmId = board.realm_id;
         if (board.visibility !== 'published' && !(await containerBoardRead(client, attempt.time)))
           throw new GrantDeniedError();
       });
+      if (dependencies.realmParticipation) {
+        const proof = await prepareRealmParticipation(
+          dependencies.pool,
+          dependencies.realmParticipation,
+          actor,
+          boardRealmId,
+          attempt.time,
+        );
+        if (!proof.allowed) throw new GrantDeniedError();
+        participation.set(attempt.time, proof);
+      }
       // Release the board checkout before parent-at-T authorization and the new
       // media-only write/initializer. These independent anchors are not atomic.
       return base.prepare!(attempt);

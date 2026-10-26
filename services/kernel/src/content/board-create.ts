@@ -19,13 +19,16 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readSubject } from '../semantic/subject.ts';
 import type { Item } from '../semantic/item.ts';
+import type { RealmParticipationCheck } from '../community/participation.ts';
 import readBoardScheme from '../community/board-scheme-read.sql';
 import insertBoard from './board-create.sql';
 import readBoard from './board-created.sql';
+import { prepareRealmParticipation, realmParticipationMatches, type RealmParticipationProof } from './media-parent.ts';
 
 export type BoardCreationDependencies = Readonly<{
   pool: Pool;
   access: Access;
+  realmParticipation?: RealmParticipationCheck;
   clock?: () => Date;
 }>;
 
@@ -137,6 +140,7 @@ export async function createBoard(
   if (roles) installResourceRoleCatalogue(access, roles);
 
   const inserted = new WeakMap<CommandTransaction, string>();
+  const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const authorization = parentCreationAuthorization({
     access,
     actor,
@@ -144,6 +148,8 @@ export async function createBoard(
     parent: {
       resource: { route: realmRoute, id: input.realmId },
       async validate(client, time) {
+        if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), input.realmId))
+          throw new GrantDeniedError();
         const concept = concepts.get(time);
         if (!concept || Date.now() >= concept.deadline || concept.subject.type !== 'skos:Concept') return false;
         const realm = await readBoardScheme.run(client, {
@@ -174,6 +180,23 @@ export async function createBoard(
       },
     },
   });
+  const preparedAuthorization = {
+    ...authorization,
+    async prepare(attempt: Parameters<NonNullable<typeof authorization.prepare>>[0]) {
+      if (dependencies.realmParticipation) {
+        const proof = await prepareRealmParticipation(
+          dependencies.pool,
+          dependencies.realmParticipation,
+          actor,
+          input.realmId,
+          attempt.time,
+        );
+        if (!proof.allowed) throw new GrantDeniedError();
+        participation.set(attempt.time, proof);
+      }
+      return authorization.prepare!(attempt);
+    },
+  };
 
   const identity = principalCommandIdentity(actor);
   const kind = 'content.board.create';
@@ -192,7 +215,7 @@ export async function createBoard(
             .update(canonicalize([identity, kind, body])!)
             .digest(),
         },
-        authorization,
+        authorization: preparedAuthorization,
       },
       async (tx, { transactionId, time }) => {
         await insertBoard.run(tx, {
