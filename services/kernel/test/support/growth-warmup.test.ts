@@ -46,6 +46,24 @@ function record(calls: Call[], kind: Call['kind']): GrowthCheck['operation'] {
   };
 }
 
+test('checkGrowth refuses fewer than one warm-up per scale and names the warmup hook', async () => {
+  const calls: string[] = [];
+  await expect(
+    checkGrowth(db!, {
+      name: 'zero warm-ups',
+      warmups: 0,
+      bounds,
+      grow: async () => {
+        calls.push('grow');
+      },
+      operation: async () => {
+        calls.push('operation');
+      },
+    }),
+  ).rejects.toMatchObject({ name: 'RangeError', message: expect.stringContaining('warmup') });
+  expect(calls).toEqual([]);
+});
+
 test('a warmup hook runs in place of the operation for every unmeasured run', async () => {
   const calls: Call[] = [];
   await checkGrowth(db!, {
