@@ -5,6 +5,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../../../auth/scripts/database.ts';
 import { handleFixture } from './workflow-handle-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 
 let deployment: ReturnType<typeof testDatabase>;
 let fixture: Awaited<ReturnType<typeof handleFixture>>;
@@ -353,13 +354,17 @@ test('successful consent and client reductions invalidate already issued JWTs at
   const old = ((await tokenResponse.json()) as { access_token: string }).access_token;
   expect((await fixture.authenticate(old)).kind).toBe('account');
   fixture.approve('consent-reduction', login.token);
-  await fixture.workflows.reduceConsent({
-    key: 'native_consent_reduction',
-    authorization: 'consent-reduction',
-    accountId: actor,
-    clientId: 'reduction-client',
-    scopes: ['read'],
-  });
+  // The reduction commits its fence and effect, then current-authority result
+  // disclosure refuses the initiating bearer that the operation just revoked.
+  await expect(
+    fixture.workflows.reduceConsent({
+      key: 'native_consent_reduction',
+      authorization: 'consent-reduction',
+      accountId: actor,
+      clientId: 'reduction-client',
+      scopes: ['read'],
+    }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
   await expect(fixture.authenticate(old)).rejects.toThrow();
   expect(
     (
