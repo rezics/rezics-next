@@ -43,7 +43,7 @@ export declare class MountedRouteCatalogue {
     find(request: Request, matchedTemplate?: string): MountedRoute | undefined;
 }
 /** App instances and standalone stage route arrays have independent catalogue lifetimes. */
-export declare function mountedRouteCatalogue(app: RouteApp | readonly MountedRoute[]): MountedRouteCatalogue;
+export declare function mountedRouteCatalogue(app: RouteApp | readonly MountedRoute[], routes?: readonly MountedRoute[]): MountedRouteCatalogue;
 /** The action label is also available for errors before authorization is initialized. */
 export declare function actionLabelOfMountedRoute(route: MountedRoute | undefined): string;
 export declare function actionOfMountedRoute(route: MountedRoute | undefined): string;
