@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { NO_COMPILE_CACHE } from './merge.ts';
 import { processIdentity } from './process.ts';
@@ -44,6 +45,8 @@ export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, par
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
   for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
+  // With CLAUDE_CONFIG_DIR set, Claude Code looks for .claude.json inside it, not beside the default ~/.claude.
+  if (pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude')) return { ...env, ...NO_COMPILE_CACHE, ...extra };
   return { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
 }
 export function workerPrompt(task: Task, evidence: string | undefined, consultation: string | undefined, resolutionFiles: readonly string[], mainCheckout: string): string {

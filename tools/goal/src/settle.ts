@@ -1,6 +1,7 @@
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
 import { makeRecord, POOL_EXHAUSTED, readMeasurement, reportedApproaches } from './records.ts';
+import { recordClaudeRateLimit } from './usage.ts';
 import { evidenceBundle } from './evidence.ts';
 import { stopProcessesUnder, terminateProcessGroup } from './process.ts';
 import type { RunningWorker } from './launch.ts';
@@ -26,6 +27,7 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
       a.state = 'exited'; a.endedAt = new Date().toISOString(); a.exitCode = code; a.after = pool ? tasks.reader(pool) : null;
     });
     const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
+    if (pool?.cli === 'claude') try { recordClaudeRateLimit(pool, readFileSync(attempt.logPath, 'utf8')); } catch { /* No log to read. */ }
     // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
     // Preserve that launch failure on the attempt and keep it out of the landing queue.
     if (!measurement.session && code !== null && code !== 0 && !measurement.failureKind
