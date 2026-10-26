@@ -26,6 +26,7 @@ import { prepareRealmParticipationResult, type RealmParticipationCheck } from '.
 import { readPartition } from '../partition/partition.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { claimMedia, InvalidMediaClaimError } from './media.ts';
 import {
   mediaParentBoard,
@@ -33,7 +34,14 @@ import {
   realmParticipationMatches,
   type RealmParticipationProof,
 } from './media-parent.ts';
-import type { ContentCommandValue, PostInput, RequestContext, RevisionInput, ThreadInput } from './model.ts';
+import type {
+  ContentCommandValue,
+  PostInput,
+  RequestContext,
+  RevisionInput,
+  ReviewVoteCitation,
+  ThreadInput,
+} from './model.ts';
 import readBoard from './read-board.sql';
 import readThread from './read-thread.sql';
 import readPost from './read-post.sql';
@@ -41,6 +49,9 @@ import insertThread from './create-thread.sql';
 import insertPost from './create-post.sql';
 import insertRevision from './create-revision.sql';
 import updateHead from './update-head.sql';
+import readReviewVote from './read-review-vote.sql';
+
+export type { ReviewVoteCitation } from './model.ts';
 
 export { DocumentTooLargeError, InvalidDocumentError } from './document.ts';
 export type ContentCommandDependencies = Readonly<{
@@ -105,6 +116,12 @@ export class RevisionPreconditionError extends Error {
     this.name = 'RevisionPreconditionError';
   }
 }
+export class ReviewConflictError extends Error {
+  constructor() {
+    super('The author already has a live review of this subject on the board');
+    this.name = 'ReviewConflictError';
+  }
+}
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new ContentForbiddenError();
   return actor;
@@ -114,9 +131,62 @@ function route(id: string): number {
   if (value === null) throw new ContentNotFoundError();
   return value;
 }
+function reviewCitation(value: unknown): ReviewVoteCitation | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new InvalidDocumentError();
+  const citation = value as Record<string, unknown>;
+  if (
+    Object.keys(citation).length !== 3 ||
+    Object.keys(citation).some((key) => !['questionId', 'units', 'revision'].includes(key)) ||
+    typeof citation.questionId !== 'string' ||
+    routeOf(citation.questionId) === null ||
+    !Number.isSafeInteger(citation.units) ||
+    (citation.units as number) < 0 ||
+    (citation.units as number) > 20 ||
+    !Number.isSafeInteger(citation.revision) ||
+    (citation.revision as number) < 1
+  )
+    throw new InvalidDocumentError();
+  return {
+    questionId: citation.questionId,
+    units: citation.units as number,
+    revision: citation.revision as number,
+  };
+}
+async function currentReviewCitation(
+  tx: CommandTransaction,
+  authorId: string,
+  subjectId: string,
+  value: unknown,
+): Promise<ReviewVoteCitation | null> {
+  const citation = reviewCitation(value);
+  if (!citation) return null;
+  const row = await readReviewVote.run(tx, {
+    route: route(authorId),
+    voter_id: authorId,
+    question_id: citation.questionId,
+    target_id: subjectId,
+  });
+  if (!row || row.units === null || Number(row.units) !== citation.units || Number(row.revision) !== citation.revision)
+    throw new InvalidDocumentError('Vote citation does not match the author’s current vote');
+  return citation;
+}
+function postgresConstraint(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'constraint' in error && typeof error.constraint === 'string'
+    ? error.constraint
+    : undefined;
+}
 export function threadTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
+  return threadTargetAtRoute(routeKey, accountId, idempotencyKey);
+}
+function threadTargetAtRoute(
+  routeKey: Uint8Array,
+  accountId: string,
+  idempotencyKey: string,
+  routeOverride?: number,
+): Resource {
   const identity = `${accountId}\n${CREATE_THREAD}\n${idempotencyKey}`;
-  const r = anchorRoute(routeKey, identity);
+  const r = routeOverride ?? anchorRoute(routeKey, identity);
   const bytes = createHmac('sha256', routeKey).update(`content.thread.target.id\n${identity}`).digest().subarray(0, 16);
   bytes[6] = (bytes[6]! & 0x0f) | 0x80;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
@@ -232,6 +302,11 @@ function document(body: unknown, licence: string, subjectIds: readonly (string |
   return validateContentDocument({ body, licence, subjectIds });
 }
 
+function storedSubjectIds(values: readonly (string | null)[]): string[] {
+  if (values.some((value) => typeof value !== 'string')) throw new TypeError('Stored subject references are invalid');
+  return values as string[];
+}
+
 async function prepareContentParticipation(
   dependencies: ContentCommandDependencies,
   actor: Actor,
@@ -267,6 +342,7 @@ function containerAuthorization(
   let current: Chain;
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
+  let currentPlaceId = GLOBAL_CONTEXT;
   const limit = revising ? 33 : 32;
   // A non-author never held a revise receipt. Keep today's not_found ahead of
   // the authorship denial. The author's fresh key is refused in the body so an
@@ -280,6 +356,7 @@ function containerAuthorization(
     if (!sameChain(prepared, current)) throw new ContentNotFoundError();
     concealErasedRevise(current);
     const board = await mediaParentBoard(client, current.thread.board_id);
+    currentPlaceId = board.realm_id ?? GLOBAL_CONTEXT;
     if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), board.realm_id))
       throw new ContentForbiddenError();
     if (revising && current.posts[0]?.author_account_id !== account(actor).accountId) throw new ContentForbiddenError();
@@ -291,6 +368,9 @@ function containerAuthorization(
     validate,
     get current() {
       return current;
+    },
+    get placeId() {
+      return currentPlaceId;
     },
     wrap(base: CommandAuthorization): CommandAuthorization {
       return {
@@ -413,6 +493,7 @@ async function appendRevision(
   mediaIds: readonly string[],
   transactionId: string,
   time: AuthoritativeTime,
+  voteCitation: ReviewVoteCitation | null = null,
 ) {
   const validated = document(body, licence, subjectIds);
   await insertRevision.run(tx, {
@@ -427,9 +508,11 @@ async function appendRevision(
     subject_ids: validated.subjectIds,
     board_id: boardId,
     media_ids: [...mediaIds],
+    vote_citation: voteCitation,
     transaction_id: transactionId,
     at: authoritativeTimeValue(time),
   });
+  return validated.subjectIds;
 }
 const CREATED_EVENT = {
   thread: 'com.rezics.content.thread.created.v1',
@@ -437,14 +520,36 @@ const CREATED_EVENT = {
   revision: 'com.rezics.content.revision.created.v1',
 } as const;
 
-function result<Noun extends keyof typeof CREATED_EVENT>(value: ContentCommandValue, actor: Actor, noun: Noun) {
+type ThreadIndexEventFields = Readonly<{
+  placeId: string;
+  kind: 'discussion' | 'review';
+  subjectIds: readonly string[];
+  activityAt: string;
+  previousSubjectIds?: readonly string[];
+}>;
+
+function eventActivityAt(time: AuthoritativeTime): string {
+  const authoritative = authoritativeTimeValue(time);
+  const value = new Date(authoritative);
+  if (!Number.isFinite(value.getTime())) throw new TypeError('Invalid authoritative content time');
+  const fraction = /\.(\d+)(?=(?:Z|[+-]\d\d(?::?\d\d)?)$)/.exec(authoritative)?.[1] ?? '';
+  const microseconds = `${fraction}000000`.slice(0, 6);
+  return value.toISOString().replace(/\.\d{3}Z$/, `.${microseconds}Z`);
+}
+
+function result<Noun extends keyof typeof CREATED_EVENT>(
+  value: ContentCommandValue,
+  actor: Actor,
+  noun: Noun,
+  index: ThreadIndexEventFields,
+) {
   return {
     value,
     events: [
       {
         type: CREATED_EVENT[noun],
         subject: value.itemId,
-        data: { ...value, actorId: account(actor).accountId },
+        data: { ...value, actorId: account(actor).accountId, ...index },
       },
     ],
   };
@@ -459,10 +564,16 @@ export async function createThread(
   ensureContentGrantTemplates(dependencies.access);
   const author = account(actor);
   const body = request(input);
-  const target = threadTarget(dependencies.routeKey, author.accountId, context.idempotencyKey);
+  const board = { route: route(body.boardId), id: body.boardId };
+  const threadKind = body.kind ?? 'discussion';
+  const target = threadTargetAtRoute(
+    dependencies.routeKey,
+    author.accountId,
+    context.idempotencyKey,
+    threadKind === 'review' ? board.route : undefined,
+  );
   const postTarget = { route: target.route, id: newId(target.route) };
   const value = { threadId: target.id, itemId: postTarget.id, revisionId: newId(target.route) };
-  const board = { route: route(body.boardId), id: body.boardId };
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(
     actor,
@@ -473,6 +584,7 @@ export async function createThread(
     inserted,
   );
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
+  let threadPlaceId = GLOBAL_CONTEXT;
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const base = parentCreationAuthorization({
     access: dependencies.access,
@@ -491,6 +603,8 @@ export async function createThread(
         )
           throw new ContentNotFoundError();
         const current = await mediaParentBoard(client, board.id);
+        threadPlaceId = current.realm_id ?? GLOBAL_CONTEXT;
+        if ((current.purpose === 'reviews') !== (threadKind === 'review')) throw new InvalidDocumentError();
         if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
           throw new ContentForbiddenError();
         return true;
@@ -533,66 +647,86 @@ export async function createThread(
       return base.prepare!(attempt);
     },
   };
-  const outcome = await runCommand(
-    dependencies.pool,
-    { ...options(dependencies, actor, target.route, CREATE_THREAD, body, context), authorization },
-    async (tx, command) => {
-      if (
-        typeof body.title !== 'string' ||
-        body.title.trim().length === 0 ||
-        (body.visibility !== 'published' && body.visibility !== 'draft')
-      )
-        throw new InvalidDocumentError();
-      const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
-      const at = authoritativeTimeValue(command.time);
-      await insertThread.run(tx, {
-        route: target.route,
-        thread_id: value.threadId,
-        author_id: author.accountId,
-        board_id: body.boardId,
-        title: body.title,
-        visibility: body.visibility,
-        transaction_id: command.transactionId,
-        first_post_id: value.itemId,
-        at,
-      });
-      await insertPost.run(tx, {
-        route: target.route,
-        thread_id: value.threadId,
-        post_id: value.itemId,
-        parent_id: null,
-        author_id: author.accountId,
-        revision_id: value.revisionId,
-        visibility: body.visibility,
-        transaction_id: command.transactionId,
-        at,
-      });
-      await appendRevision(
-        tx,
-        value,
-        body.body,
-        body.licence,
-        body.subjectIds,
-        body.boardId,
-        mediaIds,
-        command.transactionId,
-        command.time,
-      );
-      inserted.set(tx, command.transactionId);
-      for (const entry of entries) await initializeResourceGrants(tx, entry);
-      if (mediaIds.length)
-        await claimMedia(tx, {
-          mediaIds,
-          containerId: value.threadId,
-          author,
-          itemId: value.itemId,
-          revisionId: value.revisionId,
-          boardId: body.boardId,
+  try {
+    return await runCommand(
+      dependencies.pool,
+      { ...options(dependencies, actor, target.route, CREATE_THREAD, body, context), authorization },
+      async (tx, command) => {
+        if (
+          typeof body.title !== 'string' ||
+          body.title.trim().length === 0 ||
+          (body.visibility !== 'published' && body.visibility !== 'draft') ||
+          (threadKind !== 'discussion' && threadKind !== 'review')
+        )
+          throw new InvalidDocumentError();
+        const isReview = threadKind === 'review';
+        if (isReview && (body.subjectIds.length !== 1 || routeOf(body.subjectIds[0]!) === null))
+          throw new InvalidDocumentError('A review must name exactly one subject');
+        if (!isReview && body.voteCitation !== undefined) throw new InvalidDocumentError();
+        const citation = isReview
+          ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
+          : null;
+        const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
+        const at = authoritativeTimeValue(command.time);
+        await insertThread.run(tx, {
+          route: target.route,
+          thread_id: value.threadId,
+          author_id: author.accountId,
+          board_id: body.boardId,
+          kind: threadKind,
+          review_subject_id: isReview ? body.subjectIds[0]! : null,
+          title: body.title,
+          visibility: body.visibility,
+          transaction_id: command.transactionId,
+          first_post_id: value.itemId,
+          at,
         });
-      return result(value, actor, 'thread');
-    },
-  );
-  return outcome;
+        await insertPost.run(tx, {
+          route: target.route,
+          thread_id: value.threadId,
+          post_id: value.itemId,
+          parent_id: null,
+          author_id: author.accountId,
+          revision_id: value.revisionId,
+          visibility: body.visibility,
+          transaction_id: command.transactionId,
+          at,
+        });
+        const subjectIds = await appendRevision(
+          tx,
+          value,
+          body.body,
+          body.licence,
+          body.subjectIds,
+          body.boardId,
+          mediaIds,
+          command.transactionId,
+          command.time,
+          citation,
+        );
+        inserted.set(tx, command.transactionId);
+        for (const entry of entries) await initializeResourceGrants(tx, entry);
+        if (mediaIds.length)
+          await claimMedia(tx, {
+            mediaIds,
+            containerId: value.threadId,
+            author,
+            itemId: value.itemId,
+            revisionId: value.revisionId,
+            boardId: body.boardId,
+          });
+        return result(value, actor, 'thread', {
+          placeId: threadPlaceId,
+          kind: threadKind,
+          subjectIds,
+          activityAt: eventActivityAt(command.time),
+        });
+      },
+    );
+  } catch (error) {
+    if (postgresConstraint(error) === 'thread_one_live_review_idx') throw new ReviewConflictError();
+    throw error;
+  }
 }
 
 export async function createPost(
@@ -633,7 +767,7 @@ export async function createPost(
       const root = container.current.thread;
       if (body.boardId !== undefined && body.boardId !== root.board_id)
         throw new InvalidDocumentError('Board mismatch');
-      const defaults = body.subjectIds === undefined ? await post(tx, root.first_post_id!, body.threadId) : null;
+      const firstPost = await post(tx, root.first_post_id!, body.threadId);
       const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, r);
       await insertPost.run(tx, {
         route: r,
@@ -651,7 +785,7 @@ export async function createPost(
         value,
         body.body,
         body.licence,
-        body.subjectIds === undefined ? defaults!.subject_ids : body.subjectIds,
+        body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
         root.board_id,
         mediaIds,
         command.transactionId,
@@ -667,7 +801,12 @@ export async function createPost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'post');
+      return result(value, actor, 'post', {
+        placeId: container.placeId,
+        kind: container.current.thread.kind,
+        subjectIds: storedSubjectIds(firstPost.subject_ids),
+        activityAt: eventActivityAt(command.time),
+      });
     },
   );
 }
@@ -705,7 +844,21 @@ export async function revisePost(
       if (body.boardId !== undefined && body.boardId !== container.current.thread.board_id)
         throw new InvalidDocumentError('Board mismatch');
       const mediaIds = mediaReferences(body.mediaIds === undefined ? previous.media_ids : body.mediaIds, r);
-      await appendRevision(
+      const isFirstPost = value.itemId === container.current.thread.first_post_id;
+      const citation = reviewCitation(body.voteCitation);
+      if (citation && (container.current.thread.kind !== 'review' || !isFirstPost)) throw new InvalidDocumentError();
+      const revisedSubjectIdsInput = body.subjectIds === undefined ? previous.subject_ids : body.subjectIds;
+      if (
+        container.current.thread.kind === 'review' &&
+        isFirstPost &&
+        (revisedSubjectIdsInput.length !== 1 ||
+          revisedSubjectIdsInput[0] !== container.current.thread.review_subject_id)
+      )
+        throw new InvalidDocumentError('A review must retain exactly its target subject');
+      const currentCitation = citation
+        ? await currentReviewCitation(tx, author.accountId, container.current.thread.review_subject_id!, citation)
+        : null;
+      const revisedSubjectIds = await appendRevision(
         tx,
         value,
         body.body,
@@ -715,6 +868,7 @@ export async function revisePost(
         mediaIds,
         command.transactionId,
         command.time,
+        currentCitation,
       );
       const changed = await updateHead.run(tx, {
         route: r,
@@ -733,7 +887,16 @@ export async function revisePost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'revision');
+      const indexSubjectIds = isFirstPost
+        ? revisedSubjectIds
+        : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
+      return result(value, actor, 'revision', {
+        placeId: container.placeId,
+        kind: container.current.thread.kind,
+        subjectIds: indexSubjectIds,
+        activityAt: eventActivityAt(command.time),
+        ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
+      });
     },
   );
 }

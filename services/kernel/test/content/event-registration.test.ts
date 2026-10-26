@@ -22,11 +22,21 @@ const mediaId = crypto.randomUUID();
 const containerId = crypto.randomUUID();
 const reportId = crypto.randomUUID();
 const authored = { threadId, itemId, revisionId, actorId };
+const threadIndex = {
+  placeId: containerId,
+  kind: 'discussion' as const,
+  subjectIds: [itemId],
+  activityAt: '2026-10-27T00:00:00.000Z',
+};
 const media = { mediaId, containerId };
 const fixtures = {
-  'com.rezics.content.thread.created.v1': authored,
-  'com.rezics.content.post.created.v1': authored,
-  'com.rezics.content.revision.created.v1': authored,
+  'com.rezics.content.thread.created.v1': { ...authored, ...threadIndex },
+  'com.rezics.content.post.created.v1': { ...authored, ...threadIndex },
+  'com.rezics.content.revision.created.v1': {
+    ...authored,
+    ...threadIndex,
+    previousSubjectIds: [itemId],
+  },
   'com.rezics.content.board.created.v1': {
     boardId: containerId,
     realmId: crypto.randomUUID(),
@@ -61,6 +71,12 @@ const fixtures = {
   'com.rezics.content.author-erasure.requested.v1': { operationId: revisionId, threadId, authorId: actorId },
   'com.rezics.content.board-thread.projected.v1': {
     boardId: containerId,
+    threadId,
+    sourceEpoch: 1,
+    sourcePosition: '9223372036854775807',
+  },
+  'com.rezics.content.subject-thread.projected.v1': {
+    subjectId: itemId,
     threadId,
     sourceEpoch: 1,
     sourcePosition: '9223372036854775807',

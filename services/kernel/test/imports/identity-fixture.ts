@@ -34,6 +34,8 @@ export interface ImportIdentityOptions {
   /** Borrowed application database, including its original capture pool. */
   readonly database: GrowthDatabase;
   readonly clock: NonNullable<AccountWorkflowOptions['clock']>;
+  /** Optional migrated, credential-free Auth template owned by the composition. */
+  readonly authTemplate?: string;
   /** Fault observation only, after each actual committed setup boundary. */
   readonly afterStage?: (stage: Stage) => Promise<void>;
 }
@@ -136,7 +138,13 @@ export type IdentitySupport = {
 export async function openImportIdentity(options: ImportIdentityOptions): Promise<ImportIdentity> {
   const { database, clock } = options;
   const importerScopes = [...COMMON_ACTIONS, ...IMPORT_ACTIONS];
-  const managementScopes = [...importerScopes, 'access:grant', 'source_fence:takedown', 'account:manage'];
+  const managementScopes = [
+    ...importerScopes,
+    'access:grant',
+    'source_fence:takedown',
+    'account:manage',
+    'account:set_rate_tier',
+  ];
   let namespace: Awaited<ReturnType<typeof createIdentityNamespace>> | undefined;
   let authDatabase: GrowthDatabase | undefined;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
@@ -158,8 +166,8 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
     })());
   try {
-    namespace = await createIdentityNamespace(database.url);
-    migrateAuth(namespace.url);
+    namespace = await createIdentityNamespace(database.url, options.authTemplate);
+    if (!options.authTemplate) migrateAuth(namespace.url);
     authDatabase = await openGrowthDatabase(namespace.url);
     owned.set(`pool:${namespace.name}`, async () => !(authDatabase!.pool as Pool & { ended: boolean }).ended);
     // Auth owns the library pool. Make its pool close idempotent since the capture
@@ -232,7 +240,11 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       `host:${namespace.name}`,
       async () => (await auth.handler(new Request(auth.verifier.jwksUrl))).status === 200,
     );
-    const client = { clientId: `importer-${randomUUID()}`, firstParty: true, scopes: importerScopes };
+    const client = {
+      clientId: `importer-${randomUUID()}`,
+      firstParty: true,
+      scopes: [...COMMON_ACTIONS, ...IMPORT_ACTIONS, 'statement:propose', 'media:read_reservation'],
+    };
     const managementClient = `governance-${randomUUID()}`;
     await auth.internal.registerClient(client);
     await auth.internal.registerClient({ clientId: managementClient, firstParty: true, scopes: managementScopes });

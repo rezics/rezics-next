@@ -33,6 +33,7 @@ import reserveImportedMedia from '../../src/content/reserve-import-media.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
 db.pool.options.max = 1;
@@ -480,7 +481,13 @@ test('Author erasure request stays within its bound as p grows', async () => {
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: threadId,
-          data: { threadId, itemId: firstPostId, revisionId: firstRevisionId, actorId: actor.accountId },
+          data: {
+            threadId,
+            itemId: firstPostId,
+            revisionId: firstRevisionId,
+            actorId: actor.accountId,
+            ...SUBJECT_THREAD_EVENT_FIELDS,
+          },
         },
       ],
     };
@@ -615,7 +622,7 @@ test('Author erasure binding and status stays within its bound as P grows', asyn
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: threadId,
-          data: { threadId, itemId: postId, revisionId, actorId: actor.accountId },
+          data: { threadId, itemId: postId, revisionId, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
         },
       ],
     };

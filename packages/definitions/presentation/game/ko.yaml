@@ -13,3 +13,10 @@ properties:
   schema:numberOfPlayers: 플레이어 수
   schema:minValue: 최솟값
   wdt:P8646: 다음의 확장팩임
+inverseProperties:
+  schema:gamePlatform: '이 플랫폼의 게임'
+  wdt:P31: '이 유형의 출시판'
+  wdt:P437: '이 매체의 출시판'
+  wdt:P155: '후속작'
+  wdt:P408: '이 엔진을 사용하는 게임'
+  wdt:P8646: '확장 작품'

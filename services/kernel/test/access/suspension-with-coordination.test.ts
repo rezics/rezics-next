@@ -12,7 +12,7 @@ import {
   LifecycleDeniedError,
 } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands, OperatorDeniedError } from '../../src/access/operator.ts';
-import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -21,7 +21,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
+import type { Access } from '../../src/request/access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 
@@ -64,7 +64,7 @@ let now = Date.now();
 let lifecycle: ReturnType<typeof createLifecycleInternals>;
 let operators: ReturnType<typeof createOperatorCommands>;
 let lifecycleCommands: ReturnType<typeof createLifecycleCommands>;
-let lifecycleAccess: ReturnType<typeof createPermissionAccess>;
+let lifecycleAccess: Access;
 
 async function issue(email: string) {
   const signed = await service.handler(
@@ -122,14 +122,17 @@ async function lifecycleContext(accountId: string) {
   const account = await withConnection(db.pool, (client) => readAccount(client, routeOf(accountId)!, accountId));
   if (!account) throw new Error('missing account');
   return {
-    actor: {
-      kind: 'account',
-      accountId,
-      clientId: 'verified-client',
-      requestedBy: null,
-      authnEpoch: Number(account.minimumAuthnEpoch),
-      scopes: [...LIFECYCLE_ACTIONS.keys()],
-    } as AccountActor,
+    actor: await authenticateAccount(
+      lifecycleAccess,
+      { pool: db.pool, deadline: Date.now() + 10_000 },
+      {
+        accountId,
+        clientId: 'verified-client',
+        requestedBy: null,
+        authnEpoch: Number(account.minimumAuthnEpoch),
+        scopes: [...LIFECYCLE_ACTIONS.keys()],
+      },
+    ),
     account,
     deadline: Date.now() + 10000,
   };
@@ -211,10 +214,7 @@ beforeAll(async () => {
       fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
     },
   });
-  lifecycleAccess = createPermissionAccess({
-    actions: operatorActions,
-    accountEvidence: (_actor, evidence) => evidence.account ?? null,
-  });
+  lifecycleAccess = admittedAccess({ actions: operatorActions });
   operators = createOperatorCommands({
     pool: db.pool,
     access: lifecycleAccess,

@@ -7,3 +7,7 @@ properties:
   schema:publisher: publié par
   schema:numberOfPages: nombre de pages
   schema:translator: traducteur ou traductrice
+inverseProperties:
+  schema:exampleOfWork: 'Éditions'
+  schema:publisher: 'Œuvres publiées'
+  schema:translator: 'Œuvres traduites'

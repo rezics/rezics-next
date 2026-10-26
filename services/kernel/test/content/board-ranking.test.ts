@@ -9,6 +9,7 @@ import { createBoardEffect } from '../../src/content/board-projection.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -103,7 +104,13 @@ async function createSourceThread(boardId: string, createdAt: string): Promise<S
     );
     return {
       value: null,
-      events: [{ type: createdType, subject: threadId, data: { threadId, itemId, revisionId, actorId: authorId } }],
+      events: [
+        {
+          type: createdType,
+          subject: threadId,
+          data: { threadId, itemId, revisionId, actorId: authorId, ...SUBJECT_THREAD_EVENT_FIELDS },
+        },
+      ],
     };
   });
   return { boardId, threadId, authorId, itemId, revisionId, createdAt };
@@ -155,7 +162,13 @@ async function createReply(thread: SourceThread, createdAt: string): Promise<str
         {
           type: replyType,
           subject: postId,
-          data: { threadId: thread.threadId, itemId: postId, revisionId, actorId: thread.authorId },
+          data: {
+            threadId: thread.threadId,
+            itemId: postId,
+            revisionId,
+            actorId: thread.authorId,
+            ...SUBJECT_THREAD_EVENT_FIELDS,
+          },
         },
       ],
     };

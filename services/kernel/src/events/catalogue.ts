@@ -5,6 +5,7 @@ import { COMMERCE_EVENTS } from '../commerce/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { CONTENT_EVENTS } from '../content/events.ts';
 import { LIBRARY_EVENTS } from '../library/events.ts';
+import { RATING_EVENTS } from '../rating/events.ts';
 import { SEMANTIC_EVENTS } from '../semantic/events.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
@@ -15,6 +16,7 @@ const productEventTypes = {
   ...COMMUNITY_EVENTS,
   ...CONTENT_EVENTS,
   ...LIBRARY_EVENTS,
+  ...RATING_EVENTS,
   ...SEMANTIC_EVENTS,
   'com.rezics.definitions.published.v1': Type.Object({ digest }, { additionalProperties: false }),
   'com.rezics.definitions.activated.v1': Type.Object(

@@ -22,7 +22,7 @@ import { decodeSession, encodeSession, mergeSession, type SessionComponent } fro
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
-import { PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
+import { logInternalError, PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
 import {
   actionCatalogue,
   actionLabelOfMountedRoute,
@@ -152,19 +152,12 @@ export function createApp({
       });
       // internal_error is the only 500 problem; log the cause the response hides, never request content.
       if (problem.status === 500) {
-        const cause = bodyError ?? error;
-        const code = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
-        console.error(
-          JSON.stringify({
-            event: 'internal_error',
-            request_id: idFor(request),
-            method: request.method,
-            route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
-            name: cause instanceof Error ? cause.name : typeof cause,
-            ...(code === undefined ? {} : { code }),
-            stack: cause instanceof Error ? cause.stack : undefined,
-          }),
-        );
+        logInternalError({
+          requestId: idFor(request),
+          method: request.method,
+          route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
+          cause: bodyError ?? error,
+        });
       }
       return problem;
     })

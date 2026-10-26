@@ -1,5 +1,6 @@
 import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
+export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
 import { installAccessClock } from './access-clock.ts';
@@ -22,13 +23,13 @@ import type {
   Actor,
   Resource,
 } from '../request/access.ts';
+import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import timeRead from './permission-time.sql';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
 import { installDurableIdentityBridge } from './durable-identity.ts';
 import { installApprovalIdentityBridge } from './approved-identity.ts';
-import { accessRoot } from './derived-access.ts';
 
 export {
   createResourcePublicEligibility,
@@ -425,3 +426,11 @@ export {
   type ContinuationEntry,
   type ContinuationView,
 } from './committed-continuations.ts';
+
+export {
+  createPreferenceCommands,
+  readAccountPreferences,
+  DEFAULT_ACCOUNT_PREFERENCES,
+  type AccountPreferences,
+  type PreferenceChange,
+} from './preferences.ts';

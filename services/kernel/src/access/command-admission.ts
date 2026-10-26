@@ -79,10 +79,13 @@ export async function actingCommandAccount(
         actor.accountId,
       );
 }
+/** A missing registration refuses the command. An installed admission still
+ * checks only account actors; anonymous attempts add no actor read.
+ */
 export async function requireCommandAdmission(access: Access, actor: Actor, context: AccessContext): Promise<void> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
   const admission = admissions.get(accessRoot(access));
-  if (admission && actor.kind === 'account' && !(await admission(actor, context)))
+  if (!admission || (actor.kind === 'account' && !(await admission(actor, context))))
     throw new Error('Command admission denied');
 }
 

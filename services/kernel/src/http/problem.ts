@@ -167,6 +167,29 @@ function hasInvalidToken(challenge: string): boolean {
   return /(?:^|[\s,])error\s*=\s*(?:"invalid_token"|invalid_token)(?=$|[\s,])/i.test(challenge);
 }
 
+export function logInternalError(options: {
+  requestId: string;
+  method: string;
+  route?: string | undefined;
+  cause: unknown;
+  commandIndex?: number | undefined;
+}): void {
+  const { requestId, method, route, cause, commandIndex } = options;
+  const code = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
+  console.error(
+    JSON.stringify({
+      event: 'internal_error',
+      request_id: requestId,
+      method,
+      route,
+      name: cause instanceof Error ? cause.name : typeof cause,
+      ...(code === undefined ? {} : { code }),
+      stack: cause instanceof Error ? cause.stack : undefined,
+      ...(commandIndex === undefined ? {} : { command_index: commandIndex }),
+    }),
+  );
+}
+
 export function problemResponse(error: unknown, context: { method: string; id: string; action?: string }): Response {
   let code: ProblemCode = 'internal_error';
   let detail: string | undefined;

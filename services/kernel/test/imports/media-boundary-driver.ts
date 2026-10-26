@@ -1,14 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createKernelClient } from '@rezics/client';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import type { MediaBoundaryDriver } from '../../../../specs/imports-media-boundary-driver.ts';
-import { createKernel } from '../../src/http/kernel.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { createImportIdentityDriver } from './identity-driver.ts';
-import { identitySupport } from './identity-fixture.ts';
-import { createMediaBoundary, type MediaBoundary } from './media-boundary.ts';
+import type { MediaBoundary } from './media-boundary.ts';
 import { mediaEnvelope, observeMediaPool } from './media-boundary-observer.ts';
 import {
   openGrowthDatabase,
@@ -28,11 +23,60 @@ import { DBOSExecutor } from '@dbos-inc/dbos-sdk/internal/dbos-executor';
 import { globalParams } from '@dbos-inc/dbos-sdk/internal/utils';
 import { wfQueueRunner, type WorkflowQueue } from '@dbos-inc/dbos-sdk/internal/wfqueue';
 import { composeWork } from '../../src/work/registry.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';
 import { effectWorkflowId } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
+
+// SQL compilation depends on the unchanged migrated schema, not on a fixture's
+// accounts or rows. Retain only the real compiler's output between isolated
+// application processes; each child owns and removes its private loader files.
+const compiledSql = new Map<string, { source: string; code: string }>();
+async function sqlLoader() {
+  const directory = await mkdtemp(resolve(import.meta.dir, '../../../../.temp/media-sql-'));
+  const cache = `${directory}/compiled.json`;
+  const loader = `${directory}/loader.ts`;
+  const config = `${directory}/bunfig.toml`;
+  try {
+    await writeFile(config, '');
+    await writeFile(cache, JSON.stringify([...compiledSql]));
+    await writeFile(
+      loader,
+      `import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import compiler from ${JSON.stringify(import.meta.resolve('reylo/jest'))};
+const path = ${JSON.stringify(cache)};
+const compiled = new Map(JSON.parse(readFileSync(path, 'utf8')));
+Bun.plugin({ name: 'native-reylo-cache', setup(build) {
+  build.onLoad({ filter: /\\.sql$/ }, ({ path: file }) => {
+    const source = readFileSync(file, 'utf8');
+    const previous = compiled.get(file);
+    if (previous?.source === source) return { loader: 'js', contents: previous.code };
+    const { code } = compiler.process(source, file, { supportsStaticESM: true, configString: '' });
+    compiled.set(file, { source, code });
+    writeFileSync(path + '.pending', JSON.stringify([...compiled]));
+    renameSync(path + '.pending', path);
+    return { loader: 'js', contents: code };
+  });
+} });
+`,
+    );
+    return {
+      loader,
+      config,
+      async close() {
+        try {
+          const entries = JSON.parse(await readFile(cache, 'utf8')) as [string, { source: string; code: string }][];
+          for (const [file, value] of entries) compiledSql.set(file, value);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    };
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
 
 // IPC carries only private test observations. These tags preserve byte arrays,
 // Headers and log bigint positions without changing any public media JSON.
@@ -57,16 +101,24 @@ function unwire(value: any): any {
 
 /** One OS process per application runtime, with an owned graceful teardown. */
 export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record<string, string | undefined> = {}) {
-  const child = Bun.spawn(
-    [process.execPath, '--preload', import.meta.resolve('reylo/register'), import.meta.path, `--media-${mode}`],
-    {
-      cwd: process.cwd(),
-      env: { ...process.env, ...env },
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  );
+  const sql = await sqlLoader();
+  const child = await (async () => {
+    try {
+      return Bun.spawn(
+        [process.execPath, `--config=${sql.config}`, '--preload', sql.loader, import.meta.path, `--media-${mode}`],
+        {
+          cwd: process.cwd(),
+          env: { ...process.env, ...env },
+          stdin: 'pipe',
+          stdout: 'pipe',
+          stderr: 'pipe',
+        },
+      );
+    } catch (error) {
+      await sql.close();
+      throw error;
+    }
+  })();
   let output = '';
   let errorOutput = '';
   const errors = (async () => {
@@ -101,6 +153,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
   } catch (error) {
     child.kill();
     await child.exited;
+    await sql.close();
     throw error;
   } finally {
     clearTimeout(startupTimer);
@@ -134,6 +187,7 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
             if (child.exitCode !== 0) throw new Error(await errors);
           } finally {
             clearTimeout(timer);
+            await sql.close();
           }
         }
       })()),
@@ -224,6 +278,32 @@ export async function createMediaBoundaryDriver(): Promise<MediaBoundaryDriver> 
 
 type RpcHost = { call(method: string, input: any, signal?: AbortSignal): Promise<unknown>; close(): Promise<void> };
 async function applicationHost(): Promise<RpcHost> {
+  // The worker process loads the registered application modules, but has no
+  // application HTTP/identity host to install. Keep those host-only dependencies
+  // out of every isolated worker's module loading and SQL compilation.
+  const [
+    { createKernelClient },
+    { bundledRelease },
+    { createKernel },
+    { actionCatalogue },
+    { createAccess },
+    { bootstrapRelease },
+    { createWriteRateLimiter },
+    { createImportIdentityDriver },
+    { identitySupport },
+    { createMediaBoundary },
+  ] = await Promise.all([
+    import('@rezics/client'),
+    import('@rezics/definitions/bundled'),
+    import('../../src/http/kernel.ts'),
+    import('../../src/http/request.ts'),
+    import('../../src/access/index.ts'),
+    import('../../src/semantic/definitions.ts'),
+    import('../../src/access/write-rate.ts'),
+    import('./identity-driver.ts'),
+    import('./identity-fixture.ts'),
+    import('./media-boundary.ts'),
+  ]);
   const identities = createImportIdentityDriver();
   let boundary: MediaBoundary | undefined;
   let ending: Promise<void> | undefined;
@@ -238,6 +318,8 @@ async function applicationHost(): Promise<RpcHost> {
   try {
     const f = await identities.open({ clock: () => new Date() });
     const auth = f.accessConfig.auth!;
+    const declarations = createKernel({ pool: f.database.pool, routeKey: f.routeKey });
+    const access = createAccess({ actions: actionCatalogue(declarations), auth });
     // The media client consents to its private status read as well as import.
     // Auth performs ordinary account-key signin and issuance; no token is edited.
     const mediaScopes = [...f.client.scopes, 'media:read_reservation'];
@@ -246,7 +328,7 @@ async function applicationHost(): Promise<RpcHost> {
     await bootstrapRelease(f.database.pool, bundledRelease);
     const fetchConfig = { allowedHosts: ['lain.bgm.tv', 'covers.openlibrary.org'] };
     boundary = await createMediaBoundary({
-      content: { pool: f.database.pool, access: f.access, routeKey: f.routeKey, clock: () => new Date() },
+      content: { pool: f.database.pool, access, routeKey: f.routeKey, clock: () => new Date() },
       fetchConfig,
       workerEnvironment: {
         AUTH_ISSUER: auth.issuer,
@@ -264,7 +346,7 @@ async function applicationHost(): Promise<RpcHost> {
     });
     const app = createKernel({
       pool: f.database.pool,
-      access: f.access,
+      access,
       routeKey: f.routeKey,
       tokens: f.tokenKeys,
       content: { fetchConfig },
@@ -402,6 +484,7 @@ async function mediaGrowth(
   request: MediaImportRequest,
   createContainer: () => Promise<string>,
 ) {
+  const { identitySupport } = await import('./identity-fixture.ts');
   const bounds = { statements: 'constant', rows: 'constant', blocks: 'logarithmic' } as const;
   const hotContainer = request.containerId;
   const submit = async (input: MediaImportRequest, key: string) => {
@@ -412,6 +495,17 @@ async function mediaGrowth(
     if (response.status !== 202) throw new Error(`Growth public import: ${JSON.stringify(response)}`);
     return response.body.media.id;
   };
+  // Container and media-owner checks are native point reads too. Populate their
+  // relations through public creates and reservations before the first scale.
+  // These unrelated pending reservations are the same setup as population.write;
+  // grants come only from native resource initialization, never SQL seeding.
+  for (let batch = 0; batch < 128; batch++)
+    await Promise.all(
+      Array.from({ length: 8 }, async (_, index) => {
+        const containerId = await createContainer();
+        await submit({ ...request, containerId }, `container-baseline-${batch}-${index}`);
+      }),
+    );
   // Native workflow tables need a populated baseline too. Otherwise PostgreSQL's
   // small-table sequential plans count the benchmark's own preceding runs. Each
   // batch is at most sixteen real public reservations and registered jobs, with
@@ -497,6 +591,7 @@ async function mediaGrowth(
 }
 
 async function workerHost(): Promise<RpcHost> {
+  const { KERNEL_WORK_MODULES } = await import('../../src/work/modules.ts');
   const database = await openGrowthDatabase();
   const observer = await observeMediaPool(database.pool);
   const client = await createWorkClient(database.url, database.openPool());
@@ -595,15 +690,19 @@ async function workerHost(): Promise<RpcHost> {
     });
     DBOS.registerStep = registerStep;
     DBOS.registerWorkflow = registerWorkflow;
+    // Persist the SDK's real polling configuration before launch discovers its
+    // queues and schedules their first polls in this isolated runtime.
+    const effectsQueue = await client.retrieveQueue('effects');
+    const importQueue = await client.retrieveQueue('import');
+    if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
+    await effectsQueue.setMinPollingIntervalMs(1);
+    await importQueue.setMinPollingIntervalMs(1);
     await work.launch();
     const executor = DBOSExecutor.globalInstance;
     if (!executor) throw new Error('Missing work executor');
     // The timeout sweep issues a statement on a one-second timer. Leaving it on
     // the measured pool makes the statement count follow wall-clock duration.
     executor.systemDatabase.cancelTimedOutWorkflows = async () => [];
-    const effectsQueue = await DBOS.retrieveQueue('effects');
-    const importQueue = await DBOS.retrieveQueue('import');
-    if (!effectsQueue || !importQueue) throw new Error('Missing native import queue');
     let queuesQuiet = false;
     const quietQueues = async () => {
       if (queuesQuiet) return;
@@ -648,9 +747,9 @@ async function workerHost(): Promise<RpcHost> {
           const index = source.events.findIndex((event) => event.subject === mediaId && event.type === type);
           if (index < 0) throw new Error('Missing native dispatch event');
           await work!.effects.enqueue([source]);
-          await DBOS.retrieveWorkflow(effectWorkflowId(source, index, effect)).getResult();
+          await DBOS.retrieveWorkflow(effectWorkflowId(source, index, effect)).getResult({ pollingIntervalMs: 1 });
           const id = contentWorkWorkflowId(source, index, kind, kind === 'image' ? undefined : mediaId);
-          return DBOS.retrieveWorkflow(id).getResult();
+          return DBOS.retrieveWorkflow(id).getResult({ pollingIntervalMs: 1 });
         };
         if (method === 'measure') {
           drainStart = calls.length;

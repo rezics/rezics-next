@@ -171,13 +171,21 @@ type Column = {
   name: string;
   status: string;
   term?: string;
+  inverse?: true;
   on?: string;
   qualifies?: string;
   mapping?: string;
   meaning?: string;
   citations?: string[];
   reason?: string;
-  values?: Array<{ value: string; term: string; mapping: string; meaning?: string; citations?: string[] }>;
+  values?: Array<{
+    value: string;
+    term: string;
+    inverse?: true;
+    mapping: string;
+    meaning?: string;
+    citations?: string[];
+  }>;
 };
 type Table = { name: string; type: string; columns: Column[] };
 type Inventory = { source: string; snapshot: Record<string, unknown>; tables: Table[] };
@@ -186,6 +194,26 @@ function readInventory(): Inventory {
   const source = readFileSync(new URL('../sources/vndb.yaml', import.meta.url), 'utf8');
   return Bun.YAML.parse(source) as Inventory;
 }
+
+test('reverse VNDB relations are statements on the related subject', () => {
+  const source = Bun.YAML.parse(readFileSync(new URL('../sources/vndb.yaml', import.meta.url), 'utf8')) as {
+    enumerations: { vn_relation: NonNullable<Column['values']> };
+    table_types: Record<string, { term?: string; inverse?: true; mapping?: string }>;
+  };
+  for (const [value, term, mapping] of [
+    ['preq', 'wdt:P155', 'wdt:P156'],
+    ['par', 'wdt:P144', 'wdt:P4969'],
+    ['fan', 'rezics:spinOffOf', 'wdt:P2512'],
+  ]) {
+    expect(source.enumerations.vn_relation.find((entry) => entry.value === value)).toMatchObject({
+      term,
+      inverse: true,
+      mapping,
+    });
+    expect(source.table_types[mapping!]).toMatchObject({ term, inverse: true, mapping });
+    expect(bundledRelease.properties[term!]?.relation?.inverse).toBe(mapping);
+  }
+});
 
 test('every table and column of the pinned VNDB dump is inventoried exactly once', () => {
   const inventory = readInventory();
@@ -219,7 +247,16 @@ test('every inventoried term is bundled, proposed by the vocabulary rules, or om
         expect(column.term).toBeTruthy();
         expect(column.on).toBeTruthy();
         expect(properties[column.term!]).toBeDefined();
-        if (column.qualifies) {
+        if (column.inverse !== undefined) {
+          expect(column.inverse).toBe(true);
+          const property = properties[column.term!];
+          expect(property?.datatype).toBe('wikibase-item');
+          expect(property?.relation?.inverse).toBeDefined();
+          expect(property?.relation?.inverse).not.toBe('none');
+          expect(column.qualifies).toBeUndefined();
+          const type = classes[column.on!];
+          expect([column.on!, ...(type?.bases ?? [])].some((term) => property!.targets!.includes(term))).toBe(true);
+        } else if (column.qualifies) {
           expect(classes[column.on!]?.properties).toContain(column.qualifies);
           expect(properties[column.qualifies]?.qualifiers).toContain(column.term);
         } else {
@@ -249,6 +286,12 @@ test('every inventoried term is bundled, proposed by the vocabulary rules, or om
         expect(value.mapping).toMatch(/^(wd:Q[0-9]+|wdt:P[0-9]+)$/u);
         expect(value.meaning).toBeTruthy();
         expect(value.citations?.length).toBeGreaterThan(0);
+        if (value.inverse !== undefined) {
+          expect(value.inverse).toBe(true);
+          const property = properties[value.term];
+          expect(property?.datatype).toBe('wikibase-item');
+          expect(property?.relation?.inverse).toBe(value.mapping);
+        }
       }
     }
   }

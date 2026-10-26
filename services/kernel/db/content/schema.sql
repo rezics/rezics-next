@@ -265,6 +265,66 @@ $$;
 
 
 --
+-- Name: guard_review_revision(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_review_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  thread_kind text;
+  first_post_id uuid;
+  review_subject_id uuid;
+BEGIN
+  SELECT t.kind, t.first_post_id, t.review_subject_id
+    INTO thread_kind, first_post_id, review_subject_id
+  FROM content.thread t
+  WHERE t.route = NEW.route AND t.thread_id = NEW.thread_id;
+
+  IF thread_kind IS NULL THEN
+    RAISE EXCEPTION 'Revision thread is missing' USING ERRCODE = '23503';
+  END IF;
+  IF thread_kind = 'review' THEN
+    IF NEW.post_id = first_post_id AND NEW.subject_ids IS DISTINCT FROM ARRAY[review_subject_id]::uuid[] THEN
+      RAISE EXCEPTION 'A review revision must retain exactly its target subject' USING ERRCODE = '23514';
+    END IF;
+    IF NEW.post_id <> first_post_id AND NEW.vote_citation IS NOT NULL THEN
+      RAISE EXCEPTION 'Only a review first post may cite a vote' USING ERRCODE = '23514';
+    END IF;
+  ELSIF NEW.vote_citation IS NOT NULL THEN
+    RAISE EXCEPTION 'Only a review may cite a vote' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_review_thread(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_review_thread() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  board_purpose text;
+BEGIN
+  SELECT purpose INTO board_purpose
+  FROM content.board
+  WHERE route = get_byte(uuid_send(NEW.board_id), 10) * 256 + get_byte(uuid_send(NEW.board_id), 11)
+    AND board_id = NEW.board_id;
+  IF board_purpose IS NULL OR (board_purpose = 'reviews') IS DISTINCT FROM (NEW.kind = 'review') THEN
+    RAISE EXCEPTION 'Thread kind must match its board purpose' USING ERRCODE = '23514';
+  END IF;
+  IF OLD.review_live IS FALSE AND NEW.review_live IS TRUE THEN
+    RAISE EXCEPTION 'A removed review cannot become live again' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_revision(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -276,10 +336,12 @@ BEGIN
     RAISE EXCEPTION 'Revision identity must survive erasure' USING ERRCODE = '23514';
   END IF;
   IF ROW(NEW.route, NEW.thread_id, NEW.post_id, NEW.revision_id,
-         NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at, NEW.media_ids)
+         NEW.licence, NEW.subject_ids, NEW.board_id, NEW.recorded_transaction_id, NEW.recorded_at,
+         NEW.media_ids, NEW.vote_citation)
      IS DISTINCT FROM
      ROW(OLD.route, OLD.thread_id, OLD.post_id, OLD.revision_id,
-         OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at, OLD.media_ids)
+         OLD.licence, OLD.subject_ids, OLD.board_id, OLD.recorded_transaction_id, OLD.recorded_at,
+         OLD.media_ids, OLD.vote_citation)
      OR OLD.availability <> 'available' OR NEW.availability <> 'erased'
      OR OLD.body IS NULL OR OLD.body_sha256 IS NULL
      OR NEW.body IS NOT NULL OR NEW.body_sha256 IS NOT NULL OR NEW.search_text IS NOT NULL
@@ -312,6 +374,25 @@ BEGIN
     OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down AND NEW.security_revision <= OLD.security_revision) THEN
     RAISE EXCEPTION 'Source fence identity is immutable and changes require an increasing security revision'
       USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_subject_thread(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_subject_thread() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ROW(NEW.route, NEW.subject_id, NEW.thread_route, NEW.thread_id)
+       IS DISTINCT FROM ROW(OLD.route, OLD.subject_id, OLD.thread_route, OLD.thread_id)
+     OR ROW(NEW.source_epoch, NEW.source_position) <= ROW(OLD.source_epoch, OLD.source_position)
+     OR NEW.last_activity_at < OLD.last_activity_at THEN
+    RAISE EXCEPTION 'Subject thread identity, activity and source watermark cannot regress' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END;
@@ -376,7 +457,9 @@ CREATE TABLE content.board (
     recorded_transaction_id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     realm_id uuid,
+    purpose text DEFAULT 'discussion'::text NOT NULL,
     CONSTRAINT board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT board_purpose_check CHECK ((purpose = ANY (ARRAY['discussion'::text, 'reviews'::text]))),
     CONSTRAINT board_realm_id_routed_check CHECK (((realm_id IS NULL) OR (((realm_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND (route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))))),
     CONSTRAINT board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_security_revision_check CHECK ((security_revision > 0)),
@@ -481,6 +564,13 @@ CREATE TABLE content.media (
     provenance jsonb,
     taken_down boolean DEFAULT false NOT NULL,
     security_revision bigint DEFAULT 0 NOT NULL,
+    width integer,
+    height integer,
+    thumbhash bytea,
+    average_color text,
+    crop integer[],
+    focal_x real,
+    focal_y real,
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
     CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
     CONSTRAINT media_check CHECK ((route = ((get_byte(uuid_send(media_id), 10) * 256) + get_byte(uuid_send(media_id), 11)))),
@@ -492,9 +582,11 @@ CREATE TABLE content.media (
     CONSTRAINT media_check7 CHECK ((NOT (collection_pending AND erased))),
     CONSTRAINT media_cover_metadata_size CHECK (((purpose <> 'cover'::text) OR (((char_length(source_url) >= 1) AND (char_length(source_url) <= 2048)) AND (octet_length(convert_to((credit)::text, 'UTF8'::name)) <= 8192) AND ((char_length((credit ->> 'rightsHolder'::text)) >= 1) AND (char_length((credit ->> 'rightsHolder'::text)) <= 1024)) AND ((char_length(((credit -> 'via'::text) ->> 'name'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'name'::text)) <= 1024)) AND ((char_length(((credit -> 'via'::text) ->> 'url'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'url'::text)) <= 1024)) AND ((char_length((credit ->> 'license'::text)) >= 1) AND (char_length((credit ->> 'license'::text)) <= 128)) AND (((credit ->> 'license'::text) ~ '^[A-Za-z0-9.+-]+$'::text) OR ((credit ->> 'license'::text) ~ '^LicenseRef-[A-Za-z0-9.-]+$'::text)) AND (octet_length(convert_to((provenance)::text, 'UTF8'::name)) <= 65536) AND ((jsonb_array_length((provenance -> 'references'::text)) >= 1) AND (jsonb_array_length((provenance -> 'references'::text)) <= 128))))),
     CONSTRAINT media_cover_provenance_check CHECK (((purpose <> 'cover'::text) OR (((source_url IS NOT NULL) AND (source_url ~ '^https://[^[:space:]]+$'::text) AND (char_length(source_url) <= 2048) AND (credit IS NOT NULL) AND (jsonb_typeof(credit) = 'object'::text) AND (jsonb_typeof((credit -> 'rightsHolder'::text)) = 'string'::text) AND ((char_length((credit ->> 'rightsHolder'::text)) >= 1) AND (char_length((credit ->> 'rightsHolder'::text)) <= 1024)) AND (jsonb_typeof((credit -> 'via'::text)) = 'object'::text) AND (jsonb_typeof(((credit -> 'via'::text) -> 'name'::text)) = 'string'::text) AND ((char_length(((credit -> 'via'::text) ->> 'name'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'name'::text)) <= 1024)) AND (((credit -> 'via'::text) ->> 'url'::text) ~ '^https://[^[:space:]]+$'::text) AND (jsonb_typeof((credit -> 'license'::text)) = 'string'::text) AND (char_length((credit ->> 'license'::text)) > 0) AND (jsonb_typeof((credit -> 'obligations'::text)) = 'array'::text) AND (provenance IS NOT NULL) AND (jsonb_typeof(provenance) = 'object'::text) AND ((provenance ->> 'source'::text) ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (char_length((provenance ->> 'external_id'::text)) > 0) AND (char_length((provenance ->> 'record_revision'::text)) > 0) AND ((provenance ->> 'digest'::text) ~ '^[0-9a-f]{64}$'::text) AND (char_length((provenance ->> 'converter_revision'::text)) > 0) AND ((provenance ->> 'field_group'::text) = 'cover'::text) AND (jsonb_typeof((provenance -> 'references'::text)) = 'array'::text) AND ((jsonb_array_length((provenance -> 'references'::text)) >= 1) AND (jsonb_array_length((provenance -> 'references'::text)) <= 128))) IS TRUE))),
+    CONSTRAINT media_crop_check CHECK (((crop IS NULL) OR ((array_ndims(crop) = 1) AND (array_lower(crop, 1) = 1) AND (cardinality(crop) = 4) AND (array_position(crop, NULL::integer) IS NULL) AND (crop[1] >= 0) AND (crop[2] >= 0) AND (crop[3] >= 1) AND (crop[4] >= 1)))),
     CONSTRAINT media_decision_check CHECK (((decision IS NULL) OR (char_length(decision) > 0))),
     CONSTRAINT media_declared_measurements_check CHECK (((purpose = 'cover'::text) OR ((byte_count IS NOT NULL) AND (media_type IS NOT NULL)))),
     CONSTRAINT media_declared_sha256_check CHECK ((declared_sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT media_focal_point_check CHECK ((((focal_x IS NULL) AND (focal_y IS NULL)) OR ((focal_x IS NOT NULL) AND (focal_y IS NOT NULL) AND (focal_x >= (0)::double precision) AND (focal_x <= (1)::double precision) AND (focal_y >= (0)::double precision) AND (focal_y <= (1)::double precision)))),
     CONSTRAINT media_measurements_check CHECK (((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = ANY (ARRAY['uploaded'::text, 'available'::text, 'rejected'::text])) AND (byte_count IS NOT NULL) AND (media_type IS NOT NULL) AND (actual_byte_count IS NOT NULL) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (((state = 'uploaded'::text) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))) OR ((purpose = 'cover'::text) AND (state = 'rejected'::text) AND (byte_count IS NULL) AND (media_type IS NULL) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (declared_sha256 IS NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL))) IS TRUE)),
     CONSTRAINT media_media_type_check CHECK ((media_type = ANY (ARRAY['image/avif'::text, 'image/gif'::text, 'image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))),
     CONSTRAINT media_purpose_check CHECK ((purpose = ANY (ARRAY['post-image'::text, 'cover'::text]))),
@@ -757,6 +849,7 @@ CREATE TABLE content.revision (
     recorded_transaction_id uuid NOT NULL,
     recorded_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     media_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    vote_citation jsonb,
     CONSTRAINT revision_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
     CONSTRAINT revision_body_sha256_matches CHECK ((NOT (body_sha256 IS DISTINCT FROM sha256(body)))),
@@ -769,7 +862,8 @@ CREATE TABLE content.revision (
     CONSTRAINT revision_media_ids_limit CHECK ((cardinality(media_ids) <= 32)),
     CONSTRAINT revision_media_routes_check CHECK (content.media_routes_match(route, media_ids)),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT revision_subject_ids_limit CHECK ((cardinality(subject_ids) <= 128))
+    CONSTRAINT revision_subject_ids_limit CHECK ((cardinality(subject_ids) <= 128)),
+    CONSTRAINT revision_vote_citation_check CHECK (((vote_citation IS NULL) OR ((jsonb_typeof(vote_citation) = 'object'::text) AND (vote_citation ?& ARRAY['questionId'::text, 'units'::text, 'revision'::text]) AND ((vote_citation - ARRAY['questionId'::text, 'units'::text, 'revision'::text]) = '{}'::jsonb) AND (jsonb_typeof((vote_citation -> 'questionId'::text)) = 'string'::text) AND ((vote_citation ->> 'questionId'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND (jsonb_typeof((vote_citation -> 'units'::text)) = 'number'::text) AND ((vote_citation ->> 'units'::text) ~ '^(0|[1-9][0-9]*)$'::text) AND ((((vote_citation ->> 'units'::text))::numeric >= (0)::numeric) AND (((vote_citation ->> 'units'::text))::numeric <= (20)::numeric)) AND (jsonb_typeof((vote_citation -> 'revision'::text)) = 'number'::text) AND ((vote_citation ->> 'revision'::text) ~ '^[1-9][0-9]*$'::text) AND (((vote_citation ->> 'revision'::text))::numeric <= (2147483647)::numeric))))
 );
 ALTER TABLE ONLY content.revision ALTER COLUMN body SET COMPRESSION lz4;
 
@@ -794,6 +888,31 @@ CREATE TABLE content.source_fences (
 
 
 --
+-- Name: subject_thread; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.subject_thread (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    thread_route integer NOT NULL,
+    thread_id uuid NOT NULL,
+    place_id uuid NOT NULL,
+    kind text NOT NULL,
+    last_activity_at timestamp with time zone NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT subject_thread_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_thread_kind_check CHECK ((kind = ANY (ARRAY['discussion'::text, 'review'::text]))),
+    CONSTRAINT subject_thread_last_activity_finite CHECK (isfinite(last_activity_at)),
+    CONSTRAINT subject_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_thread_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT subject_thread_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT subject_thread_thread_route_check CHECK ((thread_route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT subject_thread_thread_route_range_check CHECK (((thread_route >= 0) AND (thread_route <= 65535)))
+);
+
+
+--
 -- Name: thread; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -809,8 +928,14 @@ CREATE TABLE content.thread (
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     first_post_id uuid,
     availability text DEFAULT 'available'::text NOT NULL,
+    kind text DEFAULT 'discussion'::text NOT NULL,
+    review_subject_id uuid,
+    review_live boolean DEFAULT true NOT NULL,
     CONSTRAINT thread_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT thread_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT thread_kind_check CHECK ((kind = ANY (ARRAY['discussion'::text, 'review'::text]))),
+    CONSTRAINT thread_review_route_check CHECK (((kind <> 'review'::text) OR (route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11))))),
+    CONSTRAINT thread_review_subject_check CHECK ((((kind = 'review'::text) AND (review_subject_id IS NOT NULL)) OR ((kind = 'discussion'::text) AND (review_subject_id IS NULL)))),
     CONSTRAINT thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT thread_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT thread_title_size CHECK (((title IS NULL) OR ((char_length(title) >= 1) AND (char_length(title) <= 1024)))),
@@ -848,6 +973,14 @@ ALTER TABLE ONLY content.board_thread
 
 ALTER TABLE ONLY content.imported_field
     ADD CONSTRAINT imported_field_pkey PRIMARY KEY (route, id);
+
+
+--
+-- Name: media media_image_display_metadata_check; Type: CHECK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE content.media
+    ADD CONSTRAINT media_image_display_metadata_check CHECK (((purpose <> 'cover'::text) OR (state <> 'available'::text) OR ((width IS NOT NULL) AND (width > 0) AND (height IS NOT NULL) AND (height > 0) AND (thumbhash IS NOT NULL) AND (octet_length(thumbhash) <= 32) AND (average_color IS NOT NULL) AND (average_color ~ '^#[0-9a-f]{6}$'::text)))) NOT VALID;
 
 
 --
@@ -979,11 +1112,33 @@ ALTER TABLE ONLY content.source_fences
 
 
 --
+-- Name: subject_thread subject_thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.subject_thread
+    ADD CONSTRAINT subject_thread_pkey PRIMARY KEY (route, subject_id, thread_id);
+
+
+--
 -- Name: thread thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.thread
     ADD CONSTRAINT thread_pkey PRIMARY KEY (route, thread_id);
+
+
+--
+-- Name: board_one_global_reviews_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX board_one_global_reviews_idx ON content.board USING btree (purpose) WHERE ((realm_id IS NULL) AND (purpose = 'reviews'::text));
+
+
+--
+-- Name: board_one_realm_reviews_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX board_one_realm_reviews_idx ON content.board USING btree (route, realm_id) WHERE ((realm_id IS NOT NULL) AND (purpose = 'reviews'::text));
 
 
 --
@@ -1086,10 +1241,24 @@ CREATE INDEX revision_post_page_idx ON content.revision USING btree (route, post
 
 
 --
+-- Name: subject_thread_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX subject_thread_page_idx ON content.subject_thread USING btree (route, subject_id, place_id, kind, last_activity_at DESC, thread_id);
+
+
+--
+-- Name: thread_one_live_review_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX thread_one_live_review_idx ON content.thread USING btree (route, board_id, author_account_id, review_subject_id) WHERE ((kind = 'review'::text) AND review_live AND (availability = 'available'::text) AND (visibility <> 'taken_down'::text));
+
+
+--
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'realm_id', 'subject_id', 'created_at');
+CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'realm_id', 'subject_id', 'created_at', 'purpose');
 
 
 --
@@ -1170,6 +1339,13 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON content.revision FO
 
 
 --
+-- Name: revision revision_review_contract; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER revision_review_contract BEFORE INSERT ON content.revision FOR EACH ROW EXECUTE FUNCTION content.guard_review_revision();
+
+
+--
 -- Name: source_fences source_fence_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -1177,10 +1353,24 @@ CREATE TRIGGER source_fence_identity BEFORE DELETE OR UPDATE ON content.source_f
 
 
 --
+-- Name: subject_thread subject_thread_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER subject_thread_identity BEFORE UPDATE ON content.subject_thread FOR EACH ROW EXECUTE FUNCTION content.guard_subject_thread();
+
+
+--
 -- Name: thread thread_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'created_at');
+CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'board_id', 'first_post_id', 'kind', 'review_subject_id');
+
+
+--
+-- Name: thread thread_review_board; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER thread_review_board BEFORE INSERT OR UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_review_thread();
 
 
 --

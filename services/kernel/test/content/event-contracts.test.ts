@@ -14,24 +14,35 @@ const ids = {
   threadId: '88888888-8888-4888-8888-888888888888',
 };
 
+const threadIndex = {
+  placeId: ids.containerId,
+  kind: 'discussion' as const,
+  subjectIds: [ids.itemId],
+  activityAt: '2026-10-27T00:00:00.000Z',
+};
+
 const valid = {
   'com.rezics.content.thread.created.v1': {
     threadId: ids.threadId,
     itemId: ids.itemId,
     revisionId: ids.revisionId,
     actorId: ids.actorId,
+    ...threadIndex,
   },
   'com.rezics.content.post.created.v1': {
     threadId: ids.threadId,
     itemId: ids.postId,
     revisionId: ids.revisionId,
     actorId: ids.actorId,
+    ...threadIndex,
   },
   'com.rezics.content.revision.created.v1': {
     threadId: ids.threadId,
     itemId: ids.postId,
     revisionId: ids.revisionId,
     actorId: ids.actorId,
+    ...threadIndex,
+    previousSubjectIds: [ids.itemId],
   },
   'com.rezics.content.media.reserved.v1': { mediaId: ids.mediaId, containerId: ids.containerId, actorId: ids.actorId },
   'com.rezics.content.media.uploaded.v1': { mediaId: ids.mediaId, containerId: ids.containerId, actorId: ids.actorId },

@@ -29,6 +29,7 @@ import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
 import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
+import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
   CONTENT_QUEUES,
@@ -302,9 +303,8 @@ async function registerWork(
       },
     },
   ]);
-  // Registered with the board effect by the content work module. The shared
-  // effects relay delivers each change after the source read has been released.
-  context.addEffects([createReactionCountEffect(context.pool)]);
+  // Projections consume the source events after the source read has been released.
+  context.addEffects([createReactionCountEffect(context.pool), createSubjectThreadEffect(context.pool)]);
 }
 
 function counters(value: unknown, steps: boolean): OperationProgress {

@@ -161,6 +161,40 @@ once, in document order. `SubjectList` reads subjects whose `property` statement
 page subject, sorted by name and bounded by `limit`. `TypeList` reads subjects matching its
 `types` on any page, sorted by name or by most public Collections first, and bounded by `limit`.
 
+## Subject data components
+
+The registry's data components cover every overview section. Each reads a bounded preview,
+receives the total or an "at least" count, and renders a link to its full view when the count
+exceeds the preview.
+
+| Component        | Reads                                                                                      | Preview limit |
+| ---------------- | ------------------------------------------------------------------------------------------ | ------------- |
+| `SubjectHeader`  | The page subject, with its cover summary                                                   | —             |
+| `Cover`          | The page subject's cover summary; always renders, with the placeholder when it is `null`   | —             |
+| `Summary`        | The subject's summary document in the reader's language, spoiler-safe                      | —             |
+| `Statements`     | The named properties                                                                       | 32 properties |
+| `RelationGroups` | Forward and inverse relations, grouped by relation group, each item with its cover summary | 12 per group  |
+| `Appearances`    | Character appearances with role and cast (on a work); works with role (on a character)     | 12            |
+| `Credits`        | Credits grouped by role in credit order (on a work); works by role (on a person)           | 12            |
+| `RatingSummary`  | The headline population's aggregate, the viewer's Realm aggregates, imported scores        | 3 Realms      |
+| `ThreadList`     | The most active threads about the subject in the page's population                         | 5             |
+| `ReviewList`     | The most helpful reviews in the page's population                                          | 5             |
+| `CollectionList` | Public collections containing the subject                                                  | 6             |
+| `Sources`        | Cover credits, fact sources and external identifiers                                       | —             |
+| `MoreStatements` | Facts no other component on the page shows                                                 | —             |
+
+Full views use the same components with `paged: true`, which read one page and render a
+continuation link.
+
+A data component never renders a value as an id. `Statements` and `MoreStatements` render
+`media` values with `Cover`, `document` values with the document renderer, and item values as
+linked labels; a datatype a component cannot render is left out of the reading view and shown
+in Details.
+
+The platform profile places `MoreStatements` in the Details view. The overview ends with
+`Sources` and a link to Details; it never shows an unordered dump of remaining facts after the
+header.
+
 ## Read planning
 
 A component definition may supply `read(props, page)`, where `page` is
@@ -307,26 +341,46 @@ Lookups are binary searches over the sorted lists. Resolution is O(log T) for T 
 templates, plus at most one lookup for each structural base. Bases come from the definition
 release, nearest first, bounded by its class depth. A page read never scans the profile.
 
+## Subject views
+
+A subject page is a set of views from a closed list (overview, editions, contents, characters,
+appearances, credits, works, relations, reviews, discussion, lists, details). A template entry
+(`generic`, a base, a type) holds one document per view it supports:
+
+```json
+{ "type": "wd:Q95074", "views": { "overview": { "root": { "props": {} }, "content": [] }, "relations": { "…": "…" } } }
+```
+
+`overview` is required; the other keys come from the closed view list. Resolution picks the
+template as before and then the requested view; a template that lacks the view falls back to
+the same view of the next template in the resolution order, then to the generic view. The views
+a page offers are the views its resolved templates define, minus those whose data is empty.
+Every page read includes one view-count read for the subject, answered from counts kept with
+the facts and content they count, so the tab bar never costs a read per view. The tab bar is
+rendered by the host from that list; documents cannot name or reorder tabs.
+
+Each view document has its own read budget (16 reads, cost 128). A view's reads are planned
+only when that view is requested, so the overview never pays for a full credits list.
+
 ## Platform profile
 
 `profiles/platform.json` is the presentation profile a launch vertical uses when it ships no
 page of its own. The package exports it as `@rezics/composition/profiles/platform.json`, so
 the website's fake kernel and stories serve the same templates.
 
-`generic` is a `header` slot holding `SubjectHeader` and the `actions` slot, then
-`MoreStatements`. Every subject template uses that header.
+`generic` is a `header` slot holding `SubjectHeader` and the `actions` slot. Every subject
+template uses that header, and every subject's Details view holds `MoreStatements`.
 
 `bases` has `schema:CreativeWork` and `schema:CreativeWorkSeries`. The work template is that
 header, then a `Statements` node, then a `SubjectList` of editions (`schema:exampleOfWork`,
-limit 12), then `MoreStatements`. The `Statements` properties are the work facts the bundled
+limit 12). The `Statements` properties are the work facts the bundled
 release defines, in this order: `schema:author`, `schema:illustrator`, `schema:translator`,
 `schema:publisher`, `schema:datePublished`, `schema:inLanguage`, `schema:genre`,
 `schema:isPartOf`. The series template uses that header and those statements, then
 `SubjectList`s for works in the series (`wdt:P179`) and parts (`schema:isPartOf`), limit 24
-each, then `MoreStatements`.
+each.
 
-`types` has four templates. Each list is a `SubjectList` after the header and before
-`MoreStatements`, with its title in the eight UI locales. `schema:Person` lists
+`types` has four templates. Each list is a `SubjectList` after the header, with its title in the eight UI locales. `schema:Person` lists
 `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,
 limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany` and
 `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists

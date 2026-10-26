@@ -3,6 +3,7 @@ name: book
 version: 1.0.0
 description: Book work and edition profile terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -20,6 +21,7 @@ classes:
     exact_mappings:
       - wd:Q47461344
     slots:
+      - representativeEdition
       - author
       - abstract
       - openLibraryId
@@ -38,6 +40,15 @@ classes:
     exact_mappings:
       - wd:Q3331189
     slots:
+      - contributor
+      - voiceActor
+      - developer
+      - screenwriter
+      - productionCompany
+      - producer
+      - musicBy
+      - director
+      - illustrator
       - author
       - exampleOfWork
       - openLibraryId
@@ -48,7 +59,7 @@ classes:
       - inLanguage
       - translator
     annotations:
-      facets: exampleOfWork author translator publisher datePublished numberOfPages contributor inLanguage
+      facets: exampleOfWork author translator publisher datePublished numberOfPages contributor inLanguage illustrator director musicBy producer productionCompany screenwriter developer voiceActor
 slots:
   exampleOfWork:
     slot_uri: schema:exampleOfWork
@@ -59,6 +70,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: openLibraryId sameAs
+      relation_group: derivation
+      inverse: schema:workExample
+      relation_order: date
+      acyclic: true
   isbn:
     slot_uri: schema:isbn
     description: The ISBN-13 identifier of the edition.
@@ -79,6 +94,10 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole vndbId sameAs
+      relation_group: credit
+      inverse: rezics:publisherOf
+      relation_order: position
+      relation_filter: wdt:P3831
   numberOfPages:
     slot_uri: schema:numberOfPages
     description: The number of pages in the edition.
@@ -101,3 +120,7 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: creditedAs position detailedRole openLibraryId sameAs
+      relation_group: credit
+      inverse: rezics:translatorOf
+      relation_order: position
+      relation_filter: wdt:P3831

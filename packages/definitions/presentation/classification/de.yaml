@@ -7,3 +7,9 @@ properties:
   foaf:focus: 'Bezugssubjekt'
   schema:keywords: 'Schlagwörter'
   schema:genre: 'Genre'
+inverseProperties:
+  skos:inScheme: 'Begriffe dieses Schemas'
+  skos:broader: 'Engere Begriffe'
+  foaf:focus: 'Begriffe für dieses Subjekt'
+  schema:genre: 'Werke dieses Genres'
+  schema:keywords: 'Subjekte mit diesem Schlagwort'

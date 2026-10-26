@@ -79,7 +79,8 @@ type Prepared = {
   deadline: number;
   databaseDeadline: string;
   principalId: string | null;
-  valid: string;
+  assignmentRoute: number | null;
+  assignmentRequestId: string | null;
   roles: RoleEvidence[];
   anonymous: boolean;
   grantRoles: readonly string[];
@@ -215,12 +216,13 @@ async function checkPreparedPermission(
       action,
       actor_id: actor.kind === 'account' ? actor.accountId : '',
       principal_id: facts.principalId ?? '',
+      assignment_route: facts.assignmentRoute,
+      assignment_request_id: facts.assignmentRequestId,
       anonymous: facts.anonymous,
       floor,
       at,
       roles: facts.roles,
       grant_roles: [...facts.grantRoles],
-      evidence_valid: facts.valid,
       deadline: facts.databaseDeadline,
     });
     if (
@@ -305,7 +307,8 @@ export function createAccess(config: PermissionConfig): Access {
       const attempt = accessCommandAttempt(context);
       const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
       let principalId: string | null = null;
-      let valid = '(,)';
+      let assignmentRoute: number | null = null;
+      let assignmentRequestId: string | null = null;
       const members: { accountId: string; automated: boolean }[] = [];
       if (actor.kind === 'account' && account) {
         members.push({ accountId: actor.accountId, automated: account.operatorAccountId !== null });
@@ -313,10 +316,12 @@ export function createAccess(config: PermissionConfig): Access {
           const request = requestedByPattern.exec(actor.requestedBy);
           if (!request) return evidence;
           const principal = request[1]!;
+          assignmentRoute = routeOf(principal);
+          assignmentRequestId = request[2]!;
           const assignment = await assignmentRead.run(context.pool, {
-            route: routeOf(principal),
+            route: assignmentRoute,
             principal_id: principal,
-            request_id: request[2]!,
+            request_id: assignmentRequestId,
             actor_id: actor.accountId,
             at,
           });
@@ -328,7 +333,6 @@ export function createAccess(config: PermissionConfig): Access {
           )
             return evidence;
           principalId = principal;
-          valid = assignment.valid;
           if (principal === actor.accountId) members[0]!.automated ||= assignment.operatorAccountId !== null;
           else members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
         }
@@ -478,7 +482,8 @@ export function createAccess(config: PermissionConfig): Access {
         deadline,
         databaseDeadline,
         principalId,
-        valid,
+        assignmentRoute,
+        assignmentRequestId,
         roles,
         anonymous: actor.kind === 'anonymous',
         grantRoles,

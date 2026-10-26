@@ -6,3 +6,6 @@ properties:
   schema:weight: 질량
   wdt:P1853: 혈액형
   wdt:P6296: Bangumi 캐릭터 ID
+inverseProperties:
+  schema:gender: '이 젠더의 대상'
+  wdt:P1853: '이 혈액형의 대상'

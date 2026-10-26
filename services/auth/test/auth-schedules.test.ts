@@ -118,11 +118,18 @@ if (process.argv.includes('--schedule-child')) {
       expect((await pool.query(`SELECT id FROM verification WHERE id='live'`)).rows).toEqual([{ id: 'live' }]);
       expect((await pool.query('SELECT * FROM kernel.sentinel')).rows).toEqual([{ value: 'unchanged' }]);
       const schedules = (await pool.query(`SELECT * FROM ${AUTH_SYSTEM_SCHEMA}.workflow_schedules`)).rows;
-      expect(schedules).toHaveLength(1);
-      expect(JSON.stringify(schedules)).toContain('auth-maintenance');
-      expect((await pool.query(`SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status`)).rows).toHaveLength(
-        1,
+      expect(schedules).toHaveLength(2);
+      expect(schedules.map((schedule) => schedule.schedule_name).sort()).toEqual(
+        [AUTH_MAINTENANCE_SCHEDULE, 'auth.workflowRetention.every-10-minutes'].sort(),
       );
+      expect(JSON.stringify(schedules)).toContain('auth-maintenance');
+      expect(
+        (
+          await pool.query(
+            `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE name='auth.maintenance.tick'`,
+          )
+        ).rows,
+      ).toHaveLength(1);
       expect((await pool.query(`SELECT schemaname FROM pg_tables WHERE schemaname='dbos'`)).rows).toEqual([]);
       for (const { tablename } of (
         await pool.query(`SELECT tablename FROM pg_tables WHERE schemaname=$1`, [AUTH_SYSTEM_SCHEMA])

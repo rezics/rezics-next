@@ -4,6 +4,16 @@ Access owns account state and lifecycle, bearer identity evidence, resource perm
 
 Every access event type has a schema in `events.ts`, and the catalogue test proves it with real data.
 
+## Registries
+
+Command admission, the approval identity bridge, the durable identity bridge, platform gate checks and resource roles are registered on one Access object. Every lookup goes through `accessRoot`. `deriveAccess` therefore keeps the root's registration, through any number of further derived adapters. Copying methods onto a new object does not: that object is its own root and has no registration.
+
+A command whose Access has no command admission is refused. A missing approval or durable identity bridge refuses the identity. A missing platform gate check denies the gate. A missing resource-role catalogue leaves the type unresolved. `createAccess` installs each registration, so an Access from that factory keeps admission, both identity bridges, platform gate checks and resource roles.
+
+Installing command admission or either identity bridge on a derived Access is refused. Resource-role installation is stored on the root, so a derived Access reads that same catalogue.
+
+Each use is one WeakMap read plus the derivation walk to the root.
+
 ## Grant rule
 
 A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
@@ -439,13 +449,18 @@ A completed workflow result is private to the caller whose approval started it: 
 
 ### Committed cleanup continuation
 
-A committed continuation is one immutable root row plus its completions. The root lists at most four allowlisted steps
-and a stored expiry; renewal by current governance is the only change to the root. Every step, whether listed on the
-root or proven against an immutable fence page, records one row in `access.committed_continuation_completion`
-(route, continuation, step, target, key, digest, receipt). The row is immutable and route-bound, and replay finds the
-same primary key, so crash and replay record nothing twice. A step is recorded only after the root's digest and the
-stored expiry pass at the command's T. An expired continuation releases no hold and fences nothing by TTL; current
-governance renews it first.
+A committed continuation has an immutable root, derived allowlist entries and completions. Its initial allowlist has
+at most four entries. Each fan-out page atomically adds its derived entries to the root's indexed
+`access.committed_continuation_entry` rows before their effects. The read port exposes both lists, while the sealed
+reference continues to bind the immutable root. Every step checks exact root membership and records one immutable
+row in `access.committed_continuation_completion`, including its business receipt ID, key and digest. The completion
+belongs to the root even when the business receipt belongs to an operated account on another route. Receipt replay
+writes nothing twice and is also refused after the stored expiry.
+
+At barrier commit, the expiry is the earlier of T plus 300 seconds and the resolved approval's expiry minus the
+protected native step's ten-second budget, all on the Access clock. A barrier with no cleanup lifetime left is
+refused. Native barriers without a workflow approval use the 300-second lifetime. An expired continuation releases
+no hold and fences nothing by TTL; current governance can renew its stored live expiry.
 
 `continueCommitted(reference)` dispatches on the allowlisted step kind to the runner that owns it:
 
@@ -459,9 +474,9 @@ governance renews it first.
   the account deleted and fenced, so a subject's release depends only on its terminal slot, and an operator deletes
   only after its subjects' deletions released their responsibilities.
 
-- Touches: one continuation insert in the barrier's transaction; per cleanup step one primary-key read of the root at T and one completion row insert; renewal adds one governance check on the Global Context and one update.
-- Bound: O(log R) per statement and a fixed allowlist of at most four entries for deletion, independent of other accounts and other continuations. A fencing page adds at most 100 child completions, one per effect.
-- Growth check: `growth-committed-continuation.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts and other continuations (live, completed and expired) with the deleted account fixed; constant rows and statements, logarithmic buffers.
+- Touches: one continuation insert in the barrier's transaction; per cleanup step a primary-key root read, an exact derived-entry probe when needed, and one completion insert. Each fan-out page inserts its bounded derived entries in the page transaction. Renewal adds one governance check on the Global Context and one update.
+- Bound: O(log R) per point statement, independent of other accounts and continuations. The allowlist read touches only this root's initial and derived entries, proportional to its own effects. A fencing page adds at most 100 child completions and one next-page entry.
+- Growth check: `growth-committed-continuation.test.ts` checks root lookup at [1, 8, 64] and one actual fan-out page's completion at [256, 1024, 4096] as unrelated continuations and operated accounts grow; constant rows and statements, logarithmic buffers.
 - Behaviour: `committed-continuation-runner.test.ts` runs real deletion and fencing continuations through the runner, including expiry, replay and the immutable completion store.
 
 Permission preparation and the final formula use capped account inverses and exact temporal probes; integrated checks measure constant rows/statements and logarithmic blocks in ACL/history size at fixed admitted membership, and at most linear work through the 1000-per-account cap.
@@ -557,3 +572,79 @@ including when preparation has already taken more than one second. The final SQL
 continues to check evidence validity at the authoritative command time. The database
 deadline uses the remaining budget when its clock was observed, so later preparation
 does not subtract elapsed time twice.
+
+## Viewer preferences
+
+Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
+`{ "spoilerLevel": 0, "suitability": "blur", "version": 0 }`. Anonymous viewers use these defaults locally.
+
+- `spoilerLevel` is the highest `rezics:spoilerLevel` displayed without a reveal control: 0 (none), 1 (minor), or
+  2 (major). Summaries remain spoiler-safe regardless of this setting.
+- `suitability` is `blur` (default) or `show`. With `blur`, covers and images withheld for suitability appear blurred
+  behind a label and reveal control. `show` opts into displaying them. Content and semantic own classification;
+  the web owns applying these values to Cover, relations and character displays.
+
+`GET /v1/accounts/{accountId}/preferences` returns both settings and `version`. `PATCH` accepts `expectedVersion`
+(required, a nonnegative integer) and either or both settings. Omitted settings keep their current values. Both routes
+require the acting account to equal the path account, with `account:read` and `account:update` respectively. Grants to
+another account do not bypass this equality check. An operator-opened session acts as its automated account and changes
+that account's settings; the operator's own bearer cannot change them directly. Responses are private and not cached.
+
+PATCH uses the structured-field `Idempotency-Key` header, the shared write-rate stage (one write unit), and `runCommand`.
+A changed value increments the version once. Unchanged values preserve the version and write no preference row;
+setting the initial defaults therefore leaves storage absent. Returning to the defaults after a change keeps the row
+and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
+Replaying a successful key returns its original values/version after current authorization, even if later commands
+changed the preferences. Every successful response includes both settings and the version, and PATCH carries the
+session token for its command receipt. Each successful command emits the existing `account-updated` event with only
+the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
+
+Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, with logarithmic
+blocks in accounts.
+Set cost: one preference row and the command envelope's receipt, with constant rows and statements. Authentication and
+native authorization retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored
+preferences at scales 256, 1024 and 4096 (16 accounts per scale unit, to avoid tiny-table scans) using the shared
+harness and default warmups.
+
+## Rating counting key
+
+Trusted kernel composition constructs `const ratingCounter = createRatingCounter({ secret })` (exported from
+Access), supplying a private `Uint8Array` of at least 32 random bytes. Use the same stable secret across kernel
+processes and restarts; changing it requires re-keying stored rating populations. There is no default secret.
+
+The internal port has signature `ratingCounter(client, accountId, at): Promise<string>`. `client` is the caller's
+PostgreSQL query client; `at` is a `Date` or PostgreSQL timestamp string on the authoritative T timeline. Keep event
+T strings intact to preserve microseconds. A missing account rejects. The result is the lowercase hexadecimal
+HMAC-SHA256 of `access.rating-counter.v1` followed by a NUL and the canonical controller UUID. An automated account's
+controller is its operator at T; every other account controls itself. The separate private `controller_id` account
+field is not this rating relation. Only key equality has meaning to rating. The key is never an account ID and must
+never be returned by a route, put in an event or log, or interpreted as authority. Rating may store it privately in
+its vote population; choosing the latest vote per key belongs to rating.
+
+`rating-counter.sql` reads one controller version through
+`rating_counter_controller_pkey(route, account_id, effective_at)`, seeking the latest version at or before T with
+`LIMIT 1`. This private account relation projection retains prior controllers so delayed vote events and paged
+recounts remain correct after later transfers. Account insertion and migration establish the baseline relation;
+pre-migration history is unavailable. Relation recording and native account deletion write their exact command T,
+inclusive at the boundary. Removing the operator relation records the account's own controller; direct removals use
+database transaction time.
+
+Each successful `recordOperatorRelation`, including initial automation, appends exactly one
+`com.rezics.access.rating-counter.changed.v1` event alongside its existing relation event in the same native command
+transaction and outbox envelope. Failed commands publish none; command receipt replay publishes no additional row.
+The event's `subject` is the affected account's UUID string. Its data has exactly these fields:
+
+- `accountId: string`: the affected automated account's canonical UUID, whose votes need re-keying.
+- `at: string`: the transfer transaction's authoritative T as PostgreSQL ISO `timestamptz::text`, preserving up to
+  six fractional digits and the time zone offset (for example `2026-10-26 12:00:00.123456+00`). This is the inclusive
+  instant from which `ratingCounter(client, accountId, at)` returns the new controller's key.
+
+The guarantee is one durable counter-change row per committed relation transfer, atomically with that transfer.
+Outbox consumers may retry delivery and must deduplicate by the event ID or their existing checkpoint; delivery is
+not an exactly-once invocation guarantee. Rating handles it with its paged recount. Neither the controller nor either
+counting key appears in this event. Account erasure continues to use its existing lifecycle events.
+
+Cost: one statement returning one account relation version plus one HMAC per vote; rows and statements are constant,
+with logarithmic index blocks in accounts and relation history. A transfer adds one fixed controller-version write
+and one outbox row; it never enumerates votes or responsibilities. `test/access/growth-rating-counter.test.ts` uses
+the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts in `grow` with default warmups.

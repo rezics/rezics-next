@@ -15,6 +15,7 @@ classes:
     abstract: true
     is_a: CreativeWork
     slots:
+      - representativeEdition
       - datePublished
       - inLanguage
       - abstract
@@ -27,3 +28,4 @@ classes:
       - bangumiSubjectId
     annotations:
       facets: contributor partOfSeries genre keywords inLanguage
+      cover_ratio: 1:1

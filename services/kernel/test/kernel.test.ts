@@ -70,6 +70,9 @@ const typed = [
   'POST /v1/accounts/:accountId/$reinstate',
   'POST /v1/accounts/:accountId/$setRateTier',
   'GET /v1/accounts',
+  'GET /v1/accounts/:accountId/preferences',
+  'PATCH /v1/accounts/:accountId/preferences',
+  'GET /v1/me/realms',
   'POST /v1/platform/exposure/:group/$close',
   'POST /v1/platform/exposure/:group/$open',
   'PATCH /v1/spaces/:spaceId',
@@ -187,6 +190,13 @@ const typed = [
   'DELETE /v1/collections/:collectionId/members/:memberId',
   'POST /v1/collections/:collectionId/members/:memberId/$move',
   'GET /v1/subjects/:id/collections',
+  'GET /v1/rating-questions/:questionId',
+  'PUT /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'DELETE /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'GET /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'GET /v1/subjects/:id/threads',
+  'GET /v1/subjects/:subjectId/source-statistics',
+  'PUT /v1/subjects/:subjectId/source-statistics/:source',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;

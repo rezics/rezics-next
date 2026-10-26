@@ -5,9 +5,9 @@ import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { fetchSourceImage, SourceImageRejection } from './fetch-source-image.ts';
-import { ImageDecodeRejection, transformImage } from './image-transform.ts';
+import { ImageCropOutOfBoundsRejection, ImageDecodeRejection, transformImage } from './image-transform.ts';
 import { tupleRoute } from './imported-contract.ts';
-import type { MediaImportDependencies } from './media-import.ts';
+import { mediaCropFragment, mediaCropTuple, type MediaImportDependencies } from './media-import.ts';
 import type { MediaStorage } from './media-storage.ts';
 import { readFences } from './source-fences.ts';
 import readWork from './read-import-media-work.sql';
@@ -34,7 +34,8 @@ const processable = (row: Work | null | undefined): row is Work =>
   !row.erased &&
   !row.collection_pending &&
   !row.taken_down;
-const evidence = (row: Work) => JSON.stringify([row.source_url, row.credit, row.provenance, row.uploader_id]);
+const evidence = (row: Work) =>
+  JSON.stringify([row.source_url, row.credit, row.provenance, row.crop, row.focal_x, row.focal_y, row.uploader_id]);
 
 /** Trusted native step body, registered by the single content worker. No actor or
  * remote/destination facts are accepted in its input. The media row is the durable
@@ -70,6 +71,10 @@ export async function processImportedMedia(
       sourceUrl: prepared.source_url,
       credit: prepared.credit,
       provenance: prepared.provenance,
+      ...(prepared.crop === null ? {} : { crop: mediaCropFragment(prepared.crop) }),
+      ...(prepared.focal_x === null || prepared.focal_y === null
+        ? {}
+        : { focalPoint: { x: prepared.focal_x, y: prepared.focal_y } }),
     };
     invalidEvidence = checkMediaImportRequest(input).length > 0;
     if (!invalidEvidence) {
@@ -118,7 +123,10 @@ export async function processImportedMedia(
             fetched = await fetchSourceImage(row.source_url!, deps.fetchConfig);
             // Sharp inspects actual bytes; a complete decode and re-encode through
             // the shared pipeline enforces its 40 MP bound, never remote metadata.
-            await transformImage(fetched.bytes);
+            await transformImage(
+              fetched.bytes,
+              mediaCropTuple(row.crop === null ? undefined : mediaCropFragment(row.crop)),
+            );
             const metadata = await sharp(fetched.bytes, { limitInputPixels: 40_000_000 }).metadata();
             const format = metadata.format === 'heif' && metadata.compression === 'av1' ? 'avif' : metadata.format;
             if (!['avif', 'gif', 'jpeg', 'png', 'webp'].includes(format ?? ''))
@@ -126,6 +134,7 @@ export async function processImportedMedia(
             mediaType = `image/${format}`;
           } catch (error) {
             if (error instanceof SourceImageRejection) code = error.code;
+            else if (error instanceof ImageCropOutOfBoundsRejection) code = 'crop_out_of_bounds';
             else if (error instanceof ImageDecodeRejection) code = 'source-format';
             else throw error;
           }

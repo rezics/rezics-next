@@ -26,9 +26,12 @@ export type PublicAccount = {
 };
 export type PublicIdentity = {
     id: string;
+    kind: 'actor' | 'organization';
     handle: string | null;
     displayName: string | null;
     state: 'active' | 'deleted';
+    automated: boolean;
+    operatorId: string | null;
 };
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.

@@ -541,7 +541,16 @@ export async function runCommand<T>(
             replayed: false,
           };
         } catch (error) {
-          if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === 'deadline') {
+          if (error instanceof AccessUnavailableError) {
+            try {
+              await client.query('ROLLBACK');
+            } catch (rollbackError) {
+              discardConnection(client, rollbackError as Error);
+              throw rollbackError;
+            }
+            throw error;
+          }
+          if (classifyUnavailability(error) === 'deadline') {
             try {
               await client.query('ROLLBACK');
             } catch (rollbackError) {
@@ -571,7 +580,8 @@ export async function runCommand<T>(
     } catch (error) {
       if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
-      if (error instanceof CommandUnavailableError || error instanceof AccessUnavailableError) throw error;
+      if (error instanceof AccessUnavailableError) throw error;
+      if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
       if (reason === 'deadline') throw new CommandUnavailableError('deadline', partition);
       if (reason === 'contention') {

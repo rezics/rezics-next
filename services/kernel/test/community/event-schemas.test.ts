@@ -17,7 +17,6 @@ const { productionActions } = await import('../support/production-actions.ts');
 const { createPool } = await import('../../src/database/pool.ts');
 const { readAccount } = await import('../../src/access/account-data.ts');
 const { createAccess } = await import('../../src/access/index.ts');
-const { createAccess: createPermissionAccess } = await import('../../src/access/permission.ts');
 const { setBoardScheme } = await import('../../src/community/board-scheme.ts');
 const { createRealmMembership } = await import('../../src/community/membership.ts');
 const { publish, reject, withdraw } = await import('../../src/community/publication.ts');
@@ -321,12 +320,7 @@ test('community and content commands leave a log readBatch decodes, each emitted
   );
   const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
   if (!account) throw new Error('missing account');
-  // Realm membership copies the actor, so the request account is the admission evidence.
-  const membershipAccess = createPermissionAccess({
-    actions: productionActions(),
-    accountEvidence: (_actor, requestContext) => requestContext.account ?? null,
-  });
-  const membership = createRealmMembership({ pool, access: membershipAccess });
+  const membership = createRealmMembership({ pool, access: f.access });
   const reservation = {
     accountId: actor.accountId,
     principal: { kind: 'realm' as const, id: realm.value.realmId },

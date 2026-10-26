@@ -1,9 +1,9 @@
+import { withReadTransaction } from './read.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -15,6 +15,7 @@ import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Statement, type Violation } from './item.ts';
+import { holderFacts } from './link-keys.ts';
 import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
 import { rejectContent } from './rules.ts';
@@ -481,7 +482,7 @@ export async function adoptCandidates(
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
       const beforeLinks =
-        options.context === GLOBAL_CONTEXT ? (await slotView(tx, options.subject, options.property)).facts : null;
+        options.context === GLOBAL_CONTEXT ? await holderFacts(tx, options.subject, options.release.release) : null;
       let oldGlobalCount = 0;
       if (options.context === GLOBAL_CONTEXT) {
         const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT);
@@ -539,11 +540,16 @@ export async function adoptCandidates(
           },
         ];
         if (beforeLinks) {
-          const afterFacts = (await slotView(tx, options.subject, options.property)).facts;
+          const afterFacts = (await holderFacts(tx, options.subject, options.release.release)).facts;
           const changes = linkChanges(
-            beforeLinks,
+            beforeLinks.facts,
             afterFacts,
-            factDataTypes(options.release.release, [...beforeLinks, ...afterFacts]),
+            factDataTypes(options.release.release, [...beforeLinks.facts, ...afterFacts]),
+            {
+              release: options.release.release,
+              type: beforeLinks.type,
+              refresh: options.property === 'schema:datePublished',
+            },
           );
           if (changes.length > 0) {
             events.push({
@@ -606,30 +612,18 @@ async function page<T>(
     if (!validAfter(decoded.after)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionOf(route));
-      const subject = listed(await readCandidateVisibility.run(client, { route, subject_id: options.subject }))[0];
-      if (!partition || subject?.visibility !== 'visible' || !(await options.authorize(client)))
-        throw new SubjectNotFoundError();
-      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-      const result = await read(client, cursor?.after ?? null);
-      await client.query('COMMIT');
-      return {
-        ...result.value,
-        next: result.after ? encodeCursor(ring, binding, { epoch: partition.epoch, after: result.after }) : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
+  return withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    const subject = listed(await readCandidateVisibility.run(client, { route, subject_id: options.subject }))[0];
+    if (!partition || subject?.visibility !== 'visible' || !(await options.authorize(client)))
+      throw new SubjectNotFoundError();
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const result = await read(client, cursor?.after ?? null);
+    return {
+      ...result.value,
+      next: result.after ? encodeCursor(ring, binding, { epoch: partition.epoch, after: result.after }) : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
   });
 }
 

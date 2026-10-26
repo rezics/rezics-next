@@ -39,6 +39,7 @@ export type BoardCreationInput = Readonly<{
   conceptId: string;
   title: string;
   visibility: 'published' | 'protected' | 'draft';
+  purpose?: 'discussion' | 'reviews';
 }>;
 export type BoardCreationValue = Readonly<{ boardId: string; realmId: string; conceptId: string }>;
 
@@ -82,7 +83,8 @@ export async function createBoard(
     input.title.trim().length === 0 ||
     [...input.title].length > 1024 ||
     input.title.includes('\0') ||
-    !['published', 'protected', 'draft'].includes(input.visibility)
+    !['published', 'protected', 'draft'].includes(input.visibility) ||
+    (input.purpose !== undefined && input.purpose !== 'discussion' && input.purpose !== 'reviews')
   )
     throw new BoardCreationInputError();
 
@@ -95,6 +97,7 @@ export async function createBoard(
     conceptId: input.conceptId,
     title: input.title,
     visibility: input.visibility,
+    purpose: input.purpose ?? 'discussion',
   };
   const resource: Resource = { route: realmRoute, id: newId(realmRoute) };
   const conceptResource: Resource = {
@@ -225,6 +228,7 @@ export async function createBoard(
           subject_id: input.conceptId,
           title: input.title,
           visibility: input.visibility,
+          purpose: input.purpose ?? 'discussion',
           transaction_id: transactionId,
           at: authoritativeTimeValue(time),
         });

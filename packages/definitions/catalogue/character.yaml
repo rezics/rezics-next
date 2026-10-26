@@ -3,6 +3,7 @@ name: character
 version: 1.0.0
 description: Fictional character profiles and descriptive terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -52,6 +53,9 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: spoilerLevel
+      relation_group: classification
+      inverse: rezics:subjectWithGender
+      relation_order: name
   height:
     slot_uri: schema:height
     description: >-
@@ -86,6 +90,9 @@ slots:
       - wd:P1853
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:subjectWithBloodType
+      relation_order: name
   bangumiCharacterId:
     slot_uri: wdt:P6296
     description: >-

@@ -15,6 +15,7 @@ import {
   type CommandAttempt,
   type CommandOutcome,
   type CommandTransaction,
+  type CommandEvent,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -135,6 +136,7 @@ type Mutation = {
   actor?: AccountActor;
   deadline?: number;
   authorization?: CommandAuthorization;
+  counterChanged?: boolean;
 };
 function executor(pool: Pool, clock: () => Date) {
   return async function execute<T>(
@@ -169,12 +171,25 @@ function executor(pool: Pool, clock: () => Date) {
       },
       async (tx, { transactionId }) => {
         const value = await body(tx, transactionId);
+        const events: CommandEvent[] = [
+          { type: `com.rezics.access.operator.${options.kind}.v1`, subject: options.anchor, data: value },
+        ];
+        if (options.counterChanged)
+          events.push({
+            type: 'com.rezics.access.rating-counter.changed.v1',
+            subject: options.anchor,
+            data: { accountId: options.anchor, at: authoritativeTimeValue(currentCommand(tx).time) },
+          });
         return {
           value,
-          events: [{ type: `com.rezics.access.operator.${options.kind}.v1`, subject: options.anchor, data: value }],
+          events,
         };
       },
-    );
+    ).catch((error: unknown) => {
+      // Preserve Access unavailability across the command executor boundary.
+      throwAccessUnavailable(error);
+      throw error;
+    });
     return {
       ...outcome,
       get value() {
@@ -408,6 +423,7 @@ export function createOperatorCommands(config: OperatorConfig) {
           if (!related) return { accountId: input.subjectAccountId, fenced: false, receiptId: null };
           const receiptId = derivedId(NAMESPACE, `${transactionId}:fence`, subjectRoute);
           const receipt = await nativeFence.run(tx, {
+            at: authoritativeTimeValue(currentCommand(tx).time),
             route: subjectRoute,
             account_id: input.subjectAccountId,
             receipt_id: receiptId,
@@ -499,7 +515,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       const operator = await read(input.operatorAccountId);
       const bound = operator ? databaseDeadline(operator, deadline) : '';
       return execute(
-        { anchor: input.subjectAccountId, kind: 'relation-recorded', key: input.key, input },
+        { anchor: input.subjectAccountId, kind: 'relation-recorded', key: input.key, input, counterChanged: true },
         async (tx, transactionId) => {
           live(deadline);
           // The responsibility row is on the operator. Lock that account with the
@@ -551,6 +567,7 @@ export function createOperatorCommands(config: OperatorConfig) {
             );
           }
           const changed = await link.run(tx, {
+            at: authoritativeTimeValue(currentCommand(tx).time),
             route: route(input.subjectAccountId),
             subject_id: input.subjectAccountId,
             operator_id: input.operatorAccountId,
@@ -723,6 +740,9 @@ export function createOperatorCommands(config: OperatorConfig) {
         };
       });
     },
+    /** Authorization replay returns the original receipt after checking current
+     * authority. Only session issuance or the bound credential effect consumes it.
+     */
     async authorizeOpening(
       context: LifecycleRequest,
       input: {
@@ -826,9 +846,8 @@ export function createOperatorCommands(config: OperatorConfig) {
           return openingValue(context, input, facts, input.receiptId, consumed[0].expiresAt);
         },
       );
-      // A retry can observe the durable executor result but cannot mint a second
-      // Auth issuance authorization. Lost acknowledgements fail closed. A later
-      // Auth coordinator must bind its own issuance idempotency to this receipt.
+      // Consumption replay cannot authorize another Auth issuance. Lost issuance
+      // acknowledgements fail closed; opening authorization remains replayable.
       requireAllowed(!outcome.replayed);
       return outcome;
     },

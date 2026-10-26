@@ -2,7 +2,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,
@@ -12,7 +13,6 @@ import {
   REGISTRATION_TTL_MS,
 } from '../../src/access/lifecycle.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 const reader = createPool(process.env.DATABASE_URL!);
@@ -35,24 +35,20 @@ const internal = createLifecycleInternals({
   provisioningEvidence: async (proof) => proofs.get(String(proof)) ?? null,
   recoveryEvidence: async () => null,
 });
-const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 // Authorization uses the real database clock; the injected coordinator clock
 // advances lifecycle deadlines without changing the request evidence budget.
 const commands = createLifecycleCommands({ pool, access });
 const row = (id: string) => withConnection(reader, (client) => readAccount(client, routeOf(id)!, id));
 async function context(id: string, scopes = ['account:update']) {
-  return {
-    actor: {
-      kind: 'account',
-      accountId: id,
-      clientId: 'verified-client',
-      requestedBy: null,
-      authnEpoch: 1,
-      scopes,
-    } as AccountActor,
-    account: await row(id),
-    deadline: Date.now() + 5000,
-  };
+  const claims = { accountId: id, clientId: 'verified-client', requestedBy: null, authnEpoch: 1, scopes };
+  let actor: AccountActor;
+  try {
+    actor = await authenticateAccount(access, { pool, deadline: Date.now() + 290_000 }, claims);
+  } catch {
+    actor = { kind: 'account', ...claims };
+  }
+  return { actor, account: await row(id), deadline: Date.now() + 5000 };
 }
 async function pending(handle: string) {
   const registrationKey = key();

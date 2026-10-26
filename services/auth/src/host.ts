@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readWorkflowRetentionConfig } from './retention.ts';
 import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
 import { credentialEffects, CredentialEffectDenied } from './credential-effects.ts';
@@ -75,6 +76,7 @@ function validateSchedule(schedule: string) {
 /** Explicit production composition. Library service construction never starts
  * DBOS. All account and maintenance workflows register before one SDK launch. */
 export async function createAuthHost<Context = WorkflowContext>(options: AuthHostOptions<Context>) {
+  const retention = readWorkflowRetentionConfig(process.env);
   const systemDatabaseUrl = options.systemDatabaseUrl ?? options.database.options.connectionString;
   const identity = databaseIdentity(options.database.options.connectionString);
   if (
@@ -90,6 +92,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   const config = Object.freeze({
     systemDatabaseSchemaName: AUTH_SYSTEM_SCHEMA,
     maintenanceSchedule: schedule,
+    workflowRetentionDays: retention.retentionDays,
     executorId,
   });
   const pools = new Set([options.database, ...(options.systemDatabasePool ? [options.systemDatabasePool] : [])]);
@@ -115,7 +118,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     executorId,
     handleSignals: false,
     registerWorkflows: () => {
-      maintenance = registerAuthMaintenance(service);
+      maintenance = registerAuthMaintenance(service, retention);
     },
   });
   let starting: Promise<void> | undefined;

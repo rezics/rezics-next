@@ -12,19 +12,34 @@ export const REACTION_KINDS = ['upvote', 'downvote', 'like', 'love', 'laugh', 'i
 const reactionKind = Type.Enum(REACTION_KINDS);
 
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+const subjectIds = Type.Array(UUID, { maxItems: 128, uniqueItems: true });
+const activityAt = Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}(?:\\d{3})?Z$' });
+const threadIndexFields = {
+  placeId: UUID,
+  kind: Type.Union([Type.Literal('discussion'), Type.Literal('review')]),
+  subjectIds,
+  activityAt,
+};
 
 /** Closed content event catalogue. Envelope identity and ordering belong to the kernel. */
 export const CONTENT_EVENTS = {
   'com.rezics.content.thread.created.v1': Type.Object(
-    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID },
+    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
     { additionalProperties: false },
   ),
   'com.rezics.content.post.created.v1': Type.Object(
-    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID },
+    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
     { additionalProperties: false },
   ),
   'com.rezics.content.revision.created.v1': Type.Object(
-    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID },
+    {
+      threadId: UUID,
+      itemId: UUID,
+      revisionId: UUID,
+      actorId: UUID,
+      ...threadIndexFields,
+      previousSubjectIds: Type.Optional(subjectIds),
+    },
     { additionalProperties: false },
   ),
   'com.rezics.content.board.created.v1': Type.Object(
@@ -48,6 +63,15 @@ export const CONTENT_EVENTS = {
   ),
   ...OPERATION_EVENTS,
   ...BOARD_EVENTS,
+  'com.rezics.content.subject-thread.projected.v1': Type.Object(
+    {
+      subjectId: UUID,
+      threadId: UUID,
+      sourceEpoch: Type.Integer({ minimum: 1 }),
+      sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
   ...SOURCE_FENCE_EVENTS,
 } as const;
 

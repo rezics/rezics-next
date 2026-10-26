@@ -7,3 +7,7 @@ properties:
   schema:publisher: 발행 주체
   schema:numberOfPages: 전체 쪽수
   schema:translator: 번역가
+inverseProperties:
+  schema:exampleOfWork: '판본'
+  schema:publisher: '출판한 작품'
+  schema:translator: '번역한 작품'

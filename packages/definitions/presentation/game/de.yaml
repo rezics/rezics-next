@@ -13,3 +13,10 @@ properties:
   schema:numberOfPlayers: Spieleranzahl
   schema:minValue: Mindestwert
   wdt:P8646: Erweiterung von
+inverseProperties:
+  schema:gamePlatform: 'Spiele auf dieser Plattform'
+  wdt:P31: 'Veröffentlichungen dieses Typs'
+  wdt:P437: 'Veröffentlichungen in diesem Format'
+  wdt:P155: 'Nachfolger'
+  wdt:P408: 'Spiele mit dieser Engine'
+  wdt:P8646: 'Erweiterungen'

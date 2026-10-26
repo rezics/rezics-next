@@ -13,3 +13,10 @@ properties:
   schema:numberOfPlayers: 遊玩人數
   schema:minValue: 最小值
   wdt:P8646: 資料片原作
+inverseProperties:
+  schema:gamePlatform: '此平台的遊戲'
+  wdt:P31: '此類型的發行版本'
+  wdt:P437: '此媒介的發行版本'
+  wdt:P155: '續作'
+  wdt:P408: '使用此引擎的遊戲'
+  wdt:P8646: '擴充作品'

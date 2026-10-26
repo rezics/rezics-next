@@ -1,15 +1,17 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { activeProfile } from '../../src/presentation/profiles.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -21,31 +23,38 @@ afterAll(async () => {
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ['presentation:publish', 'presentation:activate', 'presentation:read'],
-  requestedBy: null,
-  authnEpoch: 1,
-});
-const actors: Record<string, AccountActor> = {
-  curator: account('019a1b2c-3d4e-7f00-8a00-c0a7e0000001'),
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000002'),
-};
+const curatorId = '019a1b2c-3d4e-7f00-8a00-c0a7e0000001';
+const editorId = '019a1b2c-3d4e-7f00-8a00-ed170e000002';
+const presentationScopes = ['presentation:publish', 'presentation:activate', 'presentation:read'] as const;
 const checks: { action: string; route: number; id: string }[] = [];
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
+const admitted = admittedAccess({
+  actions: new Map([
+    ['presentation:publish', { anonymous: false }],
+    ['presentation:activate', { anonymous: false }],
+    ['presentation:read', { anonymous: true }],
+  ]),
+});
+const access = deriveAccess(admitted, {
   async authorize(_client, actor, action, resource) {
     checks.push({ action, route: resource.route, id: resource.id });
     if (action === 'presentation:read') return true;
-    return actor.kind === 'account' && actor.accountId === actors.curator!.accountId && resource.id === GLOBAL_CONTEXT;
+    return actor.kind === 'account' && actor.accountId === curatorId && resource.id === GLOBAL_CONTEXT;
   },
-};
+});
+let curatorToken = '';
+let editorToken = '';
+beforeAll(async () => {
+  for (const accountId of [curatorId, editorId]) {
+    await admin.query(
+      `INSERT INTO access.account
+         (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch, membership_inverse_complete)
+       VALUES ($1, $2, 'actor', 'active', $2, false, 1, true)`,
+      [routeOf(accountId), accountId],
+    );
+  }
+  curatorToken = await accountToken({ accountId: curatorId, clientId: 'web', scopes: presentationScopes });
+  editorToken = await accountToken({ accountId: editorId, clientId: 'web', scopes: presentationScopes });
+});
 const kernel = createKernel({
   pool,
   access,
@@ -85,9 +94,9 @@ const profile = (text: string): PresentationProfile => ({
   ],
   routes: [],
 });
-const publish = (body: unknown, token = 'curator', idempotency = key()) =>
+const publish = (body: unknown, token = curatorToken, idempotency = key()) =>
   call('POST', '/v1/presentation/profiles', { token, key: idempotency, body });
-const activate = (digest: string, expected: number | null, token = 'curator', idempotency = key()) =>
+const activate = (digest: string, expected: number | null, token = curatorToken, idempotency = key()) =>
   call('POST', `/v1/presentation/profiles/${digest}:activate`, {
     token,
     key: idempotency,
@@ -103,11 +112,11 @@ test('a curator publishes a profile once and anyone reads it by digest, immutabl
   const body = { profile: profile('One') };
   const digest = profileDigest(body.profile);
   const idempotency = key();
-  const first = await publish(body, 'curator', idempotency);
+  const first = await publish(body, curatorToken, idempotency);
   expect(first.response.status).toBe(201);
   expect(first.body).toEqual({ digest });
   expect(first.response.headers.get(SESSION_HEADER)).toBeTruthy();
-  expect(await publish(body, 'curator', idempotency)).toMatchObject({ body: { digest } });
+  expect(await publish(body, curatorToken, idempotency)).toMatchObject({ body: { digest } });
   const again = await publish(body);
   expect(again.response.status).toBe(200);
   expect(again.body).toEqual({ digest });
@@ -146,12 +155,12 @@ test('publishing and activating need their grant on the Global Context', async (
   const body = { profile: profile('Two') };
   const digest = profileDigest(body.profile);
   checks.length = 0;
-  expect((await publish(body, 'editor')).response.status).toBe(403);
+  expect((await publish(body, editorToken)).response.status).toBe(403);
   expect(checks).toEqual([{ action: 'presentation:publish', route: 0, id: GLOBAL_CONTEXT }]);
   expect((await call('POST', '/v1/presentation/profiles', { key: key(), body })).response.status).toBe(401);
   expect((await call('GET', `/v1/presentation/profiles/${digest}`)).response.status).toBe(404);
   expect((await publish(body)).response.status).toBe(201);
-  expect((await activate(digest, null, 'editor')).response.status).toBe(403);
+  expect((await activate(digest, null, editorToken)).response.status).toBe(403);
   expect(await activeProfile(pool)).toBeNull();
 });
 
@@ -167,8 +176,8 @@ test('activation is a compare-and-swap on the active head', async () => {
   expect((await call('GET', '/v1/presentation/active')).body).toEqual({ digest: two, head: 2 });
   expect((await activate(`sha256:${'1'.repeat(64)}`, 2)).response.status).toBe(404);
   const reused = key();
-  expect((await activate(one, 2, 'curator', reused)).body).toEqual({ digest: one, head: 3 });
-  const conflict = await activate(two, 2, 'curator', reused);
+  expect((await activate(one, 2, curatorToken, reused)).body).toEqual({ digest: one, head: 3 });
+  const conflict = await activate(two, 2, curatorToken, reused);
   expect(conflict.response.status).toBe(422);
   expect(conflict.body.code).toBe('idempotency_conflict');
   expect((await activeProfile(pool))!.digest).toBe(one);

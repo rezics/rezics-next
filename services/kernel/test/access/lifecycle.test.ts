@@ -5,6 +5,8 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount, readPublicAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import {
   createLifecycleInternals,
@@ -46,22 +48,26 @@ const internal = createLifecycleInternals({
 });
 const row = (id: string) => withConnection(reader, (client) => readAccount(client, routeOf(id)!, id));
 const publicRow = (id: string) => withConnection(reader, (client) => readPublicAccount(client, routeOf(id)!, id));
-const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const commands = createLifecycleCommands({ pool, access, clock });
 let sequence = 0;
 const key = () => `command-${++sequence}`;
-const context = async (id: string, scopes = [...LIFECYCLE_ACTIONS.keys()]) => ({
-  actor: {
-    kind: 'account',
+const context = async (id: string, scopes = [...LIFECYCLE_ACTIONS.keys()]) => {
+  const claims = {
     accountId: id,
     clientId: 'verified-client',
     requestedBy: null,
     authnEpoch: 1,
     scopes,
-  } as AccountActor,
-  account: await row(id),
-  deadline: Date.now() + 2000,
-});
+  };
+  let actor: AccountActor;
+  try {
+    actor = await authenticateAccount(access, { pool, deadline: Date.now() + 290_000 }, claims);
+  } catch {
+    actor = { kind: 'account', ...claims };
+  }
+  return { actor, account: await row(id), deadline: Date.now() + 2000 };
+};
 async function pending(handle: string) {
   const registrationKey = key();
   const accountId = internal.registrationTarget(registrationKey);
@@ -458,7 +464,9 @@ test('tombstone atomically erases private fields and returns only a durable iden
     minimumAuthnEpoch: 2n,
   });
   expect(await publicRow(id)).toEqual({ accountId: id, kind: 'actor', state: 'deleted' });
-  expect(await commands.tombstone(ctx, request)).toEqual({ ...result, replayed: true });
+  // Admission re-reads the account. Deletion changes that snapshot, so the same
+  // actor cannot replay the command after the account is gone.
+  await expect(commands.tombstone(ctx, request)).rejects.toBeInstanceOf(LifecycleDeniedError);
   expect(await row(operator)).toEqual(operatorBefore);
   const stored = await reader.query(
     'SELECT row_to_json(a)::text AS value FROM access.account a WHERE route=$1 AND account_id=$2',
@@ -625,9 +633,13 @@ test('fenced and moved partitions reject through the actual executor and authori
   await expect(
     unavailable.updateAccount(await context(id), { accountId: id, key: key(), patch: { displayName: 'forbidden' } }),
   ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  const unavailableActor = await context(id);
   await expect(
     commands.updateAccount(
-      { ...(await context(id)), account: null },
+      {
+        ...unavailableActor,
+        actor: { ...unavailableActor.actor, scopes: [...unavailableActor.actor.scopes] },
+      },
       { accountId: id, key: key(), patch: { displayName: 'forbidden' } },
     ),
   ).rejects.toBeInstanceOf(LifecycleDeniedError);
@@ -641,15 +653,14 @@ test('prepared evidence is gathered once and expires before a delayed command at
   const delayed = createLifecycleCommands({
     pool,
     clock,
-    access: {
-      ...access,
+    access: deriveAccess(access, {
       async prepare(actor, action, resource, ctx) {
         prepares++;
         const evidence = await access.prepare!(actor, action, resource, { ...ctx, deadline: Date.now() + 1000 });
         await Bun.sleep(1050);
         return evidence;
       },
-    },
+    }),
   });
   const before = await counts(id);
   await expect(

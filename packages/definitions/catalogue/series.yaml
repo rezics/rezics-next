@@ -3,6 +3,7 @@ name: series
 version: 1.0.0
 description: Series profile terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -54,6 +55,10 @@ slots:
       - wd:P1433
     annotations:
       datatype: wikibase-item
+      relation_group: membership
+      inverse: rezics:publicationContains
+      relation_order: name
+      acyclic: true
   numberOfParts:
     slot_uri: wdt:P2635
     description: >-

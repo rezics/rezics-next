@@ -10,6 +10,7 @@ import {
 import type { CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -48,7 +49,7 @@ async function createSource(boardId: string): Promise<{ threadId: string; event:
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: threadId,
-          data: { threadId, itemId, revisionId, actorId: authorId },
+          data: { threadId, itemId, revisionId, actorId: authorId, ...SUBJECT_THREAD_EVENT_FIELDS },
         },
       ],
     };
@@ -62,7 +63,7 @@ async function createSource(boardId: string): Promise<{ threadId: string; event:
       sequence: fixture.position.toString().padStart(19, '0'),
       subject: threadId,
       time: createdAt,
-      data: { threadId, itemId, revisionId, actorId: authorId },
+      data: { threadId, itemId, revisionId, actorId: authorId, ...SUBJECT_THREAD_EVENT_FIELDS },
     },
   } as { threadId: string; event: CloudEvent };
 }

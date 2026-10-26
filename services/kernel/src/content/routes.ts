@@ -1,4 +1,5 @@
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import { listSubjectThreads } from './subject-threads.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { parseItem } from 'structured-headers';
@@ -25,6 +26,7 @@ import {
   ContentNotFoundError as CommandNotFoundError,
   createPost,
   createThread,
+  ReviewConflictError,
   RevisionPreconditionError,
   revisePost,
   type ContentCommandDependencies,
@@ -67,6 +69,8 @@ import {
   strictContentSchema,
   ThreadInputSchema,
   ThreadResponseSchema,
+  SubjectThreadsQuerySchema,
+  SubjectThreadsResponseSchema,
 } from './schemas.ts';
 
 export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
@@ -132,12 +136,15 @@ const boardCreateInput = t.Object(
     conceptId: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' }),
     title: t.String({ minLength: 1, maxLength: 1024 }),
     visibility: t.Union([t.Literal('published'), t.Literal('protected'), t.Literal('draft')]),
+    purpose: t.Optional(t.Union([t.Literal('discussion'), t.Literal('reviews')])),
   },
   { additionalProperties: false },
 );
 const boardCreateBody = strictContentSchema(boardCreateInput);
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
+const subjectThreadsQuery = strictContentSchema(SubjectThreadsQuerySchema);
+const subjectThreadsResponse = strictContentSchema(SubjectThreadsResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
 const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
 
@@ -191,6 +198,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('forbidden');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
+    if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
     if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
     if (
       error instanceof TypeError &&
@@ -381,6 +389,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           201: withHeaders(threadResponse, { ...sessionHeader, location: t.String() }),
           ...writeFailures,
+          409: problemSchema('conflict'),
         },
         detail: {
           operationId: 'thread.create',
@@ -720,6 +729,41 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               next: page.nextCursor,
               rankRefreshedAt: page.rankRefreshedAt,
             };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/subjects/:id/threads',
+      {
+        params,
+        query: subjectThreadsQuery,
+        response: { 200: withHeaders(subjectThreadsResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'subject_threads.list',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, query, actor, admission, job, session }) => {
+        existingId(id);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listSubjectThreads(
+              dependencies,
+              id,
+              { actor, deadline: job.deadline },
+              {
+                place: query.place,
+                kind: query.kind,
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+            );
+            session.record(sessionComponent(page.anchor));
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { threads: [...page.entries], next: page.nextCursor };
           }),
         );
       },

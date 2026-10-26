@@ -7,6 +7,7 @@ import { readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
+import { holderFacts } from './link-keys.ts';
 import { linkChanges } from './link-changes.ts';
 import moderationBumpSecurity from './moderation-bump-security.sql';
 import moderationDeleteHidden from './moderation-delete-hidden.sql';
@@ -15,13 +16,12 @@ import moderationInsertStatement from './moderation-insert-statement.sql';
 import moderationInsertSubject from './moderation-insert-subject.sql';
 import moderationReadHidden from './moderation-read-hidden.sql';
 import moderationReadLiveCandidate from './moderation-read-live-candidate.sql';
-import moderationReadProperties from './moderation-read-properties.sql';
 import moderationReadSubject from './moderation-read-subject.sql';
 import moderationUpdateVisibility from './moderation-update-visibility.sql';
 import moderationUpsertHidden from './moderation-upsert-hidden.sql';
 import readRedirect from './read-redirect.sql';
 import readVisibility from './read-visibility.sql';
-import { expandSlot, slotView } from './slots.ts';
+import { expandSlot } from './slots.ts';
 
 export type SubjectVisibility = 'visible' | 'hidden' | 'taken_down';
 export type SubjectVisibilityState = { visibility: SubjectVisibility; securityRevision: string };
@@ -128,15 +128,11 @@ async function readModeratedSubject(
   return moderationReadSubject.run(tx, { route, subject_id: subject });
 }
 
-async function shownFacts(tx: CommandTransaction, subject: string, property?: string): Promise<FactRow[]> {
-  const properties = property
-    ? [property]
-    : (await moderationReadProperties.run(tx, { route: routeOf(subject)!, subject_id: subject })).map(
-        (row) => row.property,
-      );
-  const facts: FactRow[] = [];
-  for (const name of properties) facts.push(...(await slotView(tx, subject, name)).facts);
-  return facts;
+async function shownFacts(tx: CommandTransaction, subject: string, _property?: string): Promise<FactRow[]> {
+  const current = await readModeratedSubject(tx, routeOf(subject)!, subject);
+  const release = current && (await readRelease(tx, current.release));
+  if (!release) throw new Error('Subject revision release is missing');
+  return (await holderFacts(tx, subject, release)).facts;
 }
 
 async function moderationLinks(
@@ -151,7 +147,10 @@ async function moderationLinks(
   if (before.length === 0 && after.length === 0) return null;
   const release = await readRelease(tx, releaseDigest);
   if (!release) throw new Error('Subject revision release is missing');
-  const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]));
+  const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]), {
+    release,
+    type: (await holderFacts(tx, subject, release)).type,
+  });
   if (changes.length === 0) return null;
   return {
     type: LINKS_CHANGED,

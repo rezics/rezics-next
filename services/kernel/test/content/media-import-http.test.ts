@@ -254,6 +254,25 @@ test('malformed provenance rights and unknown fields reject before charging or r
   }
 });
 
+test('authored crop and focal point requests return problem responses when malformed', async () => {
+  const valid = await post({ ...input, crop: 'xywh=10,20,300,400', focalPoint: { x: 0.3, y: 1 } });
+  expect(valid.response.status).toBe(202);
+  for (const body of [
+    { ...input, crop: 'xywh=percent:10,20,30,40' },
+    { ...input, crop: 'xywh=0,0,0,40' },
+    { ...input, focalPoint: { x: -0.1, y: 0.5 } },
+    { ...input, focalPoint: { x: 0.5, y: 1.1 } },
+  ]) {
+    const before = charges.length;
+    const result = await post(body);
+    expect(result.response.status).toBe(400);
+    expect(result.response.headers.get('content-type')).toContain('application/problem+json');
+    expect(result.body).toMatchObject({ code: 'invalid_request', effect_status: 'not_applied' });
+    expect(charges).toHaveLength(before);
+    expect(result.response.headers.get(SESSION_HEADER)).toBeNull();
+  }
+});
+
 test('real ordinary bearer keeps grant and scope intersection and concealed unknown reads', async () => {
   expect((await post(input, undefined, null)).response.status).toBe(401);
   expect((await post(input, undefined, limited)).response.status).toBe(403);

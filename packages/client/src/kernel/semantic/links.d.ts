@@ -23,7 +23,7 @@ export type SubjectLinksPage = {
         position: bigint;
     };
 };
-export declare function waitForSubjectLinks(pool: Pool, seen: readonly SessionComponent[], subject: string): Promise<boolean>;
+export declare function waitForSubjectLinks(pool: Pool, seen: readonly SessionComponent[], subject: string, deadline: number): Promise<boolean>;
 export declare function listSubjectLinks(pool: Pool, ring: KeyRing, options: {
     subject: string;
     property: string | null;

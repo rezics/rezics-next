@@ -3,7 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createMembershipWorkPorts, registerAccounts } from '../../src/access/membership-work.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { LIFECYCLE_ACTIONS, type LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -29,7 +29,7 @@ if (import.meta.main) {
   pool.options.max = 1;
   const client = await createWorkClient(process.env.DATABASE_URL!);
   const actions = new Map(LIFECYCLE_ACTIONS);
-  const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
+  const access = admittedAccess({ actions });
   const module: WorkModule = {
     name: 'accounts',
     register(context) {
@@ -39,7 +39,11 @@ if (import.meta.main) {
         async authorize(reference) {
           if (reference !== 'authenticated-fixture') throw new Error('No approval');
           const id = process.env.MEMBERSHIP_ACTOR!;
-          return authenticated(pool, id);
+          const request = await authenticated(pool, id);
+          return {
+            ...request,
+            actor: await authenticateAccount(access, { pool, deadline: Date.now() + 10_000 }, request.actor),
+          };
         },
       });
       const wrapped = { ...ports };

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands, DelegationDeniedError } from '../../src/access/delegation-commands.ts';
 import { authoritativeTimeValue, commandTime } from '../../src/command/command.ts';
@@ -79,8 +80,7 @@ test('grant command boundary binds management and every delegated action to one 
   const observations: { action: string; explicit: string | null; bound: string; allowed: boolean }[] = [];
   let retried = false;
   // Observe and synchronize the real evaluator without replacing any policy decision.
-  const access: Access = {
-    ...f.access,
+  const access: Access = deriveAccess(f.access, {
     async authorize(client, actor, action, resource, evidence, time) {
       const bound = commandTime(client);
       if (!bound) throw new Error('Expected an actual command attempt');
@@ -99,7 +99,7 @@ test('grant command boundary binds management and every delegated action to one 
       }
       return allowed;
     },
-  };
+  });
   const commands = createGrantCommands({ pool: f.pool, access, managementAction: 'access:grant' });
   const before = await f.snapshot();
   await commands.create(await f.context(), grantInput());
@@ -126,15 +126,14 @@ test('grant command boundary binds management and every delegated action to one 
 
 test('assignment revocation mutation uses the same trusted T as its management authorization', async () => {
   const observed: string[] = [];
-  const access: Access = {
-    ...f.access,
+  const access: Access = deriveAccess(f.access, {
     async authorize(client, actor, action, resource, evidence, time) {
       const allowed = await f.access.authorize(client, actor, action, resource, evidence, time);
       if (time) observed.push(authoritativeTimeValue(time));
       await client.query('SELECT pg_sleep(0.02)');
       return allowed;
     },
-  };
+  });
   const commands = createDelegationCommands({ pool: f.pool, access, action: 'account:delegate' });
   const context = await f.context(f.principal);
   const request = {

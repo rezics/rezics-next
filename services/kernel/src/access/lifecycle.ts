@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { workflowApprovalBinding } from './workflow-approvals.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
@@ -325,6 +326,7 @@ async function fence(
   const kind = tombstone ? 'tombstone' : 'fence';
   const priorOperatorAccountId = tombstone ? account.operatorAccountId : null;
   const rows = await fenceStatement.run(tx, {
+    at: authoritativeTimeValue(currentCommand(tx).time),
     route,
     account_id: account.accountId,
     receipt_id: receiptId,
@@ -1524,6 +1526,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       );
     },
     async tombstone(context: LifecycleRequest, input: LifecycleCommand & { continuation?: ContinuationBinding }) {
+      const approval = workflowApprovalBinding(context);
       input = { ...input };
       context = snapshotRequest(context);
       const continuation = input.continuation;
@@ -1583,7 +1586,10 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
               handle: priorHandle,
               operatorAccountId: priorOperatorAccountId,
               reservationId: priorReservationId,
-              binding: continuation,
+              binding: {
+                ...continuation,
+                ...(approval ? { approvalExpiresAt: approval.expiresAt } : {}),
+              },
               barrierReceiptId: receipt.receiptId,
               minimumAuthnEpoch: receipt.minimumAuthnEpoch,
               transactionId,

@@ -126,6 +126,14 @@ classes:
     exact_mappings:
       - wd:Q1983062
     slots:
+      - translator
+      - publisher
+      - developer
+      - screenwriter
+      - productionCompany
+      - producer
+      - illustrator
+      - author
       - datePublished
       - duration
       - episodeNumber
@@ -138,7 +146,7 @@ classes:
       - genre
       - keywords
     annotations:
-      facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage
+      facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage author illustrator screenwriter producer
 slots:
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes
@@ -175,6 +183,9 @@ slots:
       - wd:P449
     annotations:
       datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:originalBroadcastOf
+      relation_order: name
   descriptiveLink:
     slot_uri: wdt:P973
     description: A link to a descriptive page about the anime work.
@@ -221,6 +232,10 @@ slots:
       - wd:P361
     annotations:
       datatype: wikibase-item
+      relation_group: membership
+      inverse: schema:hasPart
+      relation_order: name
+      acyclic: true
   workFormat:
     slot_uri: wdt:P7937
     description: The source format of this anime work, represented by a source concept.
@@ -230,3 +245,6 @@ slots:
       - wd:P7937
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:workInForm
+      relation_order: name

@@ -94,7 +94,6 @@ let governor: Awaited<ReturnType<typeof person>> | undefined;
 let authDatabaseInitialized = false;
 let clientsRegistered = false;
 const owned = new Set<Fixture>();
-const callerSessions = new Map<string, Headers>();
 const operationFixtures = new Map<string, Fixture>();
 const staleCallerTokens = new WeakMap<Fixture, string>();
 const registrations = new Map<
@@ -362,7 +361,6 @@ async function connect() {
   accessPort = undefined;
   approvalPort = undefined;
   owned.clear();
-  callerSessions.clear();
   operationFixtures.clear();
   if (!authDatabaseInitialized) {
     await admin.query(`CREATE DATABASE "${authDatabase}"`);
@@ -742,8 +740,6 @@ async function makeFixture(
   };
   owned.add(fixture);
   if (staleCaller) staleCallerTokens.set(fixture, staleCaller);
-  callerSessions.set(caller, callerPerson.session);
-  callerSessions.set(otherClientCaller, callerPerson.otherSession!);
   operationFixtures.set(operationKey, fixture);
   if (organizationApproval) preparedApprovals.set(operationKey, organizationApproval);
   return fixture;
@@ -768,7 +764,7 @@ function bindOperationFixture(caller: string, work: Work): Fixture | undefined {
   return fixture;
 }
 
-async function executeWorkflow(f: Fixture, authReference: string, work: Work, headers?: Headers): Promise<unknown> {
+async function executeWorkflow(authReference: string, work: Work): Promise<unknown> {
   const request = { key: work.operationKey, authorization: authReference };
   switch (work.operation.kind) {
     case 'organization':
@@ -789,11 +785,10 @@ async function executeWorkflow(f: Fixture, authReference: string, work: Work, he
     case 'fence-operator':
       return workflows().fenceOperator({ ...request, accountId: work.operation.accountId });
     case 'opening':
-      return workflows().openOperatorSession({
+      return workflows().authorizeOperatorOpening({
         ...request,
         operatorAccountId: work.operation.operatorAccountId,
         subjectAccountId: work.operation.subjectAccountId,
-        headers: headers ?? required(callerSessions.get(f.caller), 'Missing live Auth session'),
       });
   }
 }
@@ -944,7 +939,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           ).commandKeyPrefix;
           let value: unknown;
           if (work.operation.kind === 'delete') {
-            const completion = executeWorkflow(fixture, referenceValue, work);
+            const completion = executeWorkflow(referenceValue, work);
             completion.catch(() => {});
             let settled = false;
             void completion.then(
@@ -987,7 +982,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
               value = await completion;
             }
           } else {
-            value = await executeWorkflow(fixture, referenceValue, work);
+            value = await executeWorkflow(referenceValue, work);
           }
           if (value && typeof value === 'object' && 'outcome' in value) return value as { outcome: 'denied' };
           const receipts = await facts.query<{ transaction_id: string }>(
@@ -995,7 +990,11 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             [`${commandKeyPrefix}:%`],
           );
           const receiptId =
-            (value && typeof value === 'object' && 'receiptId' in value && typeof value.receiptId === 'string'
+            (work.operation.kind !== 'opening' &&
+            value &&
+            typeof value === 'object' &&
+            'receiptId' in value &&
+            typeof value.receiptId === 'string'
               ? value.receiptId
               : undefined) ?? receipts.rows[0]?.transaction_id;
           if (!receiptId) throw new Error('Native workflow completed without an observable command receipt');
@@ -1476,28 +1475,28 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       if (f.work.operation.kind !== 'opening') throw new Error('Opening consumption requires a native opening fixture');
       const identity = registrations.get(f.identity.actorId);
       if (!identity) throw new Error('Missing Auth session for native opening');
-      const operationKey = `${f.work.operationKey}:consume-opening`;
+      const operationKey = f.work.operationKey;
       const operation = { ...f.work.operation };
       if (mismatch === 'subject') operation.subjectAccountId = f.otherSubjectId;
       if (mismatch === 'relation') operation.operatorAccountId = f.nextOperatorId;
-      const work: Work = { operationKey, operation };
       const caller = mismatch === 'epoch' ? (staleCallerTokens.get(f) ?? f.caller) : f.caller;
-      const approval = await driver.approve(caller, work);
+      const approval = await driver.approve(caller, f.work);
       if (approval.outcome !== 'approved') return { outcome: 'denied' };
       let response: Response | { outcome: 'denied' };
-      if (mismatch === 'purpose') {
-        const access = required(accessPort, 'Access is not composed');
-        const actor = await access.authenticate(f.caller, context());
+      if (mismatch === 'purpose' || mismatch === 'subject' || mismatch === 'relation') {
         const result = await refused(async () => {
-          const issued = await native().workflowPorts.authorizeOpening!(
-            { ...context(), actor },
-            {
-              operatorAccountId: operation.operatorAccountId,
-              subjectAccountId: operation.subjectAccountId,
-              purpose: 'credential-management' as 'session',
-              key: reference('wrong-opening-purpose'),
-            },
+          const resolved = await approvals().resolveForCaller(
+            caller,
+            approval.reference,
+            accountOperation(f.work),
+            context(),
           );
+          const issued = await native().workflowPorts.authorizeOpening!(resolved, {
+            operatorAccountId: operation.operatorAccountId,
+            subjectAccountId: operation.subjectAccountId,
+            purpose: (mismatch === 'purpose' ? 'credential-management' : 'session') as 'session',
+            key: native().workflowPorts.stableCommandKey!(resolved, 'session-opening'),
+          });
           return auth().internal.openAutomatedSession({
             authorization: issued.value.receiptId,
             subjectAccountId: operation.subjectAccountId,
@@ -1512,15 +1511,19 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             : mismatch === 'client'
               ? identity.otherSession!
               : identity.session;
-        response = await refused(() =>
-          workflows().openOperatorSession({
+        response = await refused(async () => {
+          const opening = await workflows().authorizeOperatorOpening({
             key: operationKey,
             authorization: approval.reference,
             operatorAccountId: operation.operatorAccountId,
             subjectAccountId: operation.subjectAccountId,
+          });
+          return auth().internal.openAutomatedSession({
+            authorization: opening.receiptId,
+            subjectAccountId: operation.subjectAccountId,
             headers,
-          }),
-        );
+          });
+        });
       }
       if ('outcome' in response) return response;
       if (!response.ok) return { outcome: 'denied' };

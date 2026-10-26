@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import sharp from 'sharp';
 import {
   checkMediaImportRequest,
   checkMediaImportStatus,
@@ -13,6 +14,9 @@ import {
   readMediaImportStatus,
   type MediaImportDependencies,
 } from '../../src/content/media-import.ts';
+import { processImportedMedia } from '../../src/content/media-import-job.ts';
+import { processImage } from '../../src/content/image-job.ts';
+import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
@@ -33,6 +37,8 @@ const actions = [
 const request: MediaImportRequest = {
   containerId,
   sourceUrl: 'https://images.example.test/cover.jpg',
+  crop: 'xywh=0,0,100,60',
+  focalPoint: { x: 0.25, y: 0.75 },
   credit: {
     rightsHolder: 'Cover Artist',
     via: { name: 'Catalogue', url: 'https://catalogue.example.test/42' },
@@ -65,6 +71,20 @@ const context = (key = Bun.randomUUIDv7()) => ({
   idempotencyKey: key,
   requestId: Bun.randomUUIDv7(),
 });
+
+class MemoryStorage implements MediaStorage {
+  readonly objects = new Map<string, { bytes: Uint8Array; mediaType: string }>();
+  async get(key: string) {
+    const object = this.objects.get(key);
+    return object ? Uint8Array.from(object.bytes) : null;
+  }
+  async put(key: string, bytes: Uint8Array, options: { mediaType: string }) {
+    this.objects.set(key, { bytes: Uint8Array.from(bytes), mediaType: options.mediaType });
+  }
+  async deletePrefix(prefix: string) {
+    for (const key of this.objects.keys()) if (key.startsWith(prefix)) this.objects.delete(key);
+  }
+}
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -207,7 +227,7 @@ test('focused native outcomes preserve current authorization and partition bound
     ),
   ).rejects.toBeInstanceOf(IdempotencyConflictError);
   const rows = await db.admin.query(
-    `SELECT media_id,byte_count,actual_byte_count,media_type,sha256,source_url,credit,provenance
+    `SELECT media_id,byte_count,actual_byte_count,media_type,sha256,source_url,credit,provenance,crop,focal_x,focal_y
      FROM content.media WHERE route=$1 AND media_id=$2`,
     [route, id],
   );
@@ -221,6 +241,9 @@ test('focused native outcomes preserve current authorization and partition bound
       source_url: request.sourceUrl,
       credit: request.credit,
       provenance: request.provenance,
+      crop: [0, 0, 100, 60],
+      focal_x: 0.25,
+      focal_y: 0.75,
     },
   ]);
   const grants = await db.admin.query(
@@ -241,6 +264,8 @@ test('focused native outcomes preserve current authorization and partition bound
       sha256: null,
       credit: request.credit,
       provenance: request.provenance,
+      crop: request.crop!,
+      focalPoint: request.focalPoint!,
     },
   });
   expect(checkMediaImportStatus(status)).toEqual([]);
@@ -269,6 +294,83 @@ test('missing scope and anonymous identity deny; unknown reservation stays hidde
   );
   expect(await readMediaImportStatus(deps, limited, newId(route), context())).toBeNull();
   expect(await readMediaImportStatus(deps, { kind: 'anonymous' }, newId(route), context())).toBeNull();
+});
+
+test('out of bounds imported crops reject with a pollable crop decision', async () => {
+  const actor = await issue();
+  const input: MediaImportRequest = {
+    ...request,
+    sourceUrl: 'https://images.example.test/out-of-bounds.png',
+    crop: 'xywh=90,0,20,20',
+    provenance: { ...request.provenance, external_id: 'out-of-bounds' },
+  };
+  const reserved = await importMediaFromUrl(deps, actor, input, context());
+  const bytes = await sharp({ create: { width: 100, height: 80, channels: 3, background: '#2030e0' } })
+    .png()
+    .toBuffer();
+  const originalFetch = globalThis.fetch;
+  const fetchMock = spyOn(
+    globalThis as { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
+    'fetch',
+  ).mockImplementation(async () => new Response(bytes));
+  try {
+    const outcome = await processImportedMedia({ ...deps, storage: new MemoryStorage() }, reserved.value.mediaId);
+    expect(outcome).toMatchObject({ state: 'rejected', rejection: { code: 'crop_out_of_bounds' } });
+    const status = await readMediaImportStatus(deps, actor, reserved.value.mediaId, context());
+    expect(status).toMatchObject({ media: { state: 'rejected', rejection: { code: 'crop_out_of_bounds' } } });
+    const row = await db.admin.query('SELECT decision FROM content.media WHERE route=$1 AND media_id=$2', [
+      route,
+      reserved.value.mediaId,
+    ]);
+    expect(row.rows[0]?.decision).toMatch(/^crop_out_of_bounds:/);
+  } finally {
+    fetchMock.mockRestore();
+    expect(globalThis.fetch).toBe(originalFetch);
+  }
+});
+
+test('the image publication statement stores the imported crop and focal point', async () => {
+  const actor = await issue();
+  const input: MediaImportRequest = {
+    ...request,
+    sourceUrl: 'https://images.example.test/published.png',
+    crop: 'xywh=100,50,180,220',
+    focalPoint: { x: 0.4, y: 0.6 },
+    provenance: { ...request.provenance, external_id: 'published-crop' },
+  };
+  const reserved = await importMediaFromUrl(deps, actor, input, context());
+  const bytes = await sharp({ create: { width: 500, height: 400, channels: 3, background: '#2020e0' } })
+    .png()
+    .toBuffer();
+  const originalFetch = globalThis.fetch;
+  const fetchMock = spyOn(
+    globalThis as { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
+    'fetch',
+  ).mockImplementation(async () => new Response(bytes));
+  const storage = new MemoryStorage();
+  try {
+    expect(await processImportedMedia({ ...deps, storage }, reserved.value.mediaId)).toMatchObject({
+      state: 'uploaded',
+    });
+    expect(await processImage(db.pool, storage, reserved.value.mediaId as never)).toMatchObject({ state: 'available' });
+    const row = await db.admin.query(
+      'SELECT crop,focal_x,focal_y,width,height,state FROM content.media WHERE route=$1 AND media_id=$2',
+      [route, reserved.value.mediaId],
+    );
+    expect(row.rows[0]).toMatchObject({
+      crop: [100, 50, 180, 220],
+      focal_x: 0.4,
+      focal_y: 0.6,
+      width: 500,
+      height: 400,
+      state: 'available',
+    });
+    const status = await readMediaImportStatus(deps, actor, reserved.value.mediaId, context());
+    expect(status).toMatchObject({ media: { crop: input.crop, focalPoint: input.focalPoint, state: 'available' } });
+  } finally {
+    fetchMock.mockRestore();
+    expect(globalThis.fetch).toBe(originalFetch);
+  }
 });
 
 test('checkGrowth proves rows statements and buffers match declared cost', async () => {

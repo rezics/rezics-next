@@ -1,3 +1,4 @@
+import { type KernelClock } from '../clock.ts';
 import { type FetchImplementation } from 'jose';
 import { type AccessClient, type AccessContext, type AccountActor } from '../request/access.ts';
 import { type DurableIdentity } from './durable-identity.ts';
@@ -25,7 +26,7 @@ export declare function within<T>(deadline: number, work: () => Promise<T>): Pro
 /** Preserve pg's decoding capabilities when wrapping reylo's query transport. */
 export declare function deadlineClient(client: AccessClient, deadline: number): AccessClient;
 /** Each factory owns its key cache and its opaque, immutable request identities. */
-export declare function createAuthenticator(configuration?: AuthenticationConfig): {
+export declare function createAuthenticator(configuration?: AuthenticationConfig, clock?: KernelClock): {
     authenticate: (token: string, context: AccessContext) => Promise<AccountActor>;
     approvalScope: Readonly<{}>;
     durableScope: Readonly<{}>;

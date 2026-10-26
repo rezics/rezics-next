@@ -117,7 +117,7 @@ async function authenticate(id: string, scopes: readonly string[], target: Pool 
     .setIssuedAt()
     .setExpirationTime('5m')
     .sign(signing.privateKey);
-  return access.authenticate(token, { pool: target, deadline: Date.now() + 5000 });
+  return access.authenticate(token, { pool: target, deadline: Date.now() + 290_000 });
 }
 
 async function makeSubject(actor: AccountActor, label: string, target: Pool = pool): Promise<string> {

@@ -11,6 +11,7 @@ import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts
 import { createPool } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -239,7 +240,13 @@ async function reference(m: Media) {
           {
             type: 'com.rezics.content.post.created.v1',
             subject: itemId,
-            data: { threadId: m.containerId, itemId, revisionId, actorId: m.uploaderId },
+            data: {
+              threadId: m.containerId,
+              itemId,
+              revisionId,
+              actorId: m.uploaderId,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+            },
           },
         ],
       };

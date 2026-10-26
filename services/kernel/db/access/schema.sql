@@ -300,6 +300,34 @@ $$;
 
 
 --
+-- Name: record_rating_controller(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.record_rating_controller() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  at timestamptz;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    at := '-infinity';
+  ELSIF NEW.operator_account_id IS NOT DISTINCT FROM OLD.operator_account_id THEN
+    RETURN NEW;
+  ELSE
+    -- Native relation and deletion commands supply their authoritative T.
+    -- Direct relation removal uses the database transaction time.
+    at := COALESCE(NULLIF(current_setting('rezics.operator_at', true), '')::timestamptz,
+                   transaction_timestamp());
+  END IF;
+  INSERT INTO access.rating_counter_controller (route, account_id, effective_at, controller_id)
+  VALUES (NEW.route, NEW.account_id, at, COALESCE(NEW.operator_account_id, NEW.account_id))
+  ON CONFLICT (route, account_id, effective_at) DO UPDATE SET controller_id = EXCLUDED.controller_id;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: workflow_approval_immutable(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -367,6 +395,24 @@ CREATE TABLE access.account (
 
 
 --
+-- Name: account_preferences; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.account_preferences (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    spoiler_level integer NOT NULL,
+    suitability text NOT NULL,
+    version integer NOT NULL,
+    CONSTRAINT account_preferences_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_preferences_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT account_preferences_spoiler_level_check CHECK (((spoiler_level >= 0) AND (spoiler_level <= 2))),
+    CONSTRAINT account_preferences_suitability_check CHECK ((suitability = ANY (ARRAY['blur'::text, 'show'::text]))),
+    CONSTRAINT account_preferences_version_check CHECK ((version > 0))
+);
+
+
+--
 -- Name: committed_continuation; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -393,11 +439,11 @@ CREATE TABLE access.committed_continuation (
     CONSTRAINT committed_continuation_check CHECK ((route = ((get_byte(uuid_send(continuation_id), 10) * 256) + get_byte(uuid_send(continuation_id), 11)))),
     CONSTRAINT committed_continuation_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT committed_continuation_check2 CHECK ((((prior_operator_account_id IS NULL) AND (prior_reservation_id IS NULL)) OR ((prior_operator_account_id IS NOT NULL) AND (prior_reservation_id IS NOT NULL)))),
-    CONSTRAINT committed_continuation_check3 CHECK ((committed_expires_at = (created_at + '00:05:00'::interval))),
     CONSTRAINT committed_continuation_check4 CHECK ((expires_at >= committed_expires_at)),
     CONSTRAINT committed_continuation_command_key_prefix_check CHECK ((command_key_prefix ~ '^wf:[0-9a-f]{64}$'::text)),
     CONSTRAINT committed_continuation_completions_check CHECK (access.committed_continuation_entries(completions, 0, 4, true)),
     CONSTRAINT committed_continuation_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_lifetime_check CHECK (((committed_expires_at > created_at) AND (committed_expires_at <= (created_at + '00:05:00'::interval)))),
     CONSTRAINT committed_continuation_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
     CONSTRAINT committed_continuation_operation_digest_check CHECK ((operation_digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT committed_continuation_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 128))),
@@ -418,13 +464,35 @@ CREATE TABLE access.committed_continuation_completion (
     key text NOT NULL,
     digest text NOT NULL,
     receipt_id uuid NOT NULL,
+    receipt_key text,
+    receipt_digest text,
+    CONSTRAINT committed_continuation_business_receipt_check CHECK (((receipt_key IS NULL) = (receipt_digest IS NULL))),
     CONSTRAINT committed_continuation_completion_check CHECK ((route = ((get_byte(uuid_send(continuation_id), 10) * 256) + get_byte(uuid_send(continuation_id), 11)))),
-    CONSTRAINT committed_continuation_completion_check1 CHECK ((route = ((get_byte(uuid_send(receipt_id), 10) * 256) + get_byte(uuid_send(receipt_id), 11)))),
     CONSTRAINT committed_continuation_completion_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT committed_continuation_completion_key_check CHECK (((length(key) >= 1) AND (length(key) <= 240))),
+    CONSTRAINT committed_continuation_completion_receipt_digest_check CHECK ((receipt_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_completion_receipt_key_check CHECK (((length(receipt_key) >= 1) AND (length(receipt_key) <= 256))),
     CONSTRAINT committed_continuation_completion_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT committed_continuation_completion_step_check CHECK ((step ~ '^[a-z][a-z0-9-]{0,63}$'::text)),
     CONSTRAINT committed_continuation_completion_target_check CHECK (((length(target) >= 1) AND (length(target) <= 128)))
+);
+
+
+--
+-- Name: committed_continuation_entry; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.committed_continuation_entry (
+    route integer NOT NULL,
+    continuation_id uuid NOT NULL,
+    step text NOT NULL,
+    target text NOT NULL,
+    key text NOT NULL,
+    digest text NOT NULL,
+    CONSTRAINT committed_continuation_entry_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_entry_key_check CHECK (((length(key) >= 1) AND (length(key) <= 240))),
+    CONSTRAINT committed_continuation_entry_step_check CHECK ((step ~ '^[a-z][a-z0-9-]{0,63}$'::text)),
+    CONSTRAINT committed_continuation_entry_target_check CHECK (((length(target) >= 1) AND (length(target) <= 128)))
 );
 
 
@@ -779,6 +847,19 @@ CREATE TABLE access.principal_assignment (
 
 
 --
+-- Name: rating_counter_controller; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.rating_counter_controller (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    effective_at timestamp with time zone NOT NULL,
+    controller_id uuid NOT NULL,
+    CONSTRAINT rating_counter_controller_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))))
+);
+
+
+--
 -- Name: resource_denial; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -939,11 +1020,27 @@ ALTER TABLE ONLY access.account
 
 
 --
+-- Name: account_preferences account_preferences_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.account_preferences
+    ADD CONSTRAINT account_preferences_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: committed_continuation_completion committed_continuation_completion_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
 ALTER TABLE ONLY access.committed_continuation_completion
     ADD CONSTRAINT committed_continuation_completion_pkey PRIMARY KEY (route, continuation_id, step, target, key);
+
+
+--
+-- Name: committed_continuation_entry committed_continuation_entry_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation_entry
+    ADD CONSTRAINT committed_continuation_entry_pkey PRIMARY KEY (route, continuation_id, step, target, key);
 
 
 --
@@ -1104,6 +1201,14 @@ ALTER TABLE ONLY access.organization_member
 
 ALTER TABLE ONLY access.principal_assignment
     ADD CONSTRAINT principal_assignment_pkey PRIMARY KEY (route, principal_id, request_id);
+
+
+--
+-- Name: rating_counter_controller rating_counter_controller_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.rating_counter_controller
+    ADD CONSTRAINT rating_counter_controller_pkey PRIMARY KEY (route, account_id, effective_at);
 
 
 --
@@ -1282,6 +1387,13 @@ CREATE TRIGGER committed_continuation_completion_immutable BEFORE DELETE OR UPDA
 
 
 --
+-- Name: committed_continuation_entry committed_continuation_entry_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER committed_continuation_entry_immutable BEFORE DELETE OR UPDATE ON access.committed_continuation_entry FOR EACH ROW EXECUTE FUNCTION access.committed_continuation_completion_immutable();
+
+
+--
 -- Name: committed_continuation committed_continuation_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -1331,6 +1443,13 @@ CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EAC
 
 
 --
+-- Name: account rating_controller; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER rating_controller AFTER INSERT OR UPDATE OF operator_account_id ON access.account FOR EACH ROW EXECUTE FUNCTION access.record_rating_controller();
+
+
+--
 -- Name: workflow_approval workflow_approval_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -1343,6 +1462,14 @@ CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_appr
 
 ALTER TABLE ONLY access.committed_continuation_completion
     ADD CONSTRAINT committed_continuation_completion_route_continuation_id_fkey FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id);
+
+
+--
+-- Name: committed_continuation_entry committed_continuation_entry_route_continuation_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation_entry
+    ADD CONSTRAINT committed_continuation_entry_route_continuation_id_fkey FOREIGN KEY (route, continuation_id) REFERENCES access.committed_continuation(route, continuation_id);
 
 
 --

@@ -33,7 +33,23 @@
       "mappings": ["wd:Q1983062"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
+        "schema:author",
         "schema:character",
         "schema:contributor",
         "schema:datePublished",
@@ -41,15 +57,24 @@
         "schema:duration",
         "schema:episodeNumber",
         "schema:genre",
+        "schema:illustrator",
         "schema:image",
         "schema:inLanguage",
         "schema:isPartOf",
         "schema:keywords",
         "schema:musicBy",
         "schema:name",
+        "schema:producer",
+        "schema:productionCompany",
+        "schema:publisher",
         "schema:sameAs",
+        "schema:translator",
         "schema:url",
+        "wdt:P155",
+        "wdt:P178",
         "wdt:P179",
+        "wdt:P361",
+        "wdt:P58",
         "wdt:P725"
       ],
       "facets": [
@@ -64,8 +89,13 @@
         "wdt:P179",
         "schema:genre",
         "schema:keywords",
-        "schema:inLanguage"
-      ]
+        "schema:inLanguage",
+        "schema:author",
+        "schema:illustrator",
+        "wdt:P58",
+        "schema:producer"
+      ],
+      "coverRatio": "2:3"
     },
     "schema:Movie": {
       "iri": "http://schema.org/Movie",
@@ -82,6 +112,21 @@
       "mappings": ["wd:Q11424"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
         "schema:author",
@@ -102,8 +147,10 @@
         "schema:productionCompany",
         "schema:sameAs",
         "schema:url",
+        "wdt:P155",
         "wdt:P178",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P5732",
         "wdt:P58",
         "wdt:P725",
@@ -127,7 +174,8 @@
         "schema:contributor",
         "schema:character",
         "wdt:P179"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "schema:TVSeason": {
       "iri": "http://schema.org/TVSeason",
@@ -144,6 +192,21 @@
       "mappings": ["wd:Q3464665"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
         "schema:character",
@@ -164,8 +227,10 @@
         "schema:sameAs",
         "schema:startDate",
         "schema:url",
+        "wdt:P155",
         "wdt:P178",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P5732",
         "wdt:P58",
         "wdt:P725",
@@ -189,7 +254,8 @@
         "wdt:P725",
         "schema:character",
         "wdt:P179"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "schema:TVSeries": {
       "iri": "http://schema.org/TVSeries",
@@ -206,6 +272,21 @@
       "mappings": ["wd:Q5398426"],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
         "schema:author",
@@ -228,8 +309,10 @@
         "schema:sameAs",
         "schema:startDate",
         "schema:url",
+        "wdt:P155",
         "wdt:P178",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P449",
         "wdt:P5732",
         "wdt:P58",
@@ -254,7 +337,8 @@
         "wdt:P725",
         "schema:character",
         "wdt:P179"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "bf:Instance": {
       "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
@@ -271,23 +355,47 @@
       "mappings": ["wd:Q3331189"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:author",
         "schema:contributor",
         "schema:datePublished",
+        "schema:director",
         "schema:exampleOfWork",
         "schema:genre",
+        "schema:illustrator",
         "schema:image",
         "schema:inLanguage",
         "schema:isbn",
         "schema:keywords",
+        "schema:musicBy",
         "schema:name",
         "schema:numberOfPages",
+        "schema:producer",
+        "schema:productionCompany",
         "schema:publisher",
         "schema:sameAs",
         "schema:translator",
         "schema:url",
+        "wdt:P155",
+        "wdt:P178",
         "wdt:P179",
-        "wdt:P648"
+        "wdt:P361",
+        "wdt:P58",
+        "wdt:P648",
+        "wdt:P725"
       ],
       "facets": [
         "schema:exampleOfWork",
@@ -297,8 +405,17 @@
         "schema:datePublished",
         "schema:numberOfPages",
         "schema:contributor",
-        "schema:inLanguage"
-      ]
+        "schema:inLanguage",
+        "schema:illustrator",
+        "schema:director",
+        "schema:musicBy",
+        "schema:producer",
+        "schema:productionCompany",
+        "wdt:P58",
+        "wdt:P178",
+        "wdt:P725"
+      ],
+      "coverRatio": "2:3"
     },
     "schema:Book": {
       "iri": "http://schema.org/Book",
@@ -315,6 +432,21 @@
       "mappings": ["wd:Q47461344"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
         "schema:contributor",
@@ -326,7 +458,9 @@
         "schema:name",
         "schema:sameAs",
         "schema:url",
+        "wdt:P155",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P5732",
         "wdt:P648"
       ],
@@ -338,7 +472,8 @@
         "schema:datePublished",
         "schema:contributor",
         "schema:inLanguage"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "wd:Q95074": {
       "iri": "http://www.wikidata.org/entity/Q95074",
@@ -370,7 +505,8 @@
         "wdt:P3180",
         "wdt:P6296"
       ],
-      "facets": ["schema:keywords", "schema:gender", "wdt:P1853", "schema:birthDate", "schema:height", "schema:weight"]
+      "facets": ["schema:keywords", "schema:gender", "wdt:P1853", "schema:birthDate", "schema:height", "schema:weight"],
+      "coverRatio": "3:4"
     },
     "skos:Concept": {
       "iri": "http://www.w3.org/2004/02/skos/core#Concept",
@@ -395,7 +531,8 @@
         "skos:broader",
         "skos:inScheme"
       ],
-      "facets": []
+      "facets": [],
+      "coverRatio": "1:1"
     },
     "skos:ConceptScheme": {
       "iri": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
@@ -412,7 +549,8 @@
       "mappings": [],
       "bases": ["schema:Thing"],
       "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-      "facets": []
+      "facets": [],
+      "coverRatio": "1:1"
     },
     "schema:Organization": {
       "iri": "http://schema.org/Organization",
@@ -429,7 +567,8 @@
       "mappings": ["wd:Q43229"],
       "bases": ["schema:Thing"],
       "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
-      "facets": []
+      "facets": [],
+      "coverRatio": "1:1"
     },
     "schema:Person": {
       "iri": "http://schema.org/Person",
@@ -456,7 +595,8 @@
         "wdt:P6298",
         "wdt:P648"
       ],
-      "facets": []
+      "facets": [],
+      "coverRatio": "3:4"
     },
     "schema:VideoGame": {
       "iri": "http://schema.org/VideoGame",
@@ -473,6 +613,21 @@
       "mappings": ["wd:Q7889"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
         "schema:author",
@@ -494,8 +649,10 @@
         "schema:publisher",
         "schema:sameAs",
         "schema:url",
+        "wdt:P155",
         "wdt:P178",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P408",
         "wdt:P5732",
         "wdt:P58",
@@ -519,7 +676,8 @@
         "schema:publisher",
         "schema:character",
         "wdt:P179"
-      ]
+      ],
+      "coverRatio": "3:4"
     },
     "wd:Q209163": {
       "iri": "http://www.wikidata.org/entity/Q209163",
@@ -536,6 +694,21 @@
       "mappings": ["wd:Q209163"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
         "schema:author",
@@ -557,8 +730,10 @@
         "schema:publisher",
         "schema:sameAs",
         "schema:url",
+        "wdt:P155",
         "wdt:P178",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P408",
         "wdt:P5732",
         "wdt:P58",
@@ -583,7 +758,8 @@
         "schema:publisher",
         "schema:character",
         "wdt:P179"
-      ]
+      ],
+      "coverRatio": "3:4"
     },
     "wd:Q20631656": {
       "iri": "http://www.wikidata.org/entity/Q20631656",
@@ -601,21 +777,31 @@
       "bases": [],
       "properties": [
         "schema:alternateName",
+        "schema:author",
+        "schema:contributor",
         "schema:datePublished",
+        "schema:director",
         "schema:exampleOfWork",
         "schema:gamePlatform",
         "schema:gtin",
+        "schema:illustrator",
         "schema:image",
         "schema:inLanguage",
+        "schema:musicBy",
         "schema:name",
+        "schema:producer",
+        "schema:productionCompany",
         "schema:publisher",
         "schema:sameAs",
+        "schema:translator",
         "schema:url",
         "wdt:P178",
         "wdt:P2899",
         "wdt:P31",
         "wdt:P3180",
-        "wdt:P437"
+        "wdt:P437",
+        "wdt:P58",
+        "wdt:P725"
       ],
       "facets": [
         "schema:gamePlatform",
@@ -626,8 +812,16 @@
         "schema:exampleOfWork",
         "wdt:P178",
         "schema:publisher",
-        "schema:inLanguage"
-      ]
+        "schema:inLanguage",
+        "schema:author",
+        "schema:director",
+        "schema:illustrator",
+        "schema:musicBy",
+        "wdt:P58",
+        "wdt:P725",
+        "schema:contributor"
+      ],
+      "coverRatio": "3:4"
     },
     "schema:PublicationVolume": {
       "iri": "http://schema.org/PublicationVolume",
@@ -644,6 +838,20 @@
       "mappings": ["wd:Q1238720"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
         "schema:character",
@@ -660,7 +868,9 @@
         "schema:publisher",
         "schema:sameAs",
         "schema:url",
+        "wdt:P155",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P5732",
         "wdt:P725"
       ],
@@ -676,7 +886,8 @@
         "schema:character",
         "wdt:P179",
         "schema:inLanguage"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "schema:ComicSeries": {
       "iri": "http://schema.org/ComicSeries",
@@ -693,6 +904,21 @@
       "mappings": ["wd:Q21198342"],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
         "schema:character",
@@ -708,8 +934,10 @@
         "schema:sameAs",
         "schema:url",
         "wdt:P1433",
+        "wdt:P155",
         "wdt:P179",
         "wdt:P2635",
+        "wdt:P361",
         "wdt:P5732",
         "wdt:P725"
       ],
@@ -725,7 +953,8 @@
         "schema:character",
         "wdt:P179",
         "schema:inLanguage"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "schema:Recipe": {
       "iri": "http://schema.org/Recipe",
@@ -754,7 +983,8 @@
         "schema:sameAs",
         "schema:url"
       ],
-      "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"]
+      "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"],
+      "coverRatio": "4:3"
     },
     "schema:BookSeries": {
       "iri": "http://schema.org/BookSeries",
@@ -771,6 +1001,21 @@
       "mappings": ["wd:Q277759"],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:alternateName",
         "schema:contributor",
         "schema:endDate",
@@ -783,8 +1028,10 @@
         "schema:startDate",
         "schema:url",
         "wdt:P1433",
+        "wdt:P155",
         "wdt:P179",
         "wdt:P2635",
+        "wdt:P361",
         "wdt:P973"
       ],
       "facets": [
@@ -794,7 +1041,8 @@
         "schema:publisher",
         "schema:contributor",
         "wdt:P179"
-      ]
+      ],
+      "coverRatio": "2:3"
     },
     "wd:Q7725310": {
       "iri": "http://www.wikidata.org/entity/Q7725310",
@@ -811,6 +1059,21 @@
       "mappings": [],
       "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:contributor",
         "schema:genre",
         "schema:image",
@@ -818,9 +1081,12 @@
         "schema:name",
         "schema:sameAs",
         "schema:url",
-        "wdt:P179"
+        "wdt:P155",
+        "wdt:P179",
+        "wdt:P361"
       ],
-      "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"]
+      "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"],
+      "coverRatio": "2:3"
     },
     "wd:Q689445": {
       "iri": "http://www.wikidata.org/entity/Q689445",
@@ -837,6 +1103,21 @@
       "mappings": [],
       "bases": ["schema:VideoGame", "schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
         "schema:author",
@@ -856,13 +1137,10 @@
         "schema:url",
         "wdt:P144",
         "wdt:P155",
-        "wdt:P156",
         "wdt:P179",
         "wdt:P1889",
-        "wdt:P2512",
         "wdt:P3180",
         "wdt:P361",
-        "wdt:P4969",
         "wdt:P725"
       ],
       "facets": [
@@ -878,7 +1156,8 @@
         "wdt:P725",
         "wdt:P179",
         "schema:inLanguage"
-      ]
+      ],
+      "coverRatio": "3:4"
     },
     "schema:MusicAlbum": {
       "iri": "http://schema.org/MusicAlbum",
@@ -895,6 +1174,21 @@
       "mappings": ["wd:Q482994"],
       "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:representativeEdition",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:summaryOf",
         "schema:abstract",
         "schema:contributor",
         "schema:datePublished",
@@ -905,10 +1199,13 @@
         "schema:name",
         "schema:sameAs",
         "schema:url",
+        "wdt:P155",
         "wdt:P179",
+        "wdt:P361",
         "wdt:P5732"
       ],
-      "facets": ["schema:contributor", "wdt:P179", "schema:genre", "schema:keywords", "schema:inLanguage"]
+      "facets": ["schema:contributor", "wdt:P179", "schema:genre", "schema:keywords", "schema:inLanguage"],
+      "coverRatio": "1:1"
     }
   },
   "properties": {
@@ -1065,6 +1362,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "membership",
+        "order": "name",
+        "inverse": "schema:hasPart",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Episoden",
+          "en": "Episodes",
+          "es": "Episodios",
+          "fr": "Épisodes",
+          "ja": "エピソード",
+          "ko": "에피소드",
+          "zh-Hans": "集数",
+          "zh-Hant": "集數"
+        }
+      },
       "targets": ["schema:TVSeason", "schema:TVSeries"]
     },
     "schema:numberOfEpisodes": {
@@ -1119,6 +1432,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "association",
+        "order": "name",
+        "inverse": "rezics:originalBroadcastOf",
+        "inverseLabels": {
+          "de": "Erstausstrahlungen",
+          "en": "Original broadcasts",
+          "es": "Emisiones originales",
+          "fr": "Premières diffusions",
+          "ja": "初回放送作品",
+          "ko": "최초 방영 작품",
+          "zh-Hans": "首播作品",
+          "zh-Hant": "首播作品"
+        }
       },
       "targets": ["schema:Organization"]
     },
@@ -1176,6 +1504,21 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:workInForm",
+        "inverseLabels": {
+          "de": "Werke dieser Form",
+          "en": "Works in this form",
+          "es": "Obras de esta forma",
+          "fr": "Œuvres de cette forme",
+          "ja": "この形式の作品",
+          "ko": "이 형식의 작품",
+          "zh-Hans": "此形式的作品",
+          "zh-Hant": "此形式的作品"
+        }
+      },
       "targets": ["skos:Concept"]
     },
     "schema:exampleOfWork": {
@@ -1197,6 +1540,22 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "date",
+        "inverse": "schema:workExample",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Ausgaben",
+          "en": "Editions",
+          "es": "Ediciones",
+          "fr": "Éditions",
+          "ja": "版",
+          "ko": "판본",
+          "zh-Hans": "版本",
+          "zh-Hant": "版本"
+        }
       },
       "targets": ["schema:CreativeWork"]
     },
@@ -1276,6 +1635,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:publisherOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Veröffentlichte Werke",
+          "en": "Publisher of",
+          "es": "Obras publicadas",
+          "fr": "Œuvres publiées",
+          "ja": "出版作品",
+          "ko": "출판한 작품",
+          "zh-Hans": "出版作品",
+          "zh-Hant": "出版作品"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
     },
     "schema:translator": {
@@ -1297,6 +1672,22 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:translatorOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Übersetzte Werke",
+          "en": "Translator of",
+          "es": "Obras traducidas",
+          "fr": "Œuvres traduites",
+          "ja": "翻訳作品",
+          "ko": "번역한 작품",
+          "zh-Hans": "翻译作品",
+          "zh-Hant": "翻譯作品"
+        }
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
@@ -1343,6 +1734,21 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:subjectWithBloodType",
+        "inverseLabels": {
+          "de": "Subjekte dieser Blutgruppe",
+          "en": "Subjects with this blood type",
+          "es": "Sujetos de este grupo sanguíneo",
+          "fr": "Sujets de ce groupe sanguin",
+          "ja": "この血液型の対象",
+          "ko": "이 혈액형의 대상",
+          "zh-Hans": "此血型的主体",
+          "zh-Hant": "此血型的主體"
+        }
+      },
       "targets": ["skos:Concept"]
     },
     "schema:gender": {
@@ -1364,6 +1770,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:subjectWithGender",
+        "inverseLabels": {
+          "de": "Subjekte dieses Geschlechts",
+          "en": "Subjects with this gender",
+          "es": "Sujetos de este género",
+          "fr": "Sujets de ce genre",
+          "ja": "このジェンダーの対象",
+          "ko": "이 젠더의 대상",
+          "zh-Hans": "此性别的主体",
+          "zh-Hant": "此性別的主體"
+        }
       },
       "targets": ["skos:Concept"]
     },
@@ -1453,6 +1874,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "skos:narrower",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Engere Begriffe",
+          "en": "Narrower concepts",
+          "es": "Conceptos más específicos",
+          "fr": "Concepts plus spécifiques",
+          "ja": "下位概念",
+          "ko": "하위 개념",
+          "zh-Hans": "下位概念",
+          "zh-Hant": "下位概念"
+        }
+      },
       "targets": ["skos:Concept"]
     },
     "foaf:focus": {
@@ -1474,6 +1911,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:focusOf",
+        "inverseLabels": {
+          "de": "Begriffe für dieses Subjekt",
+          "en": "Concepts for this subject",
+          "es": "Conceptos que representan este sujeto",
+          "fr": "Concepts représentant ce sujet",
+          "ja": "この対象を表す概念",
+          "ko": "이 대상을 나타내는 개념",
+          "zh-Hans": "指向此主体的概念",
+          "zh-Hant": "指向此主體的概念"
+        }
       },
       "targets": ["schema:Thing"]
     },
@@ -1497,6 +1949,21 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:workInGenre",
+        "inverseLabels": {
+          "de": "Werke dieses Genres",
+          "en": "Works in this genre",
+          "es": "Obras de este género",
+          "fr": "Œuvres de ce genre",
+          "ja": "このジャンルの作品",
+          "ko": "이 장르의 작품",
+          "zh-Hans": "此类型的作品",
+          "zh-Hant": "此類型的作品"
+        }
+      },
       "targets": ["skos:Concept"]
     },
     "skos:inScheme": {
@@ -1519,6 +1986,21 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:schemeConcept",
+        "inverseLabels": {
+          "de": "Begriffe dieses Schemas",
+          "en": "Concepts in this scheme",
+          "es": "Conceptos de este esquema",
+          "fr": "Concepts de ce schéma",
+          "ja": "この体系の概念",
+          "ko": "이 체계의 개념",
+          "zh-Hans": "此概念体系的概念",
+          "zh-Hant": "此概念體系的概念"
+        }
+      },
       "targets": ["skos:ConceptScheme"]
     },
     "schema:keywords": {
@@ -1540,6 +2022,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:taggedSubject",
+        "inverseLabels": {
+          "de": "Subjekte mit diesem Schlagwort",
+          "en": "Tagged subjects",
+          "es": "Sujetos con esta etiqueta",
+          "fr": "Sujets portant cette étiquette",
+          "ja": "このタグの対象",
+          "ko": "이 태그의 대상",
+          "zh-Hans": "使用此标签的主体",
+          "zh-Hant": "使用此標籤的主體"
+        }
       },
       "targets": ["skos:Concept"]
     },
@@ -1607,6 +2104,87 @@
         }
       }
     },
+    "rezics:alternativeSetting": {
+      "iri": "https://rezics.com/vocab/alternativeSetting",
+      "labels": {
+        "de": "Andere Welt",
+        "en": "Alternative setting",
+        "es": "Universo alternativo",
+        "fr": "Univers alternatif",
+        "ja": "異なる世界観",
+        "ko": "다른 세계관",
+        "zh-Hans": "不同世界观",
+        "zh-Hant": "不同世界觀"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "world",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
+    },
+    "rezics:alternativeVersion": {
+      "iri": "https://rezics.com/vocab/alternativeVersion",
+      "labels": {
+        "de": "Andere Erzählfassung",
+        "en": "Alternative telling",
+        "es": "Versión narrativa alternativa",
+        "fr": "Autre interprétation",
+        "ja": "異なる描き方",
+        "ko": "다르게 풀어낸 이야기",
+        "zh-Hans": "不同演绎",
+        "zh-Hant": "不同演繹"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "world",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
+    },
+    "rezics:artbookCounterpart": {
+      "iri": "https://rezics.com/vocab/artbookCounterpart",
+      "labels": {
+        "de": "Kunstbuch und zugehöriges Werk",
+        "en": "Artbook counterpart",
+        "es": "Libro de ilustraciones y obra asociada",
+        "fr": "Livre d’illustrations et œuvre associée",
+        "ja": "画集と関連作品",
+        "ko": "화집과 관련 작품",
+        "zh-Hans": "画集与对应作品",
+        "zh-Hant": "畫集與對應作品"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "association",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
+    },
     "schema:author": {
       "iri": "http://schema.org/author",
       "labels": {
@@ -1635,7 +2213,50 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:authorOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Verfasste Werke",
+          "en": "Author of",
+          "es": "Obras escritas",
+          "fr": "Œuvres écrites",
+          "ja": "著作",
+          "ko": "집필한 작품",
+          "zh-Hans": "著作",
+          "zh-Hant": "著作"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
+    },
+    "rezics:bangumiLegacyVersion": {
+      "iri": "https://rezics.com/vocab/bangumiLegacyVersion",
+      "labels": {
+        "de": "Versionsbezug (alter Bangumi-Code)",
+        "en": "Version counterpart (retired Bangumi code)",
+        "es": "Versión asociada (código retirado de Bangumi)",
+        "fr": "Version associée (ancien code Bangumi)",
+        "ja": "別バージョン（Bangumi旧コード）",
+        "ko": "대응 버전 (Bangumi 폐기 코드)",
+        "zh-Hans": "版本关联（Bangumi 旧代码）",
+        "zh-Hant": "版本關聯（Bangumi 舊代碼）"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "wdt:P6298": {
       "iri": "http://www.wikidata.org/prop/direct/P6298",
@@ -1659,6 +2280,43 @@
         "maxLength": 1500,
         "pattern": "^[1-9][0-9]*$"
       }
+    },
+    "rezics:bangumiRelatedTo": {
+      "iri": "https://rezics.com/vocab/bangumiRelatedTo",
+      "labels": {
+        "de": "Verknüpft (Bangumi)",
+        "en": "Related (Bangumi)",
+        "es": "Relacionado (Bangumi)",
+        "fr": "Associé (Bangumi)",
+        "ja": "関連（Bangumi）",
+        "ko": "관련 작품 (Bangumi)",
+        "zh-Hans": "关联（Bangumi）",
+        "zh-Hant": "關聯（Bangumi）"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "association",
+        "order": "name",
+        "inverse": "rezics:bangumiRelatedFrom",
+        "inverseLabels": {
+          "de": "Verknüpft von (Bangumi)",
+          "en": "Related from (Bangumi)",
+          "es": "Vinculado desde (Bangumi)",
+          "fr": "Lien depuis (Bangumi)",
+          "ja": "関連元（Bangumi）",
+          "ko": "관련 출발 작품 (Bangumi)",
+          "zh-Hans": "关联来源（Bangumi）",
+          "zh-Hant": "關聯來源（Bangumi）"
+        }
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "wdt:P5732": {
       "iri": "http://www.wikidata.org/prop/direct/P5732",
@@ -1737,6 +2395,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "appearance",
+        "order": "name",
+        "inverse": "rezics:appearsIn",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Auftritte in",
+          "en": "Appears in",
+          "es": "Aparece en",
+          "fr": "Apparaît dans",
+          "ja": "登場作品",
+          "ko": "등장 작품",
+          "zh-Hans": "登场作品",
+          "zh-Hant": "登場作品"
+        }
+      },
       "targets": ["wd:Q95074"]
     },
     "wdt:P453": {
@@ -1759,7 +2433,39 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "appearance",
+        "order": "name",
+        "inverse": "none"
+      },
       "targets": ["wd:Q95074"]
+    },
+    "rezics:collaborationWith": {
+      "iri": "https://rezics.com/vocab/collaborationWith",
+      "labels": {
+        "de": "Figuren-Crossover",
+        "en": "Character crossover collaboration",
+        "es": "Colaboración con cruce de personajes",
+        "fr": "Collaboration avec croisement de personnages",
+        "ja": "キャラクターのコラボ",
+        "ko": "등장인물 컬래버레이션",
+        "zh-Hans": "角色联动",
+        "zh-Hant": "角色聯動"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "world",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "schema:contributor": {
       "iri": "http://schema.org/contributor",
@@ -1780,6 +2486,22 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:contributorOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Mitwirkung an",
+          "en": "Contributed to",
+          "es": "Contribuciones a",
+          "fr": "Contributions à",
+          "ja": "参加作品",
+          "ko": "참여한 작품",
+          "zh-Hans": "参与作品",
+          "zh-Hant": "參與作品"
+        }
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
@@ -1804,6 +2526,33 @@
         "minLength": 1,
         "maxLength": 1500
       }
+    },
+    "rezics:crossMediaCounterpart": {
+      "iri": "https://rezics.com/vocab/crossMediaCounterpart",
+      "labels": {
+        "de": "Werk in einem anderen Medium",
+        "en": "Cross-media counterpart",
+        "es": "Obra en otro medio",
+        "fr": "Œuvre dans un autre média",
+        "ja": "別メディアの関連作品",
+        "ko": "다른 매체의 대응 작품",
+        "zh-Hans": "跨媒体对应作品",
+        "zh-Hant": "跨媒體對應作品"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "schema:dateModified": {
       "iri": "http://schema.org/dateModified",
@@ -1927,6 +2676,11 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "none"
+      },
       "targets": ["skos:Concept"]
     },
     "wdt:P178": {
@@ -1948,6 +2702,22 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:developerOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Entwickelte Werke",
+          "en": "Developer of",
+          "es": "Obras desarrolladas",
+          "fr": "Œuvres développées",
+          "ja": "開発作品",
+          "ko": "개발한 작품",
+          "zh-Hans": "开发作品",
+          "zh-Hant": "開發作品"
+        }
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
@@ -1971,7 +2741,77 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:directorOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Regiearbeiten",
+          "en": "Director of",
+          "es": "Obras dirigidas",
+          "fr": "Œuvres réalisées",
+          "ja": "監督作品",
+          "ko": "연출한 작품",
+          "zh-Hans": "执导作品",
+          "zh-Hant": "執導作品"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
+    },
+    "rezics:editionCounterpart": {
+      "iri": "https://rezics.com/vocab/editionCounterpart",
+      "labels": {
+        "de": "Andere Buchfassung",
+        "en": "Other book version",
+        "es": "Otra versión del libro",
+        "fr": "Autre version du livre",
+        "ja": "書籍の別バージョン",
+        "ko": "다른 도서 판본",
+        "zh-Hans": "图书的不同版本",
+        "zh-Hant": "圖書的不同版本"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
+    },
+    "rezics:expansionCounterpart": {
+      "iri": "https://rezics.com/vocab/expansionCounterpart",
+      "labels": {
+        "de": "Erweiterung oder Grundspiel",
+        "en": "Expansion or base game",
+        "es": "Expansión o juego base",
+        "fr": "Extension ou jeu de base",
+        "ja": "拡張版・本編ゲーム",
+        "ko": "확장팩 또는 원본 게임",
+        "zh-Hans": "扩展包或基础游戏",
+        "zh-Hant": "擴充包或基礎遊戲"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "schema:illustrator": {
       "iri": "http://schema.org/illustrator",
@@ -1992,6 +2832,22 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:illustratorOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Illustrierte Werke",
+          "en": "Illustrator of",
+          "es": "Obras ilustradas",
+          "fr": "Œuvres illustrées",
+          "ja": "イラスト担当作品",
+          "ko": "삽화를 그린 작품",
+          "zh-Hans": "插画作品",
+          "zh-Hant": "插畫作品"
+        }
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
@@ -2058,6 +2914,22 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:musicByOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Kompositionen",
+          "en": "Composer of",
+          "es": "Obras compuestas",
+          "fr": "Œuvres composées",
+          "ja": "作曲作品",
+          "ko": "작곡한 작품",
+          "zh-Hans": "作曲作品",
+          "zh-Hant": "作曲作品"
+        }
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
@@ -2137,6 +3009,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "membership",
+        "order": "position",
+        "inverse": "rezics:seriesMember",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Serienmitglieder",
+          "en": "Members",
+          "es": "Miembros de la serie",
+          "fr": "Membres de la série",
+          "ja": "シリーズの構成作品",
+          "ko": "시리즈 구성 작품",
+          "zh-Hans": "系列成员",
+          "zh-Hant": "系列成員"
+        }
+      },
       "targets": ["schema:CreativeWorkSeries"]
     },
     "schema:position": {
@@ -2182,6 +3070,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:producerOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Produzierte Werke",
+          "en": "Producer of",
+          "es": "Obras producidas",
+          "fr": "Œuvres produites",
+          "ja": "プロデュース作品",
+          "ko": "제작한 작품",
+          "zh-Hans": "制作作品",
+          "zh-Hant": "製作作品"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
     },
     "schema:productionCompany": {
@@ -2204,7 +3108,50 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:productionCompanyOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Produktionen",
+          "en": "Productions",
+          "es": "Producciones",
+          "fr": "Productions",
+          "ja": "制作作品",
+          "ko": "제작에 참여한 작품",
+          "zh-Hans": "参与制作的作品",
+          "zh-Hant": "參與製作的作品"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
+    },
+    "rezics:representativeEdition": {
+      "iri": "https://rezics.com/vocab/representativeEdition",
+      "labels": {
+        "de": "Repräsentative Ausgabe",
+        "en": "Representative edition",
+        "es": "Edición representativa",
+        "fr": "Édition représentative",
+        "ja": "代表版",
+        "ko": "대표 판본",
+        "zh-Hans": "代表版本",
+        "zh-Hant": "代表版本"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": ["schema:inLanguage"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "inverse": "none"
+      },
+      "targets": ["bf:Instance", "wd:Q20631656"]
     },
     "schema:sameAs": {
       "iri": "http://schema.org/sameAs",
@@ -2228,6 +3175,60 @@
         "pattern": "^https?://[^\\s]+$"
       }
     },
+    "rezics:sameCharacters": {
+      "iri": "https://rezics.com/vocab/sameCharacters",
+      "labels": {
+        "de": "Gleiche Figuren, unabhängige Geschichte",
+        "en": "Same characters, unrelated story",
+        "es": "Mismos personajes, historia independiente",
+        "fr": "Mêmes personnages, récit indépendant",
+        "ja": "同じキャラクター・別の物語",
+        "ko": "같은 등장인물, 별개의 이야기",
+        "zh-Hans": "相同角色、无关故事",
+        "zh-Hant": "相同角色、無關故事"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "world",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
+    },
+    "rezics:sameSetting": {
+      "iri": "https://rezics.com/vocab/sameSetting",
+      "labels": {
+        "de": "Gleiche Welt",
+        "en": "Same setting",
+        "es": "Mismo universo",
+        "fr": "Même univers",
+        "ja": "同じ世界観",
+        "ko": "같은 세계관",
+        "zh-Hans": "相同世界观",
+        "zh-Hant": "相同世界觀"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "world",
+        "order": "name",
+        "symmetric": true
+      },
+      "targets": ["schema:CreativeWork"]
+    },
     "wdt:P58": {
       "iri": "http://www.wikidata.org/prop/direct/P58",
       "labels": {
@@ -2248,7 +3249,61 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:screenwriterOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Drehbucharbeiten",
+          "en": "Screenwriter of",
+          "es": "Guiones escritos",
+          "fr": "Scénarios écrits",
+          "ja": "脚本担当作品",
+          "ko": "각본을 쓴 작품",
+          "zh-Hans": "编剧作品",
+          "zh-Hant": "編劇作品"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
+    },
+    "rezics:sideStoryOf": {
+      "iri": "https://rezics.com/vocab/sideStoryOf",
+      "labels": {
+        "de": "Nebengeschichte zu",
+        "en": "Side story of",
+        "es": "Historia paralela de",
+        "fr": "Histoire annexe de",
+        "ja": "外伝の本編",
+        "ko": "외전의 본편",
+        "zh-Hans": "番外篇的本篇",
+        "zh-Hant": "番外篇的本篇"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "order",
+        "order": "name",
+        "inverse": "rezics:sideStory",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Nebengeschichten",
+          "en": "Side stories",
+          "es": "Historias paralelas",
+          "fr": "Histoires annexes",
+          "ja": "外伝",
+          "ko": "외전",
+          "zh-Hans": "番外篇",
+          "zh-Hant": "番外篇"
+        }
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "rezics:spoilerLevel": {
       "iri": "https://rezics.com/vocab/spoilerLevel",
@@ -2283,6 +3338,44 @@
       "units": ["1"],
       "minimum": 0,
       "maximum": 2
+    },
+    "rezics:summaryOf": {
+      "iri": "https://rezics.com/vocab/summaryOf",
+      "labels": {
+        "de": "Zusammenfassung von",
+        "en": "Summary of",
+        "es": "Resumen de",
+        "fr": "Résumé de",
+        "ja": "総集編の本編",
+        "ko": "요약판의 본편",
+        "zh-Hans": "总集篇的本篇",
+        "zh-Hant": "總集篇的本篇"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "inverse": "rezics:summaryVersion",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Zusammenfassungen",
+          "en": "Summary versions",
+          "es": "Versiones resumidas",
+          "fr": "Versions résumées",
+          "ja": "総集編",
+          "ko": "요약판",
+          "zh-Hans": "总集篇",
+          "zh-Hant": "總集篇"
+        }
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "schema:url": {
       "iri": "http://schema.org/url",
@@ -2371,6 +3464,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:voiceActorOf",
+        "filter": "wdt:P3831",
+        "inverseLabels": {
+          "de": "Sprechrollen in",
+          "en": "Voice roles in",
+          "es": "Papeles de voz en",
+          "fr": "Rôles vocaux dans",
+          "ja": "声の出演作品",
+          "ko": "목소리로 출연한 작품",
+          "zh-Hans": "配音作品",
+          "zh-Hant": "配音作品"
+        }
+      },
       "targets": ["schema:Organization", "schema:Person"]
     },
     "wdt:P2899": {
@@ -2427,6 +3536,21 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:releaseInFormat",
+        "inverseLabels": {
+          "de": "Veröffentlichungen in diesem Format",
+          "en": "Releases in this format",
+          "es": "Lanzamientos en este formato",
+          "fr": "Sorties dans ce format",
+          "ja": "この媒体のリリース",
+          "ko": "이 매체의 출시판",
+          "zh-Hans": "此媒介的发行版本",
+          "zh-Hant": "此媒介的發行版本"
+        }
+      },
       "targets": ["skos:Concept"]
     },
     "wdt:P8646": {
@@ -2448,6 +3572,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "inverse": "rezics:expansion",
+        "inverseLabels": {
+          "de": "Erweiterungen",
+          "en": "Expansions",
+          "es": "Expansiones",
+          "fr": "Extensions",
+          "ja": "拡張作品",
+          "ko": "확장 작품",
+          "zh-Hans": "扩充作品",
+          "zh-Hant": "擴充作品"
+        }
       },
       "targets": ["schema:VideoGame"]
     },
@@ -2471,6 +3610,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "order",
+        "order": "date",
+        "inverse": "wdt:P156",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Nachfolger",
+          "en": "Sequel",
+          "es": "Secuela",
+          "fr": "Suite",
+          "ja": "続編",
+          "ko": "후속작",
+          "zh-Hans": "续作",
+          "zh-Hant": "續作"
+        }
+      },
       "targets": ["schema:CreativeWork"]
     },
     "schema:gamePlatform": {
@@ -2492,6 +3647,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:gameOnPlatform",
+        "inverseLabels": {
+          "de": "Spiele auf dieser Plattform",
+          "en": "Games on this platform",
+          "es": "Juegos en esta plataforma",
+          "fr": "Jeux sur cette plateforme",
+          "ja": "このプラットフォームのゲーム",
+          "ko": "이 플랫폼의 게임",
+          "zh-Hans": "此平台的游戏",
+          "zh-Hant": "此平台的遊戲"
+        }
       },
       "targets": ["skos:Concept"]
     },
@@ -2604,6 +3774,21 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:releaseOfType",
+        "inverseLabels": {
+          "de": "Veröffentlichungen dieses Typs",
+          "en": "Releases of this type",
+          "es": "Lanzamientos de este tipo",
+          "fr": "Sorties de ce type",
+          "ja": "この種類のリリース",
+          "ko": "이 유형의 출시판",
+          "zh-Hans": "此类型的发行版本",
+          "zh-Hant": "此類型的發行版本"
+        }
+      },
       "targets": ["skos:Concept"]
     },
     "wdt:P408": {
@@ -2625,6 +3810,21 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:gameUsingEngine",
+        "inverseLabels": {
+          "de": "Spiele mit dieser Engine",
+          "en": "Games using this engine",
+          "es": "Juegos que usan este motor",
+          "fr": "Jeux utilisant ce moteur",
+          "ja": "このエンジンを使うゲーム",
+          "ko": "이 엔진을 사용하는 게임",
+          "zh-Hans": "使用此引擎的游戏",
+          "zh-Hant": "使用此引擎的遊戲"
+        }
       },
       "targets": ["skos:Concept"]
     },
@@ -2781,6 +3981,22 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "membership",
+        "order": "name",
+        "inverse": "rezics:publicationContains",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Enthaltene Werke",
+          "en": "Published works",
+          "es": "Obras publicadas aquí",
+          "fr": "Œuvres publiées ici",
+          "ja": "掲載作品",
+          "ko": "게재 작품",
+          "zh-Hans": "收录作品",
+          "zh-Hant": "收錄作品"
+        }
+      },
       "targets": ["schema:CreativeWork"]
     },
     "wdt:P1889": {
@@ -2802,6 +4018,11 @@
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "world",
+        "order": "name",
+        "symmetric": true
       },
       "targets": ["wd:Q689445"]
     },
@@ -2825,51 +4046,23 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "inverse": "wdt:P4969",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Adaptionen",
+          "en": "Adaptations",
+          "es": "Adaptaciones",
+          "fr": "Adaptations",
+          "ja": "翻案作品",
+          "ko": "각색 작품",
+          "zh-Hans": "衍生作品",
+          "zh-Hant": "衍生作品"
+        }
+      },
       "targets": ["schema:CreativeWork"]
-    },
-    "wdt:P4969": {
-      "iri": "http://www.wikidata.org/prop/direct/P4969",
-      "labels": {
-        "de": "abgeleitetes Werk",
-        "en": "derivative work",
-        "es": "obra derivada",
-        "fr": "œuvre dérivée",
-        "ja": "派生作品",
-        "ko": "다음 작품은 이 작품을 바탕으로 함",
-        "zh-Hans": "衍生作品",
-        "zh-Hant": "衍生作品"
-      },
-      "mappings": ["wd:P4969"],
-      "datatype": "wikibase-item",
-      "multivalued": true,
-      "qualifiers": [],
-      "value": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-      },
-      "targets": ["wd:Q689445"]
-    },
-    "wdt:P156": {
-      "iri": "http://www.wikidata.org/prop/direct/P156",
-      "labels": {
-        "de": "Nachfolger",
-        "en": "followed by",
-        "es": "sucedido por",
-        "fr": "suivi par",
-        "ja": "次",
-        "ko": "다음",
-        "zh-Hans": "下一项",
-        "zh-Hant": "下一項"
-      },
-      "mappings": ["wd:P156"],
-      "datatype": "wikibase-item",
-      "multivalued": true,
-      "qualifiers": [],
-      "value": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-      },
-      "targets": ["wd:Q689445"]
     },
     "wdt:P361": {
       "iri": "http://www.wikidata.org/prop/direct/P361",
@@ -2891,21 +4084,37 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
-      "targets": ["wd:Q689445"]
-    },
-    "wdt:P2512": {
-      "iri": "http://www.wikidata.org/prop/direct/P2512",
-      "labels": {
-        "de": "hat Ableger",
-        "en": "has spin-off",
-        "es": "serie derivada",
-        "fr": "série dérivée",
-        "ja": "スピンオフ",
-        "ko": "스핀오프",
-        "zh-Hans": "派生作品",
-        "zh-Hant": "派生作品"
+      "relation": {
+        "group": "membership",
+        "order": "name",
+        "inverse": "wdt:P527",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Bestandteile",
+          "en": "Parts",
+          "es": "Partes",
+          "fr": "Parties",
+          "ja": "構成作品",
+          "ko": "구성 작품",
+          "zh-Hans": "组成作品",
+          "zh-Hant": "組成作品"
+        }
       },
-      "mappings": ["wd:P2512"],
+      "targets": ["schema:CreativeWork"]
+    },
+    "rezics:spinOffOf": {
+      "iri": "https://rezics.com/vocab/spinOffOf",
+      "labels": {
+        "de": "Ableger von",
+        "en": "Spin-off of",
+        "es": "Derivada de",
+        "fr": "Dérivé de",
+        "ja": "スピンオフ元",
+        "ko": "스핀오프 원작",
+        "zh-Hans": "外传原作",
+        "zh-Hant": "外傳原作"
+      },
+      "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -2913,7 +4122,23 @@
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
-      "targets": ["wd:Q689445"]
+      "relation": {
+        "group": "derivation",
+        "order": "name",
+        "inverse": "wdt:P2512",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Ableger",
+          "en": "Spin-offs",
+          "es": "Obras derivadas",
+          "fr": "Œuvres dérivées",
+          "ja": "スピンオフ作品",
+          "ko": "스핀오프 작품",
+          "zh-Hans": "外传作品",
+          "zh-Hant": "外傳作品"
+        }
+      },
+      "targets": ["schema:CreativeWork"]
     }
   },
   "contexts": {

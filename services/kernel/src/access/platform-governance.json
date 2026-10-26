@@ -13,6 +13,7 @@
     "organization:create",
     "subject:create",
     "subject:batch_write",
+    "source_statistic:write",
     "source_fence:read",
     "source_fence:takedown",
     "media:import_from_url",

@@ -21,6 +21,9 @@ type Link = {
   source_revision: number;
   source_security_revision: number;
   present: boolean;
+  source_type: string;
+  order_key: string;
+  filter_value: string;
 };
 const projected = (id: string) => ({ type: LINKS_PROJECTED, data: { subjects: [id] } });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -118,11 +121,15 @@ export async function moveMergePage(
           after_property: state.cursor[0] ?? '',
           after_source: state.cursor[1] ?? NIL,
           after_statement: state.cursor[2] ?? NIL,
+          after_filter: state.cursor[3] ?? NIL,
         })
       ).map((link) => ({ ...link, source_security_revision: Number(link.source_security_revision) }));
       const last = links.at(-1);
       if (links.length === 100 && last)
-        next = { phase: 'links', cursor: [last.property, last.source_subject_id, last.statement_id] };
+        next = {
+          phase: 'links',
+          cursor: [last.property, last.source_subject_id, last.statement_id, last.filter_value],
+        };
       else {
         const member = await firstMember.run(tx, { route: sourceRoute, subject_id: id });
         next = { phase: member ? 'members' : 'done', cursor: [] };

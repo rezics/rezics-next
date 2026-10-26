@@ -1,9 +1,8 @@
 import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import ownersRead from '../../src/access/lifecycle-owners.sql';
 
 export type Plan = {
@@ -57,7 +56,7 @@ export async function ownerCostFixture() {
   const absent = newId(0x1234);
   const actor = owners[0]!;
   const at = new Date().toISOString();
-  const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, context) => context.account });
+  const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
   const commands = createLifecycleCommands({ pool, access });
   const internal = createLifecycleInternals({
     pool,
@@ -82,14 +81,17 @@ export async function ownerCostFixture() {
   );
   async function context() {
     return {
-      actor: {
-        kind: 'account',
-        accountId: actor,
-        clientId: 'owner-cost',
-        requestedBy: null,
-        authnEpoch: 1,
-        scopes: [...LIFECYCLE_ACTIONS.keys()],
-      } as AccountActor,
+      actor: await authenticateAccount(
+        access,
+        { pool, deadline: Date.now() + 10_000 },
+        {
+          accountId: actor,
+          clientId: 'owner-cost',
+          requestedBy: null,
+          authnEpoch: 1,
+          scopes: [...LIFECYCLE_ACTIONS.keys()],
+        },
+      ),
       account: await readAccount(reader, routeOf(actor)!, actor),
       deadline: Date.now() + 5000,
     };

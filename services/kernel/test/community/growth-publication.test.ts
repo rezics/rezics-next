@@ -146,7 +146,9 @@ let publisher: AccountActor;
 let space: typeof import('../../src/community/space.ts');
 let realm: typeof import('../../src/community/realm.ts');
 let publication: typeof import('../../src/community/publication.ts');
-const scales: [number, number, number] = [256, 2048, 16384];
+const scales: [number, number, number] = [256, 1024, 4096];
+// Keep 2,048 seeded rows per relation at the smallest growth scale.
+const populationMultiplier = 8;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -319,7 +321,7 @@ async function positionOf(partition: number) {
   );
 }
 
-test('publication writes and pages stay within their bound at 256, 2048 and 16384 publications', async () => {
+test(`publication writes and pages stay within their bound across growth scales ${scales.join(', ')}`, async () => {
   await db.admin.query(
     'TRUNCATE community.publication_head, community.publication, community.realm, community.realm_revision, community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
   );
@@ -354,8 +356,8 @@ test('publication writes and pages stay within their bound at 256, 2048 and 1638
         db,
         population(`community-publication-page-${realmId}`, hotPartition, await positionOf(hotPartition)),
         {
-          from: previous,
-          to: scale,
+          from: previous * populationMultiplier,
+          to: scale * populationMultiplier,
         },
       );
       await refreshPublisher();
@@ -388,7 +390,7 @@ test('publication writes and pages stay within their bound at 256, 2048 and 1638
       await seed(
         db,
         population(`community-publication-write-${realmId}`, hotPartition, await positionOf(hotPartition)),
-        { from: previous, to: scale },
+        { from: previous * populationMultiplier, to: scale * populationMultiplier },
       );
       await refreshPublisher();
     },

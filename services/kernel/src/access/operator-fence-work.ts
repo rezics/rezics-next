@@ -3,7 +3,7 @@ import { systemClock } from '../clock.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import type { CommandTransaction } from '../command/command.ts';
+import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -15,7 +15,7 @@ import {
   type ContinuationEntry,
   type ContinuationSnapshot,
 } from './committed-continuations.ts';
-import { lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import { lifecycleExecutor, type LifecycleReceipt } from './lifecycle-20261025094010-command.ts';
 import { createOperatorCommands } from './operator.ts';
 import { createAccess } from './permission.ts';
 import insertPage from './committed-continuation-page-insert.sql';
@@ -52,7 +52,13 @@ export function createOperatorFenceRunner(config: {
   pageSize?: number;
   root(reference: string): Promise<ContinuationSnapshot>;
   /** Records the effect's one completion on the root, in the effect's transaction, after the expiry check. */
-  record(tx: CommandTransaction, root: ContinuationSnapshot, entry: ContinuationEntry): Promise<void>;
+  record(
+    tx: CommandTransaction,
+    root: ContinuationSnapshot,
+    entry: ContinuationEntry,
+    receiptId: string,
+    receipt: LifecycleReceipt,
+  ): Promise<void>;
 }) {
   const pageSize = config.pageSize ?? PAGE_SIZE;
   allow(Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= PAGE_SIZE);
@@ -127,8 +133,8 @@ export function createOperatorFenceRunner(config: {
         key: pageEntry.key,
         input: { continuationId: root.continuationId, cursor: cursor ?? null },
       },
-      async (tx) => {
-        await config.record(tx, root, pageEntry);
+      async (tx, transactionId, receipt) => {
+        await config.record(tx, root, pageEntry, transactionId, receipt);
         allow(batch);
         const allowlist = batch.operators.map((subject) =>
           entry(
@@ -178,8 +184,8 @@ export function createOperatorFenceRunner(config: {
             key: child.key,
             input: { continuationId: root.continuationId, subjectAccountId, reservationId },
           },
-          async (tx, transactionId) => {
-            await config.record(tx, root, child);
+          async (tx, transactionId, receipt) => {
+            await config.record(tx, root, child, transactionId, receipt);
             const subject = await unfenceSubject.run(tx, {
               route,
               subject_id: subjectAccountId,
@@ -211,17 +217,18 @@ export function createOperatorFenceRunner(config: {
             key: child.key,
             input: { operatorAccountId: root.accountId, subjectAccountId, reservationId, key: child.key },
           },
-          async (tx, transactionId) => {
-            await config.record(tx, root, child);
+          async (tx, transactionId, businessReceipt) => {
+            const receiptId = derivedId('134e9749-1120-8a0c-97d0-71287a629cef', `${transactionId}:fence`, route);
             const related = await fenceSubject.run(tx, {
               route,
               subject_id: subjectAccountId,
               operator_id: root.accountId,
               reservation_id: reservationId,
             });
+            await config.record(tx, root, child, related ? receiptId : transactionId, businessReceipt);
             if (!related) return { accountId: subjectAccountId, fenced: false, receiptId: null };
-            const receiptId = derivedId('134e9749-1120-8a0c-97d0-71287a629cef', `${transactionId}:fence`, route);
             const receipt = await nativeFence.run(tx, {
+              at: authoritativeTimeValue(currentCommand(tx).time),
               route,
               account_id: subjectAccountId,
               receipt_id: receiptId,

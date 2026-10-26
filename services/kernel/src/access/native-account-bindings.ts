@@ -1,4 +1,4 @@
-import { accessClock } from './access-clock.ts';
+import { accessClock, installAccessClock } from './access-clock.ts';
 import type {
   AccountWorkflowPorts,
   AccountOperation,
@@ -30,12 +30,21 @@ import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
 import { createOperatorSessionCapability } from './auth-session-capability.ts';
-import { createCommittedContinuations, ContinuationDeniedError } from './committed-continuations.ts';
-import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
+import {
+  createCommittedContinuations,
+  ContinuationDeniedError,
+  COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
+} from './committed-continuations.ts';
+import {
+  createWorkflowApprovals,
+  workflowApprovalBinding,
+  WorkflowApprovalUnavailableError,
+} from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
+import { IdempotencyConflictError } from '../command/command.ts';
 
 /** Auth-host-owned receipt/staging point-read closures, never request fields or
  * fixture maps. Persist the real createPending command reference under the exact
@@ -139,7 +148,8 @@ function translateNativeRefusal(error: unknown): never {
     error instanceof DelegationDeniedError ||
     error instanceof ResourceAccessWriteDeniedError ||
     error instanceof OperatorDeniedError ||
-    error instanceof ContinuationDeniedError
+    error instanceof ContinuationDeniedError ||
+    error instanceof IdempotencyConflictError
   )
     throw new AuthBindingDeniedError();
   throw error;
@@ -173,6 +183,7 @@ function authWorkflowBoundary<T extends object>(ports: T): T {
  * retained only by the live session capability and is never called here. */
 export function createNativeAccountBindings(config: NativeAccountBindingsConfig): NativeAccountBindings {
   const { pool, access, actions, referenceKeys, proofs } = config;
+  if (config.clock) installAccessClock(access, config.clock);
   const workflow = proofs.workflow as AuthWorkflowProofPorts;
   const internalLifecycle = createLifecycleInternals({
     pool,
@@ -231,7 +242,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       verifyCredentialEffect: (reference, expected) =>
         config.auth().internal.verifyCredentialEffect(reference, expected),
     }));
-  const boundary = () => ({ pool, deadline: Date.now() + 10000 });
+  const boundary = () => ({ pool, deadline: Date.now() + COMMITTED_CONTINUATION_RESUME_BUDGET_MS });
   const trustedAccess: TrustedAccessPorts = {
     ...createAuthBindings({
       pool,
@@ -343,8 +354,9 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     },
     provisioningEvidence: (input) => workflow.provisioningEvidence(input),
     authorizeOperation: (reference, operation) => approvals.resolve(reference, operation, boundary()),
-    authorizeUnprotectedOperation: async (operation) => {
-      await approvals.resolve('', operation, boundary());
+    authorizeUnprotectedOperation: async () => {
+      // Native workflows provide no authority capability for unapproved operations.
+      throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,

@@ -182,7 +182,7 @@
       "body": {
         "subjects": [
           {
-            "id": "01a178a7-06ca-75b0-b60b-4671af4ce6b5",
+            "id": "01a17972-cf6a-744f-aff2-67e3a1c29953",
             "type": "schema:Book",
             "labels": {
               "de": "Der kleine Prinz",
@@ -208,7 +208,7 @@
         ],
         "total": { "value": 3, "relation": "exact" },
         "next": null,
-        "as_of": "2026-10-26T14:39:17.230Z"
+        "as_of": "2026-10-26T18:21:56.818Z"
       }
     },
     "r1": {
@@ -228,7 +228,7 @@
         ],
         "total": { "value": 2, "relation": "exact" },
         "next": null,
-        "as_of": "2026-10-26T14:39:17.230Z"
+        "as_of": "2026-10-26T18:21:56.818Z"
       }
     },
     "r2": {
@@ -248,7 +248,7 @@
         ],
         "total": { "value": 2, "relation": "exact" },
         "next": null,
-        "as_of": "2026-10-26T14:39:17.230Z"
+        "as_of": "2026-10-26T18:21:56.818Z"
       }
     },
     "r3": {
@@ -268,7 +268,7 @@
         ],
         "total": { "value": 2, "relation": "exact" },
         "next": null,
-        "as_of": "2026-10-26T14:39:17.230Z"
+        "as_of": "2026-10-26T18:21:56.818Z"
       }
     }
   },

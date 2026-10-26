@@ -6,3 +6,6 @@ properties:
   schema:weight: masa
   wdt:P1853: grupo sanguíneo
   wdt:P6296: identificador de personaje en Bangumi
+inverseProperties:
+  schema:gender: 'Sujetos de este género'
+  wdt:P1853: 'Sujetos de este grupo sanguíneo'

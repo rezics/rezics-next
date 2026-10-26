@@ -5,6 +5,9 @@ import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { withConnection } from '../database/pool.ts';
+import { routeOf } from '../route/route.ts';
+import { createPreferenceCommands, readAccountPreferences } from './preferences.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -30,6 +33,11 @@ const publicIdentity = t.Object(
   },
   closed,
 );
+const preferenceValues = {
+  spoilerLevel: t.Union([t.Literal(0), t.Literal(1), t.Literal(2)]),
+  suitability: t.Union([t.Literal('blur'), t.Literal('show')]),
+};
+const preferences = t.Object({ ...preferenceValues, version: t.Integer({ minimum: 0 }) }, closed);
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -81,7 +89,7 @@ function strict<S extends TSchema>(schema: S) {
       validate(value: unknown) {
         return validator.Check(value)
           ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the grant schema' }] };
+          : { issues: [{ message: 'Value does not match the request schema' }] };
       },
       jsonSchema: { input: () => schema, output: () => schema },
     },
@@ -171,7 +179,80 @@ export function accessRoutes(
       access: dependencies.access(),
       clock: dependencies.clock,
     }));
+  let preference: ReturnType<typeof createPreferenceCommands> | undefined;
+  const preferenceCommands = () =>
+    (preference ??= createPreferenceCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
+    .get(
+      '/v1/accounts/:accountId/preferences',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: { 200: preferences, ...failures },
+        detail: {
+          operationId: 'account.read_preferences',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, authorize, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (actor.accountId !== params.accountId) throw new ProblemError('forbidden');
+        const check = await authorize({ route: routeOf(params.accountId)!, id: params.accountId });
+        const value = await admission.run('normal', job, () =>
+          withConnection(dependencies.pool, async (client) => {
+            if (!(await check(client))) throw new ProblemError('forbidden');
+            return readAccountPreferences(client, params.accountId);
+          }),
+        );
+        set.headers['cache-control'] = 'private, no-store';
+        return value;
+      },
+    )
+    .patch(
+      '/v1/accounts/:accountId/preferences',
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(
+          t.Object(
+            {
+              expectedVersion: t.Integer({ minimum: 0, maximum: 2147483646 }),
+              spoilerLevel: t.Optional(preferenceValues.spoilerLevel),
+              suitability: t.Optional(preferenceValues.suitability),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: withHeaders(preferences, { [SESSION_HEADER]: t.String() }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: { ...detail('account.set_preferences'), 'x-action': 'account:update' },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (actor.accountId !== params.accountId) throw new ProblemError('forbidden');
+        try {
+          const outcome = await admission.run('normal', job, () =>
+            preferenceCommands().setPreferences(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { ...body, accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(outcome);
+          set.headers['cache-control'] = 'private, no-store';
+          return outcome.value;
+        } catch (error) {
+          return denied(error);
+        }
+      },
+    )
     .get(
       '/v1/accounts',
       {

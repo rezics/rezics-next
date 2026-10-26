@@ -81,6 +81,7 @@ if (process.argv.includes('--content-worker')) {
       CONTENT_AUTH_CONSENT_URL: `${consentEndpoint}/internal/v1/consents:read`,
       CF_ACCESS_CLIENT_ID: 'fixture.access',
       CF_ACCESS_CLIENT_SECRET: 'fixture-secret',
+      KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
       AUTH_ISSUER: 'https://auth.example.test',
       AUTH_AUDIENCE: 'https://api.example.test',
       AUTH_JWKS_URL: 'https://auth.example.test/.well-known/jwks.json',

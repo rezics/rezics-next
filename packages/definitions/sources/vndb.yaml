@@ -888,7 +888,8 @@ enumerations:
       }
     - {
         value: preq,
-        term: 'wdt:P156',
+        term: 'wdt:P155',
+        inverse: true,
         mapping: 'wdt:P156',
         meaning: The subject work is followed by the target work.,
         citations: ['https://www.wikidata.org/wiki/Property:P156'],
@@ -923,7 +924,8 @@ enumerations:
       }
     - {
         value: par,
-        term: 'wdt:P4969',
+        term: 'wdt:P144',
+        inverse: true,
         mapping: 'wdt:P4969',
         meaning: The target work is a side story derived from the subject parent story.,
         citations: ['https://www.wikidata.org/wiki/Property:P4969'],
@@ -939,7 +941,8 @@ enumerations:
       }
     - {
         value: fan,
-        term: 'wdt:P2512',
+        term: 'rezics:spinOffOf',
+        inverse: true,
         mapping: 'wdt:P2512',
         meaning: The target work is a fandisc spin-off of the subject work.,
         citations: ['https://www.wikidata.org/wiki/Property:P2512'],
@@ -1323,6 +1326,8 @@ table_types:
     citations: ['https://www.wikidata.org/wiki/Property:749', 'https://www.wikidata.org/wiki/Property:P749']
   wdt:P156:
     status: existing
+    term: wdt:P155
+    inverse: true
     mapping: wdt:P156
     meaning: The work that follows this visual novel.
     citations: ['https://www.wikidata.org/wiki/Property:P156']
@@ -1333,6 +1338,8 @@ table_types:
     citations: ['https://www.wikidata.org/wiki/Property:P1889']
   wdt:P2512:
     status: existing
+    term: rezics:spinOffOf
+    inverse: true
     mapping: wdt:P2512
     meaning: A spin-off work relation.
     citations: ['https://www.wikidata.org/wiki/Property:P2512']
@@ -1348,6 +1355,8 @@ table_types:
     citations: ['https://www.wikidata.org/wiki/Property:P31']
   wdt:P4969:
     status: existing
+    term: wdt:P144
+    inverse: true
     mapping: wdt:P4969
     meaning: A derivative work relation.
     citations: ['https://www.wikidata.org/wiki/Property:P4969']

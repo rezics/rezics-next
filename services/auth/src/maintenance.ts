@@ -1,6 +1,14 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthService } from './index.ts';
 import { SigningRotationPending } from './signing.ts';
+import {
+  readWorkflowRetentionConfig,
+  runWorkflowRetentionSweep,
+  WORKFLOW_RETENTION_WORKFLOW,
+  WORKFLOW_RETENTION_SCHEDULE,
+  WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
+  type WorkflowRetentionConfig,
+} from './retention.ts';
 
 export const AUTH_SYSTEM_SCHEMA = 'auth_dbos';
 export const AUTH_MAINTENANCE_SCHEDULE = 'auth-maintenance';
@@ -9,7 +17,10 @@ export const AUTH_MAINTENANCE_CRON = '0 * * * * *';
 /** Register before the Auth executor launches. Each replayable purpose step
  * invokes exactly one bounded primitive; backlog waits for another native tick.
  * Only counts cross the DBOS boundary, never product rows or key material. */
-export function registerAuthMaintenance(auth: AuthService) {
+export function registerAuthMaintenance(
+  auth: AuthService,
+  retention: WorkflowRetentionConfig = readWorkflowRetentionConfig(process.env),
+) {
   const step = (purpose: string, run: () => Promise<number>) =>
     DBOS.registerStep(
       async () => {
@@ -47,6 +58,16 @@ export function registerAuthMaintenance(auth: AuthService) {
     { name: 'auth.maintenance.tick' },
   );
 
+  const retainWorkflows = step('retainWorkflows', () => runWorkflowRetentionSweep(retention.retentionDays));
+  const retentionTick = DBOS.registerWorkflow(
+    async (_scheduledAt: Date, _context: unknown): Promise<void> => {
+      await retainWorkflows();
+    },
+    {
+      name: WORKFLOW_RETENTION_WORKFLOW,
+    },
+  );
+
   return {
     async start(schedule = AUTH_MAINTENANCE_CRON) {
       await DBOS.registerQueue(AUTH_MAINTENANCE_SCHEDULE, { globalConcurrency: 1, workerConcurrency: 1 });
@@ -55,6 +76,15 @@ export function registerAuthMaintenance(auth: AuthService) {
           scheduleName: AUTH_MAINTENANCE_SCHEDULE,
           workflowFn: tick,
           schedule,
+          context: null,
+          automaticBackfill: false,
+          cronTimezone: 'UTC',
+          queueName: AUTH_MAINTENANCE_SCHEDULE,
+        },
+        {
+          scheduleName: WORKFLOW_RETENTION_SCHEDULE,
+          workflowFn: retentionTick,
+          schedule: WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
           context: null,
           automaticBackfill: false,
           cronTimezone: 'UTC',

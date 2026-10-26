@@ -20,6 +20,7 @@ import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import type { WorkModule } from '../../src/work/registry.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -420,7 +421,7 @@ test(
             {
               type: 'com.rezics.content.thread.created.v1',
               subject: threadId,
-              data: { threadId, itemId, revisionId, actorId },
+              data: { threadId, itemId, revisionId, actorId, ...SUBJECT_THREAD_EVENT_FIELDS },
             },
           ],
         };

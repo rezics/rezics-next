@@ -7,12 +7,12 @@ exports the release types, the JSON Schema 2020-12 document at
 Use `validateRelease(input)` before storing a release. An empty array means valid;
 otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
-Validation checks references, CURIE expansion, sorted unique lists, type bases and
-facets, datatype-specific members, fixed value schemas, context defaults, saved
-filters, and regular-expression safety. A facet is an item, a time, a quantity, or
-a code: a `string` whose release definition has a `pattern`. Pattern checks use
-recheck's in-process synchronous entry point, with a three-second timeout per
-distinct pattern; inconclusive results fail validation.
+Validation checks references, CURIE expansion, sorted unique lists, type bases,
+facets, relation metadata and cover ratios, datatype-specific members, fixed value
+schemas, context defaults, saved filters, and regular-expression safety. A facet is
+an item, a time, a quantity, or a code: a `string` whose release definition has a
+`pattern`. Pattern checks use recheck's in-process synchronous entry point, with a
+three-second timeout per distinct pattern; inconclusive results fail validation.
 
 Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
 type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
@@ -55,6 +55,54 @@ catalogue, presentation, context-settings, and saved-filter YAML files for
 compilation. Each type release records its structural `bases` as CURIEs, nearest
 first, and its registered `facets` in display order. Each vertical declares its own
 facets.
+
+An item property may compile a `relation` with a group, exactly one of an inverse
+CURIE, `inverse: "none"`, or `symmetric: true`, optional acyclicity, an order key
+(default `name`), and an item-qualifier filter. A standard inverse is export and
+mapping metadata; it cannot also be a property in the release. Directed inverses
+also carry `relation.inverseLabels`, supplied under `inverseProperties` in the
+presentation group for the schema file that defines the property. Types may carry
+`coverRatio` as `W:H`, where each positive integer is at most 64; compilation
+inherits the nearest annotated base's ratio when a type has no annotation of its
+own.
+
+The relation groups are `order`, `derivation`, `world`, `membership`, and
+`association` for the Relations view; `credit` for staff and cast in Credits and
+Works; `appearance` for characters in Characters and Appearances; and
+`classification` for concept-valued facts such as genre, tags, platform, gender,
+and form. Every bundled item property declares a relation, including item
+qualifiers. Qualifier-only role properties use `inverse: none`; they do not
+create standalone inbound relations.
+
+Bundled facts are stored on the later work (`wdt:P155`), derived work
+(`wdt:P144`, `rezics:spinOffOf`, `wdt:P8646`), edition
+(`schema:exampleOfWork`), member (`wdt:P179`), contained work
+(`wdt:P361`, `schema:isPartOf`, `wdt:P1433`), or credited work
+(credits and `schema:character`). Their reverse terms are metadata, never
+additional properties. `wdt:P1889` is symmetric. Credits admit credited-as,
+position and detailed role, sort by position, and filter by `wdt:P3831`;
+appearances filter by that role and sort by name. Series members sort by
+position; follows and edition-of reads sort by date. Other bundled relations
+sort by name without inventing a source ordinal. Episode, edition and release
+profiles admit the credit properties with the same qualifiers as works.
+
+Source inventory mappings may declare `inverse: true`: `term` names the
+canonical bundled property, and the related subject holds the statement whose
+value is the source subject. Without that field, the source subject holds it.
+The external `mapping` or `wikidata`, meaning and citations retain the source
+direction. In a vocabulary map keyed by a source term, an explicit `term`
+overrides that key as the canonical property. Omitted mappings remain omitted.
+Reverse terms without a standard equivalent use `rezics:` with labels in all
+eight locales; `rezics:spinOffOf` is the canonical reverse of `wdt:P2512`.
+
+Work profiles admit multivalued `rezics:representativeEdition`, targeting the
+book edition and software release classes that hold `schema:exampleOfWork`.
+Its `schema:inLanguage` qualifier distinguishes the chosen edition for each
+language. It is a holder-only derivation relation: a cover read follows that
+choice directly rather than scanning editions. Work classes without a more
+specific cover ratio inherit 2:3; other subjects inherit 1:1. Character and
+person portraits use 3:4, games and their releases use 3:4, music releases use
+1:1, and recipes use 4:3. Books, manga, volumes and anime inherit 2:3.
 
 `schema:inLanguage` is the BCP 47 language tag of the resource. The catalogue stores
 the canonical case of the subtags it uses: a lowercase language, an optional
@@ -212,7 +260,9 @@ Source conventions:
   Every concrete class needs an explicit `class_uri` CURIE and becomes a type.
   LinkML derives its properties through `is_a` and `slot_usage`; each type has at
   most 64.
-- A class may set `annotations.facets` to a space-separated list of slot names.
+- A class may set `annotations.facets` to a space-separated list of slot names and
+  `annotations.cover_ratio` to a `W:H` ratio with positive integer sides from 1 to 64. A type compiles its own ratio or the first annotated base's ratio, nearest
+  first; absent ratios stay absent for consumers to default.
   A type inherits its ancestors' declarations from root to leaf, retaining that
   display order. Each facet must be one of the type's properties. Its datatype is
   `wikibase-item`, `time`, or `quantity`, or `string` with a `pattern` in the
@@ -232,9 +282,10 @@ Source conventions:
   Class and slot keys must each be unique. Prefix expansions must be consistent
   across files. Different induced contracts for the same property cannot be
   represented in one release and are refused.
-- Slot `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
-  is required: `wikibase-item` needs a class range or `any_of` class ranges; `string`,
-  `external-id`, `monolingualtext`, `document`, and `media` need `string`;
+- Slot `annotations` permits `datatype`, `units`, `qualifiers`, `relation_group`,
+  `inverse`, `symmetric`, `acyclic`, `relation_order`, and `relation_filter`.
+  `datatype` is required: `wikibase-item` needs a class range or `any_of` class
+  ranges; `string`, `external-id`, `monolingualtext`, `document`, and `media` need `string`;
   `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.
   An omitted range uses the source schema's default, otherwise `string`.
 - `external-id` requires exactly one exact mapping, matching `wd:P<digits>`.
@@ -247,8 +298,10 @@ Source conventions:
   256 characters, and receive `safe` from recheck's synchronous checker.
 - Each presentation entry uses a BCP 47 language tag or `<group>/<tag>`, where
   group matches `^[a-z][a-z0-9-]{0,63}$`, and contains a YAML object with optional
-  `types` and `properties` maps, keyed by release CURIE. Files with the same tag
-  merge; a term can be labelled only once per tag. Labels must be nonempty strings
+  `types`, `properties`, and `inverseProperties` maps, keyed by release CURIE.
+  Inverse-property labels belong to the group of the schema file that defines the
+  property. Files with the same tag merge; a term can be labelled only once per
+  tag. Labels must be nonempty strings
   of at most 256 characters. Unknown terms and other keys are refused. Every
   emitted type and property requires an `en` label; other locales may be partial.
 - Optional `contexts` supplies Context settings YAML keyed by id. Each id matches

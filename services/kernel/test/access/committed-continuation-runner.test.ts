@@ -5,18 +5,19 @@ import { Pool } from 'pg';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import {
   ContinuationDeniedError,
+  continuationEntryDigest,
   createCommittedContinuations,
   type ContinuationView,
 } from '../../src/access/committed-continuations.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createAccess as createAuthenticatedAccess } from '../../src/access/index.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor, ActionCatalogue } from '../../src/request/access.ts';
+import type { ActionCatalogue } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -28,7 +29,7 @@ const actions: ActionCatalogue = new Map([
   ['account:manage', { anonymous: false }],
   ['account:suspend', { anonymous: false }],
 ]);
-const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions });
 const operators = createOperatorCommands({ pool, access, actions, managementAction: 'account:manage' });
 const lifecycle = createLifecycleCommands({ pool, access });
 const proofs = new Map<
@@ -60,14 +61,17 @@ const key = () => `continuation-runner-${++sequence}`;
 const digestOf = (value: string) => createHash('sha256').update(value).digest('hex');
 const row = (id: string) => withConnection(pool, (client) => readAccount(client, routeOf(id)!, id));
 const ctx = async (id: string) => ({
-  actor: {
-    kind: 'account',
-    accountId: id,
-    clientId: 'verified-client',
-    scopes: [...actions.keys()],
-    requestedBy: null,
-    authnEpoch: 1,
-  } as AccountActor,
+  actor: await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 30_000 },
+    {
+      accountId: id,
+      clientId: 'verified-client',
+      scopes: [...actions.keys()],
+      requestedBy: null,
+      authnEpoch: 1,
+    },
+  ),
   account: await row(id),
   deadline: Date.now() + 3000,
 });
@@ -135,19 +139,19 @@ async function deleteAccount(accountId: string): Promise<ContinuationView> {
   if (!view) throw new Error('The tombstone committed no continuation');
   return view;
 }
-async function plainAccount() {
-  const id = newId(0x7562);
+async function plainAccount(route = 0x7562) {
+  const id = newId(route);
   await facts.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete) VALUES ($1,$2,'actor','active',$2,true)`,
     [routeOf(id), id],
   );
   return id;
 }
-async function operatedBy(count: number) {
+async function operatedBy(count: number, subjectRoute = 0x7562) {
   const operator = await plainAccount();
   const subjects: string[] = [];
   for (let index = 0; index < count; index++) {
-    const subject = await plainAccount();
+    const subject = await plainAccount(subjectRoute);
     const reservation = `00000000-0000-8000-8000-7562${index.toString(16).padStart(8, '0')}`;
     await facts.query(`INSERT INTO access.lifecycle_coordination VALUES ($1,$2,$3,$4,'operator',$2)`, [
       routeOf(operator),
@@ -273,6 +277,40 @@ test('a fencing continuation still runs as before and every page and child effec
     'operator-responsibility-page',
   ]);
   expect(new Set(recorded.map((item) => item.key)).size).toBe(recorded.length);
+  const expanded = (await continuations.read(root.operationKey, fixture.operator))!;
+  expect(expanded.reference).toBe(root.reference);
+  expect(expanded.allowlist).toHaveLength(root.allowlist.length + 4);
+  for (const item of recorded) {
+    expect(expanded.allowlist).toContainEqual({
+      step: item.step,
+      target: item.target,
+      key: item.key,
+      digest: continuationEntryDigest(item),
+    });
+  }
+  const receipts = await facts.query<{ matches: boolean; native: boolean }>(
+    `SELECT r.idempotency_key = c.receipt_key AND encode(r.request_digest,'hex') = c.receipt_digest AS matches,
+            c.step <> 'fence' OR f.receipt_id = c.receipt_id AS native
+     FROM access.committed_continuation_completion c
+     LEFT JOIN access.lifecycle_fence_receipt f ON f.receipt_id = c.receipt_id
+       AND f.account_id = split_part(c.target, ':', 1)::uuid
+     LEFT JOIN core.receipt r ON r.transaction_id = COALESCE(f.transaction_id, c.receipt_id)
+     WHERE c.route=$1 AND c.continuation_id=(SELECT continuation_id FROM access.committed_continuation
+       WHERE route=$1 AND operation_key=$2)`,
+    [routeOf(fixture.operator), root.operationKey],
+  );
+  expect(receipts.rows).toHaveLength(recorded.length);
+  for (const receipt of receipts.rows) expect(receipt).toEqual({ matches: true, native: true });
+  const child = expanded.allowlist.find((item) => item.step === 'fence')!;
+  const forged = { ...child, target: `${newId(routeOf(fixture.operator)!)}:${newId(routeOf(fixture.operator)!)}` };
+  forged.digest = continuationEntryDigest(forged);
+  await expect(continuations.authorizeStep(root.reference, forged)).rejects.toBeInstanceOf(ContinuationDeniedError);
+  await expect(
+    facts.query('UPDATE access.committed_continuation_entry SET digest=$1 WHERE route=$2', [
+      'ab'.repeat(32),
+      routeOf(fixture.operator),
+    ]),
+  ).rejects.toThrow('immutable');
 });
 
 test('a step presented after the stored expiry is refused and releases nothing', async () => {
@@ -307,6 +345,25 @@ test('a step presented after the stored expiry is refused and releases nothing',
   expect(await held(operator.accountId, subject.reservationId)).toBe(false);
   await continuations.continueCommitted(root.reference);
   expect(await fenced(fixture.subjects)).toEqual([true, true, true]);
+});
+
+test('an operated account on another route keeps its native fence receipt on the root completion', async () => {
+  const fixture = await operatedBy(1, 0x8673);
+  const root = await suspended(fixture.operator);
+  await continuations.continueCommitted(root.reference);
+  const completion = (await completed(fixture.operator, root.operationKey)).find((item) => item.step === 'fence')!;
+  expect(routeOf(completion.receipt_id)).toBe(0x8673);
+  const receipt = await facts.query(
+    'SELECT account_id FROM access.lifecycle_fence_receipt WHERE route=$1 AND receipt_id=$2',
+    [0x8673, completion.receipt_id],
+  );
+  expect(receipt.rows).toEqual([{ account_id: fixture.subjects[0] }]);
+  expect((await continuations.read(root.operationKey, fixture.operator))!.allowlist).toContainEqual({
+    step: completion.step,
+    target: completion.target,
+    key: completion.key,
+    digest: continuationEntryDigest(completion),
+  });
 });
 
 test('no step can bypass the expiry checked authorization path', async () => {
@@ -390,4 +447,11 @@ test('crash and replay record nothing twice', async () => {
   expect(all).toHaveLength(5);
   for (const item of afterPage) expect(all).toContainEqual(item);
   expect(await fenced(fixture.subjects)).toEqual([true, true, true]);
+  frozen = pastExpiry(view);
+  try {
+    await expect(restarted.authorizeStep(view.reference, retire)).rejects.toBeInstanceOf(ContinuationDeniedError);
+  } finally {
+    frozen = null;
+  }
+  expect(await completed(subject.accountId, view.operationKey)).toEqual(done);
 });

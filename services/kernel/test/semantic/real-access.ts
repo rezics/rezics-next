@@ -1,6 +1,7 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { Access, Resource } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -66,16 +67,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   const readChecks: RealAccessCheck[] = [];
   const access = (config: AccessConfig): Access => {
     const real = createAccess({ ...config, auth });
-    return {
-      authenticate(token, context) {
-        return real.authenticate(token, context);
-      },
-      prepare(actor, action, resource, context) {
-        return real.prepare!(actor, action, resource, context);
-      },
-      replayAuthorization(action) {
-        return real.replayAuthorization?.(action);
-      },
+    return deriveAccess(real, {
       async authorize(client, actor, action, resource, evidence, time) {
         const check = {
           persona: actor.kind === 'account' ? (accountById.get(actor.accountId) ?? 'unknown') : 'anonymous',
@@ -86,7 +78,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
         else checks.push(check);
         return real.authorize(client, actor, action, resource, evidence, time);
       },
-    };
+    });
   };
 
   async function grant(resource: Resource, persona: Persona, action: string): Promise<void> {

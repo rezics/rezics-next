@@ -2,8 +2,10 @@ types:
   wd:Q689445: Visual Novel
 properties:
   wdt:P144: basiert auf
-  wdt:P156: Nachfolger
   wdt:P1889: verschieden von
-  wdt:P2512: hat Ableger
   wdt:P361: ist Teil von
-  wdt:P4969: abgeleitetes Werk
+  rezics:spinOffOf: 'Ableger von'
+inverseProperties:
+  wdt:P144: 'Adaptionen'
+  wdt:P361: 'Bestandteile'
+  rezics:spinOffOf: 'Ableger'

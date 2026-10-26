@@ -37,6 +37,7 @@ export type AccountOperation =
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { AUTH_WORKFLOW_APPLICATION, installWorkflowRequestRetention } from './retention.ts';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
 import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureMessage } from './session-revocation.ts';
@@ -1257,7 +1258,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         options.registerWorkflows?.();
       }
       DBOS.setConfig({
-        name: 'rezics-auth-accounts',
+        name: AUTH_WORKFLOW_APPLICATION,
         systemDatabaseUrl: options.systemDatabaseUrl,
         systemDatabaseSchemaName: systemSchema,
         ...(options.systemDatabasePool ? { systemDatabasePool: options.systemDatabasePool } : {}),
@@ -1267,6 +1268,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         logLevel: 'warn',
       });
       await DBOS.launch();
+      if (sameDatabase) await installWorkflowRequestRetention(database);
       started = true;
       if (options.handleSignals !== false) {
         process.once('SIGINT', interrupt);
@@ -1279,6 +1281,31 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       throw error;
     }
   };
+  async function authorizeOperatorOpening(input: {
+    key: string;
+    authorization: string;
+    operatorAccountId: string;
+    subjectAccountId: string;
+  }) {
+    active();
+    const key = requestKey(input.key);
+    const request = {
+      kind: 'opening' as const,
+      authorization: input.authorization,
+      operatorAccountId: input.operatorAccountId,
+      subjectAccountId: input.subjectAccountId,
+    };
+    const context = await approved(request);
+    const approval = await required(access.authorizeOpening)(context, {
+      operatorAccountId: input.operatorAccountId,
+      subjectAccountId: input.subjectAccountId,
+      purpose: 'session',
+      key: access.stableCommandKey?.(context, 'session-opening') ?? `session:${hash(key).toString('hex')}`,
+    });
+    // The workflow ends at the replayable Access receipt. Only Auth issuance
+    // consumes it; cookies and session responses never become workflow results.
+    return approval.value;
+  }
   return {
     start() {
       if (started) return Promise.resolve();
@@ -1456,6 +1483,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       await DBOS.startWorkflow(clientReduction, { workflowID: id })(operation);
       return waitClientReduction(id);
     },
+    authorizeOperatorOpening,
     async openOperatorSession(input: {
       key: string;
       authorization: string;
@@ -1463,26 +1491,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       subjectAccountId: string;
       headers: Headers;
     }) {
-      active();
-      const request = {
-        kind: 'opening' as const,
-        authorization: input.authorization,
-        operatorAccountId: input.operatorAccountId,
-        subjectAccountId: input.subjectAccountId,
-      };
-      const context = await approved(request);
-      const approval = await required(access.authorizeOpening)(context, {
-        operatorAccountId: input.operatorAccountId,
-        subjectAccountId: input.subjectAccountId,
-        purpose: 'session',
-        key:
-          access.stableCommandKey?.(context, 'session-opening') ??
-          `session:${hash(requestKey(input.key)).toString('hex')}`,
-      });
-      // Cookies and the returned Auth response are deliberately never DBOS input
-      // or output. The native one-use opening receipt is consumed by Auth.
+      const opening = await authorizeOperatorOpening(input);
+      // Immediate HTTP composition retains fail-closed issuance on a retry.
       return auth.internal.openAutomatedSession({
-        authorization: approval.value.receiptId,
+        authorization: opening.receiptId,
         subjectAccountId: input.subjectAccountId,
         headers: input.headers,
       });

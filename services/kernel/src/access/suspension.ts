@@ -12,6 +12,7 @@ import suspendStatement from './suspension-update.sql';
 import probe from './operator-fence-probe.sql';
 import {
   continuationEntryDigest,
+  continuationCommandBinding,
   insertDeletionContinuation,
   validateContinuationBinding,
   type ContinuationBinding,
@@ -61,7 +62,15 @@ export function createSuspensionCommands(config: { pool: Pool; access: Access; c
       const partition = partitionOf(route);
       const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
       const digest = createHash('sha256')
-        .update(canonicalize([route, input.accountId, basis, input.reason ?? null, input.continuation ?? null])!)
+        .update(
+          canonicalize([
+            route,
+            input.accountId,
+            basis,
+            input.reason ?? null,
+            continuationCommandBinding(input.continuation),
+          ])!,
+        )
         .digest();
       const authorization = resourceAuthorization({
         access: config.access,

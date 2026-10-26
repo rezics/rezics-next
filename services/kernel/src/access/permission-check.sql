@@ -7,7 +7,10 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :action::text AS action,
          :resource_ids::uuid[] AS resource_ids, :include_global::boolean AS include_global,
-         NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id, :anonymous::boolean AS anonymous, COALESCE(:floor::nullable(boolean), false) AS floor, :deadline::timestamptz AS deadline
+         NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id,
+         :assignment_route::nullable(integer) AS assignment_route,
+         NULLIF(:assignment_request_id::nullable(text), '')::uuid AS assignment_request_id,
+         :anonymous::boolean AS anonymous, COALESCE(:floor::nullable(boolean), false) AS floor, :deadline::timestamptz AS deadline
 ), branches AS MATERIALIZED (
   SELECT false AS explicit
   UNION ALL
@@ -30,6 +33,14 @@ WITH input AS NOT MATERIALIZED (
 ), authority AS MATERIALIZED (
   SELECT COALESCE(NULLIF(:at::nullable(text), '')::timestamptz, transaction_timestamp()) AS at,
          clock_timestamp() AS observed_at
+), assignment AS MATERIALIZED (
+  SELECT i.assignment_request_id IS NULL OR EXISTS (
+    SELECT 1 FROM access.principal_assignment p
+    WHERE p.route = i.assignment_route AND p.principal_id = i.principal_id
+      AND p.request_id = i.assignment_request_id AND p.assigned_actor_id = i.actor_id
+      AND p.valid @> t.at
+  ) AS valid
+  FROM input i CROSS JOIN authority t
 ), probes AS MATERIALIZED (
   SELECT target.route, target.resource_id, b.explicit, k.*,
     ((SELECT count(*) FROM access.resource_grant g
@@ -51,7 +62,7 @@ WITH input AS NOT MATERIALIZED (
 ), decisions AS MATERIALIZED (
 SELECT target.route, target.resource_id, b.explicit, (
   t.observed_at < i.deadline
-  AND :evidence_valid::tstzrange @> t.at
+  AND assignment.valid
   AND ((i.floor AND NOT b.explicit) OR (NOT i.anonymous AND (
     COALESCE(bool_or(p.account_id = i.actor_id AND p.granted AND p.member AND p.valid @> t.at), false)
     AND (i.principal_id IS NULL OR COALESCE(bool_or(
@@ -63,9 +74,9 @@ SELECT target.route, target.resource_id, b.explicit, (
     (p.denied AND p.member) OR (p.subject_role <> '' AND (p.granted OR p.denied) AND NOT (p.valid @> t.at))
   ), false)
 ) AS allowed
-FROM input i CROSS JOIN authority t CROSS JOIN targets target CROSS JOIN branches b
+FROM input i CROSS JOIN authority t CROSS JOIN assignment CROSS JOIN targets target CROSS JOIN branches b
 LEFT JOIN probes p ON p.route = target.route AND p.resource_id = target.resource_id AND p.explicit = b.explicit
-GROUP BY target.route, target.resource_id, t.observed_at, t.at,
+GROUP BY target.route, target.resource_id, t.observed_at, t.at, assignment.valid,
          i.deadline, i.floor, i.anonymous, i.principal_id, b.explicit
 )
 SELECT local.resource_id::text AS "resourceId",

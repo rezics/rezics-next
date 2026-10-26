@@ -20,6 +20,7 @@ import { customMethod } from '../../http/custom-method.ts';
 import {
   PROBLEM_TYPE_BASE,
   ProblemError,
+  logInternalError,
   problemResponse,
   problemSchema,
   type FieldError,
@@ -61,6 +62,19 @@ const responseSchema = t.Object({
 type Pending = { index: number; route: number | null; command: BatchCommand; errors: FieldError[] };
 
 const served = new Set(['facts', 'summary', 'cover']);
+const BULK_WRITE_ROUTE = '/v1/subjects:batchWrite';
+
+export function logPendingFenceFailure(requestId: string, commandIndex: number): Error {
+  const cause = new Error('Source fence was still pending after the retry pass');
+  logInternalError({
+    requestId,
+    method: 'POST',
+    route: BULK_WRITE_ROUTE,
+    cause,
+    commandIndex,
+  });
+  return cause;
+}
 
 function fencedProblem(requestId: string) {
   return {
@@ -319,6 +333,14 @@ export function bulkRoutes(
                 id: requestId,
                 action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
               });
+              if (response.status === 500)
+                logInternalError({
+                  requestId,
+                  method: 'POST',
+                  route: BULK_WRITE_ROUTE,
+                  cause: error,
+                  commandIndex: pending.index,
+                });
               const payload = await response.json();
               if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
               results[pending.index] = { key, status: response.status, problem: payload };
@@ -347,7 +369,8 @@ export function bulkRoutes(
       for (const [, jobs] of remaining) {
         for (const pending of jobs) {
           const key = typeof pending.command?.key === 'string' ? pending.command.key : '';
-          const response = problemResponse(new ProblemError('internal_error'), {
+          const cause = logPendingFenceFailure(requestId, pending.index);
+          const response = problemResponse(cause, {
             method: 'POST',
             id: requestId,
             action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',

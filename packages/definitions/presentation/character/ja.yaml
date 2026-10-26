@@ -6,3 +6,6 @@ properties:
   schema:weight: 質量
   wdt:P1853: 血液型
   wdt:P6296: 番組計画登場人物識別子
+inverseProperties:
+  schema:gender: 'このジェンダーの対象'
+  wdt:P1853: 'この血液型の対象'

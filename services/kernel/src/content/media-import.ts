@@ -48,6 +48,34 @@ const platform = Object.freeze({ route: 0, id: '00000000-0000-8000-8000-00000000
 const action = 'media:import_from_url';
 const kind = 'content.media.importFromUrl';
 
+export type MediaCropTuple = [left: number, top: number, width: number, height: number];
+
+export function mediaCropTuple(fragment?: string): MediaCropTuple | null {
+  if (fragment === undefined) return null;
+  const match = /^xywh=(\d+),(\d+),(\d+),(\d+)$/.exec(fragment);
+  if (!match) throw new TypeError('Invalid media import request');
+  const values = match.slice(1).map(Number);
+  if (
+    values.some((number) => !Number.isSafeInteger(number) || number > 2_147_483_647) ||
+    values[2]! < 1 ||
+    values[3]! < 1
+  )
+    throw new TypeError('Invalid media import request');
+  return values as unknown as MediaCropTuple;
+}
+
+export function mediaCropFragment(crop: readonly (number | null)[] | null): string | undefined {
+  if (crop === null) return undefined;
+  if (
+    crop.length !== 4 ||
+    crop.some((number) => number === null || !Number.isSafeInteger(number) || number < 0 || number > 2_147_483_647)
+  )
+    throw new TypeError('Invalid stored media crop');
+  const values = crop as readonly number[];
+  if (values[2]! < 1 || values[3]! < 1) throw new TypeError('Invalid stored media crop');
+  return `xywh=${values.join(',')}`;
+}
+
 async function validatePlatform(client: AccessClient): Promise<boolean> {
   if (!(await readPartition(client, partitionOf(platform.route)))) return false;
   const row = await readContext.run(client, { route: platform.route, context_id: platform.id });
@@ -243,6 +271,9 @@ export async function importMediaFromUrl(
         source_url: body.sourceUrl,
         credit: body.credit,
         provenance: body.provenance,
+        crop: mediaCropTuple(body.crop),
+        focal_x: body.focalPoint?.x ?? null,
+        focal_y: body.focalPoint?.y ?? null,
         at: authoritativeTimeValue(command.time),
         transaction_id: command.transactionId,
       });
@@ -305,6 +336,8 @@ export async function readMediaImportStatus(
     sourceUrl: row.source_url,
     credit: row.credit,
     provenance: row.provenance,
+    ...(row.crop === null ? {} : { crop: mediaCropFragment(row.crop) }),
+    ...(row.focal_x === null || row.focal_y === null ? {} : { focalPoint: { x: row.focal_x, y: row.focal_y } }),
   };
   if (checkMediaImportRequest(source).length > 0) return null;
   const input = source as MediaImportRequest;
@@ -326,6 +359,8 @@ export async function readMediaImportStatus(
       sha256: row.sha256,
       credit: input.credit,
       provenance: input.provenance,
+      ...(input.crop === undefined ? {} : { crop: input.crop }),
+      ...(input.focalPoint === undefined ? {} : { focalPoint: input.focalPoint }),
       ...(row.state === 'rejected' ? { rejection: { code: rejectionCode(row.decision) } } : {}),
     },
   };
@@ -339,7 +374,8 @@ export async function readMediaImportStatus(
 
 function rejectionCode(decision: string | null): string {
   const code = decision?.split(':', 1)[0];
-  return code && /^source-(?:url|bytes|headers|network|redirect|timeout|evidence|fenced|format|integrity)$/.test(code)
+  return code === 'crop_out_of_bounds' ||
+    (code && /^source-(?:url|bytes|headers|network|redirect|timeout|evidence|fenced|format|integrity)$/.test(code))
     ? code
     : 'image-rejected';
 }

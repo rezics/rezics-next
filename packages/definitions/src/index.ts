@@ -36,10 +36,30 @@ export type TypeDefinition = {
   bases: string[];
   properties: string[];
   facets: string[];
+  coverRatio?: string;
+};
+export type RelationGroup =
+  | 'order'
+  | 'derivation'
+  | 'world'
+  | 'membership'
+  | 'association'
+  | 'credit'
+  | 'appearance'
+  | 'classification';
+export type RelationDefinition = {
+  group: RelationGroup;
+  inverse?: string;
+  inverseLabels?: Record<string, string>;
+  symmetric?: true;
+  acyclic?: true;
+  order?: 'position' | 'date' | 'name';
+  filter?: string;
 };
 export type PropertyDefinition = {
   iri: string;
   labels: Record<string, string>;
+  relation?: RelationDefinition;
   mappings: string[];
   datatype: DataType;
   multivalued: boolean;
@@ -315,9 +335,33 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
   }
   const targetNames = new Set(Object.keys(release.types));
   for (const type of Object.values(release.types)) for (const base of type.bases) targetNames.add(base);
+  const propertyIris = new Set(Object.values(release.properties).map((property) => property.iri));
   for (const [key, property] of Object.entries(release.properties)) {
     const pointer = at('/properties', key);
     list(property.qualifiers, at(pointer, 'qualifiers'), release.properties);
+    const relation = property.relation;
+    if (relation) {
+      const relationPointer = at(pointer, 'relation');
+      if (property.datatype !== 'wikibase-item') add(relationPointer);
+      const hasInverse = own(relation, 'inverse');
+      const hasSymmetric = own(relation, 'symmetric');
+      if (hasInverse === hasSymmetric) add(relationPointer);
+      const inverse = relation.inverse;
+      if (typeof inverse === 'string' && inverse !== 'none') {
+        const inverseIri = expand(inverse);
+        if (inverseIri === undefined || own(release.properties, inverse) || propertyIris.has(inverseIri))
+          add(at(relationPointer, 'inverse'));
+        if (!own(relation, 'inverseLabels')) add(at(relationPointer, 'inverseLabels'));
+      } else if (own(relation, 'inverseLabels')) add(at(relationPointer, 'inverseLabels'));
+      if (hasSymmetric && own(relation, 'acyclic')) add(at(relationPointer, 'acyclic'));
+      if (relation.order === 'position' && !property.qualifiers.includes('schema:position'))
+        add(at(relationPointer, 'order'));
+      if (relation.filter !== undefined) {
+        const qualifier = release.properties[relation.filter];
+        if (!property.qualifiers.includes(relation.filter) || qualifier?.datatype !== 'wikibase-item')
+          add(at(relationPointer, 'filter'));
+      }
+    }
     for (const member of ['targets', 'units', 'minimum', 'maximum'] as const) {
       const allowed = member === 'targets' ? property.datatype === 'wikibase-item' : property.datatype === 'quantity';
       const required = member === 'targets' || member === 'units';

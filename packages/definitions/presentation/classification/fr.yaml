@@ -7,3 +7,9 @@ properties:
   foaf:focus: 'sujet représenté'
   schema:keywords: 'mots-clés'
   schema:genre: 'genre'
+inverseProperties:
+  skos:inScheme: 'Concepts de ce schéma'
+  skos:broader: 'Concepts plus spécifiques'
+  foaf:focus: 'Concepts représentant ce sujet'
+  schema:genre: 'Œuvres de ce genre'
+  schema:keywords: 'Sujets portant cette étiquette'

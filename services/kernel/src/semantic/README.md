@@ -26,6 +26,68 @@ Semantic writes use the route action and authority below. When the authority and
 | Definition activation              | `definitions:activate` | Global Context                             |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
 
+## Relations
+
+A relation is a statement whose property is an item property and whose value is another subject. Subject-to-subject relations, credits and character appearances all use this one shape; none has a table, endpoint or read path of its own.
+
+### Relation properties
+
+Every item property in a definition release declares how it reads in both directions:
+
+- `inverse`: the property that states the same fact from the value's side, or `symmetric: true` when the fact reads the same from both sides (`same setting`, `alternative version`). A property with neither is shown only on the subject that holds the statement, and the release says so with `inverse: none`.
+- `labels` and `inverseLabels`: localized names for each direction ("Sequel" and "Prequel", "Adapted from" and "Adaptations"). A label never has to be inferred by reversing a sentence.
+- `group`: the display group a relation belongs to: `order` (prequel, sequel, parent story, side story), `derivation` (adaptation, based on, spin-off, translation, edition), `world` (same setting, alternative setting, alternative version), `membership` (series, part of, collection) or `association` (other Relations view entries); `credit` for staff and cast in Credits and Works, `appearance` for characters in Characters and Appearances, and `classification` for concept-valued facts such as genre, tags, platform, gender and form.
+- `targets`: the admitted value types, as for every item property.
+- `order`: `position` (the statement's `schema:position`), `date` (the holder's earliest `schema:datePublished`) or `name` (its default label). Missing values sort last; ties use holder id and statement id. Properties without an order retain holder-id order.
+- `filter`: one admitted item qualifier whose values select inverse pages, for example a credit role.
+- `acyclic: true` when the relation must form a directed acyclic graph (part of, prequel, based on). A write that would close a cycle is refused.
+
+A fact is stored once, on the side the release names as canonical. The other side is a read of the inverse, never a second statement, so the two directions cannot disagree. The inverse is served from inbound-edge rows in the target's partition, maintained from the forward statement and rebuildable from it.
+
+The per-subject fact cap bounds a subject's descriptive facts. It never bounds how many relations a subject can take part in: a long-running series has hundreds of characters, each with a voice credit, and a prolific performer has thousands of credits. Relations are therefore read in pages in both directions, and the anchored subject read returns only a bounded preview of each relation group with its count.
+
+A source relation is mapped to a release property only after its direction has been checked against the source's documentation and at least one known record. A source relation that no existing standard term expresses gets a `rezics:` term with its own inverse, labels and group; it is never dropped because no Wikidata property matches, and it is never mapped to a looser term that changes its meaning.
+
+An importer turns a source's subject-to-subject relations into these statements on the native subjects; it never keeps them as descriptive records about the source, which no relation read would see.
+
+### Credits and appearances
+
+A credit is a statement on the work whose property names the job and whose value is a person or organization. Its qualifiers record the name as credited, the credit order, the detailed role concept and, for performers, the character portrayed. An appearance is a `schema:character` statement on the work, qualified by its role concept (main, supporting, cameo), the credited name and its spoiler level. Character-to-character relations (family, rivals, alter egos) are ordinary relations between character subjects and follow the rules above.
+
+Spoiler level is a qualifier on the statement, not a property of the character: the same character can be a spoiler in one work and not in another.
+
+Detailed roles are concepts in a role scheme, so every staff position and cast role a source uses has a place; a credit is never dropped or flattened because a closed role list lacks it. Credits are read through the same inverse and forward reads as every other relation, so a credit list and a relation list can never disagree about roles.
+
+The relation properties a subject can take, with their labels and admitted qualifiers, are read from the active release for the subject's type. Every editor builds its choices from that read; none keeps its own list.
+
+### Inverse reads
+
+The value side of a relation is read through an indexed inverse read: the subjects whose statements with a given property point at a given subject, filtered by type and qualifier, ordered by a declared key (credit order, series position, date, name) and paged with an opaque continuation. Every inverse read returns an exact count or an "at least" count. Inverse reads never load the holding subjects' other facts.
+
+`GET /v1/subjects/:id/links` retains the cross-property listing and response shape when `property` is absent. A property page accepts `filter` (one subject id for its declared qualifier), `type` (a type CURIE, including its subtypes in the active release), `limit` (1–100, default 25), and an opaque `cursor`. Cursors bind the anchor, property, filter, type and reader language. Property-page links include the holder's `type` and `label`; `language` or the first `Accept-Language` tag selects a label, falling back to English and then the first language tag. Label fills use one batch per holder partition and never read holders' other facts.
+
+The projection stores a base row with the nil UUID and a row per distinct declared qualifier value. A two-role statement appears once in each role page and once unfiltered. Every row carries the holder type and its order key. Name keys use the same default-label fallback, NFKC case folding and a 256-character cap. Position keys use a fixed-width decimal encoding, preserving large integer ordinals; dates normalize signed years and date parts. The holder computes these keys with its write release. Global adoption of a publication date and identity writes through `updateSubjectIdentity` re-emit outbound links when holder keys change, bounded by the 512-fact cap. Changing a property's declared order or filter in a release requires a projection rebuild.
+
+Rows and `inbound_link_count` counters change in one partition-fenced transaction, including replay, removal and merge moves. Property and qualifier counts are exact. A type-filtered count samples the first 1,000 rows in the selected property/filter range; it is exact when that range has at most 1,000 rows and otherwise is an "at least" count. This bounded count sample is separate from the page scan. The page scan examines at most `4 × limit + 1` rows under a type filter and can return an empty or short page with a continuation. A continuation advances past examined rows, never past an unexamined match. Freshness waits, authorization and deadline failures follow the existing subject-link read.
+
+A hub (a long-running franchise, a prolific voice actor, a genre concept) has an unbounded number of relations, so every view over them is paged and no read enumerates them all. Credits that belong to one episode or one release are stated on that episode or release subject, not on the work.
+
+### Custom relation types
+
+People and communities can add relation types without code. A custom relation type is a property in a definition release and carries everything a bundled relation property carries: localized labels for both directions, inverse or symmetry, acyclicity, group, admitted subject types on both sides, cardinality, admitted qualifiers (ordinal, episode or chapter range, spoiler level, free note), and optional mappings to standard terms (`owl:equivalentProperty`, `skos:exactMatch`, `skos:closeMatch`) used for export. A relation type with no stated meaning, domain and range (a bare "related to") is not admitted.
+
+A custom relation type follows the same lifecycle as any term:
+
+- It is proposed by a person or a Realm and becomes usable when its definition release is reviewed and activated; the editor that proposes it is a form over the release format, not a separate store.
+- It has one meaning for its lifetime. A changed meaning is a new term; the old one is deprecated with a pointer.
+- Statements that use it are proposed, accepted and adopted in a Context like any other statement, keep their evidence and history, and can be moderated.
+- It is visible where its Context is selected. A Realm's relation type shows on that Realm's pages and on the global page only after Global adopts the term and the statements.
+- It is queryable in search filters and inverse reads exactly like a bundled property.
+- A graph view over it is a bounded neighbourhood read: an anchor, a depth of at most two, an explicit set of properties and a page size. Unanchored closure (all ancestors, all connected works) is not a read.
+- A layout or grouping a person arranges for a graph view is view state; it never changes the facts.
+
+The number of custom relation types is limited per Context; statements that use one are stored, paged and counted exactly like statements that use a bundled relation property.
+
 ## Cost
 
 These bounds follow `subject.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
@@ -177,4 +239,16 @@ Structural value limits bound subject payload blocks B by F for accepted inputs;
 Default authorization has separately anchored but uncapped evidence fan-out; its costs cannot be proved bounded using subject and definition counts alone.
 All writes serialize on their own `core.partition.position` counter, with definitions sharing partition 0; this is a partition-local lock/counter, not a global counter across all subject partitions.
 Fact/subject and activation/release joins and foreign keys stay on the same route, while related-label and Access evidence reads cross partitions as separate reads without a cross-partition join or transaction; the in-process release cache affects constants, not the cold lookup bound.
-The global context is inserted once by migration and has no runtime semantic read/write path; this base has no semantic update, erasure, background projection writer or definition-history listing to cost.
+The global context is inserted once by migration and has no runtime semantic read/write path.
+
+### Inverse page
+
+- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one counter probe, and one label read per holder partition on the page. Type counts add a separate sample of at most 1,000 index rows.
+- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. Label work depends only on the bounded labels of the returned holders.
+- Growth check: `growth-inverse-pages.test.ts`, in-degree 10², 10³, 10⁴ at limit 25; first and middle page rows and blocks stay flat.
+
+### Links projection write
+
+- Touches: per changed statement, `1 + filter values` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, property, filter_value, order_key, source_subject_id, statement_id)`.
+- Bound: O(changed statements × (1 + filter values)) per event; a holder key change re-emits its outbound links (≤ F). Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value.
+- Growth check: holders with 10, 100 and 500 outbound links; work per event is linear in changed links and independent of the anchor's in-degree.

@@ -6,7 +6,13 @@ import type { MediaId } from './model.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaVariant } from './media.ts';
 import type { MediaEventData } from './media-events.ts';
-import { ImageDecodeRejection, transformImage } from './image-transform.ts';
+import {
+  ImageCropOutOfBoundsRejection,
+  ImageDecodeRejection,
+  transformImage,
+  type ImageCrop,
+  type TransformedImage,
+} from './image-transform.ts';
 import lockMedia from './lock-media.sql';
 import finishImage from './finish-image.sql';
 
@@ -31,6 +37,11 @@ class UnchangedImage extends Error {
 }
 
 type LockedMedia = Awaited<ReturnType<typeof lockMedia.run>>[number];
+function storedCrop(value: readonly (number | null)[] | null): ImageCrop | null {
+  if (value === null) return null;
+  if (value.length !== 4 || value.some((number) => number === null)) throw new TypeError('Invalid stored image crop');
+  return [value[0]!, value[1]!, value[2]!, value[3]!];
+}
 function storedVariants(rows: readonly LockedMedia[]): MediaVariant[] {
   return rows.flatMap((row) => {
     if (row.format === null) return [];
@@ -96,6 +107,7 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
         );
       }
       if (media.state !== 'uploaded') throw new Error('Image has not been uploaded');
+      const crop = storedCrop(media.crop);
       checkDeadline();
       const bytes = await storage.get(media.key);
       checkDeadline();
@@ -103,6 +115,7 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
       if (bytes === null) throw new Error('Uploaded image is not present in storage');
       let rejection: string | null = null;
       let variants: MediaVariant[] = [];
+      let transformed: TransformedImage | undefined;
       if (
         bytes.byteLength > 20 * 1024 * 1024 ||
         bytes.byteLength !== Number(media.actual_byte_count) ||
@@ -110,12 +123,12 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
       ) {
         rejection = 'source-integrity';
       } else {
-        let transformed;
         try {
-          transformed = await transformImage(bytes);
+          transformed = await transformImage(bytes, crop);
         } catch (error) {
-          if (!(error instanceof ImageDecodeRejection)) throw error;
-          rejection = 'unsafe-image';
+          if (error instanceof ImageCropOutOfBoundsRejection) rejection = 'crop_out_of_bounds';
+          else if (error instanceof ImageDecodeRejection) rejection = 'unsafe-image';
+          else throw error;
         }
         if (transformed) {
           for (const variant of transformed.variants) {
@@ -149,6 +162,13 @@ export async function processImage(pool: Pool, storage: MediaStorage, mediaId: M
         state,
         decision: rejection === null ? null : `${rejection}:${transactionId}`,
         transaction_id: transactionId,
+        width: transformed?.width ?? null,
+        height: transformed?.height ?? null,
+        thumbhash: transformed ? Buffer.from(transformed.thumbhash) : null,
+        average_color: transformed?.averageColor ?? null,
+        crop: crop === null ? null : [...crop],
+        focal_x: media.focal_x,
+        focal_y: media.focal_y,
         variants,
       });
       if (changed.length !== 1) throw new Error('Image transition lost its locked source');
