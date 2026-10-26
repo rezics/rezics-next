@@ -58,7 +58,7 @@ export const CONTENT_EVENTS = {
   'com.rezics.content.reaction.changed.v1': Type.Object(
     {
       actorId: UUID,
-      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
+      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post'), Type.Literal('subject')]),
       targetId: UUID,
       previousKind: Type.Union([reactionKind, Type.Null()]),
       kind: Type.Union([reactionKind, Type.Null()]),

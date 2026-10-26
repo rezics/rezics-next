@@ -171,7 +171,7 @@ test('reaction event types retain the closed kinds and nullable transitions', ()
   type ReactionKind = 'upvote' | 'downvote' | 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
   expectTypeOf<ContentEventData<'com.rezics.content.reaction.changed.v1'>>().toEqualTypeOf<{
     actorId: string;
-    targetKind: 'thread' | 'post';
+    targetKind: 'thread' | 'post' | 'subject';
     targetId: string;
     previousKind: ReactionKind | null;
     kind: ReactionKind | null;

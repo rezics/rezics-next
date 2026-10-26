@@ -8,6 +8,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, REACTION_KINDS, type ContentEventData } from './events.ts';
 import readSql from './reaction-count-read.sql';
 import countUpsert from './reaction-count-upsert.sql';
+import subjectReactorDelete from './reaction-subject-reactor-delete.sql';
+import subjectReactorUpsert from './reaction-subject-reactor-upsert.sql';
 import totalUpsert from './reaction-total-upsert.sql';
 
 const changed = 'com.rezics.content.reaction.changed.v1';
@@ -53,6 +55,8 @@ function parse(event: CloudEvent): Change {
     position <= 0n ||
     position > maxPosition ||
     event.subject !== data.targetId ||
+    (data.targetKind === 'subject' &&
+      [data.previousKind, data.kind].some((kind) => kind === 'upvote' || kind === 'downvote')) ||
     !/^[0-9a-f-]{36}$/.test(event.id)
   )
     throw new TypeError('Invalid reaction count source envelope');
@@ -66,6 +70,7 @@ async function applyChange(client: PoolClient, change: Change): Promise<void> {
   const deltas: { kind: ReactionKind; delta: number }[] = [];
   if (change.previousKind && change.previousKind !== change.kind) deltas.push({ kind: change.previousKind, delta: -1 });
   if (change.kind && change.kind !== change.previousKind) deltas.push({ kind: change.kind, delta: 1 });
+  let advanced = false;
   for (const step of deltas) {
     const parameters = {
       route: change.targetRoute,
@@ -85,6 +90,7 @@ async function applyChange(client: PoolClient, change: Change): Promise<void> {
     );
     const contribution = updated.rows[0];
     if (!contribution) continue;
+    advanced = true;
     const totalParameters = {
       ...parameters,
       delta: contribution.current_count - contribution.previous_count,
@@ -93,6 +99,24 @@ async function applyChange(client: PoolClient, change: Change): Promise<void> {
     await client.query(
       totalUpsert.sql,
       totalUpsert.params.map((name) => totalParameters[name as keyof typeof totalParameters]),
+    );
+  }
+  if (!advanced || change.targetKind !== 'subject') return;
+  const parameters = {
+    route: change.targetRoute,
+    subject_id: change.targetId,
+    actor_account_id: change.actorId,
+    kind: change.kind,
+  };
+  if (change.kind === null) {
+    await client.query(
+      subjectReactorDelete.sql,
+      subjectReactorDelete.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+  } else {
+    await client.query(
+      subjectReactorUpsert.sql,
+      subjectReactorUpsert.params.map((name) => parameters[name as keyof typeof parameters]),
     );
   }
 }

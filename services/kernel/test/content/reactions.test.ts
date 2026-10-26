@@ -40,7 +40,16 @@ export async function reactionFixture() {
     kid: 'reactions-fixture',
   };
   const issuer = 'https://reactions.auth.test';
-  const actions = ['reaction:set', 'access:grant', 'board:read', 'thread:read', 'post:read'];
+  const actions = [
+    'reaction:set',
+    'access:grant',
+    'account:read',
+    'account:delete',
+    'board:read',
+    'thread:read',
+    'post:read',
+    'subject:read',
+  ];
   const approvals = new Set([accountId, managerId]);
   const auth = await createAuthService({
     database: authPool,

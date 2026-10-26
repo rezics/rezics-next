@@ -830,7 +830,8 @@ CREATE TABLE content.reaction (
     CONSTRAINT reaction_check1 CHECK ((target_route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
     CONSTRAINT reaction_kind_check CHECK ((kind = ANY (ARRAY['upvote'::text, 'downvote'::text, 'like'::text, 'love'::text, 'laugh'::text, 'insightful'::text, 'sad'::text]))),
     CONSTRAINT reaction_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT reaction_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text]))),
+    CONSTRAINT reaction_subject_kind_check CHECK (((target_kind <> 'subject'::text) OR (kind = ANY (ARRAY['like'::text, 'love'::text, 'laugh'::text, 'insightful'::text, 'sad'::text])))),
+    CONSTRAINT reaction_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text, 'subject'::text]))),
     CONSTRAINT reaction_target_route_check CHECK (((target_route >= 0) AND (target_route <= 65535)))
 );
 
@@ -979,6 +980,21 @@ CREATE TABLE content.source_fences (
     CONSTRAINT source_fences_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT source_fences_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT source_fences_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text))
+);
+
+
+--
+-- Name: subject_reactor; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.subject_reactor (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    actor_account_id uuid NOT NULL,
+    kind text NOT NULL,
+    CONSTRAINT subject_reactor_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_reactor_kind_check CHECK ((kind = ANY (ARRAY['like'::text, 'love'::text, 'laugh'::text, 'insightful'::text, 'sad'::text]))),
+    CONSTRAINT subject_reactor_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1220,6 +1236,14 @@ ALTER TABLE ONLY content.revision
 
 ALTER TABLE ONLY content.source_fences
     ADD CONSTRAINT source_fences_pkey PRIMARY KEY (route, source, external_id, field_group);
+
+
+--
+-- Name: subject_reactor subject_reactor_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.subject_reactor
+    ADD CONSTRAINT subject_reactor_pkey PRIMARY KEY (route, subject_id, actor_account_id);
 
 
 --

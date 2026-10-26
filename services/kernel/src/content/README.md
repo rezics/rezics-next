@@ -73,6 +73,35 @@ partition epoch. Its keyset position is also encrypted so a skipped item's ident
 continuation. Two disjoint index seeks handle timestamp ties and older rows within one combined scan budget;
 there is no offset. The thread index includes kind, while a separate partial reply index spans both thread kinds.
 
+
+## Reactions
+
+People have one reaction slot per thread, post or subject. Threads and posts accept upvote, downvote, like, love, laugh,
+insightful and sad. Subjects accept like, love, laugh, insightful and sad; their semantic score remains the subject's
+rating. Subject reactions require the actor to be admitted and hold `reaction:set`, then require the subject to be
+readable at the same authorization time as a subject read. Unknown or unreadable subjects return not found. A merged
+subject id resolves to its survivor, and the slot is written on that survivor. Subjects have no board, Realm
+participation or board Access step.
+
+Subject reaction changes use `com.rezics.content.reaction.changed.v1` with `targetKind: subject`. The relay maintains
+the existing per-kind counts and total in the subject's partition. It also maintains one `content.subject_reactor` row
+per reacting account in that same partition and transaction. Clearing a reaction or erasing an account removes the
+reactor row through the relay.
+
+### Cost
+
+#### Subject reaction slot
+
+- Touches: account admission; one subject readability probe in the subject's partition; one slot upsert or delete in the actor's partition; at most one change event.
+- Bound: constant rows and statements. Blocks O(log R) in the actor's partition.
+- Growth check: `test/content/growth-reactions.test.ts`, `Subject reaction slot`, at 64, 512 and 4096 reactions on the subject.
+
+#### Subject reaction relay
+
+- Touches: one contribution upsert, at most two total upserts, and one reactor upsert or delete, all in the subject's partition in one transaction.
+- Bound: constant statements. Blocks O(log R).
+- Growth check: `test/content/growth-reactions.test.ts`, `Subject reaction relay`, at 64, 512 and 4096 reactors.
+
 ## Covers
 
 A cover is a media object with purpose `cover`, named by a `schema:image` statement on its subject. One subject can have several images; the preferred-rank statement is its cover. An edition's cover belongs to the edition. A work without its own cover shows the cover of its representative edition, which the work names with one statement, so choosing a cover is one indexed read and never a scan of the work's editions. A work may name one representative edition per language; the cover then follows the same language choice as the title, so a reader never sees a title in one language over a cover chosen for another.
