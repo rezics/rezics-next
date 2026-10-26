@@ -116,11 +116,8 @@ test('a game, its releases by platform and language and its add-ons are catalogu
     minimum: 1,
     units: ['1'],
   });
-  expect(properties['wdt:P8646']).toMatchObject({
-    datatype: 'wikibase-item',
-    mappings: ['wd:P8646'],
-    targets: expect.arrayContaining(['schema:VideoGame']),
-  });
+  expect(properties['wdt:P8646']).toMatchObject({ datatype: 'wikibase-item', mappings: ['wd:P8646'] });
+  expect(properties['wdt:P8646']?.targets).toEqual(expect.arrayContaining(['schema:VideoGame']));
   for (const credit of [
     'schema:author',
     'schema:contributor',
