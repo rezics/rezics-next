@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { git } from './merge.ts';
 import type { GateOutcome, LandingRequest, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
@@ -72,5 +73,30 @@ test('a launch refused for an exhausted allowance marks the pool exhausted inste
     const key = h.tasks.settings.pools[0]!.allowanceKey;
     expect(existsSync(join(h.tasks.settings.stateDirectory, 'exhausted', `${key}.json`))).toBe(true);
     expect(inbox.map(event => event.kind)).not.toContain('stalled');
+  } finally { h.dispose(); }
+});
+
+// A worker that reports success with part of its work committed and the rest left in the worktree.
+const halfCommittingCli = `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+writeFileSync('committed.txt', 'committed');
+spawnSync('git', ['add', 'committed.txt']); spawnSync('git', ['commit', '-qm', 'part of the work']);
+writeFileSync('left.txt', 'left uncommitted');
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{"status":"success","summary":"done"}'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
+
+test('a successful attempt lands its whole worktree, committing what the worker left uncommitted', async () => {
+  const h = harness(halfCommittingCli), landings: LandingRequest[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    await job.start(task.id); await job.drain();
+    expect(landings).toHaveLength(1);
+    const files = git(task.worktree, 'show', '--name-only', '--format=', 'HEAD');
+    expect(files).toContain('left.txt');
+    expect(git(task.worktree, 'status', '--porcelain')).toBe('');
   } finally { h.dispose(); }
 });

@@ -180,6 +180,15 @@ export class WorkerTasks {
     git(task.worktree, ['add', '-A']);
     git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`]);
   }
+  /** A worker's acceptance runs on its worktree, so what lands is that worktree: commit what the worker left out. */
+  commitFinishedWork(task: Task, attempt: number): boolean {
+    for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
+      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) return false;
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return false;
+    git(task.worktree, ['add', '-A']);
+    git(task.worktree, ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`]);
+    return true;
+  }
   private validateBrief(
     briefFile: string,
     excludingTask?: string,
