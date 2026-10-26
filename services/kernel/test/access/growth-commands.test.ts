@@ -1179,6 +1179,26 @@ afterAll(async () => {
   await db.close();
 });
 
+test('hot-partition handles are deterministic and cost at most one partition hash each', () => {
+  const cases: [number, number[]][] = [
+    [1542, [200_003, 231_999, 300_003, 301_999, 400_000, 400_017]],
+    [1543, [3, 31_999, 100_003, 101_999, 300_000, 300_017]],
+  ];
+  for (const [partition, ordinals] of cases) {
+    let calls = 0;
+    const counted = (value: string): number => {
+      calls++;
+      return hashRoute(value);
+    };
+    const first = ordinals.map((ordinal) => hotHandle(partition, ordinal, counted));
+    const second = ordinals.map((ordinal) => hotHandle(partition, ordinal, counted));
+    expect(second).toEqual(first);
+    expect(new Set(first).size).toBe(first.length);
+    for (const handle of first) expect(hashRoute(handle) >>> 4).toBe(partition);
+    expect(calls).toBeLessThanOrEqual(2 * first.length);
+  }
+});
+
 test.serial(
   'Account read and public projection stays within its bound as A grows',
   async () => {
