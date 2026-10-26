@@ -1,47 +1,41 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { activeRelease, bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createRealAccess } from '../semantic/real-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
-beforeAll(() => bootstrapRelease(pool, bundledRelease));
-afterAll(() => pool.end());
+const admin = new pg.Pool({ connectionString: url, max: 2 });
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
+});
+const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
+const realAccess = await createRealAccess(admin, accounts, ['subject:create']);
 const kernel = createKernel({
   pool,
   routeKey: new Uint8Array(32).fill(7),
-  access: {
-    async authenticate() {
-      return {
-        kind: 'account',
-        accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
-        clientId: 'web',
-        scopes: ['subject:create', 'statement:propose', 'subject:read', 'presentation:read'],
-        requestedBy: null,
-        authnEpoch: 1,
-      };
-    },
-    async authorize() {
-      return true;
-    },
-  },
-  writeRate: {
-    async spend() {
-      return { allowed: true };
-    },
-  },
+  access: realAccess.access,
+  writeRate: realAccess.writeRate,
+});
+
+beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
 });
 
 async function call(method: string, path: string, body?: unknown, editor = false) {
   const headers: Record<string, string> = {};
   if (editor) {
-    headers.authorization = 'Bearer editor';
+    headers.authorization = `Bearer ${realAccess.bearer('editor')}`;
     headers['idempotency-key'] = `"${randomUUID()}"`;
   }
   if (body !== undefined) headers['content-type'] = 'application/json';
