@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { coveredByRootGate } from './promotion.ts';
+import { coveredByRootGate, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 
 test('acceptance commands inside workspace and control-plane trees are covered by the root gate', () => {
   expect(coveredByRootGate(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/a.test.ts'])).toBe(true);
@@ -16,4 +16,9 @@ test('root specs, root scripts and commands that leave a workspace still run at 
   expect(coveredByRootGate(['env', 'SPEC_STRICT=1', 'bun', 'test', 'services/auth/test/a.test.ts'])).toBe(false);
   expect(coveredByRootGate(['bun', 'run', '--cwd', 'services/kernel/test', 'check'])).toBe(false);
   expect(coveredByRootGate(['sh', '-c', 'cd apps/web && bun test; cd ../.. && bun test specs'])).toBe(false);
+});
+
+test('a promotion gate may run as long as a full root gate takes', () => {
+  // The full kernel check alone measured 44 minutes on 2026-10-26.
+  expect(PROMOTION_GATE_TIMEOUT_MS).toBeGreaterThanOrEqual(2 * 60 * 60_000);
 });

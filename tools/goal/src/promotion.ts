@@ -22,6 +22,9 @@ export type PromotionOptions = {
   derivedFiles?: DerivedFile[];
 };
 
+// The root gate runs every workspace, and the kernel's check alone takes about 45 minutes; the runner's ten-minute
+// default stopped every full gate before it could pass.
+export const PROMOTION_GATE_TIMEOUT_MS = 2 * 60 * 60_000;
 const ref = (branch: string) => `refs/heads/${branch}`;
 function isAncestor(cwd: string, older: string, newer: string): boolean {
   try {
@@ -264,7 +267,7 @@ async function gateAt(
       }
       let result: PromotionGateResult;
       try {
-        const outcome = await (options.runGate ?? gateRunner())(command, tree, logFor(index));
+        const outcome = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(command, tree, logFor(index));
         let failure = outcome.passed ? undefined : firstFailure(outcome.output);
         if (git(tree, 'rev-parse', 'HEAD') !== commit || git(tree, 'status', '--porcelain'))
           failure = firstFailure(`${failure?.assertion ?? ''}\nGate changed the checked commit or worktree`);
