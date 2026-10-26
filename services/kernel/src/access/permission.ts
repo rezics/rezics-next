@@ -334,17 +334,22 @@ export function createAccess(config: PermissionConfig): Access {
           }
           const candidates =
             isGlobalReachAction(action) && !isPlatformResource(resource)
-              ? await governanceReachCandidatesRead.run(context.pool, {
-                  route: resource.route,
-                  resource_id: resource.id,
-                  action,
-                  grant_roles: grantRoles,
-                  actor_id: actor.accountId,
-                  principal_id: principalId ?? '',
-                  roles,
-                  at,
-                  include_global: true,
-                })
+              ? (
+                  await Promise.all(
+                    [resource, PLATFORM_RESOURCE].map((anchor) =>
+                      governanceReachCandidatesRead.run(context.pool, {
+                        route: anchor.route,
+                        resource_id: anchor.id,
+                        action,
+                        grant_roles: grantRoles,
+                        actor_id: actor.accountId,
+                        principal_id: principalId ?? '',
+                        roles,
+                        at,
+                      }),
+                    ),
+                  )
+                ).flat()
               : await candidatesRead.run(context.pool, {
                   route: resource.route,
                   resource_id: resource.id,

@@ -425,7 +425,9 @@ CREATE TABLE access.exposure_opening (
     "group" text NOT NULL,
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
+    route integer DEFAULT 0 NOT NULL,
     CONSTRAINT exposure_opening_group_check CHECK (("group" ~ '^[a-z][a-z_]{0,62}$'::text)),
+    CONSTRAINT exposure_opening_route_check CHECK ((route = 0)),
     CONSTRAINT exposure_opening_valid_check CHECK (((NOT isempty(valid)) AND (NOT lower_inf(valid)) AND lower_inc(valid) AND (NOT upper_inc(valid))))
 );
 
@@ -926,7 +928,7 @@ ALTER TABLE ONLY access.credential_floor_receipt
 --
 
 ALTER TABLE ONLY access.exposure_opening
-    ADD CONSTRAINT exposure_opening_pkey PRIMARY KEY ("group", valid WITHOUT OVERLAPS);
+    ADD CONSTRAINT exposure_opening_pkey PRIMARY KEY (route, "group", valid WITHOUT OVERLAPS);
 
 
 --

@@ -69,8 +69,22 @@ export async function readPublicIdentities(
   routes: readonly number[],
   accountIds: readonly string[],
 ): Promise<PublicIdentity[]> {
-  const rows = await publicPage.run(client, { routes: [...routes], account_ids: [...accountIds] });
-  return rows.map((row) => ({ ...row, state: row.state === 'deleted' ? 'deleted' : 'active' }));
+  const anchors = new Map<number, string[]>();
+  for (const [index, route] of routes.entries()) {
+    const ids = anchors.get(route) ?? [];
+    ids.push(accountIds[index]!);
+    anchors.set(route, ids);
+  }
+  const found = new Map<string, PublicIdentity>();
+  for (const [route, ids] of anchors) {
+    const rows = await publicPage.run(client, { route, account_ids: ids });
+    for (const row of rows)
+      found.set(`${route}:${row.id}`, { ...row, state: row.state === 'deleted' ? 'deleted' : 'active' });
+  }
+  return routes.flatMap((route, index) => {
+    const row = found.get(`${route}:${accountIds[index]}`);
+    return row ? [row] : [];
+  });
 }
 
 /** Reads a single member's role at the caller's authoritative request time on the organization anchor. */

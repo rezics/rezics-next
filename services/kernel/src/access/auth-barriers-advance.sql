@@ -14,7 +14,7 @@ WITH input AS NOT MATERIALIZED (
 )
 INSERT INTO access.lifecycle_fence_receipt
   (route, account_id, receipt_id, minimum_authn_epoch, kind, prior_operator_account_id, transaction_id)
-SELECT c.route, c.account_id, i.receipt_id, c.minimum_authn_epoch, 'fence', NULL, i.transaction_id
+SELECT i.route, c.account_id, i.receipt_id, c.minimum_authn_epoch, 'fence', NULL, i.transaction_id
 FROM changed c CROSS JOIN input i
 RETURNING receipt_id AS "receiptId", account_id AS "accountId", minimum_authn_epoch::text AS "minimumAuthnEpoch",
   kind, prior_operator_account_id AS "priorOperatorAccountId";
