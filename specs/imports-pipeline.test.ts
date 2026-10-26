@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   MISSING_PIPELINE_DRIVER,
   type CreateImportPipelineDriver,
@@ -20,8 +21,7 @@ async function scenario(options: PipelineOptions, check: (d: PipelineDriver) => 
   const { createImportPipelineDriver } = (await import(module)) as {
     createImportPipelineDriver: CreateImportPipelineDriver;
   };
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp(resolve('.temp/import-pipeline-'));
+  const directory = await mkdtemp(join(tmpdir(), 'import-pipeline-'));
   let driver: PipelineDriver | undefined;
   try {
     driver = await createImportPipelineDriver({ ...options, directory });

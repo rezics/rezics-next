@@ -7,8 +7,9 @@ import {
   type BatchCommand,
   type BatchWriteResult,
 } from '@rezics/definitions/bulk';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type {
   CommandObservation,
@@ -90,8 +91,7 @@ async function withLedger(body: (h: Harness) => Promise<void>) {
   const binding = await import(url.href);
   if (typeof binding.createImportLedgerDriver !== 'function')
     throw new Error('Driver must export createImportLedgerDriver');
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp(resolve('.temp/import-ledger-'));
+  const directory = await mkdtemp(join(tmpdir(), 'import-ledger-'));
   const h = new Harness(binding.createImportLedgerDriver, directory);
   try {
     await h.open();

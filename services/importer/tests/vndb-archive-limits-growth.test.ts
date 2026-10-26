@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import { observeDumpRetention } from '../src/dumps-bytes.ts';
 import { VndbTablesStore } from '../src/vndb-tables.ts';
@@ -141,8 +142,7 @@ function seed(db: Database, previous: number, scale: number) {
 }
 
 test('fixed admission rejection and ready staging keep exact-run SQL and live buffers constant over history', async () => {
-  mkdirSync('.temp', { recursive: true });
-  const directory = mkdtempSync(resolve('.temp/vndb-admission-'));
+  const directory = mkdtempSync(join(tmpdir(), 'vndb-admission-'));
   const path = resolve(directory, 'state.sqlite');
   let db = new Database(path);
   const measure = stageProbe(db);

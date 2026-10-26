@@ -29,7 +29,7 @@ test('imports test state lives in the system temporary directory', async () => {
   for (const file of files) {
     const source = await readFile(file, 'utf8');
     for (const match of source.matchAll(call)) {
-      const prefix = match[2].replaceAll('\\', '/');
+      const prefix = match[2]!.replaceAll('\\', '/');
       if (prefix === '.temp' || prefix.startsWith('.temp/')) {
         const line = source.slice(0, match.index).split('\n').length;
         violations.push(`${file.slice(root.length + 1)}:${line}`);
