@@ -31,7 +31,9 @@ Run `bun run db up`, then `bun run dev` from this workspace to serve the API loc
 `KERNEL_HOSTNAME` defaults to `127.0.0.1` and `KERNEL_PORT` defaults to `4100`. `db up` generates the development
 secrets once and keeps them in `.env` across restarts. The worker also requires `KERNEL_RATING_COUNTER_SECRET`, a
 canonical base64url value containing at least 32 bytes, shared by every worker instance so controller counts remain
-stable.
+stable. `KERNEL_POOL_ACQUIRE_TIMEOUT_MS` defaults to 200 ms and accepts
+whole millisecond values from 50 through 10,000; other values fail startup. Before serving requests, the server opens
+all 10 PostgreSQL pool connections and keeps them open while idle.
 
 Commerce settings are optional and all or nothing: `STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`,
 `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` are required when enabled; the API also requires
@@ -191,6 +193,7 @@ database. A plain `bun test` shares one database across files, so run a single f
 database is removed at the end.
 Every test file's processes read Reylo's SQL analyses from one analysis database cloned from the template once, named by
 `REYLO_CONFIG`, so no file re-analyses the statements it imports against its own copy.
+Each test file gets `KERNEL_POOL_ACQUIRE_TIMEOUT_MS=2000` so cold connections have more time to establish on a loaded check host.
 
 New kernel tests compose their app, Access and kernel through `test/support/test-kernel.ts`. `testKernel` mirrors the
 production route catalogue, Realm role reader and write-rate stage, substituting its supplied test pool, local Auth/JWKS

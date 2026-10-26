@@ -5,8 +5,10 @@ import { createPool, NestedPoolCheckoutError } from '../src/database/pool.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
-const secondPool = createPool(databaseUrl);
+const { pool, secondPool } = withoutPoolAcquireTimeout(() => ({
+  pool: createPool(databaseUrl),
+  secondPool: createPool(databaseUrl),
+}));
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const partitions = [7, 8, 9, 10, 11, 12, ...Array.from({ length: 11 }, (_, n) => 100 + n)];
 afterEach(async () => {
@@ -23,6 +25,16 @@ afterAll(async () => {
 
 const event = (n: number): CommandEvent => ({ type: 'com.rezics.test.happened.v1', subject: `s${n}`, data: { n } });
 const failure = (code: string) => Object.assign(new Error(`failure ${code}`), { code });
+function withoutPoolAcquireTimeout<T>(use: () => T): T {
+  const previous = process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS;
+  delete process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS;
+  try {
+    return use();
+  } finally {
+    if (previous !== undefined) process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS = previous;
+  }
+}
+
 async function position(partition: number): Promise<number> {
   const { rows } = await admin.query('SELECT position::int FROM core.partition WHERE partition_no = $1', [partition]);
   return rows[0].position;

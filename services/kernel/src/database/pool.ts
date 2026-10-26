@@ -1,5 +1,21 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
+import { ConfigError } from '../commerce/config.ts';
+
+export const KERNEL_POOL_MAX = 10;
+const DEFAULT_ACQUIRE_TIMEOUT_MILLIS = 200;
+const ACQUIRE_TIMEOUT_VARIABLE = 'KERNEL_POOL_ACQUIRE_TIMEOUT_MS';
+
+export function readPoolAcquireTimeoutMillis(env: NodeJS.ProcessEnv = process.env): number {
+  const value = env[ACQUIRE_TIMEOUT_VARIABLE];
+  if (value === undefined) return DEFAULT_ACQUIRE_TIMEOUT_MILLIS;
+  if (!/^\d+$/.test(value)) throw new ConfigError(ACQUIRE_TIMEOUT_VARIABLE);
+  const timeout = Number(value);
+  if (!Number.isInteger(timeout) || timeout < 50 || timeout > 10_000) {
+    throw new ConfigError(ACQUIRE_TIMEOUT_VARIABLE);
+  }
+  return timeout;
+}
 
 export class NestedPoolCheckoutError extends Error {
   constructor() {
@@ -12,12 +28,16 @@ const heldPools = new AsyncLocalStorage<ReadonlySet<Pool>>();
 const brokenClients = new WeakMap<PoolClient, Error>();
 type Connect = Pool['connect'];
 
-export function createPool(url: string, options: { connectionTimeoutMillis?: number } = {}): Pool {
+export function createPool(
+  url: string,
+  options: { connectionTimeoutMillis?: number; idleTimeoutMillis?: number; min?: number } = {},
+): Pool {
   const pool = new pg.Pool({
     connectionString: url,
-    max: 10,
-    connectionTimeoutMillis: options.connectionTimeoutMillis ?? 200,
-    idleTimeoutMillis: 30_000,
+    max: KERNEL_POOL_MAX,
+    ...(options.min === undefined ? {} : { min: options.min }),
+    connectionTimeoutMillis: options.connectionTimeoutMillis ?? readPoolAcquireTimeoutMillis(),
+    idleTimeoutMillis: options.idleTimeoutMillis ?? 30_000,
     options: '-c idle_in_transaction_session_timeout=5000',
   });
   pool.on('error', () => {});
