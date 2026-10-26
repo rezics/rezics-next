@@ -73,7 +73,6 @@ partition epoch. Its keyset position is also encrypted so a skipped item's ident
 continuation. Two disjoint index seeks handle timestamp ties and older rows within one combined scan budget;
 there is no offset. The thread index includes kind, while a separate partial reply index spans both thread kinds.
 
-
 ## Reactions
 
 People have one reaction slot per thread, post or subject. Threads and posts accept upvote, downvote, like, love, laugh,
