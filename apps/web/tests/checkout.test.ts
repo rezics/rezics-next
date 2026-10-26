@@ -96,6 +96,14 @@ type Call = {
 const calls: Call[] = [];
 let settlePending = false;
 async function kernel(request: Request, url: URL): Promise<Response> {
+  // Unknown /v1 routes, including the anonymous home pages:read, answer 404. A bearer is required only for orders.
+  const offerRead = request.method === 'GET' && url.pathname.startsWith('/v1/offers/');
+  const orderStart = request.method === 'POST' && url.pathname === '/v1/orders';
+  const orderRead = request.method === 'GET' && /^\/v1\/orders\/[^/]+$/.test(url.pathname);
+  if (!offerRead && !orderStart && !orderRead) {
+    await request.body?.cancel().catch(() => {});
+    return problem(404, 'not_found');
+  }
   const body: unknown = request.method === 'POST' ? await request.json() : null;
   const call: Call = {
     method: request.method,
@@ -106,7 +114,7 @@ async function kernel(request: Request, url: URL): Promise<Response> {
     at: Date.now(),
   };
   calls.push(call);
-  if (request.method === 'GET' && url.pathname.startsWith('/v1/offers/')) {
+  if (offerRead) {
     const result: OfferRead = {
       offer: {
         ...offer.offer,
@@ -118,7 +126,7 @@ async function kernel(request: Request, url: URL): Promise<Response> {
   }
   if (!call.authorization || !accessTokens.some((token) => call.authorization === `Bearer ${token}`))
     return problem(401, 'unauthorized');
-  if (request.method === 'POST' && url.pathname === '/v1/orders') {
+  if (orderStart) {
     const offerId = (body as { offerId?: string }).offerId;
     if (offerId === id(2) || offerId === id(3)) return problem(409, 'offer_unavailable');
     const attempt = calls.filter((entry) => entry.method === 'POST' && entry.key === call.key).length;
@@ -129,13 +137,11 @@ async function kernel(request: Request, url: URL): Promise<Response> {
       headers: { location: `/v1/orders/${result.order.id}`, 'cache-control': 'no-store' },
     });
   }
-  if (request.method === 'GET') {
-    if (url.pathname === `/v1/orders/${id(10)}`) return json(order(10, 'paid'));
-    if (url.pathname === `/v1/orders/${id(11)}`) return json(order(11, settlePending ? 'paid' : 'pending'));
-    if (url.pathname === `/v1/orders/${id(12)}`) return json(order(12));
-    // An authenticated buyer cannot read another buyer's order.
-    if (url.pathname === `/v1/orders/${id(13)}`) return problem(404, 'not_found');
-  }
+  if (url.pathname === `/v1/orders/${id(10)}`) return json(order(10, 'paid'));
+  if (url.pathname === `/v1/orders/${id(11)}`) return json(order(11, settlePending ? 'paid' : 'pending'));
+  if (url.pathname === `/v1/orders/${id(12)}`) return json(order(12));
+  // An authenticated buyer cannot read another buyer's order.
+  if (url.pathname === `/v1/orders/${id(13)}`) return problem(404, 'not_found');
   return problem(404, 'not_found');
 }
 

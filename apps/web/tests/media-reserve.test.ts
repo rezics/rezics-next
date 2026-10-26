@@ -97,8 +97,12 @@ const fake = Bun.serve({
       });
     }
     if (!url.pathname.startsWith('/v1/')) return failure(404, 'not_found');
-    // Home reads a route page before any session exists. A missing page is a 404, not an auth failure.
-    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+    // Unknown /v1 routes, including the anonymous home pages:read, answer 404. A bearer is required only for media.
+    const creating = request.method === 'POST' && url.pathname === '/v1/media';
+    const match = /^\/v1\/media\/([^/:]+)(:complete)?$/.exec(url.pathname);
+    const reading = request.method === 'GET' && match !== null && match[2] === undefined;
+    const completing = request.method === 'POST' && match?.[2] === ':complete';
+    if (!creating && !reading && !completing) {
       await request.body?.cancel().catch(() => {});
       return failure(404, 'not_found');
     }
@@ -107,7 +111,7 @@ const fake = Bun.serve({
     calls.push({ method: request.method, path: url.pathname, authorization, body });
     const sub = tokens.get(authorization?.replace(/^Bearer /, '') ?? '');
     if (!sub) return failure(401, 'authentication_required');
-    if (url.pathname === '/v1/media' && request.method === 'POST') {
+    if (creating) {
       if (!request.headers.get('idempotency-key')) return failure(400, 'invalid_request');
       const input = body as Record<string, unknown>;
       const id = randomUUID();
@@ -129,7 +133,6 @@ const fake = Bun.serve({
       reservations.set(id, media);
       return Response.json({ media }, { status: 201, headers: { location: `/v1/media/${id}` } });
     }
-    const match = /^\/v1\/media\/([^/:]+)(:complete)?$/.exec(url.pathname);
     const media = reservations.get(match?.[1] ?? '');
     if (!media || media.uploaderId !== sub) return failure(404, 'not_found');
     if (match?.[2] && request.method === 'POST') {
