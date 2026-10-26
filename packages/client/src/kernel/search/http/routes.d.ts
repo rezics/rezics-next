@@ -50,6 +50,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                         cursor?: string;
                         descriptions?: boolean;
                         languages?: string[];
+                        properties?: string[];
                     };
                     params: {};
                     query: unknown;
@@ -61,6 +62,21 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                                 type: string;
                                 labels: Record<string, string>;
                                 descriptions?: Record<string, string>;
+                                facts?: Record<string, ({
+                                    kind: "item";
+                                    id: string;
+                                    labels: Record<string, string>;
+                                } | {
+                                    kind: "time";
+                                    year: number;
+                                } | {
+                                    kind: "quantity";
+                                    amount: number;
+                                    unit: string;
+                                } | {
+                                    kind: "code";
+                                    value: string;
+                                })[]>;
                             }[];
                             total: {
                                 value: number;

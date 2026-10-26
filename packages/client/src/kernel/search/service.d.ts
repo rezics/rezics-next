@@ -14,6 +14,7 @@ export type SearchRequest = {
     cursor?: string;
     descriptions?: boolean;
     languages?: string[];
+    properties?: string[];
 };
 type Result = {
     id: string;

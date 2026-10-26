@@ -16,12 +16,22 @@ const result = t.Object(
   { id: t.String({ format: 'uuid' }), type: t.String(), labels: t.Record(t.String(), t.String()) },
   object,
 );
+const fact = t.Union([
+  t.Object(
+    { kind: t.Literal('item'), id: t.String({ format: 'uuid' }), labels: t.Record(t.String(), t.String()) },
+    object,
+  ),
+  t.Object({ kind: t.Literal('time'), year: t.Integer() }, object),
+  t.Object({ kind: t.Literal('quantity'), amount: t.Number(), unit: t.String() }, object),
+  t.Object({ kind: t.Literal('code'), value: t.String() }, object),
+]);
 const searchHit = t.Object(
   {
     id: t.String({ format: 'uuid' }),
     type: t.String(),
     labels: t.Record(t.String(), t.String()),
     descriptions: t.Optional(t.Record(t.String(), t.String())),
+    facts: t.Optional(t.Record(t.String(), t.Array(fact))),
   },
   object,
 );
@@ -86,6 +96,7 @@ export function searchRoutes<App>(
             cursor: t.Optional(t.String()),
             descriptions: t.Optional(t.Boolean()),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
+            properties: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 4 })),
           },
           object,
         ),

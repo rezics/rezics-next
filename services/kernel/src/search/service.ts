@@ -15,7 +15,7 @@ import {
 } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
-import { projectHit, validateHitOptions, type SearchHit } from './hits.ts';
+import { admitProperties, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import {
@@ -38,6 +38,7 @@ export type SearchRequest = {
   cursor?: string;
   descriptions?: boolean;
   languages?: string[];
+  properties?: string[];
 };
 
 type Result = { id: string; type: string; labels: Record<string, string> };
@@ -123,6 +124,7 @@ function validate(request: SearchRequest) {
       limit,
       ...(hitOptions.descriptions ? { descriptions: true } : {}),
       ...(hitOptions.languages ? { languages: hitOptions.languages } : {}),
+      ...(hitOptions.properties ? { properties: hitOptions.properties } : {}),
     },
   };
 }
@@ -235,7 +237,12 @@ export function createSearchService({
   return {
     async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
       const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
-      const admitted = await admitQuery(text, filter);
+      // One lookup serves filter admission and the requested properties.
+      const current = filter || hitOptions.properties ? await release() : undefined;
+      if ((filter || hitOptions.properties) && !current)
+        throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+      const admitted = await admitQuery(text, filter, current ?? undefined);
+      if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       const cursor =
         request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
@@ -267,6 +274,7 @@ export function createSearchService({
       let total;
       let exhausted = false;
       const results: SearchHit[] = [];
+      const shown: IndexedSubject[] = [];
       for (let round = 0; round < 3; round++) {
         const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
@@ -284,11 +292,18 @@ export function createSearchService({
           after = hit.sort;
           consumed++;
           const subject = subjects.get(hit);
-          if (subject) results.push(projectHit(subject, hitOptions));
+          if (subject) {
+            results.push(projectHit(subject, hitOptions));
+            shown.push(subject);
+          }
           if (results.length === limit) break;
         }
         exhausted = page.hits.length < size && consumed === page.hits.length;
         if (exhausted || results.length === limit) break;
+      }
+      if (hitOptions.properties) {
+        const facts = await projectFacts(source, shown, hitOptions.properties, hitOptions.languages);
+        results.forEach((hit, index) => (hit.facts = facts[index]!));
       }
       return {
         subjects: results,
