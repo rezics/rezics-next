@@ -185,9 +185,9 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }
     for (const sample of children) {
-      // Cold Reylo transports additionally validate the fixed relation schemas:
-      // four catalogue statements on first install, two on a read-only attempt.
-      expect(sample.cost.statements).toBe(mode === 'first' ? 9 : 5);
+      // The CLI runs the same governance and standing-parent commands. Catalog
+      // validation is classified separately from their operation statements.
+      expect(sample.cost.statements).toBe(mode === 'first' ? 12 : mode === 'refusal' ? 3 : 10);
       expect(sample.cost.relations?.['access.account']?.rows).toBe(1);
     }
     const costs = (samples: readonly GrowthSample[]) =>
