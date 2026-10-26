@@ -1427,7 +1427,9 @@ function subjectRoutes(
           throw new ProblemError('invalid_request');
         const resource = { route, id: params.id };
         const seen = [...session.components];
-        const caughtUp = await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id));
+        const caughtUp = await admission.run('normal', job, () =>
+          waitForSubjectLinks(pool, seen, params.id, job.deadline),
+        );
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>

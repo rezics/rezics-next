@@ -4,6 +4,7 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { readPartition } from '../partition/partition.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -66,9 +67,13 @@ function covers(
   return epoch > component.epoch || (epoch === component.epoch && position >= component.position);
 }
 
-async function linksCaughtUp(pool: Pool, seen: readonly SessionComponent[], subject: string): Promise<boolean> {
-  const deadline = performance.now() + FRESHNESS_WAIT_MS;
-  for (;;) {
+async function linksCaughtUp(
+  pool: Pool,
+  seen: readonly SessionComponent[],
+  subject: string,
+  deadline = deadlineFor(FRESHNESS_WAIT_MS),
+): Promise<boolean> {
+  while (Date.now() < deadline) {
     const covered = await withConnection(pool, async (client) => {
       for (const component of seen) {
         const row = await readLinkCheckpoint.run(client, {
@@ -81,9 +86,10 @@ async function linksCaughtUp(pool: Pool, seen: readonly SessionComponent[], subj
       return pending === null;
     });
     if (covered) return true;
-    if (performance.now() + FRESHNESS_POLL_MS > deadline) return false;
+    if (Date.now() + FRESHNESS_POLL_MS > deadline) return false;
     await sleep(FRESHNESS_POLL_MS);
   }
+  return false;
 }
 
 function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange[]> {
@@ -224,8 +230,16 @@ export type SubjectLinksPage = {
   component: { partition: number; epoch: number; position: bigint };
 };
 
-export function waitForSubjectLinks(pool: Pool, seen: readonly SessionComponent[], subject: string): Promise<boolean> {
-  return linksCaughtUp(pool, seen, subject);
+export function waitForSubjectLinks(
+  pool: Pool,
+  seen: readonly SessionComponent[],
+  subject: string,
+  deadline: number,
+): Promise<boolean> {
+  const started = Date.now();
+  // Leave at least half of the remaining request budget for authorization and the read.
+  const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
+  return linksCaughtUp(pool, seen, subject, waitUntil);
 }
 
 function validAfter(after: CursorKey[], property: string | null): boolean {
