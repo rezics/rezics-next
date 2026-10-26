@@ -64,15 +64,29 @@ test('worker configuration names invalid variables without revealing values', ()
   expect(() => readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel' })).toThrow('NOMAD_ALLOC_INDEX');
 });
 
+const valid: Record<string, string> = {
+  ...workerEnvironment,
+  DATABASE_URL: databaseUrl,
+  STRIPE_SECRET_KEY: 'sk_test_worker_configuration_secret',
+  STRIPE_MANAGED_PAYMENTS: 'false',
+  CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
+  CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+};
+
+test("worker configuration children read Reylo analyses from the check's analysis database", async () => {
+  const reyloConfig = process.env.REYLO_CONFIG;
+  if (!reyloConfig) return;
+  const child = Bun.spawn([process.execPath, '-e', 'console.log(process.env.REYLO_CONFIG ?? "")'], {
+    env: { ...valid },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+  expect(exitCode).toBe(0);
+  expect(stdout.trim()).toBe(reyloConfig);
+});
+
 test('a worker missing or rejecting commerce configuration names the variable and hides secret values', async () => {
-  const valid = {
-    ...workerEnvironment,
-    DATABASE_URL: databaseUrl,
-    STRIPE_SECRET_KEY: 'sk_test_worker_configuration_secret',
-    STRIPE_MANAGED_PAYMENTS: 'false',
-    CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
-    CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
-  };
   const cases = [
     ['STRIPE_SECRET_KEY', undefined, 'STRIPE_SECRET_KEY'],
     ['STRIPE_SECRET_KEY', 'sk_test_do_not_print_secret!', 'STRIPE_SECRET_KEY'],
