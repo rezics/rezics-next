@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createResourcePublicEligibility, createAccess } from '../../src/access/index.ts';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { withConnection } from '../../src/database/pool.ts';
 import { readPartition } from '../../src/partition/partition.ts';
 import { accessCheck, type Resource } from '../../src/request/access.ts';
@@ -48,8 +49,6 @@ function context() {
 }
 
 const contentRoute = 0x1234;
-const author = newId(0x5678);
-const unrelated = newId(0x6789);
 const accounts = new Map<string, Account>();
 const nativeAccess = permissionAccess({
   actions: new Map(['board:read', 'thread:read', 'post:read'].map((name) => [name, { anonymous: true }])),
@@ -61,18 +60,19 @@ function viewer(accountId: string, scopes = ['board:read', 'thread:read', 'post:
 const deps = () => ({ pool: database.pool, access: nativeAccess, tokens });
 const ctx = (selected: Actor = actor) => ({ actor: selected, deadline: Date.now() + 5_000 });
 
-beforeAll(async () => {
-  for (const accountId of [author, unrelated]) {
-    await database.admin.query(
-      `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
-       VALUES ($1,$2,'actor','active',$2)`,
-      [routeOf(accountId), accountId],
-    );
-    accounts.set(accountId, (await readAccount(database.admin, routeOf(accountId)!, accountId))!);
-  }
-});
+async function account() {
+  const accountId = newId(0x5678);
+  await database.admin.query(
+    `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
+     VALUES ($1,$2,'actor','active',$2)`,
+    [routeOf(accountId), accountId],
+  );
+  accounts.set(accountId, (await readAccount(database.admin, routeOf(accountId)!, accountId))!);
+  return accountId;
+}
 
 async function fixture() {
+  const [author, unrelated] = await Promise.all([account(), account()]);
   const thread = newId(contentRoute);
   const post = newId(contentRoute);
   const revision = newId(contentRoute);
@@ -84,22 +84,16 @@ async function fixture() {
        VALUES ($1,$2,$3,$4,'Thread sentinel','published',1,$2,$5)`,
       [contentRoute, thread, author, board.id, post],
     );
-    await insertPost(thread, post, revision, null);
+    await insertPost(thread, post, revision, null, author);
     await database.admin.query('COMMIT');
   } catch (error) {
     await database.admin.query('ROLLBACK');
     throw error;
   }
-  return { thread, post, revision };
+  return { thread, post, revision, author, unrelated };
 }
 async function insertRevision(thread: string, post: string, revision: string, text = 'original', refs = [subject]) {
-  const body = Buffer.from(
-    JSON.stringify({
-      version: 'rezics-document-v1',
-      profile: 'text',
-      doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
-    }),
-  );
+  const body = Buffer.from(serializeDocument(fromPlainText(text)));
   await database.admin.query(
     `INSERT INTO content.revision
      (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
@@ -107,7 +101,7 @@ async function insertRevision(thread: string, post: string, revision: string, te
     [contentRoute, thread, post, revision, body, text, refs, board.id],
   );
 }
-async function insertPost(thread: string, post: string, revision: string, parent: string | null) {
+async function insertPost(thread: string, post: string, revision: string, parent: string | null, author: string) {
   await database.admin.query(
     `INSERT INTO content.post
      (route,thread_id,post_id,reply_to_post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
@@ -116,12 +110,12 @@ async function insertPost(thread: string, post: string, revision: string, parent
   );
   await insertRevision(thread, post, revision);
 }
-async function reply(thread: string, parent: string) {
+async function reply(thread: string, parent: string, author: string) {
   const post = newId(contentRoute);
   const revision = newId(contentRoute);
   await database.admin.query('BEGIN');
   try {
-    await insertPost(thread, post, revision, parent);
+    await insertPost(thread, post, revision, parent, author);
     await database.admin.query('COMMIT');
   } catch (error) {
     await database.admin.query('ROLLBACK');
@@ -135,7 +129,7 @@ async function visibility(table: 'thread' | 'post' | 'board', id: string, state:
     [routeOf(id), id, state],
   );
 }
-async function grant(id: string, action: string, accountId = author) {
+async function grant(id: string, action: string, accountId: string) {
   await database.admin.query(
     `INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id)
      VALUES ($1,$2,$3,$4,'(,)',$2)`,
@@ -145,7 +139,7 @@ async function grant(id: string, action: string, accountId = author) {
 
 test('native floor admits anonymous and zero-scope accounts; explicit denial still wins', async () => {
   const f = await fixture();
-  for (const selected of [actor, viewer(unrelated, [])]) {
+  for (const selected of [actor, viewer(f.unrelated, [])]) {
     expect((await readThread(deps(), f.thread, ctx(selected))).value?.firstPost.id).toBe(f.post);
     expect((await readPost(deps(), f.thread, f.post, ctx(selected))).value?.revisionId).toBe(f.revision);
     expect((await listThreadPosts(deps(), f.thread, ctx(selected))).entries.map(({ id }) => id)).toContain(f.post);
@@ -153,9 +147,9 @@ test('native floor admits anonymous and zero-scope accounts; explicit denial sti
   await database.admin.query(
     `INSERT INTO access.resource_denial (route,resource_id,subject_id,action,reason,valid,transaction_id)
      VALUES ($1,$2,$3,'post:read','resource','(,)',$2)`,
-    [contentRoute, f.post, unrelated],
+    [contentRoute, f.post, f.unrelated],
   );
-  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(unrelated, [])))).value).toBeNull();
+  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(f.unrelated, [])))).value).toBeNull();
   expect((await readPost(deps(), f.thread, f.post, ctx())).value?.id).toBe(f.post);
 });
 
@@ -165,11 +159,11 @@ test('draft detail and history require the author AND explicit authority; protec
   await visibility('post', f.post, 'draft');
   // Direct storage fixtures intentionally assign no creator grants. This keeps
   // identity/authorship intact while independently testing the grant operand.
-  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(author)))).value).toBeNull();
-  await grant(f.thread, 'thread:read');
-  await grant(f.post, 'post:read');
-  expect((await readThread(deps(), f.thread, ctx(viewer(author)))).value?.id).toBe(f.thread);
-  for (const selected of [actor, viewer(unrelated)]) {
+  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(f.author)))).value).toBeNull();
+  await grant(f.thread, 'thread:read', f.author);
+  await grant(f.post, 'post:read', f.author);
+  expect((await readThread(deps(), f.thread, ctx(viewer(f.author)))).value?.id).toBe(f.thread);
+  for (const selected of [actor, viewer(f.unrelated)]) {
     expect((await readThread(deps(), f.thread, ctx(selected))).value).toBeNull();
     expect((await readPost(deps(), f.thread, f.post, ctx(selected), f.revision)).value).toBeNull();
     await expect(listThreadPosts(deps(), f.thread, ctx(selected))).rejects.toMatchObject({
@@ -179,25 +173,25 @@ test('draft detail and history require the author AND explicit authority; protec
       name: 'ContentNotFoundError',
     });
   }
-  await grant(f.thread, 'thread:read', unrelated);
-  await grant(f.post, 'post:read', unrelated);
-  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(unrelated)))).value).toBeNull();
+  await grant(f.thread, 'thread:read', f.unrelated);
+  await grant(f.post, 'post:read', f.unrelated);
+  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(f.unrelated)))).value).toBeNull();
   await visibility('thread', f.thread, 'protected');
   await visibility('post', f.post, 'protected');
   await database.admin.query(
     'DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=ANY($2::uuid[]) AND subject_id=$3',
-    [contentRoute, [f.thread, f.post], author],
+    [contentRoute, [f.thread, f.post], f.author],
   );
-  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(author)))).value).toBeNull();
-  await grant(f.thread, 'thread:read');
-  await grant(f.post, 'post:read');
-  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(author)))).value?.id).toBe(f.post);
+  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(f.author)))).value).toBeNull();
+  await grant(f.thread, 'thread:read', f.author);
+  await grant(f.post, 'post:read', f.author);
+  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(f.author)))).value?.id).toBe(f.post);
 });
 
 test('every reply ancestor and independently anchored board is checked at final disclosure', async () => {
   const f = await fixture();
-  const parent = await reply(f.thread, f.post);
-  const child = await reply(f.thread, parent.post);
+  const parent = await reply(f.thread, f.post, f.author);
+  const child = await reply(f.thread, parent.post, f.author);
   expect((await readPost(deps(), f.thread, child.post, ctx())).value?.id).toBe(child.post);
   await visibility('post', parent.post, 'protected');
   expect((await readPost(deps(), f.thread, child.post, ctx(), child.revision)).value).toBeNull();
@@ -207,8 +201,8 @@ test('every reply ancestor and independently anchored board is checked at final 
   try {
     expect((await readThread(deps(), f.thread, ctx())).value).toBeNull();
     expect((await discloseThreads(deps(), [f.thread], ctx()))[0]?.value).toBeNull();
-    await grant(board.id, 'board:read');
-    expect((await readThread(deps(), f.thread, ctx(viewer(author)))).value?.id).toBe(f.thread);
+    await grant(board.id, 'board:read', f.author);
+    expect((await readThread(deps(), f.thread, ctx(viewer(f.author)))).value?.id).toBe(f.thread);
   } finally {
     await visibility('board', board.id, 'published');
   }
@@ -233,13 +227,13 @@ test('exact revision retains its own bytes and references; takedown never disclo
   expect(current.body).not.toEqual(old.body);
   expect((await listPostRevisions(deps(), f.thread, f.post, ctx())).entries.map(({ id }) => id)).toContain(f.revision);
   await visibility('post', f.post, 'taken_down');
-  await grant(f.post, 'post:read');
-  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(author)), f.revision)).value).toBeNull();
-  await database.admin.query("UPDATE content.post SET availability='erased' WHERE route=$1 AND post_id=$2", [
-    contentRoute,
-    f.post,
-  ]);
-  const tombstone = (await readPost(deps(), f.thread, f.post, ctx(viewer(author)), f.revision)).value!;
+  await grant(f.post, 'post:read', f.author);
+  expect((await readPost(deps(), f.thread, f.post, ctx(viewer(f.author)), f.revision)).value).toBeNull();
+  await database.admin.query(
+    "UPDATE content.post SET availability='erased',security_revision=security_revision+1 WHERE route=$1 AND post_id=$2",
+    [contentRoute, f.post],
+  );
+  const tombstone = (await readPost(deps(), f.thread, f.post, ctx(viewer(f.author)), f.revision)).value!;
   expect(tombstone).toMatchObject({ revisionId: f.revision, sha256: old.sha256, availability: 'erased', body: null });
   expect((await readPost(deps(), f.thread, f.post, ctx(), f.revision)).value).toBeNull();
 });
@@ -263,7 +257,7 @@ test('unknown, concealed and missing container evidence have identical absence',
 test('reply depth overflow fails closed and candidate/page inputs remain bounded', async () => {
   const f = await fixture();
   let parent = f.post;
-  for (let depth = 0; depth < 33; depth++) parent = (await reply(f.thread, parent)).post;
+  for (let depth = 0; depth < 33; depth++) parent = (await reply(f.thread, parent, f.author)).post;
   expect((await readPost(deps(), f.thread, parent, ctx())).value).toBeNull();
   await expect(
     discloseThreads(
@@ -370,7 +364,7 @@ test('checkGrowth bounds real board disclosure as unrelated data in the same par
            VALUES ($1, $2, $3, 'Distractor', 'published', 1, $2)`,
           [route, id, subject],
         );
-        await reply(f.thread, f.post);
+        await reply(f.thread, f.post, f.author);
         await insertRevision(f.thread, f.post, newId(contentRoute), 'History distractor');
       }
       await db.admin.query('ANALYZE content.board');

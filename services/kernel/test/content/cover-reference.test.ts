@@ -159,7 +159,7 @@ test('reference reader denies unknown, malformed, unprocessed, rejected, erased,
   expect(await read(uploaded)).toBeNull();
   for (const assignment of [
     "state='rejected', decision='invalid_image'",
-    'erased=true',
+    'erased=true, security_revision=security_revision+1',
     'collection_pending=true',
     'taken_down=true, security_revision=1',
   ]) {
@@ -198,7 +198,7 @@ test('exact cover lookup has bounded actual rows, statements and buffers among s
   const id = await available();
   const report = await checkGrowth(db, {
     name: 'exact cover reference',
-    scales: [32, 256, 2048],
+    scales: [2048, 8192, 32768],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
       for (let i = previous; i < scale; i++) await reserve();
@@ -208,7 +208,7 @@ test('exact cover lookup has bounded actual rows, statements and buffers among s
       expect((await read(id))?.id).toBe(id);
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([32, 256, 2048]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBe(1);
     expect(sample.cost.rows).toBeGreaterThan(0);
@@ -331,7 +331,7 @@ test('cover claim rejects every unavailable state and wrong purpose inside a nat
   for (const assignment of [
     "state='uploaded'",
     "state='rejected', decision='invalid_image'",
-    'erased=true',
+    'erased=true, security_revision=security_revision+1',
     'collection_pending=true',
     'taken_down=true, security_revision=1',
     "purpose='post-image'",

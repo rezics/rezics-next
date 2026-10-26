@@ -495,7 +495,11 @@ test('transient R2 writes retry deterministic bytes, and rejected cleanup surviv
 test('erased, collecting, taken down and non-cover rows never fetch or publish', async () => {
   const http = await fixture(() => new Response('unexpected'));
   try {
-    for (const patch of ['erased=true', 'collection_pending=true', 'taken_down=true,security_revision=1']) {
+    for (const patch of [
+      'erased=true,security_revision=security_revision+1',
+      'collection_pending=true',
+      'taken_down=true,security_revision=1',
+    ]) {
       const row = await reserve();
       await pool.query(`UPDATE content.media SET ${patch} WHERE route=$1 AND media_id=$2`, [row.route, row.mediaId]);
       expect(await processImportedMedia(deps(http.storage), row.mediaId)).toMatchObject({ state: 'already_terminal' });

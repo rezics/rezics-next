@@ -384,7 +384,9 @@ test('processing cannot publish after a collection fence or process reserved, er
         `UPDATE content.media SET collection_pending=$3, erased=$4,
          state=CASE WHEN $5 THEN 'reserved' ELSE state END,
          actual_byte_count=CASE WHEN $5 THEN NULL ELSE actual_byte_count END,
-         sha256=CASE WHEN $5 THEN NULL ELSE sha256 END WHERE route=$1 AND media_id=$2`,
+         sha256=CASE WHEN $5 THEN NULL ELSE sha256 END,
+         security_revision=CASE WHEN $4 THEN security_revision+1 ELSE security_revision END
+         WHERE route=$1 AND media_id=$2`,
         [fixture.route, fixture.id, kind === 'pending', kind === 'erased', kind === 'reserved'],
       );
     const before = await inspect(fixture);
