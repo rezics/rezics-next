@@ -105,7 +105,7 @@ exit ${SLOT_BUSY}`;
 
 /** The wrapper directory comes first on the path, so every `docker` a workspace starts is the one that adds the slice. */
 function runScript(id: string, directory: string, cwd: string, command: string[]): string {
-  return `export PATH=${directory}/scripts/check-host:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache KERNEL_CHECK_ON_REMOTE=1
+  return `export PATH=${directory}/scripts/check-host:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1
 cd ${directory} || exit 1
 exec systemd-run --scope --quiet --collect --slice=${SLICE} --unit=rezics-check-${id} \\
   sh -c 'bun install --frozen-lockfile && cd "$1" && shift && exec "$@"' sh ${[cwd, ...command].map(quote).join(' ')}`;
