@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withConnection } from '../../src/database/pool.ts';
+import { readAccount } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -160,4 +161,163 @@ test('the native grant HTTP denial remains forbidden', async () => {
     }),
   );
   expect(response.status).toBe(403);
+});
+
+const holds = async (accountId: string) =>
+  (
+    await pool.query<{ reservation_id: string }>(
+      'SELECT reservation_id::text FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2',
+      [routeOf(accountId), accountId],
+    )
+  ).rows.map((row) => row.reservation_id);
+// Workflow commands key their receipts under a stable `wf:` prefix.
+const workflowReceipts = async () =>
+  Number(
+    (await pool.query<{ count: string }>("SELECT count(*) FROM core.receipt WHERE idempotency_key LIKE '%wf:%'"))
+      .rows[0]!.count,
+  );
+const stateOf = (accountId: string) =>
+  withConnection(pool, (client) => readAccount(client, routeOf(accountId)!, accountId));
+async function approveOperation(key: string, operation: Record<string, unknown>, token: string) {
+  const approval = await f
+    .approval()
+    .approve(
+      token,
+      { operationKey: key, operation: { ...operation, authorization: 'private-approval-input' } as never },
+      { pool, deadline: Date.now() + 10_000 },
+    );
+  return approval.reference;
+}
+async function organizationOwnedBy(key: string, ownerAccountId: string) {
+  const organizationId = newId(routeOf(ownerAccountId)!);
+  const reservation = await f.bindings.internalLifecycle.reserveCoordination({
+    accountId: ownerAccountId,
+    relatedAccountId: organizationId,
+    purpose: 'membership',
+    key: `${key}-organization`,
+  });
+  await f.bindings.internalLifecycle.createOrganization({
+    organizationId,
+    ownerAccountId,
+    ownerReservationId: reservation.value.reservationId,
+    key: `${key}-create-organization`,
+  });
+  return { organizationId, reservationId: reservation.value.reservationId };
+}
+
+test('a registration with a taken handle is refused by its event, not by the elapsed event timeout', async () => {
+  const holder = await f.person('native-handle-holder');
+  expect(holder.accountId).toBeString();
+  await expect(
+    f.host.workflows.beginRegistration({ key: 'native-handle-taker', handle: 'native_handle_holder' }),
+  ).rejects.toMatchObject({ code: 'handle_unavailable' });
+});
+
+test('an owner who leaves after a successor owner exists is permitted and the release completes', async () => {
+  const key = 'native-leaving-owner';
+  const owner = await f.person(key);
+  const successor = await f.person(`${key}-successor`);
+  const token = await bearer(key);
+  const { organizationId, reservationId } = await organizationOwnedBy(key, owner.accountId);
+  const add = { organizationId, memberAccountId: successor.accountId, role: 'owner' as const };
+  await f.host.workflows.setMembership({
+    ...add,
+    key: `${key}-add`,
+    authorization: await approveOperation(`${key}-add`, { kind: 'membership', ...add }, token),
+  });
+  expect(await holds(owner.accountId)).toEqual([reservationId]);
+  const leave = { organizationId, memberAccountId: owner.accountId, role: null, reservationId };
+  expect(
+    await f.host.workflows.setMembership({
+      ...leave,
+      key: `${key}-leave`,
+      authorization: await approveOperation(`${key}-leave`, { kind: 'membership', ...leave }, token),
+    }),
+  ).toEqual({ accountId: owner.accountId });
+  expect(await holds(owner.accountId)).toEqual([]);
+  expect((await f.bindings.operators.deletionEligibility(owner.accountId)).safe).toBe(true);
+});
+
+test('an account that deletes itself is permitted and the deletion stays committed', async () => {
+  const key = 'native-self-deletion';
+  const account = await f.person(key);
+  const operationKey = `${key}-delete`;
+  const input = await approveDelete(operationKey, account.accountId, await bearer(key));
+  expect(await f.host.workflows.deleteAccount(input)).toEqual({ accountId: account.accountId });
+  expect((await stateOf(account.accountId))!.state).toBe('deleted');
+});
+
+test('an operation whose approval is revoked before its first effect is still refused', async () => {
+  const key = 'native-revoked-approval';
+  const account = await f.person(key);
+  const input = await approveDelete(`${key}-delete`, account.accountId, await bearer(key));
+  await f.bindings.internalLifecycle.raiseFence({ accountId: account.accountId, key: `${key}-fence` });
+  await expectRefusal(f.host.workflows.deleteAccount(input));
+  expect((await stateOf(account.accountId))!.state).toBe('active');
+});
+
+test('a fence or consent reduction between approval and the operation denies it and writes nothing', async () => {
+  const reduced = 'native-reduction-client';
+  await f.host.service.internal.registerClient({ clientId: reduced, firstParty: false, scopes: workflowScopes });
+  const signin = async (key: string, client: string) => {
+    const response = await f.request('/signin', {
+      email: `${key}@ordinary.test`,
+      password,
+      client_id: client,
+      scope: workflowScopes,
+    });
+    expect(response.status).toBe(200);
+    return cookies(response);
+  };
+  for (const change of ['fence', 'consent'] as const) {
+    const key = `native-stale-${change}`;
+    const owner = await f.person(key);
+    const member = await f.person(`${key}-member`);
+    const { organizationId } = await organizationOwnedBy(key, owner.accountId);
+    expect(
+      (await f.request('/consent', { client_id: reduced, scope: workflowScopes }, await signin(key, clientId))).status,
+    ).toBe(200);
+    const tokenResponse = await f.request('/token', {}, await signin(key, reduced));
+    expect(tokenResponse.status).toBe(200);
+    const token = ((await tokenResponse.json()) as { access_token: string }).access_token;
+    const add = { organizationId, memberAccountId: member.accountId, role: 'member' as const };
+    const authorization = await approveOperation(`${key}-add`, { kind: 'membership', ...add }, token);
+    if (change === 'fence')
+      await f.bindings.internalLifecycle.raiseFence({ accountId: owner.accountId, key: `${key}-fence` });
+    else
+      expect(
+        (await f.request('/consent', { client_id: reduced, scope: ['subject:create'] }, await signin(key, clientId)))
+          .status,
+      ).toBe(200);
+    const before = await workflowReceipts();
+    await expectRefusal(f.host.workflows.setMembership({ ...add, key: `${key}-add`, authorization }));
+    expect(await holds(member.accountId)).toEqual([]);
+    expect(await workflowReceipts()).toBe(before);
+  }
+});
+
+test('a fence raised while a step is authorized denies it before the step reserves anything', async () => {
+  const key = 'native-fence-during-authorization';
+  const owner = await f.person(key);
+  const member = await f.person(`${key}-member`);
+  const { organizationId } = await organizationOwnedBy(key, owner.accountId);
+  const add = { organizationId, memberAccountId: member.accountId, role: 'member' as const };
+  const authorization = await approveOperation(`${key}-add`, { kind: 'membership', ...add }, await bearer(key));
+  const prepare = f.access.prepare!.bind(f.access);
+  let calls = 0;
+  f.access.prepare = async (...args) => {
+    // The first authorization admits the operation; the fence lands inside the second, the step's own.
+    if (++calls === 2)
+      await f.bindings.internalLifecycle.raiseFence({ accountId: owner.accountId, key: `${key}-fence` });
+    return prepare(...args);
+  };
+  try {
+    const before = await workflowReceipts();
+    await expectRefusal(f.host.workflows.setMembership({ ...add, key: `${key}-add`, authorization }));
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(await holds(member.accountId)).toEqual([]);
+    expect(await workflowReceipts()).toBe(before);
+  } finally {
+    f.access.prepare = prepare;
+  }
 });

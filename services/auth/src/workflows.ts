@@ -101,8 +101,14 @@ class RegistrationFailure extends Error {
 function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === 'object' && 'code' in error && error.code === '23505';
 }
-function isLifecycleDenied(error: unknown): boolean {
-  return error instanceof Error && error.name === 'LifecycleDeniedError';
+/** A native refusal as it crosses the access binding: a thrown value carrying
+ * the 401/403 status. Recognized by this shape, never by class name, because
+ * the binding rewrites the kernel's own error classes. */
+type Refusal = { readonly status: 401 | 403 };
+function isRefusal(error: unknown): error is Refusal {
+  return (
+    typeof error === 'object' && error !== null && 'status' in error && (error.status === 401 || error.status === 403)
+  );
 }
 let owner: object | undefined;
 function denied(): never {
@@ -288,13 +294,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           const failure = new Error(`Account workflow step failed: ${name}`);
           // Persist only the native refusal status, never the command's secret
           // input, permission context or original error in a durable step.
-          if (
-            typeof error === 'object' &&
-            error !== null &&
-            'status' in error &&
-            (error.status === 401 || error.status === 403)
-          )
-            throw Object.assign(failure, { status: 403 });
+          if (isRefusal(error)) throw Object.assign(failure, { status: 403 });
           throw failure;
         }
       },
@@ -338,7 +338,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           ).value,
         } as const;
       } catch (error) {
-        if (isLifecycleDenied(error)) return { error: 'handle_unavailable' as const };
+        if (isRefusal(error)) return { error: 'handle_unavailable' as const };
         throw error;
       }
     });
@@ -637,13 +637,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       },
     );
     const reserveMember = step('reserve-member', async (input: Extract<AccountOperation, { kind: 'membership' }>) => {
-      await approved(input);
+      // The one authorization of this step precedes the hold it writes.
+      const context = await approved(input);
       return (
         await required(access.reserveCoordination)({
           accountId: input.memberAccountId,
           relatedAccountId: input.organizationId,
           purpose: 'membership',
-          key: await authorizedKey(input, 'reserve-member'),
+          key: access.stableCommandKey?.(context, 'reserve-member') ?? commandKey('reserve-member'),
         })
       ).value;
     });
@@ -655,13 +656,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           ...input,
           key: access.stableCommandKey?.(context, 'change-membership') ?? commandKey('change-membership'),
         });
+        // Releasing the hold completes this committed change. The actor may have
+        // just lost the right it used, so release is keyed here and never re-authorized.
+        return {
+          releaseKey: access.stableCommandKey?.(context, 'release-membership') ?? commandKey('release-membership'),
+        };
       },
     );
-    const releaseMember = step('release-membership', async (input: WorkflowMembership, request?: AccountOperation) => {
-      await required(access.releaseMembershipCoordination)({
-        ...input,
-        key: await authorizedKey(request, 'release-membership'),
-      });
+    const releaseMember = step('release-membership', async (input: WorkflowMembership, releaseKey: string) => {
+      await required(access.releaseMembershipCoordination)({ ...input, key: releaseKey });
     });
     const reserveOperator = step(
       'reserve-operator',
@@ -861,7 +864,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         } catch (error) {
           // Deletion may commit after the read and before the native fence.
           // Only its terminal state can discharge that lifecycle refusal.
-          if (!isLifecycleDenied(error) || !(await completeDeleted())) throw error;
+          if (!isRefusal(error) || !(await completeDeleted())) throw error;
           return null;
         }
       },
@@ -916,6 +919,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       async (input: AccountOperation) => {
         if (input.kind === 'membership') {
           if (input.role === null && !input.reservationId) denied();
+          let releaseKey: string | undefined;
           await coordinateMembership({
             leaving: input.role === null,
             reserve: async () => ({
@@ -923,8 +927,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
               memberAccountId: input.memberAccountId,
               reservationId: input.reservationId ?? (await reserveMember(input)).reservationId,
             }),
-            publish: (membership) => changeMember({ ...membership, role: input.role }, input),
-            release: (membership) => releaseMember(membership, input),
+            publish: async (membership) => {
+              releaseKey = (await changeMember({ ...membership, role: input.role }, input)).releaseKey;
+            },
+            release: (membership) => releaseMember(membership, required(releaseKey)),
           });
           return { accountId: input.memberAccountId };
         }
@@ -1112,10 +1118,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       )
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
-    const result = await (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
-    if ('authorization' in input) await approved(input);
-    else await access.authorizeUnprotectedOperation?.(input);
-    return result;
+    // The approval was resolved once, above, before any effect. The answer is
+    // the workflow's own outcome; the actor is not re-authorized against state
+    // the operation just changed.
+    return (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
   }
   async function waitClientReduction(id: string): Promise<{ clientId: string }> {
     const progress = (
@@ -1158,15 +1164,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const failed = required(steps.find((step) => step.error !== null));
       // Official SDK rewind preserves successful Access barriers and reruns
       // only the failed effect under the exact same workflow/command keys.
-      const result = await (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
-      if ('authorization' in input) await approved(input);
-      else await access.authorizeUnprotectedOperation?.(input);
-      return result;
+      return (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
     }
-    const result = await (await DBOS.resumeWorkflow(id)).getResult();
-    if ('authorization' in input) await approved(input);
-    else await access.authorizeUnprotectedOperation?.(input);
-    return result;
+    return (await DBOS.resumeWorkflow(id)).getResult();
   }
   const close = async () => {
     await starting;

@@ -319,8 +319,12 @@ export function credentialWorkflowApprovals(api: ReturnType<typeof createWorkflo
   return native;
 }
 
-/** Native durable approval storage only. Resolve separately in every protected
- * step; the actual command must still authorize at its own T before receipts.
+/** Native durable approval storage only. Resolve once in each step that takes a
+ * new effect for the person, before that effect: every resolution prepares its
+ * own evidence at its own T and nothing is written before it passes. A step that
+ * only completes an effect already committed runs under that effect's record and
+ * is not resolved again; the actor is never re-authorized against state the
+ * operation itself changed. The actual command still authorizes at its own T.
  * Auth consent reductions invalidate these original scopes through the shared
  * Access epoch floor. No Auth database, introspection or runtime is consulted.
  */
@@ -405,12 +409,24 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     });
     // The final native formula obtains authoritative SQL T. Identity/principal
     // preparation has released its connections before this resource checkout.
+    // The actor observation made when the approval was restored is older than
+    // this T: a consent reduction, raised floor or fence in between must deny, so
+    // the actor row is read again after the formula has fixed its T.
     const allowed = await within(deadline, () =>
       withConnection(config.pool, async (client) => {
         const boundedClient = deadlineClient(client, deadline);
+        if (
+          !(await anchor(descriptor).validate(boundedClient)) ||
+          !(await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
+        )
+          return false;
+        const current = await readAccount(boundedClient, routeOf(actor.accountId)!, actor.accountId);
         return (
-          (await anchor(descriptor).validate(boundedClient)) &&
-          (await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
+          !!current &&
+          current.kind === 'actor' &&
+          current.state === 'active' &&
+          !current.fenced &&
+          BigInt(actor.authnEpoch) >= current.minimumAuthnEpoch
         );
       }),
     );

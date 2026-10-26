@@ -499,6 +499,58 @@ test('client scope reduction gates issuance and durably fences bounded owner pag
   ).toBeGreaterThan(1);
 }, 30000);
 
+test('a refusal is recognized by its status, whatever class the binding gives it', async () => {
+  const reserveHandle = ports.reserveHandle;
+  class BindingRefusal extends Error {
+    readonly status = 403;
+  }
+  ports.reserveHandle = async () => {
+    throw new BindingRefusal('Handle is held');
+  };
+  try {
+    await expect(
+      workflows.beginRegistration({ key: 'refused-handle', handle: 'refused_handle' }),
+    ).rejects.toMatchObject({ code: 'handle_unavailable' });
+  } finally {
+    ports.reserveHandle = reserveHandle;
+  }
+}, 15000);
+
+test('an owner who leaves is released under the committed change and answered from the workflow outcome', async () => {
+  const { authorizeOperation, setMembership, releaseMembershipCoordination } = ports;
+  let left = false;
+  ports.authorizeOperation = async (reference, operation) => {
+    // Once the owner has left they no longer hold the right they used.
+    if (left) throw Object.assign(new Error('Approval denied'), { status: 403 });
+    return authorizeOperation!(reference, operation);
+  };
+  ports.setMembership = async () => {
+    calls.push('set-membership');
+    left = true;
+    return { value: {} };
+  };
+  ports.releaseMembershipCoordination = async (input) => {
+    calls.push(`release:${input.reservationId}`);
+    return { value: {} };
+  };
+  try {
+    calls.length = 0;
+    expect(
+      await workflows.setMembership({
+        key: 'owner-leaves',
+        authorization: 'approved',
+        organizationId: 'leave-organization',
+        memberAccountId: 'leaving-owner',
+        role: null,
+        reservationId: 'leaving-hold',
+      }),
+    ).toEqual({ accountId: 'leaving-owner' });
+    expect(calls).toEqual(['set-membership', 'release:leaving-hold']);
+  } finally {
+    Object.assign(ports, { authorizeOperation, setMembership, releaseMembershipCoordination });
+  }
+}, 15000);
+
 test('persisted operation history contains no staged credentials or Auth responses', async () => {
   let serialized = '';
   for (const { tablename } of (

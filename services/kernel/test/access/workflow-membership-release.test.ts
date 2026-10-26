@@ -218,3 +218,17 @@ test('permanent terminal slot denies delayed activation even while its hold stil
   expect(slots).toEqual([{ terminal: true }]);
   expect((await operators.deletionEligibility(member)).safe).toBe(true);
 });
+
+test('an owner who leaves after a successor owner exists releases their own hold on the committed terminal record', async () => {
+  const owner = await person();
+  const successor = await person();
+  const org = await organization(owner);
+  const [ownerHold] = await holds(owner);
+  await set(owner, await reserve(org, successor), 'owner');
+  const leaving = { organizationId: org, memberAccountId: owner, reservationId: ownerHold! };
+  await set(owner, leaving, null);
+  // The owner no longer holds the right that removed them; release needs no actor.
+  await internal.releaseMembershipCoordination({ ...leaving, key: key() });
+  expect(await holds(owner)).toEqual([]);
+  expect((await operators.deletionEligibility(owner)).safe).toBe(true);
+});

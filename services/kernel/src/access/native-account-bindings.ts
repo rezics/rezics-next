@@ -98,7 +98,8 @@ export class NativeAccountBindingsUnavailableError extends Error {
  * createAccountWorkflows registration. Registration records the real pending
  * command reference, uses actual Auth committed provisioning evidence, then
  * executes native claimHandle and activate commands. Protected workflow steps
- * resolve native persisted approvals to LifecycleRequest inside each step;
+ * resolve native persisted approvals to LifecycleRequest inside each step that
+ * takes a new effect, and never again to complete an effect already committed;
  * neither bearer tokens nor request contexts enter DBOS or approval Maps.
  *
  * Automated creation proves its operator relation and pending receipt before
