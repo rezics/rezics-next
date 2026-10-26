@@ -87,7 +87,7 @@ export function importedStatementDigest(
     const content = statement.value.content;
     if (typeof content.language === 'string' && content.document !== undefined) {
       const documentDigest = createHash('sha256')
-      .update(serializeDocument(identityDocument(parseDocument(content.document))))
+        .update(serializeDocument(identityDocument(parseDocument(content.document))))
         .digest('hex');
       return createHash('sha256')
         .update(canonicalize({ property: statement.property, language: content.language, digest: documentDigest })!)
@@ -157,9 +157,7 @@ export async function batchCommand(
       const document = parseDocument(content?.document);
       if (document.profile !== 'text') throw new TypeError('Imported summaries require a text document');
     } catch {
-      throw new SubjectInputError([
-        { pointer: '/statement/value/content/document', code: 'invalid_format' },
-      ]);
+      throw new SubjectInputError([{ pointer: '/statement/value/content/document', code: 'invalid_format' }]);
     }
   }
   const partition = partitionOf(route);

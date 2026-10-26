@@ -179,7 +179,7 @@ export async function writeProposal(
       : {
           ...(body as Record<string, unknown>),
           value: {
-            ...((body as { value: Record<string, unknown> }).value),
+            ...(body as { value: Record<string, unknown> }).value,
             content: replacement,
           },
         };
