@@ -10,6 +10,7 @@ export type RelationCost = {
 export type Cost = {
   readonly statements: number;
   readonly controlStatements: number;
+  readonly catalogStatements: number;
   readonly plans: number;
   readonly rows: number;
   readonly blocks: number;
@@ -61,17 +62,80 @@ function optionalNumber(node: PlanNode, field: string, fallback = 0): number {
   return value;
 }
 
-function documentRoots(document: unknown): PlanNode[] {
+type PlanEntry = { readonly queryText: string | undefined; readonly plan: PlanNode };
+
+function documentEntries(document: unknown): PlanEntry[] {
   if (Array.isArray(document)) {
     if (document.length === 0) throw new TypeError('EXPLAIN plan document is empty');
     return document.map((entry) => {
       if (!isRecord(entry) || !isRecord(entry.Plan)) throw new TypeError('EXPLAIN plan document has no Plan');
-      return entry.Plan;
+      return {
+        queryText: typeof entry['Query Text'] === 'string' ? entry['Query Text'] : undefined,
+        plan: entry.Plan,
+      };
     });
   }
   if (isRecord(document) && typeof document['Query Text'] === 'string' && isRecord(document.Plan))
-    return [document.Plan];
+    return [{ queryText: document['Query Text'], plan: document.Plan }];
   throw new TypeError('Unrecognized plan document');
+}
+
+function isCatalogOnlyPlan(root: PlanNode): boolean {
+  let hasRelation = false;
+  let catalogOnly = true;
+  const visit = (node: PlanNode): void => {
+    if (typeof node['Relation Name'] === 'string') {
+      hasRelation = true;
+      catalogOnly = catalogOnly && (node.Schema === 'pg_catalog' || node.Schema === 'information_schema');
+    }
+    const children = node.Plans;
+    if (children !== undefined && !Array.isArray(children)) throw new TypeError('Plan node Plans must be an array');
+    for (const child of children ?? []) {
+      if (!isRecord(child)) throw new TypeError('Plan child must be an object');
+      visit(child);
+    }
+  };
+  visit(root);
+  return hasRelation && catalogOnly;
+}
+
+export type CatalogClassification = {
+  readonly catalogTexts: ReadonlySet<string>;
+  readonly catalogStatements: number;
+  readonly allowedStatements: number;
+  readonly firstCatalogStatement: string | undefined;
+};
+
+function classifyCatalogStatements(capture: Capture): CatalogClassification {
+  const entries = capture.plans.flatMap((document) => documentEntries(document));
+  const nonControlStatements = capture.statements.filter((statement) => !isControlStatement(statement));
+  const clientTexts = new Set(nonControlStatements);
+  const plansByText = new Map<string, PlanEntry[]>();
+  for (const entry of entries) {
+    if (entry.queryText === undefined || !clientTexts.has(entry.queryText)) continue;
+    const plans = plansByText.get(entry.queryText) ?? [];
+    plans.push(entry);
+    plansByText.set(entry.queryText, plans);
+  }
+
+  const catalogTexts = new Set<string>();
+  for (const [text, plans] of plansByText) {
+    if (plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan))) catalogTexts.add(text);
+  }
+
+  const catalogStatements = nonControlStatements.filter((statement) => catalogTexts.has(statement)).length;
+  const nonCatalogTexts = new Set(nonControlStatements.filter((statement) => !catalogTexts.has(statement)));
+  const firstCatalogStatement = nonControlStatements.find((statement) => catalogTexts.has(statement));
+  return {
+    catalogTexts,
+    catalogStatements,
+    allowedStatements: nonCatalogTexts.size,
+    firstCatalogStatement,
+  };
+}
+
+export function catalogStatementBound(capture: Capture): CatalogClassification {
+  return classifyCatalogStatements(capture);
 }
 
 function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableRelationCost>): NodeTotals {
@@ -146,10 +210,14 @@ export function costOf(capture: Capture): Cost {
   let rows = 0;
   let sharedHit = 0;
   let sharedRead = 0;
+  const catalog = classifyCatalogStatements(capture);
+  let plans = 0;
 
   for (const document of capture.plans) {
-    for (const root of documentRoots(document)) {
-      const totals = costNode(root, true, relations);
+    for (const { queryText, plan } of documentEntries(document)) {
+      if (queryText !== undefined && catalog.catalogTexts.has(queryText)) continue;
+      plans++;
+      const totals = costNode(plan, true, relations);
       rows += totals.rows;
       sharedHit += totals.hit;
       sharedRead += totals.read;
@@ -157,9 +225,12 @@ export function costOf(capture: Capture): Cost {
   }
 
   return {
-    statements: capture.statements.filter((statement) => !isControlStatement(statement)).length,
+    statements: capture.statements.filter(
+      (statement) => !isControlStatement(statement) && !catalog.catalogTexts.has(statement),
+    ).length,
     controlStatements: capture.statements.filter(isControlStatement).length,
-    plans: capture.plans.length,
+    catalogStatements: catalog.catalogStatements,
+    plans,
     rows: Math.round(rows),
     blocks: sharedHit + sharedRead,
     sharedHit,
@@ -180,6 +251,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
   return {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
     controlStatements: lowerMedian(costs.map((cost) => cost.controlStatements)),
+    catalogStatements: lowerMedian(costs.map((cost) => cost.catalogStatements)),
     plans: lowerMedian(costs.map((cost) => cost.plans)),
     rows: lowerMedian(costs.map((cost) => cost.rows)),
     blocks,

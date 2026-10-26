@@ -201,6 +201,9 @@ fixed. Seed through production writes or bulk rows of identical shape. The bound
 `linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
 API from `test/support/growth.ts`.
 
+Catalog-only statements are counted apart, with at most one allowed per distinct query text in a measured run; a
+statement that also reads data counts in full.
+
 Seed every relation the operation reads, including receipts, outbox, write basis and the Access rows its authorization
 reads, to thousands of rows at the smallest scale; for example, use 500 x scale bulk rows of the production shape per
 relation. Otherwise, the planner scans small relations and the check fails on rows that production would reach through

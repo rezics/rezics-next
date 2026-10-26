@@ -1,6 +1,6 @@
-import { assertGrowth, type Bound, type GrowthSample, type Metric, type Slack } from './growth-bound.ts';
+import { assertGrowth, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
 import { capture, type GrowthDatabase } from './growth-capture.ts';
-import { costOf, medianCost, type Cost } from './growth-cost.ts';
+import { catalogStatementBound, costOf, medianCost, type Cost } from './growth-cost.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
@@ -39,8 +39,21 @@ export type GrowthCheck = {
 export type GrowthReport = {
   readonly name: string;
   readonly bounds: Readonly<Record<Metric, Bound>>;
-  readonly samples: readonly GrowthSample[];
+  readonly samples: readonly { readonly scale: number; readonly cost: Cost }[];
 };
+
+function assertCatalogBound(
+  name: string,
+  scale: number,
+  captureResult: Parameters<typeof catalogStatementBound>[0],
+  samples: readonly { readonly scale: number; readonly cost: Cost }[],
+): void {
+  const { catalogStatements, allowedStatements, firstCatalogStatement } = catalogStatementBound(captureResult);
+  if (catalogStatements <= allowedStatements) return;
+  const error = new GrowthBoundError([], samples);
+  error.message = `${name}: catalog count at scale ${scale} (${catalogStatements}) exceeds allowed count ${allowedStatements}; first catalog statement: ${firstCatalogStatement?.slice(0, 120) ?? '<unknown>'}`;
+  throw error;
+}
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
@@ -66,7 +79,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
 
   let previous = 0;
   let repetition = 0;
-  const samples: GrowthSample[] = [];
+  const samples: Array<{ readonly scale: number; readonly cost: Cost }> = [];
   for (const scale of scales) {
     await check.grow(db, scale, previous);
     await db.admin.query('VACUUM (ANALYZE)');
@@ -78,7 +91,10 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
 
     const costs: Cost[] = [];
     for (let run = 0; run < repetitions; run++) {
-      costs.push((await measure(db, () => check.operation(db, scale, repetition))).cost);
+      const measured = await capture(db, () => check.operation(db, scale, repetition));
+      const cost = costOf(measured.capture);
+      assertCatalogBound(check.name, scale, measured.capture, samples);
+      costs.push(cost);
       repetition++;
     }
     samples.push({ scale, cost: medianCost(costs) });

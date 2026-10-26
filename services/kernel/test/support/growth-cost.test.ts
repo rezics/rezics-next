@@ -207,6 +207,79 @@ test('transaction control is counted separately from application statements', as
     expect(isControlStatement(statement)).toBe(false);
 });
 
+test('catalog-only plans are counted apart, while catalog and data joins count in full', () => {
+  const catalogQuery = 'SELECT column_name FROM information_schema.columns WHERE table_name = $1';
+  const catalogPlan = [
+    {
+      'Query Text': catalogQuery,
+      Plan: {
+        'Node Type': 'Index Scan',
+        Schema: 'information_schema',
+        'Relation Name': 'columns',
+        'Actual Rows': 1,
+        'Actual Loops': 1,
+        'Shared Hit Blocks': 1,
+        'Shared Read Blocks': 0,
+      },
+    },
+  ];
+  const catalogCost = costOf({ statements: [catalogQuery], plans: [catalogPlan] });
+
+  expect(catalogCost).toMatchObject({
+    catalogStatements: 1,
+    statements: 0,
+    plans: 0,
+    rows: 0,
+    blocks: 0,
+    sharedHit: 0,
+    sharedRead: 0,
+    relations: {},
+  });
+
+  const joinedQuery =
+    'SELECT c.column_name, t.value FROM pg_catalog.pg_class AS c JOIN growth_cost_test.seq_rows AS t ON true';
+  const joinedPlan = [
+    {
+      'Query Text': joinedQuery,
+      Plan: {
+        'Node Type': 'Nested Loop',
+        'Actual Rows': 1,
+        'Actual Loops': 1,
+        'Shared Hit Blocks': 2,
+        'Shared Read Blocks': 0,
+        Plans: [
+          {
+            'Node Type': 'Index Scan',
+            Schema: 'pg_catalog',
+            'Relation Name': 'pg_class',
+            'Actual Rows': 1,
+            'Actual Loops': 1,
+            'Shared Hit Blocks': 1,
+            'Shared Read Blocks': 0,
+          },
+          {
+            'Node Type': 'Seq Scan',
+            Schema: 'growth_cost_test',
+            'Relation Name': 'seq_rows',
+            'Actual Rows': 1,
+            'Actual Loops': 1,
+            'Shared Hit Blocks': 1,
+            'Shared Read Blocks': 0,
+          },
+        ],
+      },
+    },
+  ];
+  const joinedCost = costOf({ statements: [joinedQuery], plans: [joinedPlan] });
+
+  expect(joinedCost.catalogStatements).toBe(0);
+  expect(joinedCost.statements).toBe(1);
+  expect(joinedCost.plans).toBe(1);
+  expect(joinedCost.rows).toBeGreaterThan(0);
+  expect(joinedCost.relations['pg_catalog.pg_class']).toBeDefined();
+  expect(joinedCost.relations['growth_cost_test.seq_rows']).toBeDefined();
+});
+
 test('plans without ANALYZE rows or BUFFERS counts are refused', () => {
   const noRows = [{ Plan: { 'Node Type': 'Seq Scan', 'Shared Hit Blocks': 0, 'Shared Read Blocks': 0 } }];
   const noBuffers = [{ Plan: { 'Node Type': 'Result', 'Actual Rows': 1, 'Actual Loops': 1 } }];
@@ -222,21 +295,49 @@ test('median cost takes the lower median of each measure and matching relations'
     relations: { [relation]: { rows: values.rows, blocks: values.blocks, nodes: 1, sequentialScans: 0 } },
   });
   const first = cost(
-    { statements: 1, controlStatements: 0, plans: 1, rows: 10, blocks: 4, sharedHit: 2, sharedRead: 2 },
+    {
+      statements: 1,
+      controlStatements: 0,
+      catalogStatements: 0,
+      plans: 1,
+      rows: 10,
+      blocks: 4,
+      sharedHit: 2,
+      sharedRead: 2,
+    },
     'first',
   );
   const second = cost(
-    { statements: 3, controlStatements: 2, plans: 2, rows: 20, blocks: 6, sharedHit: 3, sharedRead: 3 },
+    {
+      statements: 3,
+      controlStatements: 2,
+      catalogStatements: 2,
+      plans: 2,
+      rows: 20,
+      blocks: 6,
+      sharedHit: 3,
+      sharedRead: 3,
+    },
     'second',
   );
   const third = cost(
-    { statements: 5, controlStatements: 4, plans: 3, rows: 30, blocks: 4, sharedHit: 4, sharedRead: 0 },
+    {
+      statements: 5,
+      controlStatements: 4,
+      catalogStatements: 4,
+      plans: 3,
+      rows: 30,
+      blocks: 4,
+      sharedHit: 4,
+      sharedRead: 0,
+    },
     'third',
   );
 
   expect(medianCost([first, second, third])).toEqual({
     statements: 3,
     controlStatements: 2,
+    catalogStatements: 2,
     plans: 2,
     rows: 20,
     blocks: 4,
