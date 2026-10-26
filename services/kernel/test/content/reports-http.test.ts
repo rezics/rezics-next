@@ -378,7 +378,7 @@ describe('real migrated report HTTP and shared admission', () => {
       { ...input(), botToken: remote.mint() },
       { key, kernel: noVerifier },
     );
-    expect(absent.response.status).toBe(403);
+    expect(absent.response.status).toBe(404);
     expect(await effects()).toEqual(before);
     await create(board, key);
   });
