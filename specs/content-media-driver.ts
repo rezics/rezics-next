@@ -38,7 +38,7 @@ export interface Reservation {
   purpose: string;
   type: string;
   length: number;
-  sha256?: string;
+  sha256?: string | undefined;
 }
 export interface Media {
   id: string;
