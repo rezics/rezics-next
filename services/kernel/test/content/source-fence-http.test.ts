@@ -17,7 +17,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
-import { observeSql } from './support/sql-observer.ts';
+import { observeSql, permissionResourceId } from './support/sql-observer.ts';
 
 const action = 'source_fence:read';
 const routeKey = new Uint8Array(32).fill(7);
@@ -210,7 +210,7 @@ test('actual generated sourceFences custom check route requires protected read g
     expect(checks.length).toBeGreaterThanOrEqual(2);
     for (const check of checks) {
       const parameters = Object.fromEntries(permissionRead.params.map((key, index) => [key, check.parameters[index]]));
-      expect(parameters).toMatchObject({
+      expect({ ...parameters, resource_ids: [permissionResourceId(check, permissionRead.params)] }).toMatchObject({
         route: 0,
         resource_ids: [GLOBAL_CONTEXT],
         action,
