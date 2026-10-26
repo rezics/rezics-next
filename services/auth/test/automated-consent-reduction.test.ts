@@ -16,6 +16,7 @@ const audience = 'https://automated-consent.api.test';
 const password = 'correct horse battery staple';
 const accounts = new Map<string, AccessAccount>();
 const receipts = new Map<string, EffectAuthorization>();
+const invalidations: Parameters<NonNullable<AuthServiceOptions['trustedAccess']['invalidateAccount']>>[0][] = [];
 let pool: Pool;
 let service: AuthService;
 let options: AuthServiceOptions;
@@ -160,6 +161,7 @@ beforeAll(async () => {
         return receipt;
       },
       async invalidateAccount(input) {
+        invalidations.push(input);
         const subject = accounts.get(input.accountId)!;
         subject.authnEpoch++;
         return {
@@ -198,9 +200,20 @@ test('an operator-opened session reduces the automated account consent through t
   expect(await accepted(earlier)).toBe(true);
   const floor = accounts.get('agent')!.authnEpoch;
   const receipts = await receiptCount('agent');
+  const opening = (
+    await pool.query(
+      'SELECT receipt_id FROM auth_session_opening WHERE subject_account_id=$1 ORDER BY opened_at DESC',
+      ['agent'],
+    )
+  ).rows[0].receipt_id;
+  const sent = invalidations.length;
 
   const response = await reduce(session, ['read']);
   expect(response.status).toBe(200);
+  // Access receives exactly the opening Auth committed for the reducing session.
+  expect(invalidations.slice(sent)).toEqual([
+    expect.objectContaining({ accountId: 'agent', openingReceiptId: opening }),
+  ]);
   expect(await response.json()).toEqual({ client_id: 'automated-ext', scope: ['read'] });
   expect(accounts.get('agent')!.authnEpoch).toBe(floor + 1);
   expect(await receiptCount('agent')).toBe(receipts + 1);
@@ -267,8 +280,11 @@ test("a person's own reduction behaves as before", async () => {
   const earlier = await issued(await login('operator-human', 'automated-ext', ['write']));
   const floor = accounts.get('operator-human')!.authnEpoch;
   await seed('agent', ['read', 'write']);
+  const sent = invalidations.length;
   const response = await reduce(own, ['read']);
   expect(response.status).toBe(200);
+  expect(invalidations.slice(sent)).toHaveLength(1);
+  expect(invalidations[sent]).not.toHaveProperty('openingReceiptId');
   expect(await response.json()).toEqual({ client_id: 'automated-ext', scope: ['read'] });
   expect(accounts.get('operator-human')!.authnEpoch).toBe(floor + 1);
   expect(await consentOf('operator-human')).toEqual({ scopes: ['read'], pending_scopes: null });

@@ -188,6 +188,8 @@ interface SharedAccessPorts {
         reason: 'consent-reduction' | 'session-revocation' | 'logout' | 'refresh-replay';
         proofReference?: string;
         operationKey?: string;
+        /** Exactly the operator opening that created the reducing session of an automated account. */
+        openingReceiptId?: string;
       }) => Promise<InvalidationReceipt>)
     | undefined;
   /** Recovery-only authoritative read may expose a fenced active human's current floor. */
@@ -504,9 +506,14 @@ export type BarrierProof = Readonly<{
   operationKey: string;
   digest: string;
   expiresAt: string;
+  /** Only a consent reduction from an operator-opened session binds the opening Auth committed for it. */
+  openingReceiptId?: string;
 }>;
 
-export type BarrierProofExpectation = Pick<BarrierProof, 'accountId' | 'purpose' | 'previousEpoch' | 'operationKey'>;
+export type BarrierProofExpectation = Pick<
+  BarrierProof,
+  'accountId' | 'purpose' | 'previousEpoch' | 'operationKey' | 'openingReceiptId'
+>;
 
 /** Committed successful native Auth recovery, bound to the exact Access barrier
  * and a new credential establishment. Structurally matches Access evidence. */

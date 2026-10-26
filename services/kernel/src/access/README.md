@@ -111,6 +111,14 @@ Concurrent exact retries return that receipt; other operations at the old floor 
 Committed receipt and current account state are read back before returning to Auth.
 
 Auth also lets an operator-opened session of an automated account reduce that account's consent for a client through the same barrier and receipt; it never grants or widens an automated account's consent.
+Only `consent-reduction` advances an automated account's floor; `recovery` still requires an account without an operator.
+Auth sends `openingReceiptId` exactly for such a reduction and binds it into the consent proof, so Access accepts only the
+opening Auth committed for that session. Before advancing, the account lock reads that opening once, anchored on the
+operator: it must be consumed, of purpose `session`, for this subject, operator and reservation, and recorded at the
+subject's previous floor. Its acting human must be active, have no operator, still hold the floor recorded at the opening
+(`human_epoch_floor`), and manage the operator at authoritative T: the operator is the human, or the human is a current
+member holding a live `account:manage` grant on the organization. An exact replay of a committed floor advance returns
+its receipt without this read.
 
 Consent preserves `authn_fenced`: an unfenced human can sign in again at the new floor, while an existing fence
 stays raised. Recovery retains its fence even when Auth credential/session work fails. Only existing `clearFence`

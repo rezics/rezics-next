@@ -498,12 +498,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function operatorOpening(session: { id: string; userId: string; authMethods: string }) {
     if (session.authMethods !== 'operator') throw new Denied();
     const opening = (
-      await database.query<{ acting_human_id: string }>(
-        'SELECT acting_human_id FROM auth_session_opening WHERE session_id=$1 AND subject_account_id=$2',
+      await database.query<{ acting_human_id: string; receipt_id: string }>(
+        'SELECT acting_human_id,receipt_id FROM auth_session_opening WHERE session_id=$1 AND subject_account_id=$2',
         [session.id, session.userId],
       )
     ).rows[0];
     if (!opening || (await activeActor(opening.acting_human_id)).automated) throw new Denied();
+    return opening.receipt_id;
   }
   function freshAuthentication(human: SessionProof) {
     if (Math.floor(Date.now() / 1000) - human.auth_time > 600) throw new StepUpRequired();
@@ -1946,7 +1947,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             const account = await activeActor(session.userId);
             // An automated account is reduced only from a session its operator's manager opened for it.
             const operated = account.automated;
-            if (operated) await operatorOpening(session);
+            const openingReceiptId = operated ? await operatorOpening(session) : undefined;
             const client = await clientFor(clientId);
             if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
             return withConsent(account.accountId, clientId, async (connection) => {
@@ -1990,6 +1991,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 previous.revision,
                 previous.scopes,
                 granted,
+                ...(openingReceiptId === undefined ? [] : [openingReceiptId]),
               ];
               const operationKey = digestOf(['auth-consent-v1', evidence]);
               const resuming = session.authnEpoch < account.authnEpoch || previous.pending_reference !== null;
@@ -1998,16 +2000,19 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 if (human.account_id !== account.accountId || human.authn_epoch !== account.authnEpoch)
                   throw new Denied();
               }
-              const proof = await publishBarrier(
-                connection,
-                'consent-reduction',
-                account.accountId,
-                session.authnEpoch,
-                operationKey,
-                evidence,
-                session.expiresAt,
-                resuming,
-              );
+              const proof = {
+                ...(await publishBarrier(
+                  connection,
+                  'consent-reduction',
+                  account.accountId,
+                  session.authnEpoch,
+                  operationKey,
+                  evidence,
+                  session.expiresAt,
+                  resuming,
+                )),
+                ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
+              };
               if (resuming && previous.pending_reference !== proof.reference) throw new Denied();
               // Publish the ceiling with the proof, preserving original scopes
               // and revision for immutable evidence and the final compare-and-set.
@@ -2029,6 +2034,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               reason: 'consent-reduction',
               proofReference: proof.reference,
               operationKey: proof.operationKey,
+              ...(proof.openingReceiptId === undefined ? {} : { openingReceiptId: proof.openingReceiptId }),
             });
             invalidation(receipt, proof.accountId, proof.previousEpoch);
             await withIssuance(clientId, () =>

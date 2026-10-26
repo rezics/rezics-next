@@ -40,7 +40,7 @@ export function createAuthBarrierCapabilities({
   access?: Access;
 }) {
   async function commit(
-    value: { accountId: string; proofReference?: string; operationKey?: string },
+    value: { accountId: string; proofReference?: string; operationKey?: string; openingReceiptId?: string },
     purpose: 'consent-reduction' | 'recovery',
     previousEpoch: number,
   ): Promise<LifecycleFenceReceipt> {
@@ -57,7 +57,16 @@ export function createAuthBarrierCapabilities({
         proofs?.verify,
     );
     const reference = input.proofReference;
-    const expected = { accountId: input.accountId, purpose, previousEpoch, operationKey: input.operationKey };
+    // Only a consent reduction from an operator-opened session names its opening.
+    const openingReceiptId = purpose === 'consent-reduction' ? input.openingReceiptId : undefined;
+    allowed(input.openingReceiptId === openingReceiptId);
+    const expected = {
+      accountId: input.accountId,
+      purpose,
+      previousEpoch,
+      operationKey: input.operationKey,
+      ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
+    };
     const resolve = async () => {
       try {
         return await proofs.verify(reference, expected);
@@ -72,6 +81,7 @@ export function createAuthBarrierCapabilities({
         proof.purpose === purpose &&
         proof.previousEpoch === previousEpoch &&
         proof.operationKey === expected.operationKey &&
+        proof.openingReceiptId === openingReceiptId &&
         /^[a-f0-9]{64}$/.test(proof.digest) &&
         Date.parse(proof.expiresAt) > (access ? accessClock(access) : systemClock)().getTime(),
     );
@@ -85,6 +95,7 @@ export function createAuthBarrierCapabilities({
         proofReference: reference,
         proofDigest: bound.digest,
         proofExpiresAt: bound.expiresAt,
+        ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
       },
       async () => {
         const current = await resolve();
@@ -94,6 +105,7 @@ export function createAuthBarrierCapabilities({
           current.purpose === bound.purpose &&
           current.previousEpoch === bound.previousEpoch &&
           current.operationKey === bound.operationKey &&
+          current.openingReceiptId === bound.openingReceiptId &&
           current.digest === bound.digest &&
           current.expiresAt === bound.expiresAt
         );

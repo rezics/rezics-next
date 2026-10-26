@@ -8,8 +8,9 @@ WITH input AS NOT MATERIALIZED (
   FROM input i
   WHERE a.route = i.route AND a.account_id = i.account_id
     AND a.minimum_authn_epoch = i.expected_floor
-    AND a.state = 'active' AND a.kind = 'actor' AND a.operator_account_id IS NULL
-    AND (i.purpose = 'consent-reduction' OR (i.purpose = 'recovery' AND a.authn_fenced))
+    AND a.state = 'active' AND a.kind = 'actor'
+    AND (i.purpose = 'consent-reduction'
+      OR (i.purpose = 'recovery' AND a.operator_account_id IS NULL AND a.authn_fenced))
   RETURNING a.route, a.account_id, a.minimum_authn_epoch
 )
 INSERT INTO access.lifecycle_fence_receipt

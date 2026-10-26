@@ -33,6 +33,7 @@ import memberInsert from './lifecycle-member-insert.sql';
 import ownersRead from './lifecycle-owners.sql';
 import fenceStatement from './lifecycle-fence.sql';
 import authBarrier from './auth-barriers-advance.sql';
+import openingRead from './auth-barriers-opening-read.sql';
 import fenceRead from './lifecycle-fence-read.sql';
 import fenceClear from './lifecycle-fence-clear.sql';
 import handleHold from './lifecycle-handle-hold.sql';
@@ -108,6 +109,8 @@ export type AuthenticationBarrierCommand = LifecycleCommand & {
   proofReference: string;
   proofDigest: string;
   proofExpiresAt: string;
+  /** The operator opening of the session that reduces an automated account's consent. */
+  openingReceiptId?: string;
 };
 export type HandleTransition = LifecycleCommand & {
   handle: string;
@@ -1053,6 +1056,8 @@ export function createLifecycleInternals(
           /^[a-f0-9]{64}$/.test(input.proofReference) &&
           /^[a-f0-9]{64}$/.test(input.proofDigest) &&
           Number.isFinite(Date.parse(input.proofExpiresAt)) &&
+          (input.openingReceiptId === undefined ||
+            (input.purpose === 'consent-reduction' && routeOf(input.openingReceiptId) !== null)) &&
           typeof verifyAtAttempt === 'function',
       );
       return execute(
@@ -1072,18 +1077,33 @@ export function createLifecycleInternals(
                   Date.parse(input.proofExpiresAt) > Date.parse(authoritativeTimeValue(attempt.time)),
               );
               const account = await locked(tx, input.accountId);
+              // Only a consent reduction reaches an automated account, and only through its opening.
+              const automated = account.operatorAccountId !== null;
               requireAllowed(
                 account.state === 'active' &&
                   account.kind === 'actor' &&
-                  account.operatorAccountId === null &&
-                  (input.purpose !== 'recovery' || account.fenced),
+                  automated === (input.openingReceiptId !== undefined) &&
+                  (input.purpose !== 'recovery' || (!automated && account.fenced)),
               );
               const floor = BigInt(account.minimumAuthnEpoch);
               requireAllowed(
                 floor === BigInt(input.expectedMinimumAuthnEpoch) ||
                   floor === BigInt(input.expectedMinimumAuthnEpoch + 1),
               );
-              return floor === BigInt(input.expectedMinimumAuthnEpoch) ? 'execute' : 'receipt-only';
+              if (floor !== BigInt(input.expectedMinimumAuthnEpoch)) return 'receipt-only';
+              if (automated)
+                requireAllowed(
+                  await openingRead.run(tx, {
+                    route: accountRoute(account.operatorAccountId!),
+                    operator_id: account.operatorAccountId!,
+                    receipt_id: input.openingReceiptId!,
+                    subject_id: input.accountId,
+                    reservation_id: account.operatorReservationId!,
+                    previous_floor: String(input.expectedMinimumAuthnEpoch),
+                    at: authoritativeTimeValue(attempt.time),
+                  }),
+                );
+              return 'execute';
             },
             denied: () => new LifecycleDeniedError(),
           },
