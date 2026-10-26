@@ -37,6 +37,7 @@ export async function nativeFixture(
   existing?: {
     database: ReturnType<typeof testDatabase>;
     privateKey: JWK & { kid: string };
+    actions?: ReadonlyMap<string, { anonymous: boolean }>;
   },
 ) {
   const database = existing?.database ?? testDatabase();
@@ -47,7 +48,11 @@ export async function nativeFixture(
   let bindings: ReturnType<typeof createNativeAccountBindings>;
   let proofs: ReturnType<typeof createNativeWorkflowProofPorts>;
   let authPool: Pool;
-  const actions = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+  const actions = new Map([
+    ...LIFECYCLE_ACTIONS,
+    ...scopes.map((scope) => [scope, { anonymous: false }] as const),
+    ...(existing?.actions ?? []),
+  ]);
   const access = createAccess({
     actions,
     auth: {
