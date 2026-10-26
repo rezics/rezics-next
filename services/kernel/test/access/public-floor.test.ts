@@ -16,6 +16,7 @@ import {
   type Actor,
   type Resource,
 } from '../../src/request/access.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -222,7 +223,7 @@ beforeEach(async () => {
 });
 afterAll(async () => {
   await authPool?.end();
-  await pool.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+  await dropTestDatabase(pool, authDatabase);
   await pool.end();
 });
 

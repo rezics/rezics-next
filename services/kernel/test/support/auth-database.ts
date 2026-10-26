@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Client, type Pool } from 'pg';
+import { Client } from 'pg';
 import { migrate } from '../../../auth/scripts/database.ts';
+import { dropTestDatabase } from './drop-test-database.ts';
 
 const migrations = resolve(import.meta.dir, '../../../auth/db/migrations');
 
@@ -42,7 +43,7 @@ export async function createAuthDatabase(baseUrl: string, name: string): Promise
     try {
       const found = await owner.query('SELECT 1 FROM pg_database WHERE datname = $1', [template]);
       if (found.rowCount === 0) {
-        await owner.query(`DROP DATABASE IF EXISTS ${quote(building)} WITH (FORCE)`);
+        await dropTestDatabase(owner, building);
         await owner.query(`CREATE DATABASE ${quote(building)}`);
         url.pathname = `/${building}`;
         migrate(url.toString());
@@ -57,22 +58,4 @@ export async function createAuthDatabase(baseUrl: string, name: string): Promise
   }
   url.pathname = `/${name}`;
   return url.toString();
-}
-
-/**
- * Drops Auth database `name` once its owners have closed their pools. `pool.end()` resolves when the pool has handed
- * its clients to `client.end()`, not when the server has released their backends, so a `FORCE` drop issued right
- * after it can terminate a backend that is still closing; the pg client then raises an unhandled FATAL. This waits for
- * the backends to leave and keeps `FORCE` as the last step for any that never do.
- */
-export async function dropAuthDatabase(admin: Pick<Pool, 'query'>, name: string, patienceMs = 5000): Promise<void> {
-  const deadline = Date.now() + patienceMs;
-  while (Date.now() < deadline) {
-    const open = await admin.query('SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [
-      name,
-    ]);
-    if (open.rowCount === 0) break;
-    await new Promise((done) => setTimeout(done, 10));
-  }
-  await admin.query(`DROP DATABASE IF EXISTS ${quote(name)} WITH (FORCE)`);
 }

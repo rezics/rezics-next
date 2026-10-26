@@ -27,6 +27,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountsWorkModule } from '../../src/access/membership-work.ts';
 import { startWorker } from '../../src/worker.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const password = 'continuation-password';
 const scopes = [
@@ -337,7 +338,7 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     await authPool?.end().catch(() => {});
     await kernel.end();
     await facts.end();
-    await admin.query(`DROP DATABASE IF EXISTS "${authName}" WITH (FORCE)`);
+    await dropTestDatabase(admin, authName);
     await admin.end();
   });
   test('platform staff suspend an operator through its approval and the worker fences 205 subjects with independent credentials', async () => {

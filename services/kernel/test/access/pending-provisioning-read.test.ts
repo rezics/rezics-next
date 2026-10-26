@@ -12,6 +12,7 @@ import { createRegistrationProofBindings } from '../../src/access/registration-p
 import { readPublicAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { seal, unseal } from '../../src/tokens/seal.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -236,6 +237,6 @@ test('real Auth provisions through the concrete pending reader without ordinary 
     expect(await nativeBindings.readAccount(accountId)).toBeNull();
   } finally {
     await authPool.end();
-    await pool.query(`DROP DATABASE ${name} WITH (FORCE)`);
+    await dropTestDatabase(pool, name);
   }
 }, 60_000);

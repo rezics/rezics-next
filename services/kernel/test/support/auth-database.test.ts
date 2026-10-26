@@ -3,6 +3,7 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { authTemplateName, createAuthDatabase } from './auth-database.ts';
+import { dropTestDatabase } from './drop-test-database.ts';
 
 const base = process.env.DATABASE_URL;
 if (!base) throw new Error('DATABASE_URL must name the migrated test database');
@@ -11,7 +12,7 @@ ownerUrl.pathname = '/postgres';
 const owner = new Pool({ connectionString: ownerUrl.toString(), max: 1 });
 const created: string[] = [];
 afterAll(async () => {
-  for (const name of created) await owner.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+  for (const name of created) await dropTestDatabase(owner, name);
   await owner.end();
 });
 
