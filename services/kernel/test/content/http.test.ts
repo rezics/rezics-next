@@ -328,41 +328,44 @@ describe('content HTTP with native database adapters', () => {
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         // One seed method; setup and ANALYZE are deliberately outside capture.
+        const count = (scale - previous) * 16;
+        const distractorBoardRoute = routeOf(boardId)!;
+        const distractors = Array.from({ length: count }, () => newId(thread.route));
+        const revisionIds = Array.from({ length: count }, () => newId(thread.route));
+        const threadIds = Array.from({ length: count }, () => newId(thread.route));
+        const boardIds = Array.from({ length: count }, () => newId(distractorBoardRoute));
+        const transactionIds = Array.from({ length: count }, () => randomUUID());
         const client = await database.admin.connect();
         try {
           await client.query('BEGIN');
-          const distractors: string[] = [];
-          for (let ordinal = previous * 16; ordinal < scale * 16; ordinal++) {
-            const postId = newId(thread.route);
-            distractors.push(postId);
-            const revisionId = newId(thread.route);
-            const transaction = randomUUID();
-            const distractorBoard = newId(routeOf(boardId)!);
-            await client.query(
-              `INSERT INTO content.board
-                 (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-               VALUES ($1, $2, $3, 'Distractor board', 'published', 1, $4)`,
-              [routeOf(boardId), distractorBoard, subjectIds[0], transaction],
-            );
-            await client.query(
-              `INSERT INTO content.thread
-                 (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id)
-               VALUES ($1, $2, $3, $4, 'Distractor thread', 'published', 1, $5)`,
-              [thread.route, newId(thread.route), actor.accountId, distractorBoard, transaction],
-            );
-            await client.query(
-              `INSERT INTO content.post
-                 (route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id)
-               VALUES ($1, $2, $3, $4, $5, 'published', 1, $6)`,
-              [thread.route, thread.id, postId, actor.accountId, revisionId, transaction],
-            );
-            await client.query(
-              `INSERT INTO content.revision
-                 (route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence, subject_ids, board_id, availability, recorded_transaction_id)
-               VALUES ($1, $2, $3, $4, $5, $6, 'Unrelated seeded bytes', 'MIT', '{}', $7, 'available', $8)`,
-              [thread.route, thread.id, postId, revisionId, bytes, digest, boardId, transaction],
-            );
-          }
+          await client.query(
+            `INSERT INTO content.board
+               (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+             SELECT $1::integer, board_id, $2::uuid, 'Distractor board', 'published', 1, transaction_id
+             FROM unnest($3::uuid[], $4::uuid[]) AS row(board_id, transaction_id)`,
+            [distractorBoardRoute, subjectIds[0], boardIds, transactionIds],
+          );
+          await client.query(
+            `INSERT INTO content.thread
+               (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id)
+             SELECT $1::integer, thread_id, $2::uuid, board_id, 'Distractor thread', 'published', 1, transaction_id
+             FROM unnest($3::uuid[], $4::uuid[], $5::uuid[]) AS row(thread_id, board_id, transaction_id)`,
+            [thread.route, actor.accountId, threadIds, boardIds, transactionIds],
+          );
+          await client.query(
+            `INSERT INTO content.post
+               (route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id)
+             SELECT $1::integer, $2::uuid, post_id, $3::uuid, revision_id, 'published', 1, transaction_id
+             FROM unnest($4::uuid[], $5::uuid[], $6::uuid[]) AS row(post_id, revision_id, transaction_id)`,
+            [thread.route, thread.id, actor.accountId, distractors, revisionIds, transactionIds],
+          );
+          await client.query(
+            `INSERT INTO content.revision
+               (route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence, subject_ids, board_id, availability, recorded_transaction_id)
+             SELECT $1::integer, $2::uuid, post_id, revision_id, $3::bytea, $4::bytea, 'Unrelated seeded bytes', 'MIT', '{}'::uuid[], $5::uuid, 'available', transaction_id
+             FROM unnest($6::uuid[], $7::uuid[], $8::uuid[]) AS row(post_id, revision_id, transaction_id)`,
+            [thread.route, thread.id, bytes, digest, boardId, distractors, revisionIds, transactionIds],
+          );
           // Populate every Access relation probed by anonymous final disclosure as
           // well as content relations, without changing the measured target's grants.
           await client.query(
@@ -404,5 +407,5 @@ describe('content HTTP with native database adapters', () => {
       expect(cost.rows).toBeGreaterThan(0);
     }
     console.info(JSON.stringify(report));
-  });
+  }, 180_000);
 });
