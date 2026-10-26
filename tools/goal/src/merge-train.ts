@@ -26,6 +26,8 @@ import {
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export type IntegrationCheck = { paths: string[]; command: string[] };
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
+/** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
+export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
 
 async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
@@ -471,7 +473,7 @@ export class MergeTrain {
         const outside = outsideScope(scopeCheckedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
         if (integratesIntoDev) {
-          const formatCommand = o.formatCommand ?? [resolve(o.mainCheckout, 'node_modules/.bin/oxfmt')];
+          const formatCommand = o.formatCommand ?? [resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
           const formatFiles = result.changedFiles.filter((path) => existsSync(join(trainTree, path)));
           // Small isolated Git fixtures do not carry the repository's installed formatter.
           const formatterAvailable =

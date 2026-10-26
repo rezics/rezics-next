@@ -15,7 +15,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch } from './watchdog.ts';
-import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
+import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
@@ -155,7 +155,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const gate = local.gate ?? defaults.gate;
   if (!Array.isArray(gate) || !gate.length || gate.some((item) => typeof item !== 'string' || !item))
     throw new Error('gate must be a command array');
-  const formatCommand = local.formatCommand ?? [resolve(main, 'node_modules/.bin/oxfmt')];
+  const formatCommand = local.formatCommand ?? [resolve(main, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
   if (
     !Array.isArray(formatCommand) ||
     !formatCommand.length ||
