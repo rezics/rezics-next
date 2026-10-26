@@ -72,7 +72,7 @@ export const MenuKeyboard: Story = {
     await userEvent.click(illegal);
     await expect(within(dialog).getByRole('textbox', { name: 'Additional details' })).toBeRequired();
     await expect(within(dialog).getByRole('group', { name: 'Human verification' })).toBeVisible();
-    await expect(menu).not.toBeInTheDocument();
+    await waitFor(() => expect(menu).not.toBeInTheDocument());
   },
 };
 

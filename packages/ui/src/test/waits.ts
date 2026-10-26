@@ -1,4 +1,5 @@
-import { expect, screen, waitFor } from 'storybook/test';
+import { expect, screen, userEvent, waitFor } from 'storybook/test';
+import { waitForFocus } from './focus.ts';
 
 /**
  * Waits for the layer with this role to leave the document. A layer leaves after its exit animation and the frame
@@ -23,3 +24,16 @@ export const registered = (layer: Element) =>
     }
     throw new Error('The layer has not registered as dismissable yet');
   });
+
+/**
+ * Types into a combobox input one character at a time. storybook/test types faster than a real keyboard, and the
+ * combobox rewrites the input on the frame after each key (it autofills the highlighted item), so a key typed before
+ * that frame runs is lost. The popup must be open, and focus and the rewrite settled, before each next key.
+ */
+export const typeIntoPopup = async (input: HTMLElement, text: string) => {
+  for (const [index, character] of [...text].entries()) {
+    await userEvent.type(input, character);
+    if (index === 0) await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+    await waitForFocus(input);
+  }
+};
