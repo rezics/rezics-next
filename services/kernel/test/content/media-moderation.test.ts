@@ -321,7 +321,6 @@ test('anonymous uploader author and suspended denials preserve state; bytes and 
     routeOf(suspendedId),
     suspendedId,
   ]);
-  await grant(admin, root.id, uploaderId, action, 0);
   const before = await facts(admin, f.mediaId);
   const anchor = await readPartition(admin, partition);
   try {

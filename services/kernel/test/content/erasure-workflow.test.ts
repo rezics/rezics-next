@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { Pool } from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { commandTime, runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
@@ -33,7 +34,7 @@ const context = () => ({
 });
 
 beforeAll(async () => {
-  fixture = await standingFixture();
+  fixture = await standingFixture(['account:read']);
   const authorize = fixture.access.authorize.bind(fixture.access);
   fixture.access.authorize = async (tx, actor, action, resource, evidence, time) => {
     if (action === 'post:erase' && time) {
@@ -115,6 +116,7 @@ afterAll(async () => {
 
 async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
   const actor = (await fixture.context(accountId)).actor;
+  const body = Buffer.from(serializeDocument(fromPlainText('Private historical text')));
   const threadId = newId(route);
   const boardId = newId(route);
   const ids = Array.from({ length: posts }, () => newId(route)).sort();
@@ -143,7 +145,7 @@ async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
            (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,
             board_id,availability,recorded_transaction_id,recorded_at)
            VALUES ($1,$2,$3,$4,$5,sha256($5),'Private historical text','MIT','{}',$6,'available',$3,$7)`,
-          [route, threadId, postId, index === 0 ? head : newId(route), Buffer.from('private'), boardId, at],
+          [route, threadId, postId, index === 0 ? head : newId(route), body, boardId, at],
         );
     }
     await tx.query('COMMIT');
@@ -153,6 +155,10 @@ async function scope(posts: number, revisions = 1, accountId = fixture.actor) {
   } finally {
     tx.release();
   }
+  await fixture.grant(actor.accountId, 'account:read', {
+    route: routeOf(actor.accountId)!,
+    id: actor.accountId,
+  });
   for (const id of ids) await fixture.grant(actor.accountId, 'post:erase', { route, id });
   return { actor, threadId, ids, at };
 }
@@ -625,7 +631,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
       const media = newId(seededRoute),
         author = newId(0x1234),
         board = newId(seededRoute);
-      const body = Buffer.alloc(256, 7);
+      const body = Buffer.from(serializeDocument(fromPlainText('Unrelated history')));
       return {
         'content.thread': [
           {
@@ -811,7 +817,7 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
               const postId = newId(route);
               const head = newId(route);
               const noiseAccount = newId(routeOf(selected.actor.accountId)!);
-              const body = Buffer.from('other author revision');
+              const body = Buffer.from(serializeDocument(fromPlainText('Other author revision')));
               return {
                 'access.account': [
                   {
