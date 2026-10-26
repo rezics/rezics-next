@@ -53,12 +53,12 @@ async function register(
           subject_id: survivor,
           member_id: id,
           phase: initial.phase,
-          cursor: JSON.stringify(initial.cursor),
+          cursor: initial.cursor,
         });
         const state = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
         return {
           value: { redirect: null, state },
-          events: inserted.length && state.phase !== 'done' ? [moving(id, survivor, state)] : [projected(survivor)],
+          events: inserted && state.phase !== 'done' ? [moving(id, survivor, state)] : [projected(survivor)],
         };
       },
     );
@@ -160,7 +160,7 @@ export async function moveMergePage(
       subject_id: survivor,
       member_id: id,
       phase: page.value.next.phase,
-      cursor: JSON.stringify(page.value.next.cursor),
+      cursor: page.value.next.cursor,
     });
     return {
       value: null,
