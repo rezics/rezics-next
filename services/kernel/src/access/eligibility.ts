@@ -1,4 +1,3 @@
-import { GrantDeniedError } from './grant-commands.ts';
 import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { within } from './authenticate.ts';
@@ -71,11 +70,7 @@ export function createResourceAnonymousEligibility<E>(options: ResourceEligibili
       resource: Object.freeze({ route: options.resource.route, id: options.resource.id }),
       action: options.action,
       async prepare(context: ResourceEligibilityPrepareContext) {
-        const evidence = await accessEvidence(
-          () => prepare(context),
-          () => new GrantDeniedError(),
-          context.deadline,
-        );
+        const evidence = await accessEvidence(() => prepare(context), false, context.deadline);
         if (evidence === null || evidence === undefined) throw new Error('Missing resource eligibility evidence');
         return async (client: AccessClient, at: string) =>
           (await verify(
@@ -122,11 +117,7 @@ export async function evaluateResourceEligibility(
   if (facts) requireAccessDeadline(facts.deadline);
   if (!facts || facts.token !== eligibility || !Number.isFinite(Date.parse(attempt.at))) return false;
   const result = await within(facts.deadline, () =>
-    accessEvidence(
-      () => facts.verify(attempt.client, attempt.at),
-      () => new GrantDeniedError(),
-      facts.deadline,
-    ),
+    accessEvidence(() => facts.verify(attempt.client, attempt.at), false, facts.deadline),
   );
   requireAccessDeadline(facts.deadline);
   return result === true;

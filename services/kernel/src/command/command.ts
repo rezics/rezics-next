@@ -2,7 +2,7 @@ export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
-import { classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
 export { CommandUnavailableError } from '../access/unavailable.ts';
 import fenceStatement from './fence.sql';
 import readReceipt from './read-receipt.sql';
@@ -541,7 +541,7 @@ export async function runCommand<T>(
             replayed: false,
           };
         } catch (error) {
-          if (classifyUnavailability(error) === 'deadline') {
+          if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === 'deadline') {
             try {
               await client.query('ROLLBACK');
             } catch (rollbackError) {
@@ -571,7 +571,7 @@ export async function runCommand<T>(
     } catch (error) {
       if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
-      if (error instanceof CommandUnavailableError) throw error;
+      if (error instanceof CommandUnavailableError || error instanceof AccessUnavailableError) throw error;
       const reason = classifyUnavailability(error);
       if (reason === 'deadline') throw new CommandUnavailableError('deadline', partition);
       if (reason === 'contention') {

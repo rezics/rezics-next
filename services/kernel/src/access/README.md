@@ -21,9 +21,12 @@ A command authorized by this Global check writes one row to `access.governance_r
 Every owning-module resource evidence callback runs through `accessEvidence` in `evidence.ts`.
 A callback failure closes the whole request, including the independent grant branch. The shared
 `throwAccessUnavailable` classifier turns deadline, pool capacity, connection and contention failures into
-`AccessUnavailableError` (HTTP 503). An existing Access unavailability error retains its identity.
-The module's own denial passes through unchanged. Any other failure becomes the caller's `denied()` error,
-or `GrantDeniedError` for eligibility. The kernel's `console.error` logger records the original failure as
+`AccessUnavailableError` (HTTP 503). An existing Access unavailability error retains its identity,
+including through command rollback; the command does not retry or reclassify it.
+The module's own denial passes through unchanged. Any other failure uses the caller's existing denial form:
+boolean checks (`accessCheck`, `authorize`, and eligibility preparation/verification) answer `false` for the
+whole check, including the independent grant branch. Commands throw their `denied()` error;
+`GrantDeniedError` applies only to grant commands. The kernel's `console.error` logger records the original failure as
 an error cause; response bodies contain only the denial. No callback failure authorizes an effect, receipt
 or outbox event. Failed creation validation poisons its transaction even if the command catches the error.
 
@@ -31,8 +34,8 @@ The boundary covers eligibility `prepare` and `facts.verify`; shared resource/pa
 creation-entry `validate` (individual and manifest) and the delegated parent `authorize`; durable-operation
 `readOperation` and restored-step anchor `validate`; workflow-resolution anchor `validate`; Realm role
 `realmRoleReader`; Realm membership `readTerminal` and `readChange`; and standing-parent setup `validate`.
-Enclosing Access catches preserve
-these classified failures instead of converting them into ordinary missing evidence.
+Enclosing Access catches preserve unavailability and module denials. Unexpected callback failures in boolean
+checks instead leave no usable permission evidence or return a denied decision.
 
 Existing Content denial classes have no shared base type. The boundary retains their closed set of error
 names (`ContentNotFoundError`, `ContentForbiddenError`, `RevisionPreconditionError`, `ReportUnavailableError`),

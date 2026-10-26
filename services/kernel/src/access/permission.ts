@@ -1,4 +1,3 @@
-import { GrantDeniedError } from './grant-commands.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { Account } from './account-data.ts';
@@ -424,7 +423,7 @@ export function createAccess(config: PermissionConfig): Access {
                         accountId: group.account_id,
                         at,
                       }) ?? null,
-                    () => new GrantDeniedError(),
+                    false,
                     deadline,
                   );
                 const rows = await membershipRead.run(client, {

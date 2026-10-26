@@ -17,10 +17,12 @@ export function throwEvidenceFailure(error: unknown): void {
   if (error instanceof Error && failures.has(error)) throw error;
 }
 
-/** The sole boundary for trusted owning-module resource evidence callbacks. */
+/** The sole boundary for trusted owning-module resource evidence callbacks.
+ * A false denial form lets the enclosing boolean check deny the whole request.
+ */
 export async function accessEvidence<T>(
   callback: () => T | Promise<T>,
-  denied: () => Error,
+  denied: (() => Error) | false,
   deadline?: number,
 ): Promise<T> {
   try {
@@ -28,7 +30,7 @@ export async function accessEvidence<T>(
   } catch (error) {
     throwAccessUnavailable(error, deadline);
     throwEvidenceFailure(error);
-    const denial = denied();
+    const denial = denied === false ? new Error('Access evidence denied') : denied();
     if (
       error instanceof Error &&
       (error instanceof GrantDeniedError ||
@@ -41,7 +43,10 @@ export async function accessEvidence<T>(
     }
     // The kernel logger retains the cause; responses receive only the denial.
     console.error(new Error('Access evidence callback failed', { cause: error }));
-    failures.add(denial);
+    // Boolean checks deny the entire check in their enclosing catch. Do not
+    // preserve this internal signal as a module denial or reduce it to a false
+    // eligibility floor, which would leave the independent grant branch open.
+    if (denied !== false) failures.add(denial);
     throw denial;
   }
 }

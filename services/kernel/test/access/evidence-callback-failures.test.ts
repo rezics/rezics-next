@@ -163,7 +163,7 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
       prepare: fail,
       verify: async () => true,
     });
-    await f.run(f.actor, permissions(), { ...f.resource, eligibility });
+    return f.run(f.actor, permissions(), { ...f.resource, eligibility });
   },
   async 'eligibility verify'(fail) {
     const eligibility = createResourcePublicEligibility({
@@ -172,7 +172,7 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
       prepare: async () => ({}),
       verify: fail,
     });
-    await f.run(f.actor, permissions(), { ...f.resource, eligibility });
+    return f.run(f.actor, permissions(), { ...f.resource, eligibility });
   },
   async 'resource anchor validate'(fail) {
     await execute(
@@ -273,7 +273,7 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
     await approvals.resolve(approvalReference, workflow.operation, { pool: seam, deadline: Date.now() + 5000 });
   },
   async 'realm role reader'(fail) {
-    await realm.run(realm.actor, realm.permissions({ realmRoleReader: fail }));
+    return realm.run(realm.actor, realm.permissions({ realmRoleReader: fail }));
   },
   async 'realm terminal evidence'(fail) {
     await createMembershipInverseCommands({ pool, realmAuthority: { readTerminal: fail, readChange: fail } }).release({
@@ -311,14 +311,15 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
 };
 
 const faults = [
+  ['existing unavailability', () => new AccessUnavailableError('overloaded'), 'overloaded'],
   ['pool timeout', () => new Error('timeout exceeded when trying to connect'), 'overloaded'],
   ['query timeout', () => new Error('Query read timeout'), 'deadline'],
-  ...['08006', '53300', '57P01', '57P02', '57P03', '57014', '40001', '40P01'].map(
+  ...['08006', '53300', '57P01', '57P02', '57P03', '57014', '40001', '40P01', '55P03'].map(
     (code) =>
       [
         code,
         () => Object.assign(new Error(`private ${code}`), { code }),
-        code === '57014' ? 'deadline' : ['40001', '40P01'].includes(code) ? 'contention' : 'overloaded',
+        code === '57014' ? 'deadline' : ['40001', '40P01', '55P03'].includes(code) ? 'contention' : 'overloaded',
       ] as const,
   ),
   ['module denial', () => new ProblemError('not_found'), null],
@@ -340,8 +341,9 @@ for (const [site, invoke] of Object.entries(sites)) {
         logged.push(error);
       });
       let caught: unknown;
+      let result: unknown;
       try {
-        await invoke(async () => {
+        result = await invoke(async () => {
           calls++;
           throw cause;
         });
@@ -351,15 +353,20 @@ for (const [site, invoke] of Object.entries(sites)) {
         log.mockRestore();
       }
       expect(calls).toBeGreaterThan(0);
-      expect(caught).toBeDefined();
       if (reason) {
         expect(caught).toBeInstanceOf(AccessUnavailableError);
         expect((caught as AccessUnavailableError).reason).toBe(reason);
+        if (cause instanceof AccessUnavailableError) expect(caught).toBe(cause);
         expect(problemResponse(caught, { method: 'POST', id: 'evidence-test' }).status).toBe(503);
         expect(logged).toHaveLength(0);
       } else if (name === 'module denial' || name === 'content denial') {
         expect(caught).toBe(cause);
         expect(logged).toHaveLength(0);
+      } else if (site.startsWith('eligibility') || site === 'realm role reader') {
+        expect(caught).toBeUndefined();
+        expect(result).toBe(false);
+        expect(logged).toHaveLength(1);
+        expect((logged[0] as Error).cause).toBe(cause);
       } else {
         expect(caught).toBeInstanceOf(
           site.startsWith('durable')
@@ -386,7 +393,7 @@ test('real board HTTP read classifies resource evidence failures and hides their
     VALUES ($1,$2,$3,'Evidence board','published',1,$4)`,
     [0x6789, boardId, newId(0x6789), newId(0x6789)],
   );
-  for (const [name, makeError, reason] of faults) {
+  for (const [, makeError, reason] of faults) {
     let reads = 0;
     const cause = makeError();
     const seam = intercept(pool, (sql) => {
@@ -398,7 +405,7 @@ test('real board HTTP read classifies resource evidence failures and hides their
     try {
       const response = await app.handle(new Request(`http://kernel.test/v1/boards/${boardId}`));
       expect(reads).toBe(3);
-      expect(response.status).toBe(reason ? 503 : name === 'module denial' || name === 'content denial' ? 404 : 403);
+      expect(response.status).toBe(reason ? 503 : 404);
       const body = await response.json();
       expect(body).toMatchObject({ retryable: !!reason, effect_status: 'not_applicable' });
       expect(JSON.stringify(body)).not.toContain('private');
