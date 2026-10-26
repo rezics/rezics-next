@@ -1,6 +1,7 @@
 export declare const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
+export { CommandUnavailableError } from '../access/unavailable.ts';
 export type CommandEvent = {
     type: string;
     subject?: string;
@@ -167,12 +168,6 @@ export declare class TooManyEventsError extends Error {
     readonly count: number;
     constructor(partition: number, count: number);
 }
-export declare class CommandUnavailableError extends Error {
-    readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
-    readonly partition: number;
-    readonly movedTo: string | null;
-    constructor(reason: CommandUnavailableError['reason'], partition: number, movedTo?: string | null);
-}
 type LegacyCommandOptions = {
     partition: number;
     deadline?: number;
@@ -184,4 +179,3 @@ type LegacyCommandOptions = {
 };
 export declare function runCommand<T>(pool: Pool, options: LegacyCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
 export declare function runCommand<T>(pool: Pool, options: PrincipalCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
-export {};

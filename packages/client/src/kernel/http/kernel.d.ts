@@ -13529,6 +13529,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         query: unknown;
                         headers: {
                             "idempotency-key": string;
+                            'if-match'?: string;
                         };
                         response: {
                             200: {
@@ -13594,6 +13595,34 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            412: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
