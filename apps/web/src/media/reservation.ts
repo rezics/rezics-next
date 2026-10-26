@@ -4,6 +4,44 @@ import type { MediaEnv } from './index.ts';
 
 const invalidRequest = () => problem(400, 'invalid_request', 'Invalid Request');
 const bodyLimit = 4 * 1024;
+const imageTypes = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'];
+const contentId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function imageFields(fields: Record<string, unknown>) {
+  if (
+    fields.purpose !== 'post-image' ||
+    typeof fields.mediaType !== 'string' ||
+    !imageTypes.includes(fields.mediaType) ||
+    typeof fields.byteCount !== 'number' ||
+    !Number.isSafeInteger(fields.byteCount) ||
+    fields.byteCount < 1 ||
+    ('sha256' in fields && (typeof fields.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(fields.sha256)))
+  )
+    throw invalidRequest();
+  const shared = {
+    purpose: 'post-image' as const,
+    mediaType: fields.mediaType as ReservationInput['mediaType'],
+    byteCount: fields.byteCount,
+  };
+  if (!('sha256' in fields)) return shared;
+  return { ...shared, sha256: fields.sha256 as string };
+}
+
+function futureThread(value: unknown): { boardId: string; idempotencyKey: string } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw invalidRequest();
+  const thread = value as Record<string, unknown>;
+  const keys = Object.keys(thread);
+  if (
+    keys.length !== 2 ||
+    typeof thread.boardId !== 'string' ||
+    !contentId.test(thread.boardId) ||
+    typeof thread.idempotencyKey !== 'string' ||
+    !uuid.test(thread.idempotencyKey)
+  )
+    throw invalidRequest();
+  return { boardId: thread.boardId, idempotencyKey: thread.idempotencyKey };
+}
 
 async function reservationInput(request: Request): Promise<ReservationInput> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
@@ -38,18 +76,20 @@ async function reservationInput(request: Request): Promise<ReservationInput> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) throw invalidRequest();
   const fields = input as Record<string, unknown>;
   if (
-    Object.keys(fields).some((key) => !['containerId', 'purpose', 'mediaType', 'byteCount', 'sha256'].includes(key)) ||
-    typeof fields.containerId !== 'string' ||
-    fields.purpose !== 'post-image' ||
-    typeof fields.mediaType !== 'string' ||
-    !['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'].includes(fields.mediaType) ||
-    typeof fields.byteCount !== 'number' ||
-    !Number.isSafeInteger(fields.byteCount) ||
-    fields.byteCount < 1 ||
-    ('sha256' in fields && (typeof fields.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(fields.sha256)))
+    Object.keys(fields).some(
+      (key) => !['containerId', 'newThread', 'purpose', 'mediaType', 'byteCount', 'sha256'].includes(key),
+    )
   )
     throw invalidRequest();
-  return fields as ReservationInput;
+  const hasContainer = Object.prototype.hasOwnProperty.call(fields, 'containerId');
+  const hasFuture = Object.prototype.hasOwnProperty.call(fields, 'newThread');
+  if (hasContainer === hasFuture) throw invalidRequest();
+  const shared = imageFields(fields);
+  if (hasContainer) {
+    if (typeof fields.containerId !== 'string') throw invalidRequest();
+    return { containerId: fields.containerId, ...shared };
+  }
+  return { newThread: futureThread(fields.newThread), ...shared };
 }
 
 function publicMedia({ id, state, mediaType, byteCount, sha256, containerId }: Media) {

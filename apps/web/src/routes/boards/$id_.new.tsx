@@ -26,12 +26,21 @@ function NewThreadPage() {
         <PostComposer
           initialKey={idempotencyKey}
           titleRequired
-          onSubmit={async ({ title, body, idempotencyKey: key }) => {
+          boardId={board.id}
+          onSubmit={async ({ title, body, idempotencyKey: key, mediaIds }) => {
             const result = await startThread({
-              data: { boardId: board.id, title, body, idempotencyKey: key },
+              data: {
+                boardId: board.id,
+                title,
+                body,
+                idempotencyKey: key,
+                ...(mediaIds.length > 0 ? { mediaIds } : {}),
+              },
               headers: csrfHeaders(),
               fetch: draftFetch(body),
             });
+            if (result.ok)
+              document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
             return result.ok ? { ok: true as const, value: result.thread } : result;
           }}
           onSuccess={(thread) => {

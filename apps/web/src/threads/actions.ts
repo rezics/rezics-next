@@ -7,7 +7,7 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
-import { erasePostRequest, revisePostRequest } from './post-writes';
+import { erasePostRequest, revisePostRequest, startThreadRequest } from './post-writes';
 
 const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -61,6 +61,7 @@ function validateThreadDraft(input: unknown): {
   title: string;
   body: DocumentSnapshot;
   idempotencyKey: string;
+  mediaIds?: string[];
 } {
   const draft = validateDraft(input);
   if (
@@ -113,27 +114,7 @@ export const startThread = createServerFn({ method: 'POST' })
   .validator(validateThreadDraft)
   .handler(async ({ data }): Promise<{ ok: true; thread: ThreadCreated['thread'] } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const authorization = await sessionBearer();
-    try {
-      const result = await kernelClient().threads.post(
-        {
-          boardId: data.boardId,
-          title: data.title,
-          body: data.body,
-          licence,
-          subjectIds: [],
-          visibility: 'published',
-        },
-        {
-          headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
-        },
-      );
-      if (result.error) return refusal(result.status, result.headers, result.error.value);
-      return { ok: true, thread: result.data.thread };
-    } catch (error) {
-      if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
-      return { ok: false, reason: 'unavailable' };
-    }
+    return startThreadRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
   });
 
 export const replyToThread = createServerFn({ method: 'POST' })

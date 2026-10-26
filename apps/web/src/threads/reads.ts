@@ -4,6 +4,7 @@ import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import type { SessionEnv } from '../session/client';
+import { cookie } from '../session/cookies';
 import { readSessionIdentity } from '../session/state';
 import type { VerificationConfig } from '../report/turnstile';
 import { kernelClient } from '../kernel/client';
@@ -17,6 +18,16 @@ type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>[
 export type ThreadPost = PostPage['posts'][number];
 
 type PageInput = { id: string; cursor?: string };
+const draftCookie = 'rezics_draft_key';
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function carriedDraftKey(request: Request, threadId: string): string | undefined {
+  const raw = cookie(request, draftCookie);
+  const split = raw?.lastIndexOf('.') ?? -1;
+  if (!raw || split < 1 || raw.slice(0, split) !== threadId) return undefined;
+  const key = raw.slice(split + 1);
+  return uuid.test(key) ? key : undefined;
+}
 
 function validatePageInput(input: unknown): PageInput {
   if (
@@ -95,7 +106,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       return {
         thread: thread.thread,
         posts,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: carriedDraftKey(getRequest(), data.id) ?? crypto.randomUUID(),
         ...(identity.subject ? { viewerId: identity.subject } : {}),
         verification: {
           sitekey: config.TURNSTILE_SITE_KEY ?? '',

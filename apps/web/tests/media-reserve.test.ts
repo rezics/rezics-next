@@ -97,6 +97,11 @@ const fake = Bun.serve({
       });
     }
     if (!url.pathname.startsWith('/v1/')) return failure(404, 'not_found');
+    // Home reads a route page before any session exists. A missing page is a 404, not an auth failure.
+    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      await request.body?.cancel().catch(() => {});
+      return failure(404, 'not_found');
+    }
     const authorization = request.headers.get('authorization');
     const body = request.method === 'POST' ? await request.json() : null;
     calls.push({ method: request.method, path: url.pathname, authorization, body });
@@ -106,10 +111,14 @@ const fake = Bun.serve({
       if (!request.headers.get('idempotency-key')) return failure(400, 'invalid_request');
       const input = body as Record<string, unknown>;
       const id = randomUUID();
+      const future = input.newThread as { idempotencyKey?: string } | undefined;
       const media: Reservation = {
         id,
         state: 'reserved',
-        containerId: input.containerId as string,
+        containerId:
+          typeof input.containerId === 'string'
+            ? input.containerId
+            : `0192f3a0-6c1e-7b2a-9d4e-${(future?.idempotencyKey ?? id).replace(/-/g, '').slice(0, 12)}`,
         mediaType: input.mediaType as string,
         byteCount: input.byteCount as number,
         sha256: (input.sha256 as string | undefined) ?? null,
@@ -348,6 +357,52 @@ test(
       privateResponse(response);
       if (status === 400) expect(await response.json()).toMatchObject({ code: 'invalid_request', status: 400 });
       expect(calls.length).toBe(before);
+    }
+  },
+  timeout,
+);
+
+test(
+  'a future thread is reserved in place of a container, and any other target is refused',
+  async () => {
+    const alice = await signIn('alice');
+    const boardId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
+    const posted = {
+      newThread: { boardId, idempotencyKey: randomUUID() },
+      purpose: 'post-image',
+      mediaType: 'image/png',
+      byteCount: 4,
+      sha256: 'ab'.repeat(32),
+    };
+    const before = calls.length;
+    const accepted = await fetch(`${alice.origin}/media`, {
+      method: 'POST',
+      headers: { ...alice.headers, 'content-type': 'application/json' },
+      body: JSON.stringify(posted),
+      redirect: 'manual',
+    });
+    expect(accepted.status, await accepted.clone().text()).toBe(201);
+    privateResponse(accepted);
+    expect(calls.slice(before)).toEqual([
+      { method: 'POST', path: '/v1/media', authorization: alice.authorization, body: posted },
+    ]);
+    const hostile = [
+      { ...posted, containerId: randomUUID() },
+      { purpose: 'post-image', mediaType: 'image/png', byteCount: 4 },
+      { ...posted, note: 'no' },
+    ];
+    for (const body of hostile) {
+      const at = calls.length;
+      const response = await fetch(`${alice.origin}/media`, {
+        method: 'POST',
+        headers: { ...alice.headers, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        redirect: 'manual',
+      });
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      privateResponse(response);
+      expect(await response.json()).toMatchObject({ code: 'invalid_request', status: 400 });
+      expect(calls.length).toBe(at);
     }
   },
   timeout,

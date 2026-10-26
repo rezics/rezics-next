@@ -1,10 +1,53 @@
 import type { KernelClient } from '@rezics/client';
+import type { DocumentSnapshot } from '@rezics/document';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
 import type { EditFailure, RevisedPost, WriteFailure } from './actions';
 
 type Refusal = (status: number, headers: HeadersInit | undefined, body?: unknown) => WriteFailure;
+type StartedThread = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>['thread'];
+
+export type StartThreadInput = {
+  boardId: string;
+  title: string;
+  body: DocumentSnapshot;
+  idempotencyKey: string;
+  mediaIds?: string[];
+};
+
+export async function startThreadRequest(
+  input: StartThreadInput,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  client: KernelClient,
+  refusal: Refusal,
+): Promise<{ ok: true; thread: StartedThread } | WriteFailure> {
+  await prepareSession(request, sessionEnv);
+  const authorization = viewerCredential(request);
+  if (!authorization) throw new Error('A signed-in session is required to post.');
+  try {
+    const result = await client.threads.post(
+      {
+        boardId: input.boardId,
+        title: input.title,
+        body: input.body,
+        licence: 'LicenseRef-rezics-terms',
+        subjectIds: [],
+        visibility: 'published',
+        ...(input.mediaIds === undefined || input.mediaIds.length === 0 ? {} : { mediaIds: input.mediaIds }),
+      },
+      {
+        headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string },
+      },
+    );
+    if (result.error) return refusal(result.status, result.headers, result.error.value);
+    return { ok: true, thread: result.data.thread };
+  } catch (error) {
+    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
+    return { ok: false, reason: 'unavailable' };
+  }
+}
 
 export type RevisePostInput = {
   postId: string;

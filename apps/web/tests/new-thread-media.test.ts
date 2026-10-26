@@ -627,7 +627,7 @@ function futureReservation(idempotencyKey = randomUUID(), sha256?: string) {
 }
 
 // Choose a PNG on the opening draft, then create the thread with that media id.
-test.failing(
+test(
   "a member adds an image to a new thread's opening post, and the thread is created with its media id",
   async () => {
     reset();
@@ -702,7 +702,7 @@ test.failing(
 );
 
 // The reserve route forwards exactly one future-thread target and rejects every other shape before the kernel.
-test.failing(
+test(
   "the site's reservation accepts a future thread in place of a container, and nothing else",
   async () => {
     reset();
@@ -761,7 +761,7 @@ test.failing(
 );
 
 // The key rendered when the editor opens is the reservation's future-thread key and the creation key.
-test.failing(
+test(
   'the draft keeps one idempotency key for its uploads and its creation',
   async () => {
     reset();
@@ -798,6 +798,47 @@ test.failing(
       expect(ids).toHaveLength(2);
       expect([...(sent.body as { mediaIds: string[] }).mediaIds].sort()).toEqual(ids);
       expect(await draftKey(page).inputValue()).toBe(key);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a reservation for a thread that already exists is retried with that thread',
+  async () => {
+    reset();
+    const { page, access } = await open(`${boardPath()}/new`);
+    try {
+      await readyEditor(page);
+      await title(page).fill('Already opened');
+      await editor(page).fill('The first chart stays');
+      const key = await draftKey(page).inputValue();
+      await chooseImage(page, 'First chart');
+      await page.getByRole('img', { name: 'First chart' }).waitFor();
+      const first = [...reservations.values()].at(-1)!;
+      createdThreadKeys.add(key);
+      const before = mediaPosts().length;
+      await chooseImage(page, 'Second chart');
+      await page.getByRole('img', { name: 'Second chart' }).waitFor();
+      const added = mediaPosts().slice(before);
+      expect(added).toHaveLength(2);
+      expect(added[0]).toMatchObject({ authorization: `Bearer ${access}` });
+      expect(added[0]!.body).toEqual({
+        newThread: { boardId: id(1), idempotencyKey: key },
+        purpose: 'post-image',
+        mediaType: 'image/png',
+        byteCount: png.byteLength,
+      });
+      expect(added[1]).toMatchObject({ authorization: `Bearer ${access}` });
+      expect(added[1]!.body).toEqual({
+        containerId: first.containerId,
+        purpose: 'post-image',
+        mediaType: 'image/png',
+        byteCount: png.byteLength,
+      });
+      expect(reservations.size).toBe(2);
     } finally {
       await page.context().close();
     }

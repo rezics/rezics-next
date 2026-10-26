@@ -32,6 +32,11 @@ export class UploadRefusal extends Error {
 }
 
 type ReservedMedia = { id: string; state: string; mediaType: string; byteCount: number };
+type FutureThread = { boardId: string; idempotencyKey: string };
+type ReserveTarget = string | { containerId: string } | { newThread: FutureThread };
+
+// A 409 names no thread, and the site has no route key to derive one. Keep the id the reservation already returned.
+const futureThreadIds = new Map<string, string>();
 
 function isPostImageType(value: string): value is PostImageType {
   return (postImageTypes as readonly string[]).includes(value);
@@ -90,6 +95,16 @@ function siteFetch(path: string, init: RequestInit & { method: string }): Promis
   const headers = new Headers(init.headers);
   if (init.method !== 'GET' && init.method !== 'HEAD') headers.set('X-CSRF-Token', csrfToken());
   return fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store', headers });
+}
+
+function containerIdFrom(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.containerId === 'string' && record.containerId !== '') return record.containerId;
+  const media = record.media;
+  if (!media || typeof media !== 'object') return null;
+  const containerId = (media as Record<string, unknown>).containerId;
+  return typeof containerId === 'string' && containerId !== '' ? containerId : null;
 }
 
 function mediaOf(value: unknown): ReservedMedia | null {
@@ -175,21 +190,40 @@ async function naturalSize(file: Blob, signal: AbortSignal): Promise<{ width: nu
   return size;
 }
 
-async function reserve(containerId: string, file: File, signal: AbortSignal): Promise<ReservedMedia> {
+function reserveBody(target: ReserveTarget, file: File) {
+  const image = { purpose: 'post-image' as const, mediaType: file.type, byteCount: file.size };
+  if (typeof target === 'string') return { containerId: target, ...image };
+  if ('containerId' in target) return { containerId: target.containerId, ...image };
+  return { newThread: target.newThread, ...image };
+}
+
+async function reserve(target: ReserveTarget, file: File, signal: AbortSignal): Promise<ReservedMedia> {
   const response = await siteFetch('/media', {
     method: 'POST',
     signal,
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      containerId,
-      purpose: 'post-image',
-      mediaType: file.type,
-      byteCount: file.size,
-    }),
+    body: JSON.stringify(reserveBody(target, file)),
   });
+  if (response.status === 409 && typeof target !== 'string' && 'newThread' in target) {
+    const key = target.newThread.idempotencyKey;
+    const known = futureThreadIds.get(key);
+    if (known) {
+      await response.body?.cancel().catch(() => {});
+      return reserve({ containerId: known }, file, signal);
+    }
+    const discovered = containerIdFrom(await response.json().catch(() => undefined));
+    if (!discovered) throw new UploadRefusal('unavailable');
+    futureThreadIds.set(key, discovered);
+    return reserve({ containerId: discovered }, file, signal);
+  }
   if (!response.ok) throw await refusalFrom(response);
-  const media = mediaOf(await response.json());
+  const payload = await response.json();
+  const media = mediaOf(payload);
   if (!media) throw new UploadRefusal('unavailable');
+  if (typeof target !== 'string' && 'newThread' in target) {
+    const containerId = containerIdFrom(payload);
+    if (containerId) futureThreadIds.set(target.newThread.idempotencyKey, containerId);
+  }
   return media;
 }
 
@@ -222,14 +256,14 @@ async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
   throw new UploadRefusal('unavailable');
 }
 
-/** Reserve a post image on the thread, upload its bytes, and resolve once content accepts it. */
-export async function uploadReplyImage(containerId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+/** Reserve a post image on a thread or a future thread, upload its bytes, and resolve once content accepts it. */
+export async function uploadReplyImage(target: ReserveTarget, file: File, signal: AbortSignal): Promise<UploadedImage> {
   try {
     throwIfAborted(signal);
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
-    const reserved = await reserve(containerId, file, signal);
+    const reserved = await reserve(target, file, signal);
     throwIfAborted(signal);
     await putBytes(reserved, file, signal);
     const settled = await poll(reserved.id, signal);

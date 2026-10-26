@@ -129,12 +129,14 @@ export function PostComposer<T>({
   initialKey,
   titleRequired = false,
   containerId,
+  boardId,
   onSubmit,
   onSuccess,
 }: {
   initialKey: string;
   titleRequired?: boolean;
   containerId?: string;
+  boardId?: string;
   onSubmit: (input: {
     title: string;
     body: DocumentSnapshot;
@@ -153,6 +155,8 @@ export function PostComposer<T>({
   const editorHost = useRef<HTMLDivElement>(null);
   const [editorReady, setEditorReady] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
+  const idempotencyRef = useRef(initialKey);
+  idempotencyRef.current = idempotencyKey;
   const [failure, setFailure] = useState<WriteFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState(0);
@@ -160,18 +164,27 @@ export function PostComposer<T>({
   const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const ready = bodyCanSend && (!titleRequired || Boolean(title.trim()));
-  const upload = containerId
-    ? async (file: File, signal: AbortSignal) => {
-        refusalRef.current = null;
-        try {
-          return await uploadReplyImage(containerId, file, signal);
-        } catch (error) {
-          if (error instanceof UploadRefusal) refusalRef.current = error;
-          throw error;
+  const upload =
+    containerId || boardId
+      ? async (file: File, signal: AbortSignal) => {
+          refusalRef.current = null;
+          try {
+            return await uploadReplyImage(
+              containerId ?? { newThread: { boardId: boardId!, idempotencyKey: idempotencyRef.current } },
+              file,
+              signal,
+            );
+          } catch (error) {
+            if (error instanceof UploadRefusal) refusalRef.current = error;
+            throw error;
+          }
         }
-      }
-    : undefined;
+      : undefined;
 
+  useEffect(() => {
+    if (!containerId) return;
+    document.cookie = 'rezics_draft_key=; Path=/; Max-Age=0; SameSite=Lax';
+  }, [containerId]);
   useEffect(() => {
     const host = editorHost.current;
     if (!host) return;
@@ -231,7 +244,11 @@ export function PostComposer<T>({
       setBody(empty);
       setBodyCanSend(false);
       setUploadNotice(null);
-      setIdempotencyKey(crypto.randomUUID());
+      if (containerId || !boardId) {
+        const nextKey = crypto.randomUUID();
+        idempotencyRef.current = nextKey;
+        setIdempotencyKey(nextKey);
+      }
       onSuccess(result.value);
     } catch {
       setFailure({ ok: false, reason: 'unavailable' });
