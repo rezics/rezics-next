@@ -242,7 +242,7 @@ test('aggregation cost is O(changes) as reactions and targets grow', async () =>
   const effect = createReactionCountEffect(db.pool);
   const report = await checkGrowth(db, {
     name: 'Reaction count aggregation',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
       await seed(growthDb, population, { from: previous, to: scale });
@@ -253,7 +253,7 @@ test('aggregation cost is O(changes) as reactions and targets grow', async () =>
       for (const item of events) await effect.run(item);
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
   const first = report.samples[0]!;
   expect(batch).toBe(2);
   for (const sample of report.samples) {

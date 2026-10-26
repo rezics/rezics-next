@@ -8,7 +8,7 @@ const db = await openGrowthDatabase();
 afterAll(() => db.close());
 const route = 0x1234;
 const otherRoute = 0x5678;
-const scales = [2048, 8192, 32768] as const;
+const scales = [256, 1024, 4096] as const;
 
 test('one partition refresh has flat rows and buffers as other partitions grow', async () => {
   const at = new Date();

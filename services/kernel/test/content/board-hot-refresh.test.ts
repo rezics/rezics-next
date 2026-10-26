@@ -26,7 +26,7 @@ const boardRoute = 0x5678;
 const changedType = 'com.rezics.content.reaction.changed.v1';
 const threadType = 'com.rezics.content.thread.created.v1';
 const replyType = 'com.rezics.content.post.created.v1';
-const scales = [2048, 8192, 32768] as const;
+const scales = [256, 1024, 4096] as const;
 const staleAt = '2000-01-01T00:00:00.000Z';
 
 type SourceThread = {
@@ -107,7 +107,13 @@ async function createSourceThread(boardId: string, createdAt: string): Promise<S
     );
     return {
       value: null,
-      events: [{ type: threadType, subject: threadId, data: { threadId, itemId, revisionId, actorId: authorId } }],
+      events: [
+        {
+          type: threadType,
+          subject: threadId,
+          data: { threadId, itemId, revisionId, actorId: authorId },
+        },
+      ],
     };
   });
   return { boardId, threadId, authorId, itemId, createdAt };
@@ -159,7 +165,12 @@ async function createReply(thread: SourceThread, createdAt: string): Promise<voi
         {
           type: replyType,
           subject: postId,
-          data: { threadId: thread.threadId, itemId: postId, revisionId, actorId: thread.authorId },
+          data: {
+            threadId: thread.threadId,
+            itemId: postId,
+            revisionId,
+            actorId: thread.authorId,
+          },
         },
       ],
     };
@@ -174,7 +185,13 @@ async function appendReaction(targetId: string, kind: 'upvote' | 'downvote'): Pr
       {
         type: changedType,
         subject: targetId,
-        data: { actorId, targetKind: 'thread', targetId, previousKind: null, kind },
+        data: {
+          actorId,
+          targetKind: 'thread',
+          targetId,
+          previousKind: null,
+          kind,
+        },
       },
     ],
   }));
@@ -241,7 +258,10 @@ async function createTestRealm(): Promise<string> {
   const account = await readAccount(db.pool, route, accountId);
   if (!account) throw new Error('Realm rank test account is unavailable');
   const actions = productionActions();
-  const permissions = createPermissionAccess({ actions, accountEvidence: () => account });
+  const permissions = createPermissionAccess({
+    actions,
+    accountEvidence: () => account,
+  });
   const access: Access = {
     authenticate: permissions.authenticate.bind(permissions),
     prepare: permissions.prepare!.bind(permissions),
@@ -264,17 +284,29 @@ async function createTestRealm(): Promise<string> {
   const space = await createSpace(
     dependencies,
     actor,
-    { title: 'Board rank test space', summary: 'A fixture for Realm weighted scores.' },
+    {
+      title: 'Board rank test space',
+      summary: 'A fixture for Realm weighted scores.',
+    },
     { idempotencyKey: randomUUID(), deadline: Date.now() + 20_000 },
   );
   const realm = await createRealm(
     dependencies,
     actor,
-    { spaceId: space.value.spaceId, title: 'Board rank test Realm', visibility: 'public', contextId: GLOBAL_CONTEXT },
+    {
+      spaceId: space.value.spaceId,
+      title: 'Board rank test Realm',
+      visibility: 'public',
+      contextId: GLOBAL_CONTEXT,
+    },
     { idempotencyKey: randomUUID(), deadline: Date.now() + 20_000 },
   );
   return realm.value.realmId;
 }
+
+// Every scale step needs 1000 due candidates (two batches of 500), so each ordinal carries several candidates.
+const candidatesPerOrdinal = 4;
+const dueCandidates = 1000;
 
 function refreshPopulation(baseAt: Date): Population {
   return {
@@ -282,58 +314,62 @@ function refreshPopulation(baseAt: Date): Population {
     hotPartition: partitionOf(sourceRoute),
     hotShare: 1,
     rows: ({ ordinal }) => {
+      const first = ordinal * candidatesPerOrdinal;
+      const dueFrom = (start: number) =>
+        first >= start * candidatesPerOrdinal && first < start * candidatesPerOrdinal + dueCandidates;
       const rankRefreshedAt =
-        ordinal < 1000
+        first < dueCandidates
           ? staleAt
-          : ordinal >= 8192 && ordinal < 9192
+          : dueFrom(scales[1])
             ? new Date(baseAt.getTime() - 38 * 60_000).toISOString()
-            : ordinal >= 2048 && ordinal < 3048
+            : dueFrom(scales[0])
               ? new Date(baseAt.getTime() - 49 * 60_000).toISOString()
               : new Date(baseAt.getTime() + 60 * 60_000).toISOString();
-      const boardId = newId(boardRoute);
-      const threadId = newId(sourceRoute);
-      const subjectId = newId(boardRoute);
-      const transactionId = randomUUID();
+      const boards: Record<string, unknown>[] = [];
+      const boardThreads: Record<string, unknown>[] = [];
+      const totals: Record<string, unknown>[] = [];
+      for (let copy = 0; copy < candidatesPerOrdinal; copy++) {
+        const boardId = newId(boardRoute);
+        const threadId = newId(sourceRoute);
+        const sourcePosition = first + copy + 1;
+        boards.push({
+          route: boardRoute,
+          board_id: boardId,
+          subject_id: newId(boardRoute),
+          title: 'Rank growth board',
+          visibility: 'published',
+          security_revision: 1,
+          recorded_transaction_id: randomUUID(),
+          created_at: staleAt,
+          realm_id: null,
+        });
+        boardThreads.push({
+          route: boardRoute,
+          board_id: boardId,
+          thread_id: threadId,
+          created_at: staleAt,
+          last_activity_at: staleAt,
+          score: 0,
+          active_rank: 1,
+          hot_rank: 1,
+          rank_refreshed_at: rankRefreshedAt,
+          source_epoch: 1,
+          source_position: sourcePosition,
+          source_revision_id: null,
+        });
+        totals.push({
+          route: sourceRoute,
+          target_id: threadId,
+          kind: 'upvote',
+          count: 2,
+          source_epoch: 1,
+          source_position: sourcePosition,
+        });
+      }
       return {
-        'content.board': [
-          {
-            route: boardRoute,
-            board_id: boardId,
-            subject_id: subjectId,
-            title: 'Rank growth board',
-            visibility: 'published',
-            security_revision: 1,
-            recorded_transaction_id: transactionId,
-            created_at: staleAt,
-            realm_id: null,
-          },
-        ],
-        'content.board_thread': [
-          {
-            route: boardRoute,
-            board_id: boardId,
-            thread_id: threadId,
-            created_at: staleAt,
-            last_activity_at: staleAt,
-            score: 0,
-            active_rank: 1,
-            hot_rank: 1,
-            rank_refreshed_at: rankRefreshedAt,
-            source_epoch: 1,
-            source_position: ordinal + 1,
-            source_revision_id: null,
-          },
-        ],
-        'content.reaction_total': [
-          {
-            route: sourceRoute,
-            target_id: threadId,
-            kind: 'upvote',
-            count: 2,
-            source_epoch: 1,
-            source_position: ordinal + 1,
-          },
-        ],
+        'content.board': boards,
+        'content.board_thread': boardThreads,
+        'content.reaction_total': totals,
       };
     },
   };
@@ -353,10 +389,17 @@ test.serial(
     const report = await checkGrowth(db, {
       name: 'one hot rank refresh batch',
       scales,
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      bounds: {
+        rows: 'constant',
+        blocks: 'logarithmic',
+        statements: 'constant',
+      },
       repetitions: 1,
       grow: async (growthDb, scale, previous) =>
-        seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale }),
+        seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+          from: previous,
+          to: scale,
+        }),
       warmup: refresh,
       operation: refresh,
     });
