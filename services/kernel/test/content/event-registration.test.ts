@@ -43,6 +43,12 @@ const fixtures = {
     conceptId: crypto.randomUUID(),
     actorId,
   },
+  'com.rezics.content.authored-field.created.v1': {
+    id: revisionId,
+    subject: itemId,
+    candidate: threadId,
+    authorId: actorId,
+  },
   'com.rezics.content.media.reserved.v1': { ...media, actorId },
   'com.rezics.content.media.uploaded.v1': { ...media, actorId },
   'com.rezics.content.media.available.v1': media,

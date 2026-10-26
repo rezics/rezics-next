@@ -1,3 +1,4 @@
+-- unbound: one input route scopes the target and related review thread updates; the checker does not trace route columns through data-modifying CTEs
 -- The partition executor serializes this point decision with other writes.
 -- Native bigint arithmetic cannot reuse or round a previous revision.
 WITH input AS NOT MATERIALIZED (
