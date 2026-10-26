@@ -10,6 +10,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
 import { registerTestClient, testAccess, testApp } from '../support/test-kernel.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { dropAuthDatabase } from '../support/auth-database.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function standingFixture(extraActions: readonly string[] = []) {
@@ -332,7 +333,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
       closing ??= (async () => {
         try {
           await authPool.end();
-          await reader.query(`DROP DATABASE ${authDatabase} WITH (FORCE)`);
+          await dropAuthDatabase(reader, authDatabase);
         } finally {
           try {
             await pool.end();
