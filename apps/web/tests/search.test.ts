@@ -268,7 +268,7 @@ test(
 test(
   'the shell search box suggests subjects as you type and opens the one chosen',
   async () => {
-    const page = await open('/ja');
+    const page = await open(`/ja/subjects/${subjects[0]!.id}`);
     try {
       const before = kernelCalls.length;
       const input = page.getByRole('combobox').and(page.locator('input'));
@@ -301,7 +301,7 @@ test(
 test(
   'typing quickly sends one suggestion request per pause, not one per keystroke',
   async () => {
-    const page = await open('/en');
+    const page = await open(`/en/subjects/${subjects[0]!.id}`);
     try {
       const input = page.getByRole('combobox').and(page.locator('input'));
       expect(await input.count()).toBe(1);
@@ -347,7 +347,7 @@ test(
 test(
   'pressing Enter in the search box opens the search page for the query',
   async () => {
-    const page = await open('/ja');
+    const page = await open(`/ja/subjects/${subjects[0]!.id}`);
     try {
       const input = page.getByRole('combobox').and(page.locator('input'));
       expect(await input.count()).toBe(1);
