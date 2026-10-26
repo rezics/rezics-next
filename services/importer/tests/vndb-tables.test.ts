@@ -127,7 +127,7 @@ test('real COPY tables materialize a bounded grouped VN after all headers valida
       key: 'v123',
       revision: 7,
       record: {
-        vn: { id: 'v123', olang: 'en' },
+        vn: { id: 'v123', olang: 'en', c_votecount: 2, c_average: 700 },
         vn_titles: [
           { id: 'v123', lang: 'de', official: true, title: 'Harbor German Edition', latin: null },
           { id: 'v123', lang: 'en', official: true, title: 'Sentinel Harbor', latin: null },

@@ -16,6 +16,8 @@ export const IMPORTER_SCOPES = [
   'media:read_reservation',
 ] as const;
 
+export const VNDB_IMPORTER_SCOPES = [...IMPORTER_SCOPES, 'source_statistic:write'] as const;
+
 export type CredentialsObserver = {
   onAccountKey?(
     path: string,
@@ -219,6 +221,7 @@ export type AccountCredentialsOptions = {
   account: string;
   client: string;
   authOrigin: string;
+  scopes?: readonly string[];
   fetch?: typeof fetch;
   now?: () => number;
   observer?: CredentialsObserver;
@@ -242,7 +245,7 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
       body: JSON.stringify({
         account_id: options.account,
         client_id: options.client,
-        scope: [...IMPORTER_SCOPES],
+        scope: [...(options.scopes ?? IMPORTER_SCOPES)],
         assertion: signed,
       }),
     });

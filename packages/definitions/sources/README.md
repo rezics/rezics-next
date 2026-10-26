@@ -47,6 +47,8 @@ A character appearance is `schema:character` (Wikidata `P674`) qualified by its 
 `skos:Concept`s in a `skos:ConceptScheme` for each tree, with parent links represented by `skos:broader`. Map the
 SKOS terms to their Wikidata equivalents while retaining the SKOS semantic term in the inventory.
 
-Omit vote and list statistics, user data, and internal bookkeeping with an explicit reason. Image identifiers that
-represent profile artwork feed the cover group; the identifier is not itself an image URL or a grant to republish the
-image. Record separate image or prose source conditions on the affected columns.
+Omit user vote records, list statistics, user data, and internal bookkeeping with an explicit reason. A source's
+aggregate score may be imported as a source statistic when its licence covers the ratings; it stays separate from
+profile fields and is never turned into native votes. Image identifiers that represent profile artwork feed the cover
+group; the identifier is not itself an image URL or a grant to republish the image. Record separate image or prose
+source conditions on the affected columns.

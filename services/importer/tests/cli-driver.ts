@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { BatchWriteRequest } from '@rezics/definitions/bulk';
+import { IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from '../src/credentials.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { RUN_TABLES, type RunStore, type SourceProjection } from '../src/run-store.ts';
 import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
@@ -281,6 +282,21 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
         if (url.pathname === '/signin/key') {
           signins++;
           if (signins > 1) return new Response('', { status: 401 });
+          const sourceIndex = argv.indexOf('--source');
+          const source = sourceIndex < 0 ? undefined : argv[sourceIndex + 1];
+          const expectedScopes = source === 'vndb' ? VNDB_IMPORTER_SCOPES : IMPORTER_SCOPES;
+          let body: unknown;
+          try {
+            body = JSON.parse(await request.clone().text());
+          } catch {
+            return new Response('', { status: 401 });
+          }
+          if (
+            typeof body !== 'object' ||
+            body === null ||
+            JSON.stringify(Reflect.get(body, 'scope')) !== JSON.stringify(expectedScopes)
+          )
+            return new Response('', { status: 401 });
           session = `imports-cli-session-${issuedTokens + 1}`;
           return Response.json({}, { headers: { 'set-cookie': `session=${session}; HttpOnly; Secure` } });
         }
@@ -297,6 +313,22 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       const captured = await boundedRequest(request);
       const authorization = request.headers.get('authorization');
       requests.push({ url: request.url, authorization, bytes: captured.bytes });
+      if (request.method === 'PUT' && /^\/v1\/subjects\/[0-9a-f-]{36}\/source-statistics\/vndb$/.test(url.pathname)) {
+        let body: unknown;
+        try {
+          body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(captured.body));
+        } catch {
+          return new Response('', { status: 400 });
+        }
+        if (
+          typeof body === 'object' &&
+          body !== null &&
+          !Array.isArray(body) &&
+          (request.headers.get('idempotency-key')?.length ?? 0) > 0
+        )
+          return Response.json({ source: 'vndb', ...(body as Record<string, unknown>) });
+        return new Response('', { status: 400 });
+      }
       if (url.pathname === '/v1/subjects:batchWrite') {
         try {
           const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(captured.body)) as BatchWriteRequest;

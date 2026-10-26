@@ -5,6 +5,19 @@ import type { ConversionContext } from '../../../packages/conversion/src/support
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
 
+export type ImportSourceStatistic = Readonly<{
+  source: 'vndb';
+  sourceRecordId: string;
+  scale: Readonly<{ min: number; max: number }>;
+  mean: number;
+  count: number;
+  asOf: string;
+  licence: string;
+  attribution: string;
+}>;
+
+export type ImportSourceStatisticValue = Omit<ImportSourceStatistic, 'source'>;
+
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;
   readFence(tuple: {
@@ -12,6 +25,15 @@ export interface ImportTransport {
     external_id: string;
     field_group: FieldGroup;
   }): Promise<{ fenced: boolean; securityRevision: string | null }>;
+  writeSourceStatistic?(
+    input: {
+      subjectId: string;
+      source: ImportSourceStatistic['source'];
+      value: ImportSourceStatisticValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
 }
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
@@ -29,6 +51,7 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   digest: string;
   normalized: unknown;
   sourceMetadata?: unknown;
+  sourceStatistic?: ImportSourceStatistic;
 } & Extra;
 
 export type RunOptions = Readonly<{

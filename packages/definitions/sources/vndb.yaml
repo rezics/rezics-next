@@ -2600,13 +2600,13 @@ tables:
         values: *id017
       - name: c_votecount
         status: omitted
-        reason: Community vote count is a popularity statistic.
+        reason: Retained only as the count in the licensed VNDB source statistic with c_average, never as native votes.
       - name: c_rating
         status: omitted
-        reason: Community Bayesian rating is a vote statistic.
+        reason: Community Bayesian rating is omitted; the separate VNDB source statistic uses c_average and c_votecount.
       - name: c_average
         status: omitted
-        reason: Community vote average is a vote statistic.
+        reason: Retained only as the mean in the licensed VNDB source statistic with c_votecount, never as native votes.
       - name: c_length
         status: omitted
         reason: Community-estimated length is a vote statistic.

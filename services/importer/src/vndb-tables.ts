@@ -27,7 +27,11 @@ type Metadata = {
   num_edits: number;
   num_users: number;
 };
-type GroupedRecord = { vn: { id: string; olang: string }; vn_titles: Title[]; entry_meta: Metadata };
+type GroupedRecord = {
+  vn: { id: string; olang: string; c_votecount: number; c_average: number | null };
+  vn_titles: Title[];
+  entry_meta: Metadata;
+};
 type Stored = { id: string; child: string };
 type Run = { state: State; sourceRecords: number; stagedRows: number; stagedBytes: number };
 type Options = {
@@ -43,7 +47,8 @@ type Options = {
 // COPY TO STDOUT, not executable SQL. Official generator/dump evidence and hashes:
 // specs/imports-vndb-tables-driver.ts. Only the identity, original language, titles
 // and native revision are required by the grouped input. Other VN columns are
-// validated and discarded, including description and image identifiers.
+// validated and discarded, including Bayesian ratings, description and image identifiers.
+// The licensed average and count are retained only for a separate source statistic.
 const COLUMNS: Record<Table, readonly string[]> = {
   vn: [
     'id',
@@ -390,7 +395,7 @@ export class VndbTablesStore {
     const id = nativeId(cells.id, table !== 'entry_meta');
     if (table === 'entry_meta' && id[0] !== 'v') return 0;
     let child = '';
-    let record: { id: string; olang: string } | Title | Metadata;
+    let record: GroupedRecord['vn'] | Title | Metadata;
     if (table === 'vn') {
       for (const name of ['image', 'c_image']) {
         const value = cells[name];
@@ -400,12 +405,14 @@ export class VndbTablesStore {
         }
       }
       const olang = language(cells.olang);
-      for (const name of ['c_votecount', 'c_lengthnum']) integer(cells[name], 2147483647);
+      const c_votecount = integer(cells.c_votecount, 2147483647);
+      integer(cells.c_lengthnum, 2147483647);
       for (const name of ['c_rating', 'c_average', 'c_length'])
         if (cells[name] !== null) integer(cells[name], name === 'c_length' ? 32767 : 1000);
+      const c_average = cells.c_average === null ? null : integer(cells.c_average, 1000);
       integer(cells.length, 5);
       integer(cells.devstatus, 2);
-      record = { id, olang };
+      record = { id, olang, c_votecount, c_average };
     } else if (table === 'vn_titles') {
       child = language(cells.lang);
       check(cells.official === 't' || cells.official === 'f');

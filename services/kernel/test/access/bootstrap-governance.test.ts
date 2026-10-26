@@ -33,6 +33,7 @@ const actions = [
   'access:grant',
   'subject:create',
   'subject:batch_write',
+  'source_statistic:write',
   'source_fence:read',
   'source_fence:takedown',
   'media:import_from_url',
@@ -42,7 +43,13 @@ const actions = [
   'offer:create',
   'payout_statement:mark_paid',
 ];
-const imports = ['subject:batch_write', 'source_fence:read', 'source_fence:takedown', 'media:import_from_url'];
+const imports = [
+  'subject:batch_write',
+  'source_statistic:write',
+  'source_fence:read',
+  'source_fence:takedown',
+  'media:import_from_url',
+];
 const catalogue = new Map(actions.map((action) => [action, { anonymous: false }]));
 const audit = 'com.rezics.access.governance.bootstrapped.v1';
 let auth: Awaited<ReturnType<typeof createAuthService>>;

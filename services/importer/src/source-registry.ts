@@ -18,7 +18,7 @@ import {
 } from '@rezics/conversion/open-library';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
-import type { ImportConversion, SourceRegistration } from './import-contract.ts';
+import type { ImportConversion, ImportSourceStatistic, SourceRegistration } from './import-contract.ts';
 
 /** Typed source asset leaves are passed through from modules that define them. */
 export type SourceAssets = {
@@ -27,6 +27,9 @@ export type SourceAssets = {
 };
 
 type NativeConversion = BangumiConversion | VndbConversion | WikidataConversion | OpenLibraryConversion;
+
+// This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
+const VNDB_DUMP_AS_OF = '2026-10-25';
 
 type NativeSource = Readonly<{
   source: string;
@@ -78,11 +81,29 @@ function validateSourceField(field: SourceField, value: unknown): asserts value 
 function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
+  let sourceStatistic: ImportSourceStatistic | undefined;
+  if (result.source === 'vndb' && 'vn' in result.normalizedRecord) {
+    const count = result.normalizedRecord.vn.c_votecount;
+    const average = result.normalizedRecord.vn.c_average;
+    if (count !== undefined && count > 0 && average !== undefined && average !== null && average >= 100) {
+      sourceStatistic = {
+        source: 'vndb',
+        sourceRecordId: result.normalizedRecord.vn.id,
+        scale: { min: 1, max: 10 },
+        mean: average / 100,
+        count,
+        asOf: VNDB_DUMP_AS_OF,
+        licence: 'ODbL-1.0',
+        attribution: 'VNDB',
+      };
+    }
+  }
   return {
     ...result,
     normalized: result.normalizedRecord,
     coverAssets,
     mediaImportIntents,
+    ...(sourceStatistic === undefined ? {} : { sourceStatistic }),
   };
 }
 

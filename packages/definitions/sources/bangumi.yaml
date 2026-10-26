@@ -347,7 +347,7 @@ files:
       - id: favorite
         mapping: &id007
           status: omitted
-          reason: User tags, vote or collection/list statistics, rankings and comment counts are outside the catalogue.
+          reason: User tags and collection/list statistics, rankings and comment counts are outside the catalogue.
       - id: favorite.doing
         mapping: *id007
       - id: favorite.done
@@ -426,31 +426,33 @@ files:
           sources: &id022
             - https://www.wikidata.org/wiki/Property:P7937
       - id: rank
-        mapping: *id007
+        mapping: &id108
+          status: omitted
+          reason: Bangumi's licence covers entry information and not ratings.
       - id: score
-        mapping: *id007
+        mapping: *id108
       - id: score_details
-        mapping: *id007
+        mapping: *id108
       - id: score_details.1
-        mapping: *id007
+        mapping: *id108
       - id: score_details.10
-        mapping: *id007
+        mapping: *id108
       - id: score_details.2
-        mapping: *id007
+        mapping: *id108
       - id: score_details.3
-        mapping: *id007
+        mapping: *id108
       - id: score_details.4
-        mapping: *id007
+        mapping: *id108
       - id: score_details.5
-        mapping: *id007
+        mapping: *id108
       - id: score_details.6
-        mapping: *id007
+        mapping: *id108
       - id: score_details.7
-        mapping: *id007
+        mapping: *id108
       - id: score_details.8
-        mapping: *id007
+        mapping: *id108
       - id: score_details.9
-        mapping: *id007
+        mapping: *id108
       - id: series
         mapping: &id074
           status: existing

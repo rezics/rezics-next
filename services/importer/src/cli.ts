@@ -17,7 +17,13 @@ import { DEFAULT_VNDB_ARCHIVE_BYTES, VndbTablesStore } from './vndb-tables.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
-import { createAccountTokenProvider, CredentialInputError, type CredentialsObserver } from './credentials.ts';
+import {
+  createAccountTokenProvider,
+  CredentialInputError,
+  IMPORTER_SCOPES,
+  VNDB_IMPORTER_SCOPES,
+  type CredentialsObserver,
+} from './credentials.ts';
 
 const ARCHIVE_METADATA_LIMIT = 4096;
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
@@ -531,6 +537,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       account: config.account,
       client: config.client,
       authOrigin: config.auth,
+      scopes: config.source === 'vndb' ? VNDB_IMPORTER_SCOPES : IMPORTER_SCOPES,
       fetch: guardedFetch,
       now: () => clock.now(),
       observer: {
@@ -599,6 +606,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   const signalTransport = {
     batchWrite: (request: Parameters<typeof importTransport.batch>[0]) =>
       track(() => importTransport.batch(request, signal)),
+    writeSourceStatistic: (input: Parameters<NonNullable<typeof importTransport.writeSourceStatistic>>[0]) =>
+      track(() => importTransport.writeSourceStatistic(input, signal)),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       readFence(() =>
         importTransport.fence(

@@ -18,6 +18,7 @@ import { isDeepStrictEqual, types } from 'node:util';
 import { Check } from 'typebox/schema';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
 import { createImportFetch, MAX_IMPORT_BODY_BYTES, type ImportHttpOptions } from './import-fetch.ts';
+import type { ImportSourceStatisticValue } from './import-contract.ts';
 
 export interface FenceTuple {
   source: string;
@@ -118,6 +119,41 @@ function mediaId(id: string): void {
 function idempotencyKey(key: string): string {
   ensure(typeof key === 'string' && key.length >= 1 && key.length <= 255 && !/[^\x20-\x7e]/.test(key));
   return JSON.stringify(key);
+}
+
+function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
+  const value = snapshot(input, BODY_BYTES);
+  ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+  const body = value as Record<string, unknown>;
+  ensure(Object.keys(body).sort().join(',') === 'asOf,attribution,count,licence,mean,scale,sourceRecordId');
+  const scale = body.scale;
+  ensure(typeof scale === 'object' && scale !== null && !Array.isArray(scale));
+  const sourceScale = scale as Record<string, unknown>;
+  ensure(Object.keys(sourceScale).sort().join(',') === 'max,min');
+  ensure(sourceScale.min === 1 && sourceScale.max === 10);
+  ensure(
+    typeof body.sourceRecordId === 'string' &&
+      body.sourceRecordId.length > 0 &&
+      Buffer.byteLength(body.sourceRecordId, 'utf8') <= 1024 &&
+      typeof body.mean === 'number' &&
+      Number.isFinite(body.mean) &&
+      body.mean >= 1 &&
+      body.mean <= 10 &&
+      typeof body.count === 'number' &&
+      Number.isSafeInteger(body.count) &&
+      body.count > 0 &&
+      body.count <= 2_147_483_647 &&
+      typeof body.asOf === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(body.asOf) &&
+      new Date(`${body.asOf}T00:00:00.000Z`).toISOString().slice(0, 10) === body.asOf &&
+      typeof body.licence === 'string' &&
+      body.licence.length > 0 &&
+      Buffer.byteLength(body.licence, 'utf8') <= 1024 &&
+      typeof body.attribution === 'string' &&
+      body.attribution.length > 0 &&
+      Buffer.byteLength(body.attribution, 'utf8') <= 2000,
+  );
+  return body as ImportSourceStatisticValue;
 }
 
 /** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
@@ -228,6 +264,42 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(result.results.length === body.commands.length);
     result.results.forEach((item, index) => ensure(item.key === body.commands[index]!.key));
     return result;
+  }
+  async function writeSourceStatistic(
+    input: {
+      subjectId: string;
+      source: 'vndb';
+      value: ImportSourceStatisticValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const body = sourceStatisticBody(input.value);
+    const statisticsClient = client as unknown as {
+      subjects(params: { subjectId: string }): {
+        'source-statistics'(params: { source: 'vndb' }): {
+          put(
+            body: ImportSourceStatisticValue,
+            options: { headers: { 'idempotency-key': string }; fetch?: RequestInit },
+          ): Promise<ClientResponse>;
+        };
+      };
+    };
+    const reply = await response(
+      () =>
+        statisticsClient
+          .subjects({ subjectId: input.subjectId })
+          ['source-statistics']({ source: input.source })
+          .put(body, {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          }),
+      200,
+      signal,
+    );
+    const expected = JSON.parse(JSON.stringify({ source: input.source, ...body }));
+    ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(reply.body)), expected));
   }
   async function batch(input: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     return sendBatch(requestBody(input, bodyLimit), signal);
@@ -368,5 +440,16 @@ export function createImportTransport(options: ImportTransportOptions) {
     if ((await fence(tuple, signal)).fenced) return { outcome: 'fenced' };
     return media(body, key, signal);
   }
-  return { batch, batches, fence, refreshCover, media, importFromUrl, importStatus, requestMedia, mediaStatus };
+  return {
+    batch,
+    batches,
+    fence,
+    writeSourceStatistic,
+    refreshCover,
+    media,
+    importFromUrl,
+    importStatus,
+    requestMedia,
+    mediaStatus,
+  };
 }

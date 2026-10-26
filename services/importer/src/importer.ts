@@ -497,6 +497,25 @@ export class Importer {
         }
       }
     }
+    if (subject && conversion?.sourceStatistic) {
+      const { source, ...value } = conversion.sourceStatistic;
+      const writeSourceStatistic = this.options.transport.writeSourceStatistic;
+      if (!writeSourceStatistic) throw new Error('Source statistic transport is unavailable');
+      await writeSourceStatistic.call(
+        this.options.transport,
+        {
+          subjectId: subject,
+          source,
+          value,
+          idempotencyKey: operationKey(
+            owner,
+            `${run.id}:source-statistic:${hash(JSON.stringify(conversion.sourceStatistic))}`,
+          ),
+        },
+        signal,
+      );
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+    }
     const commands: BatchCommand[] = [];
     for (const candidate of candidates) {
       if (

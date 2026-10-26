@@ -10,7 +10,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'vndb@4';
+export const converter_revision = 'vndb@5';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
@@ -23,7 +23,7 @@ export const vndbLimits = Object.freeze({
 
 type Title = { id: string; lang: string; official: boolean; title: string; latin: string | null };
 type NormalizedRecord = {
-  vn: { id: string; olang?: string };
+  vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null };
   entry_meta: { id: string; revision: number };
   vn_titles: Title[];
   vn_extlinks: { id: string; link: number }[];
@@ -120,7 +120,8 @@ function latinLanguageTag(tag: string): string | null {
 /**
  * Projection of decoded dump tables, not a live API response. Schema authority:
  * https://g.blicky.net/vndb.git/tree/sql/schema.sql and https://vndb.org/d14.
- * Allowlist: vn.id/olang; entry_meta.id/revision; vn_titles.id/lang/official/title/latin;
+ * Allowlist: vn.id/olang/c_average/c_votecount; entry_meta.id/revision;
+ * vn_titles.id/lang/official/title/latin;
  * vn_extlinks.id/link; extlinks.id/site/value. All other fields/tables are untouched.
  * https://vndb.org/d17#4 distinguishes ODbL database and DbCL contents licensing.
  * Neither licenses description/image republication; no creative content is projected.
@@ -134,6 +135,21 @@ function project(input: ConversionInput): NormalizedRecord {
   const olangValue = field(vn, 'olang', '/vn/olang');
   const projectedVn: NormalizedRecord['vn'] = { id };
   if (olangValue !== undefined) projectedVn.olang = text(olangValue, '/vn/olang');
+  const voteCount = field(vn, 'c_votecount', '/vn/c_votecount');
+  const average = field(vn, 'c_average', '/vn/c_average');
+  if ((voteCount === undefined) !== (average === undefined))
+    fail('VNDB source statistic fields must be supplied together', '/vn');
+  if (voteCount !== undefined && average !== undefined) {
+    if (typeof voteCount !== 'number' || !Number.isSafeInteger(voteCount) || voteCount < 0 || voteCount > 2_147_483_647)
+      fail('Invalid source vote count', '/vn/c_votecount');
+    if (
+      average !== null &&
+      (typeof average !== 'number' || !Number.isSafeInteger(average) || average < 0 || average > 1000)
+    )
+      fail('Invalid source average', '/vn/c_average');
+    projectedVn.c_votecount = voteCount as number;
+    projectedVn.c_average = average as number | null;
+  }
   const meta = row(field(record, 'entry_meta', '/entry_meta'), '/entry_meta');
   if (nativeId(field(meta, 'id', '/entry_meta/id'), '/entry_meta/id') !== id)
     fail('entry_meta ID does not match vn.id', '/entry_meta/id');
