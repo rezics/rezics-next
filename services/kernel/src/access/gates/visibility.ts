@@ -100,7 +100,7 @@ export async function visibleOperations(input: {
     const principal = principalId(input.viewer);
     await withConnection(input.pool, async (client) => {
       const bounded = deadlineClient(client, input.deadline);
-      await bounded.query('BEGIN READ ONLY');
+      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
         await bounded.query('SET LOCAL enable_seqscan = off');
         for (const row of await openGroups.run(bounded, { groups, at: instant })) {
