@@ -11,6 +11,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   checkGrowth,
   openGrowthDatabase,
+  placement,
   seed,
   type GrowthCheck,
   type GrowthDatabase,
@@ -27,7 +28,10 @@ const actorRoute = routeOf(growthActorId)!;
 const actorPartition = partitionOf(actorRoute);
 const idNamespace = '00000000-0000-8000-8000-000000000001';
 const rowsPerScale = 500;
+const maxScaleUnits = 16;
 const operationsPerCheck = 3 * (1 + 5);
+// Anchors and measured runs add a few rows beside the seed; four per run bounds them and stays far below one unit.
+const rowsOutsideSeed = 4 * operationsPerCheck;
 const positionStride = 1_000;
 const seedTimestamp = new Date('2026-01-01T00:00:00.000Z');
 const activeRange = '[2020-01-01 00:00:00+00,)';
@@ -422,13 +426,36 @@ async function resetGrowthData(database: GrowthDatabase) {
   );
 }
 
-function check(database: GrowthDatabase, name: string, population: Population, operation: GrowthCheck['operation']) {
-  return checkGrowth(database, {
+type SeedAudit = { readonly name: string; readonly counts: ReadonlyMap<string, { rows: number; allowed: number }> };
+const seedAudits: SeedAudit[] = [];
+
+async function auditSeededRows(database: GrowthDatabase, name: string, population: Population) {
+  const perOrdinal = population.rows!(placement(population, 0));
+  const counts = new Map<string, { rows: number; allowed: number }>();
+  for (const [relation, rows] of Object.entries(perOrdinal)) {
+    const { rows: found } = await database.admin.query(`SELECT count(*)::int AS rows FROM ${relation}`);
+    counts.set(relation, {
+      rows: found[0].rows,
+      allowed: maxScaleUnits * rowsPerScale * rows.length + rowsOutsideSeed,
+    });
+  }
+  seedAudits.push({ name, counts });
+}
+
+async function check(
+  database: GrowthDatabase,
+  name: string,
+  population: Population,
+  operation: GrowthCheck['operation'],
+) {
+  const report = await checkGrowth(database, {
     name,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (growthDb, scale, previous) => grow(growthDb, population, scale, previous),
     operation,
   });
+  await auditSeededRows(database, name, population);
+  return report;
 }
 
 beforeAll(async () => {
@@ -799,3 +826,13 @@ test('Erasure stays within its bound as N grows', async () => {
     ).rejects.toThrow();
   });
 }, 90_000);
+
+test('every growth-orders check seeds at most sixteen scale units', () => {
+  expect(seedAudits.length).toBeGreaterThan(0);
+  const excess = seedAudits.flatMap(({ name, counts }) =>
+    [...counts]
+      .filter(([, { rows, allowed }]) => rows > allowed)
+      .map(([relation, { rows, allowed }]) => `${name}: ${relation} holds ${rows} rows, at most ${allowed} allowed`),
+  );
+  expect(excess).toEqual([]);
+});
