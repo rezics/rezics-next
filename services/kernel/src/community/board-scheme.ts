@@ -12,6 +12,7 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Actor, type Access } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -152,65 +153,70 @@ export async function setBoardScheme(
   });
   const identity = principalCommandIdentity(actor);
   const kind = 'community.realm.board-scheme';
-  return runCommand(
-    deps.pool,
-    {
-      ...identity,
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      receipt: {
-        kind,
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(canonicalize([identity, kind, body])!)
-          .digest(),
-      },
-      authorization: {
-        ...authorization,
-        async authorize(tx, attempt, proof) {
-          if (Date.now() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
-          return authorization.authorize(tx, attempt, proof);
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt: {
+          kind,
+          key: context.idempotencyKey,
+          digest: createHash('sha256')
+            .update(canonicalize([identity, kind, body])!)
+            .digest(),
+        },
+        authorization: {
+          ...authorization,
+          async authorize(tx, attempt, proof) {
+            if (Date.now() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+            return authorization.authorize(tx, attempt, proof);
+          },
         },
       },
-    },
-    async (tx, command) => {
-      const previous = current.get(command.time)!;
-      if (previous.headRevisionId !== body.expectedHead) throw new RealmConflictError();
-      const revision = newId(route);
-      await append.run(tx, {
-        route,
-        id: body.realmId,
-        revision,
-        predecessor: body.expectedHead,
-        title: previous.title,
-        summary: previous.summary,
-        visibility: previous.visibility,
-        context: previous.contextId,
-        scheme: body.schemeId,
-        at: authoritativeTimeValue(command.time),
-        author: actor.accountId,
-      });
-      if (
-        !(await moveHead.run(tx, {
+      async (tx, command) => {
+        const previous = current.get(command.time)!;
+        if (previous.headRevisionId !== body.expectedHead) throw new RealmConflictError();
+        const revision = newId(route);
+        await append.run(tx, {
           route,
           id: body.realmId,
           revision,
-          expected: body.expectedHead,
+          predecessor: body.expectedHead,
+          title: previous.title,
+          summary: previous.summary,
+          visibility: previous.visibility,
+          context: previous.contextId,
           scheme: body.schemeId,
-        }))
-      )
-        throw new RealmConflictError();
-      return {
-        value: { realmId: body.realmId, revisionId: revision },
-        events: [
-          {
-            type: 'com.rezics.community.realm.board-scheme.v1',
-            subject: body.realmId,
-            data: { realmId: body.realmId, revisionId: revision, schemeId: body.schemeId },
-          },
-        ],
-      };
-    },
-  );
+          at: authoritativeTimeValue(command.time),
+          author: actor.accountId,
+        });
+        if (
+          !(await moveHead.run(tx, {
+            route,
+            id: body.realmId,
+            revision,
+            expected: body.expectedHead,
+            scheme: body.schemeId,
+          }))
+        )
+          throw new RealmConflictError();
+        return {
+          value: { realmId: body.realmId, revisionId: revision },
+          events: [
+            {
+              type: 'com.rezics.community.realm.board-scheme.v1',
+              subject: body.realmId,
+              data: { realmId: body.realmId, revisionId: revision, schemeId: body.schemeId },
+            },
+          ],
+        };
+      },
+    );
+  } catch (error) {
+    if (error instanceof GrantDeniedError) throw new ProblemError('not_found');
+    throw error;
+  }
 }

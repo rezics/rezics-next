@@ -345,22 +345,25 @@ test.serial(
   'wrong type, unreadable or missing subject, non-owner, anonymous and stale head write nothing',
   async () => {
     const unreadable = newId(28);
+    const heads = [probe.headRevisionId, probe.predecessor!];
     const cases = [
-      { scheme: wrongTypeId, bearer: owner.bearer, head: probe.headRevisionId, status: 403 },
-      { scheme: unreadable, bearer: owner.bearer, head: probe.headRevisionId, status: 403 },
-      { scheme: newId(28), bearer: owner.bearer, head: probe.headRevisionId, status: 403 },
-      { scheme: schemeId, bearer: unrelated.bearer, head: probe.headRevisionId, status: 403 },
-      { scheme: schemeId, bearer: '', head: probe.headRevisionId, status: 401 },
-      { scheme: schemeId, bearer: owner.bearer, head: probe.predecessor!, status: 404 },
+      { scheme: wrongTypeId, bearer: owner.bearer, heads, status: 404 },
+      { scheme: unreadable, bearer: owner.bearer, heads, status: 404 },
+      { scheme: newId(28), bearer: owner.bearer, heads, status: 404 },
+      { scheme: schemeId, bearer: unrelated.bearer, heads, status: 404 },
+      { scheme: schemeId, bearer: '', heads, status: 401 },
+      { scheme: schemeId, bearer: owner.bearer, heads: [probe.predecessor!], status: 412 },
     ];
     for (const item of cases) {
-      const before = await snapshot();
-      const denied = await put(item.scheme, item.head, item.bearer);
-      expect(denied.response.status).toBe(item.status);
-      expect(denied.value).not.toHaveProperty('realm');
-      expect(await snapshot()).toEqual(before);
-      const read = await call('GET', `/v1/realms/${probe.realmId}`, { bearer: owner.bearer });
-      expect(read.value).toEqual({ realm: probe });
+      for (const head of item.heads) {
+        const before = await snapshot();
+        const denied = await put(item.scheme, head, item.bearer);
+        expect(denied.response.status).toBe(item.status);
+        expect(denied.value).not.toHaveProperty('realm');
+        expect(await snapshot()).toEqual(before);
+        const read = await call('GET', `/v1/realms/${probe.realmId}`, { bearer: owner.bearer });
+        expect(read.value).toEqual({ realm: probe });
+      }
     }
   },
 );
