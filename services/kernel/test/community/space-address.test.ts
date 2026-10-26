@@ -13,6 +13,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const issuer = 'https://space-address.auth.test';
 const audience = 'https://space-address.api.test';
@@ -132,7 +133,7 @@ beforeAll(async () => {
     audience,
     secret: 'space-address-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -149,7 +150,7 @@ beforeAll(async () => {
         if (!approved.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   const writeRate = createWriteRateLimiter({
     secret: 'space-address-private-write-rate-secret-32bytes',

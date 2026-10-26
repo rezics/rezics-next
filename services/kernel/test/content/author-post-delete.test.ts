@@ -27,6 +27,7 @@ import {
   type Population,
 } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const route = 0x6b21;
 const routeKey = new Uint8Array(32).fill(7);
@@ -66,7 +67,7 @@ beforeAll(async () => {
     audience: 'https://api.rezics.test',
     secret: 'author-delete-test-only-secret-at-least-32-bytes',
     signing: { activeKid: signing.kid, privateKeys: [signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -83,7 +84,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   for (const id of [author, other, moderator, suspended]) {

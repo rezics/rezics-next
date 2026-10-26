@@ -20,6 +20,7 @@ import { createOperatorCommands } from '../../src/access/operator.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 import { createCommittedContinuations } from '../../src/access/committed-continuations.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 export type FixtureConfiguration = {
   kernelUrl: string;
@@ -103,7 +104,7 @@ export async function handleFixture(
     audience: 'https://durable-handles.api.test',
     secret: config.secret,
     signing: { activeKid: config.signing.kid!, privateKeys: [config.signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await read(id);
         return account
@@ -144,7 +145,7 @@ export async function handleFixture(
           subjectEpoch: Number(subject.minimumAuthnEpoch),
         };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({
     clientId: 'durable-web',

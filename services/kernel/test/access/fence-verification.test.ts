@@ -8,6 +8,7 @@ import { createAccess as permissionAccess } from '../../src/access/permission.ts
 import { createLifecycleInternals, type RecoveryEvidence } from '../../src/access/lifecycle.ts';
 import { accessCheck, AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -184,13 +185,13 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-fence-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid!, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAccount: trustedAccount,
       async authorizeProvisioning(reference) {
         if (!approvals.delete(reference)) throw new Error('No provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [action] });
   await account(person, 'pending');

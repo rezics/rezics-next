@@ -6,6 +6,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createDelegationCommands, type AssignmentInput } from '../../src/access/delegation-commands.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 /** Positive verifier fixtures need the same principal command provenance as production. */
 export async function delegatedAssignmentFixture(pool: Pool) {
@@ -28,7 +29,7 @@ export async function delegatedAssignmentFixture(pool: Pool) {
       audience: 'https://api.rezics.test',
       secret: 'assignment-fixture-secret-with-at-least-thirty-two-characters',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           const account = await readAccount(pool, routeOf(id)!, id);
           return (
@@ -46,7 +47,7 @@ export async function delegatedAssignmentFixture(pool: Pool) {
           if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [action] });
     const access = createAccess({

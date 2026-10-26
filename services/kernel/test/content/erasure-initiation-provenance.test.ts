@@ -21,6 +21,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const cookies = new Map<string, string>();
 const privateBody = Buffer.from(serializeDocument(fromPlainText('private')));
@@ -120,7 +121,7 @@ beforeAll(async () => {
     audience: 'https://api.example.test',
     secret: 'operations-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAssignment: (reference, actorId) => readAssignment(db.pool, reference, actorId),
       async readAccount(accountId) {
         const account = await readAccount(db.pool, routeOf(accountId)!, accountId);
@@ -139,7 +140,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'operations-test', firstParty: true, scopes: actions });
   access = createAccess({

@@ -9,6 +9,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
 import { registerTestClient, testAccess, testApp } from '../support/test-kernel.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
 export async function standingFixture(extraActions: readonly string[] = []) {
@@ -71,7 +72,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(reader, routeOf(id)!, id);
         return (
@@ -88,7 +89,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   const app = testApp({ pool });
   for (const id of [actor, principal, recipient]) {

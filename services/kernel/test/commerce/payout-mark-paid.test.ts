@@ -9,6 +9,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
@@ -105,7 +106,7 @@ beforeAll(async () => {
     audience,
     secret: 'payout-mark-paid-test-secret-at-least-thirty-two-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(pool, routeOf(id)!, id);
         return (
@@ -122,7 +123,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'commerce-test', firstParty: true, scopes });
   for (const id of accounts) {

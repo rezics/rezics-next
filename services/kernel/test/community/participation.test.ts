@@ -31,6 +31,7 @@ import { accessCommandAuthorization, type AccessClient } from '../../src/request
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const issuer = 'https://realm-participation.auth.test';
 const audience = 'https://realm-participation.api.test';
@@ -322,7 +323,7 @@ beforeAll(async () => {
     audience,
     secret: 'realm-participation-auth-persistent-secret-32bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(accountId) {
         const account = await readAccount(admin, routeOf(accountId)!, accountId);
         return (
@@ -339,7 +340,7 @@ beforeAll(async () => {
         if (!provisioningApprovals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await service.internal.registerClient({ clientId: 'realm-participation-client', firstParty: true, scopes });
   governance = await personWithToken('participation_governance', scopes);

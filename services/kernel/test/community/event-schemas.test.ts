@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import type { AccountActor } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 // The focused acceptance command also runs from the repository root.
 await import('reylo/register');
@@ -112,7 +113,7 @@ async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Prom
     audience,
     secret: 'community-event-schema-secret-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -129,7 +130,7 @@ async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Prom
         if (reference !== accountId) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'community-events', firstParty: true, scopes: mounted });
   const access = createAccess({
