@@ -15,6 +15,8 @@ const { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } =
   await import('../../src/access/lifecycle.ts');
 const { createMembershipInverseCommands } = await import('../../src/access/membership-inverse.ts');
 const { createSuspensionCommands } = await import('../../src/access/suspension.ts');
+const { createReinstatementCommands } = await import('../../src/access/reinstatement.ts');
+const { createRateTierCommands } = await import('../../src/access/rate-tier.ts');
 const { installResourceRoleCatalogue, resolveResourceRoles } = await import('../../src/access/resource-roles.ts');
 const { installStandingParentGrant } = await import('../../src/access/standing-parent.ts');
 const { createExposureCommands } = await import('../../src/access/gates/catalogue.ts');
@@ -33,6 +35,9 @@ const catalogueScopes = [
   'organization:create',
   'organization:membership',
   'account:suspend',
+  'account:reinstate',
+  'account:set_rate_tier',
+  'account:renew_cleanup',
   'exposure:open',
   'exposure:close',
 ];
@@ -58,6 +63,7 @@ beforeAll(async () => {
   f = await nativeFixture(pool, undefined, {
     database: { url, container: '', close() {} },
     privateKey: { ...(await exportJWK(pair.privateKey)), kid: 'access-event-catalogue' },
+    actions: new Map(catalogueScopes.map((action) => [action, { anonymous: false }])),
   });
   await f.host.service.internal.registerClient({
     clientId: 'catalogue-client',
@@ -580,14 +586,45 @@ test('real access commands cover every registered event and the log reader accep
       fetch: async () => f.host.service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
     },
   });
+  await step('rate tier', async () =>
+    createRateTierCommands({ pool, access: f.access, clock: () => new Date() }).setRateTier(await grantContext(), {
+      accountId: victim.accountId,
+      key: key(),
+      tier: 'trusted',
+    }),
+  );
+  const continuation = {
+    operationKey: key(),
+    operationDigest: 'a'.repeat(64),
+    commandKeyPrefix: `wf:${'b'.repeat(64)}`,
+  };
   await step('suspend', async () => {
     const deadline = Date.now() + 20_000;
     const actor = await suspendAccess.authenticate(bearer, { pool, deadline });
     return createSuspensionCommands({ pool, access: suspendAccess, clock: () => new Date() }).suspend(
       { actor, pool, deadline },
-      { accountId: victim.accountId, key: key(), reason: 'catalogue' },
+      { accountId: victim.accountId, key: key(), reason: 'catalogue', continuation },
     );
   });
+  const cleanup = await step('read cleanup', () =>
+    f.bindings.continuations.read(continuation.operationKey, victim.accountId),
+  );
+  expect(cleanup).not.toBeNull();
+  const recorded = await step('record cleanup', () =>
+    f.bindings.continuations.authorizeStep(cleanup!.reference, cleanup!.allowlist[0]!),
+  );
+  await step('renew cleanup', () => f.bindings.continuations.renew(bearer, recorded.continuationId));
+  await step('operator fence page', () => f.bindings.continuations.continueCommitted(cleanup!.reference));
+  await step('reinstate', async () =>
+    createReinstatementCommands({ pool, access: f.access, clock: () => new Date() }).reinstate(await grantContext(), {
+      accountId: victim.accountId,
+      key: key(),
+    }),
+  );
+  const operatedFence = await step('fence operated subject', () =>
+    operators.fenceOperatedSubject({ ...linked.value, key: key() }),
+  );
+  expect(operatedFence.value).toMatchObject({ accountId: robotId, fenced: true });
   await step('redirect departed', () =>
     internal.redirectHandle({ handle: departed.handle, accountId: departed.accountId, key: key() }),
   );
