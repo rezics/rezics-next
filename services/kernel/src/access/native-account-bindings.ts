@@ -12,15 +12,16 @@ import type {
 import type { Pool } from 'pg';
 import type { Access, ActionCatalogue } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createDelegationCommands, readAssignment } from './delegation-commands.ts';
-import { createGrantCommands } from './grant-commands.ts';
+import { createDelegationCommands, DelegationDeniedError, readAssignment } from './delegation-commands.ts';
+import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
 import {
   type LifecycleRequest,
   type RecoveryEvidence,
   createLifecycleCommands,
   createLifecycleInternals,
+  LifecycleDeniedError,
 } from './lifecycle.ts';
-import { createOperatorCommands } from './operator.ts';
+import { createOperatorCommands, OperatorDeniedError } from './operator.ts';
 import { createRecoveryCompletion } from './recovery-completion.ts';
 
 import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
@@ -28,11 +29,12 @@ import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
 import { createOperatorSessionCapability } from './auth-session-capability.ts';
-import { createCommittedContinuations } from './committed-continuations.ts';
+import { createCommittedContinuations, ContinuationDeniedError } from './committed-continuations.ts';
 import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
+import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
 
 /** Auth-host-owned receipt/staging point-read closures, never request fields or
  * fixture maps. Persist the real createPending command reference under the exact
@@ -126,6 +128,43 @@ const AUTOMATED_PROVISIONING = 'access.workflow-automated-provisioning.v1';
 function required<T>(value: T | null | undefined): T {
   if (value == null) throw new AuthBindingDeniedError();
   return value;
+}
+
+function translateNativeRefusal(error: unknown): never {
+  if (
+    error instanceof LifecycleDeniedError ||
+    error instanceof GrantDeniedError ||
+    error instanceof DelegationDeniedError ||
+    error instanceof ResourceAccessWriteDeniedError ||
+    error instanceof OperatorDeniedError ||
+    error instanceof ContinuationDeniedError
+  )
+    throw new AuthBindingDeniedError();
+  throw error;
+}
+
+/** Keep native command details inside the kernel. Auth receives only a fixed
+ * refusal status, while infrastructure and programming errors retain identity. */
+function authWorkflowBoundary<T extends object>(ports: T): T {
+  return new Proxy(ports, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        try {
+          const result = Reflect.apply(value, target, args);
+          return result &&
+            (typeof result === 'object' || typeof result === 'function') &&
+            'then' in result &&
+            typeof result.then === 'function'
+            ? Promise.resolve(result).catch(translateNativeRefusal)
+            : result;
+        } catch (error) {
+          return translateNativeRefusal(error);
+        }
+      };
+    },
+  });
 }
 
 /** Pure assembly: all I/O occurs in returned capabilities. The Auth getter is
@@ -253,7 +292,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     advanceCredentialFloor: (input) => credentialCapability().advanceCredentialFloor(input),
     readAssignment: (requestedBy, assignedActorId) => readAssignment(pool, requestedBy, assignedActorId),
   };
-  const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = {
+  const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = authWorkflowBoundary({
     ...internalLifecycle,
     ...operators,
     ...lifecycle,
@@ -318,7 +357,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       const outcome = await operators.authorizeOpening({ ...context, account }, input);
       return { ...outcome, value: { receiptId: session.createOpeningReference(outcome.value) } };
     },
-  };
+  });
   return {
     trustedAccess,
     workflowPorts,
