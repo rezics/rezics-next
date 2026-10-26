@@ -23,6 +23,16 @@ afterAll(async () => {
 
 const event = (n: number): CommandEvent => ({ type: 'com.rezics.test.happened.v1', subject: `s${n}`, data: { n } });
 const failure = (code: string) => Object.assign(new Error(`failure ${code}`), { code });
+function withoutPoolAcquireTimeout<T>(use: () => T): T {
+  const previous = process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS;
+  delete process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS;
+  try {
+    return use();
+  } finally {
+    if (previous !== undefined) process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS = previous;
+  }
+}
+
 async function position(partition: number): Promise<number> {
   const { rows } = await admin.query('SELECT position::int FROM core.partition WHERE partition_no = $1', [partition]);
   return rows[0].position;
@@ -241,7 +251,12 @@ test('a command cannot take a second connection from its pool', async () => {
   ).rejects.toBeInstanceOf(NestedPoolCheckoutError);
   expect((await pool.query('SELECT 1 AS one')).rows).toEqual([{ one: 1 }]);
   expect([await position(8), await position(9)]).toEqual([0, 0]);
-  expect(pool.options).toMatchObject({ max: 10, connectionTimeoutMillis: 200, idleTimeoutMillis: 30_000 });
+  const defaultPool = withoutPoolAcquireTimeout(() => createPool(databaseUrl));
+  try {
+    expect(defaultPool.options).toMatchObject({ max: 10, connectionTimeoutMillis: 200, idleTimeoutMillis: 30_000 });
+  } finally {
+    await defaultPool.end();
+  }
 });
 
 test('a command that cannot get a connection in time is refused as overloaded', async () => {

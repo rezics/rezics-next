@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { checkPlan, cleanup, ownDiagnostics, startPostgresContainer } from '../scripts/check.ts';
+import { checkPlan, cleanup, fileEnvironment, ownDiagnostics, startPostgresContainer } from '../scripts/check.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
 
@@ -25,6 +25,19 @@ test('without arguments the check runs every test file and the whole module', ()
   withModule(['src/a.ts', 'test/b.test.ts', 'test/search/c.test.ts', 'test/support/d.ts'], (directory) => {
     expect(checkPlan([], directory)).toEqual({ files: null, tests: ['test/b.test.ts', 'test/search/c.test.ts'] });
   });
+});
+
+test('every check test process gets a 2000 ms pool acquisition timeout', () => {
+  const env = fileEnvironment(
+    { KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '100' },
+    {
+      url: 'postgres://rezics:rezics@127.0.0.1/rezics?',
+      database: 'kernel_test_1',
+      searchUrl: 'http://127.0.0.1:9200',
+      reyloConfig: '/tmp/reylo.yaml',
+    },
+  );
+  expect(env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS).toBe('2000');
 });
 
 test('a focused check runs the named test files and checks only the named files', () => {
