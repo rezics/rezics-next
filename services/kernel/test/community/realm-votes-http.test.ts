@@ -5,6 +5,7 @@ import {
   createProvisioningEvidenceVerifier,
   type AuthService,
 } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -17,6 +18,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 
 const issuer = 'https://realm-votes-http.auth.test';
 const audience = 'https://realm-votes-http.api.test';
@@ -273,6 +275,7 @@ beforeAll(async () => {
   refuser = await person('votes_http_refuser', scopes);
   outsider = await person('votes_http_outsider', scopes);
   await bootstrapGovernance(pool, governance.accountId);
+  await bootstrapRelease(pool, bundledRelease);
   await grant(contextAuthor.accountId, ['context:create']);
   const context = await call('POST', '/v1/contexts', {
     bearer: contextAuthor.bearer,

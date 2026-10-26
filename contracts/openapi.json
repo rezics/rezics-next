@@ -63978,6 +63978,62 @@
                       "protected"
                     ],
                     "type": "string"
+                  },
+                  "votes": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "downvote": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "insightful": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "laugh": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "like": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "love": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "sad": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "upvote": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      }
+                    },
+                    "required": [],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -64067,6 +64123,62 @@
                             "protected"
                           ],
                           "type": "string"
+                        },
+                        "votes": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "downvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "insightful": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "laugh": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "like": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "love": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "sad": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "upvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
                         }
                       },
                       "required": [
@@ -64083,7 +64195,8 @@
                         "title",
                         "summary",
                         "revisionCreatedAt",
-                        "author"
+                        "author",
+                        "votes"
                       ],
                       "type": "object"
                     }
@@ -64951,6 +65064,62 @@
                             "protected"
                           ],
                           "type": "string"
+                        },
+                        "votes": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "downvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "insightful": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "laugh": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "like": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "love": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "sad": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "upvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
                         }
                       },
                       "required": [
@@ -64967,7 +65136,8 @@
                         "title",
                         "summary",
                         "revisionCreatedAt",
-                        "author"
+                        "author",
+                        "votes"
                       ],
                       "type": "object"
                     }
@@ -65512,6 +65682,62 @@
                       "protected"
                     ],
                     "type": "string"
+                  },
+                  "votes": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "downvote": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "insightful": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "laugh": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "like": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "love": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "sad": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      },
+                      "upvote": {
+                        "enum": [
+                          1,
+                          -1
+                        ],
+                        "type": "integer"
+                      }
+                    },
+                    "required": [],
+                    "type": "object"
                   }
                 },
                 "required": [],
@@ -65596,6 +65822,62 @@
                             "protected"
                           ],
                           "type": "string"
+                        },
+                        "votes": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "downvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "insightful": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "laugh": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "like": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "love": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "sad": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "upvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
                         }
                       },
                       "required": [
@@ -65612,7 +65894,8 @@
                         "title",
                         "summary",
                         "revisionCreatedAt",
-                        "author"
+                        "author",
+                        "votes"
                       ],
                       "type": "object"
                     }
@@ -68879,6 +69162,62 @@
                             "protected"
                           ],
                           "type": "string"
+                        },
+                        "votes": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "downvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "insightful": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "laugh": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "like": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "love": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "sad": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            },
+                            "upvote": {
+                              "enum": [
+                                1,
+                                -1
+                              ],
+                              "type": "integer"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
                         }
                       },
                       "required": [
@@ -68895,7 +69234,8 @@
                         "title",
                         "summary",
                         "revisionCreatedAt",
-                        "author"
+                        "author",
+                        "votes"
                       ],
                       "type": "object"
                     }

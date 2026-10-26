@@ -12692,6 +12692,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     summary?: string;
                     visibility: "protected" | "public";
                     contextId: string;
+                    votes?: {
+                        upvote?: -1 | 1;
+                        downvote?: -1 | 1;
+                        like?: -1 | 1;
+                        love?: -1 | 1;
+                        laugh?: -1 | 1;
+                        insightful?: -1 | 1;
+                        sad?: -1 | 1;
+                    };
                 };
                 params: {};
                 query: unknown;
@@ -12715,6 +12724,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             summary: string;
                             revisionCreatedAt: string;
                             author: string;
+                            votes: Readonly<Partial<Record<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote", import("../community/realm-votes.ts").RealmVoteWeight>>>;
                         };
                     };
                     201: {
@@ -12733,6 +12743,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             summary: string;
                             revisionCreatedAt: string;
                             author: string;
+                            votes: {
+                                upvote?: -1 | 1;
+                                downvote?: -1 | 1;
+                                like?: -1 | 1;
+                                love?: -1 | 1;
+                                laugh?: -1 | 1;
+                                insightful?: -1 | 1;
+                                sad?: -1 | 1;
+                            };
                         };
                     };
                     400: {
@@ -12880,6 +12899,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 summary: string;
                                 revisionCreatedAt: string;
                                 author: string;
+                                votes: {
+                                    upvote?: -1 | 1;
+                                    downvote?: -1 | 1;
+                                    like?: -1 | 1;
+                                    love?: -1 | 1;
+                                    laugh?: -1 | 1;
+                                    insightful?: -1 | 1;
+                                    sad?: -1 | 1;
+                                };
                             };
                         };
                         400: {
@@ -13087,6 +13115,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         summary?: string;
                         visibility?: "protected" | "public";
                         contextId?: string;
+                        votes?: {
+                            upvote?: -1 | 1;
+                            downvote?: -1 | 1;
+                            like?: -1 | 1;
+                            love?: -1 | 1;
+                            laugh?: -1 | 1;
+                            insightful?: -1 | 1;
+                            sad?: -1 | 1;
+                        };
                     };
                     params: {
                         realmId: string;
@@ -13113,6 +13150,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 summary: string;
                                 revisionCreatedAt: string;
                                 author: string;
+                                votes: {
+                                    upvote?: -1 | 1;
+                                    downvote?: -1 | 1;
+                                    like?: -1 | 1;
+                                    love?: -1 | 1;
+                                    laugh?: -1 | 1;
+                                    insightful?: -1 | 1;
+                                    sad?: -1 | 1;
+                                };
                             };
                         };
                         400: {
@@ -13267,6 +13313,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     summary: string;
                                     revisionCreatedAt: string;
                                     author: string;
+                                    votes: {
+                                        upvote?: -1 | 1;
+                                        downvote?: -1 | 1;
+                                        like?: -1 | 1;
+                                        love?: -1 | 1;
+                                        laugh?: -1 | 1;
+                                        insightful?: -1 | 1;
+                                        sad?: -1 | 1;
+                                    };
                                 };
                             };
                             400: {

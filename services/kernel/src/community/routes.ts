@@ -12,6 +12,7 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
+import { REACTION_KINDS } from '../content/events.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -27,8 +28,16 @@ import {
   type SpaceDependencies,
 } from './space.ts';
 import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from './space-address.ts';
-import { createRealm, RealmConflictError, RealmInputError, updateRealm, type RealmDependencies } from './realm.ts';
-import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
+import {
+  createRealm,
+  readRealm,
+  RealmConflictError,
+  RealmInputError,
+  updateRealm,
+  type RealmDependencies,
+  type RealmView,
+} from './realm.ts';
+import { setBoardScheme } from './board-scheme.ts';
 import { createRealmParticipationCheck } from './participation.ts';
 import { enqueueRealmJoin, enqueueRealmLeave, readOwnRealmMembership, RealmMembershipConflictError } from './join.ts';
 import { banAccount, unbanAccount, listBans, RealmBanInputError } from './ban.ts';
@@ -68,6 +77,19 @@ const space = t.Object(
   closed,
 );
 const spaceResponse = t.Object({ space }, closed);
+const voteWeight = t.Unsafe<1 | -1>(t.Integer({ enum: [1, -1] }));
+const votes = t.Object(
+  {
+    upvote: t.Optional(voteWeight),
+    downvote: t.Optional(voteWeight),
+    like: t.Optional(voteWeight),
+    love: t.Optional(voteWeight),
+    laugh: t.Optional(voteWeight),
+    insightful: t.Optional(voteWeight),
+    sad: t.Optional(voteWeight),
+  } satisfies Record<(typeof REACTION_KINDS)[number], unknown>,
+  closed,
+);
 const realm = t.Object(
   {
     realmId: id,
@@ -84,6 +106,7 @@ const realm = t.Object(
     summary,
     revisionCreatedAt: instant,
     author: id,
+    votes,
   },
   closed,
 );
@@ -132,6 +155,7 @@ const createRealmInput = t.Object(
     summary: t.Optional(summary),
     visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
     contextId: id,
+    votes: t.Optional(votes),
   },
   closed,
 );
@@ -141,6 +165,7 @@ const updateRealmInput = t.Object(
     summary: t.Optional(summary),
     visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('protected')])),
     contextId: t.Optional(id),
+    votes: t.Optional(votes),
   },
   closed,
 );
@@ -269,7 +294,7 @@ function published(space: Space) {
   };
 }
 
-function publishedRealm(value: Realm) {
+function publishedRealm(value: RealmView) {
   if (value.state !== 'active') throw new ProblemError('not_found');
   return {
     realmId: value.realmId,
@@ -286,6 +311,7 @@ function publishedRealm(value: Realm) {
     summary: value.summary,
     revisionCreatedAt: value.revisionCreatedAt,
     author: value.author,
+    votes: value.votes,
   };
 }
 
@@ -558,6 +584,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                 ...(body.summary === undefined ? {} : { summary: body.summary }),
                 visibility: body.visibility,
                 contextId: body.contextId,
+                ...(body.votes === undefined ? {} : { votes: body.votes }),
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
@@ -679,6 +706,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                 ...(body.summary === undefined ? {} : { summary: body.summary }),
                 ...(body.visibility === undefined ? {} : { visibility: body.visibility }),
                 ...(body.contextId === undefined ? {} : { contextId: body.contextId }),
+                ...(body.votes === undefined ? {} : { votes: body.votes }),
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
