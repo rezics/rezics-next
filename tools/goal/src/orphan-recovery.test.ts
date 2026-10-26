@@ -183,3 +183,63 @@ test('a short command leaves an orphan whose worker runs to the host and skips a
     h.dispose();
   }
 });
+
+// The first attempt ends without a report, the way a killed worker does; the next one succeeds.
+const reportsOnRetry = `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
+if (process.env.GOAL_ATTEMPT !== '1') {
+  writeFileSync('result.txt', 'accepted');
+  spawnSync('git', ['add', 'result.txt']);
+  spawnSync('git', ['commit', '-m', 'Complete fixture']);
+  console.log(JSON.stringify({type:'item.completed',item:{id:'message',type:'agent_message',text:'RESULT: success'}}));
+}
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached_input_tokens:80,output_tokens:20}}));
+`;
+
+test('the host sweep retries an orphan that ended without a report, after it releases the task lease', async () => {
+  const h = harness(reportsOnRetry), landings: { attempt: number }[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    await worker.exited;
+    h.store.updateAttempt(worker.attempt, attempt => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadIdentity();
+    });
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    const started = Date.now();
+    await job.recoverOrphans();
+    await job.drain();
+
+    expect(Date.now() - started).toBeLessThan(20_000);
+    expect(h.store.attempt(worker.attempt).escalation).toBe('environment');
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(h.store.task(task.id).state).toBe('landing');
+    expect(landings.map(request => request.attempt)).toEqual([2]);
+  } finally { h.dispose(); }
+});
+
+test('a classified exit whose retry was lost with its process is retried by the next host sweep', async () => {
+  const h = harness(reportsOnRetry), landings: { attempt: number }[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    await worker.exited;
+    // What a host left behind when it ended between classifying the exit and starting the retry.
+    h.store.updateAttempt(worker.attempt, attempt => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadIdentity();
+      attempt.state = 'exited'; attempt.failureKind = 'tool'; attempt.escalation = 'environment';
+    });
+    h.store.event(worker.attempt, 'attempt-exit-classified', { kind: 'environment', detail: 'killed' });
+    expect(h.store.task(task.id).state).toBe('running');
+
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    await job.recoverOrphans();
+    await job.drain();
+
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(landings.map(request => request.attempt)).toEqual([2]);
+    expect(h.store.retryIntent(worker.attempt)?.status).toBe('started');
+  } finally { h.dispose(); }
+});
