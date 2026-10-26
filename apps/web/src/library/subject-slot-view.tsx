@@ -1,7 +1,11 @@
-// The web package does not depend on Ark directly. The styled select's collection helper
-// comes from the UI package's installed Ark build.
-import { createListCollection } from '../../../../packages/ui/node_modules/@ark-ui/react/dist/components/select/index.js';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@rezics/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -46,23 +50,22 @@ function LibraryStateSelect({
     ...stateOptions.map(([value, label]) => ({ value, label })),
     ...(hasEntry ? [{ value: removeValue, label: m.library_subject_remove() }] : []),
   ];
-  const collection = createListCollection({ items: choices });
   return (
     <Select
-      collection={collection}
       disabled={disabled}
-      onValueChange={(details) => onChoose(details.value[0] ?? '')}
-      value={selectedState ? [selectedState] : []}
+      items={choices}
+      onValueChange={(value) => onChoose(value ?? '')}
+      value={selectedState || null}
     >
       <SelectTrigger aria-busy={busy ? true : undefined} aria-label={m.library_subject_entry()} className="w-fit">
         {busy ? <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : null}
         <SelectValue placeholder={m.library_subject_add()} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent alignItemWithTrigger={false}>
         {choices.map((option) => (
           <Fragment key={option.value}>
             {option.value === removeValue ? <SelectSeparator /> : null}
-            <SelectItem item={option}>{option.label}</SelectItem>
+            <SelectItem value={option.value}>{option.label}</SelectItem>
           </Fragment>
         ))}
       </SelectContent>
