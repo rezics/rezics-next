@@ -8,7 +8,12 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 afterAll(() => pool.end());
 
-const probe = { operationId: 'deadline.probe', 'x-action': 'deadline:read', security: [{ bearerAuth: [] }, {}] };
+const probe = {
+  operationId: 'deadline.probe',
+  'x-action': 'deadline:read',
+  'x-exposure': 'public',
+  security: [{ bearerAuth: [] }, {}],
+};
 let late: Promise<number> | undefined;
 const app = createApp({ pool, requestDeadlineMs: 1_234 }).get('/v1/deadline', { detail: probe }, async ({ job }) => {
   await Bun.sleep(1);

@@ -308,38 +308,23 @@ export function createApp({
       catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
     );
     return (request) => {
-      const url = new URL(request.url);
-      const path = url.pathname;
-      // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
-      if (/\/(?:\$|%24)/i.test(path))
-        return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
+      return withRequestDeadline(Date.now() + requestDeadlineMs, () => {
+        const url = new URL(request.url);
+        const path = url.pathname;
+        // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
+        if (/\/(?:\$|%24)/i.test(path))
+          return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
 
-      const colon = path.lastIndexOf(':');
-      if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
-        url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
-        const rewritten = new Request(url, request);
-        originalRequests.set(rewritten, request);
-        return handle(rewritten);
-      }
-      return handle(request);
+        const colon = path.lastIndexOf(':');
+        if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
+          url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
+          const rewritten = new Request(url, request);
+          originalRequests.set(rewritten, request);
+          return handle(rewritten);
+        }
+        return handle(request);
+      });
     };
-  });
-
-  const handle = app.handle;
-  Object.defineProperty(app, 'handle', {
-    configurable: true,
-    value: (request: string | Request, options?: RequestInit) =>
-      withRequestDeadline(Date.now() + requestDeadlineMs, () => handle(request, options)),
-  });
-  const fetchGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(app), 'fetch')?.get;
-  if (!fetchGetter) throw new TypeError('Elysia fetch method is unavailable');
-  Object.defineProperty(app, 'fetch', {
-    configurable: true,
-    value: (request: Request) =>
-      withRequestDeadline(Date.now() + requestDeadlineMs, () => {
-        const fetch = fetchGetter.call(app) as (request: Request) => Response | Promise<Response>;
-        return fetch(request);
-      }),
   });
   return app;
 }
