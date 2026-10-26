@@ -280,14 +280,33 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       [accountId, selected.clientId],
     );
     const consent = result.rows[0];
+    // An approved operator opening is the managing person's consent act, so it needs no stored consent;
+    // issuance records it. Only a reduction in progress still bounds it.
+    const consentRequired = selected.opening
+      ? consent?.pending_scopes != null
+      : !client.first_party || consent?.pending_scopes != null;
     if (
-      ((!client.first_party || consent?.pending_scopes != null) &&
-        (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope)))) ||
+      (consentRequired && (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope)))) ||
       (consent?.pending_scopes && selected.scopes.some((scope) => !consent.pending_scopes!.includes(scope)))
     )
       throw new Denied();
     if (binding.getStore()) await materialize(accountId, selected.clientId, client.scopes, client.first_party);
     return client;
+  }
+  // Consent via issuance: the consumed opening is the managing person's consent act for its client and
+  // scopes. It adds to the stored consent and never narrows it; only the reduction barrier does that.
+  async function recordOpeningConsent(accountId: string, selected: Binding) {
+    if ((await clientFor(selected.clientId)).first_party) return;
+    await database.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `auth-consent:${accountId}:${selected.clientId}`,
+    ]);
+    await database.query(
+      `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
+       ON CONFLICT (account_id,client_id) DO UPDATE
+       SET scopes=ARRAY(SELECT s FROM unnest(auth_consent.scopes || EXCLUDED.scopes) AS s GROUP BY s ORDER BY s COLLATE "C")
+       WHERE auth_consent.pending_reference IS NULL`,
+      [accountId, selected.clientId, selected.scopes],
+    );
   }
   const website = websiteRoutes({
     options,
@@ -337,10 +356,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               if (!selected?.subjectId) throw new APIError('UNAUTHORIZED');
               const user = await ctx.context.internalAdapter.findUserById(selected.subjectId);
               if (!user) throw new APIError('UNAUTHORIZED');
-              const session = await ctx.context.internalAdapter.createSession(user.id);
-              if (!session) throw new APIError('UNAUTHORIZED');
-              try {
-                if (selected.opening)
+              // The session, its opening record and the opening's consent commit together or not at all.
+              await ctx.context.adapter.transaction(async () => {
+                const session = await ctx.context.internalAdapter.createSession(user.id);
+                if (!session) throw new APIError('UNAUTHORIZED');
+                if (selected.opening) {
                   await database.query(
                     'INSERT INTO auth_session_opening (session_id, subject_account_id, acting_human_id, operator_account_id, receipt_id) VALUES ($1,$2,$3,$4,$5)',
                     [
@@ -351,12 +371,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                       selected.opening.receiptId,
                     ],
                   );
+                  await recordOpeningConsent(user.id, selected);
+                }
                 await setSessionCookie(ctx, { session, user });
-                return ctx.json({ success: true });
-              } catch (error) {
-                await ctx.context.internalAdapter.deleteSession(session.token);
-                throw error;
-              }
+              });
+              return ctx.json({ success: true });
             }),
           },
         },

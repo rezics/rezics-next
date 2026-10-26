@@ -125,7 +125,11 @@ compares the floor again, advances once and inserts one persistent native receip
 Concurrent exact retries return that receipt; other operations at the old floor and later supersession deny.
 Committed receipt and current account state are read back before returning to Auth.
 
-Auth also lets an operator-opened session of an automated account reduce that account's consent for a client through the same barrier and receipt; it never grants or widens an automated account's consent.
+An automated account's consent to a third-party client is granted only by an approved operator opening: the opening binds
+the acting human's client and exact scopes when it is created, and Auth records that consent for the opening's client and
+scopes in the transaction that installs the session. The record only adds scopes; the consent endpoint never grants or
+widens it.
+Auth also lets an operator-opened session of an automated account reduce that account's consent for a client through the same barrier and receipt.
 Only `consent-reduction` advances an automated account's floor; `recovery` still requires an account without an operator.
 Auth sends `openingReceiptId` exactly for such a reduction and binds it into the consent proof, so Access accepts only the
 opening Auth committed for that session. Before advancing, the account lock reads that opening once, anchored on the
