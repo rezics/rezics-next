@@ -66,6 +66,8 @@ export interface AccountLifecycleDriver {
   createAutomated(actingHuman: Session, operatorId: string, handle: string): Promise<string | 'denied'>;
   patchAccount(actingHuman: Session, id: string, patch: { id?: string; kind?: string; handle?: string }): Promise<Outcome>;
   setOperator(actingHuman: Session, id: string, operatorId: string): Promise<Outcome>;
+  /** The destination operator's manager accepts operating id; the source's next setOperator to operatorId uses it. */
+  acceptOperator(actingHuman: Session, id: string, operatorId: string): Promise<Outcome>;
   setManagement(actingHuman: Session, operatorId: string, humanId: string, allowed: boolean): Promise<Outcome>;
   setMembership(owner: Session, organizationId: string, accountId: string, role: 'owner' | 'member' | null): Promise<Outcome>;
   members(organizationId: string): Promise<{ accountId: string; role: 'owner' | 'member' }[]>;

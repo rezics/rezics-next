@@ -282,6 +282,9 @@ test('operator transfer invalidates old management and never inherits either ope
   expect(await d().useResource(next.session, nextResource)).toBe('permitted');
   const before = await authenticated(d().openSession(old.session, agent));
   expect(await d().useResource(before, oldResource)).toBe('denied');
+  expect(await d().setOperator(old.session, agent, next.id)).toBe('denied');
+  expect(await d().acceptOperator(old.session, agent, next.id)).toBe('denied');
+  expect(await d().acceptOperator(next.session, agent, next.id)).toBe('permitted');
   expect(await d().setOperator(old.session, agent, next.id)).toBe('permitted');
   expect(await d().account(agent)).toMatchObject({ operatorId: next.id });
   expect(await d().openSession(old.session, agent)).toEqual({ outcome: 'denied' });
@@ -304,6 +307,7 @@ test('an operator cannot be deleted until its operated accounts transfer or dele
   const second = await automated(owner, 'second');
   expect(await d().deleteAccount(owner.session, owner.id)).toBe('denied');
   expect(await d().account(owner.id)).toMatchObject({ state: 'active' });
+  expect(await d().acceptOperator(next.session, first, next.id)).toBe('permitted');
   expect(await d().setOperator(owner.session, first, next.id)).toBe('permitted');
   expect(await d().deleteAccount(owner.session, owner.id)).toBe('denied');
   expect(await d().deleteAccount(owner.session, second)).toBe('permitted');

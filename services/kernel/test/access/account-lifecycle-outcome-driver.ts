@@ -168,6 +168,8 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
   const registrations = new Map<string, string>();
   const emails = new Map<string, string>();
   const grantedCreators = new Set<string>();
+  // Destination acceptances awaiting the source's transfer, by `${subject}:${destination}`.
+  const acceptances = new Map<string, { operationKey: string; reference: string }>();
 
   const hookFailure = () => hook.failure;
   const outage = () => revocationOutage;
@@ -433,6 +435,18 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
     ).rows[0];
     return row;
   }
+  /** The responsibility record a transfer names, read from the persisted account. */
+  async function transferRecord(caller: Caller, id: string) {
+    const current = await responsibilityOf(id);
+    return {
+      previous: {
+        operatorAccountId: current?.operator_account_id ?? caller.accountId,
+        subjectAccountId: id,
+        reservationId: current?.operator_reservation_id ?? newId(route(id)),
+      },
+      expectedVersion: current?.version ?? '0',
+    };
+  }
   async function openingFor(actingHuman: Session, subjectId: string): Promise<Login> {
     const human = callerOf(actingHuman);
     const humanId = human.accountId;
@@ -689,23 +703,38 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
       });
       return result === 'denied' ? 'denied' : 'permitted';
     },
+    async acceptOperator(actingHuman, id, operatorId) {
+      const caller = callerOf(actingHuman);
+      const { previous, expectedVersion } = await transferRecord(caller, id);
+      const operationKey = label('transfer');
+      const result = await refused(async () => {
+        const approval = await approved(caller, operationKey, {
+          kind: 'transfer-acceptance',
+          previous,
+          expectedVersion,
+          operatorAccountId: operatorId,
+          sourceOperationKey: operationKey,
+        });
+        return approval.reference;
+      });
+      if (result === 'denied') return 'denied';
+      acceptances.set(`${id}:${operatorId}`, { operationKey, reference: result });
+      return 'permitted';
+    },
     async setOperator(actingHuman, id, operatorId) {
       const caller = callerOf(actingHuman);
-      const humanId = caller.accountId;
-      const current = await responsibilityOf(id);
-      const previous = {
-        operatorAccountId: current?.operator_account_id ?? humanId,
-        subjectAccountId: id,
-        reservationId: current?.operator_reservation_id ?? newId(route(id)),
-      };
-      const expectedVersion = current?.version ?? '0';
+      const { previous, expectedVersion } = await transferRecord(caller, id);
+      // The destination's acceptance, when one was given, travels with the transfer it names.
+      const accepted = acceptances.get(`${id}:${operatorId}`);
+      const key = accepted?.operationKey ?? label('transfer');
+      const acceptance = accepted ? { acceptance: accepted.reference } : {};
       const result = await refused(async () => {
-        const key = label('transfer');
         const approval = await approved(caller, key, {
           kind: 'transfer',
           previous,
           expectedVersion,
           operatorAccountId: operatorId,
+          ...acceptance,
         });
         return wf().transferOperator({
           key,
@@ -713,9 +742,12 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
           previous,
           expectedVersion,
           operatorAccountId: operatorId,
+          ...acceptance,
         });
       });
-      return result === 'denied' ? 'denied' : 'permitted';
+      if (result === 'denied') return 'denied';
+      acceptances.delete(`${id}:${operatorId}`);
+      return 'permitted';
     },
     async setManagement(actingHuman, operatorId, humanId, allowed) {
       const caller = callerOf(actingHuman);
@@ -867,8 +899,8 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
       return {
         id: value.id as string,
         kind: value.kind as PublicView['kind'],
-        automated: value.operatorAccountId != null,
-        ...(value.operatorAccountId ? { operatorId: value.operatorAccountId as string } : {}),
+        automated: value.automated === true,
+        ...(value.operatorId ? { operatorId: value.operatorId as string } : {}),
         raw: value,
       };
     },
@@ -963,7 +995,11 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
       revocationOutage = controls.failAuthRevocation === true;
       delete hook.failure;
       try {
-        await wf().revokeSessions({ accountId: subjectId, key: label('revoke') });
+        // Platform governance on the Global Context, the path suspension uses.
+        const staff = await platform();
+        const key = label('revoke');
+        const approval = await approved(staff.caller, key, { kind: 'revoke', accountId: subjectId });
+        await wf().revokeSessions({ accountId: subjectId, key, authorization: approval.reference });
         return 'revoked';
       } catch (error) {
         const failed = hookFailure();
