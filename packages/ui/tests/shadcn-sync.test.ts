@@ -46,7 +46,8 @@ test('the reminder opens an issue only when the last sync is older than seven da
         commands.push({ command, args });
         if (command !== 'gh') throw new Error(`unexpected command: ${command}`);
         if (args[0] === 'issue' && args[1] === 'list') return { stdout: JSON.stringify(scenario.openIssues) };
-        if (args[0] === 'issue' && args[1] === 'create') return { stdout: 'https://github.com/rezics/rezics-next/issues/99\n' };
+        if (args[0] === 'issue' && args[1] === 'create')
+          return { stdout: 'https://github.com/rezics/rezics-next/issues/99\n' };
         throw new Error(`unexpected gh command: ${args.join(' ')}`);
       };
 
@@ -110,9 +111,9 @@ test('the manual sync re-adds every cloned component, refreshes the capability i
 
     expect(result).toEqual({ version: newestVersion, syncedAt: now.toISOString() });
     expect(registry.requests).toEqual(['https://registry.npmjs.org/shadcn/latest']);
-    expect(commands.some(({ command, args }) => command === 'bun' && args.join(' ') === 'scripts/shadcn-index.ts')).toBe(
-      true,
-    );
+    expect(
+      commands.some(({ command, args }) => command === 'bun' && args.join(' ') === 'scripts/shadcn-index.ts'),
+    ).toBe(true);
     expect(commands.some(({ command, args }) => command === 'git' && args.join(' ') === 'diff --')).toBe(true);
     expect(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).devDependencies.shadcn).toBe(newestVersion);
     expect(JSON.parse(readFileSync(join(root, 'shadcn-sync.json'), 'utf8'))).toEqual({

@@ -1,0 +1,21 @@
+name: shadcn sync reminder
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Check whether a shared sync issue is needed
+        run: bun packages/ui/scripts/shadcn-sync-check.ts
+        env:
+          GH_TOKEN: ${{ github.token }}

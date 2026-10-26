@@ -17,7 +17,9 @@ The package uses shadcn's Rhea style on the Base UI primitives (`components.json
 - Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand: brand changes belong in `src/styles.css`, and our own components in `src/components/`. Import them as `@rezics/ui/shadcn/<name>`; `src/index.ts` does not re-export them, because their names clash with the Ark components.
 - The shadcn colour variables map to the Aura tokens in `src/styles.css`, layered after the Rhea defaults.
 - Stories for shadcn components are `src/components/shadcn-<name>.stories.tsx`, titled `shadcn/<Name>`.
-- The package tracks the newest shadcn release; a sync workflow that re-runs the CLI and shows the diff arrives in a follow-up task. Refresh the capability index with `bun scripts/shadcn-index.ts`, which rewrites `shadcn-registry.json` and `SHADCN.md` (`--offline` regenerates `SHADCN.md` from the snapshot).
+- `shadcn-sync.json` records the last successful sync time and CLI version. The daily GitHub check opens one shared `shadcn-sync` issue when that sync is more than seven days old; it never syncs components. Anyone with repository issue access can also run `bun run shadcn:sync-check` in this directory.
+- Whoever takes the issue runs `bun run shadcn:sync` here as an ordinary task. It re-adds every cloned component from `shadcn@latest`, refreshes `shadcn-registry.json` and `SHADCN.md` with `scripts/shadcn-index.ts`, pins dependencies exactly, updates the sync record and shows the diff. Review all changes and run `bun run check` before committing. Include `Closes #<issue-number>` in the sync commit message; the issue closes when the commit reaches the default branch. The sync never runs automatically, so people do not redo it in parallel.
+- To refresh only the capability index outside a sync, run `bun scripts/shadcn-index.ts`; `--offline` regenerates `SHADCN.md` from the committed registry snapshot.
 
 ## Cover
 
