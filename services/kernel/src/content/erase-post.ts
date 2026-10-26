@@ -372,7 +372,7 @@ export async function erasePostLogicalPageAsInitiator(
       // still gets its own ordinary Access admission/check and scope validation.
       const verified = await first.restore(attempt);
       const proofs: unknown[] = [];
-      for (const point of points) proofs.push(await point.prepareRestored(attempt, verified));
+      for (const point of points) proofs.push({ targetProof: await point.prepareRestored(attempt, verified) });
       return proofs;
     },
     async authorize(tx, attempt, evidence) {
