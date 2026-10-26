@@ -306,16 +306,7 @@ $$;
 CREATE FUNCTION content.guard_review_thread() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE
-  board_purpose text;
 BEGIN
-  SELECT purpose INTO board_purpose
-  FROM content.board
-  WHERE route = get_byte(uuid_send(NEW.board_id), 10) * 256 + get_byte(uuid_send(NEW.board_id), 11)
-    AND board_id = NEW.board_id;
-  IF board_purpose IS NULL OR (board_purpose = 'reviews') IS DISTINCT FROM (NEW.kind = 'review') THEN
-    RAISE EXCEPTION 'Thread kind must match its board purpose' USING ERRCODE = '23514';
-  END IF;
   IF OLD.review_live IS FALSE AND NEW.review_live IS TRUE THEN
     RAISE EXCEPTION 'A removed review cannot become live again' USING ERRCODE = '23514';
   END IF;
@@ -935,7 +926,7 @@ CREATE TABLE content.thread (
     CONSTRAINT thread_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT thread_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT thread_kind_check CHECK ((kind = ANY (ARRAY['discussion'::text, 'review'::text]))),
-    CONSTRAINT thread_review_route_check CHECK (((kind <> 'review'::text) OR (route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11))))),
+    CONSTRAINT thread_review_route_check CHECK (((kind <> 'review'::text) OR (route = ((get_byte(uuid_send(author_account_id), 10) * 256) + get_byte(uuid_send(author_account_id), 11))))),
     CONSTRAINT thread_review_subject_check CHECK ((((kind = 'review'::text) AND (review_subject_id IS NOT NULL)) OR ((kind = 'discussion'::text) AND (review_subject_id IS NULL)))),
     CONSTRAINT thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT thread_security_revision_check CHECK ((security_revision > 0)),
@@ -1368,10 +1359,10 @@ CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXEC
 
 
 --
--- Name: thread thread_review_board; Type: TRIGGER; Schema: content; Owner: -
+-- Name: thread thread_review_live; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER thread_review_board BEFORE INSERT OR UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_review_thread();
+CREATE TRIGGER thread_review_live BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_review_thread();
 
 
 --

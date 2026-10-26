@@ -122,24 +122,29 @@ async function applyChange(pool: Pool, event: CloudEvent, change: Change): Promi
       key: `${event.id}:${partition}`,
       digest,
     };
-    const parameters = {
+    // Keep one command per partition, with an explicit route binding for each statement.
+    const updates = [...new Set(affected.map(requiredRoute))].map((route) => ({
+      route,
       thread_route: change.threadRoute,
       thread_id: change.data.threadId,
       place_id: change.data.placeId,
       kind: change.data.kind,
-      subject_ids: group.current,
-      previous_subject_ids: group.previous,
+      subject_ids: group.current.filter((id) => requiredRoute(id) === route),
+      previous_subject_ids: group.previous.filter((id) => requiredRoute(id) === route),
       activity_at: change.data.activityAt,
       source_epoch: change.epoch,
       source_position: change.position.toString(),
-    };
+    }));
     try {
       await runCommand(pool, { partition, receipt }, async (tx) => {
-        const result = await tx.query<{ changed: string | number }>(
-          upsert.sql,
-          upsert.params.map((name) => parameters[name as keyof typeof parameters]),
-        );
-        const changed = Number(result.rows[0]?.changed ?? 0);
+        let changed = 0;
+        for (const parameters of updates) {
+          const result = await tx.query<{ changed: string | number }>(
+            upsert.sql,
+            upsert.params.map((name) => parameters[name as keyof typeof parameters]),
+          );
+          changed += Number(result.rows[0]?.changed ?? 0);
+        }
         if (changed === 0) throw new UnchangedSubjectThread();
         return {
           value: null,

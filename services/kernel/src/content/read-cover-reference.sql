@@ -1,5 +1,7 @@
 -- A reference fact only: current subject authorization and source fences belong to the caller.
-WITH requested AS MATERIALIZED (
+WITH input AS NOT MATERIALIZED (
+  SELECT :partition::integer AS partition
+), requested AS MATERIALIZED (
   SELECT route, media_id
   FROM unnest(:routes::integer[], :media_ids::uuid[]) AS ids(route, media_id)
 )
@@ -11,11 +13,12 @@ SELECT media.media_id AS "mediaId", media.container_id AS "containerId", media.s
        media.average_color AS color,
        COALESCE(variants.variants_json, '[]') AS "variantsJson",
        media.focal_x AS "focalX", media.focal_y AS "focalY"
-FROM requested
+FROM requested CROSS JOIN input i
 CROSS JOIN LATERAL (
   SELECT candidate.*
   FROM content.media AS candidate
   WHERE candidate.route = requested.route AND candidate.media_id = requested.media_id
+    AND candidate.route >= i.partition * 16 AND candidate.route < (i.partition + 1) * 16
     AND candidate.purpose = 'cover' AND candidate.state = 'available'
     AND NOT candidate.erased AND NOT candidate.collection_pending AND NOT candidate.taken_down
     AND candidate.actual_byte_count IS NOT NULL AND candidate.media_type IS NOT NULL
@@ -27,4 +30,5 @@ LEFT JOIN LATERAL (
                    ORDER BY variant.width, variant.format)::text AS variants_json
   FROM content.media_variant AS variant
   WHERE variant.route = media.route AND variant.media_id = media.media_id
+    AND variant.route >= i.partition * 16 AND variant.route < (i.partition + 1) * 16
 ) AS variants ON true;

@@ -1,5 +1,6 @@
-WITH input AS MATERIALIZED (
-  SELECT :thread_route::integer AS thread_route,
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route,
+    :thread_route::integer AS thread_route,
     :thread_id::uuid AS thread_id,
     :place_id::uuid AS place_id,
     :kind::text AS kind,
@@ -11,8 +12,7 @@ WITH input AS MATERIALIZED (
 ), removed AS (
   DELETE FROM content.subject_thread AS indexed
   USING input CROSS JOIN LATERAL unnest(input.previous_subject_ids) AS subjects(subject_id)
-  WHERE indexed.route = get_byte(uuid_send(subjects.subject_id), 10) * 256
-      + get_byte(uuid_send(subjects.subject_id), 11)
+  WHERE indexed.route = input.route
     AND indexed.subject_id = subjects.subject_id
     AND NOT subjects.subject_id = ANY(input.subject_ids)
     AND indexed.thread_route = input.thread_route
@@ -22,7 +22,7 @@ WITH input AS MATERIALIZED (
 ), written AS (
   INSERT INTO content.subject_thread AS indexed
     (route, subject_id, thread_route, thread_id, place_id, kind, last_activity_at, source_epoch, source_position)
-  SELECT get_byte(uuid_send(subjects.subject_id), 10) * 256 + get_byte(uuid_send(subjects.subject_id), 11),
+  SELECT input.route,
     subjects.subject_id, input.thread_route, input.thread_id, input.place_id, input.kind,
     input.activity_at, input.source_epoch, input.source_position
   FROM input CROSS JOIN LATERAL unnest(input.subject_ids) AS subjects(subject_id)

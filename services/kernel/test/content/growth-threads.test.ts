@@ -189,7 +189,7 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
     hotPartition: homePartition,
     hotShare: 1,
     rows: ({ ordinal, route: placedRoute }) => {
-      const route = mode === 'reviews' ? board.route : placedRoute;
+      const route = mode === 'reviews' ? routeOf(actor.accountId)! : placedRoute;
       const threadId = newId(route);
       const postId = newId(route);
       const revisionId = newId(route);
@@ -693,6 +693,10 @@ test('Review creation stays within its bound as the reviews board grows', async 
     subjectId: newId(board.route),
     key: `review-${Bun.randomUUIDv7()}`,
   }));
+  const warmupInputs = reviewScales.map(() => ({
+    subjectId: newId(board.route),
+    key: `review-warmup-${Bun.randomUUIDv7()}`,
+  }));
   const voteRoute = routeOf(actor.accountId)!;
   await db.admin.query(
     `INSERT INTO rating.vote (route, voter_id, question_id, target_id, units, revision, changed_at, transaction_id)
@@ -704,10 +708,26 @@ test('Review creation stays within its bound as the reviews board grows', async 
       STANDARD_QUESTION_ID,
       baseTime,
       newId(voteRoute),
-      inputs.map(({ subjectId }) => subjectId),
+      [...inputs, ...warmupInputs].map(({ subjectId }) => subjectId),
     ],
   );
   const statements: string[] = [];
+  const createReview = (growthDb: GrowthDatabase, input: (typeof inputs)[number]) =>
+    createThread(
+      commandDependencies(growthDb.pool),
+      actor,
+      {
+        kind: 'review',
+        title: 'Fixed growth review',
+        body,
+        licence: 'MIT',
+        subjectIds: [input.subjectId],
+        boardId: board.id,
+        visibility: 'published',
+        voteCitation: { questionId: STANDARD_QUESTION_ID, units: 5, revision: 1 },
+      },
+      requestContext(input.key),
+    );
   const report = await checkGrowth(db, {
     name: 'Review creation with vote citation',
     bounds,
@@ -726,30 +746,15 @@ test('Review creation stays within its bound as the reviews board grows', async 
       });
       const seeded = await recorded.admin.query<{ total: number }>(
         `SELECT count(*)::integer AS total FROM content.thread
-         WHERE route = $1 AND board_id = $2 AND kind = 'review' AND review_live`,
-        [board.route, board.id],
+         WHERE board_id = $1 AND kind = 'review' AND review_live`,
+        [board.id],
       );
       const completedScales = reviewScales.findIndex((candidate) => candidate === scale);
       expect(seeded.rows[0]!.total).toBe(scale + completedScales * 4);
     },
-    operation: async (growthDb, _scale, repetition) => {
-      const input = inputs[repetition]!;
-      return createThread(
-        commandDependencies(growthDb.pool),
-        actor,
-        {
-          kind: 'review',
-          title: 'Fixed growth review',
-          body,
-          licence: 'MIT',
-          subjectIds: [input.subjectId],
-          boardId: board.id,
-          visibility: 'published',
-          voteCitation: { questionId: STANDARD_QUESTION_ID, units: 5, revision: 1 },
-        },
-        requestContext(input.key),
-      );
-    },
+    warmup: async (growthDb, scale) =>
+      createReview(growthDb, warmupInputs[reviewScales.findIndex((candidate) => candidate === scale)]!),
+    operation: async (growthDb, _scale, repetition) => createReview(growthDb, inputs[repetition]!),
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...reviewScales]);
   for (const sample of report.samples) {

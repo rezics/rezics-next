@@ -592,7 +592,7 @@ export async function createThread(
     dependencies.routeKey,
     author.accountId,
     context.idempotencyKey,
-    threadKind === 'review' ? board.route : undefined,
+    threadKind === 'review' ? route(author.accountId) : undefined,
   );
   const postTarget = { route: target.route, id: newId(target.route) };
   const value = { threadId: target.id, itemId: postTarget.id, revisionId: newId(target.route) };
@@ -626,6 +626,7 @@ export async function createThread(
           throw new ContentNotFoundError();
         const current = await mediaParentBoard(client, board.id);
         threadPlaceId = current.realm_id ?? GLOBAL_CONTEXT;
+        // board_identity makes purpose immutable, so this validation cannot race a purpose change.
         if ((current.purpose === 'reviews') !== (threadKind === 'review')) throw new InvalidDocumentError();
         if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
           throw new ContentForbiddenError();

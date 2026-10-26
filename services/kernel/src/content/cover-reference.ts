@@ -89,8 +89,8 @@ export async function checkMediaObjects(
     group.mediaIds.push(id);
   }
 
-  for (const { routes, mediaIds } of groups.values()) {
-    const rows = await readCoverReference.run(client, { routes, media_ids: mediaIds });
+  for (const [partition, { routes, mediaIds }] of groups) {
+    const rows = await readCoverReference.run(client, { partition, routes, media_ids: mediaIds });
     for (const row of rows) results.set(row.mediaId, coverReferenceWithMetadata(row));
   }
   return results;
