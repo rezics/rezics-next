@@ -51,7 +51,6 @@ export function createCollectionJob(
         candidates.push(
           ...(await selectCandidates.run(client, {
             route,
-            pending_route: route,
             at: time.at,
             batch,
             pending_batch: batch,

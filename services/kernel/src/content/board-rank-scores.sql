@@ -13,7 +13,9 @@ SELECT totals.target_id::text AS thread_id, totals.kind, totals.count
 FROM requested
 JOIN LATERAL (
   SELECT stored.target_id, stored.kind, stored.count
-  FROM content.reaction_total AS stored
-  WHERE stored.route = requested.route
+  FROM content.reaction_total AS stored CROSS JOIN input
+  WHERE stored.route >= input.partition * 16
+    AND stored.route < (input.partition + 1) * 16
+    AND stored.route = requested.route
     AND stored.target_id = requested.thread_id
 ) AS totals ON true;

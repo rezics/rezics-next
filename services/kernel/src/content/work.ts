@@ -234,13 +234,25 @@ async function registerWork(
     },
     { name: CONTENT_WORKFLOWS.collect },
   );
-  const refreshRanks = DBOS.registerStep(async () => refreshBoardRankBatch(context.pool, context.clock()), {
-    name: 'content.board-rank.refresh.step',
-    ...RETRY,
-  });
-  DBOS.registerWorkflow(async (_scheduledDate: Date, _context: unknown) => refreshRanks(), {
-    name: BOARD_RANK_WORKFLOW,
-  });
+  const refreshRanks = DBOS.registerStep(
+    async (chunk: readonly number[]) => {
+      const at = context.clock();
+      return Promise.all(chunk.map((partition) => refreshBoardRankBatch(context.pool, at, [partition])));
+    },
+    {
+      name: 'content.board-rank.refresh.step',
+      ...RETRY,
+    },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY)
+        await refreshRanks(partitions.slice(offset, offset + PARTITION_CONCURRENCY));
+    },
+    {
+      name: BOARD_RANK_WORKFLOW,
+    },
+  );
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
