@@ -39,6 +39,10 @@ export function acquireDirectoryLeaseWaiting(directory: string, timeoutMs = 30_0
     try { return acquireDirectoryLease(directory); }
     catch (error) {
       if (!(error instanceof LeaseHeldError)) throw error;
+      // This wait blocks the event loop, so a lease this process holds is never released while it waits.
+      const owner = readOwner(directory);
+      if (owner.kind === 'owner' && owner.owner.pid === process.pid)
+        throw new LeaseHeldError(`Lease held by this process: ${directory}`);
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`);
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(50, remaining));

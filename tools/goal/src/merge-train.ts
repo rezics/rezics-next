@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
@@ -644,7 +644,11 @@ export class MergeTrain {
     const devBranch = this.options.integrationBranch ?? 'dev';
     const devRef = `refs/heads/${devBranch}`;
     try {
-      if (this.commitIsAncestor(candidate, devBranch)) return;
+      if (this.commitIsAncestor(candidate, devBranch)) {
+        // Merged, by the train or by hand: a later conflict is news again.
+        rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
+        return;
+      }
       for (let attempt = 0; attempt < 5; attempt++) {
         const expected = this.ensureBranch(devBranch);
         try {
@@ -674,6 +678,7 @@ export class MergeTrain {
         if (merged === expected) return;
         try {
           git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
+          rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
           return;
         } catch (error) {
           if (git(this.options.mainCheckout, 'rev-parse', devRef) === expected) throw error;
@@ -725,6 +730,16 @@ export class MergeTrain {
     commit: string,
     files: readonly string[],
   ): void {
+    // The same unresolved conflict comes back with every later integration; one notice per conflict is enough, and the
+    // watchdog reports a stabilize branch that stays out of dev.
+    const record = join(this.options.stateDirectory, 'stabilize-conflict.json');
+    const key = [...files].sort().join('\n');
+    try {
+      if (existsSync(record) && (JSON.parse(readFileSync(record, 'utf8')) as { key?: string }).key === key) return;
+    } catch {
+      /* Notify again rather than never. */
+    }
+    writeFileSync(record, JSON.stringify({ key, taskId, commit }));
     const summary = `Task ${taskId} stabilize ${commit} conflicts with dev: ${files.join(', ')}`.replace(
       /[\r\n]+/g,
       ' ',

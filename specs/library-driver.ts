@@ -25,39 +25,94 @@ export type EntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'd
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
 export interface CollectionView {
-  id: string; curatorAccountId: string; title: string; description: string | null;
-  visibility: Visibility; revision: number; memberCount: number; createdAt: string; updatedAt: string;
+  id: string;
+  curatorAccountId: string;
+  title: string;
+  description: string | null;
+  visibility: Visibility;
+  revision: number;
+  memberCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
-export interface MemberView { id: string; subjectId: string; note: string | null; addedAt: string }
+export interface MemberView {
+  id: string;
+  subjectId: string;
+  note: string | null;
+  addedAt: string;
+}
 export interface EntryView {
-  subjectId: string; state: EntryState; revision: number; createdAt: string; updatedAt: string;
+  subjectId: string;
+  state: EntryState;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface SessionView {
-  id: string; subjectId: string; versionSubjectId: string | null; mode: ProgressMode; unit: ProgressUnit;
-  total: string | null; amount: string | null; locator: string | null; position: string | null;
-  completedUnitCount: number; state: 'active' | 'completed' | 'abandoned'; revision: number;
-  startedAt: string; completedAt: string | null;
+  id: string;
+  subjectId: string;
+  versionSubjectId: string | null;
+  mode: ProgressMode;
+  unit: ProgressUnit;
+  total: string | null;
+  amount: string | null;
+  locator: string | null;
+  position: string | null;
+  completedUnitCount: number;
+  state: 'active' | 'completed' | 'abandoned';
+  revision: number;
+  startedAt: string;
+  completedAt: string | null;
 }
-export type RecordIntent = { amount: string } | { locator: string; position: string }
+export type RecordIntent =
+  | { amount: string }
+  | { locator: string; position: string }
   | { add?: string[]; remove?: string[] };
 export interface ProgressChange {
-  id: string; revision: number; intent: RecordIntent | { action: 'complete' | 'abandon' }; createdAt: string;
+  id: string;
+  revision: number;
+  intent: RecordIntent | { action: 'complete' | 'abandon' };
+  createdAt: string;
 }
 export interface CopyView {
-  id: string; subjectId: string; status: 'ordered' | 'owned' | 'lent' | 'disposed'; revision: number;
-  location: string | null; source: string | null; acquiredOn: string | null; disposedOn: string | null;
+  id: string;
+  subjectId: string;
+  status: 'ordered' | 'owned' | 'lent' | 'disposed';
+  revision: number;
+  location: string | null;
+  source: string | null;
+  acquiredOn: string | null;
+  disposedOn: string | null;
   note: string | null;
 }
 export interface FollowView {
-  targetId: string; targetType: 'subject' | 'collection' | 'space'; state: 'following' | 'unfollowed';
-  reason: 'explicit' | 'library' | 'membership'; updatedAt: string;
+  targetId: string;
+  targetType: 'subject' | 'collection' | 'space';
+  state: 'following' | 'unfollowed';
+  reason: 'explicit' | 'library' | 'membership';
+  updatedAt: string;
 }
 export interface PublishedLogView {
-  id: string; accountId: string; subjectId: string; sessionState: SessionView['state'];
-  startedAt: string; completedAt: string | null; note: string | null; publishedAt: string;
+  id: string;
+  accountId: string;
+  subjectId: string;
+  sessionState: SessionView['state'];
+  startedAt: string;
+  completedAt: string | null;
+  note: string | null;
+  publishedAt: string;
 }
-export interface PublicCollectionView { id: string; curatorAccountId: string; title: string; multiplicity: number }
-export interface Anchor { id: string; route: number; partition: number }
+export interface PublicCollectionView {
+  id: string;
+  curatorAccountId: string;
+  title: string;
+  multiplicity: number;
+}
+export interface Anchor {
+  id: string;
+  route: number;
+  partition: number;
+}
 export interface LibraryInspection {
   collections: (CollectionView & { route: number; partition: number })[];
   members: (MemberView & { collectionId: string; orderKey: string; route: number; partition: number })[];
@@ -69,9 +124,15 @@ export interface LibraryInspection {
   follows: (FollowView & { accountId: string; route: number; partition: number })[];
   publishedLogs: PublishedLogView[];
   subjectPartitionRows: {
-    subjectId: string; route: number; partition: number; table: string; key: string;
+    subjectId: string;
+    route: number;
+    partition: number;
+    table: string;
+    key: string;
     source: 'entry' | 'session' | 'copy' | 'follow' | 'collection' | 'publishedLog';
-    collectionId: string | null; visibility: Visibility | null; multiplicity: number | null;
+    collectionId: string | null;
+    visibility: Visibility | null;
+    multiplicity: number | null;
   }[];
   events: { id: string; type: string; data: Record<string, unknown> }[];
   workflows: { id: string; name: string; status: string }[];
@@ -79,18 +140,32 @@ export interface LibraryInspection {
 export interface LibraryDriver {
   readonly accounts: Record<Exclude<Persona, 'anonymous'>, Anchor>;
   /** Valid absent routable identifiers, never malformed validation failures. */
-  readonly unknown: { collectionId: string; memberId: string; subjectId: string; sessionId: string;
-    copyId: string; logId: string };
+  readonly unknown: {
+    collectionId: string;
+    memberId: string;
+    subjectId: string;
+    sessionId: string;
+    copyId: string;
+    logId: string;
+  };
   setTime(instant: string): Promise<void>;
   now(): string;
   provisionSubject(input?: { versionOf?: string }): Promise<Anchor>;
-  request(as: Persona, input: {
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string;
-    headers?: Record<string, string>; body?: unknown;
-  }): Promise<Response>;
+  request(
+    as: Persona,
+    input: {
+      method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+      path: string;
+      headers?: Record<string, string>;
+      body?: unknown;
+    },
+  ): Promise<Response>;
   inspect(): Promise<LibraryInspection>;
   settle(): Promise<void>;
-  /** Append this many members through production commands, allowing repeated subjects. */
+  /**
+   * Append this many members through the library store in batched transactions; seeded members emit no events. A
+   * scenario that needs member events adds members through the API.
+   */
   seedMembers(input: { collectionId: string; subjectId: string; count: number }): Promise<void>;
   /**
    * Grow unrelated data to this total in each relevant relation: collections,

@@ -233,7 +233,7 @@ export function createApp({
       await admission.run('normal', job, async () => {
         await admitExposure({
           pool,
-          access: accessForApp(),
+          access: accessForApp,
           actor,
           route: mounted,
           deadline: job.deadline,

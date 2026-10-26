@@ -38,6 +38,8 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   let previous = options.baseline ?? emptyTokens();
   const result: LogMeasurement = { tokens: emptyTokens(), total: previous, steps: emptySteps(), session: null, result: '', blocker: null, failureKind: null };
   const seen = new Set<string>();
+  // The last answer that ended a turn with a report or a blocker; see the end of the loop.
+  let answered: string | null = null;
   for (const event of events) {
     const at = event.timestamp ? Date.parse(event.timestamp) : start;
     const inside = at >= start && at <= end;
@@ -93,8 +95,12 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
       const answer = event.result ?? event.text ?? result.result;
       result.result = typeof answer === 'string' ? answer : JSON.stringify(answer);
       result.session = event.session_id ?? event.sessionId ?? result.session;
+      if (event.type === 'result' && isFinalAnswer(result.result)) answered = result.result;
     }
   }
+  // A Claude worker whose background command finishes after its report is woken once more, and answers that
+  // notification in a later result ("my report above stands"): the report it gave stays its final answer.
+  if (answered !== null && !isFinalAnswer(result.result)) result.result = answered;
   const blocker = /^BLOCKER:\s*(.+)$/im.exec(result.result)?.[1]?.trim();
   result.blocker = blocker && !/^(none|no(?: blockers?)?|n\/a|not blocked)\.?$/i.test(blocker) ? blocker : null;
   try {
@@ -105,6 +111,10 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
     }
   } catch { /* Historical human-readable handoffs remain importable. */ }
   return result;
+}
+/** Whether an answer reports success or states a blocker, as a worker's final answer does. */
+function isFinalAnswer(text: string): boolean {
+  return reportsSuccess(text) || /^BLOCKER:/im.test(text) || lastStatusObject(text) !== null;
 }
 /** Whether a worker's final answer reports success: its status object, or the older RESULT line. */
 export function reportsSuccess(result: string): boolean {

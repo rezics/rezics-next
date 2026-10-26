@@ -232,7 +232,7 @@ beforeAll(async () => {
       try {
         await modules.admitGroup({
           pool: kernelPool,
-          access,
+          access: () => access,
           actor,
           group,
           clientAction: 'organization:create',

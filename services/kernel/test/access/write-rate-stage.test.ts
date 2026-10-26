@@ -276,6 +276,13 @@ test('expired native windows reset atomically for the next full batch', async ()
 });
 
 test('createKernel payout markPaid and offer delist spend once before effect with a native account counter', async () => {
+  // Payout and offer writes sit behind the selling gate, which the platform opens explicitly.
+  await pool.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ('selling', tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $1)
+     ON CONFLICT DO NOTHING`,
+    [Bun.randomUUIDv7()],
+  );
   const route = 0x2200;
   const account = newId(route),
     statement = newId(route),

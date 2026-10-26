@@ -17,12 +17,12 @@ import type {
   PublishedLogView,
   SessionView,
 } from '../../../../../specs/library-driver.ts';
-import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
-import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
-import { createCollectionCommands } from '../../../src/library/collections.ts';
+import { insertMember } from '../../../src/library/collection-store.ts';
+import { keyBetween, respacedKeys } from '../../../src/library/ordinal.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
@@ -30,6 +30,7 @@ import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 
 const autoExplainSetup = [
@@ -303,10 +304,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     db = await openGrowthDatabase(databaseUrl);
     restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
 
-    await owner.query(`CREATE DATABASE ${authName}`);
-    url.pathname = `/${authName}`;
-    migrateAuth(url.toString());
-    authPool = new Pool({ connectionString: url.toString(), max: 2 });
+    authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
     authPool.on('error', () => {});
     authPool.on('connect', (client) => client.on('error', () => {}));
 
@@ -375,7 +373,6 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       },
     });
 
-    let fixtureAccess: ReturnType<typeof createAccess> | undefined;
     const app = createKernel({
       pool: db!.pool,
       clock: () => new Date(scenarioNow()),
@@ -391,8 +388,8 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       }),
       routeKey: new Uint8Array(32).fill(17),
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
-      access: (config) => {
-        fixtureAccess = createAccess({
+      access: (config) =>
+        createAccess({
           ...config,
           auth: {
             issuer,
@@ -400,9 +397,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
             jwksUrl: `${issuer}/.well-known/jwks.json`,
             fetch: async (location, init) => auth.handler(new Request(location, init)),
           },
-        });
-        return fixtureAccess;
-      },
+        }),
     });
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
     scopes.push('access:grant');
@@ -492,19 +487,8 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     };
     // Account rows and Auth credentials are established through the fixture provisioning handshake.
     await bootstrapRelease(db.pool, bundledRelease);
-    const bootstrap = Bun.spawn([process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.id], {
-      cwd: resolve(import.meta.dir, '../../..'),
-      env: { ...process.env, DATABASE_URL: databaseUrl },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [bootstrapCode, bootstrapOut, bootstrapErr] = await Promise.all([
-      bootstrap.exited,
-      new Response(bootstrap.stdout).text(),
-      new Response(bootstrap.stderr).text(),
-    ]);
-    if (bootstrapCode !== 0)
-      throw new Error(`Governance bootstrap exited ${bootstrapCode}: ${bootstrapOut}${bootstrapErr}`);
+    // db.admin is outside statement capture; the measured pool stays out of fixture setup.
+    await bootstrapGovernance(db.admin, governor.id);
 
     for (const group of ['collections', 'personal_library', 'reading_progress']) {
       const response = await byRoute(tokenFor(governor), 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
@@ -905,22 +889,43 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       inspect,
       settle,
       async seedMembers(input) {
-        if (!fixtureAccess) throw new Error('Access was not composed for the production member command');
-        const actor = await fixtureAccess.authenticate(tokenFor(ownerAccount), {
-          pool: db!.pool,
-          deadline: Date.now() + 300_000,
-        });
-        const commands = createCollectionCommands({
-          pool: db!.pool,
-          access: fixtureAccess,
-          clock: () => new Date(scenarioNow()),
-        });
-        for (let index = 0; index < input.count; index += 8) {
-          await Promise.all(
-            Array.from({ length: Math.min(8, input.count - index) }, () =>
-              commands.addMember(actor, input.collectionId, { subjectId: input.subjectId }, key()),
-            ),
-          );
+        const route = routeOf(input.collectionId);
+        if (route === null) throw new Error(`Collection ${input.collectionId} has no route`);
+        // db.admin is outside statement capture, so seeding never reaches the measured pool.
+        const last = await db!.admin.query<{ ordinal_key: string }>(
+          'SELECT ordinal_key FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY ordinal_key DESC, member_id DESC LIMIT 1',
+          [route, input.collectionId],
+        );
+        const keys = last.rows[0] ? [] : respacedKeys(input.count);
+        let previous = last.rows[0]?.ordinal_key ?? null;
+        while (keys.length < input.count) {
+          previous = keyBetween(previous, null);
+          if (previous === null) throw new Error('Seeded members exhausted the ordinal key length');
+          keys.push(previous);
+        }
+        const time = scenarioNow();
+        for (let index = 0; index < input.count; index += 200) {
+          const client = await db!.admin.connect();
+          try {
+            await client.query('BEGIN');
+            const transactionId = Bun.randomUUIDv7();
+            for (const ordinalKey of keys.slice(index, index + 200)) {
+              const member = await insertMember(
+                client,
+                route,
+                input.collectionId,
+                { id: newId(route), subjectId: input.subjectId, note: null, ordinalKey },
+                { transactionId, time },
+              );
+              if (!member) throw new Error(`Collection ${input.collectionId} refused a seeded member`);
+            }
+            await client.query('COMMIT');
+          } catch (error) {
+            await client.query('ROLLBACK').catch(() => undefined);
+            throw error;
+          } finally {
+            client.release();
+          }
         }
       },
       async seed(scale) {

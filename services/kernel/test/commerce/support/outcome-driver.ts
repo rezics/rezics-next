@@ -3,7 +3,6 @@ import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../../../../specs/commerce-driver.ts';
-import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
@@ -21,6 +20,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
 import { capture, costOf, openGrowthDatabase } from '../../support/growth.ts';
 import { startFakeStripe } from './fake-stripe.ts';
 
@@ -81,10 +81,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   const databaseUrl = url.toString();
   const db = await openGrowthDatabase(databaseUrl);
   db.pool.options.max = 1;
-  await owner.query(`CREATE DATABASE ${authName}`);
-  url.pathname = `/${authName}`;
-  migrateAuth(url.toString());
-  const authPool = new Pool({ connectionString: url.toString(), max: 2 });
+  const authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
   authPool.on('error', () => {});
   authPool.on('connect', (client) => client.on('error', () => {}));
   const fake = startFakeStripe();
@@ -237,7 +234,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       headers: { authorization: `Bearer ${tokens.get(accounts.buyer.id)!}` },
     }),
   );
-  await bootstrapGovernance(db.pool, governor.id);
+  // The measured pool stays out of fixture setup; admin is outside statement capture.
+  await bootstrapGovernance(db.admin, governor.id);
   for (const group of ['purchases', 'selling']) {
     const opened = await app.handle(
       new Request(`http://kernel.test/v1/platform/exposure/${group}:open`, {
@@ -265,18 +263,6 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   });
   let sellerAuthority: Promise<void> | undefined;
   async function authorizeSeller() {
-    const bootstrap = Bun.spawn([process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.id], {
-      cwd: new URL('../../../', import.meta.url).pathname,
-      env: { ...process.env, DATABASE_URL: databaseUrl },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [code, stdout, stderr] = await Promise.all([
-      bootstrap.exited,
-      new Response(bootstrap.stdout).text(),
-      new Response(bootstrap.stderr).text(),
-    ]);
-    if (code !== 0) throw new Error(`Governance bootstrap exited ${code}: ${stdout}${stderr}`);
     const context = { pool: db.pool, deadline: Date.now() + 5000 };
     await createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' }).create(
       { ...context, actor: await grantAccess.authenticate(tokens.get(governor.id)!, context) },

@@ -239,7 +239,10 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   }
   if (restart) {
     const argv = [...(runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')]), '_manager-host'];
-    const child = spawn(argv[0]!, argv.slice(1), { cwd: runtime.mainCheckout, env: process.env, detached: true, stdio: 'ignore' });
+    // The new host writes where the first one does: errors it prints must stay readable after the handoff.
+    const log = openSync(join(runtime.stateDirectory, 'manager-host.log'), 'a', 0o600);
+    const child = spawn(argv[0]!, argv.slice(1), { cwd: runtime.mainCheckout, env: process.env, detached: true, stdio: ['ignore', log, log] });
+    closeSync(log);
     await new Promise<void>((resolve, reject) => {
       child.once('error', reject);
       child.once('spawn', () => { child.unref(); resolve(); });

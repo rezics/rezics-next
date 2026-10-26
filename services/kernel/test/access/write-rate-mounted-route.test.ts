@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
 import { t } from 'elysia';
 import { Pool } from 'pg';
 import { createApp } from '../../src/http/app.ts';
@@ -9,7 +9,16 @@ import { MountedRouteCatalogue } from '../../src/http/request.ts';
 import { declareKernelWriteRates } from '../../src/http/write-rate-routes.ts';
 import type { WriteRateFamily } from '../../src/access/write-rate.ts';
 
-const pool = new Pool();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+afterAll(() => pool.end());
+// Payout and offer writes sit behind the selling gate, which the platform opens explicitly.
+const openSelling = () =>
+  pool.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ('selling', tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $1)
+     ON CONFLICT DO NOTHING`,
+    [Bun.randomUUIDv7()],
+  );
 const post = (path: string, body: unknown = {}) =>
   new Request(`http://localhost${path}`, {
     method: 'POST',
@@ -99,6 +108,7 @@ test('native parameterized custom methods resolve the actual mounted rate declar
 });
 
 test('createKernel custom writes use post-mount composition declarations before any business effect', async () => {
+  await openSelling();
   const spends: unknown[] = [];
   const app = createKernel({
     pool,
@@ -205,6 +215,7 @@ test('legacy-owner declarations include the hidden provider route without x-acti
 });
 
 test('loopback custom writes retain native method/template selection and reject internal aliases', async () => {
+  await openSelling();
   const spends: unknown[] = [];
   const app = createKernel({
     pool,
