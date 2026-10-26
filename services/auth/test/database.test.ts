@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, POSTGRES_IMAGE, run, schemaDump, testDatabase } from '../scripts/database.ts';
+import { migrate, POSTGRES_IMAGE, run, schemaDump, ownDatabase } from '../scripts/database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const timeout = 60_000;
@@ -84,7 +84,7 @@ test(
   'check-time dumps execute pg_dump in their own server fixture and preserve exact schema bytes',
   () => {
     traceDocker((commands) => {
-      const database = testDatabase();
+      const database = ownDatabase();
       try {
         migrate(database.url);
         const start = commands().length;
@@ -119,9 +119,9 @@ test(
   'fixture contexts cannot dump another database or change its lifecycle',
   () => {
     traceDocker((commands) => {
-      const first = testDatabase();
+      const first = ownDatabase();
       try {
-        const second = testDatabase();
+        const second = ownDatabase();
         try {
           run('docker', [
             'exec',
@@ -172,7 +172,7 @@ test(
   'the dump CLI uses the pinned standalone image for an explicit URL without fixture context',
   () => {
     traceDocker((commands, temporary) => {
-      const database = testDatabase();
+      const database = ownDatabase();
       try {
         mkdirSync(join(temporary, 'scripts'));
         mkdirSync(join(temporary, 'db'));

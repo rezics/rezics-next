@@ -6,25 +6,24 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
   realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import {
-  createRecorder,
-  orderFiles,
+  capture as captureIn,
+  runLaneSuite,
+  runTestFiles as runTestFilesIn,
+  scheduleFiles as scheduleFilesIn,
+  testCommand,
+  type FileOutcome,
+  type FileRunner,
   type FileTiming,
-  parseJunit,
-  readLatest,
-  timingsDirectory,
-  writeTimings,
-} from './check-timings.ts';
+} from '../../../scripts/test-lanes.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
 
@@ -207,13 +206,7 @@ export function fileEnvironment(
   };
 }
 
-type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
-type FileRunner<T> = {
-  create: (file: string, database: string) => void | Promise<void>;
-  run: (file: string, database: string) => T | Promise<T>;
-  drop: (file: string, database: string) => void | Promise<void>;
-  onComplete?: (outcome: FileOutcome<T>) => void;
-};
+export { testCommand };
 
 /** Run the planned test files longest first, each on its own database. */
 export function runTestFiles<T>(
@@ -222,55 +215,16 @@ export function runTestFiles<T>(
   concurrency: number,
   runner: FileRunner<T>,
 ): Promise<FileOutcome<T>[]> {
-  return scheduleFiles(orderFiles(files, latest), concurrency, runner);
+  return runTestFilesIn('kernel', files, latest, concurrency, runner);
 }
 
 /** Run independent files through a fixed-size worker pool, cleaning up each created database. */
-export async function scheduleFiles<T>(
+export function scheduleFiles<T>(
   files: string[],
   concurrency: number,
   runner: FileRunner<T>,
 ): Promise<FileOutcome<T>[]> {
-  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('Concurrency must be a positive integer');
-  const outcomes = new Array<FileOutcome<T>>(files.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (true) {
-      const index = next++;
-      if (index >= files.length) return;
-      const file = files[index]!;
-      const database = `kernel_test_${index + 1}`;
-      let created = false;
-      let output: T | undefined;
-      let error: Error | undefined;
-      try {
-        await runner.create(file, database);
-        created = true;
-        output = await runner.run(file, database);
-      } catch (cause) {
-        error = cause instanceof Error ? cause : new Error(String(cause));
-      } finally {
-        if (created) {
-          try {
-            await runner.drop(file, database);
-          } catch (cause) {
-            const dropError = cause instanceof Error ? cause : new Error(String(cause));
-            error = error ? new Error(`${error.message}\nDatabase cleanup failed: ${dropError.message}`) : dropError;
-          }
-        }
-      }
-      const outcome: FileOutcome<T> = {
-        file,
-        database,
-        ...(output === undefined ? {} : { output }),
-        ...(error ? { error } : {}),
-      };
-      outcomes[index] = outcome;
-      runner.onComplete?.(outcome);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, () => worker()));
-  return outcomes;
+  return scheduleFilesIn('kernel_test', files, concurrency, runner);
 }
 
 function hasDiagnosticLine(output: string): boolean {
@@ -316,19 +270,12 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   return result.stdout.trim();
 }
 
-// Asynchronous, so the file pool's lanes overlap; a synchronous spawn blocks the event loop and runs them one at a time.
-export async function capture(
+export function capture(
   program: string,
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ status: number; output: string }> {
-  const child = Bun.spawn([program, ...args], { cwd: directory, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
-  const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { status, output: `${stdout}${stderr}` };
+  return captureIn(program, args, env, directory);
 }
 
 async function psql(sql: string): Promise<void> {
@@ -346,11 +293,6 @@ async function psql(sql: string): Promise<void> {
     sql,
   ]);
   if (result.status !== 0) throw new Error(`psql -c ${sql} failed:\n${result.output}`);
-}
-
-/** Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
-export function testCommand(file: string, junitFile: string): string[] {
-  return ['test', '--timeout', '60000', '--reporter=junit', `--reporter-outfile=${junitFile}`, `./${file}`];
 }
 
 export function docker(args: string[]): string {
@@ -580,46 +522,17 @@ async function main(): Promise<void> {
 
   const testFiles = plan.tests;
   await waitForSearch(searchUrl, searchContainer);
-  const concurrency = Number(process.env.KERNEL_CHECK_CONCURRENCY ?? 6);
-  if (!Number.isInteger(concurrency) || concurrency < 1) fail('KERNEL_CHECK_CONCURRENCY must be a positive integer');
-  const reports = mkdtempSync(join(tmpdir(), 'kernel-check-'));
-  const recorder = createRecorder();
-  let timingsPath: string | null = null;
-  try {
-    timingsPath = timingsDirectory(directory);
-  } catch (error) {
-    console.warn(`Check timings are not recorded: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  const latest = timingsPath ? readLatest(timingsPath) : {};
-  const runner = recorder.wrap(
-    {
-      // Each file gets a fresh copy so its result cannot depend on writes from another file.
-      create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
-      run: async (file, database) => {
-        const result = await capture(
-          'bun',
-          testCommand(file, join(reports, `${database}.xml`)),
-          fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
-        );
-        if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
-        return result.output;
-      },
-      drop: (_file, database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
-    },
-    async (_file, database) => parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
-  );
-  const outcomes = await runTestFiles(testFiles, latest, concurrency, {
-    ...runner,
-    onComplete: (outcome) => {
-      if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
-      if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
-    },
+  const { failed: failedFiles } = await runLaneSuite({
+    service: 'kernel',
+    directory,
+    files: testFiles,
+    partial: plan.files !== null,
+    createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
+    dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
+    environment: (database) => fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
   });
-  rmSync(reports, { recursive: true, force: true });
-  if (timingsPath) writeTimings(timingsPath, recorder.timings(), { partial: plan.files !== null });
   const queries = resolve(reyloDirectory, '.reylo/queries');
   process.stderr.write(`Reylo analyses written: ${existsSync(queries) ? readdirSync(queries).length : 0}\n`);
-  const failedFiles = outcomes.filter((outcome) => outcome.error).map((outcome) => outcome.file);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }
 

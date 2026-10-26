@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
 
+export const TEMPLATE_DATABASE = 'rezics_auth_test';
+
 type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
 
 export function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
@@ -60,7 +62,60 @@ export function schemaDump(url: string, fixture?: TestDatabase): string {
   );
 }
 
+/**
+ * The migrated Auth database a check lane is handed: a copy of the check's template, in the check's container. Only the
+ * lane's own `bun test` process, the direct child of the check, takes part; a process a test starts keeps its own server.
+ */
+type LaneContext = { container: string; url: string };
+
+let laneClaimed = false;
+let laneCopies = 0;
+
+function laneContext(env: NodeJS.ProcessEnv): LaneContext | null {
+  return env.AUTH_CHECK_CONTAINER && env.DATABASE_URL && env.AUTH_CHECK_LANE_OWNER === String(process.ppid)
+    ? { container: env.AUTH_CHECK_CONTAINER, url: env.DATABASE_URL }
+    : null;
+}
+
+function laneStatement(container: string, sql: string): string[] {
+  return ['exec', container, 'psql', '-U', 'rezics', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', sql];
+}
+
+/**
+ * A migrated database for one test. Under the check the file's lane already runs against a copy of the migrated
+ * template, so the first fixture is that copy and later ones are further copies in the same server; starting a server
+ * per fixture is what made files wait on the Docker daemon. Outside the check each fixture owns a server.
+ */
 export function testDatabase(): TestDatabase {
+  const lane = laneContext(process.env);
+  if (!lane) return ownDatabase();
+  if (!laneClaimed) {
+    laneClaimed = true;
+    return { url: lane.url, container: lane.container, close: () => {} };
+  }
+  const name = `${decodeURIComponent(new URL(lane.url).pathname.slice(1))}_copy_${++laneCopies}`;
+  run('docker', laneStatement(lane.container, `CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`));
+  const url = new URL(lane.url);
+  url.pathname = `/${name}`;
+  let closed = false;
+  return {
+    url: url.href,
+    container: lane.container,
+    close: () => {
+      if (closed) return;
+      closed = true;
+      const child = spawn('docker', laneStatement(lane.container, `DROP DATABASE IF EXISTS ${name} WITH (FORCE)`), {
+        cwd: directory,
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+    },
+  };
+}
+
+/** A migrated database in a server of its own, removed on close. */
+export function ownDatabase(): TestDatabase {
   const label = 'rezics.auth.check.pid';
   // Capture owners with IDs so concurrent cleanup cannot race a separate inspect.
   for (const row of run('docker', [
@@ -111,7 +166,7 @@ export function testDatabase(): TestDatabase {
       '-e',
       'POSTGRES_PASSWORD=rezics',
       '-e',
-      'POSTGRES_DB=rezics_auth_test',
+      `POSTGRES_DB=${TEMPLATE_DATABASE}`,
       POSTGRES_IMAGE,
       '-c',
       'fsync=off',
@@ -121,6 +176,9 @@ export function testDatabase(): TestDatabase {
       'full_page_writes=off',
       '-c',
       'max_wal_size=256MB',
+      // Each check lane holds pools of its own, and a lane's tests open further copies.
+      '-c',
+      'max_connections=500',
     ]);
     let closed = false;
     const close = () => {
@@ -138,7 +196,7 @@ export function testDatabase(): TestDatabase {
     try {
       const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
       if (!port) throw new Error('Cannot determine Auth test database port');
-      const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics_auth_test?sslmode=disable`;
+      const url = `postgres://rezics:rezics@127.0.0.1:${port}/${TEMPLATE_DATABASE}?sslmode=disable`;
       migrate(url);
       return { url, container, close };
     } catch (error) {

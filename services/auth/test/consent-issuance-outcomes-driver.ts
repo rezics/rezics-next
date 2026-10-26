@@ -109,7 +109,9 @@ export async function createNativeDriver(max = 4): Promise<ConsentIssuanceDriver
   const fixture = testDatabase();
   const authUrl = fixture.url;
   const kernelUrl = new URL(fixture.url);
-  kernelUrl.pathname = '/consent_access';
+  // One name per fixture: several drivers of one file share a server when the check runs it.
+  const accessDatabase = `${decodeURIComponent(kernelUrl.pathname.slice(1))}_access`;
+  kernelUrl.pathname = `/${accessDatabase}`;
   const pools: Pool[] = [];
   const open = (url: string, size: number, name: string) => {
     const pool = new Pool({ connectionString: url, max: size, connectionTimeoutMillis: 5000, application_name: name });
@@ -118,7 +120,7 @@ export async function createNativeDriver(max = 4): Promise<ConsentIssuanceDriver
   };
   try {
     const observer = open(authUrl, 1, 'consent-outcome-observer');
-    await observer.query('CREATE DATABASE consent_access');
+    await observer.query(`CREATE DATABASE ${accessDatabase}`);
     migrateKernel(kernelUrl.href);
     const database = open(authUrl, max, AUTH_APPLICATION);
     const kernel = open(kernelUrl.href, 4, 'consent-outcome-access');

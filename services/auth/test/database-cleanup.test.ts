@@ -57,7 +57,7 @@ if (args[0] === 'ps') {
   try {
     const module = resolve(import.meta.dir, '../scripts/database.ts');
     const result = Bun.spawnSync(
-      [process.execPath, '-e', `import { testDatabase } from ${JSON.stringify(module)}; testDatabase();`],
+      [process.execPath, '-e', `import { ownDatabase } from ${JSON.stringify(module)}; ownDatabase();`],
       { env: { ...process.env, PATH: `${temporary}:${process.env.PATH ?? ''}` }, timeout: 10_000 },
     );
     const commands = readFileSync(log, 'utf8')
