@@ -31,7 +31,11 @@ import type { DocumentSnapshot } from '../packages/document/src/types';
  */
 export type Persona = 'author' | 'other' | 'anonymous' | 'suspended' | 'moderator' | 'worker' | 'other-worker' | 'job';
 export type Outcome = 'permitted' | 'denied' | 'invalid';
-export interface Container { id: string; route: number; partition: number }
+export interface Container {
+  id: string;
+  route: number;
+  partition: number;
+}
 export interface Reservation {
   requestId: string;
   containerId: string;
@@ -89,9 +93,14 @@ export interface Derivative {
   key: string;
   bytes: Uint8Array;
 }
-export type Download = { outcome: 'denied' } | {
-  outcome: 'permitted'; key: string; representation: 'original' | 'derivative'; sha256: string;
-};
+export type Download =
+  | { outcome: 'denied' }
+  | {
+      outcome: 'permitted';
+      key: string;
+      representation: 'original' | 'derivative';
+      sha256: string;
+    };
 export interface Inspection {
   media: Media[];
   /** Durable committed post/revision references, not adapter-maintained counts. */
@@ -118,8 +127,12 @@ export interface ContentMediaDriver {
   reserve(as: Persona, input: Reservation): Promise<Reserved>;
   /** Observe real Access/SQL execution, not a declaration supplied by the adapter. */
   reservationEvidence(requestId: string): Promise<{
-    action: string; anchorId: string; partition: number; anchored: boolean;
-    authoritativeTime: string; newObjectGrant: boolean;
+    action: string;
+    anchorId: string;
+    partition: number;
+    anchored: boolean;
+    authoritativeTime: string;
+    newObjectGrant: boolean;
   }>;
   /**
    * HTTP body is {containerId,reservationRequestId,byteCount,sha256}; uploader is
@@ -132,13 +145,23 @@ export interface ContentMediaDriver {
    * if authorization denied it. Website ID comes from real Auth registration.
    * No adapter constants, decoded-but-unverified tokens or fabricated evidence.
    */
-  authenticationEvidence(as: 'author' | 'worker' | 'other-worker', requestId: string): Promise<{
-    sub: string; clientId: string; scopes: string[]; registeredWebsiteClientId: string;
+  authenticationEvidence(
+    as: 'author' | 'worker' | 'other-worker',
+    requestId: string,
+  ): Promise<{
+    sub: string;
+    clientId: string;
+    scopes: string[];
+    registeredWebsiteClientId: string;
   }>;
   process(as: Persona, objectId: string): Promise<Outcome>;
   reference(as: Persona, input: ReferenceCommand): Promise<Outcome>;
-  download(as: Persona, objectId: string, representation: 'original' | 'derivative',
-    conditional?: { ifNoneMatch: string }): Promise<Download>;
+  download(
+    as: Persona,
+    objectId: string,
+    representation: 'original' | 'derivative',
+    conditional?: { ifNoneMatch: string },
+  ): Promise<Download>;
   collect(as: Persona, partition: number): Promise<CollectionRun>;
   inspect(): Promise<Inspection>;
   derivatives(objectId: string): Promise<Derivative[]>;
@@ -148,11 +171,17 @@ export interface ContentMediaDriver {
    * XMP, ICC and orientation tags (not structural format/dimension fields).
    */
   decode(bytes: Uint8Array): Promise<{
-    format: 'avif' | 'webp'; width: number; height: number; metadata: string[];
+    format: 'avif' | 'webp';
+    width: number;
+    height: number;
+    metadata: string[];
   }>;
   /** Actual production Sharp invocation options, observed at its dependency boundary. */
   processingEvidence(objectId: string): Promise<{
-    sharpVersion: string; limitInputPixels: number; failOn: string; autoOrient: boolean;
+    sharpVersion: string;
+    limitInputPixels: number;
+    failOn: string;
+    autoOrient: boolean;
   }>;
   /**
    * Real encoded images: landscape 3000x1500; oriented-gps stored 1200x800
@@ -186,7 +215,10 @@ export interface ContentMediaDriver {
    * claim transaction; force both lock orderings in fresh fixtures. No sleep
    * race or simulated state change. Returns only once both operations settle.
    */
-  raceClaimCollection(input: ReferenceCommand, objectId: string,
-    first: 'claim' | 'collection'): Promise<{ claim: Outcome; collection: CollectionRun }>;
+  raceClaimCollection(
+    input: ReferenceCommand,
+    objectId: string,
+    first: 'claim' | 'collection',
+  ): Promise<{ claim: Outcome; collection: CollectionRun }>;
   close(): Promise<void>;
 }
