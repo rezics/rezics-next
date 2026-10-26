@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { createAuthService, createBarrierProofVerifier, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -121,6 +122,12 @@ test('native Auth barriers stay bounded with same-account receipts and unrelated
         await db.admin.query(`VACUUM (ANALYZE) ${table}`);
     },
     async operation() {
+      // Each sample starts with a deliverable recovery. The mail cooldown is
+      // independent operational state, covered by Auth's delivery tests.
+      const mailKey = createHmac('sha256', 'native-barrier-secret-at-least-32-bytes')
+        .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+        .digest('hex');
+      await database.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
       await lifecycle.raiseFence({ accountId, key: `operation-${serial++}` });
       const deliveryReady = new Promise<void>((resolve) => {
         delivered = resolve;
