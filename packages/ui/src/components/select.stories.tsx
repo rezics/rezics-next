@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookCheckIcon, BookMarkedIcon, BookOpenIcon, BookXIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { highlighted } from '../test/waits.ts';
+import { waitForFocus } from '../test/focus.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import {
   ChoiceSelect,
@@ -182,7 +182,7 @@ export const Keyboard: Story = {
     await userEvent.keyboard('{Enter}');
     const listbox = await page.findByRole('listbox');
     await waitFor(() => expect(listbox).toBeVisible());
-    await highlighted(() => within(listbox).getAllByRole('option')[0]!);
+    await waitForFocus(listbox);
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
     await waitFor(() => expect(trigger).toHaveTextContent('Read'));
   },

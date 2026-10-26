@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed } from '../test/waits.ts';
+import { dismissed, registered } from '../test/waits.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { Sheet, SheetBody, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from './sheet.tsx';
@@ -59,7 +59,7 @@ const RevisionSheet = (props: { placement?: Placement; variant?: 'default' | 'in
 
 const openSheet = async (canvasElement: HTMLElement, name = 'Revision history') => {
   await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return settled(await screen.findByRole('dialog'));
+  return registered(await settled(await screen.findByRole('dialog')));
 };
 
 export const Right: Story = {

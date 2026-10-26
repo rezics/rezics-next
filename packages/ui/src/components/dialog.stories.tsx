@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../test/focus.ts';
-import { dismissed } from '../test/waits.ts';
+import { dismissed, registered } from '../test/waits.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
@@ -70,7 +70,7 @@ const NewShelf = (props: { invalid?: boolean; saving?: boolean }) => (
 
 const openDialog = async (canvasElement: HTMLElement, name: RegExp | string) => {
   await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return settled(await screen.findByRole('dialog'));
+  return registered(await settled(await screen.findByRole('dialog')));
 };
 
 export const Default: Story = {
@@ -92,7 +92,7 @@ export const CloseWithKeyboard: Story = {
     await userEvent.tab();
     await expect(trigger).toHaveFocus();
     await userEvent.keyboard(' ');
-    const dialog = await settled(await screen.findByRole('dialog'));
+    const dialog = await registered(await settled(await screen.findByRole('dialog')));
     await userEvent.tab();
     await expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await userEvent.keyboard('{Escape}');

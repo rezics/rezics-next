@@ -17,13 +17,15 @@ export const highlighted = (item: () => HTMLElement) =>
  * handlers on the frame after it opens; a key pressed earlier is lost. The stack marks the layer, or the element
  * that positions it, with `--layer-index` in the same step.
  */
-export const registered = (layer: Element) =>
-  waitFor(() => {
+export const registered = async <T extends Element>(layer: T): Promise<T> => {
+  await waitFor(() => {
     for (let element: Element | null = layer; element; element = element.parentElement) {
       if ((element as HTMLElement).style.getPropertyValue('--layer-index') !== '') return;
     }
     throw new Error('The layer has not registered as dismissable yet');
   });
+  return layer;
+};
 
 /**
  * Types into a combobox input one character at a time. storybook/test types faster than a real keyboard, and the

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed } from '../test/waits.ts';
+import { dismissed, registered } from '../test/waits.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 import {
   AlertDialog,
@@ -30,7 +30,7 @@ type Story = StoryObj<typeof meta>;
 
 const openAlert = async (canvasElement: HTMLElement, name: string) => {
   await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return settled(await screen.findByRole('alertdialog'));
+  return registered(await settled(await screen.findByRole('alertdialog')));
 };
 
 export const RemovePost: Story = {

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InfoIcon } from 'lucide-react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed } from '../test/waits.ts';
+import { dismissed, registered } from '../test/waits.ts';
 import { settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import {
@@ -60,7 +60,7 @@ const RatingContext = (props: React.ComponentProps<typeof Popover>) => (
 
 const openPopover = async (canvasElement: HTMLElement, name: RegExp | string) => {
   await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return settled(await screen.findByRole('dialog'));
+  return registered(await settled(await screen.findByRole('dialog')));
 };
 
 export const Default: Story = {
