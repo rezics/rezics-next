@@ -1,26 +1,7 @@
 import { expect, test } from 'bun:test';
-import { Glob } from 'bun';
+import { inlineStatements, literal, statement, transactionControl } from './support/sql-placement.ts';
 
 const source = new URL('../src/', import.meta.url).pathname;
-const literal = /(['"`])((?:\\.|(?!\1)[^\\])*)\1/gs;
-const statement =
-  /^\s*(?:SELECT|INSERT|UPDATE|DELETE|MERGE|WITH|VALUES|TABLE|COPY|CALL|DO|TRUNCATE|LOCK|EXPLAIN|CREATE|ALTER|DROP|GRANT|REVOKE|BEGIN|START|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|SET|RESET|LISTEN|NOTIFY)\s+\S/i;
-const transactionControl = /^(?:BEGIN ISOLATION LEVEL |SET LOCAL )/;
-
-/** Every string literal in kernel source that reads as SQL, except transaction control, as `file:line text`. */
-async function inlineStatements(directory: string): Promise<string[]> {
-  const found: string[] = [];
-  for await (const file of new Glob('**/*.ts').scan(directory)) {
-    const text = await Bun.file(`${directory}${file}`).text();
-    for (const match of text.matchAll(literal)) {
-      const sql = match[2]!;
-      if (!statement.test(sql) || transactionControl.test(sql)) continue;
-      const line = text.slice(0, match.index).split('\n').length;
-      found.push(`${file}:${line} ${sql.split('\n')[0]!.trim()}`);
-    }
-  }
-  return found.sort();
-}
 
 test('kernel source sends no SQL text but transaction control; every statement is a typed .sql file', async () => {
   expect(await inlineStatements(source)).toEqual([]);
