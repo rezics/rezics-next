@@ -3,7 +3,8 @@ import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import { once } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, writeSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
@@ -34,6 +35,7 @@ import type { FixtureResources, SeededBoard } from './support/erasure-operation-
 import type { SqlObserver } from './support/sql-observer.ts';
 
 const phaseLog = fileURLToPath(new URL('../../../../.temp/erasure-phases.log', import.meta.url));
+mkdirSync(dirname(phaseLog), { recursive: true });
 function mark(phase: string): void {
   appendFileSync(phaseLog, `${Date.now()} ${phase}\n`);
 }
@@ -842,7 +844,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       { fromPlainText },
       { runCommand },
       { observeSql },
-      { buildBoardAndThreads, createFixtureResources, grant, provisionExactReads, request, revokeGrant, setupRequest },
+      { buildBoardAndThreads, createFixtureResources, grant, request, revokeGrant, setupRequest },
       { openGrowthDatabase },
     ] = await Promise.all([
       import('../../src/access/write-rate.ts'),
@@ -914,7 +916,6 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     const accountReadValidity = new Map<string, string[]>();
     const receiptBaselines = new Map<number, Set<string>>();
     const preparedStock: Fixture[] = [];
-    const readsProvisioned = new Set<string>();
     const inspectionCache = new Map<string, { token: string; value: Inspection }>();
     const commandQueries: { key: string; statements: string[] }[] = [];
     const system = resources.system;
@@ -1261,8 +1262,8 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
       try {
         data = await buildBoardAndThreads(resources, posts, revisions, marker, targetPartition);
       } finally {
-        // Exact-read grants are same-partition writes. Leave the relays paused until
-        // they finish, or each projection snapshot conflicts with the grant.
+        // History writes share the partition log the board projection reads.
+        // Leave the relays paused until seed resumes them.
         if (!data || tail) await worker!.resumeRelays();
       }
       if (!data) throw new Error('Board setup produced no thread');
@@ -1274,19 +1275,18 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         targeted: data.targeted,
       };
       fixtureData.set(fixture.thread, data);
-      await Promise.all(
-        data.targeted.map(async (post) => {
-          const row = await readPool.query<{ valid: string }>(
-            `SELECT valid::text FROM access.resource_role_grant
-           WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
-             AND subject_role='' AND grant_role='content.post.owner'`,
-            [data.route, post.id, data.authorId],
-          );
-          const valid = row.rows[0]?.valid;
-          if (!valid) throw new Error(`Published target ${post.id} has no native owner grant`);
-          ownerValidity.set(post.id, valid);
-        }),
+      const owners = await readPool.query<{ resource_id: string; valid: string }>(
+        `SELECT resource_id::text, valid::text FROM access.resource_role_grant
+         WHERE route=$1 AND resource_id = ANY($2::uuid[]) AND subject_kind='identity' AND subject_id=$3
+           AND subject_role='' AND grant_role='content.post.owner'`,
+        [data.route, data.targeted.map((post) => post.id), data.authorId],
       );
+      const ownerByPost = new Map(owners.rows.map((row) => [row.resource_id, row.valid]));
+      for (const post of data.targeted) {
+        const valid = ownerByPost.get(post.id);
+        if (!valid) throw new Error(`Published target ${post.id} has no native owner grant`);
+        ownerValidity.set(post.id, valid);
+      }
       const direct = await readPool.query<{ valid: string }>(
         `SELECT valid::text FROM access.resource_grant
          WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
@@ -1306,14 +1306,6 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         data.authorId,
         direct.rows.map((row) => row.valid),
       );
-      if (!tail) {
-        // Exact reads are same-partition writes. Do them while projection is paused,
-        // during the hook, so the scenario keeps its time budget.
-        mark('reads-start');
-        await provisionExactReads(resources, data);
-        readsProvisioned.add(fixture.thread);
-        mark('reads-done');
-      }
       if (tail) {
         await request(
           resources,
@@ -1356,12 +1348,6 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         const fixture = await seedFixture(input.posts, input.revisions, marker, undefined, false);
         const data = fixtureData.get(fixture.thread);
         if (!data) throw new Error('Seeded thread has no stored board');
-        if (!readsProvisioned.has(fixture.thread)) {
-          mark('reads-start');
-          await provisionExactReads(resources, data);
-          readsProvisioned.add(fixture.thread);
-          mark('reads-done');
-        }
         // Projection stays paused through publish and grants. Resume it now so the
         // erasure effect can be bound, after those writes have committed.
         await worker!.resumeRelays();
@@ -1748,7 +1734,7 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
     }
 
     // The hook has its own budget. Publish the corpus the scenarios ask for before
-    // the test body starts. Exact-read grants run when that corpus is dispensed.
+    // the test body starts.
     mark('stock-start');
     const [stockedFixture] = await Promise.all([
       seedFixture(205, 3, `erasure-${randomUUID().replaceAll('-', '')}`, undefined, false),

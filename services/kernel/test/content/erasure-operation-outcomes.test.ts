@@ -1,5 +1,5 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import reylo from 'reylo/esbuild';
 
@@ -7,6 +7,7 @@ const driverURL = new URL('./erasure-operation-driver.ts', import.meta.url);
 process.env.ERASURE_OPERATION_DRIVER = fileURLToPath(driverURL);
 const phaseLog = fileURLToPath(new URL('../../../../.temp/erasure-phases.log', import.meta.url));
 const bundleDir = fileURLToPath(new URL('../../.temp/erasure-worker/', import.meta.url));
+mkdirSync(dirname(phaseLog), { recursive: true });
 
 // Compile the worker once. The child then loads JavaScript with its SQL already
 // inlined, instead of transpiling the kernel graph under the hook timer.

@@ -1,18 +1,34 @@
-import { randomUUID } from 'node:crypto';
-import { appendFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fromPlainText } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import {
+  createResourceCreationManifest,
+  initializeResourceGrants,
+  parentCreationAuthorization,
+} from '../../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import {
+  authoritativeTimeValue,
+  runCommand,
+  type AuthoritativeTime,
+  type CommandTransaction,
+} from '../../../src/command/command.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
+import { validateContentDocument } from '../../../src/content/document.ts';
+import readPost from '../../../src/content/read-post.sql';
+import readThread from '../../../src/content/read-thread.sql';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../../src/semantic/definitions.ts';
-import { partitionOf, routeOf } from '../../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './native-system.ts';
 
 const phaseLog = fileURLToPath(new URL('../../../../../.temp/erasure-phases.log', import.meta.url));
+mkdirSync(dirname(phaseLog), { recursive: true });
 function mark(phase: string): void {
   appendFileSync(phaseLog, `${Date.now()} ${phase}\n`);
 }
@@ -265,47 +281,244 @@ export async function createFixtureResources(
   }
 }
 
-/** Explicit post:read survives owner-role revocation, and Governance must hold the
- * role's other actions before it can revoke that role. The author's platform
- * access:grant is removed once those rows exist. */
 export type SeededBoard = Awaited<ReturnType<typeof buildBoardAndThreads>>;
 
-export async function provisionExactReads(resources: FixtureResources, board: SeededBoard): Promise<void> {
-  const governorId = (
-    await resources.pool.query<{ account_id: string }>(
-      'SELECT account_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
-      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
-    )
-  ).rows[0]!.account_id;
-  await runInBatches(board.targeted.length, 2, async (index) => {
-    const post = board.targeted[index]!;
-    const target = { route: board.route, id: post.id };
-    await setupRequest(resources, 'author', 'POST', '/v1/grants', {
-      resource: target,
-      subject: { kind: 'account', id: board.authorId },
-      actions: ['post:read'],
-      valid: '(,)',
+const BULK_POSTS = 16;
+type TargetedPost = { id: string; revisions: { id: string; digest: string; body: string }[] };
+
+function phase(name: string, started: number): number {
+  const elapsed = Math.round(performance.now() - started);
+  console.log(`erasure-setup ${name} ${elapsed}ms`);
+  mark(`setup ${name} ${elapsed}ms`);
+  return performance.now();
+}
+
+/** One bulk post and one API post must present the same rows erasure reads. */
+async function assertSameErasureShape(pool: Pool, route: number, apiPostId: string, bulkPostId: string): Promise<void> {
+  const shape = async (postId: string) => {
+    const post = await pool.query(
+      `SELECT thread_id::text, reply_to_post_id::text AS parent_id, author_account_id::text AS author_id,
+              visibility, availability, security_revision::text AS security_revision,
+              head_revision_id IS NOT NULL AS has_head,
+              created_at IS NOT NULL AS has_created,
+              recorded_transaction_id IS NOT NULL AS has_transaction
+       FROM content.post WHERE route=$1 AND post_id=$2`,
+      [route, postId],
+    );
+    const revisions = await pool.query(
+      `SELECT count(*)::int AS count,
+              bool_and(body IS NOT NULL) AS bodies,
+              bool_and(search_text IS NOT NULL) AS search,
+              bool_and(body_sha256 IS NOT NULL) AS digests,
+              bool_and(availability = 'available') AS available,
+              min(licence::text) AS licence,
+              min(board_id::text) AS board_id,
+              bool_and(cardinality(subject_ids) = 0) AS empty_subjects,
+              bool_and(cardinality(media_ids) = 0) AS empty_media,
+              bool_and(recorded_at IS NOT NULL AND recorded_transaction_id IS NOT NULL) AS recorded
+       FROM content.revision WHERE route=$1 AND post_id=$2`,
+      [route, postId],
+    );
+    const roles = await pool.query(
+      `SELECT grant_role, subject_kind, subject_id::text, subject_role, upper_inf(valid) AS open
+       FROM access.resource_role_grant
+       WHERE route=$1 AND resource_id=$2
+       ORDER BY grant_role, subject_kind, subject_id, subject_role`,
+      [route, postId],
+    );
+    const initialized = await pool.query(
+      `SELECT resource_type, creator_id::text FROM access.resource_initialization
+       WHERE route=$1 AND resource_id=$2 ORDER BY resource_type`,
+      [route, postId],
+    );
+    const actions = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM access.resource_grant WHERE route=$1 AND resource_id=$2`,
+      [route, postId],
+    );
+    return {
+      post: post.rows[0],
+      revisions: revisions.rows[0],
+      roles: roles.rows,
+      initialized: initialized.rows,
+      actionGrants: actions.rows[0]?.count ?? 0,
+    };
+  };
+  const api = await shape(apiPostId);
+  const bulk = await shape(bulkPostId);
+  if (JSON.stringify(api) !== JSON.stringify(bulk))
+    throw new Error(`Bulk post row shape differs from the published post: ${JSON.stringify({ api, bulk })}`);
+}
+
+async function writeBulkPosts(
+  resources: FixtureResources,
+  input: {
+    route: number;
+    threadId: string;
+    parentId: string;
+    boardId: string;
+    authorId: string;
+    marker: string;
+    revisions: number;
+    startIndex: number;
+    count: number;
+  },
+): Promise<TargetedPost[]> {
+  if (input.count < 1 || input.count > BULK_POSTS) throw new RangeError('A bulk history command creates 1 to 16 posts');
+  const bearer = resources.bearer('author');
+  if (!bearer) throw new Error('Author bearer is missing');
+  const deadline = Date.now() + 10_000;
+  // The stored actor is bound to the system pool. Reply creation authenticates
+  // the same bearer on the kernel pool, and the command must use that observation.
+  const authenticated = await resources.system.access.authenticate(bearer, { pool: resources.pool, deadline });
+  if (authenticated.kind !== 'account') throw new Error('Author bearer did not authenticate an account');
+  const actor = authenticated;
+  const posts = Array.from({ length: input.count }, (_, offset) => {
+    const index = input.startIndex + offset;
+    const history = Array.from({ length: input.revisions }, (__, revisionIndex) => {
+      const body = `${input.marker} post-${index} revision-${revisionIndex}`;
+      const validated = validateContentDocument({
+        body: fromPlainText(body),
+        licence: 'CC0-1.0',
+        subjectIds: [],
+      });
+      const bytes = Buffer.from(validated.canonicalBytes);
+      return {
+        id: newId(input.route),
+        body,
+        search: validated.searchText,
+        hex: bytes.toString('hex'),
+        digest: createHash('sha256').update(bytes).digest('hex'),
+        ordinal: revisionIndex,
+      };
     });
-    await setupRequest(resources, 'author', 'POST', '/v1/grants', {
-      resource: target,
-      subject: { kind: 'account', id: governorId },
-      actions: ['post:read', 'post:revise', 'media:create'],
-      valid: '(,)',
-    });
+    return { id: newId(input.route), history };
   });
-  const grants = await resources.pool.query<{ valid: string }>(
-    `SELECT valid::text FROM access.resource_grant
-     WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
-       AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
-    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, board.authorId],
+  const inserted = new WeakMap<CommandTransaction, string>();
+  const creation = {
+    async validate(tx: CommandTransaction, resource: { route: number; id: string }, time: AuthoritativeTime) {
+      const row = await readPost.run(tx, { route: resource.route, id: resource.id });
+      return (
+        row !== null &&
+        row.inserted_here === true &&
+        inserted.get(tx) === row.recorded_transaction_id &&
+        row.author_account_id === input.authorId &&
+        typeof row.created_at === 'string' &&
+        Date.parse(row.created_at) === Date.parse(authoritativeTimeValue(time))
+      );
+    },
+  };
+  const entries = posts.map((post) => ({
+    resource: { route: input.route, id: post.id },
+    type: 'content.post',
+    creator: input.authorId,
+    creation,
+  }));
+  const authorization = parentCreationAuthorization({
+    access: resources.system.access,
+    actor,
+    action: 'post:create',
+    parent: {
+      resource: { route: input.route, id: input.threadId },
+      async validate(client) {
+        const thread = await readThread.run(client, { route: input.route, id: input.threadId });
+        if (!thread || thread.availability !== 'available' || thread.visibility === 'taken_down') return false;
+        const parent = await readPost.run(client, { route: input.route, id: input.parentId });
+        return (
+          parent !== null &&
+          parent.thread_id === input.threadId &&
+          parent.availability === 'available' &&
+          parent.visibility !== 'taken_down'
+        );
+      },
+    },
+    context: {
+      pool: resources.pool,
+      deadline,
+      resource: entries[0]!.resource,
+      creation,
+      manifest: createResourceCreationManifest(entries),
+    },
+  });
+  await runCommand(
+    resources.pool,
+    {
+      partition: partitionOf(input.route),
+      deadline,
+      authorization,
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+    },
+    async (tx, command) => {
+      const at = authoritativeTimeValue(command.time);
+      const revisionRows = posts.flatMap((post) => post.history.map((revision) => ({ postId: post.id, ...revision })));
+      await tx.query(
+        `INSERT INTO content.post
+           (route, thread_id, post_id, reply_to_post_id, author_account_id, head_revision_id,
+            visibility, security_revision, recorded_transaction_id, created_at, availability)
+         SELECT $1, $2, post_id, $3, $4, head_revision_id, 'published', 1, $5, $6::timestamptz, 'available'
+         FROM unnest($7::uuid[], $8::uuid[]) AS row(post_id, head_revision_id)`,
+        [
+          input.route,
+          input.threadId,
+          input.parentId,
+          input.authorId,
+          command.transactionId,
+          at,
+          posts.map((post) => post.id),
+          posts.map((post) => post.history.at(-1)!.id),
+        ],
+      );
+      await tx.query(
+        `INSERT INTO content.revision
+           (route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence,
+            subject_ids, board_id, availability, recorded_transaction_id, recorded_at, media_ids)
+         SELECT $1, $2, post_id, revision_id, decode(body_hex, 'hex'), decode(digest_hex, 'hex'),
+                search_text, 'CC0-1.0', '{}'::uuid[], $3, 'available', $4,
+                $5::timestamptz + (ordinal * interval '1 microsecond'), '{}'::uuid[]
+         FROM unnest($6::uuid[], $7::uuid[], $8::text[], $9::text[], $10::text[], $11::integer[])
+           AS row(post_id, revision_id, body_hex, digest_hex, search_text, ordinal)`,
+        [
+          input.route,
+          input.threadId,
+          input.boardId,
+          command.transactionId,
+          at,
+          revisionRows.map((row) => row.postId),
+          revisionRows.map((row) => row.id),
+          revisionRows.map((row) => row.hex),
+          revisionRows.map((row) => row.digest),
+          revisionRows.map((row) => row.search),
+          revisionRows.map((row) => row.ordinal),
+        ],
+      );
+      inserted.set(tx, command.transactionId);
+      for (const post of posts)
+        await initializeResourceGrants(tx, {
+          resource: { route: input.route, id: post.id },
+          type: 'content.post',
+          creator: input.authorId,
+        });
+      const first = posts[0]!;
+      return {
+        value: { posts: posts.length },
+        events: [
+          {
+            type: 'com.rezics.content.post.created.v1',
+            subject: first.id,
+            data: {
+              threadId: input.threadId,
+              itemId: first.id,
+              revisionId: first.history[0]!.id,
+              actorId: input.authorId,
+            },
+          },
+        ],
+      };
+    },
   );
-  for (const row of grants.rows)
-    await revokeGrant(resources, 'governance', {
-      resource: PLATFORM_RESOURCE,
-      subject: { kind: 'account', id: board.authorId },
-      actions: ['access:grant'],
-      valid: row.valid,
-    });
+  return posts.map((post) => ({
+    id: post.id,
+    revisions: post.history.map((revision) => ({ id: revision.id, digest: revision.digest, body: revision.body })),
+  }));
 }
 
 export async function buildBoardAndThreads(
@@ -315,6 +528,7 @@ export async function buildBoardAndThreads(
   marker: string,
   targetPartition?: number,
 ) {
+  const started = performance.now();
   const { system } = resources;
   const otherId = resources.accountIds.unrelated;
   const authorId = resources.accountIds.author;
@@ -411,13 +625,14 @@ export async function buildBoardAndThreads(
     actions: ['post:create'],
   };
   await grant(resources, 'governance', authorPostCreate);
+  let cursor = phase('board', started);
 
-  const targeted: { id: string; revisions: { id: string; digest: string; body: string }[] }[] = new Array(posts);
-  // The partition gate runs one command. A second chain overlaps the account
-  // read that happens before that gate, without queueing past the request deadline.
-  await runInBatches(posts, 2, async (postIndex) => {
+  const targeted: TargetedPost[] = new Array(posts);
+  // Two real replies prove publish, edit and the creation grants. The partition
+  // gate runs one command; a second chain overlaps the account read before it.
+  const apiCount = Math.min(2, posts);
+  await runInBatches(apiCount, 2, async (postIndex) => {
     const firstBody = `${marker} post-${postIndex} revision-0`;
-    if (postIndex % 50 === 0) mark(`seed-post ${postIndex}`);
     const created = await setupRequest<{
       post: { id: string; revisionId: string; sha256: string };
     }>(resources, 'author', 'POST', `/v1/threads/${threadId}/posts`, {
@@ -445,7 +660,25 @@ export async function buildBoardAndThreads(
     }
     targeted[postIndex] = { id: created.post.id, revisions: history };
   });
-  mark('seed-posts-done');
+  cursor = phase('api-posts', cursor);
+  for (let start = apiCount; start < posts; start += BULK_POSTS) {
+    const written = await writeBulkPosts(resources, {
+      route,
+      threadId,
+      parentId: firstPostId,
+      boardId: board.id,
+      authorId,
+      marker,
+      revisions,
+      startIndex: start,
+      count: Math.min(BULK_POSTS, posts - start),
+    });
+    for (let offset = 0; offset < written.length; offset++) targeted[start + offset] = written[offset]!;
+  }
+  cursor = phase('bulk-posts', cursor);
+  if (apiCount > 0 && posts > apiCount)
+    await assertSameErasureShape(resources.pool, route, targeted[0]!.id, targeted[apiCount]!.id);
+  phase('shape', cursor);
 
   const unrelatedGrant = await resources.pool.query<{ valid: string }>(
     `SELECT valid::text FROM access.resource_grant
