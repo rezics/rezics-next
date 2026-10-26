@@ -165,8 +165,10 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
       for (const table of [
         'access.account',
         'access.organization_member',
+        'access.membership_inverse',
         'access.lifecycle_membership_slot',
         'access.lifecycle_coordination',
+        'core.receipt',
       ])
         await db.admin.query(`VACUUM (ANALYZE) ${table}`);
     },

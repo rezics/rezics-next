@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   createAuthHost,
@@ -34,7 +35,19 @@ const request = (path: string, body: unknown) =>
   );
 async function recover() {
   await bindings.internalLifecycle.raiseFence({ accountId, key: `growth-fence-${serial++}` });
+  // One admitted start per minute per account. The measured completion needs a fresh proof.
+  const mailKey = createHmac('sha256', 'native-growth-recovery-persistent-secret-32-bytes')
+    .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+    .digest('hex');
+  await authDatabase.query('DELETE FROM auth_attempt_counter WHERE key=$1', [mailKey]);
+  const previous = token;
   expect((await request('/recovery/start', { email: 'human@growth.test' })).status).toBe(200);
+  // Start returns before the non-enumerating delivery stores the token.
+  const deadline = Date.now() + 5_000;
+  while (token === previous) {
+    if (Date.now() >= deadline) throw new Error('Recovery start did not deliver a token');
+    await Bun.sleep(5);
+  }
   const body = { account_id: accountId, token, new_password: password };
   expect((await request('/recovery/complete', body)).status).toBe(200);
   // Exact success replay includes real Auth/current-credential resolution and

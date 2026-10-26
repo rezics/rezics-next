@@ -225,6 +225,26 @@ afterAll(async () => {
 test('mounted suspension keeps full native formula, stage and counter cost bounded at 1/8/64 x 500', async () => {
   let positive = positives[0]!;
   let spare = positive;
+  // Coordination does not block suspension. Restore between probes so each
+  // sample suspends the same account, whose hold cardinality is what grows.
+  let grantorSuspended = false;
+  const restoreGrantor = async () => {
+    if (!grantorSuspended) return;
+    const restored = await call(root.bearer, `/v1/accounts/${grantor.accountId}:reinstate`, {});
+    expect(restored.response.status).toBe(200);
+    expect(restored.value).toMatchObject({
+      reinstatement: { accountId: grantor.accountId, state: 'active' },
+    });
+    grantorSuspended = false;
+  };
+  const suspendGrantor = async () => {
+    const suspended = await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {});
+    expect(suspended.response.status).toBe(200);
+    expect(suspended.value).toMatchObject({
+      suspension: { accountId: grantor.accountId, state: 'suspended' },
+    });
+    grantorSuspended = true;
+  };
   const exercise = async (subject: { accountId: string }, freshKey: string) => {
     expect((await call(root.bearer, `/v1/accounts/${subject.accountId}:suspend`, {}, freshKey)).response.status).toBe(
       200,
@@ -233,7 +253,7 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
       (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
     ).toBe(200);
     expect((await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {})).response.status).toBe(403);
-    expect((await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {})).response.status).toBe(403);
+    await suspendGrantor();
   };
   const report = await checkGrowth(db, {
     name: 'mounted native suspension',
@@ -274,6 +294,18 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
           `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
           SELECT 7, md5(i::text) || md5((i + 100000)::text), 'background', 1, '2099-01-01'::timestamptz
           FROM generate_series(1, 4000) i`,
+        );
+        // The suspend locks one account and probes coordination by key. Unrelated
+        // rows keep both relations past the sequential-scan crossover.
+        await database.admin.query(
+          `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+          SELECT 0,id,'actor','active',$2 FROM unnest($1::uuid[]) id`,
+          [background, backgroundTransaction],
+        );
+        await database.admin.query(
+          `INSERT INTO access.lifecycle_coordination(route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+          SELECT 0,id,id,id,'membership',$2 FROM unnest($1::uuid[]) id`,
+          [background, backgroundTransaction],
         );
       }
       // A fresh active account for the unmeasured suspend. The positive mutation stays one-shot.
@@ -337,17 +369,22 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
       // Native seeding can outlast the pool's idle lifetime. Warm the real
       // mounted path after seeding so per-connection SQL type discovery does
       // not enter only the largest sample. The positive mutation remains fresh.
-      expect((await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {})).response.status).toBe(403);
+      // Leave the coordinated account active for the unmeasured and measured suspends.
+      await restoreGrantor();
+      await suspendGrantor();
+      await restoreGrantor();
       expect(
         (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
       ).toBe(200);
     },
     warmup: async (_database, scale) => {
       await exercise(spare, `growth-warmup-${scale}`);
+      await restoreGrantor();
     },
     operation: () => exercise(positive, 'growth-positive'),
   });
   positive = positives[3]!;
+  await restoreGrantor();
   const observed = await capture(db, () => exercise(positive, 'growth-positive'));
   for (const fragment of [
     'access.account',

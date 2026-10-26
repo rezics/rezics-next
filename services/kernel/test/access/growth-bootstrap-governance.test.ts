@@ -71,7 +71,8 @@ async function clearInstallation() {
 for (const mode of ['first', 'no-op', 'refusal'] as const) {
   test(`checkGrowth 1x/8x/64x ${mode}: native operator command and exact child CLI use bounded seeks`, async () => {
     await db.admin.query(`TRUNCATE access.governance_bootstrap, access.resource_role_grant, access.resource_grant,
-      access.account, core.receipt, core.outbox, editorial.write_basis`);
+      access.operator_fence_page, access.committed_continuation, access.account, core.receipt, core.outbox,
+      editorial.write_basis`);
     await db.admin.query('DELETE FROM semantic.context WHERE route=0 AND context_id<>$1', [PLATFORM_RESOURCE.id]);
     // Starting account facts only; the functional test creates real humans with
     // lifecycle commands and verifies native Auth-issued sessions separately.
@@ -201,7 +202,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
         if (mode !== 'refusal') expect(stderr).toBe('');
         const raw = JSON.parse(readFileSync(output, 'utf8')) as Capture;
         const cost = costOf(raw);
-        expect(cost.statements).toBeGreaterThan(0);
+        expect(cost.statements, stderr).toBeGreaterThan(0);
         expect(cost.plans).toBeGreaterThan(0);
         children.push({ scale, cost });
         const state = await database.admin.query(
@@ -221,10 +222,9 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }
     for (const sample of children) {
-      // Cold Reylo transports additionally validate the fixed relation schemas:
-      // four catalogue statements on first install, two on a read-only attempt.
-      expect(sample.cost.statements).toBe(mode === 'first' ? 9 : 5);
-      expect(sample.cost.relations?.['access.account']?.rows).toBe(1);
+      // The child issues the same statements as the in-process command.
+      expect(sample.cost.statements).toBe(mode === 'first' ? 12 : mode === 'refusal' ? 3 : 10);
+      expect(sample.cost.relations?.['access.account']?.rows).toBe(mode === 'refusal' ? 1 : 4);
     }
     const costs = (samples: readonly GrowthSample[]) =>
       samples.map(({ scale, cost }) => ({ scale, statements: cost.statements, rows: cost.rows, blocks: cost.blocks }));

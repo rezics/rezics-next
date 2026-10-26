@@ -7,8 +7,8 @@ let f: Awaited<ReturnType<typeof nativeFixture>>;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   f = await nativeFixture(db.pool, () => db.openPool());
-  // Native setup, beyond the small-table sequential-scan crossover at every
-  // measured scale. No account, Auth witness or DBOS outcome is seeded with SQL.
+  // Real registrations supply same-partition history. Unrelated background rows
+  // are inserted afterwards; no measured Auth witness or DBOS outcome is seeded with SQL.
   for (let offset = 0; offset < 512; offset += 8) {
     await Promise.all(
       Array.from({ length: 8 }, (_, n) => {
@@ -58,8 +58,132 @@ beforeAll(async () => {
             statement_timestamp(), 'growth-background-user-' || i, 'growth-background-client-0', 'read', 1, 1, 'pwd'
      FROM generate_series(1, 4000) i`,
   );
-  for (const table of ['auth_client', 'auth_consent', '"user"', 'session'])
+  await f.authPool.query(
+    `INSERT INTO account (id, "accountId", "providerId", "userId", "updatedAt")
+     SELECT 'growth-background-credential-' || i, 'growth-background-user-' || i, 'credential',
+            'growth-background-user-' || i, statement_timestamp()
+     FROM generate_series(1, 4000) i`,
+  );
+  await f.authPool.query(
+    `INSERT INTO verification (id, identifier, value, "expiresAt")
+     SELECT 'growth-background-verification-' || i, 'growth-background-' || i, 'x', '2099-01-01'::timestamptz
+     FROM generate_series(1, 4000) i`,
+  );
+  await f.authPool.query(
+    `INSERT INTO auth_registration_stage (registration_id, request_key, handle, account_id, request_digest, completed_at)
+     SELECT 'growth-background-registration-' || i, 'growth-background-request-' || i, 'growthbg' || i,
+            'growth-background-stage-' || i, decode(repeat('00', 32), 'hex'), statement_timestamp()
+     FROM generate_series(1, 4000) i`,
+  );
+  await f.authPool.query(
+    `INSERT INTO auth_provisioning_receipt (idempotency_key, account_id, digest)
+     SELECT 'growth-background-provision-' || i, 'growth-background-stage-' || i, decode(repeat('ab', 32), 'hex')
+     FROM generate_series(1, 4000) i`,
+  );
+  for (const table of [
+    'auth_client',
+    'auth_consent',
+    '"user"',
+    'session',
+    'account',
+    'verification',
+    'auth_registration_stage',
+    'auth_provisioning_receipt',
+  ])
     await f.authPool.query(`VACUUM (ANALYZE) ${table}`);
+  // Registration and replay also read the kernel relations below. A few hundred
+  // real rows stay inside the sequential-scan range, so unrelated rows come first.
+  const routeOfId = '(get_byte(uuid_send(id), 10) * 256) + get_byte(uuid_send(id), 11)';
+  await db.admin.query(
+    `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+     SELECT ${routeOfId}, id, 'actor', 'active', id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.lifecycle_coordination(route, account_id, reservation_id, related_account_id, purpose, transaction_id)
+     SELECT ${routeOfId}, id, id, id, 'membership', id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.operator_relation_slot(route, subject_account_id, reservation_id, operator_account_id, terminal, transaction_id)
+     SELECT ${routeOfId}, id, id, gen_random_uuid(), false, id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     SELECT ${routeOfId}, id, id, 'subject:read', '(,)', id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.handle_claim(route, normalized_handle, account_id, state, transaction_id)
+     SELECT (get_byte(digest, 0) * 256) + get_byte(digest, 1), handle, gen_random_uuid(), 'active', gen_random_uuid()
+     FROM (
+       SELECT 'growthbg' || i AS handle, sha256(convert_to('growthbg' || i, 'UTF8')) AS digest
+       FROM generate_series(1, 4000) i
+     ) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.workflow_approval(
+       route, approval_id, actor_id, client_id, scopes, authn_epoch, operation_key, operation, digest,
+       created_at, expires_at, jwt_expires_at, transaction_id)
+     SELECT ${routeOfId}, id, id, 'growth-background', ARRAY['read'], 1, 'growth-background-' || n,
+            '{"kind":"background"}'::jsonb, repeat('ab', 32),
+            statement_timestamp(), statement_timestamp() + interval '4 minutes',
+            statement_timestamp() + interval '1 hour', id
+     FROM (SELECT gen_random_uuid() AS id, n FROM generate_series(1, 4000) n) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO core.receipt(
+       partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest, epoch, position, transaction_id, response)
+     SELECT 0, 'account', id, 'unrelated.command', id::text, decode(repeat('00', 32), 'hex'), 1, 5000000 + n, id, '{}'::jsonb
+     FROM (SELECT gen_random_uuid() AS id, n FROM generate_series(1, 4000) n) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO core.outbox(partition_no, position, event_seq, event_count, epoch, id, type, data)
+     SELECT 0, 5000000 + n, 0, 1, 1, id, 'com.rezics.subject.created.v1', jsonb_build_object('id', id)
+     FROM (SELECT gen_random_uuid() AS id, n FROM generate_series(1, 4000) n) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO editorial.write_basis(partition_no, transaction_id, epoch, position, principal_id, client_id, principal_kind)
+     SELECT 0, id, 1, 5000000 + n, id, 'growth-background', 'account'
+     FROM (SELECT gen_random_uuid() AS id, n FROM generate_series(1, 4000) n) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.membership_inverse(route, account_id, kind, group_id, reservation_id, transaction_id)
+     SELECT ${routeOfId}, id, 'organization', id, id, id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.organization_member(route, organization_id, member_account_id, role, valid, transaction_id)
+     SELECT ${routeOfId}, id, gen_random_uuid(), 'member', '(,)', id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_role_grant(route, resource_id, subject_id, grant_role, valid, transaction_id)
+     SELECT ${routeOfId}, id, id, 'unrelated.reader', '(,)', id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_denial(route, resource_id, subject_id, action, reason, valid, transaction_id)
+     SELECT ${routeOfId}, id, id, 'subject:read', 'resource', '(,)', id
+     FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 4000)) s`,
+  );
+  for (const table of [
+    'access.account',
+    'access.lifecycle_coordination',
+    'access.operator_relation_slot',
+    'access.resource_grant',
+    'access.handle_claim',
+    'access.workflow_approval',
+    'access.membership_inverse',
+    'access.organization_member',
+    'access.resource_role_grant',
+    'access.resource_denial',
+    'core.receipt',
+    'core.outbox',
+    'editorial.write_basis',
+  ])
+    await db.admin.query(`VACUUM (ANALYZE) ${table}`);
 }, 600000);
 afterAll(async () => {
   await f?.close();
