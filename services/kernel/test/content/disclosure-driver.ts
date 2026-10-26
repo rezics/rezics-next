@@ -567,20 +567,22 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       if (!Number.isFinite(parsed)) throw new TypeError('Invalid trusted command time');
       commandInstant = parsed;
     }
+    // A routed subject id with no semantic row. Existence is not required.
+    const subjectIds = input.missingSemanticSubject ? [newId(1)] : [];
     try {
       const path = input.thread ? `/v1/threads/${input.thread.id}/posts` : '/v1/threads';
       const body = input.thread
         ? {
             body: fromPlainText(input.body),
             licence: 'MIT',
-            subjectIds: [],
+            subjectIds,
             ...(input.parent ? { parentId: input.parent.id } : {}),
           }
         : {
             title: `${BOARD_TITLE} ${++serial}`,
             body: fromPlainText(input.body),
             licence: 'MIT',
-            subjectIds: [],
+            subjectIds,
             boardId: input.board.id,
             visibility: 'published',
           };
@@ -611,7 +613,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     }
   }
 
-  async function firstPostId(threadId: string): Promise<string> {
+  async function firstPostId(threadId: string): Promise<string | null> {
     const known = firstPosts.get(threadId);
     if (known) return known;
     const { rows } = await pool.query<{ first_post_id: string | null }>(
@@ -619,13 +621,15 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       [requiredRoute(threadId), threadId],
     );
     const id = rows[0]?.first_post_id;
-    if (!id) throw new Error('Thread first post is missing');
+    if (!id) return null;
     firstPosts.set(threadId, id);
     return id;
   }
 
   async function edit(target: Content, body: string, key?: string): Promise<Revision> {
-    const postId = target.kind === 'post' ? target.id : await firstPostId(target.id);
+    const resolved = target.kind === 'post' ? target.id : await firstPostId(target.id);
+    if (!resolved) throw new Error('Thread first post is missing');
+    const postId = resolved;
     const headerKey = key ?? randomUUID();
     const response = await call({
       method: 'POST',
@@ -790,7 +794,9 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       const thread = asRecord(asRecord(await response.clone().json(), 'thread').thread, 'thread');
       return { response, value: { id: text(thread, 'id'), revision: revisionFromView(thread.firstPost) } };
     }
-    const postId = target.kind === 'post' ? target.id : await firstPostId(target.id);
+    // A thread with no stored first post still uses the revision route. The
+    // product returns the same not_found problem as a missing post.
+    const postId = target.kind === 'post' ? target.id : ((await firstPostId(target.id)) ?? target.id);
     const path = revisionId === undefined ? `/v1/posts/${postId}` : `/v1/posts/${postId}/revisions/${revisionId}`;
     const response = await call({ method: 'GET', path, persona });
     if (!response.ok) return { response };
