@@ -78,7 +78,6 @@ test('setup failures without the complete retry contract fail immediately with t
     [503, { ...overloaded, retryable: 'true' }],
     [503, { retryable: true }],
     [503, { ...overloaded, effect_status: 'unknown' }],
-    [503, { ...overloaded, effect_status: 'not_applicable' }],
     [503, { ...overloaded, effect_status: 'applied' }],
     [503, null],
     [429, overloaded],
@@ -155,6 +154,42 @@ test('setup reads retry overload safely and unexpected successful statuses fail 
   await expect(
     setupRequest(async () => Response.json({ unexpected: true }), request(), { ...timing, status: 201 }),
   ).rejects.toThrow('(200): {"unexpected":true}');
+});
+
+test('setup reads retry not_applicable overloads with Retry-After and leave successful bodies readable', async () => {
+  const timing = clock();
+  const seen: (string | null)[] = [];
+  const result = await setupRequest(
+    async (input) => {
+      seen.push(input.headers.get('Idempotency-Key'));
+      return seen.length === 1
+        ? Response.json(
+            { ...overloaded, effect_status: 'not_applicable' },
+            { status: 503, headers: { 'Retry-After': '1' } },
+          )
+        : Response.json({ posts: [{ id: 'before-delete' }] });
+    },
+    new Request('https://kernel.test/v1/threads/example/posts'),
+    { ...timing, status: 200 },
+  );
+  expect(seen).toEqual([null, null]);
+  expect(timing.waits).toEqual([1000]);
+  expect(await result.json()).toEqual({ posts: [{ id: 'before-delete' }] });
+});
+
+test('not_applicable setup overloads also stop at six attempts with the last body', async () => {
+  const timing = clock();
+  let attempts = 0;
+  const problem = { ...overloaded, effect_status: 'not_applicable' };
+  await expect(
+    setupRequest(
+      async () => Response.json({ ...problem, attempt: ++attempts }, { status: 503 }),
+      new Request('https://kernel.test/v1/threads/example/posts'),
+      timing,
+    ),
+  ).rejects.toThrow(JSON.stringify({ ...problem, attempt: 6 }));
+  expect(attempts).toBe(6);
+  expect(timing.waits).toEqual([50, 100, 200, 400, 800]);
 });
 
 test('setup generates one key for an unkeyed write and reuses it across retries', async () => {

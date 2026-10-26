@@ -386,6 +386,19 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
         transaction_id: revision,
       };
       return {
+        // Grow the parent relation too, so point reads use its index at every scale.
+        'content.thread': [
+          {
+            route,
+            thread_id: post,
+            author_account_id: author,
+            board_id: neighbour.board,
+            title: 'Neighbour thread',
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: revision,
+          },
+        ],
         'content.post': [
           {
             route,

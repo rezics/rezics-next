@@ -33,7 +33,7 @@ export async function setupRequest(
     } catch {
       break;
     }
-    if (problem?.retryable !== true || problem?.effect_status !== 'not_applied') break;
+    if (problem?.retryable !== true || !['not_applied', 'not_applicable'].includes(problem?.effect_status)) break;
     const retryAfter = response.headers.get('Retry-After');
     let delay = 50 * 2 ** attempt;
     if (retryAfter !== null) {
