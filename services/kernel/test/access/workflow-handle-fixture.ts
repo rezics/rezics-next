@@ -7,8 +7,7 @@ import { createAuthService, createAccountWorkflows } from '../../../auth/src/ind
 import type { AccountWorkflowPorts, AccountOperation } from '../../../auth/src/workflows.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAuthenticator } from '../../src/access/authenticate.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { createAccess } from '../../src/access/index.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,
@@ -152,10 +151,6 @@ export async function handleFixture(
     firstParty: true,
     scopes: ['account:update', 'account:delete', 'organization:create', 'organization:membership', 'account:manage'],
   });
-  const verifier = createAuthenticator({
-    ...auth.verifier,
-    fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
-  });
   const actions = new Map([
     ...LIFECYCLE_ACTIONS,
     ['account:manage', { anonymous: false }],
@@ -163,7 +158,10 @@ export async function handleFixture(
   ] as const);
   const access = createAccess({
     actions,
-    accountEvidence: (actor) => verifier.identity(actor)?.account,
+    auth: {
+      ...auth.verifier,
+      fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
+    },
   });
   const commands = createLifecycleCommands({ pool: kernel, access });
   const continuations = createCommittedContinuations({
@@ -223,7 +221,7 @@ export async function handleFixture(
       if (!approval || (approval.operation && JSON.stringify(approval.operation) !== JSON.stringify(operation)))
         throw new Error('Approval mismatch');
       const context = { pool: kernel, deadline: Date.now() + 5000 };
-      const actor = await verifier.authenticate(approval.token, context).catch(() => {
+      const actor = await access.authenticate(approval.token, context).catch(() => {
         throw new AuthBindingDeniedError();
       });
       if (actor.kind !== 'account') throw new Error('No authenticated actor');
@@ -325,7 +323,7 @@ export async function handleFixture(
       beforeRevoke = callback;
     },
     authenticate(token: string) {
-      return verifier.authenticate(token, { pool: kernel, deadline: Date.now() + 5000 });
+      return access.authenticate(token, { pool: kernel, deadline: Date.now() + 5000 });
     },
     get workflows() {
       return workflows;

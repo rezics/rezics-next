@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import type { Access } from '../../src/request/access.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,
   LIFECYCLE_ACTIONS,
   LifecycleDeniedError,
 } from '../../src/access/lifecycle.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import {
   assertGrowth,
@@ -25,6 +25,7 @@ import memberInsert from '../../src/access/lifecycle-member-insert.sql';
 
 let db: GrowthDatabase;
 let commands: ReturnType<typeof createLifecycleCommands>;
+let access: Access;
 let internal: ReturnType<typeof createLifecycleInternals>;
 const route = 0x7430;
 const organizationId = newId(route);
@@ -45,7 +46,7 @@ const clock = () => {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, ctx) => ctx.account });
+  access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
   commands = createLifecycleCommands({ pool: db.pool, access, clock });
   internal = createLifecycleInternals({
     pool: db.pool,
@@ -81,14 +82,17 @@ afterAll(async () => {
 
 async function context() {
   return {
-    actor: {
-      kind: 'account',
-      accountId: owner,
-      clientId: 'membership-cost',
-      requestedBy: null,
-      authnEpoch: 1,
-      scopes: [...LIFECYCLE_ACTIONS.keys()],
-    } as AccountActor,
+    actor: await authenticateAccount(
+      access,
+      { pool: db.pool, deadline: Date.now() + 10_000 },
+      {
+        accountId: owner,
+        clientId: 'membership-cost',
+        requestedBy: null,
+        authnEpoch: 1,
+        scopes: [...LIFECYCLE_ACTIONS.keys()],
+      },
+    ),
     account: await readAccount(db.admin, routeOf(owner)!, owner),
     deadline: Date.now() + 5000,
   };

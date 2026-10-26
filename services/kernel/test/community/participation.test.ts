@@ -8,7 +8,6 @@ import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
 import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { createAccountsWorkModule, enqueueMembership } from '../../src/access/membership-work.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -51,7 +50,6 @@ let kernel: ReturnType<typeof createKernel>;
 let workClient: Awaited<ReturnType<typeof createWorkClient>>;
 let workRuntime: Awaited<ReturnType<typeof composeWork>>;
 let access: ReturnType<typeof createAccess>;
-let membershipAccess: ReturnType<typeof createPermissionAccess>;
 let membership: ReturnType<typeof createRealmMembership>;
 let roleReader: ReturnType<typeof createRealmMembership>['roleReader'] | undefined;
 let scopes: string[];
@@ -307,15 +305,10 @@ beforeAll(async () => {
     writeRate: limiter,
   });
   scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
-  membershipAccess = createPermissionAccess({
-    actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
-    accountEvidence: (_actor, context) => context.account,
-    realmRoleReader: (client, input) => {
-      if (!roleReader) return Promise.resolve(null);
-      return roleReader(client, input);
-    },
-  });
-  membership = createRealmMembership({ pool, access: membershipAccess });
+  // The kernel installs its Access on the first routed request. Membership must use that object.
+  await kernel.handle(new Request(`http://kernel.test/v1/realms/${newId(29)}`));
+  if (!access) throw new Error('Kernel access was not installed');
+  membership = createRealmMembership({ pool, access });
   roleReader = membership.roleReader;
   service = await createAuthService({
     database: authPool,
@@ -350,7 +343,7 @@ beforeAll(async () => {
     [
       createAccountsWorkModule({
         realm: { ...membership, authorize: authorizeMembership },
-        access: membershipAccess,
+        access,
         authorize: authorizeMembership,
       }),
     ],

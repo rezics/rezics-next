@@ -10,9 +10,9 @@ import {
   parentCreationAuthorization,
   resourceAuthorization,
 } from '../../src/access/index.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type Access, type AccountActor } from '../../src/request/access.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -95,7 +95,7 @@ function seedRow(kind: keyof typeof seedColumns, values: readonly unknown[]): Re
 // prettier-ignore
 type Fixture = { tag: string; prefix: string; seedClient: string; seedSource: string; sourceExternalId: string; sourceRoute: number;
   sourcePartition: number; partition: number; route: number; actor: AccountActor; boardId: string; threadId: string; postId: string;
-  revisionId: string; accounts: Map<string, Account>; access: ReturnType<typeof createAccess>; storage: Storage; basePosition: bigint; baseOrdinal: number };
+  revisionId: string; accounts: Map<string, Account>; access: Access; storage: Storage; basePosition: bigint; baseOrdinal: number };
 
 let db: GrowthDatabase | undefined;
 let imageBytes = new Uint8Array();
@@ -174,17 +174,17 @@ async function makeAnchor(options: { partition?: number; tag?: string } = {}): P
   for (const [resource, action] of [[threadId, 'media:create'], [threadId, 'post:create'], [boardId, 'board:read'],
     [platform, 'media:import_from_url'], [platform, 'source_fence:read'], [platform, 'source_fence:takedown']] as const)
     await grant({ actor }, resource, action);
-  const access = createAccess({ actions: new Map(actor.scopes.map(action => [action, { anonymous: false, ...(action === 'media:create' || action === 'media:import_from_url'
+  const access = admittedAccess({ actions: new Map(actor.scopes.map(action => [action, { anonymous: false, ...(action === 'media:create' || action === 'media:import_from_url'
   ? { 'x-resource-types': ['content.media'] as const }
   : action === 'post:create'
     ? { 'x-resource-types': ['content.post'] as const }
-    : {}) }])),
-    accountEvidence: candidate => accounts.get(candidate.accountId) });
+    : {}) }])) });
+  const admitted = await authenticateAccount(access, { pool: db!.pool, deadline: Date.now() + 290_000 }, actor);
   const position = await db!.admin.query<{ position: string }>(
     'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [partition]);
   const fixture: Fixture = { tag, prefix: `growth-media:${tag}:`, seedClient: 'rezics-website',
     seedSource, sourceExternalId, sourceRoute, sourcePartition,
-    partition, route, actor, boardId, threadId, postId, revisionId, accounts, access, storage: new Storage(),
+    partition, route, actor: admitted, boardId, threadId, postId, revisionId, accounts, access, storage: new Storage(),
     basePosition: BigInt(position.rows[0]!.position) + 1n, baseOrdinal: 0 };
   await createPostAnchor(fixture);
   return fixture;

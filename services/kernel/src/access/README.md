@@ -4,6 +4,16 @@ Access owns account state and lifecycle, bearer identity evidence, resource perm
 
 Every access event type has a schema in `events.ts`, and the catalogue test proves it with real data.
 
+## Registries
+
+Command admission, the approval identity bridge, the durable identity bridge, platform gate checks and resource roles are registered on one Access object. Every lookup goes through `accessRoot`. `deriveAccess` therefore keeps the root's registration, through any number of further derived adapters. Copying methods onto a new object does not: that object is its own root and has no registration.
+
+A command whose Access has no command admission is refused. A missing approval or durable identity bridge refuses the identity. A missing platform gate check denies the gate. A missing resource-role catalogue leaves the type unresolved. `createAccess` installs each registration, so an Access from that factory keeps admission, both identity bridges, platform gate checks and resource roles.
+
+Installing command admission or either identity bridge on a derived Access is refused. Resource-role installation is stored on the root, so a derived Access reads that same catalogue.
+
+Each use is one WeakMap read plus the derivation walk to the root.
+
 ## Grant rule
 
 A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.

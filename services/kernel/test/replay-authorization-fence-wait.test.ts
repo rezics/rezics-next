@@ -1,11 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createPool, withConnection } from '../src/database/pool.ts';
 import { CommandUnavailableError } from '../src/command/command.ts';
-import { createAccess } from '../src/access/permission.ts';
+import { deriveAccess } from '../src/access/derived-access.ts';
 import { readAccount } from '../src/access/account-data.ts';
 import { createLifecycleCommands, LifecycleDeniedError, LIFECYCLE_ACTIONS } from '../src/access/lifecycle.ts';
 import { newId, partitionOf } from '../src/route/route.ts';
-import type { AccountActor } from '../src/request/access.ts';
+import { admittedAccess, authenticateAccount } from './support/admitted-access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -39,32 +39,29 @@ async function fixture(route: number) {
      VALUES ($1,$2,$2,'account:update','(,)',$3)`,
     [route, accountId, Bun.randomUUIDv7()],
   );
-  const actor: AccountActor = {
-    kind: 'account',
-    accountId,
-    clientId: 'web',
-    scopes: ['account:update'],
-    requestedBy: null,
-    authnEpoch: 1,
-  };
   const account = await withConnection(admin, (tx) => readAccount(tx, route, accountId));
+  if (!account) throw new Error('missing account');
   const counts = { prepare: 0, authorize: 0 };
-  const permission = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: () => account });
+  const root = admittedAccess({ actions: LIFECYCLE_ACTIONS });
+  const actor = await authenticateAccount(
+    root,
+    { pool, deadline: Date.now() + 30_000 },
+    { accountId, clientId: 'web', scopes: ['account:update'], requestedBy: null, authnEpoch: 1 },
+  );
   const rolledBack = Promise.withResolvers<void>();
   trace = { body: 0, rollback: () => rolledBack.resolve() };
   const commands = createLifecycleCommands({
     pool,
-    access: {
-      ...permission,
+    access: deriveAccess(root, {
       async prepare(...args) {
         counts.prepare++;
-        return permission.prepare!(...args);
+        return root.prepare!(...args);
       },
       async authorize(...args) {
         counts.authorize++;
-        return permission.authorize(...args);
+        return root.authorize(...args);
       },
-    },
+    }),
   });
   const state = (writeState: string, movedTo: string | null = null) =>
     admin.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [

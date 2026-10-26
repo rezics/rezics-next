@@ -22,13 +22,13 @@ import type {
   Actor,
   Resource,
 } from '../request/access.ts';
+import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import timeRead from './permission-time.sql';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
 import { installDurableIdentityBridge } from './durable-identity.ts';
 import { installApprovalIdentityBridge } from './approved-identity.ts';
-import { accessRoot } from './derived-access.ts';
 
 export {
   createResourcePublicEligibility,

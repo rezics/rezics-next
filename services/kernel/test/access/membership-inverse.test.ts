@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import {
   createLifecycleInternals,
   createLifecycleCommands,
@@ -26,7 +26,7 @@ const internals = createLifecycleInternals({
   provisioningEvidence: async () => null,
   recoveryEvidence: async () => null,
 });
-const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, ctx) => ctx.account });
+const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const lifecycle = createLifecycleCommands({ pool, access });
 const api = () => import('../../src/access/membership-inverse.ts');
 async function person(route = 0x5200) {
@@ -38,15 +38,21 @@ async function person(route = 0x5200) {
   return id;
 }
 async function context(id: string) {
+  const claims = {
+    accountId: id,
+    clientId: 'test',
+    requestedBy: null,
+    authnEpoch: 1,
+    scopes: [...LIFECYCLE_ACTIONS.keys()],
+  };
+  let actor: AccountActor;
+  try {
+    actor = await authenticateAccount(access, { pool, deadline: Date.now() + 290_000 }, claims);
+  } catch {
+    actor = { kind: 'account', ...claims };
+  }
   return {
-    actor: {
-      kind: 'account',
-      accountId: id,
-      clientId: 'test',
-      requestedBy: null,
-      authnEpoch: 1,
-      scopes: [...LIFECYCLE_ACTIONS.keys()],
-    } as AccountActor,
+    actor,
     account: await withConnection(reader, (c) => readAccount(c, routeOf(id)!, id)),
     deadline: Date.now() + 2000,
   };

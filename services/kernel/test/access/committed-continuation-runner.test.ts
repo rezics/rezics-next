@@ -12,12 +12,12 @@ import {
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createAccess as createAuthenticatedAccess } from '../../src/access/index.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor, ActionCatalogue } from '../../src/request/access.ts';
+import type { ActionCatalogue } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -29,7 +29,7 @@ const actions: ActionCatalogue = new Map([
   ['account:manage', { anonymous: false }],
   ['account:suspend', { anonymous: false }],
 ]);
-const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions });
 const operators = createOperatorCommands({ pool, access, actions, managementAction: 'account:manage' });
 const lifecycle = createLifecycleCommands({ pool, access });
 const proofs = new Map<
@@ -61,14 +61,17 @@ const key = () => `continuation-runner-${++sequence}`;
 const digestOf = (value: string) => createHash('sha256').update(value).digest('hex');
 const row = (id: string) => withConnection(pool, (client) => readAccount(client, routeOf(id)!, id));
 const ctx = async (id: string) => ({
-  actor: {
-    kind: 'account',
-    accountId: id,
-    clientId: 'verified-client',
-    scopes: [...actions.keys()],
-    requestedBy: null,
-    authnEpoch: 1,
-  } as AccountActor,
+  actor: await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 30_000 },
+    {
+      accountId: id,
+      clientId: 'verified-client',
+      scopes: [...actions.keys()],
+      requestedBy: null,
+      authnEpoch: 1,
+    },
+  ),
   account: await row(id),
   deadline: Date.now() + 3000,
 });

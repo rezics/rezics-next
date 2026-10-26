@@ -1,5 +1,6 @@
 import { actionCatalogue } from '../http/request.ts';
 import type { Access, ActionCatalogue } from '../request/access.ts';
+import { accessRoot } from './derived-access.ts';
 import defaults from './resource-roles.json';
 import governance from './platform-governance.json';
 
@@ -175,13 +176,14 @@ export function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalog
 }
 
 export function installResourceRoleCatalogue(access: Access, catalogue: ResolvedResourceRoles): void {
-  const previous = installed.get(access)?.declaredTypes;
+  const root = accessRoot(access);
+  const previous = installed.get(root)?.declaredTypes;
   if (catalogue.declaredTypes !== undefined || previous === undefined) {
-    installed.set(access, catalogue);
+    installed.set(root, catalogue);
     return;
   }
-  installed.set(access, { roles: catalogue.roles, types: catalogue.types, declaredTypes: previous });
+  installed.set(root, { roles: catalogue.roles, types: catalogue.types, declaredTypes: previous });
 }
 export function resourceRoleCatalogue(access: Access): ResolvedResourceRoles | undefined {
-  return installed.get(access);
+  return installed.get(accessRoot(access));
 }

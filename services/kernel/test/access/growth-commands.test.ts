@@ -2,7 +2,7 @@ import { resetGrowthTables } from './growth-reset.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
-import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { readAccount, readOrganizationRole, readPublicAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands, readAssignment } from '../../src/access/delegation-commands.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
@@ -18,12 +18,7 @@ import {
   parentCreationAuthorization,
 } from '../../src/access/index.ts';
 import { runCommand } from '../../src/command/command.ts';
-import {
-  accessCommandAuthorization,
-  type AccountActor,
-  type ActionCatalogue,
-  type Resource,
-} from '../../src/request/access.ts';
+import { accessCommandAuthorization, type ActionCatalogue, type Resource } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   checkGrowth,
@@ -63,11 +58,7 @@ const actions: ActionCatalogue = new Map([
 ]);
 
 let db: GrowthDatabase;
-const accountEvidence = new Map<string, NonNullable<Awaited<ReturnType<typeof readAccount>>>>();
-const access = createPermissionAccess({
-  actions,
-  accountEvidence: (actor) => accountEvidence.get(actor.accountId),
-});
+const access = admittedAccess({ actions });
 
 function accountRoute(id: string): number {
   const route = routeOf(id);
@@ -117,27 +108,25 @@ async function createActor(partition: number, handle: string) {
   });
   const account = await readAccount(db.pool, route, accountId);
   if (!account) throw new Error('Lifecycle fixture actor was not created');
-  accountEvidence.set(accountId, account);
   return { accountId, account };
 }
 
-function actorFor(accountId: string, account: NonNullable<Awaited<ReturnType<typeof readAccount>>>): AccountActor {
-  return {
-    kind: 'account',
-    accountId,
-    clientId: 'growth-access-test',
-    scopes: [...actions.keys()],
-    requestedBy: null,
-    authnEpoch: Number(account.minimumAuthnEpoch),
-  };
-}
-
-function contextFor(accountId: string, account: NonNullable<Awaited<ReturnType<typeof readAccount>>>) {
+async function contextFor(accountId: string, account: NonNullable<Awaited<ReturnType<typeof readAccount>>>) {
   return {
     pool: db.pool,
     deadline: Date.now() + 30_000,
     account,
-    actor: actorFor(accountId, account),
+    actor: await authenticateAccount(
+      access,
+      { pool: db.pool, deadline: Date.now() + 30_000 },
+      {
+        accountId,
+        clientId: 'growth-access-test',
+        scopes: [...actions.keys()],
+        requestedBy: null,
+        authnEpoch: Number(account.minimumAuthnEpoch),
+      },
+    ),
   };
 }
 
@@ -335,7 +324,6 @@ async function clearFixtureRows(): Promise<void> {
   ]);
   await db.admin.query('UPDATE core.partition SET position = 0');
   await db.admin.query('CHECKPOINT');
-  accountEvidence.clear();
 }
 
 type CommandHistoryEntry = { readonly kind: string; readonly eventType?: string };
@@ -1720,7 +1708,7 @@ test.serial(
       population,
       async (_growthDb, _scale, repetition) => {
         const { actor, resource } = parents[repetition]!;
-        const context = contextFor(actor.accountId, actor.account);
+        const context = await contextFor(actor.accountId, actor.account);
         const parent = {
           resource,
           validate: async (client: Parameters<typeof readAccount>[0]) =>
@@ -1750,7 +1738,7 @@ test.serial(
     const creator = await createActor(partition, 'growth_initializer_creator');
     const parent: Resource = { route: accountRoute(creator.accountId), id: creator.accountId };
     await grant(parent, creator.accountId, 'subject:create');
-    const context = contextFor(creator.accountId, creator.account);
+    const context = await contextFor(creator.accountId, creator.account);
     const children = Array.from({ length: operationsPerCheck }, () => ({
       route: parent.route,
       id: newId(parent.route),
@@ -1818,7 +1806,7 @@ test.serial(
     for (const action of ['access:grant', 'subject:read', 'subject:update'])
       await grant(resource, actor.accountId, action);
     const commands = createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' });
-    const context = contextFor(actor.accountId, actor.account);
+    const context = await contextFor(actor.accountId, actor.account);
     const recipientId = newId(resource.route);
     const population = grantPopulation('growth-access-grant-commands', partition, [
       { kind: 'grant.create' },
@@ -1828,7 +1816,7 @@ test.serial(
     const report = await check(
       population,
       async (_growthDb, _scale, repetition) => {
-        const ctx = contextFor(actor.accountId, actor.account);
+        const ctx = await contextFor(actor.accountId, actor.account);
         const base = {
           resource,
           subjectId: recipientId,
@@ -1872,7 +1860,7 @@ test.serial(
     const report = await check(
       population,
       async (_growthDb, _scale, repetition) => {
-        const ctx = contextFor(principal.accountId, principal.account);
+        const ctx = await contextFor(principal.accountId, principal.account);
         const input = {
           principalId: principal.accountId,
           assignedActorId,
@@ -2037,7 +2025,7 @@ test.serial(
       population,
       async (_growthDb, _scale, repetition) => {
         const { actor, target } = anchors[repetition]!;
-        const ctx = contextFor(actor.accountId, actor.account);
+        const ctx = await contextFor(actor.accountId, actor.account);
         const update = await commands.updateAccount(ctx, {
           accountId: target.accountId,
           key: `growth-account-update-${repetition}`,
@@ -2092,7 +2080,7 @@ test.serial(
       population,
       async (_growthDb, _scale, repetition) => {
         const target = anchors[repetition]!;
-        return commands.setMembership(contextFor(owner.accountId, owner.account), {
+        return commands.setMembership(await contextFor(owner.accountId, owner.account), {
           organizationId,
           memberAccountId: target.member.accountId,
           reservationId: target.reservationId,
@@ -2143,7 +2131,7 @@ test.serial(
     const report = await check(
       population,
       async (_growthDb, _scale, repetition) =>
-        commands.tombstone(contextFor(actor.accountId, actor.account), {
+        commands.tombstone(await contextFor(actor.accountId, actor.account), {
           accountId: targets[repetition]!,
           key: `growth-tombstone-${repetition}`,
         }),

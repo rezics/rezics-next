@@ -5,8 +5,7 @@ import { appendImportedField, readImportedField, type ImportedFieldView } from '
 import type { ImportedFieldInput } from '../../src/content/imported-contract.ts';
 import { runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
-import { createAccess } from '../../src/access/permission.ts';
-import { readAccount } from '../../src/access/account-data.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
 
@@ -16,7 +15,7 @@ const route = 0xc120;
 const subject = newId(route);
 const actorId = newId(0xc230);
 const action = 'subject:update';
-const actor: AccountActor = {
+let actor: AccountActor = {
   kind: 'account',
   accountId: actorId,
   clientId: 'web',
@@ -25,7 +24,7 @@ const actor: AccountActor = {
   requestedBy: null,
 };
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let access: ReturnType<typeof createAccess>;
+let access: ReturnType<typeof admittedAccess>;
 class Denied extends Error {}
 const hash = (body: Uint8Array) => createHash('sha256').update(body).digest('hex');
 function input(): ImportedFieldInput {
@@ -96,8 +95,8 @@ beforeAll(async () => {
     VALUES ($1,$2,$3,$4,'(,)',$3)`,
     [route, subject, actorId, action],
   );
-  const account = await readAccount(db.admin, routeOf(actorId)!, actorId);
-  access = createAccess({ actions: new Map([[action, { anonymous: false }]]), accountEvidence: () => account });
+  access = admittedAccess({ actions: new Map([[action, { anonymous: false }]]) });
+  actor = await authenticateAccount(access, { pool: db.pool, deadline: Date.now() + 10_000 }, actor);
 });
 afterAll(async () => {
   await db?.close();
