@@ -39,3 +39,23 @@ test('toMatchObject continues to support .not', () => {
   expect({ revision: 4 }).not.toMatchObject({ revision: 5 });
   expect(() => expect({ revision: 4 }).not.toMatchObject({ revision: 4 })).toThrow();
 });
+
+test('toMatchObject sees the own properties of a rejected error', async () => {
+  const error = Object.assign(new Error('denied'), { code: 'forbidden' });
+
+  await expect(Promise.reject(error)).rejects.toMatchObject({ code: 'forbidden', message: 'denied' });
+  expect({ failure: error }).toMatchObject({ failure: { code: 'forbidden' } });
+  expect(error).toBeInstanceOf(Error);
+});
+
+test('toMatchObject leaves a frozen or cyclic received value unchanged', () => {
+  const frozen = Object.freeze({ revision: 4, rows: Object.freeze([{ id: 'a' }]) });
+  const cyclic: { id: string; self?: unknown } = { id: 'b' };
+  cyclic.self = cyclic;
+
+  expect(frozen).toMatchObject({ revision: expect.any(Number), rows: [{ id: expect.any(String) }] });
+  expect(cyclic).toMatchObject({ id: expect.any(String) });
+
+  expect(frozen).toEqual({ revision: 4, rows: [{ id: 'a' }] });
+  expect(cyclic.id).toBe('b');
+});
