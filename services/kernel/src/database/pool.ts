@@ -12,11 +12,11 @@ const heldPools = new AsyncLocalStorage<ReadonlySet<Pool>>();
 const brokenClients = new WeakMap<PoolClient, Error>();
 type Connect = Pool['connect'];
 
-export function createPool(url: string): Pool {
+export function createPool(url: string, options: { connectionTimeoutMillis?: number } = {}): Pool {
   const pool = new pg.Pool({
     connectionString: url,
     max: 10,
-    connectionTimeoutMillis: 200,
+    connectionTimeoutMillis: options.connectionTimeoutMillis ?? 200,
     idleTimeoutMillis: 30_000,
     options: '-c idle_in_transaction_session_timeout=5000',
   });
