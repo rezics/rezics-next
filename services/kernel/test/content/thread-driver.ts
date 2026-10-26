@@ -44,7 +44,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
-import { observeSql, type SqlObserver } from './support/sql-observer.ts';
+import { observeSql, permissionResourceId, type SqlObserver } from './support/sql-observer.ts';
 
 const AUDIENCE = 'https://content.test';
 const MEASURED_KEYS = 24;
@@ -1048,7 +1048,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
           const route = Number(parameter(record, permissionRead.params, 'route'));
           checks.push({
             action: String(parameter(record, permissionRead.params, 'action')),
-            resourceId: String(parameter(record, permissionRead.params, 'resource_ids')),
+            resourceId: permissionResourceId(record, permissionRead.params),
             partition: route >>> 4,
             statement: index + 1,
             at: instant(parameter(record, permissionRead.params, 'at')),

@@ -19,7 +19,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkStatement } from '../support/partition-binding.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { createContentSystem, type ContentCredential, type ContentSystem } from './support/system.ts';
-import { observeSql, type SqlExecution } from './support/sql-observer.ts';
+import { observeSql, permissionResourceId, type SqlExecution } from './support/sql-observer.ts';
 import { digest, embeddedMetadata, imageSource, provisionMediaContainers } from './support/media-fixtures.ts';
 import { createMediaStorage, StorageDeleteFailure } from './support/storage.ts';
 
@@ -277,7 +277,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         );
         if (!check || !records) throw new Error('No executed media:create permission check');
         const route = Number(parameter(check, permissionRead.params, 'route'));
-        const anchorId = String(parameter(check, permissionRead.params, 'resource_ids'));
+        const anchorId = permissionResourceId(check, permissionRead.params);
         const account = String(parameter(check, permissionRead.params, 'actor_id'));
         const authoritativeTime = instant(parameter(check, permissionRead.params, 'at'));
         const permissionIds = records
@@ -286,7 +286,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
               record.statement === permissionRead.sql &&
               parameter(record, permissionRead.params, 'action') === 'media:create',
           )
-          .map((record) => String(parameter(record, permissionRead.params, 'resource_ids')));
+          .map((record) => permissionResourceId(record, permissionRead.params));
         const reserved = (
           await pool.query<{ media_id: string }>(
             `SELECT media_id::text FROM content.media

@@ -16,7 +16,7 @@ import insertRevision from '../../src/content/insert-revision.sql';
 import { createHash } from 'node:crypto';
 import anchor from '../../src/partition/read.sql';
 import { checkGrowth, seed, openGrowthDatabase } from '../support/growth.ts';
-import { observeSql, type SqlExecution } from './support/sql-observer.ts';
+import { observeSql, permissionResourceId, type SqlExecution } from './support/sql-observer.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const containerRoute = 0x4312;
@@ -259,14 +259,10 @@ test('protected remote board requires an actual current grant; replay, revocatio
     nativeBoardTrace(trace.records, f.board);
     const checks = trace.records.filter((r) => r.statement === permission.sql);
     expect(
-      checks.some(
-        (r) =>
-          JSON.stringify(r.parameters[permission.params.indexOf('resource_ids')]) === JSON.stringify([f.board]) &&
-          r.parameters.includes('board:read'),
-      ),
+      checks.some((r) => permissionResourceId(r, permission.params) === f.board && r.parameters.includes('board:read')),
     ).toBe(true);
     const parent = checks.find((r) => r.parameters.includes('media:create'))!;
-    expect(parent.parameters[permission.params.indexOf('resource_ids')]).toEqual([f.thread]);
+    expect(permissionResourceId(parent, permission.params)).toBe(f.thread);
     const stored = (
       await db.admin.query(
         `SELECT m.created_at::text, m.transaction_id, i.initialized_at::text,
