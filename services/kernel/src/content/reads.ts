@@ -12,6 +12,7 @@ import {
   type AccessCheck,
   type AccessClient,
   type Actor,
+  type Resource,
 } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
@@ -42,6 +43,25 @@ import viewerReactions from './reaction-viewer.sql';
 const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
 /** The receipt revision for the command response currently being disclosed. */
 const replayedRevision = new AsyncLocalStorage<string>();
+export type RealmDisclosureScope = {
+  realmId?: string | null;
+  realmResource?: Resource;
+  realmEvidence?: unknown;
+  realmEvidencePrepared?: boolean;
+  associationCheck?: Promise<boolean>;
+  accessCheck?: Promise<boolean>;
+};
+const realmDisclosure = new AsyncLocalStorage<RealmDisclosureScope>();
+
+/** Share one containing-Realm proof across the thread and post checks in a disclosure. */
+export function currentRealmDisclosureScope(): RealmDisclosureScope | undefined {
+  return realmDisclosure.getStore();
+}
+
+function withRealmDisclosureScope<T>(read: () => Promise<T>): Promise<T> {
+  if (realmDisclosure.getStore()) return read();
+  return realmDisclosure.run({}, read);
+}
 
 /** One exact command replay. GET reads stay outside this scope, so owner roles
  * and the public floor still cannot authorize erased metadata. */
@@ -548,7 +568,10 @@ export async function readThread(
   threadId: ThreadId,
   context: ReadContext,
 ): Promise<Anchored<ThreadView | null>> {
-  return (await disclose(dependencies, threadId, context, undefined, undefined, true)) as Anchored<ThreadView | null>;
+  return withRealmDisclosureScope(
+    async () =>
+      (await disclose(dependencies, threadId, context, undefined, undefined, true)) as Anchored<ThreadView | null>,
+  );
 }
 export async function readPost(
   dependencies: ContentReadDependencies,
@@ -567,15 +590,18 @@ export async function readPost(
   ) {
     return snapshot(dependencies, threadId, context, async () => null);
   }
-  return (await disclose(
-    dependencies,
-    threadId,
-    context,
-    postId,
-    revisionId,
-    false,
-    replayedRevisionId,
-  )) as Anchored<PostEntry | null>;
+  return withRealmDisclosureScope(
+    async () =>
+      (await disclose(
+        dependencies,
+        threadId,
+        context,
+        postId,
+        revisionId,
+        false,
+        replayedRevisionId,
+      )) as Anchored<PostEntry | null>,
+  );
 }
 
 async function list(

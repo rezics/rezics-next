@@ -17,6 +17,7 @@ import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
+import { currentRealmDisclosureScope } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
@@ -76,12 +77,17 @@ function realmAwareContentAccess(access: Access): Access {
       const primary = access.prepare ? await access.prepare(actor, action, resource, context) : undefined;
       if (action !== 'thread:read' && action !== 'post:read') return primary;
 
+      const scope = currentRealmDisclosureScope();
       const kind = action === 'thread:read' ? 'thread' : 'post';
-      const realmId = await withConnection(context.pool, (connection) =>
-        within(context.deadline, () =>
-          realmOfItem(deadlineClient(connection, context.deadline), kind, resource.route, resource.id),
-        ),
-      );
+      const realmId =
+        scope?.realmId !== undefined
+          ? scope.realmId
+          : await withConnection(context.pool, (connection) =>
+              within(context.deadline, () =>
+                realmOfItem(deadlineClient(connection, context.deadline), kind, resource.route, resource.id),
+              ),
+            );
+      if (scope && scope.realmId === undefined) scope.realmId = realmId;
       const association: ContentReadAssociation = { realmId };
       let realmResource: Resource | undefined;
       let realmEvidence: unknown;
@@ -90,15 +96,29 @@ function realmAwareContentAccess(access: Access): Access {
         const realmRoute = routeOf(association.realmId);
         valid = realmRoute !== null;
         if (realmRoute !== null) {
-          const preparedResource: Resource = {
-            route: realmRoute,
-            id: association.realmId,
-            eligibility: realmReadEligibility({ route: realmRoute, id: association.realmId }),
-          };
-          realmResource = preparedResource;
-          realmEvidence = access.prepare
-            ? await access.prepare(actor, 'realm:read', preparedResource, context)
-            : undefined;
+          if (
+            scope?.realmResource?.route === realmRoute &&
+            scope.realmResource.id === association.realmId &&
+            scope.realmEvidencePrepared
+          ) {
+            realmResource = scope.realmResource;
+            realmEvidence = scope.realmEvidence;
+          } else {
+            const preparedResource: Resource = {
+              route: realmRoute,
+              id: association.realmId,
+              eligibility: realmReadEligibility({ route: realmRoute, id: association.realmId }),
+            };
+            realmResource = preparedResource;
+            realmEvidence = access.prepare
+              ? await access.prepare(actor, 'realm:read', preparedResource, context)
+              : undefined;
+            if (scope) {
+              scope.realmResource = preparedResource;
+              scope.realmEvidence = realmEvidence;
+              scope.realmEvidencePrepared = true;
+            }
+          }
         }
       }
       const proof = Object.freeze({});
@@ -129,11 +149,23 @@ function realmAwareContentAccess(access: Access): Access {
       if (!primaryAllowed) return false;
 
       const kind = action === 'thread:read' ? 'thread' : 'post';
-      const realmId = await realmOfItem(client, kind, resource.route, resource.id);
-      if (realmId !== proof.association.realmId) return false;
+      const scope = currentRealmDisclosureScope();
+      if (scope?.realmId !== undefined && scope.realmId !== proof.association.realmId) return false;
+      if (scope?.associationCheck) {
+        if (!(await scope.associationCheck)) return false;
+      } else {
+        const associationCheck = realmOfItem(client, kind, resource.route, resource.id).then(
+          (realmId) => realmId === proof.association.realmId,
+        );
+        if (scope) scope.associationCheck = associationCheck;
+        if (!(await associationCheck)) return false;
+      }
       if (proof.association.realmId === null) return true;
       if (!proof.realmResource) return false;
-      return access.authorize(client, actor, 'realm:read', proof.realmResource, proof.realmEvidence, time);
+      if (scope?.accessCheck) return scope.accessCheck;
+      const accessCheck = access.authorize(client, actor, 'realm:read', proof.realmResource, proof.realmEvidence, time);
+      if (scope) scope.accessCheck = accessCheck;
+      return accessCheck;
     },
   });
   const catalogue = resourceRoleCatalogue(access);

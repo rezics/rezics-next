@@ -1,19 +1,33 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { createAuthService, type AuthService } from '@rezics/auth';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
+import { createAccountsWorkModule } from '../../src/access/membership-work.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { communityWorkModule } from '../../src/community/work.ts';
+import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { startWorker, type WorkerConfig } from '../../src/worker.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-boards.auth.test';
@@ -23,18 +37,23 @@ const routeKey = new Uint8Array(32).fill(61);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) };
 const accountRoute = 0x3456;
 const provisioned = new Set<string>();
+const growthBody = Buffer.from(serializeDocument(fromPlainText('Fixed protected Realm read growth body')));
+const growthBodySha256 = createHash('sha256').update(growthBody).digest();
 
 let db: GrowthDatabase;
 let authPool: Pool;
 let authDatabaseName = '';
 let service: AuthService;
 let kernel: ReturnType<typeof createKernel>;
+let work: WorkClient;
+let worker: Awaited<ReturnType<typeof startWorker>>;
 let governance: Person;
 let owner: Person;
 let moderator: Person;
 let nonmember: Person;
 let publicRealm: Realm;
 let protectedRealm: Realm;
+let scopes: string[] = [];
 let schemeId: string;
 let otherSchemeId: string;
 let conceptId: string;
@@ -216,10 +235,52 @@ async function expectHiddenAsMissing(path: string, missingPath: string, token?: 
   expect(hidden.response.headers.get(SESSION_HEADER)).toBeNull();
 }
 
+async function settleMembership(workflowId: string) {
+  expect(await work.retrieveWorkflow(workflowId).getResult()).toBeUndefined();
+}
+
+async function startMembershipWorker() {
+  let membership: ReturnType<typeof createRealmMembership>;
+  const workerAccess = createAccess({
+    actions: actionCatalogue(kernel),
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: issuer + '/.well-known/jwks.json',
+      fetch: async () => service.handler(new Request(issuer + '/.well-known/jwks.json')),
+    },
+    realmRoleReader: (client, input) => membership.roleReader(client, input),
+  });
+  membership = createRealmMembership({
+    pool: db.pool,
+    access: workerAccess,
+    referenceKeys: tokens,
+    restorer: createInitiatorRestorer({
+      pool: db.pool,
+      access: workerAccess,
+      readOperation: readMembershipInitiator,
+      readConsent: async ({ actorAccountId, clientId }) => ({ actorAccountId, clientId, scopes }),
+    }),
+  });
+  const config: WorkerConfig = {
+    databaseUrl: db.url,
+    executorId: 'realm-boards-test-' + process.pid,
+    poolSize: 10,
+  };
+  worker = await startWorker(config, [createAccountsWorkModule({ realm: membership }), communityWorkModule], {
+    AUTH_ISSUER: issuer,
+    AUTH_AUDIENCE: audience,
+    AUTH_JWKS_URL: issuer + '/.well-known/jwks.json',
+    KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+    KERNEL_SESSION_KEYS: `1:${Buffer.from(tokens.keys.get(1)!).toString('base64url')}`,
+  });
+}
+
 beforeAll(async () => {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is required');
   db = await openGrowthDatabase(url);
+  work = await createWorkClient(db.url, db.pool);
   authDatabaseName = 'realm_boards_auth_' + process.pid;
   await db.admin.query('CREATE DATABASE ' + authDatabaseName);
   const authUrl = new URL(url);
@@ -278,8 +339,9 @@ beforeAll(async () => {
         },
       }),
     writeRate: rateLimit,
+    workClient: work,
   });
-  const scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
+  scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
   await service.internal.registerClient({ clientId: 'realm-boards-client', firstParty: true, scopes });
   governance = await person('boards_governance', scopes);
   owner = await person('boards_owner', scopes);
@@ -301,6 +363,8 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  await worker?.stop();
+  await work?.close();
   await authPool?.end();
   if (authDatabaseName) await dropTestDatabase(db!.admin, authDatabaseName);
   await db?.close();
@@ -406,6 +470,178 @@ test.serial(
     expect(await writeSnapshot()).toEqual(beforeSuspended);
   },
 );
+
+test.serial('a settled protected Realm member reads its boards, threads and posts', async () => {
+  const subjectId = await createSubject('skos:Concept', schemeId);
+  const createdBoard = await createBoard(protectedRealm, subjectId);
+  expect(createdBoard.response.status).toBe(201);
+  const board = createdBoard.value.board as Board;
+  const protectedMember = await person('boards_protected_member', scopes);
+  await startMembershipWorker();
+
+  const added = await call('POST', `/v1/realms/${protectedRealm.realmId}/members`, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: { accountId: protectedMember.accountId },
+  });
+  expect(added.response.status).toBe(202);
+  await settleMembership(added.value.workflowId as string);
+
+  const membership = await db.admin.query(
+    `SELECT 1 FROM community.realm_member
+     WHERE route=$1 AND realm_id=$2 AND account_id=$3 AND valid @> clock_timestamp()`,
+    [routeOf(protectedRealm.realmId), protectedRealm.realmId, protectedMember.accountId],
+  );
+  expect(membership.rowCount).toBe(1);
+  const memberGrant = await db.admin.query(
+    `SELECT 1 FROM access.resource_role_grant
+     WHERE route=$1 AND resource_id=$2 AND grant_role='community.realm.member' AND upper_inf(valid)`,
+    [routeOf(protectedRealm.realmId), protectedRealm.realmId],
+  );
+  expect(memberGrant.rowCount).toBe(1);
+
+  const threadCreated = await call('POST', '/v1/threads', {
+    bearer: protectedMember.bearer,
+    key: crypto.randomUUID(),
+    body: {
+      title: 'A thread in the protected Realm',
+      body: fromPlainText('The member can read this thread.'),
+      licence: 'MIT',
+      subjectIds: [],
+      boardId: board.id,
+      visibility: 'published',
+    },
+  });
+  expect(threadCreated.response.status).toBe(201);
+  const threadId = threadCreated.value.thread.id as string;
+  const postCreated = await call('POST', `/v1/threads/${threadId}/posts`, {
+    bearer: protectedMember.bearer,
+    key: crypto.randomUUID(),
+    body: { body: fromPlainText('The member can read this post.'), licence: 'MIT', subjectIds: [] },
+  });
+  expect(postCreated.response.status).toBe(201);
+  const postId = postCreated.value.post.id as string;
+
+  const protectedPaths = [
+    [`/v1/boards/${board.id}`, `/v1/boards/${newId(board.route)}`],
+    [`/v1/threads/${threadId}`, `/v1/threads/${newId(routeOf(threadId)!)}`],
+    [`/v1/posts/${postId}`, `/v1/posts/${newId(routeOf(postId)!)}`],
+  ] as const;
+  const capturedThreadRead = await capture(db, () =>
+    call('GET', `/v1/threads/${threadId}`, { bearer: protectedMember.bearer }),
+  );
+  expect(capturedThreadRead.value.response.status).toBe(200);
+  expect(
+    capturedThreadRead.capture.statements.filter((statement) => statement.includes('community.realm_member')),
+  ).toHaveLength(1);
+  for (const [path] of protectedPaths) {
+    const readable = await call('GET', path, { bearer: protectedMember.bearer });
+    expect(readable.response.status).toBe(200);
+  }
+
+  for (const [path, missingPath] of protectedPaths) {
+    await expectHiddenAsMissing(path, missingPath, nonmember.bearer);
+  }
+
+  const readPopulation: Population = {
+    name: 'protected-realm-thread-read-' + crypto.randomUUID(),
+    hotPartition: partitionOf(routeOf(threadId)!),
+    hotShare: 1,
+    rows({ route }) {
+      const unrelatedBoardId = newId(route);
+      const unrelatedThreadId = newId(route);
+      const unrelatedPostId = newId(route);
+      const unrelatedRevisionId = newId(route);
+      const transactionId = newId(route);
+      return {
+        'content.board': [
+          {
+            route,
+            board_id: unrelatedBoardId,
+            subject_id: newId(route),
+            title: 'Unrelated protected-read growth board',
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: transactionId,
+          },
+        ],
+        'content.thread': [
+          {
+            route,
+            thread_id: unrelatedThreadId,
+            author_account_id: owner.accountId,
+            board_id: unrelatedBoardId,
+            title: 'Unrelated protected-read growth thread',
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: transactionId,
+            first_post_id: unrelatedPostId,
+            availability: 'available',
+          },
+        ],
+        'content.post': [
+          {
+            route,
+            thread_id: unrelatedThreadId,
+            post_id: unrelatedPostId,
+            reply_to_post_id: null,
+            author_account_id: owner.accountId,
+            head_revision_id: unrelatedRevisionId,
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: transactionId,
+            created_at: new Date('2020-06-01T00:00:00Z'),
+            availability: 'available',
+          },
+        ],
+        'content.revision': [
+          {
+            route,
+            thread_id: unrelatedThreadId,
+            post_id: unrelatedPostId,
+            revision_id: unrelatedRevisionId,
+            body: growthBody,
+            body_sha256: growthBodySha256,
+            search_text: 'Fixed protected Realm read growth body',
+            licence: 'MIT',
+            subject_ids: [],
+            board_id: unrelatedBoardId,
+            availability: 'available',
+            recorded_transaction_id: transactionId,
+            recorded_at: new Date('2020-06-01T00:00:00Z'),
+            media_ids: [],
+          },
+        ],
+      };
+    },
+  };
+  const report = await checkGrowth(db, {
+    name: 'Protected Realm member thread read',
+    scales: [256, 1024, 4096],
+    repetitions: 3,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(database, scale, previous) {
+      await seed({ pool: database.pool, admin: database.admin }, readPopulation, { from: previous, to: scale });
+    },
+    async operation() {
+      const result = await call('GET', `/v1/threads/${threadId}`, { bearer: protectedMember.bearer });
+      expect(result.response.status).toBe(200);
+      return result;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+  for (const { cost } of report.samples) expect(cost.statements).toBeLessThanOrEqual(4096);
+  console.info(JSON.stringify(report));
+
+  const left = await call('DELETE', `/v1/realms/${protectedRealm.realmId}/membership`, {
+    bearer: protectedMember.bearer,
+  });
+  expect(left.response.status).toBe(202);
+  await settleMembership(left.value.workflowId as string);
+  for (const [path, missingPath] of protectedPaths) {
+    await expectHiddenAsMissing(path, missingPath, protectedMember.bearer);
+  }
+});
 
 test.serial(
   'Realm board keyset listing stays bounded as other Realms add boards',
