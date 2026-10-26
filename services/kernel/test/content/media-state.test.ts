@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
 import { createHash } from 'node:crypto';
 import { createAccess } from '../../src/access/permission.ts';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
@@ -18,6 +19,7 @@ import {
 import insertPost from '../../src/content/insert-post.sql';
 import insertRevision from '../../src/content/insert-revision.sql';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const route = 0x4312;
@@ -43,7 +45,7 @@ const thread = newId(route);
 const secondThread = newId(route);
 const accounts = new Map<string, Account>();
 const access = createAccess({
-  actions: new Map([...author.scopes, 'media:read', 'media:erase'].map((action) => [action, { anonymous: false }])),
+  actions: productionActions(),
   accountEvidence: (actor) => accounts.get(actor.accountId),
 });
 const dependencies = () => ({ pool: db.pool, access });
@@ -365,7 +367,7 @@ async function reference(
         security_revision: 1,
         transaction_id: command.transactionId,
       });
-      const body = Buffer.from('{}');
+      const body = Buffer.from(JSON.stringify(fromPlainText('')));
       await insertRevision.run(tx, {
         route,
         thread_id: thread,
@@ -384,7 +386,12 @@ async function reference(
       if (options.fail) throw new Error('referencing command failed');
       return {
         value: { postId, at: authoritativeTimeValue(command.time) },
-        events: [{ type: 'com.rezics.content.post.created.v1', data: { postId } }],
+        events: [
+          {
+            type: 'com.rezics.content.post.created.v1',
+            data: { threadId: thread, itemId: postId, revisionId, actorId: actor.accountId },
+          },
+        ],
       };
     },
   );

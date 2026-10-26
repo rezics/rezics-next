@@ -16,6 +16,7 @@ import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -239,7 +240,7 @@ async function createTestRealm(): Promise<string> {
   );
   const account = await readAccount(db.pool, route, accountId);
   if (!account) throw new Error('Realm rank test account is unavailable');
-  const actions = new Map(roleActions.map((action) => [action, { anonymous: false }] as const));
+  const actions = productionActions();
   const permissions = createPermissionAccess({ actions, accountEvidence: () => account });
   const access: Access = {
     authenticate: permissions.authenticate.bind(permissions),

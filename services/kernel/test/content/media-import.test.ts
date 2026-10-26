@@ -16,6 +16,7 @@ import {
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const root = { route: 0, id: '00000000-0000-8000-8000-000000000000' };
 const route = 42000;
@@ -72,7 +73,7 @@ beforeAll(async () => {
   const issuer = 'https://auth.example.test';
   const audience = 'https://api.example.test';
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: productionActions(),
     auth: {
       issuer,
       audience,

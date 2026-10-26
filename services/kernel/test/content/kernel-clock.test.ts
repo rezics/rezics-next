@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { normalizeDocument } from '@rezics/document';
+import { fromPlainText } from '@rezics/document';
 import { createHash, randomUUID } from 'node:crypto';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { installResourceRoleCatalogue, resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { reserveMedia } from '../../src/content/media.ts';
 import { readBoard } from '../../src/content/reads.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -10,6 +11,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { decodeCursor } from '../../src/tokens/cursor.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const routeKey = new Uint8Array(32).fill(41);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(42)]]) };
@@ -17,14 +19,7 @@ const at = Date.parse('2026-01-01T00:00:00Z');
 const boardId = newId(0x4321);
 const timedBoardId = newId(0x4321);
 const subjectId = newId(0x6789);
-const body = normalizeDocument({
-  version: 'rezics-document-v1',
-  profile: 'text',
-  doc: {
-    type: 'doc',
-    content: [{ type: 'paragraph', attrs: { id: 'clock-paragraph' }, content: [{ type: 'text', text: 'Clock' }] }],
-  },
-});
+const body = fromPlainText('Clock');
 const input = { body, licence: 'MIT', subjectIds: [subjectId] };
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
@@ -78,6 +73,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
   fixture = await standingFixture();
+  installResourceRoleCatalogue(fixture.access, resolveResourceRoles(productionActions()));
   await fixture.reset();
   const authenticate = fixture.access.authenticate;
   fixture.access.authenticate = (token, boundary) => {
@@ -269,6 +265,7 @@ test('fixed native command and actual pages retain their bounds at three informa
         revisionId = newId(thread.route),
         transaction = randomUUID();
       const accountId = newId(routeOf(actor.accountId)!);
+      const reactionTargetId = newId(thread.route);
       const principal = { subject_id: accountId, valid: '(,)', transaction_id: transaction };
       return {
         'content.board': [
@@ -363,6 +360,27 @@ test('fixed native command and actual pages retain their bounds at three informa
             sha256: digest.toString('hex'),
             key: `m/${mediaId}/webp-320`,
             transaction_id: transaction,
+          },
+        ],
+        'content.reaction': [
+          {
+            route: routeOf(accountId),
+            actor_account_id: accountId,
+            target_kind: 'post',
+            target_route: thread.route,
+            target_id: reactionTargetId,
+            kind: 'like',
+            updated_at: new Date(at),
+          },
+        ],
+        'content.reaction_total': [
+          {
+            route: thread.route,
+            target_id: reactionTargetId,
+            kind: 'like',
+            count: 1,
+            source_epoch: 1,
+            source_position: 1,
           },
         ],
         'access.account': [
