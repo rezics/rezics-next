@@ -13,6 +13,8 @@ import {
   type ContextSettings,
   type DataType,
   type PropertyDefinition,
+  type RelationDefinition,
+  type RelationGroup,
   type Release,
   type SavedFilter,
 } from './index.ts';
@@ -68,8 +70,20 @@ const slotKeys =
 const iri = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u0020\u007f-\u009f<>"{}|\\^`]*$(?![\s\S])/u;
 const normalize = (file: string) => posix.normalize(file).replace(/\.ya?ml$/u, '');
 const languagePattern = new RegExp(Object.keys(releaseSchema.$defs.labels.patternProperties)[0]!, 'u');
+const presentationGroup = (file: string) => posix.basename(file).replace(/\.ya?ml$/u, '');
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const filterName = /^[a-z][a-z0-9-]{0,63}$(?![\s\S])/u;
+const relationGroups = ['order', 'derivation', 'world', 'membership', 'association'] as const;
+const relationOrders = ['position', 'date', 'name'] as const;
+const relationAnnotationKeys = [
+  'relation_group',
+  'inverse',
+  'symmetric',
+  'acyclic',
+  'relation_order',
+  'relation_filter',
+] as const;
+const coverRatio = /^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\s\S])/u;
 
 function savedFilterCode(error: FilterValidationError): 'invalid' | 'limit' {
   return error.problem === 'unsupported_query' && error.code === 'out_of_range' ? 'limit' : 'invalid';
@@ -138,7 +152,7 @@ export async function compileCatalogue(input: {
     allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
     if (!record(slot)) return;
     if (slot.annotations !== undefined)
-      allowed(slot.annotations, 'datatype units qualifiers', {
+      allowed(slot.annotations, `datatype units qualifiers ${relationAnnotationKeys.join(' ')}`, {
         ...location,
         pointer: at(location.pointer, 'annotations'),
       });
@@ -185,13 +199,23 @@ export async function compileCatalogue(input: {
           const definition = object(value);
           if (definition.annotations !== undefined) {
             const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
-            allowed(definition.annotations, 'facets', annotationLocation);
-            const facets = object(definition.annotations).facets;
+            allowed(definition.annotations, 'facets cover_ratio', annotationLocation);
+            const annotations = object(definition.annotations);
+            const facets = annotations.facets;
             if (facets !== undefined && typeof facets !== 'string')
               add(
                 { ...annotationLocation, pointer: at(annotationLocation.pointer, 'facets') },
                 'invalid',
                 'Facets must be space-separated slot names',
+              );
+            if (
+              annotations.cover_ratio !== undefined &&
+              (typeof annotations.cover_ratio !== 'string' || !coverRatio.test(annotations.cover_ratio))
+            )
+              add(
+                { ...annotationLocation, pointer: at(annotationLocation.pointer, 'cover_ratio') },
+                'invalid',
+                'Cover ratio must be W:H with positive integer sides from 1 to 64',
               );
           }
           const usage = definition.slot_usage;
@@ -336,6 +360,11 @@ export async function compileCatalogue(input: {
       sourceClasses.set(name, { value: object(definition), location: { file, pointer: at('/classes', name) } });
       if (typeof object(definition).is_a === 'string') parents.set(name, object(definition).is_a as string);
     }
+  const sourceClassesByCurie = new Map<string, { name: string; value: Node }>();
+  for (const [name, definition] of sourceClasses) {
+    const classUri = definition.value.class_uri;
+    if (typeof classUri === 'string') sourceClassesByCurie.set(classUri, { name, value: definition.value });
+  }
   // Use induced attributes for properties used by concrete classes. A global
   // property cannot represent two different class-specific value contracts.
   const effective = new Map<string, string>();
@@ -371,6 +400,7 @@ export async function compileCatalogue(input: {
   }
   const slots = terms('slots', globals);
   const slotKeysByName = new Map(slots.map((term) => [term.name, term.key]));
+  const propertyLocations = new Map<string, Location>();
   const classChain = (name: string) => {
     const result: string[] = [];
     const seen = new Set<string>();
@@ -429,6 +459,18 @@ export async function compileCatalogue(input: {
       seenBases.add(classUri);
       bases.push(classUri);
     }
+    const ownCoverRatio = object(sourceClasses.get(term.name)?.value.annotations).cover_ratio;
+    let effectiveCoverRatio = typeof ownCoverRatio === 'string' ? ownCoverRatio : undefined;
+    if (effectiveCoverRatio === undefined) {
+      for (const base of bases) {
+        const baseClass = sourceClassesByCurie.get(base);
+        const inherited = object(baseClass?.value.annotations).cover_ratio;
+        if (typeof inherited === 'string') {
+          effectiveCoverRatio = inherited;
+          break;
+        }
+      }
+    }
     const facets: string[] = [];
     const facetNames = new Set<string>();
     const origins = new Map<string, { name: string; location: Location }>();
@@ -469,6 +511,7 @@ export async function compileCatalogue(input: {
       bases,
       properties,
       facets,
+      ...(effectiveCoverRatio === undefined ? {} : { coverRatio: effectiveCoverRatio }),
     };
   }
   for (const term of slots) {
@@ -515,6 +558,7 @@ export async function compileCatalogue(input: {
       qualifiers: [],
       value: {},
     };
+    propertyLocations.set(term.key, location);
     if (annotations.qualifiers !== undefined && typeof annotations.qualifiers !== 'string')
       add(annotation('qualifiers'), 'invalid', 'Qualifiers must be space-separated slot names');
     for (const name of words(annotations.qualifiers)) {
@@ -523,6 +567,66 @@ export async function compileCatalogue(input: {
       else add(annotation('qualifiers'), 'invalid', `Unknown qualifier ${name}`);
     }
     property.qualifiers = unique(property.qualifiers);
+    if (relationAnnotationKeys.some((key) => Object.hasOwn(annotations, key))) {
+      const group = annotations.relation_group;
+      const hasInverse = Object.hasOwn(annotations, 'inverse');
+      const hasSymmetric = Object.hasOwn(annotations, 'symmetric');
+      if (!relationGroups.includes(group as (typeof relationGroups)[number]))
+        add(annotation('relation_group'), 'invalid', 'Relation group is required and must be recognized');
+      if (hasInverse === hasSymmetric)
+        add(
+          hasSymmetric ? annotation('symmetric') : annotation('relation_group'),
+          'invalid',
+          'A relation requires exactly one of inverse or symmetric',
+        );
+      if (datatype !== 'wikibase-item')
+        add(annotation('relation_group'), 'invalid', 'Relations are only allowed on item properties');
+
+      const direction: Partial<RelationDefinition> = {};
+      if (hasInverse) {
+        const inverse = annotations.inverse;
+        if (
+          typeof inverse !== 'string' ||
+          (inverse !== 'none' && !/^([a-z][a-z0-9_]*):([^\s]+)$(?![\s\S])/u.test(inverse))
+        )
+          add(annotation('inverse'), 'invalid', 'Inverse must be a CURIE or none');
+        else {
+          direction.inverse = inverse;
+          if (inverse !== 'none') expand(inverse, annotation('inverse'));
+        }
+      }
+      if (hasSymmetric) {
+        if (annotations.symmetric !== true)
+          add(annotation('symmetric'), 'invalid', 'Symmetric must be true');
+        else direction.symmetric = true;
+      }
+      if (Object.hasOwn(annotations, 'acyclic')) {
+        if (annotations.acyclic !== true)
+          add(annotation('acyclic'), 'invalid', 'Acyclic must be true');
+        else if (annotations.symmetric === true)
+          add(annotation('acyclic'), 'invalid', 'Symmetric relations cannot be acyclic');
+        else direction.acyclic = true;
+      }
+      const order = annotations.relation_order;
+      if (order !== undefined && !relationOrders.includes(order as (typeof relationOrders)[number]))
+        add(annotation('relation_order'), 'invalid', 'Relation order must be position, date or name');
+      if (order === 'position' && !property.qualifiers.includes('schema:position'))
+        add(annotation('relation_order'), 'invalid', 'Position order requires the schema:position qualifier');
+      const filter = annotations.relation_filter;
+      if (filter !== undefined && (typeof filter !== 'string' || !property.qualifiers.includes(filter)))
+        add(annotation('relation_filter'), 'invalid', 'Relation filter must be an admitted item qualifier');
+      if (relationGroups.includes(group as (typeof relationGroups)[number])) {
+        property.relation = {
+          group: group as RelationGroup,
+          order: (relationOrders.includes(order as (typeof relationOrders)[number]) ? order : 'name') as
+            | 'position'
+            | 'date'
+            | 'name',
+          ...direction,
+          ...(typeof filter === 'string' ? { filter } : {}),
+        };
+      }
+    }
     if (datatype === 'wikibase-item') {
       const targets: string[] = [];
       for (const name of declaredClasses) {
@@ -564,6 +668,33 @@ export async function compileCatalogue(input: {
     });
     release.properties[term.key] = property;
   }
+  const propertyIris = new Set(Object.values(release.properties).map((property) => property.iri));
+  for (const [key, property] of Object.entries(release.properties)) {
+    const location = propertyLocations.get(key);
+    if (!property.relation || !location) continue;
+    const relation = property.relation;
+    if (relation.inverse && relation.inverse !== 'none') {
+      const inverseIri = expand(relation.inverse, {
+        ...location,
+        pointer: at(at(location.pointer, 'annotations'), 'inverse'),
+      });
+      if (
+        Object.hasOwn(release.properties, relation.inverse) ||
+        (inverseIri !== undefined && propertyIris.has(inverseIri))
+      )
+        add(
+          { ...location, pointer: at(at(location.pointer, 'annotations'), 'inverse') },
+          'invalid',
+          'The inverse property must not also be present in the release',
+        );
+    }
+    if (relation.filter && release.properties[relation.filter]?.datatype !== 'wikibase-item')
+      add(
+        { ...location, pointer: at(at(location.pointer, 'annotations'), 'relation_filter') },
+        'invalid',
+        'Relation filters must name an admitted item qualifier',
+      );
+  }
   for (const [key, type] of Object.entries(release.types))
     for (const facet of type.facets) {
       const property = release.properties[facet];
@@ -597,7 +728,7 @@ export async function compileCatalogue(input: {
       parts.length > 2
     )
       add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
-    allowed(labels, 'types properties', { file, pointer: '' });
+    allowed(labels, 'types properties inverseProperties', { file, pointer: '' });
     for (const collection of ['types', 'properties'] as const) {
       if (labels[collection] !== undefined && !record(labels[collection]))
         add({ file, pointer: `/${collection}` }, 'invalid', 'Expected a label object');
@@ -616,6 +747,33 @@ export async function compileCatalogue(input: {
         }
       }
     }
+    if (labels.inverseProperties !== undefined && !record(labels.inverseProperties))
+      add({ file, pointer: '/inverseProperties' }, 'invalid', 'Expected a label object');
+    for (const [key, label] of Object.entries(object(labels.inverseProperties))) {
+      const location = { file, pointer: at('/inverseProperties', key) };
+      const property = release.properties[key];
+      if (!property) add(location, 'invalid', 'Unknown property');
+      else if (!property.relation?.inverse || property.relation.inverse === 'none')
+        add(location, 'invalid', 'Inverse labels require a relation with an inverse CURIE');
+      else {
+        const sourceFile = propertyLocations.get(key)?.file ?? '';
+        const home = presentationGroup(sourceFile);
+        if (parts.length !== 2 || parts[0] !== home)
+          add(location, 'invalid', `Inverse labels belong in presentation/${home}/${tag}`);
+        else if (typeof label !== 'string' || !label.length || [...label].length > 256)
+          add(location, 'invalid', 'Label must contain between one and 256 characters');
+        else {
+          const identity = `${tag}\0inverseProperties\0${key}`;
+          if (seenLabels.has(identity))
+            add(location, 'duplicate', 'Term already has an inverse label in this language');
+          else {
+            seenLabels.add(identity);
+            property.relation!.inverseLabels ??= dictionary();
+            property.relation!.inverseLabels[tag] = label;
+          }
+        }
+      }
+    }
   }
   for (const collection of ['types', 'properties'] as const)
     for (const [key, term] of Object.entries(release[collection]))
@@ -625,6 +783,20 @@ export async function compileCatalogue(input: {
           'missing_label',
           'English label is required',
         );
+  for (const [key, property] of Object.entries(release.properties))
+    if (
+      property.relation?.inverse &&
+      property.relation.inverse !== 'none' &&
+      !property.relation.inverseLabels?.en
+    ) {
+      const sourceFile = propertyLocations.get(key)?.file ?? '';
+      const home = presentationGroup(sourceFile);
+      add(
+        { file: `presentation/${home}/en`, pointer: at('/inverseProperties', key) },
+        'missing_label',
+        'English inverse label is required',
+      );
+    }
   stop();
 
   const contextIds = Object.keys(input.contexts ?? {}).sort(compare);
