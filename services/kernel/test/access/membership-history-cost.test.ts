@@ -9,8 +9,16 @@ import {
 } from '../../src/access/lifecycle.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth-capture.ts';
-import { costOf, type Cost } from '../support/growth-cost.ts';
+import {
+  assertGrowth,
+  capture,
+  checkGrowth,
+  costOf,
+  medianCost,
+  openGrowthDatabase,
+  type Cost,
+  type GrowthDatabase,
+} from '../support/growth.ts';
 import { nodes, type Plan } from './owner-cost-fixture.ts';
 import membershipChange from '../../src/access/lifecycle-membership.sql';
 import memberInsert from '../../src/access/lifecycle-member-insert.sql';
@@ -297,71 +305,107 @@ test('receipt failure rolls back history, terminal slot and effects; last owner 
   expect(await snapshot()).toEqual(before);
 });
 
-test('three scales keep actual membership mutation rows fixed as expired history and background grow', async () => {
-  const samples: { scale: number; role: string | null; scheduled: boolean; cost: Cost; mutation: Cost }[] = [];
-  // Native commands admit one ongoing interval. Scheduled replacement measures
-  // fixed k=2 as well: arbitrary future scheduling needs a bounded admission or
-  // separately anchored workflow before it can promise fixed command work.
-  for (const scheduled of [false, true]) {
-    for (const scale of [32, 256, 2048]) {
-      for (const role of ['owner', null] as const) {
-        // Each sample has the same coordination state; only membership history
-        // and background membership populations grow.
-        await db.admin.query('TRUNCATE access.lifecycle_coordination, access.lifecycle_membership_slot');
-        await seed(scale, past, scheduled);
-        const old = await history();
-        const hold = await reserve();
-        const ctx = await context();
-        const result = await capture(db, () =>
-          commands.setMembership(ctx, {
-            organizationId,
-            memberAccountId: member,
-            reservationId: hold.reservationId,
-            role,
-            key: key(),
-          }),
-        );
-        const plans = result.capture.plans as { 'Query Text': string; Plan: Plan }[];
-        expect(
-          plans.filter((p) => p['Query Text'] === membershipChange.sql || p['Query Text'] === memberInsert.sql),
-        ).toHaveLength(role === null ? 1 : 2);
-        const mutationPlans = plans.filter(
-          (p) =>
-            p['Query Text'] === membershipChange.sql ||
-            p['Query Text'] === memberInsert.sql ||
-            p['Query Text'].startsWith('SELECT m.valid') ||
-            p['Query Text'].includes('CURRENT OF overlapping'),
-        );
-        const scans = mutationPlans
-          .flatMap((p) => nodes(p.Plan))
-          .filter((n) => n['Relation Name'] === 'organization_member' && n['Node Type'] !== 'ModifyTable');
-        expect(scans.length).toBeGreaterThan(0);
-        for (const scan of scans) {
-          if (scan['Node Type'] === 'Tid Scan') continue;
-          expect(scan['Node Type']).toMatch(/Index (Only )?Scan/);
-          for (const predicate of ['route =', 'organization_id =', 'member_account_id =', 'valid &&'])
-            expect(scan['Index Cond']).toContain(predicate);
-        }
-        expect(scans.filter((scan) => scan['Node Type'] === 'Index Scan').length).toBeGreaterThan(0);
-        const mutation = costOf({ statements: [], plans: mutationPlans });
-        samples.push({ scale, role, scheduled, cost: costOf(result.capture), mutation });
-        console.info('membership mutation EXPLAIN', JSON.stringify(samples.at(-1)));
-        expect(await history()).toEqual(old);
-        expect(mutation.rows).toBe(scheduled ? 4 : 2);
+const growthCases = [false, true].flatMap((scheduled) =>
+  (['owner', null] as const).map((role) => ({ scheduled, role })),
+);
+
+for (const { scheduled, role } of growthCases) {
+  test(`scales 256 1024 4096 keep actual membership mutation rows fixed as expired history and background grow (${scheduled ? 'scheduled' : 'ongoing'} member, ${role ?? 'removal'})`, async () => {
+    // Native commands admit one ongoing interval. Scheduled replacement measures
+    // fixed k=2 as well: arbitrary future scheduling needs a bounded admission or
+    // separately anchored workflow before it can promise fixed command work.
+    const bounds = { rows: 'constant', statements: 'constant', blocks: 'logarithmic' } as const;
+    // Reservation and fixture reads use the plain pool, so a capture holds only the command.
+    const reserver = createLifecycleInternals({
+      pool: db.admin,
+      clock,
+      routeKey: new Uint8Array(32).fill(71),
+      provisioningEvidence: async () => null,
+      recoveryEvidence: async () => null,
+    });
+    const started = new Date();
+    // Every run starts from the same receipts, coordination state and the member's current and scheduled intervals;
+    // only membership history and background membership populations grow with the scale.
+    async function exercise() {
+      await db.admin.query('TRUNCATE access.lifecycle_coordination, access.lifecycle_membership_slot');
+      await db.admin.query('DELETE FROM core.receipt WHERE created_at >= $1', [started]);
+      await db.admin.query(
+        `DELETE FROM access.organization_member
+         WHERE route=$1 AND organization_id=$2 AND member_account_id=$3
+           AND (upper_inf(valid) OR upper(valid) > $4::timestamptz)`,
+        [route, organizationId, member, past],
+      );
+      await insert(member, 'member', past, scheduled ? future : null);
+      if (scheduled) await insert(member, 'owner', future, later);
+      const old = await history();
+      const hold = (
+        await reserver.reserveCoordination({
+          accountId: member,
+          relatedAccountId: organizationId,
+          purpose: 'membership',
+          key: key(),
+        })
+      ).value;
+      const ctx = await context();
+      await commands.setMembership(ctx, {
+        organizationId,
+        memberAccountId: member,
+        reservationId: hold.reservationId,
+        role,
+        key: key(),
+      });
+      expect(await history()).toEqual(old);
+    }
+    function mutationCostOf(captured: { plans: readonly unknown[] }): Cost {
+      const plans = captured.plans as { 'Query Text': string; Plan: Plan }[];
+      expect(
+        plans.filter((p) => p['Query Text'] === membershipChange.sql || p['Query Text'] === memberInsert.sql),
+      ).toHaveLength(role === null ? 1 : 2);
+      const mutationPlans = plans.filter(
+        (p) =>
+          p['Query Text'] === membershipChange.sql ||
+          p['Query Text'] === memberInsert.sql ||
+          p['Query Text'].startsWith('SELECT m.valid') ||
+          p['Query Text'].includes('CURRENT OF overlapping'),
+      );
+      const scans = mutationPlans
+        .flatMap((p) => nodes(p.Plan))
+        .filter((n) => n['Relation Name'] === 'organization_member' && n['Node Type'] !== 'ModifyTable');
+      expect(scans.length).toBeGreaterThan(0);
+      for (const scan of scans) {
+        if (scan['Node Type'] === 'Tid Scan') continue;
+        expect(scan['Node Type']).toMatch(/Index (Only )?Scan/);
+        for (const predicate of ['route =', 'organization_id =', 'member_account_id =', 'valid &&'])
+          expect(scan['Index Cond']).toContain(predicate);
       }
+      expect(scans.filter((scan) => scan['Node Type'] === 'Index Scan').length).toBeGreaterThan(0);
+      const mutation = costOf({ statements: [], plans: mutationPlans });
+      expect(mutation.rows).toBe(scheduled ? 4 : 2);
+      return mutation;
     }
-  }
-  for (const baseline of samples.filter((s) => s.scale === 32)) {
-    for (const sample of samples.filter((s) => s.role === baseline.role && s.scheduled === baseline.scheduled)) {
-      expect(sample.cost.statements).toBe(baseline.cost.statements);
-      expect(sample.cost.rows).toBe(baseline.cost.rows);
-      expect(sample.cost.plans).toBe(baseline.cost.plans);
-      expect(sample.mutation.rows).toBe(baseline.mutation.rows);
-      // Bounded native probes, at most two changed intervals, four page
-      // visits per tree doubling including temporal constraint maintenance.
-      expect(sample.mutation.blocks).toBeLessThanOrEqual(baseline.mutation.blocks + 4 * Math.log2(sample.scale / 32));
-      // The full command also makes two owner probes through temporal trees.
-      expect(sample.cost.blocks).toBeLessThanOrEqual(baseline.cost.blocks + 6 * Math.log2(sample.scale / 32));
-    }
-  }
-}, 30000);
+
+    // The harness captures only the whole command; the mutation statements are isolated from plans captured
+    // at the same data after each growth step, as the median of the same number of runs.
+    const mutations: { scale: number; cost: Cost }[] = [];
+    const report = await checkGrowth(db, {
+      name: `membership mutation (${scheduled ? 'scheduled' : 'ongoing'} member, ${role ?? 'removal'})`,
+      scales: [256, 1024, 4096],
+      bounds,
+      async grow(_database, scale) {
+        await seed(scale, past, scheduled);
+        await exercise();
+        const costs: Cost[] = [];
+        for (let run = 0; run < 5; run++) {
+          const observed = await capture(db, exercise);
+          costs.push(mutationCostOf(observed.capture));
+          console.info('membership mutation EXPLAIN', JSON.stringify({ scale, role, scheduled, cost: costs.at(-1) }));
+        }
+        mutations.push({ scale, cost: medianCost(costs) });
+      },
+      operation: exercise,
+    });
+    console.info('membership command', JSON.stringify(report.samples.map(({ scale, cost }) => [scale, cost.blocks])));
+    for (const { cost } of report.samples) expect(cost.plans).toBe(report.samples[0]!.cost.plans);
+    assertGrowth(mutations, bounds);
+  }, 120_000);
+}
