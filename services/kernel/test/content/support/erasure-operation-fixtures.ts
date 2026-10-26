@@ -197,6 +197,26 @@ export async function createFixtureResources(databaseUrl: string): Promise<Fixtu
       subject: { kind: 'account', id: accountIds.author },
       actions: ['access:grant'],
     });
+    await grant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: accountIds.unrelated },
+      actions: ['post:erase'],
+    });
+    await revokeGrant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: accountIds.unrelated },
+      actions: ['post:erase'],
+    });
+    await grant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: accountIds.suspended },
+      actions: ['post:erase'],
+    });
+    await grant(resources, 'governance', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: accountIds.legal },
+      actions: ['post:erase', 'moderation:takedown'],
+    });
     return resources;
   } catch (error) {
     await system.close();
@@ -309,7 +329,7 @@ export async function buildBoardAndThreads(
   await grant(resources, 'governance', authorPostCreate);
 
   const targeted: { id: string; revisions: { id: string; digest: string; body: string }[] }[] = new Array(posts);
-  await runInBatches(posts, 8, async (postIndex) => {
+  await runInBatches(posts, 24, async (postIndex) => {
     const firstBody = `${marker} post-${postIndex} revision-0`;
     const created = await setupRequest<{
       post: { id: string; revisionId: string; sha256: string };
@@ -348,7 +368,7 @@ export async function buildBoardAndThreads(
       [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
     )
   ).rows[0]!.account_id;
-  await runInBatches(targeted.length, 8, async (index) => {
+  await runInBatches(targeted.length, 24, async (index) => {
     const post = targeted[index]!;
     const target = { route, id: post.id };
     await grant(resources, 'governance', {
@@ -369,43 +389,21 @@ export async function buildBoardAndThreads(
       valid: '(,)',
     });
   });
-  await grant(resources, 'author', {
-    resource: { route: routeOf(authorId)!, id: authorId },
-    subject: { kind: 'account', id: governorId },
-    actions: ['account:read'],
-  });
-  await revokeGrant(resources, 'governance', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: authorId },
-    actions: ['access:grant'],
-  });
-  await revokeGrant(resources, 'governance', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: otherId },
-    actions: ['access:grant'],
-  });
-  // This account held erasure authority before it was revoked, while the
-  // suspended account retains a real matching grant under its retained token.
-  await grant(resources, 'governance', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: otherId },
-    actions: ['post:erase'],
-  });
-  await revokeGrant(resources, 'governance', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: otherId },
-    actions: ['post:erase'],
-  });
-  await grant(resources, 'governance', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: resources.accountIds.suspended },
-    actions: ['post:erase'],
-  });
-  await grant(resources, 'governance', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: resources.accountIds.legal },
-    actions: ['post:erase', 'moderation:takedown'],
-  });
+  for (const accountId of [authorId, otherId]) {
+    const grants = await resources.pool.query<{ valid: string }>(
+      `SELECT valid::text FROM access.resource_grant
+       WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+         AND subject_role='' AND action='access:grant' AND upper_inf(valid)`,
+      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, accountId],
+    );
+    for (const row of grants.rows)
+      await revokeGrant(resources, 'governance', {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: accountId },
+        actions: ['access:grant'],
+        valid: row.valid,
+      });
+  }
 
   let sentinelKey = randomUUID();
   while (partitionOf(threadTarget(system.routeKey, otherId, sentinelKey).route) === partition)

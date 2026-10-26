@@ -18,12 +18,13 @@ import type {
   Reply,
   Trace,
 } from '../../../../specs/erasure-operation-driver.ts';
-import { authoritativeTimeValue } from '../../src/command/command.ts';
+import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { effectsRelay } from '../../src/events/effects.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { createWorkClient, DBOS_SCHEMA, type WorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { startWorker } from '../../src/worker.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -227,7 +228,7 @@ function combineCost(left: GrowthSample['cost'], right: Cost): GrowthSample['cos
   };
 }
 
-async function runOperationWorkerProcess(): Promise<void> {
+export async function runOperationWorkerProcess(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   const authDatabaseUrl = process.env.ERASURE_AUTH_DATABASE_URL;
   const routeKey = Buffer.from(process.env.ERASURE_ROUTE_KEY ?? '', 'base64url');
@@ -260,6 +261,9 @@ async function runOperationWorkerProcess(): Promise<void> {
   };
 
   let barrierMode: 'run' | 'hold' = process.env.ERASURE_OPERATION_INITIAL_MODE === 'hold' ? 'hold' : 'run';
+  const originalSetConfig = DBOS.setConfig.bind(DBOS);
+  DBOS.setConfig = ((configuration) =>
+    originalSetConfig({ ...configuration, logLevel: 'info' })) as typeof DBOS.setConfig;
   const originalRegisterStep = DBOS.registerStep.bind(DBOS);
   DBOS.registerStep = ((func: (...args: any[]) => any, configuration: { name?: string; [key: string]: unknown }) => {
     if (configuration.name !== 'content.authorErase.step') return originalRegisterStep(func, configuration as never);
@@ -369,7 +373,13 @@ async function runOperationWorkerProcess(): Promise<void> {
     } else {
       worker = await startWorker({ databaseUrl, executorId: `erasure-${randomUUID()}`, poolSize: 12 }, [module]);
     }
+    for (const name of Object.keys(WORK_QUEUES)) {
+      const queue = await DBOS.retrieveQueue(name);
+      if (!queue) throw new Error(`Native worker did not register queue ${name}`);
+      await queue.setMinPollingIntervalMs(1);
+    }
   } finally {
+    DBOS.setConfig = originalSetConfig as typeof DBOS.setConfig;
     DBOS.registerStep = originalRegisterStep as typeof DBOS.registerStep;
   }
   process.stdout.write('ERASURE_WORKER_READY\n');
@@ -442,7 +452,8 @@ async function nativeWorker(resources: FixtureResources, client: WorkClient) {
   async function start(growthMode = false): Promise<void> {
     const authUrl = resources.system.database.authPool.options.connectionString;
     if (!authUrl) throw new Error('Native Auth database has no connection URL');
-    child = Bun.spawn([process.execPath, import.meta.path], {
+    const source = `import { runOperationWorkerProcess } from ${JSON.stringify(import.meta.url)}; await runOperationWorkerProcess();`;
+    child = Bun.spawn([process.execPath, '-e', source], {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -676,8 +687,62 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
            WHERE o.route=$1 AND o.operation_id=$2`,
           [route, id, partitionOf(route)],
         );
+        const events = await readPool.query<{
+          epoch: number;
+          partition_no: number;
+          position: string;
+          event_seq: number;
+        }>(
+          `SELECT epoch,partition_no,position::text,event_seq
+           FROM core.outbox
+           WHERE partition_no=$1 AND type='com.rezics.content.author-erasure.requested.v1'
+             AND data->>'operationId'=$2
+           ORDER BY position,event_seq`,
+          [partitionOf(route), id],
+        );
+        const effectWorkflowIds = events.rows.map(
+          (event) =>
+            `fx:${event.epoch}:${event.partition_no}:${event.position}:${event.event_seq}:content_author_erasure`,
+        );
+        const effectStatus =
+          effectWorkflowIds.length === 0
+            ? { rows: [] }
+            : await readPool.query(
+                `SELECT workflow_uuid,status,error,queue_name,executor_id,application_version,
+                        recovery_attempts,created_at,updated_at
+                 FROM ${DBOS_SCHEMA}.workflow_status
+                 WHERE workflow_uuid=ANY($1::text[])
+                 ORDER BY workflow_uuid`,
+                [effectWorkflowIds],
+              );
+        const effectOutputs =
+          effectWorkflowIds.length === 0
+            ? { rows: [] }
+            : await readPool.query(
+                `SELECT workflow_uuid,function_name,error
+                 FROM ${DBOS_SCHEMA}.operation_outputs
+                 WHERE workflow_uuid=ANY($1::text[])
+                 ORDER BY workflow_uuid,function_id`,
+                [effectWorkflowIds],
+              );
+        const operationRow = await readPool.query('SELECT * FROM content.operation WHERE route=$1 AND operation_id=$2', [
+          route,
+          id,
+        ]);
+        const queueState = await readPool.query(`SELECT * FROM ${DBOS_SCHEMA}.queues ORDER BY name`);
+        const applicationVersions = await readPool.query(
+          `SELECT * FROM ${DBOS_SCHEMA}.application_versions ORDER BY version_timestamp`,
+        );
+        const partitionQueueState = await readPool.query(
+          `SELECT workflow_uuid,status,name,error,queue_partition_key,created_at,updated_at
+           FROM ${DBOS_SCHEMA}.workflow_status
+           WHERE queue_name='effects' AND queue_partition_key=$1 AND status<>'SUCCESS'
+           ORDER BY created_at,workflow_uuid
+           LIMIT 20`,
+          [String(events.rows[0]?.partition_no)],
+        );
         throw new Error(
-          `Committed operation has not been bound to native DBOS; relay=${JSON.stringify(relayState.rows[0] ?? null)}; worker=${worker!.diagnostics()}`,
+          `Committed operation has not been bound to native DBOS; relay=${JSON.stringify(relayState.rows[0] ?? null)}; effectWorkflows=${JSON.stringify(effectWorkflowIds)}; effectStatus=${JSON.stringify(effectStatus.rows)}; effectOutputs=${JSON.stringify(effectOutputs.rows)}; operation=${JSON.stringify(operationRow.rows[0] ?? null)}; queues=${JSON.stringify(queueState.rows)}; applicationVersions=${JSON.stringify(applicationVersions.rows)}; partitionQueue=${JSON.stringify(partitionQueueState.rows)}; worker=${worker!.diagnostics()}`,
         );
       }
       workflowByOperation.set(id, workflowId);
@@ -748,10 +813,14 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
               valid,
             });
         } else {
-          await grant(resources, 'governance', {
-            resource: { route, id: accountId },
-            subject: { kind: 'account', id: accountId },
-            actions: ['account:read'],
+          await runCommand(resources.pool, { partition: partitionOf(route) }, async (tx, command) => {
+            await tx.query(
+              `INSERT INTO access.resource_grant
+                 (route,resource_id,subject_id,subject_role,action,valid,transaction_id)
+               VALUES ($1,$2,$2,'','account:read',tstzrange($3::timestamptz,NULL,'[)'),$4)`,
+              [route, accountId, authoritativeTimeValue(command.time), command.transactionId],
+            );
+            return { value: null, events: [] };
           });
         }
         return;
@@ -872,8 +941,11 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         if (failures.length) throw new AggregateError(failures, 'Native erasure operation fixture cleanup failed');
       },
       async seed(input): Promise<Fixture> {
+        console.error('ERASURE_DRIVER seed start');
         const marker = `erasure-${randomUUID().replaceAll('-', '')}`;
-        return seedFixture(input.posts, input.revisions, marker);
+        const fixture = await seedFixture(input.posts, input.revisions, marker);
+        console.error('ERASURE_DRIVER seed done');
+        return fixture;
       },
       async erase(actor, thread, authorId, key) {
         const mark = observer.records.length;
@@ -946,10 +1018,13 @@ export async function createErasureOperationDriver(): Promise<ErasureOperationDr
         await worker!.hold();
       },
       async step(name) {
+        console.error('ERASURE_DRIVER step start');
         const id = operationId(name);
         const workflowId = await workflowIdFor(name);
+        console.error('ERASURE_DRIVER workflow bound');
         const serial = (serialByOperation.get(id) ?? 0) + 1;
         const event = await waitForCheckpoint(workflowId, serial);
+        console.error('ERASURE_DRIVER barrier reached');
         await worker!.send(workflowId, serial);
         await waitForCheckpoint(workflowId, serial + 1);
         serialByOperation.set(id, serial);
