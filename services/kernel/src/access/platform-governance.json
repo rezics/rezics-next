@@ -6,6 +6,7 @@
     "exposure:open",
     "exposure:close",
     "account:suspend",
+    "account:reinstate",
     "account:renew_cleanup",
     "client:manage",
     "organization:create",

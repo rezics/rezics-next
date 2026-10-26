@@ -27,6 +27,12 @@ declare const productEventTypes: {
         minimumAuthnEpoch: Type.TString;
         receiptId: Type.TString;
     }>;
+    readonly 'com.rezics.access.account.reinstated.v1': Type.TObject<{
+        accountId: Type.TString;
+        state: Type.TLiteral<"active">;
+        minimumAuthnEpoch: Type.TString;
+        receiptId: Type.TString;
+    }>;
     readonly 'com.rezics.access.grant.create.v1': Type.TUnion<[Type.TObject<{
         resource: Type.TObject<{
             route: Type.TInteger;

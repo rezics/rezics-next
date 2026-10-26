@@ -12,6 +12,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { readPublicIdentities } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
+import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
 import { createSuspensionCommands } from './suspension.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -152,6 +153,13 @@ export function accessRoutes(
       access: dependencies.access(),
       clock: dependencies.clock,
     }));
+  let reinstatement: ReturnType<typeof createReinstatementCommands> | undefined;
+  const reinstatementCommands = () =>
+    (reinstatement ??= createReinstatementCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
     .get(
       '/v1/accounts',
@@ -238,6 +246,54 @@ export function accessRoutes(
           const { accountId, state, minimumAuthnEpoch, receiptId } = result.value;
           return { suspension: { accountId, state, minimumAuthnEpoch, receiptId } };
         } catch (error) {
+          denied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'reinstate'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })) }, closed)),
+        response: {
+          200: withHeaders(
+            t.Object(
+              {
+                reinstatement: t.Object(
+                  {
+                    accountId: id,
+                    state: t.Literal('active'),
+                    minimumAuthnEpoch: t.String({ pattern: '^[1-9][0-9]{0,18}$' }),
+                    receiptId: id,
+                  },
+                  closed,
+                ),
+              },
+              closed,
+            ),
+            { [SESSION_HEADER]: t.String() },
+          ),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: { ...detail('account.reinstate'), 'x-action': 'account:reinstate' },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            reinstatementCommands().reinstate(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key, ...body },
+            ),
+          );
+          session.record(result);
+          const { accountId, state, minimumAuthnEpoch, receiptId } = result.value;
+          return { reinstatement: { accountId, state, minimumAuthnEpoch, receiptId } };
+        } catch (error) {
+          if (error instanceof ReinstatementNotAppliedError) throw new ProblemError('conflict');
           denied(error);
         }
       },
