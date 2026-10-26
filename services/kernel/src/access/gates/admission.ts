@@ -14,7 +14,8 @@ export class PlatformClosedError extends Error {
 
 export async function admitExposure(input: {
   pool: Pool;
-  access: Access;
+  /** Resolved only when a closed gate needs an account decision. */
+  access: () => Access;
   actor: Actor;
   route: MountedRoute | undefined;
   deadline: number;
@@ -32,7 +33,7 @@ export async function admitExposure(input: {
   if (input.actor.kind !== 'account') throw new PlatformClosedError();
 
   const allowed = await authorizePlatformGate(
-    input.access,
+    input.access(),
     input.actor,
     [`gate:${exposure.group}`, 'gate:any'],
     actionLabelOfMountedRoute(route),
