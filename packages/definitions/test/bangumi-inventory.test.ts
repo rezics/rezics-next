@@ -464,12 +464,13 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
   const game = data.infobox.find(({ id }) => id === 'Game')!;
   expect(game.fields.find(({ id }) => id === '游戏引擎')!.mapping.term).toBe('wdt:P408');
   expect(game.fields.find(({ id }) => id === '平台')!.mapping.term).toBe('schema:gamePlatform');
-  for (const [id, term] of [
-    [4001, 'schema:VideoGame'],
-    [4002, 'wd:Q7397'],
-    [4005, 'schema:Game'],
-  ] as const)
-    expect(group('platform.game').find((entry) => entry.id === id)!.mapping.profile?.term).toBe(term);
+  expect(group('platform.game').find((entry) => entry.id === 4001)!.mapping.profile?.term).toBe('schema:VideoGame');
+  for (const id of [4002, 4005]) {
+    const profile = group('platform.game').find((entry) => entry.id === id)!.mapping.profile;
+    expect(profile?.status).toBe('omitted');
+    expect(profile?.reason?.trim().length).toBeGreaterThan(15);
+    expect(profile?.term).toBeUndefined();
+  }
   expect(data.files.find(({ id }) => id === 'person-characters')!.type).toMatchObject({
     term: 'wdt:P725',
     qualifiers: { character: { term: 'wdt:P453' } },
