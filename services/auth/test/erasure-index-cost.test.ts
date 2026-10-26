@@ -357,7 +357,12 @@ test('native account erasure preserves authorization, invalidation order and unr
         .rows,
     ).toEqual([{ value: subject.accountId }]);
     expect(
-      (await pool.query('SELECT account_id FROM auth_effect_receipt WHERE receipt_id=$1', ['add-erasure-key'])).rows,
+      (
+        await pool.query('SELECT account_id FROM auth_effect_receipt WHERE account_id=$1 AND operation_key=$2', [
+          subject.accountId,
+          'add-erasure-key',
+        ])
+      ).rows,
     ).toEqual([{ account_id: subject.accountId }]);
     expect(
       (

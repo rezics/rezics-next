@@ -494,7 +494,7 @@ test('credential floor hook requires an exact committed floor receipt', async ()
 test('legacy unbound credential inputs fail unavailable before any I/O in both capabilities', async () => {
   const input = { purpose: 'add-key' as const, authorization: 'legacy', subjectAccountId: subject, human: {} as never };
   await expect(f.capability.consumeAuthAuthorization(input as never)).rejects.toThrow('unavailable');
-  await expect(f.session.consumeAuthAuthorization(input)).rejects.toThrow('unavailable');
+  await expect(f.session.consumeAuthAuthorization(input as never)).rejects.toThrow('unavailable');
 });
 
 test('lost committed credential consumption acknowledgement leaves the opening spent', async () => {
@@ -642,6 +642,6 @@ test('native bindings install the credential capability beside the unchanged ses
       authorization: 'legacy',
       subjectAccountId: subject,
       human: {} as never,
-    }),
+    } as never),
   ).rejects.toThrow('unavailable');
 });

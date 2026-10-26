@@ -114,20 +114,7 @@ export type CredentialAuthorizationInput = {
   };
 }[CredentialPurpose];
 
-/** @deprecated Only legacy internal.setCredential produces this unbound input.
- * Native kernel capabilities must reject it: it carries no exact effect binding.
- * A later task removes this variant together with the legacy setCredential path.
- */
-export type LegacyCredentialAuthorizationInput = Omit<SessionAuthorizationInput, 'purpose'> & {
-  purpose: CredentialPurpose;
-  operationKey?: undefined;
-  effectReference?: undefined;
-};
-
-export type AuthorizationConsumeInput =
-  | SessionAuthorizationInput
-  | CredentialAuthorizationInput
-  | LegacyCredentialAuthorizationInput;
+export type AuthorizationConsumeInput = SessionAuthorizationInput | CredentialAuthorizationInput;
 
 interface EffectAuthorizationBase {
   receiptId: string;
@@ -144,8 +131,8 @@ interface EffectAuthorizationBase {
 
 /** A consumed durable Access authorization, never a caller-supplied approval.
  * Native credential results carry the complete credential extension. The unbound
- * branch exists for sessions and legacy setCredential only; it cannot carry a
- * partial credential binding. Auth must compare the native extension to its stage.
+ * branch cannot carry a partial credential binding. Auth must compare the native
+ * extension to its stage.
  */
 export type EffectAuthorization =
   | (EffectAuthorizationBase & {
@@ -177,7 +164,7 @@ export interface TrustedAccessPorts {
   /** Consume once while rechecking relationship, formula, floors and client evidence.
    * Exact credential calls return CredentialEffectAuthorization; Auth compares its
    * operationKey, effectReference, effectDigest, purpose and subject with its own
-   * immutable stage before writing. Native capabilities reject the legacy variant.
+   * immutable stage before writing. A credential purpose requires both locators.
    */
   consumeAuthorization?(input: AuthorizationConsumeInput): Promise<EffectAuthorization>;
   /** Trusted native credential capability. Missing ports fail closed. Approval
