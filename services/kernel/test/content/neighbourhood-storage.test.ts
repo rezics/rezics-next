@@ -154,10 +154,10 @@ test('logical erasure preserves exact revision metadata and bounded immutable me
     const before = (
       await client.query('SELECT * FROM content.revision WHERE route=$1 AND revision_id=$2', [route, id('revision-0')])
     ).rows;
-    await client.query("UPDATE content.post SET availability='erased' WHERE route=$1 AND post_id=$2", [
-      route,
-      id('post-0'),
-    ]);
+    await client.query(
+      "UPDATE content.post SET availability='erased', security_revision=security_revision+1 WHERE route=$1 AND post_id=$2",
+      [route, id('post-0')],
+    );
     await client.query("UPDATE content.thread SET availability='erased', title=NULL WHERE route=$1 AND thread_id=$2", [
       route,
       thread,
@@ -275,8 +275,8 @@ test('forward deployment converts enums and backfills actual metadata without re
     ]);
     await client.query(
       `INSERT INTO editorial.write_basis
-      (partition_no,transaction_id,epoch,position,actor_account_id,client_id,recorded_at)
-      VALUES ($1,$2,1,987654,$3,'fixture',$4)`,
+      (partition_no,transaction_id,epoch,position,principal_kind,principal_id,client_id,recorded_at)
+      VALUES ($1,$2,1,987654,'account',$3,'fixture',$4)`,
       [0x9abc >>> 4, id('transaction'), author, time],
     );
     await client.query(`INSERT INTO content.board VALUES ($1,$2,$3,'No metadata','taken_down',1,$4)`, [

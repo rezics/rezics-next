@@ -86,7 +86,13 @@ beforeAll(async () => {
         'post:revise',
         'post:erase',
         'report:create',
-      ].map((a) => [a, { anonymous: false }]),
+        'reaction:set',
+      ].map((action) => [
+        action,
+        action === 'media:create'
+          ? { anonymous: false as const, 'x-resource-types': ['content.media'] as const }
+          : { anonymous: false as const },
+      ]),
     ),
     accountEvidence: () => account,
   });
@@ -637,7 +643,8 @@ test('checkGrowth keeps fixed ancestry and one media effect constant across popu
               'core.receipt': [
                 {
                   partition_no: partitionOf(r),
-                  actor_account_id: actor.accountId,
+                  principal_kind: 'account',
+                  principal_id: actor.accountId,
                   command_kind: 'content.media.reserve',
                   idempotency_key: `seed-${ordinal}`,
                   request_digest: digest,
