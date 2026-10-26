@@ -4,12 +4,14 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -28,7 +30,7 @@ const accounts = {
   editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
   outsider: '019a1b2c-3d4e-7f00-8a00-0075de000003',
 };
-const actions = ['access:grant', 'context:create', 'context:read', 'context:accept', 'context:adopt'];
+const scopes = ['access:grant', 'context:create', 'context:read', 'context:accept', 'context:adopt'];
 let access: ReturnType<typeof createAccess>;
 let bearerTokens: Record<keyof typeof accounts, string>;
 let jwk: Record<string, unknown>;
@@ -43,21 +45,14 @@ const kernel = createKernel({
   access: (config: AccessConfig) => (access ??= createAccess({ ...config, auth })),
   tokens,
   routeKey: new Uint8Array(32).fill(4),
-  writeRate: {
-    async spend() {
-      return { allowed: true as const };
-    },
-  },
+  writeRate: createWriteRateLimiter({ secret: 'semantic-contexts-test-rate-secret-at-least-32-bytes' }),
 });
 
 beforeAll(async () => {
   await bootstrapRelease(pool, bundledRelease);
   const signing = await generateKeyPair('ES256', { extractable: true });
   jwk = { ...(await exportJWK(signing.publicKey)), kid: 'contexts', alg: 'ES256' };
-  access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: action === 'context:read' }])),
-    auth,
-  });
+  access = createAccess({ actions: actionCatalogue(kernel), auth });
   bearerTokens = {
     editor: await signedToken(accounts.editor, signing.privateKey),
     outsider: await signedToken(accounts.outsider, signing.privateKey),
@@ -83,7 +78,7 @@ beforeAll(async () => {
 async function signedToken(accountId: string, key: Awaited<ReturnType<typeof generateKeyPair>>['privateKey']) {
   return new SignJWT({
     client_id: 'web',
-    scope: actions.join(' '),
+    scope: scopes.join(' '),
     authn_epoch: 1,
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
