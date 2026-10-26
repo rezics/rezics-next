@@ -389,6 +389,32 @@ test('successful consent and client reductions invalidate already issued JWTs at
     receiptId: receipt.receipt_id,
   });
 
+  const deleted = await person('deleted_reduction_owner');
+  const deletedLogin = await operatorLogin(deleted);
+  fixture.approve('delete-reduction-owner', deletedLogin.token);
+  await expect(
+    fixture.workflows.deleteAccount({
+      key: 'delete_reduction_owner',
+      authorization: 'delete-reduction-owner',
+      accountId: deleted,
+    }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  await expect(fixture.authenticate(deletedLogin.token)).rejects.toThrow();
+  const deletedAccount = await fixture.read(deleted);
+  expect(deletedAccount).toMatchObject({ state: 'deleted' });
+  expect(
+    (
+      await fixture.database.query('SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2', [
+        deleted,
+        'durable-web',
+      ])
+    ).rows,
+  ).toEqual([{ account_id: deleted }]);
+  const deletedFences = await fixture.kernel.query(
+    'SELECT receipt_id FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 ORDER BY receipt_id',
+    [routeOf(deleted), deleted],
+  );
+
   const administrator = await person('client_reduction_admin');
   const adminLogin = await operatorLogin(administrator);
   fixture.approve('client-reduction', adminLogin.token);
@@ -405,4 +431,22 @@ test('successful consent and client reductions invalidate already issued JWTs at
     (await fixture.database.query('SELECT scopes FROM auth_client WHERE client_id=$1', ['durable-web'])).rows,
   ).toEqual([{ scopes: ['account:update'] }]);
   expect((await fixture.database.query('SELECT client_id FROM auth_client_reduction')).rows).toEqual([]);
+  expect(await fixture.read(deleted)).toEqual(deletedAccount);
+  expect(
+    (
+      await fixture.kernel.query(
+        'SELECT receipt_id FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 ORDER BY receipt_id',
+        [routeOf(deleted), deleted],
+      )
+    ).rows,
+  ).toEqual(deletedFences.rows);
+  expect(
+    (
+      await fixture.database.query(
+        "SELECT receipt_id FROM auth_effect_receipt WHERE account_id=$1 AND purpose='client-reduction'",
+        [deleted],
+      )
+    ).rows,
+  ).toEqual([]);
+  expect((await fixture.database.query('SELECT id FROM session WHERE "userId"=$1', [deleted])).rows).toEqual([]);
 }, 60000);
