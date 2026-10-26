@@ -17,7 +17,7 @@ import { createAccess } from '../../src/access/index.ts';
 import type { Actor, AccessContext, Resource } from '../../src/request/access.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { COMMITTED_CONTINUATION_ACTIONS } from '../../src/access/committed-continuations.ts';
+import { COMMITTED_CONTINUATION_ACTIONS, type ContinuationEntry } from '../../src/access/committed-continuations.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { WORKFLOW_APPROVAL_ACTIONS } from '../../src/access/workflow-approvals.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -424,6 +424,34 @@ function route(id: string): number {
   return value;
 }
 
+async function continuationAllowlist(f: Fixture, fallback: ContinuationEntry[]): Promise<ContinuationEntry[]> {
+  const root = await facts.query<{
+    continuation_id: string;
+    allowlist: ContinuationEntry[];
+  }>('SELECT continuation_id::text, allowlist FROM access.committed_continuation WHERE route=$1 AND operation_key=$2', [
+    route(continuationAccount(f)),
+    f.work.operationKey,
+  ]);
+  const row = root.rows[0];
+  if (!row) return fallback;
+  const pages = await facts.query<{ allowlist: ContinuationEntry[] }>(
+    `WITH RECURSIVE pages AS (
+       SELECT page.page_key, page.cursor, page.next_cursor, page.allowlist, 0 AS commit_order
+       FROM access.operator_fence_page AS page
+       WHERE page.route=$1 AND page.continuation_id=$2 AND page.cursor IS NULL
+       UNION ALL
+       SELECT child.page_key, child.cursor, child.next_cursor, child.allowlist, pages.commit_order+1
+       FROM pages
+       JOIN access.operator_fence_page AS child
+         ON child.route=$1 AND child.continuation_id=$2 AND child.cursor=pages.next_cursor
+       WHERE pages.next_cursor IS NOT NULL
+     )
+     SELECT allowlist FROM pages ORDER BY commit_order`,
+    [route(continuationAccount(f)), row.continuation_id],
+  );
+  return [...row.allowlist, ...pages.rows.flatMap((page) => page.allowlist)];
+}
+
 function continuationAccount(f: Fixture): string {
   return f.work.operation.kind === 'delete' ? f.work.operation.accountId : f.ownerId;
 }
@@ -677,7 +705,7 @@ async function makeFixture(
       : family === 'fence-operator'
         ? await person('fence-caller')
         : family === 'subject-delete'
-          ? subjectPerson
+          ? owner
           : family === 'operator-delete'
             ? owner
             : await person(`${family}-caller`);
@@ -1082,21 +1110,16 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             }
             if (continuation) {
               await continuationReached;
-              const current = await refused(() =>
-                approvals().resolveForCaller(caller, reference, nativeOperation, context()),
-              );
-              if ('outcome' in current) {
-                pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
-                completion
-                  .finally(() => {
-                    const currentPending = pendingWorkflows.get(work.operationKey);
-                    if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
-                    if (stepObserver === executionObserver) stepObserver = priorObserver;
-                  })
-                  .catch(() => {});
-                pendingCompletion = true;
-                return { outcome: 'denied' as const };
-              }
+              pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
+              completion
+                .finally(() => {
+                  const currentPending = pendingWorkflows.get(work.operationKey);
+                  if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
+                  if (stepObserver === executionObserver) stepObserver = priorObserver;
+                })
+                .catch(() => {});
+              pendingCompletion = true;
+              return { outcome: 'denied' as const };
             }
             if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
             if (!continuation) value = await completion;
@@ -1377,7 +1400,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         );
         const old = await facts.query<{ reservation_id: string }>(
           `SELECT reservation_id::text FROM access.lifecycle_coordination WHERE route=$1 AND account_id=$2 AND related_account_id=$3 AND purpose='membership' ORDER BY reservation_id LIMIT 1`,
-          [route(f.ownerId), f.identity.actorId, f.ownerId],
+          [route(f.identity.actorId), f.identity.actorId, f.ownerId],
         );
         if (old.rows[0])
           await native().workflowPorts.setMembership!(
@@ -1481,7 +1504,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         operationDigest: view.operationDigest,
         barrierReceiptId: view.barrierReceiptId,
         expiresAt: view.expiresAt,
-        allowed: view.allowlist,
+        allowed: await continuationAllowlist(f, view.allowlist),
       };
     },
     async continueCommitted(referenceValue, override, hook) {
@@ -1884,7 +1907,14 @@ function stepTargetFromArgs(f: Fixture, name: string, args: unknown[]): string {
 }
 
 async function observe(f: Fixture): Promise<Snapshot> {
-  const ids = new Set([f.ownerId, f.nextOperatorId, f.subjectId, f.otherSubjectId, f.organizationId]);
+  const ids = new Set([
+    f.ownerId,
+    f.nextOperatorId,
+    f.subjectId,
+    f.otherSubjectId,
+    f.organizationId,
+    f.identity.actorId,
+  ]);
   const operated = await facts.query<{ account_id: string }>(
     `SELECT related_account_id::text AS account_id FROM access.lifecycle_coordination
      WHERE purpose='operator' AND account_id=ANY($1::uuid[])
