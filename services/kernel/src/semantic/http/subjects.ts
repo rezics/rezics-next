@@ -43,13 +43,11 @@ import {
 } from '../moderation.ts';
 import { ContextNotFoundError, editorialContextAnchor, globalContextAnchor } from '../context.ts';
 import type { CommandAuthorization } from '../../command/command.ts';
-import { readSubjectReactionCounts, withViewerReactions } from '../../content/reads.ts';
-import { SubjectReactionsResponseSchema } from '../../content/schemas.ts';
-import { readPartition } from '../../partition/partition.ts';
+import { REACTION_KINDS } from '../../content/events.ts';
+import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
 import readVisibility from '../read-visibility.sql';
 import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../agents.ts';
 import readRedirect from '../read-redirect.sql';
-import { withReadTransaction } from '../read.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const AgentSelfSourceSchema = t.Object(
@@ -270,6 +268,22 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
+const reactionKind = t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
+const reactionCountResponse = t.Object(
+  {
+    counts: t.Array(
+      t.Object({ kind: reactionKind, count: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+    ),
+    watermark: t.Union([
+      t.Object(
+        { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
+        { additionalProperties: false },
+      ),
+      t.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
 type SubjectRouteDependencies = {
   pool: Pool;
   routeKey: Uint8Array;
@@ -1583,7 +1597,7 @@ function subjectRoutes(
       {
         params: t.Object({ id: t.String() }),
         response: {
-          200: withHeaders(SubjectReactionsResponseSchema, { [SESSION_HEADER]: t.String(), ...cacheControl }),
+          200: withHeaders(reactionCountResponse, cacheControl),
           308: withHeaders(redirectResponse, { location: t.String() }),
           ...listingErrors,
         },
@@ -1594,42 +1608,34 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, actor, authorize, admission, job, session, set, request }) => {
+      async ({ params, authorize, admission, job, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
-        const state = await admission.run('normal', job, () =>
-          withReadTransaction(pool, async (client) => {
-            const partition = await readPartition(client, partitionOf(route));
+        const result = await admission.run('normal', job, () =>
+          withConnection(pool, async (client) => {
             const subject = await readVisibility.run(client, { route, subject_id: params.id });
-            if (!partition || !subject || subject.visibility !== 'visible' || !(await check(client))) return null;
+            if (!subject || subject.visibility !== 'visible' || !(await check(client)))
+              throw new ProblemError('not_found');
             const redirect = await readRedirect.run(client, { route, subject_id: params.id });
-            return { partition, redirect: redirect?.target ?? null };
+            if (redirect?.target) return { redirect: redirect.target } as const;
+            const result = await readReactionCounts(client, { targetId: params.id });
+            return {
+              counts: result.counts.map(({ kind, count }) => ({ kind, count })),
+              watermark: result.watermark
+                ? { epoch: result.watermark.epoch, position: result.watermark.position.toString() }
+                : null,
+            };
           }),
         );
-        if (!state) throw new ProblemError('not_found');
-        if (state.redirect) {
+        if ('redirect' in result) {
           set.status = 308;
-          set.headers.location = `/v1/subjects/${state.redirect}/reactions${new URL(request.url).search}`;
-          return { redirect: { from: params.id, to: state.redirect } };
+          set.headers.location = `/v1/subjects/${result.redirect}/reactions${new URL(request.url).search}`;
+          return { redirect: { from: params.id, to: result.redirect } };
         }
-        session.record({
-          partition: state.partition.partitionNo,
-          epoch: state.partition.epoch,
-          position: state.partition.position,
-        });
-        const dependencies = { pool, access: access(), tokens };
-        const counts = await admission.run('normal', job, () =>
-          readSubjectReactionCounts(dependencies, [params.id], job.deadline),
-        );
-        const viewer = await admission.run('normal', job, () =>
-          withViewerReactions(dependencies, actor, [{ id: params.id }], job.deadline),
-        );
-        const count = counts.get(params.id);
-        if (!count) throw new ProblemError('not_found');
         set.headers['cache-control'] = 'no-cache';
-        return { counts: count, viewer: viewer[0]?.viewerReaction ?? null };
+        return result;
       },
     );
 }

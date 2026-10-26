@@ -509,7 +509,8 @@ export async function withViewerReactions<T extends { readonly id: string }>(
 export type ReactionCountFreshness = Readonly<{ epoch: number; position: string }>;
 type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
 export type SubjectReactionKind = (typeof subjectReactionKinds)[number];
-export type SubjectReactionCounts = Readonly<Record<SubjectReactionKind, number>>;
+export type SubjectReactionCount = Readonly<{ kind: SubjectReactionKind; count: number }>;
+export type SubjectReactionCounts = readonly SubjectReactionCount[];
 type Counted<T> = T extends ErasedPlaceholder & { readonly revisionId?: never }
   ? T
   : T & { readonly reactions: ReactionCountMap };
@@ -597,13 +598,13 @@ export async function readSubjectReactionCounts(
 ): Promise<Map<string, SubjectReactionCounts>> {
   if (subjectIds.length < 1 || subjectIds.length > 100)
     throw new RangeError('Subject reaction count reads require 1 to 100 ids');
-  const counts = new Map<string, Record<SubjectReactionKind, number>>();
+  const counts = new Map<string, SubjectReactionCount[]>();
   const groups = new Map<number, { ids: string[]; routes: number[] }>();
   for (const id of subjectIds) {
     let targetRoute = routeOf(id);
     if (targetRoute === null) throw new TypeError('Invalid content identity');
     if (counts.has(id)) continue;
-    counts.set(id, { like: 0, love: 0, laugh: 0, insightful: 0, sad: 0 });
+    counts.set(id, []);
     const partition = partitionOf(targetRoute);
     const group = groups.get(partition) ?? { ids: [], routes: [] };
     group.ids.push(id);
@@ -627,10 +628,12 @@ export async function readSubjectReactionCounts(
       if (!Number.isSafeInteger(row.count) || row.count < 0) throw new TypeError('Invalid subject reaction count');
       const counted = counts.get(row.targetId);
       if (!counted) throw new TypeError('Unexpected subject reaction count target');
-      counted[row.kind as SubjectReactionKind] = row.count;
+      if (row.count > 0) counted.push({ kind: row.kind as SubjectReactionKind, count: row.count });
     }
   }
-  return counts;
+  const result = new Map<string, SubjectReactionCounts>();
+  for (const [id, rows] of counts) result.set(id, rows);
+  return result;
 }
 
 export async function readThread(

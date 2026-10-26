@@ -278,19 +278,10 @@ export const ReactionInputSchema = t.Object({ kind: reactionKind }, closed);
 export const ReactionResponseSchema = t.Object({ kind: reactionKind }, closed);
 export const SubjectReactionInputSchema = t.Object({ kind: subjectReactionKind }, closed);
 export const SubjectReactionResponseSchema = t.Object({ kind: subjectReactionKind }, closed);
-export const SubjectReactionsResponseSchema = t.Object(
+export const SubjectOwnReactionResponseSchema = t.Object({ kind: t.Union([subjectReactionKind, t.Null()]) }, closed);
+export const SubjectReactionRedirectResponseSchema = t.Object(
   {
-    counts: t.Object(
-      {
-        like: t.Integer({ minimum: 0 }),
-        love: t.Integer({ minimum: 0 }),
-        laugh: t.Integer({ minimum: 0 }),
-        insightful: t.Integer({ minimum: 0 }),
-        sad: t.Integer({ minimum: 0 }),
-      },
-      closed,
-    ),
-    viewer: t.Union([subjectReactionKind, t.Null()]),
+    redirect: t.Object({ from: ContentIdSchema, to: ContentIdSchema }, closed),
   },
   closed,
 );

@@ -8,14 +8,19 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { erasePostLogical } from './erase-post.ts';
 import { postEraseReceiptAccess } from './operations.ts';
 import { moderationRoutes } from './moderation-routes.ts';
-import { withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { accessCheck, AuthenticationError, type Actor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { readPartition } from '../partition/partition.ts';
+import readSubjectVisibility from '../semantic/read-visibility.sql';
+import readSubjectRedirect from '../semantic/read-redirect.sql';
 import readContainingThread from './read-containing-post-thread.sql';
 import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
 import { applyBoardCandidate } from './board-projection.ts';
@@ -54,6 +59,7 @@ import {
   type ThreadView,
   withReactionCounts,
   withViewerReactions,
+  type SubjectReactionKind,
 } from './reads.ts';
 import {
   BoardResponseSchema,
@@ -67,6 +73,8 @@ import {
   PostResponseSchema,
   ReactionInputSchema,
   ReactionResponseSchema,
+  SubjectOwnReactionResponseSchema,
+  SubjectReactionRedirectResponseSchema,
   SubjectReactionInputSchema,
   SubjectReactionResponseSchema,
   RevisionInputSchema,
@@ -120,10 +128,12 @@ const reviseHeaders = t.Object(
 const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
+const subjectReactionKinds: ReadonlySet<string> = new Set(['like', 'love', 'laugh', 'insightful', 'sad']);
 const reactionInput = strictContentSchema(ReactionInputSchema);
 const reactionResponse = strictContentSchema(ReactionResponseSchema);
 const subjectReactionInput = strictContentSchema(SubjectReactionInputSchema);
 const subjectReactionResponse = strictContentSchema(SubjectReactionResponseSchema);
+const subjectOwnReactionResponse = strictContentSchema(SubjectOwnReactionResponseSchema);
 const threadInput = strictContentSchema(ThreadInputSchema);
 const postInput = strictContentSchema(PostInputSchema);
 const revisionInput = strictContentSchema(RevisionInputSchema);
@@ -985,6 +995,86 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ params: { id }, actor, request, admission, job, session, set }) => {
         await writeReaction(dependencies, actor, 'subject', id, null, request, admission, job, session);
         set.status = 204;
+      },
+    )
+    .get(
+      '/v1/subjects/:id/reaction',
+      {
+        params,
+        response: {
+          200: withHeaders(subjectOwnReactionResponse, sessionHeader),
+          308: withHeaders(SubjectReactionRedirectResponseSchema, { location: t.String() }),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'subject.get_own_reaction',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, actor, admission, job, session, set, request }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        existingId(id);
+        const route = routeOf(id);
+        if (route === null) throw new ProblemError('not_found');
+        const resource = { route, id };
+        const check = await accessCheck(
+          dependencies.access,
+          actor,
+          'subject:read',
+          { ...resource, eligibility: subjectReadEligibility(resource) },
+          { pool: dependencies.pool, deadline: job.deadline },
+        );
+        const state = await admission.run('normal', job, () =>
+          within(job.deadline, () =>
+            withConnection(dependencies.pool, async (connection) => {
+              const client = deadlineClient(connection, job.deadline);
+              try {
+                await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+                const partition = await readPartition(client, partitionOf(route));
+                const subject = await readSubjectVisibility.run(client, { route, subject_id: id });
+                if (!partition || !subject || subject.visibility !== 'visible' || !(await check(client))) {
+                  await client.query('COMMIT');
+                  return null;
+                }
+                const redirect = await readSubjectRedirect.run(client, { route, subject_id: id });
+                await client.query('COMMIT');
+                return { partition, redirect: redirect?.target ?? null };
+              } catch (error) {
+                try {
+                  await connection.query('ROLLBACK');
+                } catch (rollbackError) {
+                  discardConnection(connection, rollbackError as Error);
+                }
+                throw error;
+              }
+            }),
+          ),
+        );
+        if (!state) throw new ProblemError('not_found');
+        if (state.redirect) {
+          set.status = 308;
+          set.headers.location = `/v1/subjects/${state.redirect}/reaction${new URL(request.url).search}`;
+          return { redirect: { from: id, to: state.redirect } };
+        }
+        session.record({
+          partition: state.partition.partitionNo,
+          epoch: state.partition.epoch,
+          position: state.partition.position,
+        });
+        const viewer = await admission.run('normal', job, () =>
+          withViewerReactions(
+            { pool: dependencies.pool, access: dependencies.access, tokens: dependencies.tokens },
+            actor,
+            [{ id }],
+            job.deadline,
+          ),
+        );
+        const kind = viewer[0]?.viewerReaction ?? null;
+        if (kind !== null && !subjectReactionKinds.has(kind)) throw new TypeError('Invalid subject reaction kind');
+        set.headers['cache-control'] = 'no-cache';
+        return { kind: kind as SubjectReactionKind | null };
       },
     );
 
