@@ -155,6 +155,13 @@ const fake = Bun.serve({
   },
 });
 
+// Kernel reads are independent of Auth's request counter and stalls.
+const kernel = Bun.serve({
+  port: 0,
+  hostname: '127.0.0.1',
+  fetch: () => json({ error: 'not_found' }, 404),
+});
+
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
@@ -170,7 +177,7 @@ let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
 let browser: Browser | undefined;
 
-// The documented command, pointed at the fake through the environment it reads in development.
+// The documented command, pointed at the fakes through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
@@ -184,7 +191,7 @@ function site(): Promise<string> {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
+        KERNEL_ORIGIN: kernel.url.origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
@@ -223,6 +230,7 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
+  kernel.stop(true);
   if (child?.pid)
     try {
       process.kill(-child.pid, 'SIGTERM');
