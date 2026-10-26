@@ -215,7 +215,8 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
     'unitAmountMinor',
   ]);
   const publicRead = await request(`/v1/offers/${selling.id}`, null);
-  expect([publicRead.status, await publicRead.json()]).toEqual([200, { offer: selling }]);
+  const { summary, ...offerFields } = selling as Offer & { summary: unknown };
+  expect([publicRead.status, await publicRead.json()]).toEqual([200, { offer: { ...offerFields, subject: summary } }]);
   const requestKey = key();
   const response = await request('/v1/orders', buyer, { offerId: selling.id }, requestKey);
   expect(response.status).toBe(201);

@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
@@ -7,7 +9,9 @@ import * as commerceStore from '../../src/commerce/store.ts';
 import { StripeUnavailableError, type Offer } from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
+import { readSubjectSummaries } from '../../src/semantic/summaries.ts';
 import {
   checkGrowth,
   openGrowthDatabase,
@@ -22,12 +26,13 @@ import { startFakeStripe } from './support/fake-stripe.ts';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
-const actions = ['offer:create', 'offer:read', 'offer:manage', 'order:create'];
+const actions = ['offer:create', 'offer:read', 'offer:manage', 'order:create', 'subject:read'];
 const growthActorId = newId(0);
 const actorRoute = routeOf(growthActorId)!;
 const actorPartition = partitionOf(actorRoute);
 const idNamespace = '00000000-0000-8000-8000-000000000001';
 const rowsPerScale = 500;
+const unrelatedSubjectsPerScale = 256;
 const maxScaleUnits = 16;
 const operationsPerCheck = 3 * (1 + 5);
 // Anchors and measured runs add a few rows beside the seed; four per run bounds them and stays far below one unit.
@@ -45,6 +50,7 @@ let commands: ReturnType<typeof createCommerceCommands>;
 let stripe: ReturnType<typeof createStripePort>;
 let signing: Awaited<ReturnType<typeof generateKeyPair>>;
 let nextPositionBase: number;
+let summaryTargetSubjectId: string;
 
 function seededId(name: string, ordinal: number, label: string): string {
   return derivedId(idNamespace, `${name}:${ordinal}:${label}`, actorRoute);
@@ -73,9 +79,9 @@ async function freshActor() {
   return access.authenticate(token, { pool: db!.pool, deadline: Date.now() + 5_000 });
 }
 
-function offerInput() {
+function offerInput(targetSubjectId = newId(actorRoute)) {
   return {
-    targetSubjectId: newId(actorRoute),
+    targetSubjectId,
     title: 'Growth offer',
     currency: 'usd',
     unitAmountMinor: 1200,
@@ -83,8 +89,19 @@ function offerInput() {
   };
 }
 
-async function createOfferAnchor(): Promise<Offer> {
-  return (await commands.createOffer(await freshActor(), offerInput(), requestKey('growth-anchor-offer', 0))).value;
+async function createOfferAnchor(targetSubjectId?: string): Promise<Offer> {
+  return (
+    await commands.createOffer(await freshActor(), offerInput(targetSubjectId), requestKey('growth-anchor-offer', 0))
+  ).value;
+}
+
+async function summaryFor(actor: Awaited<ReturnType<typeof freshActor>>, subjectId: string) {
+  const summaries = await readSubjectSummaries({ pool: db!.pool, access, actor, deadline: Date.now() + 5_000 }, [
+    subjectId,
+  ]);
+  const summary = summaries.get(subjectId);
+  if (!summary) throw new Error(`Subject summary ${subjectId} is unavailable`);
+  return summary;
 }
 
 type PopulationOptions = {
@@ -401,10 +418,38 @@ function commercePopulation(name: string, options: PopulationOptions = {}): Popu
   };
 }
 
-async function grow(database: GrowthDatabase, population: Population, scale: number, previous: number) {
+function unrelatedSubjectPopulation(name: string): Population {
+  return {
+    name,
+    hotPartition: actorPartition,
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'semantic.subject': [
+        {
+          route: actorRoute,
+          subject_id: seededId(name, ordinal, 'unrelated-subject'),
+          type: 'schema:Book',
+          recorded_transaction_id: seededId(name, ordinal, 'unrelated-subject-transaction'),
+          visibility: 'visible',
+          security_revision: 0,
+          current_facts: 0,
+          current_release: bundledDigest,
+        },
+      ],
+    }),
+  };
+}
+
+async function grow(
+  database: GrowthDatabase,
+  population: Population,
+  scale: number,
+  previous: number,
+  perScale = rowsPerScale,
+) {
   await seed({ pool: database.pool, admin: database.admin }, population, {
-    from: previous * rowsPerScale,
-    to: scale * rowsPerScale,
+    from: previous * perScale,
+    to: scale * perScale,
   });
 }
 
@@ -429,14 +474,20 @@ async function resetGrowthData(database: GrowthDatabase) {
 type SeedAudit = { readonly name: string; readonly counts: ReadonlyMap<string, { rows: number; allowed: number }> };
 const seedAudits: SeedAudit[] = [];
 
-async function auditSeededRows(database: GrowthDatabase, name: string, population: Population) {
+async function auditSeededRows(
+  database: GrowthDatabase,
+  name: string,
+  population: Population,
+  baseline: ReadonlyMap<string, number>,
+  perScale: number,
+) {
   const perOrdinal = population.rows!(placement(population, 0));
   const counts = new Map<string, { rows: number; allowed: number }>();
   for (const [relation, rows] of Object.entries(perOrdinal)) {
     const { rows: found } = await database.admin.query(`SELECT count(*)::int AS rows FROM ${relation}`);
     counts.set(relation, {
       rows: found[0].rows,
-      allowed: maxScaleUnits * rowsPerScale * rows.length + rowsOutsideSeed,
+      allowed: (baseline.get(relation) ?? 0) + maxScaleUnits * perScale * rows.length + rowsOutsideSeed,
     });
   }
   seedAudits.push({ name, counts });
@@ -447,15 +498,43 @@ async function check(
   name: string,
   population: Population,
   operation: GrowthCheck['operation'],
+  unrelatedSubjects?: Population,
 ) {
+  const populations = [population, ...(unrelatedSubjects ? [unrelatedSubjects] : [])];
+  const baselines = new Map<Population, Map<string, number>>();
+  for (const current of populations) {
+    const relations = Object.keys(current.rows!(placement(current, 0)));
+    const baseline = new Map<string, number>();
+    for (const relation of relations) {
+      const { rows } = await database.admin.query(`SELECT count(*)::int AS rows FROM ${relation}`);
+      baseline.set(relation, rows[0].rows);
+    }
+    baselines.set(current, baseline);
+  }
   const report = await checkGrowth(database, {
     name,
     scales: [1, 4, 16],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    grow: (growthDb, scale, previous) => grow(growthDb, population, scale, previous),
+    grow: async (growthDb, scale, previous) => {
+      for (const current of populations)
+        await grow(
+          growthDb,
+          current,
+          scale,
+          previous,
+          current === unrelatedSubjects ? unrelatedSubjectsPerScale : rowsPerScale,
+        );
+    },
     operation,
   });
-  await auditSeededRows(database, name, population);
+  for (const current of populations)
+    await auditSeededRows(
+      database,
+      name,
+      current,
+      baselines.get(current)!,
+      current === unrelatedSubjects ? unrelatedSubjectsPerScale : rowsPerScale,
+    );
   return report;
 }
 
@@ -483,7 +562,7 @@ beforeAll(async () => {
       actions.map((action) => [
         action,
         {
-          anonymous: false,
+          anonymous: action === 'subject:read',
           ...(action === 'offer:create' ? { 'x-resource-types': ['commerce.offer'] } : {}),
         },
       ]),
@@ -505,6 +584,26 @@ beforeAll(async () => {
     "INSERT INTO access.resource_grant(route, resource_id, subject_id, subject_role, action, valid, transaction_id, subject_kind) VALUES (0, $1, $2, '', 'offer:create', '(,)', $2, 'identity')",
     [GLOBAL_CONTEXT, growthActorId],
   );
+  await bootstrapRelease(db.pool, bundledRelease);
+  const subjectKey = requestKey('growth-summary-subject', 0);
+  summaryTargetSubjectId = (
+    await createSubject(db.pool, {
+      actor: {
+        kind: 'account',
+        accountId: growthActorId,
+        clientId: 'growth-test',
+        scopes: [...actions],
+        requestedBy: null,
+        authnEpoch: 1,
+      },
+      target: { route: actorRoute, id: newId(actorRoute) },
+      idempotencyKey: subjectKey,
+      digest: createHash('sha256').update(subjectKey).digest(),
+      item: { type: 'schema:Book', labels: { en: 'Growth target', ja: '成長対象' } },
+      release: { digest: bundledDigest, release: bundledRelease },
+      authorize: async () => true,
+    })
+  ).subject.id;
 });
 
 afterAll(async () => {
@@ -546,13 +645,13 @@ test('Offer read and delist stays within its bound as N grows', async () => {
   const database = db!;
   await resetGrowthData(database);
   const offers: Offer[] = [];
-  for (let index = 0; index < operationsPerCheck; index++) offers.push(await createOfferAnchor());
+  for (let index = 0; index < operationsPerCheck; index++) offers.push(await createOfferAnchor(summaryTargetSubjectId));
   const population = commercePopulation(`offer-read-delist-${Bun.randomUUIDv7()}`, {
     orders: true,
     entitlements: true,
     offerInitialization: false,
   });
-  await check(
+  const report = await check(
     database,
     'Offer read and delist stays within its bound as N grows',
     population,
@@ -562,9 +661,22 @@ test('Offer read and delist stays within its bound as N grows', async () => {
       const actor = await freshActor();
       const read = await commands.readOffer(offer.id);
       if (!read) throw new Error(`Offer ${offer.id} is missing`);
+      const subject = await summaryFor(actor, read.targetSubjectId);
+      expect(subject.id).toBe(summaryTargetSubjectId);
       return commands.delistOffer(actor, offer.id, requestKey('offer-delist', repetition));
     },
+    unrelatedSubjectPopulation(`offer-read-subjects-${Bun.randomUUIDv7()}`),
   );
+  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([
+    report.samples[0]!.cost.rows,
+    report.samples[0]!.cost.rows,
+    report.samples[0]!.cost.rows,
+  ]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([
+    report.samples[0]!.cost.statements,
+    report.samples[0]!.cost.statements,
+    report.samples[0]!.cost.statements,
+  ]);
 }, 90_000);
 
 test('Order creation stays within its bound as o grows', async () => {
@@ -618,7 +730,7 @@ test('Checkout and receipt recording stays within its bound as o grows', async (
 test('Order session and transaction reads stays within its bound as o grows', async () => {
   const database = db!;
   await resetGrowthData(database);
-  const offer = await createOfferAnchor();
+  const offer = await createOfferAnchor(summaryTargetSubjectId);
   const actor = await freshActor();
   const anchor = await checkout(
     { pool: database.pool, commands, stripe, successUrl, cancelUrl },
@@ -632,18 +744,34 @@ test('Order session and transaction reads stays within its bound as o grows', as
     receiptKind: 'checkout',
     offerInitialization: false,
   });
-  await check(
+  const report = await check(
     database,
     'Order session and transaction reads stays within its bound as o grows',
     population,
     async () => {
+      const primaryOrder = await commerceStore.readOrder(database.pool, actorRoute, anchor.id);
+      if (!primaryOrder) throw new Error(`Order ${anchor.id} is missing`);
+      const actor = await freshActor();
+      const subject = await summaryFor(actor, primaryOrder.targetSubjectId);
+      expect(subject.id).toBe(summaryTargetSubjectId);
       const sessionOrder = await commerceStore.readOrderBySession(database.pool, actorRoute, anchor.checkoutSessionId!);
       const transactions = await commerceStore.readOrderTransactions(database.pool, actorRoute, anchor.id);
       expect(sessionOrder?.id).toBe(anchor.id);
       expect(transactions).toHaveLength(0);
-      return { sessionOrder, transactions };
+      return { primaryOrder, subject, sessionOrder, transactions };
     },
+    unrelatedSubjectPopulation(`order-read-subjects-${Bun.randomUUIDv7()}`),
   );
+  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([
+    report.samples[0]!.cost.rows,
+    report.samples[0]!.cost.rows,
+    report.samples[0]!.cost.rows,
+  ]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([
+    report.samples[0]!.cost.statements,
+    report.samples[0]!.cost.statements,
+    report.samples[0]!.cost.statements,
+  ]);
 }, 90_000);
 
 test('Order decision and settlement stays within its bound as N grows', async () => {

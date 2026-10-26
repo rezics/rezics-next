@@ -34,9 +34,7 @@ async function request(path: string, account: string | null = buyer, body?: unkn
       headers: {
         'x-request-id': 'offer-subject',
         ...(account ? { authorization: `Bearer ${tokens.get(account)!}` } : {}),
-        ...(body === undefined
-          ? {}
-          : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key()) }),
+        ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key()) }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -66,7 +64,11 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
-    writeRate: { async spend() { return { allowed: true as const }; } },
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
     access: (config) =>
       createAccess({
         ...config,
@@ -86,6 +88,7 @@ beforeAll(async () => {
         protocol: 'http',
         maxNetworkRetries: 0,
         timeoutMs: 1000,
+        clock: () => new Date(),
       }),
       successUrl,
       cancelUrl,
@@ -124,7 +127,8 @@ beforeAll(async () => {
         headers: { authorization: `Bearer ${tokens.get(seller)!}`, 'idempotency-key': JSON.stringify(key()) },
       }),
     );
-    if (response.status !== 200) throw new Error(`Opening ${group} failed: ${response.status} ${await response.text()}`);
+    if (response.status !== 200)
+      throw new Error(`Opening ${group} failed: ${response.status} ${await response.text()}`);
   }
 });
 
@@ -215,7 +219,10 @@ test('offer and order reads reject invalid language preference lists', async () 
   const createdResponse = await request('/v1/orders', buyer, { offerId: offer.id });
   expect(createdResponse.status).toBe(201);
   const order = (await createdResponse.json()).order;
-  for (const path of [`/v1/offers/${offer.id}?languages=`, `/v1/orders/${order.id}?languages=en,ja,fr,de,it,es,ko,zh,ar`]) {
+  for (const path of [
+    `/v1/offers/${offer.id}?languages=`,
+    `/v1/orders/${order.id}?languages=en,ja,fr,de,it,es,ko,zh,ar`,
+  ]) {
     const response = await request(path);
     expect(response.status).toBe(400);
     expect((await response.json()).code).toBe('invalid_request');

@@ -51,10 +51,37 @@ const offerSchema = t.Object(
   },
   object,
 );
+const offerReadSchema = t.Object(
+  {
+    id,
+    targetSubjectId: id,
+    subject: t.Union([SubjectSummarySchema, t.Null()]),
+    title: t.String(),
+    currency: t.String(),
+    unitAmountMinor: t.Integer(),
+    state: t.Union([t.Literal('active'), t.Literal('delisted')]),
+  },
+  object,
+);
 const orderSchema = t.Object(
   {
     id,
     offerId: id,
+    settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
+    checkoutUrl: nullableId,
+    checkoutExpiresAt: nullableId,
+    entitlementId: nullableId,
+    createdAt: t.String(),
+  },
+  object,
+);
+const orderReadSchema = t.Object(
+  {
+    id,
+    offerId: id,
+    title: t.String(),
+    targetSubjectId: id,
+    subject: t.Union([SubjectSummarySchema, t.Null()]),
     settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
     checkoutUrl: nullableId,
     checkoutExpiresAt: nullableId,
@@ -78,9 +105,13 @@ const entitlementSchema = t.Object(
   object,
 );
 const offerResponse = t.Object({ offer: offerSchema }, object);
+const offerReadResponse = t.Object({ offer: offerReadSchema }, object);
 const orderResponse = t.Object({ order: orderSchema }, object);
+const orderReadResponse = t.Object({ order: orderReadSchema }, object);
 const entitlementResponse = t.Object({ entitlement: entitlementSchema }, object);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+const languageQuery = t.Object({ languages: t.Optional(t.String()) }, object);
+const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema(
   'dependency_unavailable',
@@ -96,6 +127,10 @@ function detail(operationId: string, action: string, exposure: 'gate:purchases' 
 function offerView(offer: Offer, summary: SubjectSummary | null) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
   return { id, targetSubjectId, title, currency, unitAmountMinor, state, summary };
+}
+function offerReadView(offer: Offer, subject: SubjectSummary | null) {
+  const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
+  return { id, targetSubjectId, subject, title, currency, unitAmountMinor, state };
 }
 function entitlementView(entitlement: Entitlement, summary: SubjectSummary | null) {
   const { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason } = entitlement;
@@ -127,6 +162,21 @@ async function orderView(pool: Pool, order: Order) {
 function requireAccount(actor: Actor) {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   return actor;
+}
+function languagePreferences(value: string | string[] | undefined): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  const languages = typeof value === 'string' ? value.split(',') : value;
+  if (languages.length < 1 || languages.length > 8)
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/languages', code: 'out_of_range' }] });
+  const seen = new Set<string>();
+  languages.forEach((language, index) => {
+    if (language.length > 35 || !languageTag.test(language) || seen.has(language))
+      throw new ProblemError('invalid_request', {
+        errors: [{ pointer: `/languages/${index}`, code: 'invalid_format' }],
+      });
+    seen.add(language);
+  });
+  return languages;
 }
 function scoped(actor: Actor, action: string): boolean {
   return actor.kind === 'account' && actor.scopes.includes(action);
@@ -160,24 +210,30 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       '/v1/offers/:offerId',
       {
         params: t.Object({ offerId: id }),
-        response: { 200: offerResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
+        query: languageQuery,
+        response: {
+          200: offerReadResponse,
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          503: unavailable,
+        },
         detail: detail('offer.get', 'offer:read', 'gate:purchases', true),
       },
-      async ({ params, actor, admission, job }) => {
+      async ({ params, query, actor, admission, job }) => {
         const route = routeOf(params.offerId);
         if (route === null) throw new ProblemError('not_found');
-        const offer = await admission.run('normal', job, () => store.readOffer(pool, route, params.offerId));
-        if (!offer) throw new ProblemError('not_found');
-        return {
-          offer: offerView(
-            offer,
-            (
-              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
-                offer.targetSubjectId,
-              ])
-            ).get(offer.targetSubjectId) ?? null,
-          ),
-        };
+        const languages = languagePreferences(query.languages);
+        return admission.run('normal', job, async () => {
+          const offer = await store.readOffer(pool, route, params.offerId);
+          if (!offer) throw new ProblemError('not_found');
+          const summaryDependencies = { pool, access: deps.access(), actor, deadline: job.deadline };
+          const summaries =
+            languages === undefined
+              ? await readSubjectSummaries(summaryDependencies, [offer.targetSubjectId])
+              : await readSubjectSummaries(summaryDependencies, [offer.targetSubjectId], { languages });
+          return { offer: offerReadView(offer, summaries.get(offer.targetSubjectId) ?? null) };
+        });
       },
     )
     .post(
@@ -317,10 +373,17 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       '/v1/orders/:orderId',
       {
         params: t.Object({ orderId: id }),
-        response: { 200: orderResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
+        query: languageQuery,
+        response: {
+          200: orderReadResponse,
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          503: unavailable,
+        },
         detail: detail('order.get', 'order:read', 'gate:purchases'),
       },
-      async ({ params, actor, admission, job }) => {
+      async ({ params, query, actor, admission, job }) => {
         const route = routeOf(params.orderId);
         if (
           actor.kind !== 'account' ||
@@ -329,10 +392,23 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           route !== routeOf(actor.accountId)
         )
           throw new ProblemError('not_found');
+        const languages = languagePreferences(query.languages);
         return admission.run('normal', job, async () => {
           const order = await store.readOrder(pool, route, params.orderId);
           if (!order || order.buyerAccountId !== actor.accountId) throw new ProblemError('not_found');
-          return { order: await orderView(pool, order) };
+          const summaryDependencies = { pool, access: deps.access(), actor, deadline: job.deadline };
+          const summaries =
+            languages === undefined
+              ? await readSubjectSummaries(summaryDependencies, [order.targetSubjectId])
+              : await readSubjectSummaries(summaryDependencies, [order.targetSubjectId], { languages });
+          return {
+            order: {
+              ...(await orderView(pool, order)),
+              title: order.title,
+              targetSubjectId: order.targetSubjectId,
+              subject: summaries.get(order.targetSubjectId) ?? null,
+            },
+          };
         });
       },
     )
