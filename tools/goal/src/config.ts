@@ -362,6 +362,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       branch: task.branch,
       worktree: task.worktree,
       declaredPaths: task.brief.paths,
+      protectedPaths: tasks.protectedPaths(task.brief),
       gate: task.brief.acceptance.command,
     };
   };

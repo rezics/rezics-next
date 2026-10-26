@@ -6,7 +6,7 @@ import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
 import { matchesPath } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
-import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
+import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage, LandingRequest } from './contracts.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -237,6 +237,9 @@ export function rebaseOnto(
 ): void {
   const upstream = rebaseUpstream(cwd, base, originalBase);
   const head = git(cwd, 'rev-parse', 'HEAD');
+  // Files the worker's own commits touched: a squash may change these outside the allowed paths, never a file only
+  // the target's history changed, which a wrong upstream would replay or revert.
+  const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
   const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
   if (initialConflict === undefined) return;
@@ -253,7 +256,7 @@ export function rebaseOnto(
   if (allowedPaths) {
     const changed = git(cwd, 'diff', '--name-only', upstream, 'HEAD').split('\n').filter(Boolean);
     const outside = outsideScope(
-      changed.filter((path) => !derivedForPath(path, files).length),
+      changed.filter((path) => !derivedForPath(path, files).length && !own.has(path)),
       allowedPaths,
     );
     if (outside.length) {
@@ -477,8 +480,7 @@ export class MergeTrain {
         result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
-        const outside = outsideScope(scopeCheckedFiles, request.declaredPaths);
-        if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
+        this.checkScope(scopeCheckedFiles, request, logPath);
         if (integratesIntoDev) {
           const formatCommand = o.formatCommand ?? [
             resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
@@ -510,9 +512,7 @@ export class MergeTrain {
             const formattedScopeCheckedFiles = result.changedFiles.filter(
               (path) => !derivedForPath(path, derivedFiles).length,
             );
-            const formattedOutside = outsideScope(formattedScopeCheckedFiles, request.declaredPaths);
-            if (formattedOutside.length)
-              throw new Error(`Changes outside declared paths: ${formattedOutside.join(', ')}`);
+            this.checkScope(formattedScopeCheckedFiles, request, logPath);
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
@@ -763,6 +763,19 @@ export class MergeTrain {
     git(tree, 'add', '--', ...files);
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
+  }
+
+  /**
+   * Declared paths say where the work is expected, not a fence: a worker may change other files its acceptance or a
+   * defect blocking it needs, and they are logged. Only risk areas the brief did not declare stay closed.
+   */
+  private checkScope(files: readonly string[], request: LandingRequest, logPath: string): void {
+    const outside = outsideScope(files, request.declaredPaths);
+    if (!outside.length) return;
+    const protectedPaths = request.protectedPaths ?? [];
+    const refused = protectedPaths.length ? outside.filter((path) => !outsideScope([path], protectedPaths).length) : [];
+    if (refused.length) throw new Error(`Changes in undeclared risk areas: ${refused.join(', ')}`);
+    appendFileSync(logPath, `Changed outside declared paths (allowed): ${outside.join(', ')}\n`);
   }
 
   private notifyStabilizeConflict(
