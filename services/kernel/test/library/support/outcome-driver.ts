@@ -18,7 +18,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
-import { startWorker } from '../../../src/worker.ts';
+import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import {
@@ -30,6 +30,7 @@ import {
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 import { trustedAccessPorts } from '../../support/trusted-access.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -522,21 +523,15 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       child = Bun.spawn([process.execPath, import.meta.filename], {
         env: {
           ...process.env,
-          DATABASE_URL: databaseUrl,
-          KERNEL_ROUTE_KEY: Buffer.alloc(32, 17).toString('base64url'),
-          KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 19).toString('base64url')}`,
-          AUTH_ISSUER: issuer,
-          AUTH_AUDIENCE: audience,
-          AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
-          CONTENT_R2_ENDPOINT: `https://${'a'.repeat(32)}.r2.cloudflarestorage.com`,
-          CONTENT_R2_BUCKET: 'content-media',
-          CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
-          CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
-          CONTENT_SOURCE_HOSTS: 'images.example.org',
-          CONTENT_AUTH_CONSENT_URL: 'https://realm-join.auth.test/internal/v1/consents:read',
-          CF_ACCESS_CLIENT_ID: 'realm-join.access',
-          CF_ACCESS_CLIENT_SECRET: 'realm-join-access-secret',
-          OPENSEARCH_URL: '',
+          ...workerTestEnv({
+            DATABASE_URL: databaseUrl,
+            KERNEL_WORKER_POOL_SIZE: '10',
+            KERNEL_EXECUTOR_ID: 'library-outcomes',
+            AUTH_ISSUER: issuer,
+            AUTH_AUDIENCE: audience,
+            AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+            OPENSEARCH_URL: '',
+          }),
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -1246,7 +1241,13 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
 if (import.meta.main) {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required for the library executor');
-  await startWorker({ databaseUrl, poolSize: 10, executorId: 'library-outcomes' }, KERNEL_WORK_MODULES, process.env);
+  const workerEnv = workerTestEnv({
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+    KERNEL_WORKER_POOL_SIZE: '10',
+    KERNEL_EXECUTOR_ID: 'library-outcomes',
+  });
+  await startWorker(readWorkerConfig(workerEnv), KERNEL_WORK_MODULES, workerEnv);
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
 }

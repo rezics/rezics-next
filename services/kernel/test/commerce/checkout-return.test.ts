@@ -9,6 +9,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
 
 setDefaultTimeout(60_000);
@@ -89,7 +90,7 @@ function workerScript(): string {
           cancelUrl: process.env.CHECKOUT_CANCEL_URL,
         },
       })],
-      { pool, client, databaseUrl, executorId: 'checkout-return-test' },
+      { pool, client, databaseUrl, executorId: process.env.KERNEL_EXECUTOR_ID },
     );
     await work.launch();
     console.log('ready');
@@ -100,10 +101,13 @@ async function startWorker() {
   const child = Bun.spawn([process.execPath, '--eval', workerScript()], {
     env: {
       ...process.env,
-      DATABASE_URL: db.url,
-      WORK_STRIPE_PORT: String(fake.port),
-      CHECKOUT_SUCCESS_URL: configuration.successUrl,
-      CHECKOUT_CANCEL_URL: configuration.cancelUrl,
+      ...workerTestEnv({
+        DATABASE_URL: db.url,
+        KERNEL_EXECUTOR_ID: 'checkout-return-test',
+        WORK_STRIPE_PORT: String(fake.port),
+        CHECKOUT_SUCCESS_URL: configuration.successUrl,
+        CHECKOUT_CANCEL_URL: configuration.cancelUrl,
+      }),
     },
     stdout: 'pipe',
     stderr: 'pipe',

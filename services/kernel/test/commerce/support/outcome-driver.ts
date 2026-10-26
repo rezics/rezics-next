@@ -19,10 +19,11 @@ import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
-import { startWorker } from '../../../src/worker.ts';
+import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { capture, costOf, openGrowthDatabase, withoutCatalogStatements } from '../../support/growth.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 import { startFakeStripe } from './fake-stripe.ts';
 import { trustedAccessPorts } from '../../support/trusted-access.ts';
 
@@ -55,11 +56,8 @@ if (import.meta.main) {
     )
       offset = Math.max(offset, message.advanceTo - realNow());
   });
-  await startWorker(
-    { databaseUrl: process.env.DATABASE_URL!, poolSize: 10, executorId: 'commerce-outcomes' },
-    KERNEL_WORK_MODULES,
-    process.env,
-  );
+  const workerEnv = workerTestEnv(process.env);
+  await startWorker(readWorkerConfig(workerEnv), KERNEL_WORK_MODULES, workerEnv);
   // This executor only drains commerce. A deadline jump must not run the host's content crons.
   for (const schedule of await DBOS.listSchedules()) await DBOS.deleteSchedule(schedule.scheduleName);
   // Shorten scheduling latency while preserving the production queues' concurrency policies.
@@ -303,29 +301,22 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       ready = resolve;
     });
     // Search indexing is optional and would share this executor. The outcome suite does not configure it.
-    const childEnv: Record<string, string> = {
+    const childEnv = {
       ...process.env,
-      DATABASE_URL: databaseUrl,
-      KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
-      KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
-      AUTH_ISSUER: issuer,
-      AUTH_AUDIENCE: audience,
-      AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
-      STRIPE_SECRET_KEY: 'sk_test_commerce',
-      STRIPE_MANAGED_PAYMENTS: String(managedPayments),
-      STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
-      CHECKOUT_SUCCESS_URL: configuration.successUrl,
-      CHECKOUT_CANCEL_URL: configuration.cancelUrl,
-      COMMERCE_OUTCOME_TIME: String(Date.parse(instant)),
-      // Content joins the shared worker and refuses to register without host storage config.
-      CONTENT_R2_ENDPOINT: `https://${'ab'.repeat(16)}.r2.cloudflarestorage.com`,
-      CONTENT_R2_BUCKET: 'content-media',
-      CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
-      CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
-      CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
-      CF_ACCESS_CLIENT_ID: 'fixture.access',
-      CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
+      ...workerTestEnv({
+        DATABASE_URL: databaseUrl,
+        KERNEL_WORKER_POOL_SIZE: '10',
+        KERNEL_EXECUTOR_ID: 'commerce-outcomes',
+        AUTH_ISSUER: issuer,
+        AUTH_AUDIENCE: audience,
+        AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+        STRIPE_SECRET_KEY: 'sk_test_commerce',
+        STRIPE_MANAGED_PAYMENTS: String(managedPayments),
+        STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
+        CHECKOUT_SUCCESS_URL: configuration.successUrl,
+        CHECKOUT_CANCEL_URL: configuration.cancelUrl,
+        COMMERCE_OUTCOME_TIME: String(Date.parse(instant)),
+      }),
     };
     delete childEnv.OPENSEARCH_URL;
     child = Bun.spawn([process.execPath, import.meta.filename], {

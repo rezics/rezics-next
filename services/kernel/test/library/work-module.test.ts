@@ -4,6 +4,7 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { newId } from '../../src/route/route.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -14,19 +15,13 @@ test('the library module runs once after commerce in the single configured kerne
   expect(KERNEL_WORK_MODULES.findIndex((module) => module.name === 'library')).toBeGreaterThan(
     KERNEL_WORK_MODULES.findIndex((module) => module.name === 'commerce'),
   );
-  const env = {
+  const env = workerTestEnv({
     DATABASE_URL: databaseUrl,
-    KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
-    KERNEL_ROUTE_KEY: Buffer.alloc(32, 106).toString('base64url'),
-    KERNEL_SESSION_KEYS: `0:${Buffer.alloc(32, 107).toString('base64url')}`,
-    AUTH_ISSUER: 'https://auth.example.test',
-    AUTH_AUDIENCE: 'https://api.rezics.test',
-    AUTH_JWKS_URL: 'https://auth.example.test/jwks',
     STRIPE_SECRET_KEY: 'sk_test_library_worker',
     STRIPE_MANAGED_PAYMENTS: 'false',
     CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
     CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
-  };
+  });
   const worker = await startWorker(readWorkerConfig(env), undefined, env);
   const client = await createWorkClient(databaseUrl);
   try {
