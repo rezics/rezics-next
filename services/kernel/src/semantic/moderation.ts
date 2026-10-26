@@ -30,17 +30,6 @@ export type ModerationAction = 'hide' | 'take_down' | 'restore';
 export class ModerationConflictError extends Error {}
 export class ModerationSubjectNotFoundError extends Error {}
 
-/** `.run` returns one row, null, or a list, depending on the statement shape. */
-function oneRow<T>(value: T | readonly T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
-
-function hasRow(value: unknown): boolean {
-  if (value == null) return false;
-  return Array.isArray(value) ? value.length > 0 : true;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -136,14 +125,14 @@ async function readModeratedSubject(
   route: number,
   subject: string,
 ): Promise<ModeratedSubject | null> {
-  return oneRow(await moderationReadSubject.run(tx, { route, subject_id: subject })) as ModeratedSubject | null;
+  return moderationReadSubject.run(tx, { route, subject_id: subject });
 }
 
 async function shownFacts(tx: CommandTransaction, subject: string, property?: string): Promise<FactRow[]> {
   const properties = property
     ? [property]
     : (await moderationReadProperties.run(tx, { route: routeOf(subject)!, subject_id: subject })).map(
-        (row) => row.property!,
+        (row) => row.property,
       );
   const facts: FactRow[] = [];
   for (const name of properties) facts.push(...(await slotView(tx, subject, name)).facts);
@@ -175,8 +164,8 @@ export async function readStatementCandidate(pool: Pool, subject: string, candid
   const route = routeOf(subject);
   if (route === null || routeOf(candidate) !== route) return false;
   return withConnection(pool, async (client) => {
-    return hasRow(
-      await moderationHasLiveCandidate.run(client, { route, subject_id: subject, candidate_id: candidate }),
+    return (
+      (await moderationHasLiveCandidate.run(client, { route, subject_id: subject, candidate_id: candidate })) !== null
     );
   });
 }
@@ -232,15 +221,13 @@ export async function moderateSubject(
 
       const body = validateModerationBody(options.action, options.body);
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject) : [];
-      const updated = oneRow(
-        await moderationUpdateVisibility.run(tx, {
-          route,
-          subject_id: options.subject,
-          visibility: nextVisibility,
-          expected_visibility: current.visibility,
-          expected_security_revision: current.securityRevision,
-        }),
-      );
+      const updated = await moderationUpdateVisibility.run(tx, {
+        route,
+        subject_id: options.subject,
+        visibility: nextVisibility,
+        expected_visibility: current.visibility,
+        expected_security_revision: current.securityRevision,
+      });
       const revision = updated?.security_revision;
       if (revision === undefined) throw new ModerationConflictError();
       await moderationInsertSubject.run(tx, {
@@ -341,35 +328,29 @@ export async function moderateStatement(
     },
     async (tx, { transactionId }) => {
       const current = await readModeratedSubject(tx, route, options.subject);
-      const located = oneRow(
-        await moderationReadLiveCandidate.run(tx, {
-          route,
-          subject_id: options.subject,
-          candidate_id: options.candidate,
-        }),
-      );
+      const located = await moderationReadLiveCandidate.run(tx, {
+        route,
+        subject_id: options.subject,
+        candidate_id: options.candidate,
+      });
       const property = located?.property;
-      if (!current || property === undefined) throw new ModerationSubjectNotFoundError();
-      const hidden = oneRow(
-        await moderationReadHidden.run(tx, {
-          route,
-          subject_id: options.subject,
-          candidate_id: options.candidate,
-        }),
-      );
+      if (!current || property == null) throw new ModerationSubjectNotFoundError();
+      const hidden = await moderationReadHidden.run(tx, {
+        route,
+        subject_id: options.subject,
+        candidate_id: options.candidate,
+      });
       const currentVisibility: SubjectVisibility = hidden?.visibility ?? 'visible';
       if (!statementTransition(options.action, currentVisibility)) throw new ModerationConflictError();
       const body = validateModerationBody(options.action, options.body);
       const nextVisibility = nextStatementVisibility(options.action);
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
       await expandSlot(tx, options.subject, property, transactionId);
-      const updated = oneRow(
-        await moderationBumpSecurity.run(tx, {
-          route,
-          subject_id: options.subject,
-          expected_security_revision: current.securityRevision,
-        }),
-      );
+      const updated = await moderationBumpSecurity.run(tx, {
+        route,
+        subject_id: options.subject,
+        expected_security_revision: current.securityRevision,
+      });
       const revision = updated?.security_revision;
       if (revision === undefined) throw new ModerationConflictError();
       await moderationInsertStatement.run(tx, {
