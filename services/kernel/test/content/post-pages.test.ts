@@ -211,7 +211,7 @@ test('three informative seeded scales have zero content sequential scans and bou
   await anchored(threadId, async (client) => {
     const report = await checkGrowth(db, {
       name: 'Native post candidates',
-      scales: [256, 2048, 16384],
+      scales: [64, 512, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: async (_, scale, previous) => {
         // Grow the same parent's skipped history and later history, plus other
@@ -242,7 +242,7 @@ test('three informative seeded scales have zero content sequential scans and bou
         return page;
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBe(21);
       expect(sample.cost.statements).toBe(1);

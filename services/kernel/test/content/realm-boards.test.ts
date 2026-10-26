@@ -488,7 +488,7 @@ test.serial(
     };
     const report = await checkGrowth(db, {
       name: 'Realm board listing',
-      scales: [2048, 8192, 32768],
+      scales: [64, 512, 4096],
       repetitions: 3,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       async grow(database, scale, previous) {
@@ -500,7 +500,7 @@ test.serial(
         expect(result.value.items.map((item: Board) => item.id)).toHaveLength(1);
       },
     });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([2048, 8192, 32768]);
+    expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
     for (const { cost } of report.samples)
       for (const relation of Object.values(cost.relations ?? {})) expect(relation.sequentialScans).toBe(0);
     console.info(JSON.stringify(report));

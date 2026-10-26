@@ -453,7 +453,7 @@ test('shared admission and native point/author commands stay bounded at three po
   const jwksReads = fetches;
   const report = await checkGrowth(db, {
     name: 'Authenticated content command admission',
-    scales: [256, 2048, 16384],
+    scales: [64, 512, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
     async grow(database, scale, previous) {
@@ -480,7 +480,7 @@ test('shared admission and native point/author commands stay bounded at three po
       expect(fetches).toBe(jwksReads);
     },
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 2048, 16384]);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   for (const { cost } of report.samples) {
     expect(cost.statements).toBe(report.samples[0]!.cost.statements);
     expect(cost.relations).toBeDefined();

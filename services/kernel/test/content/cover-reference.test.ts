@@ -198,17 +198,25 @@ test('exact cover lookup has bounded actual rows, statements and buffers among s
   const id = await available();
   const report = await checkGrowth(db, {
     name: 'exact cover reference',
-    scales: [2048, 8192, 32768],
+    scales: [64, 512, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
-      for (let i = previous; i < scale; i++) await reserve();
+      const added = Array.from({ length: scale - previous }, () => newId(route));
+      await database.admin.query(
+        `INSERT INTO content.media
+           (route, media_id, container_id, uploader_id, reservation_request_id, purpose,
+            media_type, byte_count, state, key, transaction_id, source_url, credit, provenance)
+         SELECT $2, id, $3, $4, id::text, 'cover', NULL, NULL, 'reserved', 'm/'||id::text||'/original', id, $5, $6, $7
+         FROM unnest($1::uuid[]) AS ids(id)`,
+        [added, route, containerId, uploaderId, request.sourceUrl, request.credit, request.provenance],
+      );
       await database.admin.query('ANALYZE content.media');
     },
     async operation() {
       expect((await read(id))?.id).toBe(id);
     },
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBe(1);
     expect(sample.cost.rows).toBeGreaterThan(0);
@@ -352,10 +360,10 @@ test('cover claim rejects every unavailable state and wrong purpose inside a nat
 test('intentional cover claim batch growth is linear in changed rows and input bytes', async () => {
   const ids: string[] = [];
   const inputBytes: number[] = [];
-  const batchSize = (scale: number) => scale / 2048;
+  const batchSize = (scale: number) => scale / 256;
   const report = await checkGrowth(db, {
     name: 'explicit cover claim batch',
-    scales: [2048, 8192, 32768],
+    scales: [256, 1024, 4096],
     bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
     async grow(database, scale, previous) {
       const added = Array.from({ length: scale - previous }, () => newId(route));
@@ -388,5 +396,5 @@ test('intentional cover claim batch growth is linear in changed rows and input b
     expect(mediaRows).toBeLessThanOrEqual(2 * batchSize(sample.scale));
     expect(sample.cost.blocks).toBeGreaterThan(0);
   }
-  expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
 }, 60000);

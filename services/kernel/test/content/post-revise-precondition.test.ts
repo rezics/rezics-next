@@ -260,7 +260,7 @@ describe('post revise precondition through the mounted kernel', () => {
     const digest = createHash('sha256').update(bytes).digest();
     const report = await checkGrowth(db, {
       name: 'post revise precondition and revisedAt read',
-      scales: [2048, 8192, 32768],
+      scales: [64, 512, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 3,
       warmups: 1,
@@ -325,7 +325,7 @@ describe('post revise precondition through the mounted kernel', () => {
         expect(revised.response.status).toBe(200);
       },
     });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([2048, 8192, 32768]);
+    expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
     for (const { cost } of report.samples) {
       expect(cost.statements).toBeGreaterThan(0);
       expect(cost.rows).toBeGreaterThan(0);

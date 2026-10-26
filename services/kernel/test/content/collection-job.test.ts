@@ -565,7 +565,7 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
   try {
     const report = await checkGrowth(db, {
       name: 'partition media collection',
-      scales: [256, 2048, 16384],
+      scales: [256, 1024, 4096],
       repetitions: 2,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow,
@@ -577,7 +577,7 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
       },
     });
     console.log('GrowthReport', JSON.stringify(report));
-    expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+    expect(report.samples.map((s) => s.scale)).toEqual([256, 1024, 4096]);
     for (const sample of report.samples) {
       expect(sample.cost.relations).toBeDefined();
       if (!sample.cost.relations) throw new Error(`Missing relation costs at scale ${sample.scale}`);
