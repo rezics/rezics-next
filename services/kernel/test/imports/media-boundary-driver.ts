@@ -527,12 +527,17 @@ async function mediaGrowth(
   const authRuns = new Map<number, Cost[]>();
   const raw: { scale: number; worker: Capture; auth: Capture }[] = [];
   let floors: Record<string, number> = {};
+  let populationWrites = Promise.resolve();
   const population = {
     name: 'public-media-and-history',
     hotPartition: partitionOf(routeOf(hotContainer)!),
     async write(_target: unknown, placement: { ordinal: number; hot: boolean }) {
-      const containerId = placement.hot ? hotContainer : await createContainer();
-      await submit({ ...request, containerId }, `population-${placement.ordinal}`);
+      const write = populationWrites.then(async () => {
+        const containerId = placement.hot ? hotContainer : await createContainer();
+        await submit({ ...request, containerId }, `population-${placement.ordinal}`);
+      });
+      populationWrites = write.catch(() => {});
+      await write;
     },
   };
   const report = await checkGrowth(f.database, {
