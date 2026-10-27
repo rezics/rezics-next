@@ -89,6 +89,16 @@ export interface PreparationInspection {
     isolation: string;
     releasedBeforeAccount: boolean;
   }[];
+  /** Actual SQL/protocol source reads, including retries; measure before mapping returned JS values. */
+  sourceReads: {
+    phase: 'initial' | 'page' | 'publication' | 'consume';
+    sourceId: string;
+    partitionClient: string;
+    identityClient: string;
+    /** Null only when no type query ran; discarding selected text does not count as zero bytes. */
+    typeClient: string | null;
+    typeBytes: number;
+  }[];
   requests: {
     reservationTransactions: number;
     continuationTransactions: number;
@@ -128,6 +138,8 @@ export interface LibraryTypePreparationDriver {
   /** Restart only this driver's executor and replay native logs/receipts; no forced cursor advancement. */
   recover(): Promise<void>;
   reviseType(fixture: PreparationFixture, type: string): Promise<void>;
+  /** Real unrelated semantic identity command in the same source partition; no raw SQL/model increment. */
+  advanceUnrelatedSource(fixture: PreparationFixture): Promise<void>;
   mergeSource(fixture: PreparationFixture, survivorType: string): Promise<{ survivorId: string }>;
   rebuildOwner(fixture: PreparationFixture): Promise<void>;
   deleteOwner(fixture: PreparationFixture): Promise<void>;

@@ -4,7 +4,6 @@ import type { KernelClock } from '../clock.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ShelfSourceStamp, ShelfTypeKeys } from './shelf-contract.ts';
-import type { observeShelfType } from './shelf-type-source.ts';
 
 export interface TypePreparationInput {
   readonly accountId: string;
@@ -52,11 +51,23 @@ export interface TypePreparationOrigin {
   readonly survivorId: string | null;
 }
 
+/** Fixed visible create/identity version; partition position is ordering, not an item version or Access proof. */
+export interface TypePreparationIdentity {
+  readonly sourceId: string;
+  readonly partition: number;
+  readonly epoch: number;
+  readonly revision: number;
+  readonly transactionId: string;
+  readonly redirect: string | null;
+}
+
 /** Immutable native row header. Exact input text/bytes and their equality evidence stay native. */
 export interface TypePreparationEvidence {
   readonly preparationId: string;
   readonly binding: TypePreparationBinding;
   readonly origin: TypePreparationOrigin;
+  readonly sourceIdentity: TypePreparationIdentity;
+  readonly originIdentity: TypePreparationIdentity;
   readonly reservationId: string | null;
 }
 
@@ -89,7 +100,7 @@ export interface TypePreparationPorts {
   prepare(actor: Actor, input: { subjectId: string; requestKey: string }): Promise<TypePreparationResult>;
   /** ONE <=100-edge native command. Its successor intent commits with progress; no user effects. */
   continue(intent: TypePreparationIntent): Promise<TypePreparationPageResult>;
-  /** Fresh source/redirect and current Access checks; releases every source connection before returning. */
+  /** Fresh identity-only source/origin and current Access checks; releases source clients before returning. */
   revalidate(actor: Actor, prepared: PreparedType): Promise<'current' | 'refresh'>;
   /** Inside the ordinarily authorized entry command, check native evidence and account-share/gate again. */
   consume(
@@ -101,12 +112,22 @@ export interface TypePreparationPorts {
   >;
 }
 
-/** Existing committed types; concrete composed keys/producer/runner are wired only at final composition. */
+/** Structural source ports: initial full type and identity share RR; later reads transfer metadata only. */
+export interface TypePreparationSourceObservation {
+  readonly stamp: Readonly<ShelfSourceStamp>;
+  readonly identity: TypePreparationIdentity | null;
+  readonly type: string | null;
+}
+
+/** Concrete source adapter/keys/producer/runner are wired only at final composition. */
 export interface TypePreparationDependencies {
   readonly pool: Pool;
   readonly access: Access;
   readonly keys: ShelfTypeKeys;
-  readonly observe: typeof observeShelfType;
+  /** Bound initial observePreparationSource from the default preparation-source adapter. */
+  readonly observe: (subjectId: string) => Promise<TypePreparationSourceObservation>;
+  /** Bound observePreparationIdentity; no readItemTypes/full observer/full equality on this path. */
+  readonly observeIdentity: (subjectId: string) => Promise<Omit<TypePreparationSourceObservation, 'type'>>;
   readonly clock?: KernelClock;
 }
 

@@ -5,6 +5,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { CloudEvent } from '../events/log.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ShelfSourceStamp, ShelfTypeKeys } from './shelf-contract.ts';
+import type { TypePreparationIdentity } from './type-preparation-contract.ts';
 
 export interface InitialShelfInputs {
   readonly hasEntries: boolean;
@@ -132,9 +133,12 @@ export interface ShelfDerivedPage {
 export interface ShelfMaintenanceTypeObservation {
   readonly subjectId: string;
   readonly incarnationId: string;
+  /** Expected entry CAS transaction; identity.transactionId is the independent source version. */
   readonly transactionId: string;
   readonly sourceId: string;
   readonly stamp: ShelfSourceStamp;
+  readonly identity: TypePreparationIdentity;
+  readonly originIdentity: TypePreparationIdentity;
   readonly fullType: string;
 }
 
@@ -146,7 +150,7 @@ export interface ShelfMaintenanceDerivedPorts {
     page: ShelfDerivedPage,
     source: ShelfMaintenanceTypeObservation,
   ): ReturnType<ShelfTypeKeys['reserve']>;
-  /** Same-run, same-build, <=100 edges; no source connection held here. */
+  /** Same-run, same-build, <=100 edges after fresh identity-only checks; no source client held here. */
   continue(
     tx: CommandTransaction,
     page: ShelfDerivedPage,

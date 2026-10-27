@@ -83,9 +83,13 @@ The bounded phase order is:
    head maxima, finished from best-known completed state/session evidence per the shelf contract. Preserve user
    revision, creation/update transaction/time and state; do not emit user entry.updated events for metadata repair.
 4. `types`: observe current source/one-hop survivor using real semantic Access outside the owner transaction. Release
-   source clients before owner checkout. Persist expected incarnation, transaction, source binding/stamp and native
-   reservation; continue one long key per bounded page until exact identity publishes. Reobserve/CAS before attaching
-   it. Invisible sources retain known type; absent/unavailable evidence never invents a type or completes the phase.
+   source clients before owner checkout. Capture partition, full type and identity together once in the original
+   authoritative RR per source. Persist expected entry incarnation/transaction, source binding/initial position stamp,
+   `identity` for the resolved source and `originIdentity` for the requested source immutably beside the native
+   reservation header. Original and resolved source may share one identity value when equal; otherwise authorize and
+   anchor each independently. Continue one long key per bounded page until exact native identity publishes. Revalidate
+   metadata and entry CAS before attaching it. Invisible sources retain known type; absent/unavailable evidence never
+   invents a type or completes the phase.
 5. `count-entries`: seek ALL states with resolved type IDs into the empty build's fixed rollup/state/type keys.
    `count-collections`: seek active Collections into its nil-type rollup. A page touches <=100 source rows and a fixed
    bounded number of counter keys per row in deterministic key order. No whole-account COUNT at validation/cutover.
@@ -149,6 +153,38 @@ input. Continuation SQL directly slices stored bytea at offset+1 for <=25600byte
 No repeated conversion, text substring, full-value return or growing prefix scan. Advance offset/node with edges in
 the same tx. Final exact text/terminal publication is one separately measured O(input) copy; accepted input remains
 within the existing release limit, without a new per-type cap. Purge removes reservation bytes as well as text.
+
+The type phase uses the [preparation identity protocol](type-preparation-contract.md#observation-and-authority).
+`TypePreparationIdentity` holds only sourceId, partition, epoch, latest create/identity revision, its recorded
+transactionId and current redirect. Before every subsequent owner page, publication and consumption/attachment, use
+`semantic/item-identity.readItemIdentityVersion` and `readPartition` on the SAME new RR client for each independently
+anchored origin/survivor. The proposed default `library/preparation-source.ts` adapter captures initial full type and
+identity with `observePreparationSource`, then uses `observePreparationIdentity` for these metadata-only checks.
+No unfinished module is imported or running integration asserted by this contract.
+
+Compare every identity component exactly against immutable native evidence; compare origin and survivor separately.
+The semantic type-writer audit ensures every type change creates a create/identity revision, so same source/epoch and
+exact revision/transactionId/redirect prove unchanged accepted input. Missing/nonvisible identity, changed identity or
+partition epoch, moved/missing ownership or a second redirect requires refresh/cancellation, failing closed. Initial
+source positions still order projection observations and bind the native reservation; they are not item versions.
+Unrelated writes or position advancement alone never restart/cancel work. Do not call `readItemTypes`, the full observer
+or full source equality again per page, publication or attachment. Release every source client before account/gate
+admission. Preserve current Access rechecks: metadata is no Access proof, source lock, global lock or authority.
+
+Native creator receipt commitments cover both captured identities. Initial/final native exact-value equality and atomic
+publication remain mandatory for collision handling; source metadata is not hash equality. Full type identifiers never
+enter DBOS payloads. This protocol adds neither an input cap nor a per-type source lock.
+
+## Cost
+
+### Type source revalidation
+
+- Touches: each independently anchored origin/survivor partition's ownership, indexed identity and redirect points.
+- Bound: fixed rows, statements and result bytes per bounded page, independent of source input length and unrelated
+  revisions; initial accepted input and final exact native publication remain O(input bytes).
+- Growth check: `specs/library-type-metadata-outcomes.test.ts`, “native continuation verifies identity without
+  retransferring staged source text”, requires actual repeated-page typeBytes=0 and same-client metadata. The source
+  adapter and semantic helper own native statement/byte and population measurements; this is no measurement claim.
 
 ## Purge authority, inventory and honest completion
 
