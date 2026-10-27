@@ -290,7 +290,7 @@ async function groupStep(read: GroupReader, root: string, basis: IdentityBasis, 
   expect(window.originals.length).toBeLessThanOrEqual(limit);
   expect(window.examined).toBeLessThanOrEqual(limit + 1);
   expect(new Set(window.originals).size).toBe(window.originals.length);
-  expect([...window.originals].sort()).toEqual(window.originals);
+  expect([...window.originals].sort()).toEqual([...window.originals]);
   if (!window.exhausted) expect(window.after !== null && (after === null || window.after > after)).toBe(true);
   return window;
 }
