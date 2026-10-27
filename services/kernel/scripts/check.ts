@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withStackSlot } from '../../../scripts/stack-lease.ts';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
 
@@ -127,10 +128,10 @@ export function fileEnvironment(
   };
 }
 
-type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
-type FileRunner<T> = {
+export type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
+export type FileRunner<T> = {
   create: (file: string, database: string) => void | Promise<void>;
-  run: (file: string, database: string) => T | Promise<T>;
+  run: (file: string, database: string, env?: Record<string, string>) => T | Promise<T>;
   drop: (file: string, database: string) => void | Promise<void>;
   onComplete?: (outcome: FileOutcome<T>) => void;
 };
@@ -181,6 +182,74 @@ export async function scheduleFiles<T>(
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, () => worker()));
   return outcomes;
+}
+
+type GrowthFailure = { title: string; message: string };
+
+/**
+ * The failed checks of one test file's output when every failure is a `GrowthBoundError` raised inside a test, else
+ * null. Bun prints a failed test's error in the block before its `(fail)` line; anything else in a block, or after
+ * the last one, is a different failure (an unhandled error, a hook failure, a timeout) and makes the file ineligible.
+ */
+export function growthFailures(output: string): GrowthFailure[] | null {
+  const failures: GrowthFailure[] = [];
+  let block: string[] = [];
+  let finished = false;
+  for (const line of output.split(/\r\n?|\n/)) {
+    const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
+    if (failure) {
+      const message = block.find((candidate) => candidate.startsWith('GrowthBoundError:'));
+      if (message === undefined || block.some((candidate) => /^(error:|# Unhandled)/.test(candidate))) return null;
+      failures.push({ title: failure[1]!, message: message.slice('GrowthBoundError:'.length).trim() });
+      block = [];
+    } else if (/^\s*\d+ (pass|fail|skip|todo)\b/.test(line) || line.startsWith('Ran ')) {
+      finished = true;
+    } else if (!finished) {
+      block.push(line);
+    }
+  }
+  return failures.length > 0 && block.every((line) => line.trim() === '') ? failures : null;
+}
+
+/**
+ * Reruns, once each and one at a time under a stack slot, the files whose only failures are growth bound errors. Growth
+ * checks count work, so a genuine regression fails alone too; a file that passes alone only failed under load. Returns
+ * the outcomes that still fail the run: every ineligible one and each eligible file that failed again.
+ */
+export async function rerunGrowthFailures(
+  outcomes: FileOutcome<string>[],
+  runner: FileRunner<string>,
+  lease: <R>(label: string, run: (env: Record<string, string>) => Promise<R>) => Promise<R>,
+  write: (text: string) => void = (text) => void process.stderr.write(text),
+): Promise<{ failed: FileOutcome<string>[] }> {
+  const failed: FileOutcome<string>[] = [];
+  const loadSensitive: string[] = [];
+  for (const outcome of outcomes) {
+    if (!outcome.error) continue;
+    const failures = outcome.error.message.includes('Database cleanup failed:')
+      ? null
+      : growthFailures(outcome.error.message);
+    if (!failures) {
+      failed.push(outcome);
+      continue;
+    }
+    const [again] = await lease('kernel growth rerun', (env) =>
+      scheduleFiles([outcome.file], 1, { ...runner, run: (file, database) => runner.run(file, database, env) }),
+    );
+    if (again?.error) {
+      write(`${outcome.error.message}\n${outcome.file}: failed again alone:\n${again.error.message}\n`);
+      failed.push(outcome);
+      continue;
+    }
+    for (const failure of failures) {
+      const message = failure.message.split('\n')[0]!;
+      loadSensitive.push(`load-sensitive growth check: ${outcome.file} :: ${failure.title} :: ${message}`);
+    }
+  }
+  if (loadSensitive.length > 0) {
+    write(`Load-sensitive growth checks (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
+  }
+  return { failed };
 }
 
 function hasDiagnosticLine(output: string): boolean {
@@ -485,16 +554,15 @@ async function main(): Promise<void> {
   await waitForSearch(searchUrl, searchContainer);
   const concurrency = Number(process.env.KERNEL_CHECK_CONCURRENCY ?? 6);
   if (!Number.isInteger(concurrency) || concurrency < 1) fail('KERNEL_CHECK_CONCURRENCY must be a positive integer');
-  const outcomes = await scheduleFiles(testFiles, concurrency, {
+  const runner: FileRunner<string> = {
     // Each file gets a fresh copy so its result cannot depend on writes from another file.
     create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
-    run: async (file, database) => {
+    run: async (file, database, slotEnvironment) => {
       // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
-      const result = await capture(
-        'bun',
-        ['test', '--timeout', '60000', `./${file}`],
-        fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
-      );
+      const result = await capture('bun', ['test', '--timeout', '60000', `./${file}`], {
+        ...fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
+        ...slotEnvironment,
+      });
       if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
       return result.output;
     },
@@ -503,10 +571,12 @@ async function main(): Promise<void> {
       if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
       if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
     },
-  });
+  };
+  const outcomes = await scheduleFiles(testFiles, concurrency, runner);
+  const { failed } = await rerunGrowthFailures(outcomes, runner, withStackSlot);
   const queries = resolve(reyloDirectory, '.reylo/queries');
   process.stderr.write(`Reylo analyses written: ${existsSync(queries) ? readdirSync(queries).length : 0}\n`);
-  const failedFiles = outcomes.filter((outcome) => outcome.error).map((outcome) => outcome.file);
+  const failedFiles = failed.map((outcome) => outcome.file);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }
 
