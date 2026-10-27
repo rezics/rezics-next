@@ -14,6 +14,8 @@ import {
 } from './session/csrf.ts';
 import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
+import { robotsResponse } from './sitemap/robots.ts';
+import { sitemapResponse, type SitemapEnv } from './sitemap/serve.ts';
 import { suggestSubjects } from './search/suggestions.ts';
 import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
 import { orderStatusResponse } from './checkout/order.server.ts';
@@ -46,6 +48,12 @@ const fetchHandler = createStartHandler(defaultStreamHandler);
 export default {
   async fetch(request: Request) {
     const url = new URL(request.url);
+    // Sitemaps and robots.txt read no session and make no kernel request.
+    const publicEnv = env as Partial<SitemapEnv> & { PUBLIC_ORIGIN?: string };
+    const crawlerFile =
+      robotsResponse(request, { origin: publicEnv.PUBLIC_ORIGIN ?? '', locales }) ??
+      (await sitemapResponse(request, publicEnv));
+    if (crawlerFile) return crawlerFile;
     const sessionEnv = env as Partial<SessionEnv>;
     if (
       isUnsafeRequest(request) &&

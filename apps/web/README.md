@@ -359,6 +359,14 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   refusals stop before K
 - **Growth check:** `tests/checkout-cost.test.ts`: `read rate limits stay within their bound as s grows`
 
+### Sitemaps and robots.txt (serving)
+
+- **Touches:** One R2 `get` on the `SITEMAPS` binding (bucket `rezics-sitemaps`, simulated locally) per sitemap request;
+  `robots.txt` touches nothing. `/sitemap.xml` reads `index.xml`; `/sitemap-{type}-{digest}.xml.gz` reads
+  `shards/{type}-{digest}.xml.gz`; other keys are the export's private state and are never served.
+- **Bound:** Constant per request: no kernel request, no session read, no cookie, no list operation; the body streams
+- **Growth check:** `tests/sitemap-serve.test.ts`: `sitemap requests make exactly one R2 get whatever the number of stored files`
+
 ### Platform gates
 
 - **Touches:** Shared kernel-client recognition checks the problem body from an existing gated read; the root error

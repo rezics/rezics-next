@@ -144,7 +144,15 @@ test('GET /sitemap-{type}-{digest}.xml.gz streams the stored file as application
 
 test('requests outside the sitemap paths are not handled', async () => {
   const bucket = new FakeBucket();
-  for (const path of ['/', '/en', '/en/sitemap.xml', '/sitemap.xml/', '/robots.txt', '/sitemaps.xml', '/media/sitemap-x']) {
+  for (const path of [
+    '/',
+    '/en',
+    '/en/sitemap.xml',
+    '/sitemap.xml/',
+    '/robots.txt',
+    '/sitemaps.xml',
+    '/media/sitemap-x',
+  ]) {
     expect(await call(path, bucket), path).toBeUndefined();
   }
   expect(bucket.operations).toEqual([]);
@@ -317,8 +325,12 @@ test('GET /robots.txt disallows every not-crawled route of docs/seo.md Indexing 
     expect(disallowed(robots, path), path).toBe(false);
   for (const locale of locales) expect(disallowed(robots, `/${locale}`), locale).toBe(false);
 
-  expect((await robotsResponse(new Request(`${origin}/robots.txt`, { method: 'HEAD' }), { origin, locales })!.text())).toBe('');
-  expect(robotsResponse(new Request(`${origin}/robots.txt`, { method: 'POST' }), { origin, locales })!.status).toBe(405);
+  expect(
+    await robotsResponse(new Request(`${origin}/robots.txt`, { method: 'HEAD' }), { origin, locales })!.text(),
+  ).toBe('');
+  expect(robotsResponse(new Request(`${origin}/robots.txt`, { method: 'POST' }), { origin, locales })!.status).toBe(
+    405,
+  );
 });
 
 function freePort(): Promise<number> {
