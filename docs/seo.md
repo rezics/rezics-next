@@ -98,9 +98,19 @@ answers its new status at once and leaves the sitemaps at the next export, withi
 
 The evidence is in [docs/research/sitemaps-at-scale.md](research/sitemaps-at-scale.md).
 
+The public `GET /v1/subject-pages` feed accepts an optional opaque `cursor` and integer `limit` from 1 to 1,000
+(default 20). The 1,000 maximum is an exception to the ordinary list maximum of 100 for server-to-server sitemap
+reads. A page contains `subjectPages` entries with `id`, `lastModified` (UTC date-time) and public display `labels`
+(`language` and `value`), plus `next` (an opaque cursor or null). The final cursor is a signed keyset token, never a
+raw id. The feed has no session personalization and includes only visible, nonmerged, indexable subjects with a
+public fact beyond the title; closed, removed, hidden and unreadable subjects are excluded. `lastModified` records
+the last change to a shown fact. The semantic feed implementation is pending: valid requests currently return
+`semantic_not_ready` (503), and the stub does not verify cursors.
+
 ## Status and change
 
-- A merged subject answers 301 to the survivor's URL; an unmerged one returns to 200.
+- A merged subject read returns 308 with `redirect.to`; web follows it once and answers 301 to the survivor's URL.
+  An unmerged subject returns to 200.
 - A subject, thread or agent removed by takedown or erasure answers 404 exactly as an unknown or unreadable id
   does, so a response never reveals that something existed; the removal reaches search engines through the 404 and
   its absence from sitemaps.

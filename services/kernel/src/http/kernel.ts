@@ -39,6 +39,7 @@ import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
+import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
@@ -245,6 +246,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
     },
   );
+  subjectPageRoutes(subjects as unknown as ReturnType<typeof createApp>);
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -400,6 +402,7 @@ type KernelComposition = ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof personalLibraryRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
+  ReturnType<typeof subjectPageRoutes> &
   ReturnType<typeof bulkRoutes> &
   ReturnType<typeof profileRoutes> &
   ReturnType<typeof accessRoutes> &
