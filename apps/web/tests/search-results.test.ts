@@ -241,7 +241,7 @@ const cases = [
     language: 'en',
     languages: ['en'],
     title: 'Kokoro',
-    type: 'book',
+    type: 'Book',
     description: 'A student meets a reclusive teacher. <em>Not markup</em>',
     other: 'A picture book about courage.',
     facts: 'Natsume Soseki · Second Author · Third Author',

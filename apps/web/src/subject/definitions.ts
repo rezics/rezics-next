@@ -24,7 +24,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** A type's display name: uppercase its first Unicode character in its language, leaving the rest as released. */
+export function displayTypeLabel(label: string, locale: string): string {
+  const codePoint = label.codePointAt(0);
+  if (codePoint === undefined) return label;
+  const first = String.fromCodePoint(codePoint);
+  return `${first.toLocaleUpperCase(locale)}${label.slice(first.length)}`;
+}
+
 const definitionMemory = new Map<string, { storedAt: number; value: unknown }>();
+const displayReleaseMemory = new Map<string, Promise<Release>>();
 
 async function cachedDefinition<T>(url: string, ttl?: number): Promise<T> {
   const now = Date.now();
@@ -84,12 +93,41 @@ export async function readRelease(): Promise<Release> {
   const active = await cachedDefinition<{ digest?: unknown }>(activeUrl, 60_000);
   if (typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
     throw new Error('Active definitions release is invalid');
-  const releaseUrl = new URL(`/v1/definitions/releases/${encodeURIComponent(active.digest)}`, origin).href;
-  const response = await cachedDefinition<{ digest?: unknown; release?: unknown }>(releaseUrl);
-  const value = response.release;
-  if (response.digest !== active.digest || !isRecord(value) || !isRecord(value.types) || !isRecord(value.properties))
-    throw new Error('Definitions release is invalid');
-  return value as unknown as Release;
+  let pending = displayReleaseMemory.get(active.digest);
+  if (!pending) {
+    const releaseUrl = new URL(`/v1/definitions/releases/${encodeURIComponent(active.digest)}`, origin).href;
+    pending = (async () => {
+      const response = await cachedDefinition<{ digest?: unknown; release?: unknown }>(releaseUrl);
+      const value = response.release;
+      if (
+        response.digest !== active.digest ||
+        !isRecord(value) ||
+        !isRecord(value.types) ||
+        !isRecord(value.properties)
+      )
+        throw new Error('Definitions release is invalid');
+      const types = Object.fromEntries(
+        Object.entries(value.types).map(([type, definition]) => {
+          if (!isRecord(definition) || !isRecord(definition.labels)) return [type, definition];
+          const labels = Object.fromEntries(
+            Object.entries(definition.labels).map(([locale, label]) => [
+              locale,
+              typeof label === 'string' ? displayTypeLabel(label, locale) : label,
+            ]),
+          );
+          return [type, { ...definition, labels }];
+        }),
+      );
+      return { ...value, types } as unknown as Release;
+    })();
+    displayReleaseMemory.set(active.digest, pending);
+  }
+  try {
+    return await pending;
+  } catch (error) {
+    if (displayReleaseMemory.get(active.digest) === pending) displayReleaseMemory.delete(active.digest);
+    throw error;
+  }
 }
 
 /** The definition release's name for each of these types in the reader's language chain; a type it has no name for is absent. */

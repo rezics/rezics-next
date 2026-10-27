@@ -184,10 +184,10 @@ test(
     const page = await open('/es/search?q=Kokoro');
     try {
       const main = page.getByRole('main');
-      expect(await main.getByRole('link', { name: 'libro', exact: true }).count()).toBe(1);
-      expect(await main.getByRole('link', { name: 'receta', exact: true }).count()).toBe(1);
+      expect(await main.getByRole('link', { name: 'Libro', exact: true }).count()).toBe(1);
+      expect(await main.getByRole('link', { name: 'Receta', exact: true }).count()).toBe(1);
       expect(await main.getByRole('link', { name: 'persona', exact: true }).count()).toBe(0);
-      await main.getByRole('link', { name: 'libro', exact: true }).click();
+      await main.getByRole('link', { name: 'Libro', exact: true }).click();
       await page.waitForURL((url) => url.searchParams.get('type') === book);
       expect(new URL(page.url()).searchParams.get('q')).toBe('Kokoro');
       expect(await main.getByRole('group', { name: 'autor' }).count()).toBe(1);
@@ -253,7 +253,7 @@ test(
     const page = await open(`/es/search?q=Kokoro&type=${encodeURIComponent(book)}`);
     try {
       const main = page.getByRole('main');
-      expect(await main.getByText('libro', { exact: true }).count()).toBeGreaterThan(0);
+      expect(await main.getByText('Libro', { exact: true }).count()).toBeGreaterThan(0);
       const property = main.getByRole('group', { name: 'autor' });
       expect(await property.count()).toBe(1);
       expect(await property.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(1);

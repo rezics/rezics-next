@@ -360,7 +360,7 @@ const fake = Bun.serve({
     if (url.pathname === '/v1/definitions/releases/rebuild-1')
       return json({
         digest: 'rebuild-1',
-        release: { types: { 'schema:Book': { labels: { en: 'Book', 'zh-Hans': '书籍' } } }, properties: {} },
+        release: { types: { 'schema:Book': { labels: { en: 'book', 'zh-Hans': '书籍' } } }, properties: {} },
       });
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
     const body = request.method === 'PUT' || request.method === 'POST' ? await request.json().catch(() => null) : null;
@@ -736,6 +736,7 @@ test(
     const sessions = rows(progressPage.html);
     expect(sessions).toHaveLength(1);
     expectImage(sessions[0]!);
+    expect(text(sessions[0]!)).toContain('Book');
     expect(sessions[0]).toContain(`href="/en/library/progress/${sessionId}"`);
 
     const sessionPage = await readPage(`/en/library/progress/${sessionId}`, cookie);
@@ -743,20 +744,31 @@ test(
     const header = /<header\b[\s\S]*?<\/header>/.exec(main(sessionPage.html))![0];
     expectImage(header);
     expect(text(header)).toContain('Zebra story');
+    expect(text(header)).toContain('Book');
     // The published logs on the same page show the subject's cover too.
     expectImage(withTitle(rows(sessionPage.html), 'Halfway'));
+
+    const progressPageChinese = await readPage(`/zh-Hans/library/progress?subjectId=${zebra.id}`, cookie);
+    expect(text(rows(progressPageChinese.html)[0]!)).toContain('书籍');
+    const sessionPageChinese = await readPage(`/zh-Hans/library/progress/${sessionId}`, cookie);
+    const headerChinese = /<header\b[\s\S]*?<\/header>/.exec(main(sessionPageChinese.html))![0];
+    expect(text(headerChinese)).toContain('书籍');
 
     const followingPage = await readPage('/en/library/following', cookie);
     expect(followingPage.status).toBe(200);
     const followed = articles(followingPage.html);
     expect(followed).toHaveLength(4);
     expectImage(withTitle(followed, 'Zebra story'));
+    expect(text(withTitle(followed, 'Zebra story'))).toContain('Book');
     expectPlaceholder(withTitle(followed, 'Apple story'));
     expectPlaceholder(withTitle(followed, 'Night shelf'));
     expect(withTitle(followed, 'Night shelf')).toContain(`href="/en/collections/${shelfId}"`);
     expectPlaceholder(withTitle(followed, 'Unavailable'));
     for (const card of followed) expect(card).toContain('aria-label="More actions for ');
     expect(main(followingPage.html)).not.toContain(hiddenSubjectId);
+
+    const followingPageChinese = await readPage('/zh-Hans/library/following', cookie);
+    expect(text(withTitle(articles(followingPageChinese.html), 'Zebra story'))).toContain('书籍');
   },
   timeout,
 );

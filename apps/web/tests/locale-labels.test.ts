@@ -390,8 +390,8 @@ test(
     for (const [locale, bookName, filmName] of [
       ['zh-Hans', '图书', '電影'],
       ['zh-Hant', '圖書', '電影'],
-      ['ja', '本', 'film'],
-      ['de', 'book', 'film'],
+      ['ja', '本', 'Film'],
+      ['de', 'Book', 'Film'],
     ] as const) {
       const shelf = main(await html(`/${locale}/collections/${collectionId}`));
       // The decorative cover's initials are not part of what the row says.

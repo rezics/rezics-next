@@ -179,7 +179,11 @@ async function subjectTypeLabel(locale: string, id = bookId): Promise<string> {
     html,
   );
   expect(meta, `${locale} subject type label`).not.toBeNull();
-  return meta![1]!.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim().split(' · ')[0]!;
+  return meta![1]!
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .trim()
+    .split(' · ')[0]!;
 }
 
 function relationHeading(html: string): string {
@@ -209,7 +213,7 @@ test(
 );
 
 test(
-  "property and relation labels keep the case declared by the release",
+  'property and relation labels keep the case declared by the release',
   async () => {
     const author = await pageHtml(`/en/subjects/${bookId}/relations?property=schema%3Aauthor`);
     expect(relationHeading(author)).toBe('author');

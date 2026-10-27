@@ -251,6 +251,12 @@ const release = {
   },
   properties: { [published]: { labels: { en: 'publication date', 'zh-Hans': '出版日期' }, datatype: 'time' } },
 };
+const displayTypeLabels: Record<string, Record<'en' | 'zh-Hans', string>> = {
+  'schema:Book': { en: 'Book', 'zh-Hans': '书籍' },
+  'schema:Recipe': { en: 'Recipe', 'zh-Hans': '食谱' },
+  'bf:Instance': { en: 'Edition', 'zh-Hans': '版本' },
+  'wd:Q20631656': { en: 'Release', 'zh-Hans': '版本' },
+};
 const typeCounts: Record<string, number> = {
   'schema:Book': 1,
   'schema:Recipe': 7,
@@ -790,7 +796,7 @@ test(
           expect(await cover.getAttribute('data-ratio')).toBe('2:3');
           const title = row.getByRole('link', { name: hit.labels[locale]!, exact: true });
           expect(await title.count()).toBe(1);
-          const typeName = release.types[hit.type as keyof typeof release.types].labels[locale];
+          const typeName = displayTypeLabels[hit.type]![locale];
           expect(await row.getByText(typeName, { exact: true }).count()).toBe(1);
           expect(await row.locator('[data-slot="year"]').innerText()).toBe(String(hit.year));
         }
@@ -811,7 +817,7 @@ test(
         const entries = types.locator('li');
         const expected =
           locale === 'en'
-            ? ['recipe (7)', 'edition (3)', 'release (3)', 'book (1)']
+            ? ['Recipe (7)', 'Edition (3)', 'Release (3)', 'Book (1)']
             : ['食谱 (7)', '版本 (3)', '版本 (3)', '书籍 (1)'];
         expect((await entries.allInnerTexts()).map(squash)).toEqual(expected);
         const hrefs = await entries.locator('a').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')));
@@ -840,7 +846,7 @@ test(
           expect(await frame.getAttribute('data-size')).toBe('xs');
           const text = squash(await option.innerText());
           expect(text).toContain(hit.labels[locale]!);
-          expect(text).toContain(release.types[hit.type as keyof typeof release.types].labels[locale]);
+          expect(text).toContain(displayTypeLabels[hit.type]![locale]);
           expect(await option.locator('[data-slot="year"]').innerText()).toBe(String(hit.year));
         }
         const suggest = calledPaths('/v1/subjects:suggest').at(-1)!;
