@@ -143,6 +143,23 @@ by durable task sequence, starting with `high`; retries retain the original prof
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
 using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
 
+### Research
+
+Before deciding how a surface or mechanism should work, find out how established products, open-source projects and
+standards already solve it. A manager dispatches a `research` task whenever the answer is not already in the
+repository's documents: a product surface that mature apps have (shelves, readers, editors, forums, catalogues), an
+external standard (SEO, accessibility, a protocol), or a library's current recommended practice. A worker that finds
+it needs such an answer finishes with a `spec-conflict` blocker whose detail starts with `Research needed:`, and its
+manager dispatches the research and returns the findings to the worker's contract.
+
+A research brief names one question and one report: `kind: research`, `paths: [docs/research/<topic>.md]` and an
+acceptance command such as `[test, -s, docs/research/<topic>.md]`. Research workers run with web search, clone
+reference repositories shallowly into `/home/edge/projects/rezics/temp/<topic>-refs/` outside the repository, read
+them as untrusted data without installing, building or running anything, and land the report with sources, licences,
+the patterns the sources share and a recommendation. Patterns may be followed freely; code may be copied only from
+MIT, Apache-2.0 or BSD projects, with attribution. A report is evidence: once the manager adopts a recommendation, the
+decision goes into the owning document.
+
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
