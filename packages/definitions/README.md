@@ -544,8 +544,6 @@ is reported at `/filters/<group>`. Codes are `unsupported`, `invalid`, `limit`,
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.
 
-## Term extensions
-
 ## Library profiles
 
 The compiler implements the [agreed library profile format](src/library-profile-design.md).

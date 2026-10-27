@@ -68,6 +68,7 @@ export function validateLibraryProfileSource(
   value: unknown,
   add: (pointer: string) => void,
 ): value is LibraryProfileSource {
+  libraryProgressSemantics(value, add);
   if (!sourceValidator.Check(value)) {
     const [, errors] = sourceValidator.Errors(value);
     for (const error of errors) {
@@ -88,11 +89,32 @@ export function validateLibraryProfileSource(
   return valid;
 }
 
+/** Report dependent descriptor errors even when a different required member is missing. */
+export function libraryProgressSemantics(value: unknown, add: (pointer: string) => void): void {
+  const record = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
+  if (!record(value) || !record(value.progress) || !Array.isArray(value.progress.allowed)) return;
+  value.progress.allowed.forEach((mode: unknown, i: number) => {
+    if (!record(mode) || !Array.isArray(mode.units)) return;
+    if (typeof mode.mode !== 'string' || !['scalar_amount', 'cursor_position', 'completed_units'].includes(mode.mode))
+      return;
+    mode.units.forEach((unit: unknown, j: number) => {
+      if (!record(unit)) return;
+      const home = `/progress/allowed/${i}/units/${j}`;
+      if (record(unit.identity) && unit.identity.kind !== (mode.mode === 'completed_units' ? 'session_local' : 'none'))
+        add(`${home}/identity`);
+      if (mode.mode !== 'scalar_amount' && unit.totalPolicy !== undefined && unit.totalPolicy !== 'forbidden')
+        add(`${home}/totalPolicy`);
+    });
+  });
+}
+
 /** Linear validation shared by source and release; callers first establish structural validity. */
 export function libraryProfileSemantics(
   profile: LibraryProfileSource,
   add: (pointer: string) => void,
 ): void {
+  libraryProgressSemantics(profile, add);
   const duplicates = <T>(values: readonly T[], key: (value: T) => string, pointer: string) => {
     const seen = new Set<string>();
     values.forEach((value, index) => {
@@ -110,10 +132,6 @@ export function libraryProfileSemantics(
       duplicates(mode.units, (u) => u.id, pointer);
       mode.units.forEach((unit, j) => {
         const home = libraryAt(pointer, j);
-        if (unit.identity.kind !== (mode.mode === 'completed_units' ? 'session_local' : 'none'))
-          add(`${home}/identity`);
-        if (mode.mode !== 'scalar_amount' && unit.totalPolicy !== undefined && unit.totalPolicy !== 'forbidden')
-          add(`${home}/totalPolicy`);
         if (unit.minimum !== undefined && unit.maximum !== undefined) {
           // Fixed-width digit strings preserve exact order up to the parser's maximum.
           const digits = (text: string) => {

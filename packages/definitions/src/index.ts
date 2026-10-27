@@ -5,7 +5,12 @@ import { createHash } from 'node:crypto';
 import { checkSync } from 'recheck/lib/browser.js';
 import { Compile } from 'typebox/schema';
 import schema from '../schema/release.json';
-import { libraryProfileSemantics, type LibraryProfile, type LibraryProfileReference } from './library-profile.ts';
+import {
+  libraryProfileSemantics,
+  libraryProgressSemantics,
+  type LibraryProfile,
+  type LibraryProfileReference,
+} from './library-profile.ts';
 export type {
   LibraryLabels,
   LibraryProgressMode,
@@ -483,6 +488,9 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
     if (exceedsSize(value)) return [{ pointer: '', code: 'limit' }];
     // JCS rejects malformed Unicode as well as non-finite JSON numbers.
     canonicalize(value);
+    if (record(value) && record(value.libraryProfiles))
+      for (const [id, profile] of Object.entries(value.libraryProfiles))
+        libraryProgressSemantics(profile, (pointer) => add(at('/libraryProfiles', id) + pointer));
     if (!validator.Check(value)) {
       const [, errors] = validator.Errors(value);
       for (const error of errors) {

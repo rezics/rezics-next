@@ -341,6 +341,92 @@
                 "required": [
                   "mode",
                   "units"
+                ],
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "mode": {
+                          "const": "scalar_amount"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "units": {
+                          "items": {
+                            "properties": {
+                              "identity": {
+                                "properties": {
+                                  "kind": {
+                                    "const": "none"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "mode": {
+                          "const": "cursor_position"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "units": {
+                          "items": {
+                            "properties": {
+                              "identity": {
+                                "properties": {
+                                  "kind": {
+                                    "const": "none"
+                                  }
+                                }
+                              },
+                              "totalPolicy": {
+                                "const": "forbidden"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "mode": {
+                          "const": "completed_units"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "units": {
+                          "items": {
+                            "properties": {
+                              "identity": {
+                                "properties": {
+                                  "kind": {
+                                    "const": "session_local"
+                                  }
+                                }
+                              },
+                              "totalPolicy": {
+                                "const": "forbidden"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 ]
               },
               "minItems": 0,
