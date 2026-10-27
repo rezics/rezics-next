@@ -121,3 +121,24 @@ test('a worker that ends without a success report is not landed and its half-don
     expect(git(task.worktree, 'log', '--format=%s', '-1')).not.toContain('left uncommitted');
   } finally { h.dispose(); }
 });
+
+// The provider refuses a busy model before a session starts; it says nothing about the task.
+const capacityCli = `#!/usr/bin/env bun
+console.error('Selected model is at capacity. Please try a different model.');
+process.exit(1);
+`;
+
+test('a model capacity refusal continues the task after a short pause, however often it repeats', async () => {
+  const h = harness(capacityCli), inbox: ManagerEvent[] = [];
+  try {
+    const job = await import('./job.ts');
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = new job.WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    await worker.start(task.id);
+    await new Promise(resolve => setTimeout(resolve, job.CAPACITY_PAUSE_MS * 2 + 3_000));
+    expect(h.store.task(task.id).currentAttempt).toBeGreaterThanOrEqual(3);
+    expect(h.store.task(task.id).state).not.toBe('stopped');
+    expect(inbox.filter(event => event.kind === 'stalled')).toEqual([]);
+    await h.tasks.stop?.(task.id).catch?.(() => {});
+  } finally { h.dispose(); }
+}, 60_000);
