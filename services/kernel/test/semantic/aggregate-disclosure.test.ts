@@ -57,6 +57,11 @@ test('paused consumers cannot retain exact public totals after source revocation
     expect(response.freshness.consistency).toBe('eventual');
     if (Object.hasOwn(response, 'count')) failures.push(`${verb}: ${JSON.stringify(response)}`);
   }
+  expect(failures).toEqual([]);
+});
+
+test('a revoked imported tuple cannot retain its relation row or exact total while consumers pause', async () => {
+  const failures: string[] = [];
   // Revocation of imported tuple authority is a real native command, not a fake Access decision.
   const target = await fixture.create('Tuple target');
   const externalId = `aggregate-${randomUUID()}`;
@@ -98,6 +103,7 @@ test('paused consumers cannot retain exact public totals after source revocation
   await fixture.call('POST', `/v1/subjects/${source}:adopt`, {
     context: GLOBAL_CONTEXT,
     property,
+    target: target.id,
     mode: 'replace',
     selection: [{ candidate, rank: 'normal' }],
     expected_head: null,
