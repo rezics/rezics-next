@@ -47,7 +47,7 @@ test('a failing stabilize gate blocks that candidate without bisecting or revert
     await h.seed('later');
     let gates = 0;
 
-    const runGate = async (_command: string[], _cwd: string, log: string) => {
+    const runGate = async (_command: readonly string[], _cwd: string, log: string) => {
       gates++;
       const output =
         'Workspace @fixture/kernel finished in 1.00s\n' +
