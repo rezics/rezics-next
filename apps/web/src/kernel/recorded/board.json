@@ -1,5 +1,7 @@
 {
   "board": {
+    "realmId": null,
+    "purpose": "discussion",
     "id": "01a17a3b-09a4-7204-87d4-43219f9a15ad",
     "route": 17185,
     "title": "Stories of the little prince",

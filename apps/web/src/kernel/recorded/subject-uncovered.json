@@ -1,5 +1,29 @@
 {
+  "account": null,
   "subject": {
+    "relationCounts": {
+      "rezics:alternativeSetting": 0,
+      "rezics:alternativeVersion": 0,
+      "rezics:artbookCounterpart": 0,
+      "rezics:bangumiLegacyVersion": 0,
+      "rezics:bangumiRelatedTo": 0,
+      "rezics:collaborationWith": 0,
+      "rezics:crossMediaCounterpart": 0,
+      "rezics:editionCounterpart": 0,
+      "rezics:expansionCounterpart": 0,
+      "rezics:representativeEdition": 0,
+      "rezics:sameCharacters": 0,
+      "rezics:sameSetting": 0,
+      "rezics:sideStoryOf": 0,
+      "rezics:spinOffOf": 0,
+      "rezics:storyArc": 0,
+      "rezics:summaryOf": 0,
+      "schema:author": 0,
+      "schema:contributor": 0,
+      "wdt:P155": 0,
+      "wdt:P179": 0,
+      "wdt:P361": 0
+    },
     "id": "01a17a3b-0884-7c02-9b4e-c0de00000002",
     "type": "schema:Book",
     "revision": 1,
@@ -25,10 +49,7 @@
     "id": "01a17a3b-0884-7c02-9b4e-c0de00000002",
     "type": "schema:Book",
     "types": ["schema:Book"],
-    "label": {
-      "value": "Night Flight",
-      "language": "en"
-    },
+    "label": { "value": "Night Flight", "language": "en" },
     "creativeWork": true,
     "cover": null
   },

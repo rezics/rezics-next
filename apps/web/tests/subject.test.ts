@@ -119,7 +119,7 @@ test('the kernel client reads the local fixtures as the kernel serves them', asy
   expect(found.status).toBe(200);
   expect(found.error).toBeNull();
   // The ADR-0034 session token travels in headers that the client handles, never in the body.
-  expect(Object.keys(found.data!).sort()).toEqual(['related', 'subject']);
+  expect(Object.keys(found.data!).sort()).toEqual(['account', 'related', 'subject']);
   expect(found.data!.subject).toEqual(kokoro);
 
   // Every property and subject the read mentions comes with its labels, so a page needs no second read.

@@ -1,6 +1,7 @@
 {
   "posts": [
     {
+      "voteCitation": null,
       "id": "01a17a3b-09b4-77c0-86c5-123438ddb82b",
       "threadId": "01a17a3b-09b4-77bf-a24b-1234ebeab5b2",
       "route": 4660,
@@ -51,6 +52,7 @@
       "reactions": {}
     },
     {
+      "voteCitation": null,
       "id": "01a17a3b-09b4-77c2-ab59-12340efeb733",
       "threadId": "01a17a3b-09b4-77bf-a24b-1234ebeab5b2",
       "route": 4660,
@@ -101,6 +103,7 @@
       "reactions": {}
     },
     {
+      "voteCitation": null,
       "id": "01a17a3b-09b4-77c4-897c-1234fa5b6bd0",
       "threadId": "01a17a3b-09b4-77bf-a24b-1234ebeab5b2",
       "route": 4660,

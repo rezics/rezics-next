@@ -54,8 +54,6 @@ let container = '';
 let searchContainer = '';
 let kernel: ReturnType<typeof spawn> | undefined;
 let worker: ReturnType<typeof spawn> | undefined;
-let relayPool: Pool | undefined;
-let relays: { stop(): Promise<void> } | undefined;
 let jwks: ReturnType<typeof Bun.serve> | undefined;
 let pool: Pool | undefined;
 
@@ -140,11 +138,7 @@ async function waitForKernel(origin: string, child: ReturnType<typeof spawn>): P
 }
 
 async function stopKernel(): Promise<void> {
-  await relays?.stop();
-  await relayPool?.end();
-  relays = undefined;
-  relayPool = undefined;
-  if (worker?.pid) {
+  if (worker?.pid && worker.exitCode === null) {
     const child = worker;
     child.kill('SIGTERM');
     await Promise.race([new Promise<void>((resolve) => child.once('exit', () => resolve())), Bun.sleep(10_000)]);
@@ -704,28 +698,25 @@ async function recordLibrary(input: {
 
   const entries = recordedLibrary.get('library-entries')?.libraryEntries;
   const shelfMembers = recordedLibrary.get('library-collection-members')?.members;
-  const shelfLabels = Array.isArray(shelfMembers)
-    ? shelfMembers.map((member) => {
-        const label = objectBody(objectBody(member, 'member').subject, 'member subject').label;
-        return typeof label === 'string' ? label : objectBody(label, 'member subject label').value;
-      })
+  const shelfSubjects = Array.isArray(shelfMembers)
+    ? shelfMembers.map((member) => objectBody(member, 'member').subjectId)
     : [];
   if (!Array.isArray(entries) || entries.length !== 5)
     throw new Error(`The library should hold five entries: ${JSON.stringify(entries)}`);
-  if (shelfLabels.join('|') !== 'Snow Country|The Tale of Genji|The Little Prince|Kokoro')
-    throw new Error(`The public collection is not in the chosen order: ${shelfLabels.join('|')}`);
+  const expectedSubjects = [subject('snow-country'), subject('genji'), princeId, subject('kokoro')];
+  if (shelfSubjects.join('|') !== expectedSubjects.join('|'))
+    throw new Error(`The public collection is not in the chosen order: ${shelfSubjects.join('|')}`);
   const follows = recordedLibrary.get('library-follows')?.follows;
   if (!Array.isArray(follows) || !follows.some((follow) => objectBody(follow, 'follow').targetId === neighbour))
     throw new Error(`The followed collection is missing: ${JSON.stringify(follows)}`);
   return recordedLibrary;
 }
 
-/** Keep existing story content stable; only newly recorded UUIDs change in existing recordings. */
+/** Keep story content and identities stable while adding newly recorded response fields. */
 function stableRecording(value: unknown, previous: unknown): unknown {
   if (previous === undefined) return value;
   const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
-  if (typeof value === 'string' && typeof previous === 'string')
-    return value.replace(uuid, '<id>') === previous.replace(uuid, '<id>') ? value : previous;
+  if (typeof value === 'string' && typeof previous === 'string') return previous;
   if (Array.isArray(value) && Array.isArray(previous))
     return previous.map((item, index) => stableRecording(value[index], item));
   if (!value || typeof value !== 'object' || !previous || typeof previous !== 'object') return previous;
@@ -733,12 +724,13 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   const before = previous as Record<string, unknown>;
   const oldIds = Object.keys(before).filter((key) => key.match(uuid));
   const newIds = Object.keys(current).filter((key) => key.match(uuid));
-  return Object.fromEntries(
-    Object.entries(before).map(([name, item]) => {
+  return Object.fromEntries([
+    ...Object.entries(current).filter(([name]) => !Object.hasOwn(before, name) && !newIds.includes(name)),
+    ...Object.entries(before).map(([name, item]) => {
       const recordedName = oldIds.includes(name) ? (newIds[oldIds.indexOf(name)] ?? name) : name;
-      return [recordedName, stableRecording(current[recordedName], item)];
+      return [name, stableRecording(current[recordedName], item)];
     }),
-  );
+  ]);
 }
 
 /**
@@ -969,6 +961,13 @@ async function main(): Promise<void> {
      VALUES ($1, $2, 'actor', 'active', '{}', 1, $2)`,
     [accountRoute, accountId],
   );
+  // The inserted account needs the self grants normally installed at account creation.
+  await pool.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1, $2, $2, 'account:update', '(,)', $2),
+            ($1, $2, $2, 'account:read', '(,)', $2)`,
+    [accountRoute, accountId],
+  );
   const { bootstrapGovernance } = await import(`${kernelBase}/src/access/bootstrap-governance.ts`);
   await bootstrapGovernance(pool, accountId);
 
@@ -985,6 +984,8 @@ async function main(): Promise<void> {
   const kernelEnvironment = {
     ...process.env,
     DATABASE_URL: databaseUrl,
+    // Concurrent checks can delay connections to the disposable PostgreSQL instance during startup.
+    KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000',
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(kernelPort),
     KERNEL_ROUTE_KEY: kernelRouteKey,
@@ -1012,20 +1013,22 @@ async function main(): Promise<void> {
     env: kernelEnvironment,
   });
   await waitForKernel(origin, kernel);
-  // The worker projects the library listing and runs the effects the kernel leaves to it.
-  worker = spawn('bun', ['src/worker.ts'], {
+  // The subject page reads collections; the route is guarded by the collections exposure group.
+  const exposureToken = await libraryToken(accountId, 'exposure:open');
+  const opening = await retryOverloaded(() =>
+    fetch(`${origin}/v1/platform/exposure/collections:open`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${exposureToken}`, 'idempotency-key': JSON.stringify(Bun.randomUUIDv7()) },
+    }),
+  );
+  if (opening.status !== 200)
+    throw new Error(`Opening collections returned ${opening.status}: ${await opening.text()}`);
+  // Reverse links are projected asynchronously by the kernel worker.
+  worker = spawn('bun', [resolve(root, 'services/kernel/src/worker.ts')], {
     cwd: resolve(root, 'services/kernel'),
     stdio: ['ignore', 'ignore', 'inherit'],
     env: { ...kernelEnvironment, KERNEL_RATING_COUNTER_SECRET: randomBytes(32).toString('base64url') },
   });
-  // The relation projection normally runs in the worker; without it a page's links reads stay empty. The recorder
-  // runs just that projection over its own pool.
-  const projectionBase = '../../../services/kernel';
-  const { startRelays } = await import(`${projectionBase}/src/events/relays.ts`);
-  const { linkProjection } = await import(`${projectionBase}/src/semantic/links.ts`);
-  relayPool = new Pool({ connectionString: databaseUrl, max: 8 });
-  relayPool.on('error', () => {});
-  relays = startRelays(relayPool, [linkProjection(relayPool)]);
   const token = await new SignJWT({
     client_id: 'web-recorder',
     scope: 'subject:create subject:read',
@@ -1274,6 +1277,30 @@ async function main(): Promise<void> {
     if (actual !== status) throw new Error(`${name} returned ${actual}: ${JSON.stringify(recorded.get(name))}`);
   };
   await expectStatus('subject', `/v1/subjects/${subjectId}`, 200);
+  // The Realm's published subjects and the uncovered story predate this recorder. Seed their
+  // existing labels, read them through the kernel, and retain their stable fixture identities.
+  const readFixtureSubject = async (fixture: JsonObject): Promise<JsonObject> => {
+    const old = objectBody(fixture.subject, 'fixture subject');
+    const id = await create({ type: old.type, labels: old.labels }, 'fixture subject');
+    const response = await retryOverloaded(() => fetch(`${origin}/v1/subjects/${id}`));
+    const body = objectBody(await response.json(), 'fixture subject read');
+    if (response.status !== 200)
+      throw new Error(`Fixture subject read returned ${response.status}: ${JSON.stringify(body)}`);
+    return JSON.parse(JSON.stringify(body).replaceAll(id, String(old.id))) as JsonObject;
+  };
+  const uncovered = objectBody(
+    await Bun.file(join(app, 'src/kernel/recorded/subject-uncovered.json')).json(),
+    'uncovered',
+  );
+  recorded.set('subject-uncovered', { ...(await readFixtureSubject(uncovered)), status: 200 });
+  const realmFixtures = objectBody(
+    objectBody(await Bun.file(join(app, 'src/kernel/recorded/realm-subjects.json')).json(), 'realm subjects').subjects,
+    'realm subject entries',
+  );
+  const realmSubjects: JsonObject = {};
+  for (const [id, fixture] of Object.entries(realmFixtures))
+    realmSubjects[id] = await readFixtureSubject(objectBody(fixture, 'realm subject'));
+  recorded.set('realm-subjects', { status: 200, subjects: realmSubjects });
   await expectStatus('missing-subject', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
   const missingSubjectId = '00000000-0000-4000-8000-000000000000';
   const savePost = async (name: string, payload: unknown) => {
@@ -1290,28 +1317,23 @@ async function main(): Promise<void> {
     recorded.set(name, { ...body, status: response.status });
     return response.status;
   };
-  // The subject page has no search read, so the spawned kernel answers it, collections and projections included. The
-  // relation projection catches up in the background, so the page is read again until it lists the editions.
-  const pageDeadline = Date.now() + 90_000;
-  for (;;) {
-    const response = await retryOverloaded(() =>
-      fetch(new URL('/v1/pages:read', origin), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: { subject: subjectId } }),
-      }),
-    );
-    const body = objectBody(await response.json(), 'subject-page');
-    recorded.set('subject-page', { ...body, status: response.status });
-    const reads = Object.values(objectBody(body.reads ?? {}, 'subject-page reads'));
-    const listed = reads.some((read) => {
-      const links = objectBody(objectBody(read, 'subject-page read').body, 'subject-page read body').links;
-      return Array.isArray(links) && links.length === editionIds.length;
-    });
-    if (response.status === 200 && listed) break;
-    if (Date.now() > pageDeadline)
-      throw new Error(`subject-page did not list the editions: ${JSON.stringify(recorded.get('subject-page'))}`);
-    await Bun.sleep(1000);
+  const deadline = Date.now() + 60_000;
+  while (true) {
+    if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
+      throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
+    const reads = Object.values(objectBody(objectBody(recorded.get('subject-page'), 'subject-page').reads, 'reads'));
+    const editions = reads
+      .map((read) => objectBody(objectBody(read, 'read').body, 'read body'))
+      .find(
+        (body) =>
+          Array.isArray(body.links) &&
+          body.links.some((link: unknown) => objectBody(link, 'link').property === 'schema:exampleOfWork'),
+      );
+    if (Array.isArray(editions?.links) && editions.links.length === editionIds.length) break;
+    if (worker.exitCode !== null) throw new Error(`Kernel worker exited with ${worker.exitCode}`);
+    if (Date.now() >= deadline)
+      throw new Error(`The recorded page should list ${editionIds.length} editions: ${JSON.stringify(reads)}`);
+    await Bun.sleep(500);
   }
   const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
   const template = objectBody(subjectPage.template, 'subject-page template');
@@ -1329,14 +1351,6 @@ async function main(): Promise<void> {
     throw new Error(
       `The recorded subject needs descriptions in en and ja and two aliases: ${JSON.stringify(subjectRecord)}`,
     );
-  const pageReads = Object.values(objectBody(subjectPage.reads, 'subject-page reads')).map((read) =>
-    objectBody(objectBody(read, 'subject-page read').body, 'subject-page read body'),
-  );
-  // The editions list is a links read of the inverse `schema:exampleOfWork` property.
-  const listed = (body: JsonObject): unknown[] =>
-    Array.isArray(body.links) ? body.links : Array.isArray(body.subjects) ? body.subjects : [];
-  if (!pageReads.some((body) => listed(body).length === editionIds.length))
-    throw new Error(`The recorded page should list ${editionIds.length} editions: ${JSON.stringify(pageReads)}`);
   if ((await savePost('missing-subject-page', { target: { subject: missingSubjectId } })) !== 404)
     throw new Error(`missing-subject-page returned ${JSON.stringify(recorded.get('missing-subject-page'))}`);
   if (recorded.get('missing-subject-page')?.code !== 'not_found')
@@ -1605,7 +1619,7 @@ async function main(): Promise<void> {
     await Bun.sleep(1000);
   }
 
-  const output = join(app, 'src/kernel/recorded');
+  const output = process.env.WEB_RECORD_OUTPUT ?? join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });
   const unknown = only.filter((name) => !recorded.has(name));
   if (unknown.length)
@@ -1615,7 +1629,7 @@ async function main(): Promise<void> {
     if (only.length && !only.includes(name)) continue;
     const file = join(output, `${name}.json`);
     written.push(file);
-    const previous = name !== 'accounts' && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    const previous = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
     await writeFile(file, JSON.stringify(stableRecording(body, previous)));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.

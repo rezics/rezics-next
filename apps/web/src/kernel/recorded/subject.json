@@ -1,5 +1,29 @@
 {
+  "account": null,
   "subject": {
+    "relationCounts": {
+      "rezics:alternativeSetting": 0,
+      "rezics:alternativeVersion": 0,
+      "rezics:artbookCounterpart": 0,
+      "rezics:bangumiLegacyVersion": 0,
+      "rezics:bangumiRelatedTo": 0,
+      "rezics:collaborationWith": 0,
+      "rezics:crossMediaCounterpart": 0,
+      "rezics:editionCounterpart": 0,
+      "rezics:expansionCounterpart": 0,
+      "rezics:representativeEdition": 0,
+      "rezics:sameCharacters": 0,
+      "rezics:sameSetting": 0,
+      "rezics:sideStoryOf": 0,
+      "rezics:spinOffOf": 0,
+      "rezics:storyArc": 0,
+      "rezics:summaryOf": 0,
+      "schema:author": 1,
+      "schema:contributor": 0,
+      "wdt:P155": 0,
+      "wdt:P179": 0,
+      "wdt:P361": 0
+    },
     "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
     "type": "schema:Book",
     "revision": 1,
@@ -22,23 +46,14 @@
       "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。",
       "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde."
     },
-    "aliases": {
-      "ja": ["星の王子様"],
-      "en": ["Le Petit Prince"]
-    },
+    "aliases": { "ja": ["星の王子様"], "en": ["Le Petit Prince"] },
     "statements": {
       "schema:author": [
         {
           "id": "cc366178-5375-8fc1-a0c3-d7ff3caf2bef",
           "rank": "normal",
-          "property": {
-            "id": "schema:author",
-            "data_type": "wikibase-item"
-          },
-          "value": {
-            "type": "value",
-            "content": "01a17a3b-07ab-779f-a76f-c4de973680d4"
-          },
+          "property": { "id": "schema:author", "data_type": "wikibase-item" },
+          "value": { "type": "value", "content": "01a17a3b-07ab-779f-a76f-c4de973680d4" },
           "qualifiers": [],
           "references": [],
           "rezics": {
@@ -51,10 +66,7 @@
         {
           "id": "53a7f68b-74b8-8a49-9968-d7ff32ccdfb9",
           "rank": "normal",
-          "property": {
-            "id": "schema:datePublished",
-            "data_type": "time"
-          },
+          "property": { "id": "schema:datePublished", "data_type": "time" },
           "value": {
             "type": "value",
             "content": {
@@ -75,14 +87,8 @@
         {
           "id": "25827703-28f3-884b-9071-d7ffbb586188",
           "rank": "normal",
-          "property": {
-            "id": "schema:genre",
-            "data_type": "wikibase-item"
-          },
-          "value": {
-            "type": "value",
-            "content": "01a17a3b-0870-73a0-8b41-d281ed8a1465"
-          },
+          "property": { "id": "schema:genre", "data_type": "wikibase-item" },
+          "value": { "type": "value", "content": "01a17a3b-0870-73a0-8b41-d281ed8a1465" },
           "qualifiers": [],
           "references": [],
           "rezics": {
@@ -95,14 +101,8 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728107",
           "rank": "normal",
-          "property": {
-            "id": "schema:inLanguage",
-            "data_type": "string"
-          },
-          "value": {
-            "type": "value",
-            "content": "fr"
-          },
+          "property": { "id": "schema:inLanguage", "data_type": "string" },
+          "value": { "type": "value", "content": "fr" },
           "qualifiers": [],
           "references": [],
           "rezics": {
@@ -115,10 +115,7 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728201",
           "rank": "normal",
-          "property": {
-            "id": "schema:abstract",
-            "data_type": "document"
-          },
+          "property": { "id": "schema:abstract", "data_type": "document" },
           "value": {
             "type": "value",
             "content": {
@@ -159,10 +156,7 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728202",
           "rank": "normal",
-          "property": {
-            "id": "schema:abstract",
-            "data_type": "document"
-          },
+          "property": { "id": "schema:abstract", "data_type": "document" },
           "value": {
             "type": "value",
             "content": {
@@ -203,10 +197,7 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728203",
           "rank": "normal",
-          "property": {
-            "id": "schema:abstract",
-            "data_type": "document"
-          },
+          "property": { "id": "schema:abstract", "data_type": "document" },
           "value": {
             "type": "value",
             "content": {
@@ -249,14 +240,8 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728204",
           "rank": "normal",
-          "property": {
-            "id": "schema:image",
-            "data_type": "media"
-          },
-          "value": {
-            "type": "value",
-            "content": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0"
-          },
+          "property": { "id": "schema:image", "data_type": "media" },
+          "value": { "type": "value", "content": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0" },
           "qualifiers": [],
           "references": [],
           "rezics": {
@@ -269,14 +254,8 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728205",
           "rank": "normal",
-          "property": {
-            "id": "schema:keywords",
-            "data_type": "string"
-          },
-          "value": {
-            "type": "value",
-            "content": "a pilot and a prince"
-          },
+          "property": { "id": "schema:keywords", "data_type": "string" },
+          "value": { "type": "value", "content": "a pilot and a prince" },
           "qualifiers": [],
           "references": [],
           "rezics": {
@@ -287,27 +266,12 @@
         {
           "id": "0494501a-36af-8cc7-95c9-d7ffe4728206",
           "rank": "normal",
-          "property": {
-            "id": "schema:keywords",
-            "data_type": "string"
-          },
-          "value": {
-            "type": "value",
-            "content": "the prince returns to his asteroid"
-          },
+          "property": { "id": "schema:keywords", "data_type": "string" },
+          "value": { "type": "value", "content": "the prince returns to his asteroid" },
           "qualifiers": [
             {
-              "property": {
-                "id": "rezics:spoilerLevel",
-                "data_type": "quantity"
-              },
-              "value": {
-                "type": "value",
-                "content": {
-                  "amount": "+2",
-                  "unit": "1"
-                }
-              }
+              "property": { "id": "rezics:spoilerLevel", "data_type": "quantity" },
+              "value": { "type": "value", "content": { "amount": "+2", "unit": "1" } }
             }
           ],
           "references": [],
@@ -369,6 +333,9 @@
       }
     },
     "01a17a3b-07ab-779f-a76f-c4de973680d4": {
+      "type": "schema:Person",
+      "types": ["schema:Person", "schema:Thing"],
+      "cover": null,
       "labels": {
         "de": "Antoine de Saint-Exupéry",
         "en": "Antoine de Saint-Exupéry",
@@ -381,6 +348,9 @@
       }
     },
     "01a17a3b-0870-73a0-8b41-d281ed8a1465": {
+      "type": "skos:Concept",
+      "types": ["skos:Concept", "schema:Thing"],
+      "cover": null,
       "labels": {
         "de": "Fabel",
         "en": "Fable",

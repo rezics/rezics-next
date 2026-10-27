@@ -551,6 +551,8 @@ test(
       'missing-subject.json': 'MissingResponse',
       'missing-subject-page.json': 'PageMissingResponse',
       'home-page.json': 'PageResponse',
+      'agent-page.json': 'PageResponse',
+      'agent-page-reader.json': 'PageResponse',
       'subject.json': 'SubjectResponse',
       'subject-page.json': 'PageResponse',
       'subject-reactions.json': 'SubjectReactionsResponse',

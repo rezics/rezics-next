@@ -273,7 +273,7 @@ export function AccountCollections(props: Record<string, unknown>) {
           return (
             <li key={typeof collection.id === 'string' ? collection.id : index} className="space-y-1">
               <p className="font-medium">
-                <span className={`${linkClass} ${linkColor}`}>
+                <span className={`${linkClass} ${linkColor} [&_a]:underline!`}>
                   <Link
                     href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
                   >

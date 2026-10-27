@@ -2,7 +2,31 @@
   "status": 200,
   "subjects": {
     "01a17973-16a7-7485-ad5f-692b696c34bc": {
+      "account": null,
       "subject": {
+        "relationCounts": {
+          "rezics:alternativeSetting": 0,
+          "rezics:alternativeVersion": 0,
+          "rezics:artbookCounterpart": 0,
+          "rezics:bangumiLegacyVersion": 0,
+          "rezics:bangumiRelatedTo": 0,
+          "rezics:collaborationWith": 0,
+          "rezics:crossMediaCounterpart": 0,
+          "rezics:editionCounterpart": 0,
+          "rezics:expansionCounterpart": 0,
+          "rezics:representativeEdition": 0,
+          "rezics:sameCharacters": 0,
+          "rezics:sameSetting": 0,
+          "rezics:sideStoryOf": 0,
+          "rezics:spinOffOf": 0,
+          "rezics:storyArc": 0,
+          "rezics:summaryOf": 0,
+          "schema:author": 0,
+          "schema:contributor": 0,
+          "wdt:P155": 0,
+          "wdt:P179": 0,
+          "wdt:P361": 0
+        },
         "id": "01a17973-16a7-7485-ad5f-692b696c34bc",
         "type": "schema:Book",
         "labels": {
@@ -28,36 +52,21 @@
         "id": "01a17973-16a7-7485-ad5f-692b696c34bc",
         "type": "schema:Book",
         "types": ["schema:Book"],
-        "label": {
-          "value": "Kokoro",
-          "language": "en"
-        },
+        "label": { "value": "Kokoro", "language": "en" },
         "creativeWork": true,
         "cover": {
           "media": "01a1a000-0000-7000-8000-000000000041",
           "width": 800,
           "height": 1200,
-          "placeholder": {
-            "thumbhash": "YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==",
-            "color": "#3a4a73"
-          },
+          "placeholder": { "thumbhash": "YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==", "color": "#3a4a73" },
           "variants": [
-            {
-              "format": "avif",
-              "width": 320
-            },
-            {
-              "format": "webp",
-              "width": 320
-            }
+            { "format": "avif", "width": 320 },
+            { "format": "webp", "width": 320 }
           ],
           "focalPoint": null,
           "credit": {
             "rightsHolder": "Fixture Press",
-            "via": {
-              "name": "Fixture",
-              "url": "https://example.test"
-            },
+            "via": { "name": "Fixture", "url": "https://example.test" },
             "license": "CC0",
             "obligations": []
           }
@@ -65,7 +74,31 @@
       }
     },
     "01a1a000-0000-7000-8000-000000000021": {
+      "account": null,
       "subject": {
+        "relationCounts": {
+          "rezics:alternativeSetting": 0,
+          "rezics:alternativeVersion": 0,
+          "rezics:artbookCounterpart": 0,
+          "rezics:bangumiLegacyVersion": 0,
+          "rezics:bangumiRelatedTo": 0,
+          "rezics:collaborationWith": 0,
+          "rezics:crossMediaCounterpart": 0,
+          "rezics:editionCounterpart": 0,
+          "rezics:expansionCounterpart": 0,
+          "rezics:representativeEdition": 0,
+          "rezics:sameCharacters": 0,
+          "rezics:sameSetting": 0,
+          "rezics:sideStoryOf": 0,
+          "rezics:spinOffOf": 0,
+          "rezics:storyArc": 0,
+          "rezics:summaryOf": 0,
+          "schema:author": 0,
+          "schema:contributor": 0,
+          "wdt:P155": 0,
+          "wdt:P179": 0,
+          "wdt:P361": 0
+        },
         "id": "01a1a000-0000-7000-8000-000000000021",
         "type": "schema:Book",
         "labels": {
@@ -91,16 +124,37 @@
         "id": "01a1a000-0000-7000-8000-000000000021",
         "type": "schema:Book",
         "types": ["schema:Book"],
-        "label": {
-          "value": "Snow Country",
-          "language": "en"
-        },
+        "label": { "value": "Snow Country", "language": "en" },
         "creativeWork": true,
         "cover": null
       }
     },
     "01a1a000-0000-7000-8000-000000000022": {
+      "account": null,
       "subject": {
+        "relationCounts": {
+          "rezics:alternativeSetting": 0,
+          "rezics:alternativeVersion": 0,
+          "rezics:artbookCounterpart": 0,
+          "rezics:bangumiLegacyVersion": 0,
+          "rezics:bangumiRelatedTo": 0,
+          "rezics:collaborationWith": 0,
+          "rezics:crossMediaCounterpart": 0,
+          "rezics:editionCounterpart": 0,
+          "rezics:expansionCounterpart": 0,
+          "rezics:representativeEdition": 0,
+          "rezics:sameCharacters": 0,
+          "rezics:sameSetting": 0,
+          "rezics:sideStoryOf": 0,
+          "rezics:spinOffOf": 0,
+          "rezics:storyArc": 0,
+          "rezics:summaryOf": 0,
+          "schema:author": 0,
+          "schema:contributor": 0,
+          "wdt:P155": 0,
+          "wdt:P179": 0,
+          "wdt:P361": 0
+        },
         "id": "01a1a000-0000-7000-8000-000000000022",
         "type": "schema:Book",
         "labels": {
@@ -126,36 +180,21 @@
         "id": "01a1a000-0000-7000-8000-000000000022",
         "type": "schema:Book",
         "types": ["schema:Book"],
-        "label": {
-          "value": "Botchan",
-          "language": "en"
-        },
+        "label": { "value": "Botchan", "language": "en" },
         "creativeWork": true,
         "cover": {
           "media": "01a1a000-0000-7000-8000-000000000043",
           "width": 800,
           "height": 1200,
-          "placeholder": {
-            "thumbhash": "YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==",
-            "color": "#2f5368"
-          },
+          "placeholder": { "thumbhash": "YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==", "color": "#2f5368" },
           "variants": [
-            {
-              "format": "avif",
-              "width": 320
-            },
-            {
-              "format": "webp",
-              "width": 320
-            }
+            { "format": "avif", "width": 320 },
+            { "format": "webp", "width": 320 }
           ],
           "focalPoint": null,
           "credit": {
             "rightsHolder": "Fixture Press",
-            "via": {
-              "name": "Fixture",
-              "url": "https://example.test"
-            },
+            "via": { "name": "Fixture", "url": "https://example.test" },
             "license": "CC0",
             "obligations": []
           }
@@ -163,7 +202,31 @@
       }
     },
     "01a1a000-0000-7000-8000-000000000023": {
+      "account": null,
       "subject": {
+        "relationCounts": {
+          "rezics:alternativeSetting": 0,
+          "rezics:alternativeVersion": 0,
+          "rezics:artbookCounterpart": 0,
+          "rezics:bangumiLegacyVersion": 0,
+          "rezics:bangumiRelatedTo": 0,
+          "rezics:collaborationWith": 0,
+          "rezics:crossMediaCounterpart": 0,
+          "rezics:editionCounterpart": 0,
+          "rezics:expansionCounterpart": 0,
+          "rezics:representativeEdition": 0,
+          "rezics:sameCharacters": 0,
+          "rezics:sameSetting": 0,
+          "rezics:sideStoryOf": 0,
+          "rezics:spinOffOf": 0,
+          "rezics:storyArc": 0,
+          "rezics:summaryOf": 0,
+          "schema:author": 0,
+          "schema:contributor": 0,
+          "wdt:P155": 0,
+          "wdt:P179": 0,
+          "wdt:P361": 0
+        },
         "id": "01a1a000-0000-7000-8000-000000000023",
         "type": "schema:Book",
         "labels": {
@@ -189,16 +252,37 @@
         "id": "01a1a000-0000-7000-8000-000000000023",
         "type": "schema:Book",
         "types": ["schema:Book"],
-        "label": {
-          "value": "The Makioka Sisters",
-          "language": "en"
-        },
+        "label": { "value": "The Makioka Sisters", "language": "en" },
         "creativeWork": true,
         "cover": null
       }
     },
     "01a1a000-0000-7000-8000-000000000024": {
+      "account": null,
       "subject": {
+        "relationCounts": {
+          "rezics:alternativeSetting": 0,
+          "rezics:alternativeVersion": 0,
+          "rezics:artbookCounterpart": 0,
+          "rezics:bangumiLegacyVersion": 0,
+          "rezics:bangumiRelatedTo": 0,
+          "rezics:collaborationWith": 0,
+          "rezics:crossMediaCounterpart": 0,
+          "rezics:editionCounterpart": 0,
+          "rezics:expansionCounterpart": 0,
+          "rezics:representativeEdition": 0,
+          "rezics:sameCharacters": 0,
+          "rezics:sameSetting": 0,
+          "rezics:sideStoryOf": 0,
+          "rezics:spinOffOf": 0,
+          "rezics:storyArc": 0,
+          "rezics:summaryOf": 0,
+          "schema:author": 0,
+          "schema:contributor": 0,
+          "wdt:P155": 0,
+          "wdt:P179": 0,
+          "wdt:P361": 0
+        },
         "id": "01a1a000-0000-7000-8000-000000000024",
         "type": "schema:Book",
         "labels": {
@@ -224,36 +308,21 @@
         "id": "01a1a000-0000-7000-8000-000000000024",
         "type": "schema:Book",
         "types": ["schema:Book"],
-        "label": {
-          "value": "I Am a Cat",
-          "language": "en"
-        },
+        "label": { "value": "I Am a Cat", "language": "en" },
         "creativeWork": true,
         "cover": {
           "media": "01a1a000-0000-7000-8000-000000000045",
           "width": 800,
           "height": 1200,
-          "placeholder": {
-            "thumbhash": "YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==",
-            "color": "#3c6046"
-          },
+          "placeholder": { "thumbhash": "YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==", "color": "#3c6046" },
           "variants": [
-            {
-              "format": "avif",
-              "width": 320
-            },
-            {
-              "format": "webp",
-              "width": 320
-            }
+            { "format": "avif", "width": 320 },
+            { "format": "webp", "width": 320 }
           ],
           "focalPoint": null,
           "credit": {
             "rightsHolder": "Fixture Press",
-            "via": {
-              "name": "Fixture",
-              "url": "https://example.test"
-            },
+            "via": { "name": "Fixture", "url": "https://example.test" },
             "license": "CC0",
             "obligations": []
           }

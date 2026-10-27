@@ -1,5 +1,6 @@
 {
   "thread": {
+    "kind": "discussion",
     "id": "01a17a3b-09b4-77bf-a24b-1234ebeab5b2",
     "route": 4660,
     "authorId": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
@@ -12,6 +13,7 @@
     "availability": "available",
     "createdAt": "2026-10-24T00:00:00.000Z",
     "firstPost": {
+      "voteCitation": null,
       "id": "01a17a3b-09b4-77c0-86c5-123438ddb82b",
       "threadId": "01a17a3b-09b4-77bf-a24b-1234ebeab5b2",
       "route": 4660,

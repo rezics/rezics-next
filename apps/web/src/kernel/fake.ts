@@ -549,7 +549,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function subjectPayload(
   fixtures: Fixtures,
   id: string,
-): { subject: Subject; related: Related; summary?: Summary } | undefined {
+): { subject: Subject; account: { id: string } | null; related: Related; summary?: Summary } | undefined {
   const target = fixtures.redirects[id] ?? id;
   const subject = fixtures.subjects.find((item) => item.id === target);
   if (!subject) return undefined;
@@ -577,7 +577,8 @@ function subjectPayload(
     }
   const summary =
     fixtures.summaries && Object.hasOwn(fixtures.summaries, target) ? fixtures.summaries[target] : undefined;
-  return { subject, related, ...(summary ? { summary } : {}) };
+  const account = fixtures.accounts?.find((item) => item.subject === target);
+  return { subject, account: account ? { id: account.id } : null, related, ...(summary ? { summary } : {}) };
 }
 
 function byEnglishLabel(left: Subject, right: Subject): number {
@@ -760,6 +761,7 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   const payload = account
     ? (subjectPayload(fixtures, account.subject ?? account.id) ?? {
         subject: agentNode(account),
+        account: { id: account.id },
         related: {} as Related,
       })
     : requested
@@ -794,7 +796,7 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
             : descriptor.kind === 'collections'
               ? { status: 200, body: { collections: [], count: { value: 0, exact: true } } }
               : account && descriptor.kind === 'account'
-                ? { status: 200, body: { accounts: [accountProfile(fixtures, account)] } }
+                ? { status: 200, body: { accounts: [accountProfile(fixtures, account)], next: null } }
                 : account && descriptor.kind === 'accountPosts'
                   ? { status: 200, body: accountListPage(account, 'posts', descriptor) }
                   : account && descriptor.kind === 'accountThreads'

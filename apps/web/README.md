@@ -198,7 +198,9 @@ database with a local Stripe fixture: three offers (one with a long CJK title, o
 the paid, pending and failed settlements. It stops the kernel and removes the containers it started on success and
 failure; it does not use a development kernel, the shared search node, or a shared database. Name recordings to write
 only those files, for example `bun run --cwd apps/web record -- offer order-paid`; with no names the recorder writes
-every recording.
+every recording. Set `WEB_RECORD_OUTPUT` to write them to another directory.
+The recorder opens the `collections` exposure group through the platform API before the subject page reads
+`GET /v1/subjects/:id/collections`. It starts the kernel worker and waits for the two edition links to be projected.
 
 The thread and subject recordings carry story content the recorder keeps when it re-records: the thread's `subjectIds`,
 a cover `summary` on the recorded subject and a second recorded subject without a cover (`subject-uncovered.json`), so
