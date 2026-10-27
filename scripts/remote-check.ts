@@ -9,7 +9,7 @@
 // host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
 import { randomUUID } from 'node:crypto';
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type Host = {
@@ -46,6 +46,9 @@ export const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
+export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
+export const CHECK_SLOT_PROCESSORS = 2;
+const MAX_WAIT_RECORD_MS = 60_000;
 
 export class Aborted extends Error {}
 
@@ -96,15 +99,56 @@ const sshOptions = (host: Host): string[] => [
   'ServerAliveCountMax=4',
 ];
 
-/** Memory the slice can still use: what the host has available, bounded by the slice's cap less its current use. */
+/** Reports the resources the next check would share with, falling back to host memory when the slice is unreadable. */
 function probeScript(host: Host): string {
-  const cap = Math.round(host.memoryMaxGiB * 2 ** 30);
-  return `awk -v cap=${cap} 'BEGIN {
-  while ((getline line < "/proc/meminfo") > 0) if (line ~ /^MemAvailable:/) { split(line, field, " "); available = field[2] * 1024 }
-  getline used < "/sys/fs/cgroup/${SLICE}/memory.current"
-  if (cap - used < available) available = cap - used
-  printf "AVAILABLE %.0f\\n", available
-}'`;
+  return `set -eu
+processors=$(nproc)
+load=$(awk 'NR == 1 { print $1; exit }' /proc/loadavg)
+available=$(awk 'BEGIN { while ((getline line < "/proc/meminfo") > 0) if (line ~ /^MemAvailable:/) { split(line, field, " "); printf "%.0f\\n", field[2] * 1024; exit } }' 2>/dev/null || true)
+case "$available" in ''|*[!0-9]*) available= ;; esac
+slice_cgroup=$(systemctl show --property=ControlGroup --value ${SLICE} 2>/dev/null || true)
+case "$slice_cgroup" in /*) ;; *) slice_cgroup= ;; esac
+current=
+maximum=
+cpu_max=
+if [ -n "$slice_cgroup" ]; then
+  current=$(cat "/sys/fs/cgroup$slice_cgroup/memory.current" 2>/dev/null || true)
+  maximum=$(cat "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true)
+  cpu_max=$(cat "/sys/fs/cgroup$slice_cgroup/cpu.max" 2>/dev/null || true)
+fi
+case "$current" in ''|*[!0-9]*) current= ;; esac
+case "$maximum" in ''|*[!0-9]*) maximum= ;; esac
+if [ -n "$current" ] && [ -n "$maximum" ]; then
+  headroom=$((maximum - current))
+  [ "$headroom" -ge 0 ] || headroom=0
+  printf 'MEMORY_CURRENT %s\\nMEMORY_MAX %s\\nMEMORY_HEADROOM %s\\n' "$current" "$maximum" "$headroom"
+else
+  [ -n "$available" ] || exit 1
+  printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\n' "$available"
+fi
+slice_processors=
+set -- $cpu_max
+if [ "$#" -eq 2 ]; then
+  case "$1:$2" in *[!0-9:]*|:*|*:) ;; *)
+    if [ "$2" -gt 0 ]; then slice_processors=$(awk -v quota="$1" -v period="$2" 'BEGIN { printf "%.6f\\n", quota / period }'); fi
+    ;;
+  esac
+fi
+if [ -z "$slice_processors" ]; then
+  slice_processors=$(awk -v quota="${host.cpuQuotaPercent}" 'BEGIN { printf "%.6f\\n", quota / 100 }')
+fi
+slots_used=0
+i=0
+while [ "$i" -lt ${host.slots} ]; do
+  lock=${ROOT}/slots/$i.lock
+  if [ -e "$lock" ]; then
+    exec 9<"$lock"
+    if flock -n 9; then flock -u 9; else slots_used=$((slots_used + 1)); fi
+    exec 9<&-
+  fi
+  i=$((i + 1))
+done
+printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nSLOTS_USED %s\\n' "$processors" "$slice_processors" "$load" "$slots_used"`;
 }
 
 /** Holds a host's exclusive reservation while a multi-slot run collects its slots. */
@@ -118,12 +162,12 @@ exec cat >/dev/null`;
 }
 
 /** Takes a free slot while the connection lives: the lock goes with the session. */
-function slotScript(host: Host, reserved: boolean): string {
+function slotScript(host: Host, reserved: boolean, slotLimit: number): string {
   const mode = reserved ? 'REMOTE_CHECK_SLOT_RESERVED' : 'REMOTE_CHECK_SLOT_SINGLE';
   const reservation = reserved
     ? ''
     : `exec 8>"${ROOT}/slots/reserve.lock"
-flock -s -n 8 || exit ${SLOT_BUSY}
+flock -x -n 8 || exit ${SLOT_BUSY}
 `;
   const unlockReservation = reserved
     ? ''
@@ -132,7 +176,17 @@ exec 8>&-
 `;
   return `mkdir -p ${ROOT}/slots ${ROOT}/runs
 ${mode}=1
+# REMOTE_CHECK_SLOT_LIMIT ${slotLimit}
 ${reservation}
+occupied=0
+i=0
+while [ "$i" -lt ${host.slots} ]; do
+  exec 9>"${ROOT}/slots/$i.lock"
+  if flock -n 9; then flock -u 9; else occupied=$((occupied + 1)); fi
+  exec 9>&-
+  i=$((i + 1))
+done
+if [ "$occupied" -ge ${slotLimit} ]; then exit ${SLOT_BUSY}; fi
 i=0
 while [ "$i" -lt ${host.slots} ]; do
   exec 9>"${ROOT}/slots/$i.lock"
@@ -245,15 +299,134 @@ async function sleep(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) throw new Aborted();
 }
 
-async function availableMemory(host: Host): Promise<number | null> {
+type WaitRecorder = { begin(): void; record(): void; stop(): void };
+
+/** Records elapsed wait time in full-line appends, without allowing a reporting error to fail the check. */
+function waitRecorder(file = process.env.GOAL_CHECK_WAIT_FILE): WaitRecorder {
+  if (!file) return { begin() {}, record() {}, stop() {} };
+  let started: number | undefined;
+  let recordedThrough = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    if (started === undefined) return;
+    const elapsed = Math.max(0, Math.floor(performance.now() - started) - recordedThrough);
+    let remaining = elapsed;
+    while (remaining > 0) {
+      const increment = Math.min(remaining, MAX_WAIT_RECORD_MS);
+      try {
+        appendFileSync(file, `${increment}\n`);
+      } catch {
+        // The control-plane hint is best-effort and must never fail a check.
+      }
+      recordedThrough += increment;
+      remaining -= increment;
+    }
+  };
+  const schedule = (delay = MAX_WAIT_RECORD_MS) => {
+    timer = setTimeout(() => {
+      flush();
+      schedule();
+    }, delay);
+    timer.unref?.();
+  };
+  return {
+    begin() {
+      if (started !== undefined) return;
+      started = performance.now();
+      schedule(100);
+    },
+    record: flush,
+    stop() {
+      if (started === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+      flush();
+    },
+  };
+}
+
+type HostProbe = {
+  processors: number;
+  sliceProcessors: number;
+  load: number;
+  memoryHeadroom: number;
+  slotsUsed: number;
+};
+type RankedHost = {
+  host: Host;
+  resourceSlots: number;
+  freeSlots: number;
+  slotLimit: number;
+  memoryHeadroom: number;
+};
+
+function probeCapacity(host: Host, probe: HostProbe): number {
+  let freeSlots = 0;
+  for (let count = 1; count <= host.slots; count += 1) {
+    if (
+      probe.memoryHeadroom < count * CHECK_SLOT_MEMORY_BYTES ||
+      probe.load + count * CHECK_SLOT_PROCESSORS > probe.sliceProcessors
+    )
+      break;
+    freeSlots = count;
+  }
+  return freeSlots;
+}
+
+function rankHost(host: Host, probe: HostProbe): RankedHost {
+  const resourceSlots = probeCapacity(host, probe);
+  const freeSlots = Math.min(resourceSlots, Math.max(0, host.slots - probe.slotsUsed));
+  const slotLimit = Math.min(host.slots, probe.slotsUsed + resourceSlots);
+  return { host, resourceSlots, freeSlots, slotLimit, memoryHeadroom: probe.memoryHeadroom };
+}
+
+function parseProbe(output: string): HostProbe | null {
+  const value = (name: string): string | null => output.match(new RegExp(`^${name} ([^\\r\\n]+)$`, 'm'))?.[1] ?? null;
+  const processorValue = value('PROCESSORS');
+  const sliceProcessorValue = value('SLICE_PROCESSORS');
+  const loadValue = value('LOAD');
+  const headroomValue = value('MEMORY_HEADROOM');
+  const processors = Number(processorValue);
+  const sliceProcessors = Number(sliceProcessorValue);
+  const load = Number(loadValue);
+  const memoryHeadroom = Number(headroomValue);
+  const slotsUsedValue = value('SLOTS_USED');
+  const slotsUsed = Number(slotsUsedValue);
+  const current = value('MEMORY_CURRENT');
+  const maximum = value('MEMORY_MAX');
+  const sliceMemory = current !== null && maximum !== null && /^\d+$/.test(current) && /^\d+$/.test(maximum);
+  const memoryFallback = current === '-' && maximum === '-';
+  if (
+    processorValue === null ||
+    sliceProcessorValue === null ||
+    loadValue === null ||
+    headroomValue === null ||
+    !Number.isSafeInteger(processors) ||
+    processors < 1 ||
+    !Number.isFinite(sliceProcessors) ||
+    sliceProcessors < 0 ||
+    !Number.isFinite(load) ||
+    load < 0 ||
+    !Number.isSafeInteger(memoryHeadroom) ||
+    memoryHeadroom < 0 ||
+    slotsUsedValue === null ||
+    !Number.isSafeInteger(slotsUsed) ||
+    slotsUsed < 0 ||
+    slotsUsed > 1_000_000 ||
+    (!sliceMemory && !memoryFallback)
+  )
+    return null;
+  return { processors, sliceProcessors, load, memoryHeadroom, slotsUsed };
+}
+
+async function probeHost(host: Host): Promise<HostProbe | null> {
   const child = Bun.spawn(['ssh', ...sshOptions(host), host.address, probeScript(host)], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore',
   });
   const [code, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
-  const match = output.match(/^AVAILABLE (\d+)$/m);
-  return code === 0 && match ? Number(match[1]) : null;
+  return code === 0 ? parseProbe(output) : null;
 }
 
 function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore'>): SessionLease {
@@ -347,14 +520,15 @@ async function takeSession(
   }
 }
 
-/** Tries a slot while taking a shared reservation for a single-slot run. */
+/** Takes the short exclusive reservation used to keep slot acquisition inside the probed limit. */
 async function takeSlot(
   host: Host,
   reserved: boolean,
+  slotLimit: number,
   signal: AbortSignal,
   reservation?: SessionLease,
 ): Promise<Lease | null> {
-  return takeSession(host, slotScript(host, reserved), /^SLOT \d+$/m, signal, reservation);
+  return takeSession(host, slotScript(host, reserved, slotLimit), /^SLOT \d+$/m, signal, reservation);
 }
 
 async function takeReservation(host: Host, signal: AbortSignal, wait = true): Promise<SessionLease | null> {
@@ -368,6 +542,7 @@ async function takeReservation(host: Host, signal: AbortSignal, wait = true): Pr
 async function takeReservedSlots(
   host: Host,
   count: number,
+  capacity: number,
   pollMs: number,
   signal: AbortSignal,
   reservation: SessionLease,
@@ -385,7 +560,7 @@ async function takeReservedSlots(
         await reservation.release();
         return null;
       }
-      const lease = await takeSlot(host, true, signal, reservation);
+      const lease = await takeSlot(host, true, capacity, signal, reservation);
       if (lease) {
         held.push(lease);
         continue;
@@ -401,6 +576,15 @@ async function takeReservedSlots(
         return null;
       }
       announceWait();
+      const probe = await probeHost(host);
+      if (!probe || !reservation.isActive()) {
+        await releaseAll();
+        await reservation.release();
+        return null;
+      }
+      const resourceSlots = probeCapacity(host, probe);
+      const otherSlotsUsed = Math.max(0, probe.slotsUsed - held.length);
+      capacity = Math.min(host.slots, otherSlotsUsed + resourceSlots);
       await sleep(pollMs, signal);
     }
     await reservation.release();
@@ -413,30 +597,34 @@ async function takeReservedSlots(
   }
 }
 
-/** Hosts that answered a probe, the one with the most available memory first. */
-async function rankedHosts(hosts: Host[], signal: AbortSignal): Promise<Host[]> {
-  const memory = await Promise.all(hosts.map(async (host) => ({ host, available: await availableMemory(host) })));
+/** Hosts that can admit slots, with the most resource-backed free slots first. */
+async function rankedHosts(hosts: Host[], signal: AbortSignal): Promise<RankedHost[]> {
+  const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
-  return memory
-    .filter((entry): entry is { host: Host; available: number } => entry.available !== null)
-    .sort((left, right) => right.available - left.available)
-    .map((entry) => entry.host);
+  return (
+    probes
+      .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
+      .map(({ host, probe }) => rankHost(host, probe))
+      // Equal slot counts prefer the host with more measured slice memory headroom.
+      .sort((left, right) => right.freeSlots - left.freeSlots || right.memoryHeadroom - left.memoryHeadroom)
+  );
 }
 
-/** One probe round. A host that does not answer is absent; the rest are most available memory first. */
+/** One probe round. Responding hosts are ranked by resource-backed free slots. */
 export async function answeringHosts(hosts: Host[]): Promise<Host[]> {
-  return rankedHosts(hosts, new AbortController().signal);
+  return (await rankedHosts(hosts, new AbortController().signal)).map(({ host }) => host);
 }
 
-/** Tries every host's slots once, most available memory first, and never waits for one. */
+/** Tries every host's slots once, most resource-backed free slots first, and never waits for one. */
 async function acquireOnce(hosts: Host[], slots: number, signal: AbortSignal): Promise<Lease | null> {
-  for (const host of await rankedHosts(hosts, signal)) {
+  for (const { host, freeSlots, slotLimit } of await rankedHosts(hosts, signal)) {
+    if (freeSlots < slots) continue;
     let lease: Lease | null;
-    if (slots === 1) lease = await takeSlot(host, false, signal);
+    if (slots === 1) lease = await takeSlot(host, false, slotLimit, signal);
     else {
       const reservation = await takeReservation(host, signal, false);
       if (!reservation) continue;
-      lease = await takeReservedSlots(host, slots, 0, signal, reservation);
+      lease = await takeReservedSlots(host, slots, slotLimit, 0, signal, reservation);
     }
     if (lease && signal.aborted) {
       await lease.release();
@@ -457,42 +645,70 @@ async function acquire(
 ): Promise<Lease | null> {
   let announced = false;
   let answered = false;
+  const wait = waitRecorder();
   const announceWait = (): void => {
+    wait.begin();
     if (announced) return;
     console.error('remote-check: every check slot is busy; waiting for a free one');
     announced = true;
   };
-  while (true) {
-    const memory = await Promise.all(hosts.map(async (host) => ({ host, available: await availableMemory(host) })));
-    if (signal.aborted) throw new Aborted();
-    const ranked = memory
-      .filter((entry): entry is { host: Host; available: number } => entry.available !== null)
-      .sort((left, right) => right.available - left.available);
-    if (ranked.length > 0) {
-      answered = true;
-      onAnswered?.();
-    } else if (giveUpIfUnanswered && !answered) return null;
-    for (const { host } of ranked) {
-      if (slots === 1) {
-        const lease = await takeSlot(host, false, signal);
+  try {
+    while (true) {
+      const ranked = await rankedHosts(hosts, signal);
+      if (ranked.length > 0) {
+        answered = true;
+        onAnswered?.();
+      } else if (giveUpIfUnanswered && !answered) return null;
+      for (const entry of ranked) {
+        const { host, freeSlots, resourceSlots, slotLimit } = entry;
+        if (slots === 1) {
+          if (freeSlots < 1) continue;
+          const lease = await takeSlot(host, false, slotLimit, signal);
+          if (lease && signal.aborted) {
+            await lease.release();
+            throw new Aborted();
+          }
+          if (lease) return lease;
+          continue;
+        }
+        let reservation = await takeReservation(host, signal, false);
+        let waitedForReservation = false;
+        if (!reservation) {
+          announceWait();
+          wait.record();
+          reservation = await takeReservation(host, signal);
+          waitedForReservation = true;
+        }
+        if (!reservation) continue;
+        let current = entry;
+        if (waitedForReservation) {
+          const probe = await probeHost(host);
+          if (!probe) {
+            await reservation.release();
+            continue;
+          }
+          current = rankHost(host, probe);
+        }
+        if (current.freeSlots < 1) {
+          await reservation.release();
+          continue;
+        }
+        const lease = await takeReservedSlots(host, slots, current.slotLimit, pollMs, signal, reservation, () => {
+          announceWait();
+          wait.record();
+        });
         if (lease && signal.aborted) {
           await lease.release();
           throw new Aborted();
         }
         if (lease) return lease;
-        continue;
       }
-      const reservation = await takeReservation(host, signal);
-      if (!reservation) continue;
-      const lease = await takeReservedSlots(host, slots, pollMs, signal, reservation, announceWait);
-      if (lease && signal.aborted) {
-        await lease.release();
-        throw new Aborted();
-      }
-      if (lease) return lease;
+      announceWait();
+      wait.record();
+      await sleep(pollMs, signal);
     }
-    announceWait();
-    await sleep(pollMs, signal);
+  } finally {
+    wait.stop();
   }
 }
 

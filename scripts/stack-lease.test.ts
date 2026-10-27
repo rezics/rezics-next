@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { acquireStackSlot, stackCapacity } from './stack-lease.ts';
@@ -26,6 +26,7 @@ function environment(capacity = 1): Record<string, string> {
   };
   delete env.REZICS_STACK_SLOT;
   delete env.REZICS_STACK_LEASE;
+  delete env.GOAL_CHECK_WAIT_FILE;
   // These runs test the local lease. An empty KERNEL_CHECK_REMOTE falls back to the shared hosts file, so a missing
   // file is what keeps them here.
   env.KERNEL_CHECK_REMOTE = join(directory, 'no-such-hosts.json');
@@ -266,6 +267,48 @@ test('the wait is printed when a slot is taken', async () => {
   expect(immediate.output.stderr).toMatch(/^stack-lease: immediate slot 1\/1 after \d+ ms\n$/);
 });
 
+test('a stack lease wait is appended to GOAL_CHECK_WAIT_FILE', async () => {
+  const env = environment();
+  const waitFile = join(env.REZICS_STACK_LEASE_DIR!, 'goal-check-wait-ms');
+  env.GOAL_CHECK_WAIT_FILE = waitFile;
+  const holder = await take(env);
+  const waiter = start(env, 'recorded-wait');
+
+  await waitFor(() => existsSync(waitFile) && waiter.output.stderr.includes('waiting (1/1 held, 0 ahead)'));
+  const whileWaiting = readFileSync(waitFile, 'utf8');
+  expect(waiter.child.exitCode).toBeNull();
+  await Bun.sleep(50);
+  await holder.release();
+  await waitFor(() => waiter.output.stdout.includes('1/1'));
+  await stop(waiter);
+
+  const lines = readFileSync(waitFile, 'utf8').trim().split('\n');
+  expect(lines.length).toBeGreaterThan(0);
+  expect(lines.every((line) => /^\d+$/.test(line) && Number(line) > 0 && Number(line) <= 60_000)).toBe(true);
+  expect(lines.reduce((sum, line) => sum + Number(line), 0)).toBeGreaterThan(
+    whileWaiting
+      .trim()
+      .split('\n')
+      .reduce((sum, line) => sum + Number(line), 0),
+  );
+});
+
+test('without GOAL_CHECK_WAIT_FILE no wait is recorded', async () => {
+  const env = environment();
+  const waitFile = join(env.REZICS_STACK_LEASE_DIR!, 'goal-check-wait-ms');
+  delete env.GOAL_CHECK_WAIT_FILE;
+  const holder = await take(env);
+  const waiter = start(env, 'unrecorded-wait');
+
+  await waitFor(() => waiter.output.stderr.includes('waiting (1/1 held, 0 ahead)'));
+  await Bun.sleep(50);
+  await holder.release();
+  await waitFor(() => waiter.output.stdout.includes('1/1'));
+  await stop(waiter);
+
+  expect(existsSync(waitFile)).toBe(false);
+});
+
 test('web and auth isolated runs hold one slot for the whole command', async () => {
   const env = environment();
   for (const app of ['web', 'auth']) {
@@ -291,7 +334,9 @@ test('remote commands run with the lease off', async () => {
     join(bin, 'ssh'),
     `#!/usr/bin/env bun
     const script = process.argv.at(-1);
-    if (script.includes('MemAvailable')) console.log('AVAILABLE 1000000000');
+    if (script.includes('/proc/loadavg')) {
+      console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 4000000000\\nPROCESSORS 4\\nSLICE_PROCESSORS 2\\nLOAD 0\\nSLOTS_USED 0');
+    }
     else if (script.includes('systemd-run')) await Bun.write(${JSON.stringify(scriptFile)}, script);
     else if (script.includes('SLOT')) { console.log('SLOT 0'); await Bun.stdin.text(); }
   `,
@@ -303,7 +348,7 @@ test('remote commands run with the lease off', async () => {
     hosts,
     JSON.stringify({
       hosts: [
-        { name: 'test', address: 'ops@test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 100, slots: 1 },
+        { name: 'test', address: 'ops@test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 200, slots: 1 },
       ],
     }),
   );

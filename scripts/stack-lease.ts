@@ -16,7 +16,16 @@
  * waiting (held/capacity and tickets ahead), repeats it every 60 seconds, and records every take with elapsed ms.
  * The CLI holds its slot for the command's life, forwards signals, and returns the command's exit code.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, watch, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  unlinkSync,
+  watch,
+  writeFileSync,
+} from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -41,6 +50,51 @@ export function stackCapacity(env: Record<string, string | undefined> = process.
 
 type Lock = { release(): Promise<void> };
 const BUSY = 75;
+const MAX_WAIT_RECORD_MS = 60_000;
+
+/** Records elapsed wait time in full-line appends, without allowing a reporting error to fail the check. */
+function waitRecorder(file?: string): { begin(): void; record(): void; stop(): void } {
+  if (!file) return { begin() {}, record() {}, stop() {} };
+  let started: number | undefined;
+  let recordedThrough = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    if (started === undefined) return;
+    const elapsed = Math.max(0, Math.floor(performance.now() - started) - recordedThrough);
+    let remaining = elapsed;
+    while (remaining > 0) {
+      const increment = Math.min(remaining, MAX_WAIT_RECORD_MS);
+      try {
+        appendFileSync(file, `${increment}\n`);
+      } catch {
+        // The control-plane hint is best-effort and must never fail a check.
+      }
+      recordedThrough += increment;
+      remaining -= increment;
+    }
+  };
+  const schedule = (delay = MAX_WAIT_RECORD_MS) => {
+    timer = setTimeout(() => {
+      flush();
+      schedule();
+    }, delay);
+    timer.unref?.();
+  };
+  return {
+    begin() {
+      if (started !== undefined) return;
+      started = performance.now();
+      schedule(100);
+    },
+    record: flush,
+    stop() {
+      if (started === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+      flush();
+    },
+  };
+}
 
 /** The pipe is owned only by this process: even SIGKILL releases every lock it owns. */
 async function lock(file: string, blocking = false): Promise<Lock | null> {
@@ -104,6 +158,7 @@ export async function acquireStackSlot(
   }
   const started = performance.now();
   const directory = env.REZICS_STACK_LEASE_DIR ?? '/tmp/rezics-stack-lease';
+  const wait = waitRecorder(env.GOAL_CHECK_WAIT_FILE);
   mkdirSync(directory, { recursive: true });
   let wake: (() => void) | undefined;
   let generation = 0;
@@ -192,12 +247,15 @@ export async function acquireStackSlot(
           console.error(`stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`);
           lastLog = performance.now();
         }
+        wait.begin();
+        wait.record();
       } finally {
         await mutex.release();
       }
       await changed(observed);
     }
   } finally {
+    wait.stop();
     watcher.close();
     await ticketLock?.release();
     // Dead tickets are left for the next mutex owner, just as they are after SIGKILL.

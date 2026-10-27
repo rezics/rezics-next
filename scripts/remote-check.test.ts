@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
+import { CHECK_SLOT_MEMORY_BYTES, CHECK_SLOT_PROCESSORS } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const kernel = join(repository, 'services/kernel');
@@ -18,7 +19,15 @@ const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const script = args.at(-1)!;
 const address = args.at(-2)!;
-const config = JSON.parse(readFileSync(dir + '/config.json', 'utf8'))[address] ?? {};
+const hostConfigs = JSON.parse(readFileSync(dir + '/config.json', 'utf8'));
+const knownHost = Object.hasOwn(hostConfigs, address);
+const config = hostConfigs[address] ?? {};
+const updateConfig = (updates: Record<string, unknown>) => {
+  const file = dir + '/config.json';
+  const all = JSON.parse(readFileSync(file, 'utf8'));
+  all[address] = { ...all[address], ...updates };
+  writeFileSync(file, JSON.stringify(all));
+};
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, ...event }) + '\\n');
 const hostKey = address.replace(/[^a-z0-9]/gi, '_');
 const count = (name: string) => {
@@ -27,10 +36,31 @@ const count = (name: string) => {
   writeFileSync(file, String(seen + 1));
   return seen;
 };
-if (script.includes('MemAvailable')) {
-  log({ kind: 'probe' });
-  if (config.down) process.exit(255);
-  console.log('AVAILABLE ' + config.available);
+if (script.includes('/proc/loadavg')) {
+  if (!knownHost || config.down) process.exit(255);
+  const configuredMaximum = config.memoryMax ?? Math.max(16 * 2 ** 30, config.available ?? 16 * 2 ** 30);
+  const memoryMaximum = config.memoryUnreadable ? '-' : configuredMaximum;
+  const memoryCurrent = config.memoryUnreadable
+    ? '-'
+    : (config.memoryCurrent ?? configuredMaximum - (config.memoryHeadroom ?? config.available ?? configuredMaximum));
+  const memoryHeadroom = config.memoryUnreadable
+    ? (config.available ?? 0)
+    : configuredMaximum - Number(memoryCurrent);
+  const processors = config.processors ?? 16;
+  const sliceProcessors = config.cpuMaxUnreadable || config.cpuMaxIsMax
+    ? (config.cpuQuotaPercent ?? 800) / 100
+    : (config.sliceProcessors ?? (config.cpuQuotaPercent ?? 800) / 100);
+  const load = config.load ?? 0;
+  const slots = config.slots ?? 2;
+  const slotsUsed = Array.from({ length: slots }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
+  log({ kind: 'probe', script, processors, sliceProcessors, load, memoryCurrent, memoryMaximum, memoryHeadroom, slotsUsed });
+  console.log('MEMORY_CURRENT ' + memoryCurrent);
+  console.log('MEMORY_MAX ' + memoryMaximum);
+  console.log('MEMORY_HEADROOM ' + memoryHeadroom);
+  console.log('PROCESSORS ' + processors);
+  console.log('SLICE_PROCESSORS ' + sliceProcessors);
+  console.log('LOAD ' + load);
+  console.log('SLOTS_USED ' + slotsUsed);
 } else if (script.includes('REMOTE_CHECK_RESERVATION')) {
   const lock = dir + '/' + hostKey + '.reservation';
   let announcedWait = false;
@@ -40,6 +70,7 @@ if (script.includes('MemAvailable')) {
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (script.includes('flock -n 8')) process.exit(75);
       if (!announcedWait) {
         log({ kind: 'reservation-wait' });
         announcedWait = true;
@@ -77,7 +108,13 @@ if (script.includes('MemAvailable')) {
     log({ kind: 'slot', granted: false, reason: 'grant-limit', mode });
     process.exit(75);
   }
-  const capacity = Number(script.match(/i -lt (\\d+)/)?.[1] ?? config.slots ?? 1);
+  const capacity = config.slots ?? 2;
+  const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? capacity);
+  const occupied = Array.from({ length: capacity }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
+  if (occupied >= slotLimit) {
+    log({ kind: 'slot', granted: false, reason: 'capacity', mode, occupied, slotLimit });
+    process.exit(75);
+  }
   let slot = -1;
   for (let index = 0; index < capacity; index++) {
     try {
@@ -117,6 +154,7 @@ if (script.includes('MemAvailable')) {
   for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
+  if (config.hang && config.loadOnHang !== undefined) updateConfig({ load: config.loadOnHang });
   log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1] });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
@@ -134,7 +172,10 @@ if (script.includes('MemAvailable')) {
   if (config.stderr) console.error(config.stderr);
   if (config.hang) {
     console.log('started');
-    process.on('SIGTERM', () => process.exit(143));
+    process.on('SIGTERM', () => {
+      if (config.loadAfterHang !== undefined) updateConfig({ load: config.loadAfterHang });
+      process.exit(143);
+    });
     setInterval(() => {}, 1000);
   } else process.exit(result);
 } else {
@@ -168,6 +209,19 @@ process.exit(99);
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
   available?: number;
+  memoryCurrent?: number;
+  memoryMax?: number;
+  memoryHeadroom?: number;
+  memoryUnreadable?: boolean;
+  processors?: number;
+  sliceProcessors?: number;
+  cpuMaxUnreadable?: boolean;
+  cpuMaxIsMax?: boolean;
+  loadOnHang?: number;
+  loadAfterHang?: number;
+  load?: number;
+  cpuQuotaPercent?: number;
+  memoryMaxGiB?: number;
   busy?: number;
   grantOnly?: number;
   slots?: number;
@@ -215,20 +269,22 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         name,
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
-        memoryMaxGiB: 16,
-        cpuQuotaPercent: 800,
+        memoryMaxGiB: hosts[name].memoryMaxGiB ?? 16,
+        cpuQuotaPercent: hosts[name].cpuQuotaPercent ?? 800,
         slots: hosts[name].slots ?? 2,
       })),
     }),
   );
+  const env: Record<string, string> = {
+    ...(process.env as Record<string, string>),
+    PATH: `${join(root, 'bin')}:${process.env.PATH}`,
+    FAKE_DIR: dir,
+    KERNEL_CHECK_REMOTE: join(dir, 'hosts.json'),
+    REMOTE_CHECK_POLL_MS: '20',
+  };
+  delete env.GOAL_CHECK_WAIT_FILE;
   return {
-    env: {
-      ...(process.env as Record<string, string>),
-      PATH: `${join(root, 'bin')}:${process.env.PATH}`,
-      FAKE_DIR: dir,
-      KERNEL_CHECK_REMOTE: join(dir, 'hosts.json'),
-      REMOTE_CHECK_POLL_MS: '20',
-    },
+    env,
     events: () => {
       const file = join(dir, 'log.jsonl');
       return existsSync(file)
@@ -340,6 +396,162 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   // The slot is released and the run directory removed.
   const kinds = seen.filter((event) => event.address === 'ops@b.test').map((event) => event.kind);
   expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
+});
+
+test('a host admits a slot only while its check slice has the memory and its processors the load for one more', async () => {
+  const { env, events } = scenario({
+    memory: {
+      available: 64 * 2 ** 30,
+      memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES - 1,
+      cpuQuotaPercent: 200,
+      processors: 16,
+      load: 0,
+      slots: 4,
+    },
+    cpu: {
+      available: 64 * 2 ** 30,
+      memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: 2 * CHECK_SLOT_MEMORY_BYTES,
+      cpuQuotaPercent: 800,
+      processors: 16,
+      load: 8 - CHECK_SLOT_PROCESSORS + 0.01,
+      slots: 4,
+    },
+    ready: {
+      available: 1,
+      memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
+      cpuQuotaPercent: 200,
+      processors: 16,
+      load: 2 - CHECK_SLOT_PROCESSORS,
+      slots: 4,
+    },
+  });
+  const result = await remote(env, workspace());
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@ready.test:');
+  const probe = events().find((event) => event.kind === 'probe')!.script as string;
+  for (const reportedValue of [
+    'nproc',
+    '/proc/loadavg',
+    'systemctl show --property=ControlGroup',
+    'memory.current',
+    'memory.max',
+    'cpu.max',
+    '/proc/meminfo',
+  ])
+    expect(probe).toContain(reportedValue);
+  expect(
+    events()
+      .filter((event) => event.kind === 'slot')
+      .map((event) => event.address),
+  ).toEqual(['ops@ready.test']);
+});
+
+test('the configured slots are a ceiling, not the capacity', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: 64 * 2 ** 30,
+      memoryMax: 64 * 2 ** 30,
+      memoryHeadroom: 64 * 2 ** 30,
+      cpuQuotaPercent: 1600,
+      processors: 16,
+      load: 0,
+      slots: 1,
+    },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--slots', '2']);
+
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain('No check host has 2 slots');
+  expect(events()).toEqual([]);
+});
+
+test('a remote slot wait is appended to GOAL_CHECK_WAIT_FILE while it is still waiting', async () => {
+  const { env, events } = scenario({ a: { available: 8 * 2 ** 30, slots: 1, busy: 12 } });
+  const waitFile = join(env.FAKE_DIR!, 'goal-check-wait-ms');
+  env.GOAL_CHECK_WAIT_FILE = waitFile;
+  env.REMOTE_CHECK_POLL_MS = '20';
+  const run = startRemote(env, workspace(), ['true']);
+
+  await waitFor(
+    () => existsSync(waitFile) && events().filter((event) => event.kind === 'slot' && !event.granted).length > 0,
+  );
+  const whileWaiting = readFileSync(waitFile, 'utf8');
+  expect(run.child.exitCode).toBeNull();
+  await Bun.sleep(60);
+  const whileStillWaiting = readFileSync(waitFile, 'utf8');
+  expect(whileStillWaiting.length).toBeGreaterThanOrEqual(whileWaiting.length);
+
+  const [code, ,] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
+  expect(code).toBe(0);
+  const lines = readFileSync(waitFile, 'utf8').trim().split('\n');
+  expect(lines.length).toBeGreaterThan(0);
+  expect(lines.every((line) => /^\d+$/.test(line) && Number(line) > 0 && Number(line) <= 60_000)).toBe(true);
+});
+
+test('without GOAL_CHECK_WAIT_FILE no wait is recorded', async () => {
+  const { env } = scenario({ a: { available: 8 * 2 ** 30, slots: 1, busy: 4 } });
+  const waitFile = join(env.FAKE_DIR!, 'goal-check-wait-ms');
+  delete env.GOAL_CHECK_WAIT_FILE;
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(existsSync(waitFile)).toBe(false);
+});
+
+test('acquisition prefers the host with the most free capacity', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: 64 * 2 ** 30,
+      memoryMax: 8 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: 8 * CHECK_SLOT_MEMORY_BYTES,
+      cpuQuotaPercent: 800,
+      processors: 16,
+      load: 8 - CHECK_SLOT_PROCESSORS + 0.01,
+      slots: 4,
+    },
+    b: {
+      available: 1,
+      memoryMax: 4 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: 4 * CHECK_SLOT_MEMORY_BYTES,
+      cpuQuotaPercent: 800,
+      processors: 16,
+      load: 8 - 3 * CHECK_SLOT_PROCESSORS,
+      slots: 4,
+    },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--slots', '2']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
+  expect(events().filter((event) => event.kind === 'probe')).toHaveLength(2);
+  expect(
+    events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted),
+  ).toHaveLength(2);
+});
+
+test('an unreadable check slice memory limit falls back to MemAvailable', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: CHECK_SLOT_MEMORY_BYTES,
+      memoryUnreadable: true,
+      cpuQuotaPercent: 800,
+      processors: 16,
+      load: 0,
+    },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'probe')).toMatchObject({
+    memoryCurrent: '-',
+    memoryMaximum: '-',
+    memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
+  });
+  expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
 });
 
 test("the remote run's output streams back and its exit code becomes the local exit code", async () => {
@@ -516,7 +728,10 @@ test('a remote run holds the requested number of slots on one host and releases 
 });
 
 test('a multi-slot waiter reserves its host and later single-slot runs go elsewhere', async () => {
-  const { env, events } = scenario({ a: { available: 10e9, slots: 2 }, b: { available: 20e9, slots: 2, hang: true } });
+  const { env, events } = scenario({
+    a: { available: 10e9, slots: 2, cpuQuotaPercent: 200 },
+    b: { available: 20e9, slots: 3, cpuQuotaPercent: 400, hang: true, loadOnHang: 2, loadAfterHang: 0 },
+  });
   const first = startRemote(env, workspace(), ['sleep', '120']);
   let multi: ReturnType<typeof startRemote> | undefined;
   let laterSingle: ReturnType<typeof startRemote> | undefined;
