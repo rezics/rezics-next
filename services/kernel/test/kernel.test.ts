@@ -23,9 +23,11 @@ type Success<Route> = Route extends { response: infer Responses }
 /** Routes whose success response type is an open record: its schema was lost on the way into the route. */
 type LooseRoutes<Tree, Path extends string = ''> = {
   [Key in keyof Tree & string]: Key extends Method
-    ? string extends keyof Success<Tree[Key]>
-      ? Name<Key, Path>
-      : never
+    ? [Success<Tree[Key]>] extends [never]
+      ? never
+      : string extends keyof Success<Tree[Key]>
+        ? Name<Key, Path>
+        : never
     : LooseRoutes<Tree[Key], `${Path}/${Key}`>;
 }[keyof Tree & string];
 type Routes = TypedRoutes<Kernel['~Routes']>;
@@ -123,6 +125,8 @@ const typed = [
   'GET /v1/subjects/:id/revisions',
   'GET /v1/subjects/:id/links',
   'GET /v1/subjects/:id/relations',
+  'GET /v1/subjects/graph',
+  'GET /v1/subjects/:id/graph',
   'POST /v1/definitions/releases',
   'GET /v1/definitions/releases/:digest',
   'GET /v1/definitions/active',
@@ -201,6 +205,9 @@ const typed = [
   'POST /v1/collections/:collectionId/members/:memberId/$move',
   'GET /v1/subjects/:id/collections',
   'GET /v1/subjects/:id/reactions',
+  'GET /v1/subjects/:id/reaction',
+  'PUT /v1/subjects/:id/reaction',
+  'DELETE /v1/subjects/:id/reaction',
   'GET /v1/rating-questions/:questionId',
   'GET /v1/subjects/:id/ratings',
   'GET /v1/subjects/:id/ratings/populations',

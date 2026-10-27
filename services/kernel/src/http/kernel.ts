@@ -22,7 +22,7 @@ import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
-import { contentRoutes } from '../content/routes.ts';
+import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
@@ -293,7 +293,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     });
     return realmParticipation(client, input, time);
   };
-  content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
+  const contentDependencies = {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
@@ -308,7 +308,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         contentAccess = realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(content), realmRoleReader }));
       return contentAccess;
     },
-  });
+  };
+  content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, contentDependencies);
+  subjectReactionRoutes(app, contentDependencies);
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
@@ -403,6 +405,7 @@ type KernelComposition = ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof accessRoutes> &
   ReturnType<typeof mediaRoutes> &
   ReturnType<typeof contentRoutes> &
+  ReturnType<typeof subjectReactionRoutes> &
   ReturnType<typeof searchRoutes> &
   ReturnType<typeof payoutRoutes> &
   ReturnType<typeof commerceRoutes> &

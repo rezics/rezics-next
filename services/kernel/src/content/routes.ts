@@ -957,7 +957,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
     );
 
-  routes
+  return routes;
+}
+
+export function subjectReactionRoutes(
+  routes: ReturnType<typeof definitionRoutes>,
+  dependencies: Dependencies,
+) {
+  return routes
     .put(
       '/v1/subjects/:id/reaction',
       {
@@ -1077,8 +1084,6 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         return { kind: kind as SubjectReactionKind | null };
       },
     );
-
-  return routes;
 }
 
 async function writeReaction(

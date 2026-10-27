@@ -1,4 +1,3 @@
-import { requireAccessDeadline } from '../access/unavailable.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import { encodeCursor } from '../tokens/cursor.ts';
@@ -307,6 +306,5 @@ export async function listSubjectGraph(
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
   });
-  requireAccessDeadline();
   return graph;
 }

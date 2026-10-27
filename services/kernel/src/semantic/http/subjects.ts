@@ -1550,7 +1550,6 @@ function subjectRoutes(
     .get(
       '/v1/subjects/graph',
       {
-        query: t.Any(),
         response: { 400: problemSchema('invalid_request') },
         detail: {
           operationId: 'subject.graph_missing_anchor',

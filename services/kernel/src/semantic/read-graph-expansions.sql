@@ -13,9 +13,11 @@ counted AS MATERIALIZED (
   SELECT request.*,
          COALESCE(outbound.value, inbound.value, 0)::bigint AS relation_count
   FROM requests AS request
+  CROSS JOIN input
   LEFT JOIN LATERAL (
     SELECT value FROM semantic.outbound_link_count
     WHERE request.direction = 'out'
+      AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
       AND route = request.route AND subject_id = request.node_id
       AND property = request.property
       AND filter_value = '00000000-0000-0000-0000-000000000000'::uuid
@@ -24,6 +26,7 @@ counted AS MATERIALIZED (
   LEFT JOIN LATERAL (
     SELECT value FROM semantic.inbound_link_count
     WHERE request.direction = 'in'
+      AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
       AND route = request.route AND subject_id = request.node_id
       AND property = request.property
       AND filter_value = '00000000-0000-0000-0000-000000000000'::uuid
@@ -58,6 +61,7 @@ walk AS (
                link.order_key
         FROM semantic.outbound_link AS link
         WHERE request.direction = 'out'
+          AND link.route >= input.partition_no * 16 AND link.route < (input.partition_no + 1) * 16
           AND link.route = request.route AND link.subject_id = request.node_id
           AND link.present AND link.relation AND link.property = request.property
           AND link.filter_value = '00000000-0000-0000-0000-000000000000'::uuid
@@ -72,6 +76,7 @@ walk AS (
                link.order_key
         FROM semantic.inbound_link AS link
         WHERE request.direction = 'in'
+          AND link.route >= input.partition_no * 16 AND link.route < (input.partition_no + 1) * 16
           AND link.route = request.route AND link.subject_id = request.node_id
           AND link.present AND link.property = request.property
           AND link.filter_value = '00000000-0000-0000-0000-000000000000'::uuid
@@ -114,6 +119,7 @@ walk AS (
                link.order_key
         FROM semantic.outbound_link AS link
         WHERE request.direction = 'out'
+          AND link.route >= input.partition_no * 16 AND link.route < (input.partition_no + 1) * 16
           AND link.route = request.route AND link.subject_id = request.node_id
           AND link.present AND link.relation AND link.property = request.property
           AND link.filter_value = '00000000-0000-0000-0000-000000000000'::uuid
@@ -128,6 +134,7 @@ walk AS (
                link.order_key
         FROM semantic.inbound_link AS link
         WHERE request.direction = 'in'
+          AND link.route >= input.partition_no * 16 AND link.route < (input.partition_no + 1) * 16
           AND link.route = request.route AND link.subject_id = request.node_id
           AND link.present AND link.property = request.property
           AND link.filter_value = '00000000-0000-0000-0000-000000000000'::uuid
