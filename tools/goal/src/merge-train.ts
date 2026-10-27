@@ -31,7 +31,7 @@ const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
 
-async function runIntegrationChecks(
+export async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
   cwd: string,
   logPath: string,
@@ -41,13 +41,44 @@ async function runIntegrationChecks(
   let output = '';
   let passed = true,
     timedOut = false;
-  // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors.
-  for (const command of commands) {
-    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const result = await execute(command, cwd, logPath);
+  const record = (command: readonly string[], result: GateResult, started: number) => {
     output += result.output;
     passed &&= result.passed;
     timedOut ||= result.timedOut;
+    appendFileSync(logPath, `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`);
+  };
+  // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors. Installing
+  // dependencies changes the tree the others read, so it runs first and alone; the remaining checks only read the tree
+  // and run at once, each into its own log section, which keeps the landing as long as its slowest check.
+  // A check that installs or generates writes the tree, so those run one at a time, before and after the read-only
+  // group.
+  const writes = (command: readonly string[]) => / install\b|\bgenerate\b/.test(` ${command.join(' ')}`);
+  const install = commands.filter((command) => command[0] === 'bun' && command[1] === 'install');
+  const rest = commands.filter((command) => !install.includes(command) && !writes(command));
+  const after = commands.filter((command) => !install.includes(command) && writes(command));
+  for (const command of install) {
+    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
+    const started = Date.now();
+    record(command, await execute(command, cwd, logPath), started);
+  }
+  const parallel = await Promise.all(
+    rest.map(async (command, index) => {
+      const own = `${logPath}.check-${index}`;
+      writeFileSync(own, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
+      const started = Date.now();
+      const result = await execute(command, cwd, own);
+      return { command, result, started, own };
+    }),
+  );
+  for (const { command, result, started, own } of parallel) {
+    appendFileSync(logPath, readFileSync(own, 'utf8'));
+    rmSync(own, { force: true });
+    record(command, result, started);
+  }
+  for (const command of after) {
+    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
+    const started = Date.now();
+    record(command, await execute(command, cwd, logPath), started);
   }
   return { passed, output, timedOut };
 }

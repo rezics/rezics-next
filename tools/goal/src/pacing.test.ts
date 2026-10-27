@@ -6,7 +6,8 @@ import { choosePoolWithFallback } from './allowance.ts';
 import { alertUnspentAllowances, pace, parseCodexStatus } from './pacing.ts';
 import type { Pool, PoolReading, Profile } from './types.ts';
 
-const now = Date.parse('2026-10-26T10:00:00Z');
+// Readings are relative to the real clock, which the allowance code also reads.
+const now = Date.now();
 const hour = 3_600_000;
 const policy = (reservePercent: number) => ({ weight: 1, reservePercent, allowUnknown: true, maxAgeMs: 24 * hour });
 const claude = { name: 'claude-worker', cli: 'claude', classes: ['claude'], command: 'claude', configDirectory: '/c', allowanceKey: 'claude', policy: policy(30) } as unknown as Pool;
