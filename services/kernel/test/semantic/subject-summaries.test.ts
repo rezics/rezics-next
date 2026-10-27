@@ -139,26 +139,21 @@ async function cover(route: number, container: string) {
   return id;
 }
 function dependencies(client: SummaryDependencies['client'] = db.pool): SummaryDependencies {
-  const checks = new Map<string, ReturnType<typeof accessCheck>>();
   return {
     client,
     pool: db.pool,
     release: bundledRelease,
     async authorize(_client, id, batch) {
       const route = routeOf(id)!;
-      let pending = checks.get(id);
-      if (!pending) {
-        pending = accessCheck(
-          access,
-          anonymous,
-          'subject:read',
-          { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-          { pool: db.pool, deadline: Date.now() + 600_000 },
-        );
-        checks.set(id, pending);
-      }
-      const check = await pending;
       // Access has its own evidence cost; the growth probe measures the display projection's indexed reads.
+      // Prepare current evidence here: its short lifetime cannot span population growth or repeated captures.
+      const check = await accessCheck(
+        access,
+        anonymous,
+        'subject:read',
+        { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
+        { pool: db.admin, deadline: Date.now() + 600_000 },
+      );
       const connection = await db.admin.connect();
       try {
         return await check(connection);
