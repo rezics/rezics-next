@@ -20,7 +20,7 @@ test('the legacy number input and its existence test are removed', () => {
 });
 
 test('workspace sources do not import the legacy number input', () => {
-  const excluded = new Set(['node_modules', '.temp', '.git', '.next', '.turbo', 'dist', 'build', 'coverage']);
+  const excluded = new Set(['node_modules', '.temp', '.git', '.next', '.turbo', '.output', 'dist', 'build', 'coverage']);
   const pattern = /(?:from\s*|import\s*\(|require\s*\()\s*['"][^'"]*number-input/;
   const matches: string[] = [];
 
