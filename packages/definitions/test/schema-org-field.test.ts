@@ -4,15 +4,22 @@ import { validateRelease, type Release } from '../src/index.ts';
 
 async function fixture(schemaType?: unknown) {
   const schema = {
-    id: 'https://example.test/seo-types', name: 'seo_types', version: '1.0.0',
+    id: 'https://example.test/seo-types',
+    name: 'seo_types',
+    version: '1.0.0',
     prefixes: { linkml: 'https://w3id.org/linkml/', ex: 'https://example.test/' },
-    imports: ['linkml:types'], default_range: 'string',
+    imports: ['linkml:types'],
+    default_range: 'string',
     classes: {
-      Work: { class_uri: 'ex:Work', ...(schemaType === undefined ? {} : { annotations: { schema_org_type: schemaType } }) },
+      Work: {
+        class_uri: 'ex:Work',
+        ...(schemaType === undefined ? {} : { annotations: { schema_org_type: schemaType } }),
+      },
     },
   };
   return compileCatalogue({
-    root: 'seo.yaml', schemas: { 'seo.yaml': JSON.stringify(schema) },
+    root: 'seo.yaml',
+    schemas: { 'seo.yaml': JSON.stringify(schema) },
     presentation: { 'seo/en': 'types:\n  ex:Work: Example work\n' },
   });
 }
@@ -31,7 +38,13 @@ test('missing legacy metadata stays valid and unsafe type IRIs are rejected', as
   const legacy = await fixture();
   expect(metadata(legacy).schemaOrgType).toBeUndefined();
   expect(validateRelease(legacy)).toEqual([]);
-  for (const bad of ['javascript:Book', 'https://evil.test/Book', 'https://schema.org/Book?x=1', 'https://schema.org/Book/Other', 7]) {
+  for (const bad of [
+    'javascript:Book',
+    'https://evil.test/Book',
+    'https://schema.org/Book?x=1',
+    'https://schema.org/Book/Other',
+    7,
+  ]) {
     await expect(fixture(bad)).rejects.toBeInstanceOf(CatalogueError);
     const release = structuredClone(legacy);
     metadata(release).schemaOrgType = bad;
