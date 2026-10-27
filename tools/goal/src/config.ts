@@ -177,13 +177,21 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   if (!Array.isArray(poolValues)) throw new Error('pools must be an array');
   const pools: Pool[] = poolValues.map((raw: unknown) => {
     const pool = object(raw, 'pool');
-    keys(pool, ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'], 'pool');
+    keys(
+      pool,
+      ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'],
+      'pool',
+    );
     if (pool.note !== undefined && typeof pool.note !== 'string') throw new Error('pool note must be text');
     if (!['codex', 'grok', 'cursor', 'claude'].includes(String(pool.cli))) throw new Error('unsupported pool CLI');
     if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
       throw new Error('pool classes required');
     const policy = object(pool.policy, 'pool policy');
-    keys(policy, ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'], 'pool policy');
+    keys(
+      policy,
+      ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'],
+      'pool policy',
+    );
     if (typeof policy.allowUnknown !== 'boolean') throw new Error('allowUnknown must be explicit');
     const reservePercent = positive(policy.reservePercent, 'reservePercent', true);
     if (reservePercent >= 100) throw new Error('reservePercent must be less than 100');
@@ -347,8 +355,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       // The local file is read for every landing, so checks can be switched off or on without restarting the train.
       try {
         const file = join(settings.stateDirectory, 'local.json');
-        const local = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { integrationChecks?: unknown }) : {};
-        return local.integrationChecks === undefined ? readIntegrationChecks() : readIntegrationChecks(local.integrationChecks);
+        const local = existsSync(file)
+          ? (JSON.parse(readFileSync(file, 'utf8')) as { integrationChecks?: unknown })
+          : {};
+        return local.integrationChecks === undefined
+          ? readIntegrationChecks()
+          : readIntegrationChecks(local.integrationChecks);
       } catch {
         return configured;
       }
@@ -366,12 +378,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   });
   function promoteNow(): Promise<void> {
     return promote({
-        settings,
-        job,
-        runGate: promotionGate,
-        derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
-        ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
-      });
+      settings,
+      job,
+      runGate: promotionGate,
+      derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+      ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
+    });
   }
   const landing: IntegrationRuntime['landing'] = (taskId) => {
     const task = store.task(taskId),

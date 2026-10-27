@@ -325,10 +325,10 @@ export class WorkerJob implements GateOutcomeSink {
       // needs an environment outcome; errors after a classified exit or a landing request already have an owner.
       if (
         current.state === 'exited' &&
-        (current.failureKind || store.events(ref.taskId).some(
-          (event) => event.attempt === ref.attempt && event.kind === 'landing-requested',
-        ))
-      ) return;
+        (current.failureKind ||
+          store.events(ref.taskId).some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested'))
+      )
+        return;
       const task = store.task(ref.taskId),
         pool = this.tasks.settings.pools.find((candidate) => candidate.name === current.pool);
       let detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
