@@ -17,18 +17,30 @@ export type ListCursorPosition = {
 export type ListCursorResult = CursorResult;
 export type ListCursorProfile = 'default' | 'search';
 
+export const LIST_CURSOR_BOUNDS = Object.freeze({
+  default: Object.freeze({
+    maxAfterKeys: 8,
+    maxKeyBytes: 256,
+    maxAfterBytes: 2_048,
+    // The existing 4,096-character token cap permits 3,072 bytes, including the 34-byte envelope.
+    maxPlaintextBytes: 3_038,
+    maxTokenLength: 4_096,
+  }),
+  search: Object.freeze({
+    maxAfterKeys: 8,
+    maxKeyBytes: 2_560,
+    maxAfterBytes: 3_072,
+    maxPlaintextBytes: 3_584,
+    maxTokenLength: 4_864,
+  }),
+});
+
 const VERSION = 1;
 const SALT_BYTES = 16;
 const TAG_BYTES = 16;
 const HEADER_BYTES = 2 + SALT_BYTES;
-const MAX_TOKEN_LENGTH = 4_096;
 const MAX_ROUTE_BYTES = 256;
 const MAX_QUERY_BYTES = 2_048;
-const MAX_AFTER_KEY_BYTES = 256;
-const MAX_SEARCH_AFTER_KEY_BYTES = 1_024;
-const MAX_SEARCH_AFTER_BYTES = 2_048;
-const MAX_SEARCH_PLAINTEXT_BYTES = 2_560;
-const MAX_AFTER_KEYS = 8;
 const MAX_FUTURE_MS = 60_000;
 const LIFETIME_MS = 15 * 60_000;
 const HKDF_INFO = new TextEncoder().encode('rezics/list-cursor/v1');
@@ -111,17 +123,18 @@ function associatedData(kid: number, binding: ListCursorBinding, profile: ListCu
 }
 
 function validAfter(after: unknown, profile: ListCursorProfile): after is CursorKey[] {
+  const bounds = LIST_CURSOR_BOUNDS[profile];
   let totalBytes = 0;
   return (
     Array.isArray(after) &&
-    after.length <= MAX_AFTER_KEYS &&
+    after.length <= bounds.maxAfterKeys &&
     after.every((value) => {
       if (typeof value !== 'string') return typeof value === 'number' && Number.isSafeInteger(value);
       const bytes = byteLength(value);
       totalBytes += bytes;
-      return bytes <= (profile === 'search' ? MAX_SEARCH_AFTER_KEY_BYTES : MAX_AFTER_KEY_BYTES);
+      return bytes <= bounds.maxKeyBytes;
     }) &&
-    (profile !== 'search' || totalBytes <= MAX_SEARCH_AFTER_BYTES)
+    totalBytes <= bounds.maxAfterBytes
   );
 }
 
@@ -155,7 +168,7 @@ export async function encodeListCursor(
       timed ? { e: position.epoch, a: position.after, t: issuedAt } : { e: position.epoch, a: position.after },
     ),
   );
-  if (profile === 'search' && plaintext.byteLength > MAX_SEARCH_PLAINTEXT_BYTES)
+  if (profile === 'search' && plaintext.byteLength > LIST_CURSOR_BOUNDS[profile].maxPlaintextBytes)
     throw new TypeError('The list cursor position is too long');
   const salt = timed ? crypto.getRandomValues(new Uint8Array(SALT_BYTES)) : await syntheticSalt(key, data, plaintext);
   const { aes, iv } = await perTokenKey(key, salt);
@@ -167,7 +180,7 @@ export async function encodeListCursor(
     ),
   );
   const token = Buffer.concat([Buffer.from([VERSION, kid]), salt, sealed]).toString('base64url');
-  if (token.length > MAX_TOKEN_LENGTH) throw new TypeError('The list cursor is too long');
+  if (token.length > LIST_CURSOR_BOUNDS[profile].maxTokenLength) throw new TypeError('The list cursor is too long');
   return token;
 }
 
@@ -179,7 +192,13 @@ export async function decodeListCursor(
   options: { profile?: ListCursorProfile } = {},
 ): Promise<ListCursorResult> {
   try {
-    if (typeof token !== 'string' || token.length > MAX_TOKEN_LENGTH || !BASE64URL.test(token)) return invalid();
+    const profile = options.profile ?? 'default';
+    if (
+      typeof token !== 'string' ||
+      token.length > LIST_CURSOR_BOUNDS[profile].maxTokenLength ||
+      !BASE64URL.test(token)
+    )
+      return invalid();
     const bytes = Buffer.from(token, 'base64url');
     if (bytes.toString('base64url') !== token || bytes.length < HEADER_BYTES + TAG_BYTES + 1) return invalid();
     const [version, kid] = [bytes[0], bytes[1]];
@@ -188,7 +207,6 @@ export async function decodeListCursor(
     if (!key || key.byteLength < 32) return invalid();
     const nowMs = now instanceof Date ? now.getTime() : Number.NaN;
     if (!Number.isSafeInteger(nowMs)) return invalid();
-    const profile = options.profile ?? 'default';
     const data = associatedData(kid, binding, profile);
 
     const salt = bytes.subarray(2, HEADER_BYTES);
@@ -200,7 +218,7 @@ export async function decodeListCursor(
         bytes.subarray(HEADER_BYTES),
       ),
     );
-    if (profile === 'search' && plaintext.byteLength > MAX_SEARCH_PLAINTEXT_BYTES) return invalid();
+    if (profile === 'search' && plaintext.byteLength > LIST_CURSOR_BOUNDS[profile].maxPlaintextBytes) return invalid();
     const payload: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
     if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return invalid();
     const value = payload as Record<string, unknown>;

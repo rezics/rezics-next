@@ -5,6 +5,7 @@ import { decodeCursor } from '../../src/tokens/cursor.ts';
 import {
   decodeListCursor,
   encodeListCursor,
+  LIST_CURSOR_BOUNDS,
   type ListCursorBinding,
   type ListCursorPosition,
   type ListCursorResult,
@@ -365,6 +366,28 @@ test('anonymous salts authenticate associated data and timeless plaintext with a
 });
 
 const search = { profile: 'search' } as const;
+const searchPositionResult: ListCursorResult = { ok: true, epoch: position.epoch, after: [...position.after] };
+
+test('list cursor bounds publish frozen limits for both profiles', () => {
+  expect(LIST_CURSOR_BOUNDS).toEqual({
+    default: {
+      maxAfterKeys: 8,
+      maxKeyBytes: 256,
+      maxAfterBytes: 2_048,
+      maxPlaintextBytes: 3_038,
+      maxTokenLength: 4_096,
+    },
+    search: {
+      maxAfterKeys: 8,
+      maxKeyBytes: 2_560,
+      maxAfterBytes: 3_072,
+      maxPlaintextBytes: 3_584,
+      maxTokenLength: 4_864,
+    },
+  });
+  for (const value of [LIST_CURSOR_BOUNDS, ...Object.values(LIST_CURSOR_BOUNDS)])
+    expect(Object.isFrozen(value)).toBe(true);
+});
 
 function searchData(bound: ListCursorBinding): Buffer {
   const query = Object.fromEntries(Object.entries(bound.query).sort(([a], [b]) => a.localeCompare(b)));
@@ -397,16 +420,16 @@ function handmadeSearchCursor(bound: ListCursorBinding, payload: unknown): strin
   ]).toString('base64url');
 }
 
-test('a search cursor round-trips Unicode after-keys up to 1024 bytes each and 2048 bytes in total', async () => {
-  const cjk = '界'.repeat(340) + '😀';
-  const emoji = '😀'.repeat(256);
-  expect(Buffer.byteLength(cjk)).toBe(1_024);
-  expect(Buffer.byteLength(emoji)).toBe(1_024);
+test('a search cursor round-trips Unicode after-keys up to 2560 bytes each and 3072 bytes in total', async () => {
+  const cjk = '界'.repeat(852) + '😀';
+  const emoji = '😀'.repeat(128);
+  expect(Buffer.byteLength(cjk)).toBe(2_560);
+  expect(Buffer.byteLength(emoji)).toBe(512);
   const p = { epoch: 7, after: [cjk, emoji, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, 0, -1, '', ''] };
   for (const viewer of [null, viewerId]) {
     const bound = { ...binding, viewer };
     const token = await encodeListCursor(ring, bound, p, now, search);
-    expect(token.length).toBeLessThanOrEqual(4_096);
+    expect(token.length).toBeLessThanOrEqual(4_864);
     expect(await decodeListCursor(ring, bound, token, now, search)).toEqual({ ok: true, ...p });
     expect(
       await decodeListCursor(
@@ -422,17 +445,18 @@ test('a search cursor round-trips Unicode after-keys up to 1024 bytes each and 2
 });
 
 test('a search cursor above its per-key total or plaintext bound is refused at encode and decodes as invalid', async () => {
-  const invalid = { ok: false, reason: 'invalid' };
+  const invalid: ListCursorResult = { ok: false, reason: 'invalid' };
   for (const viewer of [null, viewerId]) {
     const bound = { ...binding, viewer };
     const payload = { e: 7, a: [''], t: now.getTime() };
     // JSON escaping can exceed the plaintext cap while the raw key stays well within its byte cap.
-    const room = 2_560 - Buffer.byteLength(JSON.stringify(payload));
+    const room = 3_584 - Buffer.byteLength(JSON.stringify(payload));
     const atLimit = '\0'.repeat(Math.floor(room / 6)) + 'x'.repeat(room % 6);
     payload.a = [atLimit];
-    expect(Buffer.byteLength(JSON.stringify(payload))).toBe(2_560);
+    expect(Buffer.byteLength(JSON.stringify(payload))).toBe(3_584);
     const p = { epoch: 7, after: payload.a };
     const token = await encodeListCursor(ring, bound, p, now, search);
+    expect(token.length).toBe(4_824);
     expect(await decodeListCursor(ring, bound, token, now, search)).toEqual({ ok: true, ...p });
     expect(await decodeListCursor(ring, bound, handmadeSearchCursor(bound, payload), now, search)).toEqual({
       ok: true,
@@ -440,33 +464,40 @@ test('a search cursor above its per-key total or plaintext bound is refused at e
     });
 
     for (const after of [
-      ['界'.repeat(340) + '😀x'], // 1,025 UTF-8 bytes in one key.
-      ['😀'.repeat(256), '界'.repeat(340) + '😀', 'x'], // 2,049 bytes in total.
-      [atLimit + 'x'], // 2,561 bytes of plaintext.
+      ['界'.repeat(852) + '😀x'], // 2,561 UTF-8 bytes in one key.
+      ['😀'.repeat(128), '界'.repeat(852) + '😀', 'x'], // 3,073 bytes in total.
+      [atLimit + 'x'], // 3,585 bytes of plaintext.
       Array.from({ length: 9 }, () => ''),
       [Number.MAX_SAFE_INTEGER + 1],
       [1.5],
     ]) {
       await expect(encodeListCursor(ring, bound, { epoch: 7, after }, now, search)).rejects.toThrow(TypeError);
       const forged = handmadeSearchCursor(bound, { e: 7, a: after, t: now.getTime() });
-      expect(forged.length).toBeLessThanOrEqual(4_096);
+      expect(forged.length).toBeLessThanOrEqual(4_864);
       expect(await decodeListCursor(ring, bound, forged, now, search)).toEqual(invalid);
     }
     for (const other of [
-      { ...bound, route: '界'.repeat(86) },
-      { ...bound, query: { q: '😀'.repeat(512) } },
+      { ...bound, route: '界'.repeat(85) + 'xx' },
+      { ...bound, query: { q: '😀'.repeat(510) + 'x' } },
     ]) {
       await expect(encodeListCursor(ring, other, position, now, search)).rejects.toThrow(TypeError);
       expect(await decodeListCursor(ring, other, token, now, search)).toEqual(invalid);
     }
     // An unusable ring must never be consulted for an oversized token.
+    let keyLookups = 0;
     const unreadableRing = {
       current: 1,
       get keys(): KeyRing['keys'] {
+        keyLookups += 1;
         throw new Error('Unexpected key lookup');
       },
     };
-    expect(await decodeListCursor(unreadableRing, bound, 'A'.repeat(4_097), now, search)).toEqual(invalid);
+    const oversized = Buffer.concat([Buffer.from([1, 1]), Buffer.alloc(3_646)]).toString('base64url') + 'A';
+    expect(oversized.length).toBe(4_865);
+    expect(await decodeListCursor(unreadableRing, bound, oversized, now, search)).toEqual(invalid);
+    expect(keyLookups).toBe(0);
+    expect(await decodeListCursor(unreadableRing, bound, oversized.slice(0, -1), now, search)).toEqual(invalid);
+    expect(keyLookups).toBe(1);
   }
 });
 
@@ -485,16 +516,13 @@ test('an anonymous search cursor carries its issue time differs on each encode a
     const plaintext = Buffer.concat([decipher.update(bytes.subarray(18, -16)), decipher.final()]);
     expect(JSON.parse(plaintext.toString())).toEqual({ e: position.epoch, a: position.after, t: now.getTime() });
     for (const elapsed of [0, 15 * 60_000])
-      expect(await decodeListCursor(ring, bound, token, later(elapsed), search)).toEqual({ ok: true, ...position });
+      expect(await decodeListCursor(ring, bound, token, later(elapsed), search)).toEqual(searchPositionResult);
     expect(await decodeListCursor(ring, bound, token, later(15 * 60_000 + 1), search)).toEqual({
       ok: false,
       reason: 'expired',
     });
     const fresh = await encodeListCursor(ring, bound, position, later(15 * 60_000 + 1), search);
-    expect(await decodeListCursor(ring, bound, fresh, later(15 * 60_000 + 1), search)).toEqual({
-      ok: true,
-      ...position,
-    });
+    expect(await decodeListCursor(ring, bound, fresh, later(15 * 60_000 + 1), search)).toEqual(searchPositionResult);
     for (const t of [undefined, 'invalid', 1.5])
       expect(await decodeListCursor(ring, bound, handmadeSearchCursor(bound, { e: 7, a: [], t }), now, search)).toEqual(
         { ok: false, reason: 'invalid' },
@@ -508,7 +536,7 @@ test('a search cursor issued more than 60 seconds ahead decodes as invalid', asy
     for (const lead of [60_000, 60_001]) {
       const token = await encodeListCursor(ring, bound, position, later(lead), search);
       expect(await decodeListCursor(ring, bound, token, now, search)).toEqual(
-        lead === 60_000 ? { ok: true, ...position } : { ok: false, reason: 'invalid' },
+        lead === 60_000 ? searchPositionResult : { ok: false, reason: 'invalid' },
       );
     }
   }
@@ -522,10 +550,9 @@ test('a search cursor never decodes under the default profile and a default curs
       expect(await decodeListCursor(ring, bound, token, now, defaults)).toEqual({ ok: false, reason: 'invalid' });
       const defaultToken = await encodeListCursor(ring, bound, position, now, defaults);
       expect(await decodeListCursor(ring, bound, defaultToken, now, search)).toEqual({ ok: false, reason: 'invalid' });
-      expect(await decodeListCursor(ring, bound, defaultToken, now, { profile: 'default' })).toEqual({
-        ok: true,
-        ...position,
-      });
+      expect(await decodeListCursor(ring, bound, defaultToken, now, { profile: 'default' })).toEqual(
+        searchPositionResult,
+      );
     }
   }
 });
