@@ -1,5 +1,11 @@
-import type { FilterQualifier, FilterRange } from '@rezics/filter';
-import { subjectPartition, type IndexedSubject, type SubjectSource } from '../source.ts';
+import type { FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
+import {
+  MAX_RELATION_FACET_PROBES,
+  subjectPartition,
+  type IndexedSubject,
+  type RelationFacetProbe,
+  type SubjectSource,
+} from '../source.ts';
 
 /** One OpenSearch hit, including the indexed partition, security revision and matched query names. */
 export type Hit = { id: string; partition: number; securityRevision: number; matched: readonly string[] };
@@ -40,16 +46,92 @@ function holds(subject: IndexedSubject, clause: FactClause): boolean {
   });
 }
 
+const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
+
+function normalizedQualifiers(
+  qualifiers: readonly FilterQualifier[] = [],
+): NonNullable<RelationFacetProbe['qualifiers']> {
+  const clauses = new Map<string, { property: string; in: string[] }>();
+  for (const { property, in: values } of qualifiers) {
+    const clause = { property, in: sortedValues(values) };
+    clauses.set(JSON.stringify(clause), clause);
+  }
+  return [...clauses.keys()].sort().map((key) => clauses.get(key)!);
+}
+
+/** Semantic keys let named index clauses prioritize the same leaves in the complete filter. */
+function clauseKey(clause: FactClause): string {
+  if (clause.facet === 'type') return JSON.stringify(['type', sortedValues(clause.values)]);
+  return JSON.stringify([
+    'statement',
+    clause.property,
+    'values' in clause
+      ? ['values', sortedValues(clause.values)]
+      : ['range', clause.range.gte, clause.range.lte, clause.range.unit],
+    normalizedQualifiers(clause.qualifiers),
+  ]);
+}
+
+function filterPlan(filter: FilterDocument) {
+  const leaves: FactClause[] = [];
+  const indices = new Map<string, number>();
+  type Evaluate = (values: readonly boolean[]) => boolean;
+  function visit(node: FilterDocument): Evaluate {
+    if ('and' in node) {
+      const children = node.and.map(visit);
+      return (values) => children.every((child) => child(values));
+    }
+    if ('or' in node) {
+      const children = node.or.map(visit);
+      return (values) => children.some((child) => child(values));
+    }
+    if ('not' in node) {
+      const child = visit(node.not);
+      return (values) => !child(values);
+    }
+    if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
+    const clause: FactClause =
+      'type' in node
+        ? { facet: 'type', values: node.type.in }
+        : {
+            facet: 'statement',
+            property: node.statement.property,
+            ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
+            ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
+          };
+    const key = clauseKey(clause);
+    let index = indices.get(key);
+    if (index === undefined) {
+      index = leaves.length;
+      indices.set(key, index);
+      leaves.push(clause);
+    }
+    const leaf = index;
+    return (values) => values[leaf]!;
+  }
+  const evaluate = visit(filter);
+  return { leaves, indices, evaluate };
+}
+
 /** Recheck candidates against current anchor snapshots; any failed read rejects the whole page. */
 export async function checkHits(
   source: SubjectSource,
   hits: readonly Hit[],
   clauses: ReadonlyMap<string, FactClause>,
-  options?: { concurrency?: number },
+  options?: { concurrency?: number; filter?: FilterDocument },
 ): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number }> {
   const concurrency = options?.concurrency ?? 8;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1)
     throw new RangeError('Concurrency must be a positive safe integer');
+
+  const plan = options?.filter === undefined ? undefined : filterPlan(options.filter);
+  const hints = new Map<string, number>();
+  if (plan) {
+    for (const [name, clause] of clauses) {
+      const index = plan.indices.get(clauseKey(clause));
+      if (index !== undefined) hints.set(name, index);
+    }
+  }
 
   const groups = new Map<number, { ids: Set<string>; candidates: { hit: Hit; index: number }[] }>();
   for (const [index, hit] of hits.entries()) {
@@ -76,6 +158,10 @@ export async function checkHits(
     for (const [partition, group] of partitions) {
       const snapshot = await source.read(partition, [...group.ids]);
       const subjects = new Map(snapshot.subjects.map((subject) => [subject.id, subject]));
+      type Point = { probe: RelationFacetProbe; result?: boolean };
+      const points = new Map<string, Point>();
+      const evaluations = new Map<string, () => boolean>();
+      const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
       for (const { hit, index } of group.candidates) {
         const subject = subjects.get(hit.id);
         if (
@@ -85,6 +171,52 @@ export async function checkHits(
           subject.securityRevision !== hit.securityRevision
         )
           continue;
+        if (plan) {
+          eligible.push({ hit, subject, index });
+          if (evaluations.has(subject.id)) continue;
+          // Hints determine work order only. Every leaf, including unreported negative leaves,
+          // is resolved from current facts before evaluating the original boolean expression.
+          const order = new Set<number>();
+          for (const name of hit.matched) {
+            const leaf = hints.get(name);
+            if (leaf !== undefined) order.add(leaf);
+          }
+          for (const leaf of plan.leaves.keys()) order.add(leaf);
+          const values: (boolean | Point[])[] = new Array(plan.leaves.length);
+          for (const leaf of order) {
+            const clause = plan.leaves[leaf]!;
+            if (
+              clause.facet !== 'statement' ||
+              !('values' in clause) ||
+              !subject.relationFacetOverflow?.includes(clause.property)
+            ) {
+              values[leaf] = holds(subject, clause);
+              continue;
+            }
+            const qualifiers = normalizedQualifiers(clause.qualifiers);
+            values[leaf] = sortedValues(clause.values).map((value) => {
+              const probe: RelationFacetProbe = {
+                subject: subject.id,
+                property: clause.property,
+                value,
+                ...(qualifiers.length ? { qualifiers } : {}),
+              };
+              const key = JSON.stringify(probe);
+              let point = points.get(key);
+              if (!point) {
+                point = { probe };
+                points.set(key, point);
+              }
+              return point;
+            });
+          }
+          evaluations.set(subject.id, () =>
+            plan.evaluate(
+              values.map((value) => (typeof value === 'boolean' ? value : value.some((p) => p.result === true))),
+            ),
+          );
+          continue;
+        }
         if (
           !hit.matched.every((name) => {
             const clause = clauses.get(name);
@@ -93,6 +225,25 @@ export async function checkHits(
         )
           continue;
         checked[index] = { hit, subject };
+      }
+      const pending = [...points.values()];
+      for (let offset = 0; offset < pending.length; offset += MAX_RELATION_FACET_PROBES) {
+        if (!source.matchRelationFacets) throw new Error('Overflow disclosure requires relation facet probes');
+        const batch = pending.slice(offset, offset + MAX_RELATION_FACET_PROBES);
+        const results = await source.matchRelationFacets(
+          partition,
+          batch.map((point) => point.probe),
+        );
+        if (!Array.isArray(results) || results.length !== batch.length)
+          throw new Error('Malformed relation facet probe results');
+        for (const [index, point] of batch.entries()) {
+          const result = results[index];
+          if (typeof result !== 'boolean') throw new Error('Malformed relation facet probe results');
+          point.result = result;
+        }
+      }
+      for (const { hit, subject, index } of eligible) {
+        if (evaluations.get(subject.id)!()) checked[index] = { hit, subject };
       }
     }
   }
