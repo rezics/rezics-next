@@ -698,3 +698,84 @@ test('agreed cardinality maxima and eight-locale labels fit actual canonical rel
   expect(max.importSources.every((s: ProfileData) => s.recordKinds.length === 16)).toBe(true);
   expect(max.entryStateSet.states[0].labels.en).toBe(long);
 });
+
+test('repeated declarations in distinct presentation groups deduplicate only identical labelled objects', async () => {
+  const input = fixture();
+  const schema = JSON.parse(input.schemas['fixture.yaml']);
+  schema.imports.push('extra');
+  input.schemas['fixture.yaml'] = JSON.stringify(schema);
+  (input.schemas as Record<string, string>)['extra.yaml'] = JSON.stringify({
+    id: 'https://example.org/extra',
+    name: 'extra',
+    version: '1',
+    imports: ['linkml:types'],
+    prefixes: { linkml: 'https://w3id.org/linkml/' },
+    classes: { DuplicateData: { abstract: true, annotations: { library: libraryProfile() } } },
+  });
+  for (const locale of LIBRARY_LOCALES) {
+    const home = JSON.parse(input.presentation[`fixture/${locale}`]!);
+    input.presentation[`extra/${locale}`] = JSON.stringify({
+      libraryProfiles: { 'fixture.reading': home.libraryProfiles['fixture.reading'] },
+    });
+  }
+  const release = await compileCatalogue(input);
+  expect(validateRelease(release)).toEqual([]);
+  expect(Object.keys(registryOf(release)!).sort()).toEqual(['fixture.reading', 'fixture.root', 'legacy-fixed-v1']);
+  const labels = JSON.parse(input.presentation['extra/en']!);
+  labels.libraryProfiles['fixture.reading'].states.planned = 'Different label';
+  input.presentation['extra/en'] = JSON.stringify(labels);
+  expect(
+    (await compilerErrors(input)).some(
+      (e) => e.pointer.includes('libraryProfiles') || e.pointer.includes('/annotations/library'),
+    ),
+  ).toBe(true);
+});
+
+test('identifier boundaries and absent precision or total policy remain data rather than unit-name rules', async () => {
+  const p = libraryProfile('a'.repeat(64), 'seed-tray.v2');
+  const unit = p.progress.allowed[0].units[0];
+  delete unit.totalPolicy;
+  Object.assign(unit, { dimension: 'count', precision: 0, minimum: '0', maximum: '999999999999' });
+  expect(profileOf(await compileCatalogue(fixture(p)), 'ex:Child')).toEqual(compiledProfile(p));
+  delete unit.precision;
+  Object.assign(unit, { minimum: '1.000001', maximum: '1.000001' });
+  expect(profileOf(await compileCatalogue(fixture(p)), 'ex:Child')).toEqual(compiledProfile(p));
+  expect(validateRelease(releaseWith())).toEqual([]);
+});
+
+test('source labels cannot duplicate presentation authority at any named leaf', async () => {
+  for (const path of [
+    '/entryStateSet/states/0',
+    '/progress/allowed/0/units/0',
+    '/copies/kinds/0',
+    '/copies/kinds/0/statuses/0',
+  ]) {
+    const p = libraryProfile();
+    let node = p;
+    for (const key of path.split('/').filter(Boolean)) node = node[key];
+    node.labels = { en: 'Inline label' };
+    expect(
+      (await compilerErrors(fixture(p))).some((e) =>
+        e.pointer.startsWith(`/classes/Parent/annotations/library${path}/labels`),
+      ),
+    ).toBe(true);
+  }
+});
+
+test('legacy abstract source is forbidden from gaining a class URI or descendants', async () => {
+  for (const edit of [
+    (classes: ProfileData) => {
+      classes.LegacyData.class_uri = 'ex:Legacy';
+    },
+    (classes: ProfileData) => {
+      classes.LegacyChild = { abstract: true, is_a: 'LegacyData' };
+    },
+    (classes: ProfileData) => {
+      classes.LegacyData.abstract = false;
+    },
+  ]) {
+    const input = fixture();
+    editSource(input, edit);
+    expect((await compilerErrors(input)).some((e) => e.pointer.includes('/classes/Legacy'))).toBe(true);
+  }
+});
