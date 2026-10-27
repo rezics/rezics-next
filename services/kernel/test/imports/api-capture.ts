@@ -287,7 +287,9 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
         // One capture owns the whole operation, including concurrent fence
         // requests. Per-request captures contend for the same native pool and
         // turn legitimate parallel reads into transport failures and retries.
-        const result = await capture(database, () => capture(auth, action));
+        const result = await capture(database, () => capture(auth, action, { includeBackends: true }), {
+          includeBackends: true,
+        });
         merge(result.capture);
         merge(result.value.capture);
         return counters;

@@ -20,9 +20,15 @@ export type SeedingCount = { statements: number; rowsWritten: number };
 type ActiveCapture = {
   statements: string[];
   plans: unknown[];
+  readonly includeBackends: boolean;
+  statementBackends: (number | undefined)[];
+  planBackends: (number | undefined)[];
   backgroundStatements: string[];
   backgroundPlans: unknown[];
+  backgroundStatementBackends: (number | undefined)[];
+  backgroundPlanBackends: (number | undefined)[];
   pending: Set<Promise<void>>;
+  clients: Set<PoolClient>;
   error?: Error;
 };
 type Attribution = {
@@ -32,6 +38,7 @@ type Attribution = {
 };
 type CaptureState = {
   active: ActiveCapture | undefined;
+  finishing: boolean;
   seeding: SeedingCount | undefined;
   setupError?: Error;
   setupTasks: Set<Promise<void>>;
@@ -40,6 +47,7 @@ type CaptureState = {
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
 const clientAttribution = new WeakMap<PoolClient, Attribution>();
+const rawClientQuery = new WeakMap<PoolClient, (statement: string) => unknown>();
 const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
@@ -92,9 +100,13 @@ function statementText(query: unknown): string | undefined {
   return typeof query.text === 'string' ? query.text : undefined;
 }
 
+function backendPid(client: PoolClient): number | undefined {
+  const processID = (client as PoolClient & { readonly processID?: unknown }).processID;
+  return typeof processID === 'number' && Number.isSafeInteger(processID) ? processID : undefined;
+}
+
 const WRITE_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'COPY']);
 const ENDS_TRANSACTION = /^\s*(?:ROLLBACK|ABORT|COMMIT|END)\b/i;
-const UNDOES_SETTINGS = /^\s*(?:ROLLBACK|ABORT)\b/i;
 const IN_FAILED_TRANSACTION = '25P02';
 
 function countWrites(counter: SeedingCount | undefined, result: unknown): void {
@@ -118,6 +130,7 @@ function countWrites(counter: SeedingCount | undefined, result: unknown): void {
  */
 function intercept(client: PoolClient, state: CaptureState, explain: boolean): (statement: string) => unknown {
   const query = client.query.bind(client) as PoolClient['query'];
+  rawClientQuery.set(client, (statement) => query(statement));
   const pending: Array<Attribution | undefined> = [];
   let suppressAttribution = false;
   // Whether auto_explain is on for this connection; undefined when a rollback or a failure may have undone it.
@@ -158,15 +171,25 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
     if (explain && !suppressAttribution && text !== undefined && attribution) {
-      (attribution.background ? attribution.capture.backgroundStatements : attribution.capture.statements).push(text);
+      const capture = attribution.capture;
+      (attribution.background ? capture.backgroundStatements : capture.statements).push(text);
+      if (capture.includeBackends)
+        (attribution.background ? capture.backgroundStatementBackends : capture.statementBackends).push(
+          backendPid(client),
+        );
+      capture.clients.add(client);
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
     if (explain && !suppressAttribution) {
       if (text === undefined || !ENDS_TRANSACTION.test(text)) {
         const wanted = state.active !== undefined;
-        if (explaining !== wanted) switchTo(wanted);
+        // A pg client queues concurrent queries. A preceding queued query may fail or roll back the transaction after
+        // this call observes `explaining`, so reassert the setting between queued statements as well as on transitions.
+        if (explaining !== wanted || pending.length > 0) switchTo(wanted);
       }
-      if (text !== undefined && UNDOES_SETTINGS.test(text)) explaining = undefined;
+      // COMMIT can roll back an already-failed transaction, which also rolls back SET changes. Treat every end as
+      // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
+      if (text !== undefined && ENDS_TRANSACTION.test(text)) explaining = undefined;
     }
     pending.push(attribution);
     refreshAttribution();
@@ -181,23 +204,29 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       refreshAttribution();
     };
     const callback = args.at(-1);
+    const track = (task: Promise<void>): void => {
+      if (!attribution) return;
+      const capture = attribution.capture;
+      capture.pending.add(task);
+      void task.then(() => capture.pending.delete(task));
+    };
+
     if (typeof callback === 'function') {
-      let finishBackground: (() => void) | undefined;
-      if (attribution?.background) {
-        const task = new Promise<void>((resolve) => (finishBackground = resolve));
-        attribution.capture.pending.add(task);
-        void task.then(() => attribution!.capture.pending.delete(task));
-      }
+      let finishCapture: (() => void) | undefined;
+      if (attribution) track(new Promise<void>((resolve) => (finishCapture = resolve)));
       const wrapped = (error: unknown, result?: unknown, ...rest: unknown[]): unknown => {
         done(Boolean(error), result);
-        finishBackground?.();
-        return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
+        try {
+          return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
+        } finally {
+          finishCapture?.();
+        }
       };
       try {
         return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
       } catch (error) {
         done(true);
-        finishBackground?.();
+        finishCapture?.();
         throw error;
       }
     }
@@ -209,23 +238,27 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       throw error;
     }
     if (outcome instanceof Promise) {
-      if (attribution?.background) {
-        const task = Promise.resolve(outcome).then(
-          () => {},
-          () => {},
-        );
-        attribution.capture.pending.add(task);
-        void task.then(() => attribution!.capture.pending.delete(task));
-      }
-      outcome.then(
-        (result) => done(false, result),
-        () => done(true),
+      track(
+        Promise.resolve(outcome).then(
+          (result) => done(false, result),
+          () => done(true),
+        ),
       );
     } else if (typeof outcome === 'object' && outcome !== null && 'once' in outcome) {
       const stream = outcome as { once?: (event: string, listener: () => void) => unknown };
       if (typeof stream.once === 'function') {
-        stream.once('end', () => done(false));
-        stream.once('error', () => done(true));
+        track(
+          new Promise<void>((resolve) => {
+            stream.once!('end', () => {
+              done(false);
+              resolve();
+            });
+            stream.once!('error', () => {
+              done(true);
+              resolve();
+            });
+          }),
+        );
       } else done(false);
     } else {
       done(false);
@@ -245,9 +278,23 @@ function instrument(client: PoolClient, state: CaptureState): void {
       return;
 
     try {
-      (attribution.background ? attribution.capture.backgroundPlans : attribution.capture.plans).push(
-        JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown,
-      );
+      const plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown;
+      const roots = Array.isArray(plan) ? plan : [plan];
+      if (
+        roots.some(
+          (root) =>
+            typeof root === 'object' &&
+            root !== null &&
+            'Query Text' in root &&
+            typeof root['Query Text'] === 'string' &&
+            root['Query Text'].includes('growth-capture-drain'),
+        )
+      )
+        return;
+      const capture = attribution.capture;
+      (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
+      if (capture.includeBackends)
+        (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
     } catch (error) {
       attribution.capture.error ??= asError(error);
     }
@@ -298,7 +345,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
   const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const libraryPools = new Set<pg.Pool>();
-  const state: CaptureState = { active: undefined, seeding: undefined, setupTasks: new Set() };
+  const state: CaptureState = { active: undefined, finishing: false, seeding: undefined, setupTasks: new Set() };
   admin.on('connect', (client) => intercept(client, state, false));
   const database: GrowthDatabase = {
     url,
@@ -334,18 +381,25 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
 export async function capture<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
+  options: { readonly includeBackends?: boolean } = {},
 ): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
-  if (state.active) throw new Error('A growth capture is already active for this database');
+  if (state.active || state.finishing) throw new Error('A growth capture is already active for this database');
   if (state.setupError) throw state.setupError;
 
   const active: ActiveCapture = {
     statements: [],
     plans: [],
+    includeBackends: options.includeBackends === true,
+    statementBackends: [],
+    planBackends: [],
     backgroundStatements: [],
     backgroundPlans: [],
+    backgroundStatementBackends: [],
+    backgroundPlanBackends: [],
     pending: new Set(),
+    clients: new Set(),
   };
   state.active = active;
   try {
@@ -356,7 +410,27 @@ export async function capture<T>(
       operation,
     );
     state.active = undefined;
-    await Promise.all([...active.pending]);
+    state.finishing = true;
+    while (active.pending.size > 0) await Promise.all([...active.pending]);
+    await Promise.all([...state.setupTasks]);
+    // A protocol barrier makes sure every NOTICE from a captured statement has been delivered before returning.
+    // Use the underlying query method so the marker itself is neither counted nor assigned a plan.
+    await Promise.all(
+      [...active.clients].map(async (client) => {
+        const flags = client as PoolClient & {
+          readonly ended?: boolean;
+          readonly ending?: boolean;
+          readonly _ending?: boolean;
+          readonly _queryable?: boolean;
+        };
+        if (flags.ended || flags.ending || flags._ending || flags._queryable === false) return;
+        try {
+          await rawClientQuery.get(client)?.('SELECT 1 /*growth-capture-drain*/');
+        } catch {
+          // A failed transaction rejects the barrier too; its earlier query responses have already drained the stream.
+        }
+      }),
+    );
     await Promise.all([...state.setupTasks]);
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
@@ -365,12 +439,22 @@ export async function capture<T>(
       capture: {
         statements: active.statements,
         plans: active.plans,
+        ...(active.includeBackends
+          ? { statementBackends: active.statementBackends, planBackends: active.planBackends }
+          : {}),
         backgroundStatements: active.backgroundStatements,
         backgroundPlans: active.backgroundPlans,
+        ...(active.includeBackends
+          ? {
+              backgroundStatementBackends: active.backgroundStatementBackends,
+              backgroundPlanBackends: active.backgroundPlanBackends,
+            }
+          : {}),
       },
     };
   } finally {
     state.active = undefined;
+    state.finishing = false;
   }
 }
 

@@ -1,8 +1,14 @@
 export type Capture = {
   readonly statements: readonly string[];
   readonly plans: readonly unknown[];
+  /** Backend process ID parallel to each statement and plan when capture(..., { includeBackends: true }) is used. */
+  readonly statementBackends?: readonly (number | undefined)[];
+  readonly planBackends?: readonly (number | undefined)[];
   readonly backgroundStatements?: readonly string[];
   readonly backgroundPlans?: readonly unknown[];
+  /** Backend process ID parallel to each background statement and plan, when backends are included. */
+  readonly backgroundStatementBackends?: readonly (number | undefined)[];
+  readonly backgroundPlanBackends?: readonly (number | undefined)[];
 };
 
 export type RelationCost = {
@@ -109,50 +115,119 @@ function isCatalogOnlyPlan(root: PlanNode): boolean {
 
 export type CatalogClassification = {
   readonly catalogTexts: ReadonlySet<string>;
+  /** JSON encoded [backend PID, query text] keys; used when backend metadata is present. */
+  readonly catalogKeys: ReadonlySet<string>;
+  readonly backendAware: boolean;
   readonly catalogStatements: number;
   readonly allowedStatements: number;
   readonly firstCatalogStatement: string | undefined;
 };
 
 function classifyCatalogStatements(capture: Capture): CatalogClassification {
-  const entries = capture.plans.flatMap((document) => documentEntries(document));
-  const nonControlStatements = capture.statements.filter((statement) => !isControlStatement(statement));
-  const clientTexts = new Set(nonControlStatements);
-  const plansByText = new Map<string, PlanEntry[]>();
-  for (const entry of entries) {
-    if (entry.queryText === undefined || !clientTexts.has(entry.queryText)) continue;
-    const plans = plansByText.get(entry.queryText) ?? [];
-    plans.push(entry);
-    plansByText.set(entry.queryText, plans);
+  const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
+  const statementEntries = capture.statements.flatMap((text, index) =>
+    !isControlStatement(text) ? [{ text, backend: capture.statementBackends?.[index] }] : [],
+  );
+  const clientKeys = new Set(statementEntries.map(({ text, backend }) => catalogKey(backendAware, backend, text)));
+  const plansByKey = new Map<string, PlanEntry[]>();
+  for (let index = 0; index < capture.plans.length; index++) {
+    const backend = capture.planBackends?.[index];
+    for (const entry of documentEntries(capture.plans[index])) {
+      if (entry.queryText === undefined) continue;
+      const key = catalogKey(backendAware, backend, entry.queryText);
+      if (!clientKeys.has(key)) continue;
+      const plans = plansByKey.get(key) ?? [];
+      plans.push(entry);
+      plansByKey.set(key, plans);
+    }
   }
 
   const catalogTexts = new Set<string>();
-  for (const [text, plans] of plansByText) {
-    if (plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan))) catalogTexts.add(text);
+  const catalogKeys = new Set<string>();
+  const catalogOnlyByText = new Map<string, boolean>();
+  for (const [key, plans] of plansByKey) {
+    const queryText = plans[0]!.queryText!;
+    const catalogOnly = plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
+    if (catalogOnly) {
+      catalogKeys.add(key);
+    }
+    catalogOnlyByText.set(queryText, (catalogOnlyByText.get(queryText) ?? true) && catalogOnly);
   }
+  for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
 
-  const catalogStatements = nonControlStatements.filter((statement) => catalogTexts.has(statement)).length;
-  const nonCatalogTexts = new Set(nonControlStatements.filter((statement) => !catalogTexts.has(statement)));
-  const firstCatalogStatement = nonControlStatements.find((statement) => catalogTexts.has(statement));
+  const catalogStatements = statementEntries.filter(({ text, backend }) =>
+    catalogKeys.has(catalogKey(backendAware, backend, text)),
+  ).length;
+  const nonCatalogKeys = new Set(
+    statementEntries
+      .filter(({ text, backend }) => !catalogKeys.has(catalogKey(backendAware, backend, text)))
+      .map(({ text, backend }) => catalogKey(backendAware, backend, text)),
+  );
+  const firstCatalogStatement = statementEntries.find(({ text, backend }) =>
+    catalogKeys.has(catalogKey(backendAware, backend, text)),
+  )?.text;
   return {
     catalogTexts,
+    catalogKeys,
+    backendAware,
     catalogStatements,
-    allowedStatements: nonCatalogTexts.size,
+    allowedStatements: nonCatalogKeys.size,
     firstCatalogStatement,
   };
+}
+
+function catalogKey(backendAware: boolean, backend: number | undefined, text: string): string {
+  return backendAware ? JSON.stringify([backend ?? null, text]) : text;
+}
+
+function isCatalogQuery(classification: CatalogClassification, text: string, backend: number | undefined): boolean {
+  return classification.catalogKeys.has(catalogKey(classification.backendAware, backend, text));
 }
 
 export function catalogStatementBound(capture: Capture): CatalogClassification {
   return classifyCatalogStatements(capture);
 }
 
-/** The capture without the statements in `catalogTexts` and the plan documents that explain only those statements. */
-export function withoutCatalogTexts(capture: Capture, catalogTexts: ReadonlySet<string>): Capture {
+/** The capture without catalog statements and the plan documents that explain only those statements. */
+export function withoutCatalogTexts(
+  capture: Capture,
+  classification: CatalogClassification | ReadonlySet<string>,
+): Capture {
+  const catalog: CatalogClassification =
+    'catalogKeys' in classification
+      ? classification
+      : {
+          catalogTexts: classification,
+          catalogKeys: classification,
+          backendAware: false,
+          catalogStatements: 0,
+          allowedStatements: 0,
+          firstCatalogStatement: undefined,
+        };
+  const statements = capture.statements.flatMap((statement, index) =>
+    !isCatalogQuery(catalog, statement, capture.statementBackends?.[index]) ? [index] : [],
+  );
+  const plans = capture.plans.flatMap((document, index) => {
+    const backend = capture.planBackends?.[index];
+    return documentEntries(document).some(
+      ({ queryText }) => queryText === undefined || !isCatalogQuery(catalog, queryText, backend),
+    )
+      ? [index]
+      : [];
+  });
   return {
-    statements: capture.statements.filter((statement) => !catalogTexts.has(statement)),
-    plans: capture.plans.filter((document) =>
-      documentEntries(document).some(({ queryText }) => queryText === undefined || !catalogTexts.has(queryText)),
-    ),
+    statements: statements.map((index) => capture.statements[index]!),
+    plans: plans.map((index) => capture.plans[index]!),
+    ...(capture.statementBackends === undefined
+      ? {}
+      : { statementBackends: statements.map((index) => capture.statementBackends![index]) }),
+    ...(capture.planBackends === undefined ? {} : { planBackends: plans.map((index) => capture.planBackends![index]) }),
+    ...(capture.backgroundStatements === undefined ? {} : { backgroundStatements: capture.backgroundStatements }),
+    ...(capture.backgroundPlans === undefined ? {} : { backgroundPlans: capture.backgroundPlans }),
+    ...(capture.backgroundStatementBackends === undefined
+      ? {}
+      : { backgroundStatementBackends: capture.backgroundStatementBackends }),
+    ...(capture.backgroundPlanBackends === undefined ? {} : { backgroundPlanBackends: capture.backgroundPlanBackends }),
   };
 }
 
@@ -245,9 +320,11 @@ export function costOf(capture: Capture): Cost {
   const catalog = classifyCatalogStatements(capture);
   let plans = 0;
 
-  for (const document of capture.plans) {
+  for (let index = 0; index < capture.plans.length; index++) {
+    const document = capture.plans[index];
+    const backend = capture.planBackends?.[index];
     for (const { queryText, plan } of documentEntries(document)) {
-      if (queryText !== undefined && catalog.catalogTexts.has(queryText)) continue;
+      if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
       plans++;
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
       const totals = costNode(plan, true, relations, ctes);
@@ -289,7 +366,8 @@ export function costOf(capture: Capture): Cost {
 
   const cost = {
     statements: capture.statements.filter(
-      (statement) => !isControlStatement(statement) && !catalog.catalogTexts.has(statement),
+      (statement, index) =>
+        !isControlStatement(statement) && !isCatalogQuery(catalog, statement, capture.statementBackends?.[index]),
     ).length,
     controlStatements: capture.statements.filter(isControlStatement).length,
     catalogStatements: catalog.catalogStatements,
