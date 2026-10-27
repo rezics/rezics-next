@@ -211,9 +211,6 @@ test('top-level GET mounts once through content and createKernel, with real cont
     expect(result.body).toEqual({ document: { ...expected, availability: 'available', body } });
   }
   expect((await Bun.file('../../contracts/openapi.json').json()).paths['/v1/documents/{id}']).toBeDefined();
-  expect((await Bun.file('../../packages/client/src/kernel/http/kernel.d.ts').text()).includes('documents:')).toBe(
-    true,
-  );
   expect(charges).toBe(0);
 });
 

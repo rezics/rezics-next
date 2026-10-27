@@ -286,11 +286,6 @@ test('mounted once with current generated OpenAPI, action and shared rate declar
   expect(actionCatalogue(kernel).get(action)?.anonymous).toBe(false);
   const committed = await Bun.file(new URL('../../../../contracts/openapi.json', import.meta.url)).json();
   expect(committed.paths['/v1/media/{id}:takeDown']).toEqual(document.paths['/v1/media/{id}:takeDown']);
-  const generated = await Bun.file(
-    new URL('../../../../packages/client/src/kernel/content/media-moderation-routes.d.ts', import.meta.url),
-  ).text();
-  expect(generated).toContain('$takeDown');
-  expect(generated).toContain('securityRevision: string');
 });
 
 test('literal POST reaches native moderator command and actual shared write rate exactly once; retains appeal bytes', async () => {

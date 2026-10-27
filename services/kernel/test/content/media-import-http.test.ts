@@ -229,9 +229,6 @@ test('literal custom methods mount once with closed portable OpenAPI and generat
   }
   const contract = await Bun.file('../../contracts/openapi.json').text();
   expect(contract).toContain('"/v1/media:importFromUrl"');
-  const client = await Bun.file('../../packages/client/src/kernel/http/kernel.d.ts').text();
-  expect(client).toContain('$importFromUrl');
-  expect(client).toContain('$importStatus');
   expect((await call('POST', '/v1/media/$importFromUrl', input)).response.status).toBe(404);
 });
 

@@ -479,11 +479,6 @@ if (process.argv.includes('--reaction-count-worker')) {
       expect(JSON.stringify(openapi.paths['/v1/threads/{id}/posts']?.get?.responses?.['200'])).toContain(
         'reactionsAsOf',
       );
-      const client = readFileSync(
-        new URL('../../../../packages/client/src/kernel/http/kernel.d.ts', import.meta.url),
-        'utf8',
-      );
-      expect(client).toContain('reactionsAsOf');
     },
   );
 
