@@ -16,42 +16,6 @@ type PopulationCounts = {
   inverseRows: number;
 };
 
-async function clearPreviousPopulation(database: GrowthDatabase): Promise<void> {
-  const client = await database.admin.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query("DELETE FROM access.membership_inverse WHERE left(account_id::text, 8) = '54000000'");
-    await client.query("DELETE FROM access.organization_member WHERE left(organization_id::text, 8) = '55000000'");
-    await client.query(
-      "DELETE FROM access.resource_grant WHERE left(resource_id::text, 8) IN ('51000000', '51100000')",
-    );
-    await client.query(
-      "DELETE FROM access.resource_denial WHERE left(resource_id::text, 8) IN ('51000000', '51100000')",
-    );
-    await client.query(
-      "DELETE FROM access.resource_role_grant WHERE left(resource_id::text, 8) IN ('51000000', '51100000')",
-    );
-    await client.query(
-      "DELETE FROM access.resource_initialization WHERE left(resource_id::text, 8) IN ('51000000', '51100000')",
-    );
-    await client.query(
-      "DELETE FROM library.collection_member WHERE left(collection_id::text, 8) IN ('51000000', '51100000')",
-    );
-    await client.query(
-      "DELETE FROM access.account WHERE left(account_id::text, 8) IN ('53000000', '54000000', '55000000')",
-    );
-    await client.query(
-      "DELETE FROM library.collection WHERE left(collection_id::text, 8) IN ('51000000', '51100000')",
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
 /** Seeds route-valid, unrelated Collection and Access rows in the same 1:8:64 population as the measured operation. */
 export async function seedCollectionGrowthPopulation(
   database: GrowthDatabase,
@@ -62,10 +26,7 @@ export async function seedCollectionGrowthPopulation(
 ): Promise<void> {
   const scaleDelta = scale - previous;
   if (scaleDelta <= 0) return;
-  if (previous === 0) {
-    await clearPreviousPopulation(database);
-    nextOrdinal = 0;
-  }
+  if (previous === 0) nextOrdinal = 0;
   const curatorRoute = routeOf(curatorId);
   if (curatorRoute === null) throw new Error('Collection growth curator must have a native route');
 

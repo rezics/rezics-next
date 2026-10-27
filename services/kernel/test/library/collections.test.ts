@@ -564,8 +564,10 @@ async function prepareGrowth(): Promise<{
   subjectId: string;
   collectionCommands: ReturnType<typeof createCollectionCommands>;
 }> {
-  if (!growth) growth = await openGrowthDatabase(databaseUrl);
-  const database = growth;
+  if (growth) await growth.close();
+  growth = undefined;
+  const database = await openGrowthDatabase(databaseUrl);
+  growth = database;
   await bootstrapRelease(database.pool, bundledRelease);
   const accountId = newId(route);
   await insertAccount(database.pool, accountId);
