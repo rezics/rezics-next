@@ -354,7 +354,7 @@ test('last native alias remains discoverable through actual bounded group mainte
   for (const count of [257, 4096]) {
     const terminal = count === 257 ? root : await f.baseline();
     const originals: string[] = [];
-    for (let index = 0; index < count; index++) originals.push(await f.create());
+    for (let index = 0; index < count; index++) originals.push(await f.create('schema:Book'));
     originals.sort();
     for (const original of originals) {
       await mergeSubjects(db.pool, {

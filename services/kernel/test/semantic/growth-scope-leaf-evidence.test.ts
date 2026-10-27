@@ -33,6 +33,7 @@ test('leaf evidence cost is bounded under unrelated property history and relatio
   for (const axis of ['unrelated-properties', 'unrelated-history', 'relation-degree', 'same-pair-witnesses'] as const) {
     const subject = axis === 'unrelated-properties' ? book : await f.baseline();
     let head: number | null = null;
+    let historyWrites = Promise.resolve();
     const population: Population = {
       name: `current-leaf-${axis}`,
       hotPartition: 0x750,
@@ -45,21 +46,25 @@ test('leaf evidence cost is bounded under unrelated property history and relatio
           await f.accept(subject, candidate);
           await f.adopt(subject, 'ex:credit', [candidate], null, { target, key });
         } else if (axis === 'unrelated-history') {
-          // Thousands of legal expanded editorial heads on an unrelated property of the selected subject.
-          const candidate = await f.propose(subject, 'schema:datePublished', {
-            time: `+${1900 + ordinal}-01-01T00:00:00Z`,
-            precision: 11,
-            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          // Serialize this native slot's compare-and-swap heads while retaining the shared seed population.
+          historyWrites = historyWrites.then(async () => {
+            // Thousands of legal expanded editorial heads on an unrelated property of the selected subject.
+            const candidate = await f.propose(subject, 'schema:datePublished', {
+              time: `+${1900 + ordinal}-01-01T00:00:00Z`,
+              precision: 11,
+              calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+            });
+            await f.accept(subject, candidate);
+            if (head === null) {
+              const row = await db.admin.query(
+                'SELECT max(head) AS head FROM semantic.adoption WHERE route=$1 AND subject_id=$2',
+                [0x7500, subject],
+              );
+              head = row.rows[0].head === null ? null : Number(row.rows[0].head);
+            }
+            head = await f.adopt(subject, 'schema:datePublished', [candidate], head);
           });
-          await f.accept(subject, candidate);
-          if (head === null) {
-            const row = await db.admin.query(
-              'SELECT max(head) AS head FROM semantic.adoption WHERE route=$1 AND subject_id=$2',
-              [0x7500, subject],
-            );
-            head = row.rows[0].head === null ? null : Number(row.rows[0].head);
-          }
-          head = await f.adopt(subject, 'schema:datePublished', [candidate], head);
+          await historyWrites;
         } else if (axis === 'relation-degree') {
           const other = await f.create();
           const candidate = await f.propose(subject, 'schema:author', other);
