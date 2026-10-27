@@ -1,15 +1,17 @@
 # Subject sitemap publication: research evidence
 
-Research snapshot: 2026-10-27. This report is evidence for a future adoption into
-[SEO](../seo.md), not an approved mechanism or an implementation completion claim.
-The existing HTTP and privacy contracts remain authoritative.
+Research snapshot: 2026-10-27. This report supports the adopted
+[SEO sitemap policy](../seo.md#sitemaps); it is not a mechanism specification or
+an implementation completion claim. The existing HTTP and privacy contracts
+remain authoritative.
 
 ## Finding and recommendation
 
-Use a bounded partition-local candidate range, followed by current public-page
-disclosure, with separately maintained **public publication metadata** for
-`lastModified`. Do not derive it from the latest editorial revision, the newest
-surviving fact, a security counter, a relay checkpoint or sitemap generation time.
+The owning [SEO policy](../seo.md#sitemaps) adopts a bounded partition-local
+candidate range, followed by current public-page disclosure, with separately
+maintained **public publication metadata** for `lastModified`. Do not derive it
+from the latest editorial revision, the newest surviving fact, a security
+counter, a relay checkpoint or sitemap generation time.
 This combines two implemented patterns: MediaWiki's fixed page-id ranges and
 Wagtail's separation of published timestamps from draft revision timestamps.
 It is an adaptation to REZICS, not a claim that either project implements its
@@ -22,11 +24,11 @@ establishes the stronger lastmod semantics REZICS needs under private proposals
 and fact-level moderation. Wagtail supplies useful publication metadata evidence,
 but even it advances the timestamp on republishing unchanged content. [O1][W2]
 
-Recommend bounded direct candidate enumeration plus publication metadata first,
-rather than a separate full feed projection. A full projection remains viable
-if its backfill, all change paths and final suppression are specified. None of
-the examined implementations licenses treating an eventually updated sitemap
-as a privacy enforcement boundary.
+The adopted SEO policy uses bounded direct candidate enumeration and publication
+metadata. A separate full feed projection remains a possible implementation
+choice if its backfill, all change paths and final suppression are specified.
+None of the examined implementations licenses treating an eventually updated
+sitemap as a privacy enforcement boundary.
 
 ## Scope, source provenance and licences
 
@@ -73,8 +75,9 @@ links. A cosmetic copyright-date update does not qualify. `priority` and
 that fabricated freshness eventually loses credibility. It explicitly permits
 omitting dates when the publisher cannot establish them. This is guidance,
 not evidence that every CMS already implements accurate publication tracking.
-It does not authorize changing REZICS's fixed required `lastModified` field:
-the owner must establish truthful metadata rather than silently manufacture it.
+This aligns with the adopted [SEO policy](../seo.md#sitemaps): unknown legacy
+publication times are omitted until a proven meaningful public change supplies
+one, and the web omits URL `lastmod` when the time is absent.
 
 [Google's localization guidance][G3] requires a separate URL entry per localized
 page and reciprocal alternates including itself. Alternate child links do not
@@ -239,10 +242,12 @@ stronger conditions rather than copying the action wholesale. [W1][W2]
 
 REZICS evidence inspected at base `b83e8ec43c3056755cc6593b35dafa2e52f2e7f0`:
 
-- [SEO](../seo.md) and [subject pages](../subject-pages.md) define indexing and
-  anonymous page output. The fixed feed is public `GET /v1/subject-pages`, with
-  a signed keyset cursor, limit at most 1,000 and envelope
-  `{subjectPages:[{id,lastModified,labels:[{language,value}]}],next}`.
+- [SEO](../seo.md#sitemaps) and [subject pages](../subject-pages.md) define
+  indexing and anonymous page output. The feed is public
+  `GET /v1/subject-pages`, with a signed keyset cursor, limit at most 1,000 and
+  envelope `{subjectPages:[{id,labels:[{language,value}],lastModified?}],next}`.
+  `lastModified` is optional under the adopted policy: unknown legacy original
+  times are omitted until the next proven meaningful public change.
 - [Semantic paging SQL](../../services/kernel/src/semantic/page-subjects.sql)
   already materializes a partition-local ordered subject range before label
   filling. It is a useful enumeration shape, not a ready-made public feed:
@@ -273,9 +278,10 @@ Unknown, hidden, removed and unreadable ids remain indistinguishable 404s.
 The merged API response remains 308, followed by web's public 301. This report
 does not reopen either contract or reinterpret platform-grant status handling.
 
-## Suggested adoption: publication semantics and bounded work
+## Adopted policy: publication semantics and bounded work
 
-The following is a recommendation for the owner to adopt, not a new authority.
+The owning [SEO policy](../seo.md#sitemaps) adopts these public semantics. This
+section records their research basis; it does not specify an implementation.
 
 **Eligibility.** Use the facts the anonymous public page can actually show,
 after selection, moderation, source fences and access. A label/title alone
@@ -285,13 +291,20 @@ omit the subject even if stale metadata still marks it eligible. If other
 public facts remain, retain it and reflect the removal in its publication time.
 Keep merged source ids out; publish the survivor only when it qualifies.
 
-**Time.** Adopt the publication-clock pattern demonstrated by Wagtail, with
-REZICS's existing stronger rule: advance only for a significant change to the
-public page. Proposal, acceptance or moderation events are inputs to this
+**Time.** The policy uses the publication-clock pattern demonstrated by
+Wagtail, with REZICS's stronger rule: advance only for a meaningful change to
+the public page. Proposal, acceptance or moderation events are inputs to this
 decision, not automatic bumps. Hiding an unshown candidate leaves the public
 state unchanged. Hiding a shown fact, retracting it, changing Global selection,
 or restoring it changes public state even when the next visible value is older.
 Labels used by canonical URLs or rendered metadata also count as public changes.
+
+While foreign-change relays converge, an uncertain candidate may be omitted and
+a known time may lag. Finite convergence and the next completed repair pass
+correct temporary omissions and times; every returned entry must still be
+readable now. If a legacy row has no recoverable original public time, omit
+`lastModified` until its next proven meaningful public change. See the adopted
+[SEO policy](../seo.md#sitemaps) for these delivery rules.
 
 For example: fact A was published at T10; at T20 it is removed and older B from
 T5 remains. The page changed at T20. `MAX(timestamp of surviving facts)` would
@@ -337,16 +350,16 @@ alone cannot bound an unbounded relation neighbourhood.
 
 A full publication projection could instead enumerate a prequalified ordered
 range. That established metadata pattern trades read work for maintenance; it
-still requires an initial backfill, complete change coverage, restart/replay
-handling and final suppression. Backfill must preserve established public-change
-times, never stamp every old page with backfill time. The direct-read option
-still requires a bounded inspected set and trustworthy publication metadata;
-neither option may hide a whole-catalogue rebuild inside a feed request.
+still requires complete change coverage, restart/replay handling and final
+suppression. The approved omission rule applies when original public-change
+times cannot be recovered. The direct-read option still requires a bounded
+inspected set and trustworthy publication metadata; neither option may hide a
+whole-catalogue rebuild inside a feed request.
 
-## Adoption details still requiring an owning specification
+## Implementation details still requiring specification
 
-These are mechanism details for the owner to settle before dispatch, not reasons
-to reopen the approved public/privacy contract:
+These mechanism details remain to be specified; the adopted public and privacy
+semantics are recorded in [SEO](../seo.md#sitemaps):
 
 - Enumerate which already-rendered facts and views contribute to the shared
   subject timestamp, including relation previews, inverse facts, localized
@@ -355,32 +368,36 @@ to reopen the approved public/privacy contract:
 - Choose the metadata maintenance boundary and define effective-time handling
   for asynchronous visibility/fence changes, merge/unmerge and restoration.
   Reprocessing unchanged state must preserve the original public time.
-- Identify a truthful initial timestamp source and backfill completeness rule.
-  If existing history cannot recover public changes, the required non-null
-  `lastModified` needs an explicit owning migration decision, not guessed dates.
+- Identify available original-time history and the backfill completeness rule.
+  If existing history cannot recover a public-change time, preserve the approved
+  omission until the next proven meaningful public change.
 - Specify the candidate and dependent-read budgets, continuation bindings and
   partition traversal using the already approved signed-cursor contract. A full
   projection additionally needs a readiness rule and final suppression even
   while its change consumer is behind.
 
-## Exact suggested acceptance cases
+## Suggested mechanism acceptance cases
 
-These are proposed tests for the later mechanism; no acceptance tests were
-changed or executed as reference repository code for this report.
+These are proposed checks for the later mechanism, not evidence of implementation
+completion. The `T` values below are effective public-change times. During relay
+convergence, an uncertain candidate may be omitted and a known time may lag; the
+values converge after finite relay convergence and the next completed repair
+pass. Every returned entry remains readable now. Unknown legacy original times
+remain omitted until a proven meaningful public change.
 
 | Case                                                          | Required observation                                                                                                                                 |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Title only; title plus hidden/unselected/private-Context fact | Subject absent; no label or timestamp leaks from excluded entries                                                                                    |
-| First shown non-title fact at T1                              | Subject present with current public labels and `lastModified=T1`                                                                                     |
-| New proposal at T2, no public selection change                | Entry and T1 unchanged                                                                                                                               |
-| Hide/take down/reject a never-shown candidate at T3           | Public entry and T1 unchanged despite security/editorial changes                                                                                     |
-| Publish replacement at T4                                     | Current selected fact affects eligibility and `lastModified=T4`                                                                                      |
-| Remove shown A at T5, older B remains                         | Subject remains; `lastModified=T5`, not B's creation time                                                                                            |
+| First shown non-title fact at T1                              | After convergence, subject is present with current public labels and `lastModified=T1`; uncertainty may temporarily omit it                          |
+| New proposal at T2, no public selection change                | After convergence, entry and T1 remain unchanged                                                                                                     |
+| Hide/take down/reject a never-shown candidate at T3           | After convergence, public entry and T1 remain unchanged despite security/editorial changes                                                           |
+| Publish replacement at T4                                     | After convergence, current selected fact affects eligibility and `lastModified=T4`                                                                   |
+| Remove shown A at T5, older B remains                         | After convergence, subject remains and `lastModified=T5`, not B's creation time                                                                      |
 | Remove or fence the last shown non-title fact                 | Subject absent immediately at final disclosure, even with a stale positive publication row                                                           |
 | Hide/remove/close subject after candidate collection          | Final output omits it, including its labels; point reads retain existing status semantics                                                            |
 | Fence a source at a different tuple home                      | Bounded owner checks suppress its evidence without a cross-partition SQL join                                                                        |
-| Restore a shown fact at T6                                    | Eligible again if public, timestamp reflects the actual restored public change                                                                       |
-| Merge source into survivor; reverse merge                     | Source omitted while redirected; existing API 308/web 301 unchanged; reversal recomputes public eligibility/time without bulk timestamp fabrication  |
+| Restore a shown fact at T6                                    | After convergence, eligible again if public, with time reflecting the actual restored public change                                                  |
+| Merge source into survivor; reverse merge                     | Source omitted while redirected; existing API 308/web 301 unchanged; reversal follows public eligibility and time policy                             |
 | Replay, retry, rebuild, compaction, unchanged import          | Entry and public timestamp unchanged; no clock set to worker execution time                                                                          |
 | Edit/remove public locale label                               | Labels and canonical slug agree with rendered fallback; significant public change advances publication time                                          |
 | Multiple labels, missing requested-language label             | Deterministic stored tags; configured localized URLs use the same fallback as HTML and reciprocal alternates                                         |
@@ -390,7 +407,7 @@ changed or executed as reference repository code for this report.
 | Partition move or cursor tampering                            | Existing signed binding and stale/moved handling apply; never resume against a different unchecked range                                             |
 | Large descriptive history and arbitrarily many relations      | Fixed candidate/dependency inspection budget independent of history and relation count; an existence decision cannot scan the complete relation list |
 | Projection bootstrap and lag, if selected                     | Preexisting eligible pages are backfilled; all change classes are covered; delayed projection never bypasses final suppression                       |
-| XML generation repeated without page changes                  | URL lastmod stable; sitemap-file lastmod handled separately; escaped URLs, 50,000-URL and uncompressed byte limits respected                         |
+| XML generation repeated without page changes                  | Known URL lastmod stays stable and absent values are omitted; sitemap-file lastmod is separate; escaping and protocol limits are respected           |
 
 ## Primary source links
 

@@ -1,16 +1,22 @@
 # Catalogue profiles and Schema.org serialization
 
-Research evidence, inspected 2026-10-27. Recommendations below await adoption in
-the owning catalogue and SEO documents; this report does not change their authority.
+Research evidence, inspected 2026-10-27. The reviewed mapping decisions are
+recorded in the owning [catalogue](../../packages/definitions/README.md#schemaorg-subject-types)
+and [SEO](../seo.md#structured-data) documents; this report remains supporting
+evidence rather than authority.
 
-## Recommendation
+## Mapping recommendation and adopted consumer policy
 
 Annotate each concrete catalogue profile with the narrowest Schema.org class true
 of every subject admitted by that profile. Keep the agreed optional
 `Release.types[type].schemaOrgType` as a full `https://schema.org/Type` IRI.
-The web serializer uses that value for JSON-LD `@type`; missing legacy metadata
-continues to produce `https://schema.org/CreativeWork`. No backend type switch,
-ontology import, runtime dependency, or additional configuration language is needed.
+The owning [catalogue](../../packages/definitions/README.md#schemaorg-subject-types)
+and [SEO](../seo.md#structured-data) documents record the reviewed mappings and
+consumer behavior. The web consumer uses explicit metadata for JSON-LD `@type`,
+then its existing `schema:` mapping, then `Thing`; other consumers choose their
+own fallback for missing metadata. The release does not prescribe a universal
+fallback. No backend type switch, ontology import, runtime dependency, or
+additional configuration language is needed.
 
 The important exceptions are book editions, which can serialize as `Book` without
 becoming identical to book works; fictional characters, which need `Thing` because
@@ -62,7 +68,8 @@ Relevant existing decisions were read at discussion-repository commit
   Changing a presentation mapping must not merge those resources or their storage.
 
 This research neither migrates those topics nor changes the discussion repository.
-Adoption belongs in the owning documents before catalogue data is changed.
+The owning documents carry the current mapping and serialization policy; profile
+annotation data remains a separate change.
 
 ## What the catalogue implementations actually do
 
@@ -256,32 +263,38 @@ but mapping native SKOS properties is separate from selecting this `@type`.
 
 Prefer an explicit annotation on every concrete profile, even when its native IRI
 already belongs to Schema.org, or when the deliberate target is CreativeWork.
-This makes semantic review visible and keeps fallback for genuinely missing legacy
-metadata. A native HTTP Schema.org IRI is not itself the agreed HTTPS output field;
-equivalence/exact-mapping lists are also not a source from which to guess a target.
+This makes semantic review visible and leaves missing-metadata behavior to each
+consumer. A native HTTP Schema.org IRI is not itself the agreed HTTPS output
+field; equivalence/exact-mapping lists are also not a source from which to guess
+a target.
 
 Local inheritance is useful evidence: VisualNovel specializes VideoGame, while
 Series specializes CreativeWorkSeries. It is not sufficient output policy.
-Edition inherits CreativeWork but warrants Book; characters need Thing rather
-than the legacy CreativeWork default; recipes and applications have specialized
-web types despite their local Thing base. The release class has no structural
-bases. These examples make explicit per-profile review preferable to runtime
-ancestor walking. Do not add inheritance behavior to the already agreed transport.
+Edition inherits CreativeWork structurally but has an explicit Book
+serialization; characters explicitly select Thing, and recipes and applications
+have specialized web types despite their local Thing base. The release class has
+no structural bases. These examples make explicit per-profile review preferable
+to runtime ancestor walking. Do not add inheritance behavior to the agreed
+transport.
 
-A new fixture type stays configuration-only: declare its normal catalogue type and
-one reviewed Schema.org target, compile/publish the release through the agreed
-metadata path, then render it through the same generic lookup. For example, a new
-independently identified creative-fragment fixture may explicitly select
-`https://schema.org/CreativeWork`. Its native fixture CURIE does not need a new
-backend case, an exact mapping, or a new web component to obtain that `@type`.
-Future acceptance should check that declared value reaches the graph and that
-removing only the optional metadata exercises the CreativeWork legacy fallback.
-This is a verification recommendation, not an acceptance-test change in this task.
+A third fixture type can explicitly select a reviewed Schema.org class without
+backend code: declare its normal catalogue type and `schema_org_type`, compile
+and publish the release through the agreed metadata path, then render it through
+the same generic lookup. For example, a new independently identified
+creative-fragment fixture may select `https://schema.org/CreativeWork`. Its
+native fixture CURIE does not need a backend case, an exact mapping or a new web
+component to obtain that `@type`. A fixture can verify that an explicit value
+reaches the graph and that a consumer's documented missing-metadata fallback
+applies when the field is absent. For web, that chain is specified in
+[SEO](../seo.md#structured-data). This describes a verification approach, not
+implementation completion or an acceptance-test change.
 
-The manager can adopt the table and these scope boundaries into catalogue/SEO
-authority, then annotate profiles. Selecting a type alone neither maps all its
-properties nor guarantees search-engine rich-result eligibility; the public-facts
-and visibility rules in `docs/seo.md` still govern graph construction.
+The owning catalogue and SEO documents record the table and these scope
+boundaries; profile annotations remain a separate task. Selecting a type alone
+neither maps all its properties nor guarantees search-engine rich-result
+eligibility; the public-facts and visibility rules in [SEO](../seo.md) still
+govern graph construction. This report is supporting evidence, not a claim that
+profile annotations or serializer implementation are complete.
 
 ## Source provenance, licences and method
 

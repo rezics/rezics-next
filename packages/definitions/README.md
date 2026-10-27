@@ -68,40 +68,16 @@ presentation group for the schema file that defines the property. Types may carr
 `coverRatio` as `W:H`, where each positive integer is at most 64; compilation
 inherits the nearest annotated base's ratio when a type has no annotation of its
 own. A type may also carry `schemaOrgType`, a full `https://schema.org/Type` IRI
-that consumers use as the JSON-LD `@type`; a release without it stays valid, and
-the release defines no default. Consumers choose their fallback for older releases.
+that a generic consumer can use as the JSON-LD `@type`; a release without it
+stays valid, and the release defines no default. Each consumer chooses its own
+fallback for missing metadata. The reviewed profile mappings are listed in
+[Schema.org subject types](#schemaorg-subject-types), with research evidence in
+the [mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 
 Bundled values are presentation correspondences for JSON-LD. They do not replace
 native type IRIs, bases or mappings; they do not assert ontology equivalence or
 guarantee Schema.org rich-result eligibility. In particular, book works and
 editions retain separate native identities even though both serialize as `Book`.
-
-| Native type                  | Schema.org serialization type            |
-| ---------------------------- | ---------------------------------------- |
-| `schema:Book`                | `https://schema.org/Book`                |
-| `bf:Instance`                | `https://schema.org/Book`                |
-| `schema:VideoGame`           | `https://schema.org/VideoGame`           |
-| `wd:Q689445`                 | `https://schema.org/VideoGame`           |
-| `wd:Q20631656`               | `https://schema.org/CreativeWork`        |
-| `wd:Q209163`                 | `https://schema.org/CreativeWork`        |
-| `wd:Q2620972`                | `https://schema.org/CreativeWork`        |
-| `schema:TVSeries`            | `https://schema.org/TVSeries`            |
-| `schema:Movie`               | `https://schema.org/Movie`               |
-| `schema:TVSeason`            | `https://schema.org/TVSeason`            |
-| `schema:Episode`             | `https://schema.org/Episode`             |
-| `schema:ComicSeries`         | `https://schema.org/ComicSeries`         |
-| `schema:PublicationVolume`   | `https://schema.org/PublicationVolume`   |
-| `wd:Q95074`                  | `https://schema.org/Thing`               |
-| `wd:Q2095`                   | `https://schema.org/Thing`               |
-| `wd:Q7725310`                | `https://schema.org/CreativeWorkSeries`  |
-| `schema:BookSeries`          | `https://schema.org/BookSeries`          |
-| `schema:Person`              | `https://schema.org/Person`              |
-| `schema:Organization`        | `https://schema.org/Organization`        |
-| `schema:SoftwareApplication` | `https://schema.org/SoftwareApplication` |
-| `skos:Concept`               | `https://schema.org/DefinedTerm`         |
-| `skos:ConceptScheme`         | `https://schema.org/DefinedTermSet`      |
-| `schema:Recipe`              | `https://schema.org/Recipe`              |
-| `schema:MusicAlbum`          | `https://schema.org/MusicAlbum`          |
 
 The relation groups are `order`, `derivation`, `world`, `membership`, and
 `association` for the Relations view; `credit` for staff and cast in Credits and
@@ -315,6 +291,52 @@ changes, add a new term instead of editing the existing one.
 
 Run `bun run --cwd packages/definitions check` from the repository root.
 
+### Schema.org subject types
+
+For each concrete catalogue profile, select the narrowest Schema.org class
+that is true of its entire admitted scope. The following 24 mappings are the
+reviewed choices for subject JSON-LD; the source research and supporting
+rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
+The corresponding `annotations.schema_org_type` values are a separate profile
+annotation task. Do not infer them from class names, exact mappings or bases,
+and do not assert ontology equivalence. The generic profile lookup needs no
+backend type switch. This mapping changes neither native identity nor exact
+mappings or property semantics.
+
+| Concrete release type / profile                    | Selected Schema.org class                |
+| -------------------------------------------------- | ---------------------------------------- |
+| `schema:Book` / book Work                          | `https://schema.org/Book`                |
+| `bf:Instance` / book Edition                       | `https://schema.org/Book`                |
+| `schema:VideoGame` / BangumiVideoGame              | `https://schema.org/VideoGame`           |
+| `wd:Q689445` / VisualNovel                         | `https://schema.org/VideoGame`           |
+| `wd:Q20631656` / VideoGameRelease                  | `https://schema.org/CreativeWork`        |
+| `wd:Q209163` / GameAddOn                           | `https://schema.org/CreativeWork`        |
+| `schema:TVSeries` / TVSeries                       | `https://schema.org/TVSeries`            |
+| `schema:Movie` / Movie                             | `https://schema.org/Movie`               |
+| `schema:TVSeason` / TVSeason                       | `https://schema.org/TVSeason`            |
+| `schema:Episode` / Episode                         | `https://schema.org/Episode`             |
+| `schema:ComicSeries` / MangaWork                   | `https://schema.org/ComicSeries`         |
+| `schema:PublicationVolume` / MangaVolume           | `https://schema.org/PublicationVolume`   |
+| `wd:Q95074` / FictionalCharacter                   | `https://schema.org/Thing`               |
+| `wd:Q2620972` / StoryArc                           | `https://schema.org/CreativeWork`        |
+| `wd:Q7725310` / Series                             | `https://schema.org/CreativeWorkSeries`  |
+| `schema:BookSeries` / BookSeries                   | `https://schema.org/BookSeries`          |
+| `schema:Person` / Person                           | `https://schema.org/Person`              |
+| `schema:Organization` / Organization               | `https://schema.org/Organization`        |
+| `schema:SoftwareApplication` / SoftwareApplication | `https://schema.org/SoftwareApplication` |
+| `skos:Concept` / Concept                           | `https://schema.org/DefinedTerm`         |
+| `skos:ConceptScheme` / ConceptScheme               | `https://schema.org/DefinedTermSet`      |
+| `wd:Q2095` / Food                                  | `https://schema.org/Thing`               |
+| `schema:Recipe` / Recipe                           | `https://schema.org/Recipe`              |
+| `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
+
+Book work and its book-specific edition both use `Book` while keeping distinct
+native identities. Broad fictional characters and Food use `Thing`; broad game
+releases, add-ons and story arcs use `CreativeWork`. `DefinedTerm` and
+`DefinedTermSet` apply to the classification profiles only. The remaining rows
+select the explicit native-profile classes for games, anime and manga, series,
+people, organizations, applications, recipes and music.
+
 ### Shared terms
 
 `CreativeWork`, `Character` and `CreativeWorkSeries` are abstract anchors. Book
@@ -428,7 +450,9 @@ Source conventions:
   (other origins, queries, fragments, extra path segments, nonstrings); nothing is fetched. The
   transport is explicit only: no value is inferred from class names, Wikidata ids, mappings or
   ancestors, and subclasses do not inherit it. Older releases and types without the annotation omit
-  the field; the release defines no default, so consumers choose their fallback.
+  the field; consumers choose their own fallback. The web consumer's current fallback chain is
+  `schemaOrgType`, then its existing `schema:` mapping, then `Thing`, as specified in
+  [SEO](../../docs/seo.md#structured-data).
   A type inherits its ancestors' declarations from root to leaf, retaining that
   display order. Each facet must be one of the type's properties. Its datatype is
   `wikibase-item`, `time`, or `quantity`, or `string` with a `pattern` in the

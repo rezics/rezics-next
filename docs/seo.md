@@ -64,15 +64,24 @@ Every indexed page sets, per locale:
 
 Each indexed page embeds one JSON-LD graph from the same data it renders:
 
-- a subject as its schema.org type (`Book`, `Movie`, `TVSeries`, `VideoGame`, `Recipe`, `MusicAlbum`,
-  `CreativeWork` and so on, from the type's mapping), with name, alternate names, creators as `Person` or
-  `Organization` linked to their agent URLs, dates, image, `sameAs` external identifiers, and editions or episodes
-  where the type has them;
+- a subject as the explicitly selected Schema.org class for its concrete catalogue
+  profile, with name, alternate names, creators as `Person` or `Organization`
+  linked to their agent URLs, dates, image, `sameAs` external identifiers, and
+  editions or episodes where the type has them;
 - `aggregateRating` only from the Global population of native votes and only above the display threshold, with
   `ratingCount`, `bestRating` and `worstRating`; imported source statistics never appear in it;
 - a recipe's ingredients and steps as `recipeIngredient` and `recipeInstructions`;
 - an agent as `Person` or `Organization` with `sameAs` links the agent published;
 - `BreadcrumbList` for type and parent pages.
+
+The 24 concrete profile mappings and the explicit `schema_org_type` annotation
+rule are authoritative in the [definitions README](../packages/definitions/README.md#schemaorg-subject-types), with
+[research evidence](research/catalogue-schema-org-mapping.md). The optional
+`schemaOrgType` release field supplies a full Schema.org IRI. The web consumer
+resolves `@type` from `schemaOrgType`, then its existing `schema:` mapping, then
+`Thing`. Do not infer a class from a profile name, exact mapping, ancestor or
+equivalence claim. This selection leaves native identity, exact mappings and
+property semantics unchanged.
 
 ## Sitemaps
 
@@ -81,38 +90,60 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 (24,000 URLs), and at most 40,000,000 bytes uncompressed, below the protocol's 50,000 URLs and 50 MB. A page's
 locale URLs stay in one file.
 
-Every locale URL is its own entry with `lastmod` and lists the same page in all eight locales, itself included,
-with `xhtml:link`. `x-default` stays in page heads only. `changefreq` and `priority` are omitted.
+Every locale URL is its own entry, with URL-level `lastmod` when known, and lists the same page in all eight
+locales, itself included, with `xhtml:link`. `x-default` stays in page heads only. `changefreq` and `priority` are
+omitted.
 
-Sitemaps are generated outside the request path once a day from paged keyset reads of indexable pages. The
-server-to-server feeds may return up to 1,000 entries per page, above the usual list limit. The export reads each
-feed to its end: only `next: null` ends a feed; a short or empty page does not. It writes changed files to object
-storage under their content digest and replaces the index only after every feed and file succeeded. A failed
-export leaves the previous index public. A request never starts a scan.
+The sitemap export runs outside the request path once a day from paged keyset reads of indexable pages. The
+server-to-server feed may return up to 1,000 entries per page, above the usual list limit. The export reads each
+feed to its end: only `next: null` ends a feed; a short or empty page may still carry `next`. It writes changed
+files to object storage under their content digest and replaces the index only after every feed and file succeeds.
+A failed export leaves the previous index public. A request never starts a scan. Feed and export implementation,
+including bounded-cost tests, remain required pending work.
 
-A page's `lastmod` is the last change of what the page shows, as its feed reports it. A file's `lastmod` in the
-index is when that file last changed. Neither is the export time.
+A page's `lastmod` is its separate public publication metadata for the last meaningful change to what the page
+shows. A file's `lastmod` in the index is when that file last changed. Neither is the export time.
 
 Sitemaps are an inventory as of the last successful export. A page that becomes `noindex`, closed or removed
 answers its new status at once and leaves the sitemaps at the next export, within about a day.
 
-The evidence is in [docs/research/sitemaps-at-scale.md](research/sitemaps-at-scale.md).
-
 The public `GET /v1/subject-pages` feed accepts an optional opaque `cursor` and integer `limit` from 1 to 1,000
 (default 20). The 1,000 maximum is an exception to the ordinary list maximum of 100 for server-to-server sitemap
-reads. A page contains `subjectPages` entries with `id`, public display `labels` (`language` and `value`) and an
-optional `lastModified` (UTC ISO 8601 date-time, never null), plus `next` (an opaque cursor or null). Web omits XML
-`lastmod` when the time is absent. Legacy rows whose original public effective time was never stored omit it until
-their next proven meaningful public change. A known time records the last meaningful change to what the page shows.
-The final cursor is a signed keyset token, never a raw id.
+reads. A page contains `subjectPages` entries with `id`, current public display `labels` (`language` and `value`),
+and an optional `lastModified` (UTC ISO 8601 date-time), plus `next` (an opaque cursor or null). Omit
+`lastModified` when unknown; never return it as `null` or guess the current time. Web omits XML `lastmod` when the
+time is absent. The final cursor is a signed keyset token, never a raw id.
 
-The feed has no session personalization. It includes only readable, visible, nonmerged subjects in the Global
-Context with a public fact beyond the title; closed, removed and hidden subjects are excluded. Title-only pages are
-`noindex`. Every returned subject must be readable now. The feed may temporarily omit a candidate it cannot prove
-listable, and known `lastModified` values may lag while foreign-change relays catch up. Finite relay convergence and
-the next completed repair pass correct omissions and times. Freshness never uses processing or rebuild time or private
-activity. The semantic feed implementation is pending: valid requests currently return `semantic_not_ready` (503),
-and the stub does not verify cursors or establish indexability.
+Read at most `limit` candidate subject keys and one key-only lookahead from a single source partition, then apply
+the existing bounded batch owner reads to those candidates. Continue after the last examined candidate; the
+lookahead is not consumed. Short or empty pages may carry `next` and make valid progress through runs of
+nonqualifying candidates. Never scan until `limit` eligible pages are found or cross into another partition to fill
+a response; partition coordination stays explicit.
+
+The feed has no session personalization. Return only readable, visible, nonmerged subjects in the Global Context
+with a currently shown public fact beyond the title; closed, removed, hidden and title-only subjects are excluded.
+Title-only pages are `noindex`.
+Every returned subject must be readable now. Final current anonymous disclosure overrides candidate and publication
+metadata, including when all non-title evidence has become fenced while candidate metadata is stale. A candidate
+whose listability is uncertain may be temporarily omitted. Select only the current public display-label set with
+its actual language tags. Stored label languages do not set the configured site-locale URL list; the web uses its
+consistent locale fallback and alternate rules. Never fabricate labels.
+
+`lastModified` is separate public publication metadata for a meaningful change to what the anonymous page shows,
+not an editorial revision, latest surviving fact timestamp, private or security activity, processing or rebuild
+time, or compaction time. A shown selected-fact change or removal, restoration, public label change, or source-fence
+or related-label change advances it when the rendered page changes; an unshown proposal does not. For example,
+removing a shown fact at T20 records that public change even if an older fact remains, while a proposal at T30 that
+is not shown does not advance the time. A legacy row with no recoverable original public time omits `lastModified`
+until its next proven meaningful public change. Known times may lag while foreign-change relays catch up. Finite
+relay convergence and the next completed repair pass correct temporary omissions and times; freshness never uses
+processing or rebuild time.
+
+Unknown, hidden, removed and unreadable ids remain indistinguishable 404s. A merged-source API response remains
+308, followed by the web's public 301. See the [publication research](research/subject-sitemap-publication.md) for
+evidence and [sitemap scale research](research/sitemaps-at-scale.md) for export constraints. The semantic feed
+implementation is pending: valid requests currently return `semantic_not_ready` (503), and the stub does not
+verify cursors or establish indexability.
 
 ## Status and change
 
