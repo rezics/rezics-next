@@ -614,23 +614,42 @@ The narrow internal handoff is:
 ```ts
 // identity-maintenance.ts; metadata writer owns implementations and SQL
 export type IdentityMutation = Readonly<{
-  original: string; previous: string | null; target: string | null;
+  original: string;
+  previous: string | null;
+  target: string | null;
 }>;
 export type IdentityObligation = Readonly<{
-  original: string; version: bigint; epoch: number; home: string; target: string | null;
+  original: string;
+  version: bigint;
+  epoch: number;
+  home: string;
+  target: string | null;
 }>;
+export type SealedSubjectIdentity =
+  | { state: 'ready'; terminal: string; home: HomeIdentity }
+  | { state: 'not_ready' }
+  | null;
+export function readSealedSubjectIdentity(client: PoolClient, original: string): Promise<SealedSubjectIdentity>;
 export function readHomeIdentity(client: PoolClient, partition: number): Promise<HomeIdentity>;
-export function readIdentityReadiness(client: PoolClient, mapping: {
-  original: string; target: string | null;
-}): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
+export function readIdentityReadiness(
+  client: PoolClient,
+  mapping: {
+    original: string;
+    target: string | null;
+  },
+): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
 export function recordIdentityMutation(
-  client: PoolClient, mutation: IdentityMutation
+  client: PoolClient,
+  mutation: IdentityMutation,
 ): Promise<IdentityObligation | null>;
-export function advanceIdentityObligation(client: PoolClient, options: {
-  obligation: IdentityObligation;
-  expected: { phase: string; after: readonly string[] };
-  next: { phase: string; after: readonly string[] } | { sealed: true };
-}): Promise<boolean>;
+export function advanceIdentityObligation(
+  client: PoolClient,
+  options: {
+    obligation: IdentityObligation;
+    expected: { phase: string; after: readonly string[] };
+    next: { phase: string; after: readonly string[] } | { sealed: true };
+  },
+): Promise<boolean>;
 ```
 
 All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
@@ -640,6 +659,35 @@ unchanged/replayed mappings return null. It atomically increments the home gener
 means stale work, with no mutation. Existing maintenance supplies durable registration/repoint acknowledgements before a seal;
 `sealed:true` is permitted only after complete inherited coverage, and decrements pending exactly once. These ports
 are for trusted native writers, not caller-supplied positive membership or authorization assertions.
+
+`readSealedSubjectIdentity` is the smallest actor-neutral canonical-repair discovery point in this SAME
+structural metadata producer. Its caller supplies the source-home RR client/transaction. It checks bounded original
+existence, current native redirect, current obligation/version/seal and exact core/home metadata points, with no
+pool checkout, Access preparation/authorization, actor, eligibility or disclosure. Visibility and read denial are
+deliberately ignored at this trusted internal boundary. It reads no type, payload, history, jobs, graph or target;
+it never walks a redirect or repeats the fixed-home digest sweeps per original.
+
+Invalid or missing ORIGINAL returns null before and after the exact point. Null never means hidden or denied and
+never permits substituting self or dropping a stored fact. A live original maps to itself only from its actual
+native live mapping and never-redirected evidence, or a sealed CURRENT removal obligation. A redirect returns its
+maintained target only when the current native mapping matches the current obligation target/version and
+`sealed_version === version`. Missing, mismatched or unsealed evidence returns `{state:'not_ready'}` without a key;
+there is no guessed identity or fallback. The structural producer must preserve current seal coverage through
+inherited repoint and unmerge, including explicitly larger survivors; consumers do not repair by walking targets.
+
+The returned `home` is the SOURCE home's generation/epoch/home/pending observation. It is neither global terminal
+readiness nor an allow: a sealed source-local terminal may since have redirected, disappeared or become denied in
+another home. Canonical repair first obtains the actual ready FULL identity basis, then independently revalidates
+it before publishing index coverage/final handoff and on continuation. Changed or pending global basis invalidates
+canonical coverage; unresolved source/terminal obligations require repair readiness, never a manufactured key.
+Every final positive still needs actual current original, terminal and source Access plus current identity.
+Per-viewer denial cannot change this deterministic metadata or turn it into a cached allow.
+
+`identity-metadata.test.ts` independently accepts this producer before terminal/group exports exist. It covers
+live/hidden/genuinely denied originals, stored originals before filtering, pending registration/repoint, inherited
+larger-survivor coverage, current removal after native unmerge, missing originals and bounded points with no Access
+or payload/type. `growth-terminal-identity.test.ts` also charges a real ready metadata point in its existing
+irrelevant-history sample, with the same scales, warmup and repetitions.
 
 `readIdentityReadiness` checks the exact original's current native mapping and current obligation point, with the
 current core epoch/home observation on the same RR client. A redirect needs matching target and
@@ -652,8 +700,8 @@ Do NOT compare the obligation version to the home's latest generation: another o
 advance that generation. The terminal recheck compares the observed original mapping and home generation; basis
 readiness additionally requires home pending zero. None of these checks reads maintenance jobs, revisions or history.
 
-A redirected original is ready only after its current obligation is sealed and its direct terminal is currently
-live. Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and
+An authorized terminal read is ready only after the original's current obligation is sealed and its direct
+terminal is currently live. The source-local sealed metadata port does not establish that terminal condition. Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and
 acknowledgement transactions must keep that condition truthful through nested merges; a parent cannot acknowledge
 before every inherited member has durable current-terminal coverage. A newly created member derived from an existing
 redirect is covered by that originating obligation, not an independent unchecked inverse authority. Initial rollout
@@ -767,8 +815,8 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 ### Identity terminal, basis and alias windows
 
-- Touches: terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus current home/core and obligation seal points and the original mapping/generation recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
-- Bound: terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Readiness metadata point reads, including absent obligation seeks, are charged in native capture. Maintenance writes one home counter/obligation per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
+- Touches: sealed-subject metadata uses only the supplied source-home RR original-existence/native-mapping/current-obligation/core-home points, with no target or Access read. Terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus current home/core and obligation seal points and the original mapping/generation recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
+- Bound: a sealed-subject metadata point has constant rows/statements independent of alias count, history and population (native point acceptance admits at most 16 examined rows and 12 statements including transaction controls), logarithmic index blocks, and never an 8192-row basis sweep. Terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Readiness metadata point reads, including absent obligation seeks, are charged in native capture. Maintenance writes one home counter/obligation per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
 - Growth check: `test/semantic/growth-terminal-identity.test.ts` owns `terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows`. `test/semantic/growth-identity-contract.test.ts` owns `identity alias steps keep fixed candidate and point budgets as the native group grows` and `terminal identity and alias windows stay bounded as unrelated native population and redirect history grow`. These require a current last-original positive, not a successful null or not_ready result. Functional continuation, terminal authorization and atomicity coverage is split across `identity-contract.test.ts`, `terminal-identity-contract.test.ts` and `identity-generation.test.ts` as named above.
 
 ### Command and receipt

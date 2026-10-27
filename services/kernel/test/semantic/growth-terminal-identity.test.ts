@@ -5,6 +5,8 @@ import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support
 import {
   identityFixture,
   terminalReader,
+  sealedIdentityReader,
+  homeOf,
   basisReader,
   readyBasis,
   readOptions,
@@ -38,6 +40,7 @@ test('terminal identity and fixed-home digest stay bounded as irrelevant editori
   await f.baseline(original);
   const terminal = await terminalReader();
   const basis = await basisReader();
+  const metadata = await sealedIdentityReader();
   const stable = await readyBasis(basis, db.pool);
   let historySubject = '';
   const report = await checkGrowth(db, {
@@ -69,6 +72,19 @@ test('terminal identity and fixed-home digest stay bounded as irrelevant editori
       expect(await readyBasis(basis, db.pool)).toEqual(stable);
       const result = await terminal(db.pool, original, readOptions(f));
       expect(result).toMatchObject({ state: 'ready', id: root });
+      // Charge the producer point alongside the original native sample, never prove cost with null/not_ready.
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        expect(await metadata(client, original)).toMatchObject({
+          state: 'ready',
+          terminal: root,
+          home: { partition: homeOf(original), pending: 0n },
+        });
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
     },
   });
   expect(report.samples).toHaveLength(3);

@@ -35,6 +35,11 @@ export type TerminalIdentity =
   | { state: 'ready'; id: string; components: readonly SubjectComponent[] }
   | { state: 'not_ready' }
   | null;
+export type SealedSubjectIdentity =
+  | { state: 'ready'; terminal: string; home: HomeIdentity }
+  | { state: 'not_ready' }
+  | null;
+export type SealedIdentityReader = (client: PoolClient, original: string) => Promise<SealedSubjectIdentity>;
 export type BasisRead = { state: 'ready'; basis: IdentityBasis } | { state: 'not_ready' };
 export type AliasWindow =
   | { state: 'not_ready' | 'basis_changed' }
@@ -74,6 +79,8 @@ async function requiredExport<T>(module: string, name: string): Promise<T> {
   expect(exported[name], `Missing additive semantic/${module}.${name}; native baseline completed`).toBeFunction();
   return exported[name] as T;
 }
+export const sealedIdentityReader = () =>
+  requiredExport<SealedIdentityReader>('identity-maintenance', 'readSealedSubjectIdentity');
 export const terminalReader = () => requiredExport<TerminalReader>('terminal-identity', 'readTerminalSubjectIdentity');
 export const basisReader = () => requiredExport<BasisReader>('identity-basis', 'readIdentityBasis');
 export const homeReader = () => requiredExport<HomeReader>('identity-basis', 'readIdentityHome');
