@@ -168,7 +168,7 @@ export function CoverCard({
             title={small ? title : undefined}
             onClick={onClick}
             data-slot="cover-card-title"
-            className="relative z-[1] line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere outline-none after:absolute after:inset-0 after:content-['']"
+            className="line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere outline-none after:absolute after:inset-0 after:z-[1] after:content-['']"
           >
             {title}
           </Link>
