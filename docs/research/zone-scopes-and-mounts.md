@@ -71,6 +71,8 @@ Web documentation remains under its publishers' notices; RFC 7516 carries the IE
 ## What the worktree has, and what it does not
 
 The inventory was checked against worktree base `7fe0308d4164e3d9b9ffe37fba1365cab3790ab9`.
+The shared list-cursor module and its tests were subsequently inspected directly and compared with that base;
+both already existed there unchanged. This corrects the earlier inventory's inspection of only the older HMAC cursor.
 
 | Owner and existing surface | Exact capability and limit | Additive seam needed |
 | --- | --- | --- |
@@ -82,11 +84,18 @@ The inventory was checked against worktree base `7fe0308d4164e3d9b9ffe37fba1365c
 | Curated store/index: [`20261025164011_library_collections.sql`](../../services/kernel/db/library/migrations/20261025164011_library_collections.sql); [`20261025170530_library_subject_listing.sql`](../../services/kernel/db/library/migrations/20261025170530_library_subject_listing.sql) | PK `(route, collection_id, member_id)`; unique ordinal index; **existing** `collection_member_subject(route, collection_id, subject_id)` supports a named Collection's subject seek and existence probe. Store `readMember` addresses an occurrence ID, not a subject. Repeated subjects are allowed. | A read-only owner adapter over that existing index, not a new global index. `subject_id > h ORDER BY subject_id LIMIT q` may return repeated IDs; equality existence uses `LIMIT 1`. Neither needs to enumerate all duplicates. |
 | Public Collection listing: same migration; `listSubjectCollections` | `subject_collection` PK `(route, subject_id, collection_id)` and `subject_listing` public counters are subject-anchored public projections; they are not private/current Collection membership. | Do not use these counts or public reverse rows to answer private mount membership. Probe the Collection's own partition. |
 | Dynamic Collections: [`docs/dynamic-collections.md`](../dynamic-collections.md) | Explicitly specification-only here. Built-in Everything/state identities, current-keyset subject order, candidate budget `4P <= 400`, profile pins, and publication/freeze semantics are specified. Curated runtime DTO still has `memberCount` and no dynamic discriminator. | Library supplies both prefix and point adapters for built-ins and retained published generations. Existing curated routes and shelf helpers are not evidence that this seam already runs. User-saved dynamic queries remain later scope. |
-| Shared tokens: [`tokens/cursor.ts`](../../services/kernel/src/tokens/cursor.ts), [`tokens/seal.ts`](../../services/kernel/src/tokens/seal.ts) | Binding, key rotation, eight key components, 4,096-character decoder ceiling, timestamp and 15-minute expiry. `seal` uses base64 JSON plus HMAC: integrity, **not encryption**. Search binds principal/request/generation; curated member binding currently names only the Collection. | Shared owner must supply the confidential cursor capability already required by the dynamic spec, including its anonymous/account policy. Do not reuse the existing signed payload for a rejected/private subject watermark or create a Zone-local codec. |
+| Shared list cursors: [`tokens/list-cursor.ts`](../../services/kernel/src/tokens/list-cursor.ts), `encodeListCursor`, `decodeListCursor` | Existing authenticated AES-GCM encryption, shared key-ring rotation, route/viewer/canonical-query binding, positive integer epoch and at most eight string/integer position keys. Tokens are at most 4,096 characters; route/query are limited to 256/2,048 UTF-8 bytes and each string position key to 256 bytes. Anonymous (`viewer: null`) tokens are deterministic and timeless; account tokens use random salts, carry issuance time and expire after 15 minutes. | Reuse this codec. Integrate the Zone/source/profile/release basis and watermark with its binding/position fields and validate the current basis in the caller. No new codec, cryptography or lifetime-policy owner task is needed. |
+| Older cursor consumers: [`tokens/cursor.ts`](../../services/kernel/src/tokens/cursor.ts), [`tokens/seal.ts`](../../services/kernel/src/tokens/seal.ts) | The older seal is base64 JSON plus HMAC: integrity, **not encryption**. Search binds principal/request/generation; curated member binding currently names only the Collection. These consumers do not establish Zone adapter integration with the encrypted list cursor. | Do not expose their signed raw payloads as a private/rejected subject watermark. Compose the new adapter continuation through the existing encrypted list-cursor API. |
 
-The last two rows are real readiness gaps, not reasons to claim existing runtime support. In particular, the dynamic
-spec's encrypted, timeless anonymous cursor is not supplied by the inspected timestamped HMAC codec. The manager can
-adopt the needed shared seams without this report changing either authority or broadening first-scope saved queries.
+Dynamic membership adapters remain a readiness gap; confidential shared cursor capability already exists.
+[`test/tokens/list-cursor.test.ts`](../../services/kernel/test/tokens/list-cursor.test.ts) covers encrypted position
+round-trips, route/query/viewer mismatches, tampering, size bounds, key rotation/retirement, account expiry, and
+anonymous time-independent deterministic encoding and decoding a year later. It also verifies that HMAC seals and
+encrypted list cursors are not interchangeable. Timeless does not mean valid after key retirement or a caller-detected
+basis change, and deterministic anonymous encoding exposes equality for the same key, binding and position.
+These are codec tests, not evidence that Zone basis validation, current Access or owner adapters already run.
+The manager can adopt the needed integration seams without this report changing either authority or broadening
+first-scope saved queries.
 
 ## Proposed minimum owner adapter contract
 
@@ -198,8 +207,11 @@ this is a mathematical traversal bound, not a promise that a large traversal com
 
 Bind operation/route, Zone identity/incarnation/revision, ordered source-set and admitted scope digest, semantic release,
 query/profile pins, relevant index/projection generations, sort/filter/page size, viewer identity and authorization
-context, watermark, and shared key/expiry policy. Compress the bounded basis vector into a server-verifiable digest;
-do not pack 32 raw owner tokens into the eight-key codec. Check basis again on continuation. A changed meaning or
+context, watermark, and shared key/expiry policy. Use `ListCursorBinding.route`, `.viewer` and the canonical flat
+`.query` map for the route, viewer and bounded query/basis digest; use `ListCursorPosition.epoch` and `.after` for
+the validated epoch and watermark. Compress the bounded basis vector into a server-verifiable digest within the
+query-size bound; do not pack 32 raw owner tokens into the eight-key codec. The codec authenticates these values,
+but does not derive or check current Zone/source meaning. Check basis again on continuation. A changed meaning or
 generation requests restart; ordinary member insertion/removal need not invalidate every cursor. Current account
 state, scope/grant eligibility and each resource's current Access are checked again, regardless of token validity.
 Follow the shared owner's anonymous/account lifetime rules; do not introduce a separate Zone lifetime policy.
@@ -249,10 +261,12 @@ when live membership moves between sources. It is less attractive than subject o
 Copying private memberships into Search, UNION DISTINCT over full owner tables, and LIMIT-after-Access filtering do
 not repair these problems within the declared ownership and work constraints.
 
-The manager can adopt the subject-order prefix algorithm and its conditional proof, then request four minimum seams:
+The manager can adopt the subject-order prefix algorithm and its conditional proof, then request three owner adapters:
 Search raw prefixes under explicit quotas; Semantic bounded current scope/subject points with truthful negatives;
-Library curated and built-in dynamic prefix/point adapters with canonical identity and publication stamps; and shared
-confidential, fully bound cursors. No new index is needed for ordinary curated stored-ID seeks. Dynamic/canonical source
+and Library curated and built-in dynamic prefix/point adapters with canonical identity and publication stamps.
+Zone continuation must integrate those adapters and current basis validation with the existing confidential shared
+`encodeListCursor`/`decodeListCursor` API; no new codec/crypto owner task is required.
+No new index is needed for ordinary curated stored-ID seeks. Dynamic/canonical source
 indexes require their owner's plan evidence. Until these seams exist, the public Search and Collection APIs cannot
 honestly be composed into the stronger bounded canonical union contract. This is a concrete dependency finding,
 not permission to implement a parallel membership authority.
