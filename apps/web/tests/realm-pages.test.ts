@@ -606,8 +606,20 @@ test(
     // Anonymous readers get a sign-in link, no member state and no authorized reads.
     expect(anchors.some((anchor) => anchor.href === '/auth/sign-in?return_to=%2Fen%2Fspaces%2Fatlas')).toBe(true);
     expect(body).not.toContain('data-member-state');
-    // The shell's own template read is not the page's.
-    const reads = calls.filter((call) => call.path !== '/v1/pages:read' && !call.path.startsWith('/v1/subjects/'));
+    // A cold render reads each definitions resource at most once, independent of the number of subjects.
+    expect(
+      Math.max(
+        calls.filter((call) => call.path === '/v1/definitions/active').length,
+        calls.filter((call) => call.path.startsWith('/v1/definitions/releases/')).length,
+      ),
+    ).toBeLessThanOrEqual(1);
+    // The shell's template read and cached definitions reads are outside the page's community reads.
+    const reads = calls.filter(
+      (call) =>
+        call.path !== '/v1/pages:read' &&
+        !call.path.startsWith('/v1/subjects/') &&
+        !call.path.startsWith('/v1/definitions/'),
+    );
     expect(reads.every((call) => call.method === 'GET' && call.authorization === null)).toBe(true);
     expect(reads.map((call) => call.path).sort()).toEqual(
       [
