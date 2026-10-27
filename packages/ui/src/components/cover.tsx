@@ -14,6 +14,7 @@ import {
   coverWidths,
   intrinsicSize,
   objectPosition,
+  parseCoverRatio,
   placeholderColors,
   ratioValue,
   thumbhashImage,
@@ -80,7 +81,7 @@ export function Cover({
   className,
 }: CoverProps) {
   const text = { ...coverLabels, ...labels };
-  const frameRatio = ratio ?? coverRatio(subject.types);
+  const frameRatio = (ratio === undefined ? undefined : parseCoverRatio(ratio)) ?? coverRatio(subject.types);
   const image = cover && cover.variants.length > 0 ? cover : null;
   const [status, setStatus] = useState<Status | null>(null);
   const [backdrop, setBackdrop] = useState<{ media: string; src: string } | null>(null);
