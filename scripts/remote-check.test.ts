@@ -654,15 +654,21 @@ test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', asyn
   expect(result.code).not.toBe(0);
   const seen = events();
   expect(seen.some((event) => event.kind === 'docker')).toBe(true);
-  expect(seen.filter((event) => event.kind !== 'docker')).toEqual([]);
+  // An unset name falls back to the shared hosts file. Those hosts do not answer this fake ssh, so the check still
+  // runs locally; the probes are the only remote traffic.
+  expect(seen.filter((event) => event.kind !== 'docker' && event.kind !== 'probe')).toEqual([]);
 
-  // An unreadable hosts file, or a check already running on a host, does not hand off either.
+  // An unreadable hosts file does not fall back and does not hand off.
   const missing = scenario({ a: { available: 4e9 } });
   await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
+  expect(missing.events().some((event) => event.kind === 'docker')).toBe(true);
+  expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
+
+  // KERNEL_CHECK_ON_REMOTE does not mean this process is on a check host. The shared decision still places the run.
   const onRemote = scenario({ a: { available: 4e9 } });
-  await kernelCheck({ ...onRemote.env, KERNEL_CHECK_ON_REMOTE: '1' });
-  for (const other of [missing, onRemote]) {
-    expect(other.events().some((event) => event.kind === 'docker')).toBe(true);
-    expect(other.events().filter((event) => event.kind !== 'docker')).toEqual([]);
-  }
+  const placed = await kernelCheck({ ...onRemote.env, KERNEL_CHECK_ON_REMOTE: '1' });
+  expect(placed.code).toBe(0);
+  expect(placed.stderr).toContain('stack-run: kernel check on a');
+  expect(onRemote.events().some((event) => event.kind === 'docker')).toBe(false);
+  expect(onRemote.events().some((event) => event.kind === 'run')).toBe(true);
 });

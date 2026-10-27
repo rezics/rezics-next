@@ -26,8 +26,9 @@ function environment(capacity = 1): Record<string, string> {
   };
   delete env.REZICS_STACK_SLOT;
   delete env.REZICS_STACK_LEASE;
-  // These runs test the local lease, so the entries must not hand them to a check host.
-  delete env.KERNEL_CHECK_REMOTE;
+  // These runs test the local lease. An empty KERNEL_CHECK_REMOTE falls back to the shared hosts file, so a missing
+  // file is what keeps them here.
+  env.KERNEL_CHECK_REMOTE = join(directory, 'no-such-hosts.json');
   return env as Record<string, string>;
 }
 

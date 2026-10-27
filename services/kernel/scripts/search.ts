@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const imageDirectory = resolve(directory, 'db/search/opensearch');
@@ -117,6 +118,8 @@ function containerExists(): boolean {
 }
 
 async function up(): Promise<void> {
+  const refusal = await workerLocalContainerError(process.env, process.cwd());
+  if (refusal) throw new Error(refusal);
   const image = buildSearchImage();
   if (containerExists()) {
     const existingImage = docker(['inspect', '-f', '{{.Config.Image}}', container]);

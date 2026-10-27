@@ -88,7 +88,7 @@ function hostInvocation(args: string[]): string[] | null {
 
 if (includesSpecs(testFileFilters(testArguments()))) {
   // The preload cannot move its own process, so it re-runs the whole invocation on a host and exits with its code. A
-  // run on a host never gets here: KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE=off keep it local.
+  // run whose working directory is under the check host's run root stays here.
   const args = testArguments();
   const forHost = hostInvocation(args);
   const code = await runOnCheckHost({

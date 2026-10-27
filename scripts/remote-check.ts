@@ -35,7 +35,7 @@ export type RemoteCheck = {
 /** What a try-once run reports: no host had a free slot, or the command ran there and exited with this code. */
 export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; code: number };
 
-const ROOT = '/srv/rezics-check';
+export const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 
@@ -398,6 +398,11 @@ async function rankedHosts(hosts: Host[], signal: AbortSignal): Promise<Host[]> 
     .map((entry) => entry.host);
 }
 
+/** One probe round. A host that does not answer is absent; the rest are most available memory first. */
+export async function answeringHosts(hosts: Host[]): Promise<Host[]> {
+  return rankedHosts(hosts, new AbortController().signal);
+}
+
 /** Tries every host's slots once, most available memory first, and never waits for one. */
 async function acquireOnce(hosts: Host[], slots: number, signal: AbortSignal): Promise<Lease | null> {
   for (const host of await rankedHosts(hosts, signal)) {
@@ -417,8 +422,15 @@ async function acquireOnce(hosts: Host[], slots: number, signal: AbortSignal): P
   return null;
 }
 
-async function acquire(hosts: Host[], slots: number, pollMs: number, signal: AbortSignal): Promise<Lease> {
+async function acquire(
+  hosts: Host[],
+  slots: number,
+  pollMs: number,
+  signal: AbortSignal,
+  giveUpIfUnanswered = false,
+): Promise<Lease | null> {
   let announced = false;
+  let answered = false;
   const announceWait = (): void => {
     if (announced) return;
     console.error('remote-check: every check slot is busy; waiting for a free one');
@@ -430,6 +442,8 @@ async function acquire(hosts: Host[], slots: number, pollMs: number, signal: Abo
     const ranked = memory
       .filter((entry): entry is { host: Host; available: number } => entry.available !== null)
       .sort((left, right) => right.available - left.available);
+    if (ranked.length > 0) answered = true;
+    else if (giveUpIfUnanswered && !answered) return null;
     for (const { host } of ranked) {
       if (slots === 1) {
         const lease = await takeSlot(host, false, signal);
@@ -544,6 +558,22 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
   const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal);
+  if (!lease) throw new Error('remote-check: no check host answered');
+  return await runLeased(lease, options, files, slotWaitStarted, signal);
+}
+
+/**
+ * Like `remoteCheck`, but the first probe round that finds no host returns null instead of waiting. Once a host has
+ * answered, a later silence keeps waiting for a slot. A run no host has enough slots for is still an error.
+ */
+export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number | null> {
+  const slots = options.slots ?? 1;
+  const hosts = hostsWithSlots(options, slots);
+  if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
+  const files = workspaceFiles(options.workspace);
+  const slotWaitStarted = performance.now();
+  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal, true);
+  if (!lease) return null;
   return await runLeased(lease, options, files, slotWaitStarted, signal);
 }
 

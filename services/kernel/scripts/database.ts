@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
@@ -192,6 +193,8 @@ function docker(args: string[]): string {
 }
 
 async function up(): Promise<void> {
+  const refusal = await workerLocalContainerError(process.env, process.cwd());
+  if (refusal) throw new Error(refusal);
   const existing = docker(['ps', '-aq', '--filter', `name=^${container}$`]).trim();
   if (existing) {
     const running = docker(['inspect', '-f', '{{.State.Running}}', container]).trim();

@@ -1,10 +1,22 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
+import { runOnCheckHost } from './stack-run.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
+const databaseScript = join(repository, 'services/kernel/scripts/database.ts');
+const searchScript = join(repository, 'services/kernel/scripts/search.ts');
 
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
 // there and what was released, without a network.
@@ -131,8 +143,21 @@ appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
 }) + '\\n');
 `;
 
+const fakeDocker = `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({ kind: 'docker', args: process.argv.slice(2) }) + '\\n');
+process.exit(99);
+`;
+
 type Event = { kind: string; address?: string; [key: string]: unknown };
-type HostConfig = { available?: number; busy?: number; grantOnly?: number; slots?: number; exit?: number };
+type HostConfig = {
+  available?: number;
+  busy?: number;
+  grantOnly?: number;
+  slots?: number;
+  exit?: number;
+  down?: boolean;
+};
 
 let root: string;
 let counter = 0;
@@ -144,6 +169,7 @@ beforeAll(() => {
   for (const [name, source] of [
     ['ssh', fakeSsh],
     ['rsync', fakeRsync],
+    ['docker', fakeDocker],
   ] as const) {
     const file = join(root, 'bin', name);
     writeFileSync(file, source);
@@ -179,7 +205,13 @@ function scenario(hosts: Record<string, HostConfig>): {
     }),
   );
   const env = { ...process.env } as Record<string, string>;
-  for (const name of ['KERNEL_CHECK_ON_REMOTE', 'REZICS_STACK_LEASE', 'REZICS_STACK_SLOT', 'REZICS_STACK_REMOTE']) {
+  for (const name of [
+    'KERNEL_CHECK_ON_REMOTE',
+    'REZICS_STACK_LEASE',
+    'REZICS_STACK_SLOT',
+    'REZICS_STACK_REMOTE',
+    'GOAL_TASK_ID',
+  ]) {
     delete env[name];
   }
   return {
@@ -221,8 +253,8 @@ async function stack(
   environment: Record<string, string>,
   command: string[],
   options: string[] = [],
+  directory = workspace(),
 ): Promise<{ code: number; stdout: string; stderr: string; directory: string }> {
-  const directory = workspace();
   const child = Bun.spawn(
     ['bun', stackRun, ...options, 'the run', directory, join(directory, 'src'), '--', ...command],
     {
@@ -264,47 +296,28 @@ test("a stack run goes to a free check host and returns the command's exit code"
   expect(existsSync(lease)).toBe(false);
 }, 30_000);
 
-test('a stack run takes the local stack slot when every check host slot is busy, without waiting for a host', async () => {
-  const busy = scenario({ a: { available: 4e9, busy: 1000 }, b: { available: 30e9, busy: 1000 } });
-  const first = await stack(busy.env, local);
+test('a stack run runs locally when no check host answers, and when no host has enough slots', async () => {
+  const down = scenario({ a: { down: true }, b: { down: true } });
+  const first = await stack(down.env, local);
 
   expect(first.code).toBe(3);
-  expect(first.stderr).toContain('stack-run: the run local, every check host slot busy');
-  expect(first.stderr).toMatch(/stack-lease: the run slot 1\/1 after \d+ ms/);
+  expect(first.stderr).toContain('stack-run: the run local, no check host answered');
+  expect(first.stderr).not.toContain('waiting');
   expect(first.stdout).toContain('local slot=1/1');
-  const seen = busy.events();
-  // Each host's slot was tried once, nothing was synced or run, and nothing polled again.
-  expect(seen.filter((event) => event.kind === 'slot').map((event) => [event.address, event.granted])).toEqual(
-    expect.arrayContaining([
-      ['ops@a.test', false],
-      ['ops@b.test', false],
-    ]),
-  );
-  expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(2);
-  expect(seen.filter((event) => event.kind === 'rsync' || event.kind === 'run')).toEqual([]);
-
-  // A run of two slots on hosts that can only grant one is also local, and the first slot goes back.
-  const partial = scenario({ a: { available: 4e9, grantOnly: 1 } });
-  const second = await stack(partial.env, local, ['--slots', '2']);
-  expect(second.code).toBe(3);
-  expect(second.stderr).toContain('stack-run: the run local, every check host slot busy');
-  const kinds = partial.events().map((event) => event.kind);
-  expect(kinds).toContain('reservation-release');
-  expect(kinds).toContain('release');
-  expect(kinds).not.toContain('run');
+  const seen = down.events();
+  expect(seen.filter((event) => event.kind === 'probe')).toHaveLength(2);
+  expect(seen.filter((event) => event.kind === 'slot' || event.kind === 'rsync' || event.kind === 'run')).toEqual([]);
 
   // No host has two slots, so the run never asks one.
   const small = scenario({ a: { available: 4e9, slots: 1 } });
   const third = await stack(small.env, local, ['--slots', '2']);
   expect(third.code).toBe(3);
-  expect(third.stderr).toContain('every check host slot busy');
+  expect(third.stderr).toContain('No check host has 2 slots');
   expect(small.events().filter((event) => event.kind === 'slot')).toEqual([]);
 }, 30_000);
 
 test('a stack run that is already on a check host, or that writes files the caller keeps, runs locally', async () => {
   const cases: [string, Record<string, string>, string[], string][] = [
-    ['on a check host', { KERNEL_CHECK_ON_REMOTE: '1' }, [], 'already on a check host'],
-    ['lease off', { REZICS_STACK_LEASE: 'off' }, [], 'already on a check host'],
     ['inside a slot', { REZICS_STACK_SLOT: '2/4' }, [], 'already inside a stack slot'],
     ['keeps files', {}, ['--keeps-files'], 'the run keeps files it writes'],
     ['forced local', { REZICS_STACK_REMOTE: 'off' }, [], 'REZICS_STACK_REMOTE=off'],
@@ -317,6 +330,31 @@ test('a stack run that is already on a check host, or that writes files the call
     expect(events(), name).toEqual([]);
   }
 
+  // The working directory under the remote run root is what counts, not an environment variable.
+  const onHost = scenario({ a: { available: 4e9, exit: 7 } });
+  const directory = workspace();
+  const lines: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args.map(String).join(' '));
+  };
+  try {
+    const code = await runOnCheckHost(
+      {
+        label: 'the run',
+        root: directory,
+        cwd: '/srv/rezics-check/runs/example/src',
+        command: local,
+      },
+      onHost.env,
+    );
+    expect(code).toBeNull();
+  } finally {
+    console.error = original;
+  }
+  expect(lines.join('\n')).toContain('stack-run: the run local, already on a check host');
+  expect(onHost.events()).toEqual([]);
+
   // Without a hosts file, or with an unreadable one, the run is local as before and holds the local slot.
   const none = scenario({ a: { available: 4e9 } });
   const unset = await stack({ ...none.env, KERNEL_CHECK_REMOTE: '' }, local);
@@ -327,4 +365,127 @@ test('a stack run that is already on a check host, or that writes files the call
   expect(missing.code).toBe(3);
   expect(missing.stderr).toContain('is not readable');
   expect(none.events()).toEqual([]);
+}, 30_000);
+
+test("a worker's stack run waits for a check host slot instead of running locally", async () => {
+  const { env, events } = scenario({ a: { available: 4e9, busy: 2 }, b: { available: 30e9, busy: 2, exit: 9 } });
+  const result = await stack({ ...env, GOAL_TASK_ID: 'worker' }, local);
+
+  expect(result.code).toBe(9);
+  expect(result.stderr).toContain('waiting');
+  expect(result.stderr).toContain('stack-run: the run on b');
+  expect(result.stdout).not.toContain('local slot');
+  const seen = events();
+  expect(seen.filter((event) => event.kind === 'slot' && event.granted === false).length).toBeGreaterThan(0);
+  expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(seen.filter((event) => event.kind === 'probe').length).toBeGreaterThan(2);
+}, 30_000);
+
+test("environment variables cannot make a worker's run count as on a check host", async () => {
+  const extras: Record<string, string>[] = [
+    { KERNEL_CHECK_ON_REMOTE: '1' },
+    { REZICS_STACK_LEASE: 'off' },
+    {
+      KERNEL_CHECK_ON_REMOTE: '1',
+      REZICS_STACK_LEASE: 'off',
+      REZICS_STACK_REMOTE: 'off',
+      REZICS_STACK_SLOT: '1/1',
+    },
+  ];
+  for (const extra of extras) {
+    const { env, events } = scenario({ a: { available: 30e9, exit: 4 } });
+    const name = JSON.stringify(extra);
+    const result = await stack({ ...env, GOAL_TASK_ID: 'worker', ...extra }, local);
+    expect(result.code, name).toBe(4);
+    expect(result.stderr, name).toContain('stack-run: the run on a');
+    expect(result.stderr, name).not.toContain('already on a check host');
+    expect(result.stderr, name).not.toContain('REZICS_STACK_REMOTE=off');
+    expect(result.stderr, name).not.toContain('already inside a stack slot');
+    expect(result.stdout, name).not.toContain('local slot');
+    expect(
+      events().some((event) => event.kind === 'run'),
+      name,
+    ).toBe(true);
+  }
+}, 30_000);
+
+test('an empty or missing KERNEL_CHECK_REMOTE falls back to the shared hosts file', async () => {
+  for (const clear of ['empty', 'missing'] as const) {
+    const { env, events } = scenario({ a: { available: 30e9, exit: 5 } });
+    const directory = workspace();
+    mkdirSync(join(directory, '.temp/goal'), { recursive: true });
+    copyFileSync(env.KERNEL_CHECK_REMOTE!, join(directory, '.temp/goal/remote-check-hosts.json'));
+    const environment = { ...env };
+    if (clear === 'empty') environment.KERNEL_CHECK_REMOTE = '';
+    else delete environment.KERNEL_CHECK_REMOTE;
+    const result = await stack(environment, local, [], directory);
+    expect(result.code, clear).toBe(5);
+    expect(result.stderr, clear).toContain('stack-run: the run on a');
+    expect(
+      events().some((event) => event.kind === 'probe'),
+      clear,
+    ).toBe(true);
+    expect(
+      events().some((event) => event.kind === 'run'),
+      clear,
+    ).toBe(true);
+  }
+}, 30_000);
+
+test('a worker cannot start a local stack container while a check host is reachable', async () => {
+  const reachable = scenario({ a: { available: 30e9 } });
+  const worker = { ...reachable.env, GOAL_TASK_ID: 'worker' };
+  for (const script of [databaseScript, searchScript]) {
+    const child = Bun.spawn(['bun', script, 'up'], {
+      cwd: join(repository, 'services/kernel'),
+      env: worker,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(code, script).not.toBe(0);
+    expect(stderr, script).toContain('bun run --cwd services/kernel check <files>');
+    expect(stderr, script).toContain('bun run --cwd services/auth check <files>');
+    expect(stderr, script).toContain('root `bun test`');
+  }
+  expect(reachable.events().filter((event) => event.kind === 'docker')).toEqual([]);
+  expect(reachable.events().some((event) => event.kind === 'probe')).toBe(true);
+
+  const ask = async (environment: Record<string, string>, cwd: string): Promise<string | null> => {
+    const child = Bun.spawn(
+      [
+        'bun',
+        '-e',
+        'import { workerLocalContainerError } from "./scripts/stack-run.ts"; const reason = await workerLocalContainerError(process.env, process.env.PROBE_CWD ?? ""); console.log(JSON.stringify(reason));',
+      ],
+      {
+        cwd: repository,
+        env: { ...environment, PROBE_CWD: cwd },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, stderr).toBe(0);
+    return JSON.parse(stdout) as string | null;
+  };
+
+  const down = scenario({ a: { down: true } });
+  expect(await ask({ ...down.env, GOAL_TASK_ID: 'worker' }, join(repository, 'services/kernel'))).toBeNull();
+
+  const person = scenario({ a: { available: 30e9 } });
+  expect(await ask(person.env, join(repository, 'services/kernel'))).toBeNull();
+  expect(person.events().filter((event) => event.kind === 'probe')).toEqual([]);
+
+  const hosted = scenario({ a: { available: 30e9 } });
+  expect(
+    await ask({ ...hosted.env, GOAL_TASK_ID: 'worker' }, '/srv/rezics-check/runs/example/services/kernel'),
+  ).toBeNull();
+  expect(hosted.events().filter((event) => event.kind === 'probe')).toEqual([]);
 }, 30_000);

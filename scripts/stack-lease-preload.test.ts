@@ -36,8 +36,9 @@ function startRootTest(area: 'specs' | 'scripts'): { run: Run; directory: string
   };
   delete env.REZICS_STACK_SLOT;
   delete env.REZICS_STACK_LEASE;
-  // The fixture reads the slot of this machine's lease, so it must not be handed to a check host.
-  delete env.KERNEL_CHECK_REMOTE;
+  // The fixture reads the slot of this machine's lease. An empty KERNEL_CHECK_REMOTE falls back to the shared hosts
+  // file, so a missing file is what keeps the fixture here.
+  env.KERNEL_CHECK_REMOTE = join(directory, 'no-such-hosts.json');
   const child = Bun.spawn([process.execPath, 'test', fixture], {
     cwd: repository,
     env,

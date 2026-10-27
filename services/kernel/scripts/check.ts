@@ -1,7 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import {
-  accessSync,
-  constants,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -25,6 +23,7 @@ import {
   type FileRunner,
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
+import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
 
@@ -404,43 +403,31 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-let remoteRun: ReturnType<typeof Bun.spawn> | undefined;
+let placing = false;
 
-/** The hosts file when this check should run on a development host: named, readable and not already on one. */
-function remoteHostsFile(): string | null {
-  const file = process.env.KERNEL_CHECK_REMOTE;
-  if (!file || process.env.KERNEL_CHECK_ON_REMOTE) return null;
-  try {
-    accessSync(file, constants.R_OK);
-    return file;
-  } catch {
-    process.stderr.write(`KERNEL_CHECK_REMOTE ${file} is not readable; running the check locally\n`);
-    return null;
-  }
-}
-
-/** The plan was computed here, where Git history is; the host runs exactly its files. */
-async function runRemotely(plan: CheckPlan): Promise<void> {
-  const root = resolve(directory, '../..');
-  const forwarded = process.env.KERNEL_CHECK_CONCURRENCY
-    ? ['env', `KERNEL_CHECK_CONCURRENCY=${process.env.KERNEL_CHECK_CONCURRENCY}`]
+/**
+ * Hands the planned files to the shared placement decision. The plan was computed here, where Git history is; the host
+ * runs exactly those files. An affected selection of no tests stays here: an empty file list would be read as the
+ * whole suite. Returns the remote exit code, or null when the check runs in this process.
+ */
+export async function placeKernelCheck(
+  plan: CheckPlan,
+  env: NodeJS.ProcessEnv = process.env,
+  locations: { root: string; cwd: string } = { root: resolve(directory, '../..'), cwd: directory },
+): Promise<number | null> {
+  if (plan.files?.length === 0) return null;
+  const forwarded = env.KERNEL_CHECK_CONCURRENCY
+    ? ['env', `KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`]
     : [];
-  remoteRun = Bun.spawn(
-    [
-      process.execPath,
-      resolve(root, 'scripts/remote-check.ts'),
-      '--cwd',
-      relative(root, directory),
-      root,
-      '--',
-      ...forwarded,
-      'bun',
-      'scripts/check.ts',
-      ...(plan.files ?? []),
-    ],
-    { cwd: root, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
+  return runOnCheckHost(
+    {
+      label: 'kernel check',
+      root: locations.root,
+      cwd: locations.cwd,
+      command: [...forwarded, 'bun', 'scripts/check.ts', ...(plan.files ?? [])],
+    },
+    env,
   );
-  process.exitCode = await remoteRun.exited;
 }
 
 async function main(): Promise<void> {
@@ -449,8 +436,17 @@ async function main(): Promise<void> {
   const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrationFiles, new Date());
 
-  // An affected selection of no tests stays here: the remote check reads an empty file list as the whole suite.
-  if (remoteHostsFile() && plan.files?.length !== 0) return await runRemotely(plan);
+  placing = true;
+  let placed: number | null;
+  try {
+    placed = await placeKernelCheck(plan);
+  } finally {
+    placing = false;
+  }
+  if (placed !== null) {
+    process.exitCode = placed;
+    return;
+  }
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
@@ -548,14 +544,15 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  // A run handed to a host must clean up there; the hand-off removes its run directory and releases its slot on a signal.
+  // While the shared placement has the run, it forwards the signal and releases the host slot. A local run removes
+  // the containers this process started.
   process.on('SIGINT', () => {
-    if (remoteRun) return void remoteRun.kill('SIGINT');
+    if (placing) return;
     cleanup();
     process.exit(130);
   });
   process.on('SIGTERM', () => {
-    if (remoteRun) return void remoteRun.kill('SIGTERM');
+    if (placing) return;
     cleanup();
     process.exit(143);
   });
