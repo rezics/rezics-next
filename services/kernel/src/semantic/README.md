@@ -453,20 +453,29 @@ The last type is imported type-only from `subject.ts`; implementation must not i
 ```ts
 // terminal-identity.ts
 export type IdentityReadOptions = Readonly<{
-  access: Access; actor: Actor; deadline: number; nativeT?: AuthoritativeTime;
+  access: Access;
+  actor: Actor;
+  deadline: number;
+  nativeT?: AuthoritativeTime;
 }>;
 export type TerminalIdentity =
   | { state: 'ready'; id: string; components: readonly SubjectComponent[] }
   | { state: 'not_ready' }
   | null;
 export function readTerminalSubjectIdentity(
-  pool: Pool, id: string, options: IdentityReadOptions
+  pool: Pool,
+  id: string,
+  options: IdentityReadOptions,
 ): Promise<TerminalIdentity>;
 
 // identity-basis.ts: internal metadata, never an Access or browser API
 export type IdentityBasis = Readonly<{ digest: string }>;
 export type HomeIdentity = Readonly<{
-  partition: number; epoch: number; home: string; generation: bigint; pending: bigint;
+  partition: number;
+  epoch: number;
+  home: string;
+  generation: bigint;
+  pending: bigint;
 }>;
 export type BasisRead = { state: 'ready'; basis: IdentityBasis } | { state: 'not_ready' };
 export function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
@@ -476,13 +485,23 @@ export function readIdentityBasis(pool: Pool, options: { deadline: number }): Pr
 export type AliasWindow =
   | { state: 'not_ready' | 'basis_changed' }
   | {
-      state: 'ready'; originals: readonly string[]; after: string | null;
-      exhausted: boolean; examined: number; points: number;
+      state: 'ready';
+      originals: readonly string[];
+      after: string | null;
+      exhausted: boolean;
+      examined: number;
+      points: number;
     };
-export function readSubjectAliasGroup(pool: Pool, options: {
-  terminal: string; basis: IdentityBasis; after: string | null;
-  limit: number; deadline: number;
-}): Promise<AliasWindow>;
+export function readSubjectAliasGroup(
+  pool: Pool,
+  options: {
+    terminal: string;
+    basis: IdentityBasis;
+    after: string | null;
+    limit: number;
+    deadline: number;
+  },
+): Promise<AliasWindow>;
 ```
 
 `readIdentityHome` reads one home on the supplied client, including a command transaction. `home` is the current
@@ -571,6 +590,45 @@ No synchronous cross-home transaction or new scheduler is introduced; existing d
 Requested survivors need not decrease in UUID order. Existing register/repoint retry branches must consult actual
 current native redirects rather than treating lexical target order as a concurrency or convergence proof.
 
+#### Atomic structural identity event and Search coverage handoff
+
+`semantic/events.ts` exports `SUBJECT_IDENTITY_CHANGED` with the fully qualified value
+`com.rezics.subject.identity.changed.v1`. The producer registers its closed schema in the same implementation
+change before emitting it. Data contains ONLY `{generation: string}`, matching `/^(0|[1-9][0-9]*)$/`.
+The value is the ACTUAL `recordIdentityMutation` returned obligation's `version.toString()`, never a Number,
+subject revision, live ordinary partition head, new global clock or guessed latest home generation.
+The envelope `subject` is the actual changed ORIGINAL in its OWN home. Core envelope epoch/position supplies the
+committed structural catch-up fence; no new native read API, signature or position field is added.
+
+Every actual redirect insertion, removal and repoint, including inherited aliases, appends this event in the SAME
+native command transaction as the mapping, generation and pending obligation mutation. The audited SQL writers
+are exactly `merges-insert-redirect.sql`, `merge-moves-insert-redirect.sql` and
+`account-agent-delete-redirect.sql`. Ordinary merge, trusted verification, verification reversal and inherited
+member repoint all participate. In particular, repoint's existing `links.projected` event without a subject anchor
+cannot substitute for original-anchored structural invalidation. Rollback, unchanged mapping/no-op maintenance and
+authorized receipt replay emit NO NEW identity event. Existing semantic events retain their meanings; an inherited
+member receives no fake identity/create revision. The metadata/hooks producer alone owns production SQL, hook,
+event export and schema changes; this specification adds no implementation or catalogue registration.
+
+`identity-events.test.ts` is an independent native acceptance file. After legal native setup it dynamically checks
+the export and registered closed schema, then covers merge, verification/removal, inherited explicitly larger
+survivor repoint, actual obligation version, original/home anchoring, command/outbox fence and transaction
+provenance, unchanged inherited revisions, rollback, no-op and receipt replay. It does not seed raw outbox rows.
+
+A native ready structural basis is NOT Search public-index canonical coverage. Search alone owns its bounded
+per-home coverage/attempt/lineage rows (at most 4096 * 3), keyed to the actual physical index incarnation and
+source-home structural tuple. Its proof uses the actual consumer checkpoint, CAPTURED structural catch-up fence
+and current canonical work. Catch-up position is proof only, never the identity digest's meaning. Ordinary
+visibility/index lag does not change structural basis: prepare must not demand current `behind=0` every time.
+A raw prefix containing a subsequently hidden original under an UNCHANGED structural basis must remain possible,
+with current native disclosure checks deciding its use.
+
+Unknown late sink writes cannot be certified by a lease timeout/expiry or an invented ready callback. A native
+read helper returning ready is not a Source index proof. Search's owning README and native tests specify its
+consumer enrollment/drain and lineage implementation; this shared handoff does not duplicate its storage.
+The event adds no permission/holder engine and changes none of the terminal, basis, group or sealed-metadata
+signatures. Coverage is independently revalidated before publication/final handoff and on continuation.
+
 #### Same-home metadata ownership and internal ports
 
 The structural-store/hooks implementation owns `identity-maintenance.ts` and ALL new metadata-table SQL and
@@ -596,29 +654,42 @@ The narrow internal handoff is:
 ```ts
 // identity-maintenance.ts; metadata writer owns implementations and SQL
 export type IdentityMutation = Readonly<{
-  original: string; previous: string | null; target: string | null;
+  original: string;
+  previous: string | null;
+  target: string | null;
 }>;
 export type IdentityObligation = Readonly<{
-  original: string; version: bigint; epoch: number; home: string; target: string | null;
+  original: string;
+  version: bigint;
+  epoch: number;
+  home: string;
+  target: string | null;
 }>;
 export type SealedSubjectIdentity =
   | { state: 'ready'; terminal: string; home: HomeIdentity }
-  | { state: 'not_ready' } | null;
-export function readSealedSubjectIdentity(
-  client: PoolClient, original: string
-): Promise<SealedSubjectIdentity>;
+  | { state: 'not_ready' }
+  | null;
+export function readSealedSubjectIdentity(client: PoolClient, original: string): Promise<SealedSubjectIdentity>;
 export function readHomeIdentity(client: PoolClient, partition: number): Promise<HomeIdentity>;
-export function readIdentityReadiness(client: PoolClient, mapping: {
-  original: string; target: string | null;
-}): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
+export function readIdentityReadiness(
+  client: PoolClient,
+  mapping: {
+    original: string;
+    target: string | null;
+  },
+): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
 export function recordIdentityMutation(
-  client: PoolClient, mutation: IdentityMutation
+  client: PoolClient,
+  mutation: IdentityMutation,
 ): Promise<IdentityObligation | null>;
-export function advanceIdentityObligation(client: PoolClient, options: {
-  obligation: IdentityObligation;
-  expected: { phase: string; after: readonly string[] };
-  next: { phase: string; after: readonly string[] } | { sealed: true };
-}): Promise<boolean>;
+export function advanceIdentityObligation(
+  client: PoolClient,
+  options: {
+    obligation: IdentityObligation;
+    expected: { phase: string; after: readonly string[] };
+    next: { phase: string; after: readonly string[] } | { sealed: true };
+  },
+): Promise<boolean>;
 ```
 
 All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
@@ -786,7 +857,7 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 ### Identity terminal, basis and alias windows
 
 - Touches: sealed-subject metadata uses only the supplied source-home RR original-existence/native-mapping/current-obligation/core-home points, with no target or Access read. Terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus current home/core and obligation seal points and the original mapping/generation recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
-- Bound: a sealed-subject metadata point has constant rows/statements independent of alias count, history and population (native point acceptance admits at most 16 examined rows and 12 statements including transaction controls), logarithmic index blocks, and never an 8192-row basis sweep. Terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Readiness metadata point reads, including absent obligation seeks, are charged in native capture. Maintenance writes one home counter/obligation per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
+- Bound: a sealed-subject metadata point has constant rows/statements independent of alias count, history and population (native point acceptance admits at most 16 examined rows and 12 statements including transaction controls), logarithmic index blocks, and never an 8192-row basis sweep. Terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Readiness metadata point reads, including absent obligation seeks, are charged in native capture. Maintenance writes one home counter/obligation and one closed original-anchored outbox event per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
 - Growth check: `test/semantic/growth-terminal-identity.test.ts` owns `terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows`. `test/semantic/growth-identity-contract.test.ts` owns `identity alias steps keep fixed candidate and point budgets as the native group grows` and `terminal identity and alias windows stay bounded as unrelated native population and redirect history grow`. These require a current last-original positive, not a successful null or not_ready result. Functional continuation, terminal authorization and atomicity coverage is split across `identity-contract.test.ts`, `terminal-identity-contract.test.ts` and `identity-generation.test.ts` as named above.
 
 ### Command and receipt
