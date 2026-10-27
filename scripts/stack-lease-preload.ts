@@ -1,5 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
+import { runOnCheckHost, testKeepsFiles } from './stack-run.ts';
+
+const root = resolve(import.meta.dir, '..');
 
 const requiredValueOptions = new Set([
   '--timeout',
@@ -64,7 +68,37 @@ function includesSpecs(filters: string[]): boolean {
   return filters.some((filter) => /(?:^|[/\\])specs(?:[/\\]|$)/.test(filter));
 }
 
+/**
+ * The invocation as a host runs it: file arguments inside the checkout become relative to the working directory, and
+ * null when one lies outside it, where a host has no such file.
+ */
+function hostInvocation(args: string[]): string[] | null {
+  const rewritten: string[] = [];
+  for (const argument of args) {
+    if (!isAbsolute(argument)) {
+      rewritten.push(argument);
+      continue;
+    }
+    const inside = relative(root, argument);
+    if (inside === '..' || inside.startsWith('../') || isAbsolute(inside)) return null;
+    rewritten.push(relative(process.cwd(), argument));
+  }
+  return rewritten;
+}
+
 if (includesSpecs(testFileFilters(testArguments()))) {
+  // The preload cannot move its own process, so it re-runs the whole invocation on a host and exits with its code. A
+  // run on a host never gets here: KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE=off keep it local.
+  const args = testArguments();
+  const forHost = hostInvocation(args);
+  const code = await runOnCheckHost({
+    label: 'root bun test',
+    root,
+    cwd: process.cwd(),
+    command: ['bun', 'test', ...(forHost ?? [])],
+    keepsFiles: forHost === null || testKeepsFiles(args),
+  });
+  if (code !== null) process.exit(code);
   const slot = await acquireStackSlot('root bun test');
   if (slot.env.REZICS_STACK_SLOT !== undefined) {
     process.env.REZICS_STACK_SLOT = slot.env.REZICS_STACK_SLOT;

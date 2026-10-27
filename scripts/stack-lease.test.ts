@@ -26,6 +26,8 @@ function environment(capacity = 1): Record<string, string> {
   };
   delete env.REZICS_STACK_SLOT;
   delete env.REZICS_STACK_LEASE;
+  // These runs test the local lease, so the entries must not hand them to a check host.
+  delete env.KERNEL_CHECK_REMOTE;
   return env as Record<string, string>;
 }
 

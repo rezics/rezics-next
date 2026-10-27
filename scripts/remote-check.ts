@@ -28,13 +28,18 @@ export type RemoteCheck = {
   command: string[];
   slots?: number;
   pollMs?: number;
+  /** Called with the host's name once its slot is held and the command is about to start. */
+  started?: (host: string) => void;
 };
+
+/** What a try-once run reports: no host had a free slot, or the command ran there and exited with this code. */
+export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; code: number };
 
 const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 
-class Aborted extends Error {}
+export class Aborted extends Error {}
 
 export function readHosts(file: string): Host[] {
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as { hosts?: unknown };
@@ -85,11 +90,11 @@ function probeScript(host: Host): string {
 }
 
 /** Holds a host's exclusive reservation while a multi-slot run collects its slots. */
-function reservationScript(): string {
+function reservationScript(wait = true): string {
   return `# REMOTE_CHECK_RESERVATION
 mkdir -p ${ROOT}/slots ${ROOT}/runs
 exec 8>"${ROOT}/slots/reserve.lock"
-flock 8
+${wait ? 'flock 8' : `flock -n 8 || exit ${SLOT_BUSY}`}
 echo RESERVATION
 exec cat >/dev/null`;
 }
@@ -226,7 +231,7 @@ async function availableMemory(host: Host): Promise<number | null> {
   return code === 0 && match ? Number(match[1]) : null;
 }
 
-function sessionLease(host: Host, holder: ReturnType<typeof Bun.spawn>): SessionLease {
+function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore'>): SessionLease {
   let ended = false;
   let released = false;
   const exited = holder.exited.then((code) => {
@@ -327,18 +332,21 @@ async function takeSlot(
   return takeSession(host, slotScript(host, reserved), /^SLOT \d+$/m, signal, reservation);
 }
 
-async function takeReservation(host: Host, signal: AbortSignal): Promise<SessionLease | null> {
-  return takeSession(host, reservationScript(), /^RESERVATION$/m, signal);
+async function takeReservation(host: Host, signal: AbortSignal, wait = true): Promise<SessionLease | null> {
+  return takeSession(host, reservationScript(wait), /^RESERVATION$/m, signal);
 }
 
-/** Keeps every slot it gets while exclusively reserving the host for this multi-slot acquisition. */
+/**
+ * Keeps every slot it gets while exclusively reserving the host for this multi-slot acquisition. Without
+ * `announceWait` it does not wait: one busy slot releases what it holds and returns null.
+ */
 async function takeReservedSlots(
   host: Host,
   count: number,
   pollMs: number,
   signal: AbortSignal,
   reservation: SessionLease,
-  announceWait: () => void,
+  announceWait?: () => void,
 ): Promise<Lease | null> {
   const held: Lease[] = [];
   const releaseAll = async (): Promise<void> => {
@@ -362,6 +370,11 @@ async function takeReservedSlots(
         await reservation.release();
         return null;
       }
+      if (!announceWait) {
+        await releaseAll();
+        await reservation.release();
+        return null;
+      }
       announceWait();
       await sleep(pollMs, signal);
     }
@@ -373,6 +386,35 @@ async function takeReservedSlots(
     await reservation.release();
     throw error;
   }
+}
+
+/** Hosts that answered a probe, the one with the most available memory first. */
+async function rankedHosts(hosts: Host[], signal: AbortSignal): Promise<Host[]> {
+  const memory = await Promise.all(hosts.map(async (host) => ({ host, available: await availableMemory(host) })));
+  if (signal.aborted) throw new Aborted();
+  return memory
+    .filter((entry): entry is { host: Host; available: number } => entry.available !== null)
+    .sort((left, right) => right.available - left.available)
+    .map((entry) => entry.host);
+}
+
+/** Tries every host's slots once, most available memory first, and never waits for one. */
+async function acquireOnce(hosts: Host[], slots: number, signal: AbortSignal): Promise<Lease | null> {
+  for (const host of await rankedHosts(hosts, signal)) {
+    let lease: Lease | null;
+    if (slots === 1) lease = await takeSlot(host, false, signal);
+    else {
+      const reservation = await takeReservation(host, signal, false);
+      if (!reservation) continue;
+      lease = await takeReservedSlots(host, slots, 0, signal, reservation);
+    }
+    if (lease && signal.aborted) {
+      await lease.release();
+      throw new Aborted();
+    }
+    if (lease) return lease;
+  }
+  return null;
 }
 
 async function acquire(hosts: Host[], slots: number, pollMs: number, signal: AbortSignal): Promise<Lease> {
@@ -427,14 +469,14 @@ function reportDuration(phase: string, started: number, host: string): void {
   console.error(`remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}`);
 }
 
-export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
-  const slots = options.slots ?? 1;
-  // A host with fewer slots than the run needs can never serve it, so it is not asked and not waited for.
-  const hosts = options.hosts.filter((host) => host.slots >= slots);
-  if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
-  const files = workspaceFiles(options.workspace);
-  const slotWaitStarted = performance.now();
-  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal);
+/** Runs the command on the lease's host and always removes the run's directory and releases the lease. */
+async function runLeased(
+  lease: Lease,
+  options: RemoteCheck,
+  files: string[],
+  slotWaitStarted: number,
+  signal: AbortSignal,
+): Promise<number> {
   const { host } = lease;
   reportDuration('slot wait', slotWaitStarted, host.name);
   const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -461,6 +503,7 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
     if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
 
     console.error(`remote-check: running on ${host.name}`);
+    options.started?.(host.name);
     const run = Bun.spawn(
       [
         'ssh',
@@ -487,6 +530,40 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
     }
     await lease.release();
   }
+}
+
+/** Hosts with enough slots for the run; a host with fewer can never serve it, so it is not asked and not waited for. */
+function hostsWithSlots(options: RemoteCheck, slots: number): Host[] {
+  return options.hosts.filter((host) => host.slots >= slots);
+}
+
+export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
+  const slots = options.slots ?? 1;
+  const hosts = hostsWithSlots(options, slots);
+  if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
+  const files = workspaceFiles(options.workspace);
+  const slotWaitStarted = performance.now();
+  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal);
+  return await runLeased(lease, options, files, slotWaitStarted, signal);
+}
+
+/**
+ * Like `remoteCheck`, but each host's slot is tried once and a busy host is not waited for. The result says whether
+ * the command ran, so a caller never reads "no slot" as an exit code. A run no host has enough slots for is "no-slot".
+ */
+export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
+  const slots = options.slots ?? 1;
+  const hosts = hostsWithSlots(options, slots);
+  if (hosts.length === 0) return { status: 'no-slot' };
+  const files = workspaceFiles(options.workspace);
+  const slotWaitStarted = performance.now();
+  const lease = await acquireOnce(hosts, slots, signal);
+  if (!lease) return { status: 'no-slot' };
+  return {
+    status: 'ran',
+    host: lease.host.name,
+    code: await runLeased(lease, options, files, slotWaitStarted, signal),
+  };
 }
 
 function parse(argv: string[]): RemoteCheck {

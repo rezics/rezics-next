@@ -58,7 +58,8 @@ test(
       // Stop after the real dump so this child check cannot recursively run this test suite.
       const result = Bun.spawnSync([process.execPath, 'scripts/check.ts'], {
         cwd: directory,
-        env: { ...process.env, AUTH_DUMP_TRACE_STOP: '1' },
+        // The check must run here, where docker is traced, and without queueing for a local slot.
+        env: { ...process.env, AUTH_DUMP_TRACE_STOP: '1', REZICS_STACK_LEASE: 'off' },
         timeout: 30_000,
       });
       expect(result.exitCode).toBe(1);
