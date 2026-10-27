@@ -1284,7 +1284,8 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         const principal = actor.requestedBy ? /^urn:rezics:request:([^:]+):/.exec(actor.requestedBy)?.[1] : undefined;
         if (actor.requestedBy && !principal) throw new Error('Auth returned a malformed assignment reference');
         const who = fact === 'principal-grant' ? (principal ?? actor.accountId) : actor.accountId;
-        const identity = required(registrations.get(who), `Missing native grant holder session for ${who}`);
+        const issuer = principal ?? actor.accountId;
+        const identity = required(registrations.get(issuer), `Missing native grant issuer session for ${issuer}`);
         const session = await login(identity.email, f.identity.clientId);
         const grantActor = await required(accessPort, 'Access is not composed').authenticate(session.bearer, context());
         const target =
