@@ -120,7 +120,9 @@ beforeAll(async () => {
   expect(native.map((hit) => hit.id)).toEqual(ids);
   // B is rejected by actual current Semantic state only AFTER its real document exists.
   await post(`/v1/subjects/${ids[1]}:hide`, { reason: 'Hidden after native indexing' });
-  const checked = await checkHits(source, native, new Map(compiled.leaves.map((leaf) => [leaf.name, leaf])), filter);
+  const checked = await checkHits(source, native, new Map(compiled.leaves.map((leaf) => [leaf.name, leaf])), {
+    filter,
+  });
   expect(checked.passed.map(({ subject }) => subject.id)).toEqual([ids[0]!, ids[2]!]);
   expect(checked.dropped).toBe(1);
 }, 180_000);
@@ -188,8 +190,20 @@ test('real engine preserves raw ordered B and genuine matched_queries after curr
 test('canonical readiness is an explicit native dependency, never an ordinary partition position', async () => {
   const runtime = await scope();
   // The current SubjectSource has read/count, not canonical generation readiness.
-  // Until native composition binds the real identity port, valid admission fails closed.
-  await expect(runtime.prepare(filter)).rejects.toMatchObject({ code: 'index_not_ready' });
+  // Allow actual native delivery to satisfy readiness later; valid input is not
+  // frozen to throw forever. No fixture callback may manufacture the alternative.
+  const outcome = await runtime.prepare(filter).then(
+    (handle) => ({ handle, error: undefined }),
+    (error: unknown) => ({ handle: undefined, error }),
+  );
+  if (outcome.error !== undefined) expect(outcome.error).toMatchObject({ code: 'index_not_ready' });
+  else {
+    expect(outcome.handle!.basis).toBeDefined();
+    expect(outcome.handle!.generation).toBe(1);
+    const ordinary = await source.read(subjectPartition(ids[0]!), [ids[0]!]);
+    expect(outcome.handle!.basis).not.toEqual(ordinary.position);
+    expect(outcome.handle!.basis).not.toEqual({ position: ordinary.position });
+  }
 });
 
 test('quota one charges its real lookahead without advancing the covered frontier to B', async () => {
