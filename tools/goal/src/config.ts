@@ -334,7 +334,17 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     mainBranch: settings.mainBranch,
     integrationBranch: settings.integrationBranch,
     formatCommand: settings.formatCommand,
-    integrationChecks: (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [],
+    integrationChecks: () => {
+      const configured = (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [];
+      // The local file is read for every landing, so checks can be switched off or on without restarting the train.
+      try {
+        const file = join(settings.stateDirectory, 'local.json');
+        const local = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { integrationChecks?: unknown }) : {};
+        return local.integrationChecks === undefined ? readIntegrationChecks() : readIntegrationChecks(local.integrationChecks);
+      } catch {
+        return configured;
+      }
+    },
     queue,
     fence: store,
     sink: job,
