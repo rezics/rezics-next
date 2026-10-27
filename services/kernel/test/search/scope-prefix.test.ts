@@ -175,6 +175,27 @@ function assertPage(
   if (!page.exhausted && page.hits.length === 0) expect(page.coveredThrough).not.toBeNull();
 }
 
+function observedTransport() {
+  const raw: string[][] = [];
+  const transport: OpenSearch = {
+    bulk: client.bulk.bind(client),
+    async request<T>(
+      method: Parameters<OpenSearch['request']>[0],
+      path: string,
+      body?: unknown,
+      options?: Parameters<OpenSearch['request']>[3],
+    ) {
+      const response = await client.request<T>(method, path, body, options);
+      if (path.includes('/_search')) {
+        const actual = response.body as { hits: { hits: { _id: string }[] } };
+        raw.push(actual.hits.hits.map((hit) => hit._id));
+      }
+      return response;
+    },
+  };
+  return { transport, raw };
+}
+
 test('real engine preserves raw ordered B and genuine matched_queries after current rejection', async () => {
   const current = await searchSubjects(client, prefix, {
     filter: compileFilter(admitFilter(filter, (await activeRelease(pool))!.release), { prefix: 'f' }).query,
@@ -207,8 +228,11 @@ test('canonical readiness is an explicit native dependency, never an ordinary pa
 });
 
 test('real raw prefix covers rejected and lookahead candidates with pinned generation and truthful exhaustion and failures', async () => {
-  const { runtime, handle } = await prepared();
+  const observed = observedTransport();
+  const { runtime, handle } = await prepared(prefix, observed.transport);
+  observed.raw.length = 0;
   assertPage(await runtime.prefix(handle, { quota: 1, budget: 2 }), native.slice(0, 1), ids[0]!, false, 2);
+  expect(observed.raw).toEqual([[ids[0]!, ids[1]!]]);
 });
 
 test('rejected raw prefix is returned without disclosure refill, then eligible C follows it', async () => {
@@ -236,8 +260,10 @@ test('duplicates from bounded reread are charged again, including rejected and l
 });
 
 test('caller aggregate 256 reserves every source dispatch and rejects insufficient quota+1', async () => {
-  const one = await prepared();
-  const two = await prepared();
+  const observed = observedTransport();
+  const one = await prepared(prefix, observed.transport);
+  const two = await prepared(prefix, observed.transport);
+  observed.raw.length = 0;
   let remaining = 256;
   // Repeated raw candidates are deliberately not deduplicated by the caller.
   for (let n = 0; n < 127; n++) {
@@ -254,10 +280,15 @@ test('caller aggregate 256 reserves every source dispatch and rejects insufficie
   const last = await one.runtime.prefix(one.handle, { quota: 1, budget: remaining });
   remaining -= last.usage.candidates;
   expect(remaining).toBe(0);
+  expect(observed.raw).toHaveLength(128);
+  expect(observed.raw.every((keys) => keys.length === 2)).toBe(true);
+  expect(observed.raw.flat()).toHaveLength(256);
+  const dispatched = observed.raw.length;
   await expect(two.runtime.prefix(two.handle, { quota: 1, budget: remaining })).rejects.toThrow();
   await expect(two.runtime.prefix(two.handle, { quota: 1, budget: 1 })).rejects.toThrow();
   await expect(two.runtime.prefix(two.handle, { quota: 101, budget: 256 })).rejects.toThrow();
   await expect(two.runtime.prefix(two.handle, { quota: 1, budget: 257 })).rejects.toThrow();
+  expect(observed.raw).toHaveLength(dispatched);
 });
 
 test('empty raw range is true exhaustion with no successful unchanged nonexhaustion', async () => {
