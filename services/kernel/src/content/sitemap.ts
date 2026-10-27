@@ -3,7 +3,7 @@ import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { indexedReadAccess, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import { readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { isErasedPlaceholder, type ReadContext } from './model.ts';
 import { discloseThreads, type ThreadView } from './reads.ts';
 import newestThreads from './sitemap-board-newest.sql';
@@ -164,7 +164,6 @@ async function listSitemap(
   if (!Number.isInteger(limit) || limit < 1 || limit > SITEMAP_MAX_LIMIT)
     throw new RangeError(`Page limit must be 1 to ${SITEMAP_MAX_LIMIT}`);
   let position = decodePosition(dependencies, feed, input.cursor);
-  const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
   const reader: ReadContext = { actor: { kind: 'anonymous' }, deadline };
   const items: (SitemapBoard | SitemapThread)[] = [];
   let budget = limit * CANDIDATES_PER_ITEM;
@@ -185,7 +184,7 @@ async function listSitemap(
       position = { boardId: rows[0]!.board_id, scanning: true, thread: null };
     }
     const boardId: string = position.boardId;
-    const board = await readRealmBoard(readDependencies, boardId, reader);
+    const board = await readRealmBoard(dependencies, boardId, reader);
     if (!board.value) {
       position = { boardId, scanning: false, thread: null };
       continue;
@@ -206,7 +205,7 @@ async function listSitemap(
       );
       budget -= rows.length;
       const disclosed = await discloseThreads(
-        readDependencies,
+        dependencies,
         rows.map((row) => row.thread_id),
         reader,
       );

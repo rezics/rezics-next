@@ -7,6 +7,7 @@ import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
@@ -20,6 +21,22 @@ const sourceRoute = 0x1248;
 const boardRoute = 0x2468;
 const createdType = 'com.rezics.content.thread.created.v1';
 const replyType = 'com.rezics.content.post.created.v1';
+const growingRelations = new Set([
+  'access.account',
+  'access.membership_inverse',
+  'access.resource_grant',
+  'access.resource_role_grant',
+  'community.realm_member',
+  'community.space',
+  'community.space_revision',
+  'community.realm',
+  'community.realm_revision',
+  'content.board',
+  'content.board_thread',
+  'content.thread',
+  'content.post',
+  'content.revision',
+]);
 
 type ListedThread = {
   id: string;
@@ -328,106 +345,206 @@ test.serial(
       hotShare: 1,
       rows: ({ ordinal, route }) => {
         const otherBoardId = newId(boardRoute);
-        const slots = [
-          { boardId, slot: 0 },
-          { boardId: otherBoardId, slot: 1 },
-        ];
-        const threads = [];
-        const posts = [];
-        const revisions = [];
-        const boardThreads = [];
-        const boards = [
-          {
-            route: boardRoute,
-            board_id: otherBoardId,
-            subject_id: newId(boardRoute),
-            title: 'Other hot board',
-            visibility: 'published',
-            security_revision: 1,
-            recorded_transaction_id: randomUUID(),
-            created_at: at,
-            realm_id: null,
-          },
-        ];
-        for (const slot of slots) {
-          const threadId = newId(route);
-          const postId = newId(route);
-          const revisionId = newId(route);
-          const transactionId = randomUUID();
-          threads.push({
-            route,
-            thread_id: threadId,
-            author_account_id: authorId,
-            board_id: slot.boardId,
-            title: 'Hot growth thread',
-            visibility: 'published',
-            security_revision: 1,
-            recorded_transaction_id: transactionId,
-            created_at: at,
-            first_post_id: postId,
-            availability: 'available',
-          });
-          posts.push({
-            route,
-            thread_id: threadId,
-            post_id: postId,
-            reply_to_post_id: null,
-            author_account_id: authorId,
-            head_revision_id: revisionId,
-            visibility: 'published',
-            security_revision: 1,
-            recorded_transaction_id: transactionId,
-            created_at: at,
-            availability: 'available',
-          });
-          revisions.push({
-            route,
-            thread_id: threadId,
-            post_id: postId,
-            revision_id: revisionId,
-            body,
-            body_sha256: bodyHash,
-            search_text: 'A fixed hot page body',
-            licence: 'MIT',
-            subject_ids: [],
-            board_id: slot.boardId,
-            availability: 'available',
-            recorded_transaction_id: transactionId,
-            recorded_at: at,
-            media_ids: [],
-          });
-          boardThreads.push({
-            route: boardRoute,
-            board_id: slot.boardId,
-            thread_id: threadId,
-            created_at: at,
-            last_activity_at: at,
-            score: 0,
-            active_rank: 0,
-            hot_rank: 0,
-            rank_refreshed_at: at,
-            source_epoch: 1,
-            source_position: ordinal * 2 + slot.slot + 1,
-            source_revision_id: revisionId,
-          });
-        }
+        const subjectId = newId(boardRoute);
+        const accountId = newId(boardRoute);
+        const spaceId = newId(boardRoute);
+        const spaceRevisionId = newId(boardRoute);
+        const realmId = newId(boardRoute);
+        const realmRevisionId = newId(boardRoute);
+        const threadId = newId(route);
+        const postId = newId(route);
+        const revisionId = newId(route);
+        const reservationId = newId(boardRoute);
+        const transactionId = randomUUID();
         return {
-          'content.board': boards,
-          'content.thread': threads,
-          'content.post': posts,
-          'content.revision': revisions,
-          'content.board_thread': boardThreads,
+          'access.account': [
+            { route: boardRoute, account_id: accountId, kind: 'actor', state: 'active', transaction_id: transactionId },
+          ],
+          'access.membership_inverse': [
+            {
+              route: boardRoute,
+              account_id: accountId,
+              kind: 'realm',
+              group_id: realmId,
+              reservation_id: reservationId,
+              transaction_id: transactionId,
+            },
+          ],
+          'access.resource_grant': [
+            {
+              route: boardRoute,
+              resource_id: otherBoardId,
+              subject_id: accountId,
+              subject_role: '',
+              action: 'board:read',
+              valid: '(,)',
+              transaction_id: transactionId,
+            },
+          ],
+          'access.resource_role_grant': [
+            {
+              route: boardRoute,
+              resource_id: realmId,
+              subject_kind: 'identity',
+              subject_id: accountId,
+              subject_role: '',
+              grant_role: 'community.realm.member',
+              valid: '(,)',
+              transaction_id: transactionId,
+            },
+          ],
+          'community.realm_member': [
+            {
+              route: boardRoute,
+              realm_id: realmId,
+              account_id: accountId,
+              role: 'member',
+              valid: '(,)',
+              reservation_id: reservationId,
+              transaction_id: transactionId,
+            },
+          ],
+          'community.space': [
+            {
+              route: boardRoute,
+              space_id: spaceId,
+              state: 'active',
+              head_revision_id: spaceRevisionId,
+              created_at: at,
+              creator: accountId,
+            },
+          ],
+          'community.space_revision': [
+            {
+              route: boardRoute,
+              space_id: spaceId,
+              revision_id: spaceRevisionId,
+              predecessor: null,
+              title: 'Other hot growth Realm host',
+              summary: '',
+              created_at: at,
+              author: accountId,
+            },
+          ],
+          'community.realm': [
+            {
+              route: boardRoute,
+              realm_id: realmId,
+              space_id: spaceId,
+              state: 'active',
+              visibility: 'public',
+              context_id: GLOBAL_CONTEXT,
+              head_revision_id: realmRevisionId,
+              created_at: at,
+              creator: accountId,
+            },
+          ],
+          'community.realm_revision': [
+            {
+              route: boardRoute,
+              realm_id: realmId,
+              revision_id: realmRevisionId,
+              predecessor: null,
+              title: 'Other hot growth Realm',
+              summary: '',
+              visibility: 'public',
+              context_id: GLOBAL_CONTEXT,
+              created_at: at,
+              author: accountId,
+            },
+          ],
+          'content.board': [
+            {
+              route: boardRoute,
+              board_id: otherBoardId,
+              realm_id: realmId,
+              subject_id: subjectId,
+              title: 'Other hot board',
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              created_at: at,
+            },
+          ],
+          'content.thread': [
+            {
+              route,
+              thread_id: threadId,
+              author_account_id: authorId,
+              board_id: otherBoardId,
+              title: 'Hot growth thread',
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              created_at: at,
+              first_post_id: postId,
+              availability: 'available',
+            },
+          ],
+          'content.post': [
+            {
+              route,
+              thread_id: threadId,
+              post_id: postId,
+              reply_to_post_id: null,
+              author_account_id: authorId,
+              head_revision_id: revisionId,
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              created_at: at,
+              availability: 'available',
+            },
+          ],
+          'content.revision': [
+            {
+              route,
+              thread_id: threadId,
+              post_id: postId,
+              revision_id: revisionId,
+              body,
+              body_sha256: bodyHash,
+              search_text: 'A fixed hot page body',
+              licence: 'MIT',
+              subject_ids: [],
+              board_id: otherBoardId,
+              availability: 'available',
+              recorded_transaction_id: transactionId,
+              recorded_at: at,
+              media_ids: [],
+            },
+          ],
+          'content.board_thread': [
+            {
+              route: boardRoute,
+              board_id: otherBoardId,
+              thread_id: threadId,
+              created_at: at,
+              last_activity_at: at,
+              score: 0,
+              active_rank: 0,
+              hot_rank: 0,
+              rank_refreshed_at: at,
+              source_epoch: 1,
+              source_position: ordinal + 1,
+              source_revision_id: revisionId,
+            },
+          ],
         };
       },
     };
-    const scales = [256, 1024, 4096] as const;
+    const scales = [8, 32, 128] as const;
+    // Grow grants, memberships, Realms, boards, and threads on other resources at 500 × scale; keep the requested board and page fixed.
     const report = await checkGrowth(db, {
       name: 'Hot board page',
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,
       grow: async (growthDb, scale, previous) => {
-        await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale });
+        await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+          from: 500 * previous,
+          to: 500 * scale,
+        });
       },
       operation: async () => {
         const page = await get(listing(boardId, { sort: 'hot', limit: '1' }));
@@ -444,6 +561,8 @@ test.serial(
       const boardThread = Object.entries(cost.relations ?? {}).filter(([name]) => name.endsWith('board_thread'));
       expect(boardThread).toHaveLength(1);
       expect(boardThread[0]?.[1].sequentialScans).toBe(0);
+      for (const [name, relation] of Object.entries(cost.relations ?? {}))
+        if (growingRelations.has(name)) expect(relation.sequentialScans).toBe(0);
     }
   },
   300_000,

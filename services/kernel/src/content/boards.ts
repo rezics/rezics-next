@@ -1,6 +1,5 @@
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { deriveAccess } from '../access/derived-access.ts';
-import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
+import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -74,11 +73,6 @@ type HotRankCandidatePage = {
   position: bigint;
 };
 
-/** Realm and board reads run inside read-only snapshots. Prefer their indexed
- * grant lookups even when a small grant table would make a sequential scan
- * look cheaper to the planner. */
-const indexedAccesses = new WeakSet<Access>();
-
 async function pageHotBoardCandidates(
   pool: ContentBoardDependencies['pool'],
   boardId: string,
@@ -138,18 +132,6 @@ async function pageHotBoardCandidates(
   });
 }
 
-export function indexedReadAccess(access: Access): Access {
-  if (indexedAccesses.has(access)) return access;
-  const indexed = deriveAccess(access, {
-    async authorize(client, actor, action, resource, evidence, time) {
-      await client.query('SET LOCAL enable_seqscan = off');
-      return access.authorize(client, actor, action, resource, evidence, time);
-    },
-  });
-  indexedAccesses.add(indexed);
-  return indexed;
-}
-
 async function prepareRealmRead(
   dependencies: ContentBoardDependencies,
   actor: Actor,
@@ -175,14 +157,12 @@ export async function readRealmBoard(
   boardId: string,
   context: ReadContext,
 ): Promise<Anchored<BoardView | null>> {
-  const access = indexedReadAccess(dependencies.access);
-  const readDependencies = { ...dependencies, access };
-  const board = await readBoard(readDependencies, boardId, context);
+  const board = await readBoard(dependencies, boardId, context);
   if (!board.value) return board;
   const realmId = board.value.realmId;
   if (realmId === null) return board;
 
-  const check = await prepareRealmRead(readDependencies, context.actor, realmId, context.deadline);
+  const check = await prepareRealmRead(dependencies, context.actor, realmId, context.deadline);
   if (!check) return { ...board, value: null };
   const visible = await withConnection(dependencies.pool, async (connection) => {
     const client = deadlineClient(connection, context.deadline);
@@ -215,8 +195,7 @@ export async function listRealmBoards(
   const limit = input.limit ?? 20;
   if (realmRoute === null) throw new ContentNotFoundError();
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
-  const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
-  const check = await prepareRealmRead(readDependencies, context.actor, realmId, context.deadline);
+  const check = await prepareRealmRead(dependencies, context.actor, realmId, context.deadline);
   if (!check) throw new ContentNotFoundError();
 
   const now = (dependencies.cursorNow ?? Date.now)();
@@ -278,7 +257,7 @@ export async function listRealmBoards(
     if (items.length >= limit) break;
     after = candidate;
     scanned++;
-    const visible = await readRealmBoard(readDependencies, candidate, context);
+    const visible = await readRealmBoard(dependencies, candidate, context);
     anchors.push(visible.anchor);
     if (visible.value) items.push(visible.value);
   }
@@ -353,8 +332,7 @@ export async function listBoardThreads(
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
   if (sort !== 'newest' && sort !== 'oldest' && sort !== 'active' && sort !== 'hot')
     throw new TypeError('Invalid content cursor');
-  const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
-  const board = await readBoard(readDependencies, boardId, context);
+  const board = await readBoard(dependencies, boardId, context);
   if (!board.value) throw new ContentNotFoundError();
   const binding: BoardCursorBinding = {
     boardId,
@@ -439,7 +417,7 @@ export async function listBoardThreads(
   while (scanned < candidates.length && entries.length <= limit) {
     const batch = candidates.slice(scanned, scanned + Math.max(1, limit + 1 - entries.length));
     const disclosed = await discloseThreads(
-      readDependencies,
+      dependencies,
       batch.map((candidate) => candidate.id),
       context,
     );
@@ -466,7 +444,7 @@ export async function listBoardThreads(
   // Revalidate after query snapshots, keeping current fields and refusing a
   // changed revision whose text was never matched. The reader groups partitions.
   const final = await discloseThreads(
-    readDependencies,
+    dependencies,
     entries.map((thread) => thread.id),
     context,
   );
@@ -489,7 +467,7 @@ export async function listBoardThreads(
     currentPositions.push(entryPositions[index]!);
   }
   const pageEntries = current.slice(0, limit);
-  const parent = await readRealmBoard(readDependencies, boardId, context);
+  const parent = await readRealmBoard(dependencies, boardId, context);
   if (!parent.value) throw new ContentNotFoundError();
   if (parent.anchor.epoch !== board.anchor.epoch) throw new TypeError('Invalid content cursor');
   anchors.push(parent.anchor);

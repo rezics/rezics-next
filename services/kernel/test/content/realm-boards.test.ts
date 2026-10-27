@@ -40,6 +40,22 @@ const accountRoute = 0x3456;
 const provisioned = new Set<string>();
 const growthBody = Buffer.from(serializeDocument(fromPlainText('Fixed protected Realm read growth body')));
 const growthBodySha256 = createHash('sha256').update(growthBody).digest();
+const growingRelations = new Set([
+  'access.account',
+  'access.membership_inverse',
+  'access.resource_grant',
+  'access.resource_role_grant',
+  'community.realm_member',
+  'community.space',
+  'community.space_revision',
+  'community.realm',
+  'community.realm_revision',
+  'content.board',
+  'content.board_thread',
+  'content.thread',
+  'content.post',
+  'content.revision',
+]);
 
 let db: GrowthDatabase;
 let authPool: Pool;
@@ -275,6 +291,72 @@ async function startMembershipWorker() {
     KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
     KERNEL_SESSION_KEYS: `1:${Buffer.from(tokens.keys.get(1)!).toString('base64url')}`,
   });
+}
+
+function relationPlanNodes(value: unknown, relation: string): Record<string, unknown>[] {
+  if (typeof value !== 'object' || value === null) return [];
+  if (Array.isArray(value)) return value.flatMap((entry) => relationPlanNodes(entry, relation));
+  const record = value as Record<string, unknown>;
+  const matches = record['Relation Name'] === relation ? [record] : [];
+  return matches.concat(...Object.values(record).map((entry) => relationPlanNodes(entry, relation)));
+}
+
+function accessGrowthRows(input: {
+  route: number;
+  accountId: string;
+  resourceId: string;
+  realmId: string;
+  reservationId: string;
+  transactionId: string;
+}) {
+  const { route, accountId, resourceId, realmId, reservationId, transactionId } = input;
+  return {
+    'access.account': [{ route, account_id: accountId, kind: 'actor', state: 'active', transaction_id: transactionId }],
+    'access.membership_inverse': [
+      {
+        route,
+        account_id: accountId,
+        kind: 'realm',
+        group_id: realmId,
+        reservation_id: reservationId,
+        transaction_id: transactionId,
+      },
+    ],
+    'access.resource_grant': [
+      {
+        route,
+        resource_id: resourceId,
+        subject_id: accountId,
+        subject_role: '',
+        action: 'board:read',
+        valid: '(,)',
+        transaction_id: transactionId,
+      },
+    ],
+    'access.resource_role_grant': [
+      {
+        route,
+        resource_id: realmId,
+        subject_kind: 'identity',
+        subject_id: accountId,
+        subject_role: '',
+        grant_role: 'community.realm.member',
+        valid: '(,)',
+        transaction_id: transactionId,
+      },
+    ],
+    'community.realm_member': [
+      {
+        route,
+        realm_id: realmId,
+        account_id: accountId,
+        role: 'member',
+        valid: '(,)',
+        reservation_id: reservationId,
+        transaction_id: transactionId,
+      },
+    ],
+  };
 }
 
 beforeAll(async () => {
@@ -557,20 +639,84 @@ test.serial('a settled protected Realm member reads its boards, threads and post
     hotShare: 1,
     rows({ route }) {
       const unrelatedBoardId = newId(route);
+      const unrelatedRealmId = newId(route);
+      const spaceId = newId(route);
+      const spaceRevisionId = newId(route);
+      const realmRevisionId = newId(route);
+      const accountId = newId(route);
       const unrelatedThreadId = newId(route);
       const unrelatedPostId = newId(route);
       const unrelatedRevisionId = newId(route);
       const transactionId = newId(route);
       return {
+        ...accessGrowthRows({
+          route,
+          accountId,
+          resourceId: unrelatedBoardId,
+          realmId: unrelatedRealmId,
+          reservationId: newId(route),
+          transactionId,
+        }),
+        'community.space': [
+          {
+            route,
+            space_id: spaceId,
+            state: 'active',
+            head_revision_id: spaceRevisionId,
+            created_at: new Date('2020-06-01T00:00:00Z'),
+            creator: accountId,
+          },
+        ],
+        'community.space_revision': [
+          {
+            route,
+            space_id: spaceId,
+            revision_id: spaceRevisionId,
+            predecessor: null,
+            title: 'Unrelated protected-read growth host',
+            summary: '',
+            created_at: new Date('2020-06-01T00:00:00Z'),
+            author: accountId,
+          },
+        ],
+        'community.realm': [
+          {
+            route,
+            realm_id: unrelatedRealmId,
+            space_id: spaceId,
+            state: 'active',
+            visibility: 'public',
+            context_id: GLOBAL_CONTEXT,
+            head_revision_id: realmRevisionId,
+            created_at: new Date('2020-06-01T00:00:00Z'),
+            creator: accountId,
+          },
+        ],
+        'community.realm_revision': [
+          {
+            route,
+            realm_id: unrelatedRealmId,
+            revision_id: realmRevisionId,
+            predecessor: null,
+            title: 'Unrelated protected-read growth Realm',
+            summary: '',
+            visibility: 'public',
+            context_id: GLOBAL_CONTEXT,
+            created_at: new Date('2020-06-01T00:00:00Z'),
+            author: accountId,
+          },
+        ],
         'content.board': [
           {
             route,
             board_id: unrelatedBoardId,
+            realm_id: unrelatedRealmId,
             subject_id: newId(route),
             title: 'Unrelated protected-read growth board',
             visibility: 'published',
             security_revision: 1,
             recorded_transaction_id: transactionId,
+            created_at: new Date('2020-06-01T00:00:00Z'),
           },
         ],
         'content.thread': [
@@ -623,13 +769,17 @@ test.serial('a settled protected Realm member reads its boards, threads and post
       };
     },
   };
+  // Growth model: grow grants, memberships, other Realms and their boards, and threads on other boards at 500 × scale; keep the protected Realm, board, and read fixed.
   const report = await checkGrowth(db, {
     name: 'Protected Realm member thread read',
-    scales: [256, 1024, 4096],
+    scales: [8, 32, 128],
     repetitions: 3,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(database, scale, previous) {
-      await seed({ pool: database.pool, admin: database.admin }, readPopulation, { from: previous, to: scale });
+      await seed({ pool: database.pool, admin: database.admin }, readPopulation, {
+        from: 500 * previous,
+        to: 500 * scale,
+      });
     },
     async operation() {
       const result = await call('GET', `/v1/threads/${threadId}`, { bearer: protectedMember.bearer });
@@ -637,8 +787,12 @@ test.serial('a settled protected Realm member reads its boards, threads and post
       return result;
     },
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
-  for (const { cost } of report.samples) expect(cost.statements).toBeLessThanOrEqual(4096);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([8, 32, 128]);
+  for (const { cost } of report.samples) {
+    expect(cost.statements).toBeLessThanOrEqual(4096);
+    for (const [name, relation] of Object.entries(cost.relations ?? {}))
+      if (growingRelations.has(name)) expect(relation.sequentialScans).toBe(0);
+  }
   console.info(JSON.stringify(report));
 
   const left = await call('DELETE', `/v1/realms/${protectedRealm.realmId}/membership`, {
@@ -651,6 +805,113 @@ test.serial('a settled protected Realm member reads its boards, threads and post
   }
 });
 
+test.serial('board reads authorize with no planner method settings', async () => {
+  if (!worker) await startMembershipWorker();
+
+  const subjectId = await createSubject('skos:Concept', schemeId);
+  const createdBoard = await createBoard(protectedRealm, subjectId);
+  expect(createdBoard.response.status).toBe(201);
+  const board = createdBoard.value.board as Board;
+  const member = await person('boards_planner_member', scopes);
+  const added = await call('POST', `/v1/realms/${protectedRealm.realmId}/members`, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: { accountId: member.accountId },
+  });
+  expect(added.response.status).toBe(202);
+  await settleMembership(added.value.workflowId as string);
+
+  const threadCreated = await call('POST', '/v1/threads', {
+    bearer: member.bearer,
+    key: crypto.randomUUID(),
+    body: {
+      title: 'A thread for planner-free board reads',
+      body: fromPlainText('A protected Realm member can read this thread.'),
+      licence: 'MIT',
+      subjectIds: [],
+      boardId: board.id,
+      visibility: 'published',
+    },
+  });
+  expect(threadCreated.response.status).toBe(201);
+
+  const route = routeOf(protectedRealm.realmId)!;
+  const rowCount = 500 * 8;
+  const accountIds = Array.from({ length: rowCount }, () => newId(route));
+  const grants = accountIds.map((subjectId) => {
+    const resourceId = newId(route);
+    return { resource_id: resourceId, subject_id: subjectId, transaction_id: newId(route) };
+  });
+  const memberships = accountIds.map((accountId) => ({
+    account_id: accountId,
+    reservation_id: newId(route),
+    transaction_id: newId(route),
+  }));
+  const inverseMemberships = memberships.map(({ account_id, reservation_id, transaction_id }) => ({
+    account_id,
+    group_id: protectedRealm.realmId,
+    reservation_id,
+    transaction_id,
+  }));
+  const roleGrants = accountIds.map((subject_id) => ({
+    resource_id: protectedRealm.realmId,
+    subject_id,
+    transaction_id: newId(route),
+  }));
+  await db.admin.query(
+    `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+     SELECT $1, account_id, 'actor', 'active', account_id
+     FROM jsonb_to_recordset($2::jsonb) AS rows(account_id uuid)`,
+    [route, JSON.stringify(accountIds.map((account_id) => ({ account_id })))],
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, subject_role, action, valid, transaction_id)
+     SELECT $1, resource_id, subject_id, '', 'board:read', '(,)'::tstzrange, transaction_id
+     FROM jsonb_to_recordset($2::jsonb) AS rows(resource_id uuid, subject_id uuid, transaction_id uuid)`,
+    [route, JSON.stringify(grants)],
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_role_grant(route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
+     SELECT $1, resource_id, 'identity', subject_id, '', 'community.realm.member', '(,)'::tstzrange, transaction_id
+     FROM jsonb_to_recordset($2::jsonb) AS rows(resource_id uuid, subject_id uuid, transaction_id uuid)`,
+    [route, JSON.stringify(roleGrants)],
+  );
+  await db.admin.query(
+    `INSERT INTO access.membership_inverse(route, account_id, kind, group_id, reservation_id, transaction_id)
+     SELECT $1, account_id, 'realm', group_id, reservation_id, transaction_id
+     FROM jsonb_to_recordset($2::jsonb) AS rows(account_id uuid, group_id uuid, reservation_id uuid, transaction_id uuid)`,
+    [route, JSON.stringify(inverseMemberships)],
+  );
+  await db.admin.query(
+    `INSERT INTO community.realm_member(route, realm_id, account_id, role, valid, reservation_id, transaction_id)
+     SELECT $1, $2, account_id, 'member', '(,)'::tstzrange, reservation_id, transaction_id
+     FROM jsonb_to_recordset($3::jsonb) AS rows(account_id uuid, reservation_id uuid, transaction_id uuid)`,
+    [route, protectedRealm.realmId, JSON.stringify(memberships)],
+  );
+  await db.admin.query(
+    'ANALYZE access.account, access.membership_inverse, access.resource_grant, access.resource_role_grant, community.realm_member',
+  );
+
+  // Seed grants and other member rows at 500 × 8, keeping the protected Realm, board, and page fixed.
+  const reads = await capture(db, async () => {
+    const boardRead = await call('GET', `/v1/boards/${board.id}`, { bearer: member.bearer });
+    const realmBoards = await call('GET', `/v1/realms/${protectedRealm.realmId}/boards`, { bearer: member.bearer });
+    const boardThreads = await call('GET', `/v1/boards/${board.id}/threads`, { bearer: member.bearer });
+    expect(boardRead.response.status).toBe(200);
+    expect(realmBoards.response.status).toBe(200);
+    expect(realmBoards.value.items.map((item: Board) => item.id)).toContain(board.id);
+    expect(boardThreads.response.status).toBe(200);
+    expect(boardThreads.value.threads.map((thread: { id: string }) => thread.id)).toContain(
+      threadCreated.value.thread.id,
+    );
+  });
+
+  expect(reads.capture.statements.join('\n')).not.toMatch(/\b(SET|set_config)\b[^;]*\benable_/is);
+  const grantScans = relationPlanNodes(reads.capture.plans, 'resource_grant');
+  expect(grantScans.length).toBeGreaterThan(0);
+  expect(grantScans.map((node) => node['Index Name'])).toContain('resource_grant_pkey');
+});
+
 test.serial(
   'Realm board keyset listing stays bounded as other Realms add boards',
   async () => {
@@ -660,13 +921,27 @@ test.serial(
       name: 'realm-boards-other-realms',
       hotPartition: partitionOf(route),
       hotShare: 1,
-      rows() {
+      rows({ ordinal, route: threadRoute }) {
         const spaceId = newId(route);
         const spaceRevisionId = newId(route);
         const realmId = newId(route);
         const realmRevisionId = newId(route);
         const boardId = newId(route);
+        const accountId = newId(route);
+        const reservationId = newId(route);
+        const transactionId = newId(route);
+        const threadId = newId(threadRoute);
+        const postId = newId(threadRoute);
+        const revisionId = newId(threadRoute);
         return {
+          ...accessGrowthRows({
+            route,
+            accountId,
+            resourceId: boardId,
+            realmId,
+            reservationId,
+            transactionId,
+          }),
           'community.space': [
             {
               route,
@@ -725,19 +1000,88 @@ test.serial(
               title: 'Unrelated board',
               visibility: 'published',
               security_revision: 1,
-              recorded_transaction_id: newId(route),
+              recorded_transaction_id: transactionId,
+              created_at: new Date(createdAt),
+            },
+          ],
+          'content.thread': [
+            {
+              route: threadRoute,
+              thread_id: threadId,
+              author_account_id: accountId,
+              board_id: boardId,
+              title: 'Unrelated Realm listing thread',
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              created_at: new Date(createdAt),
+              first_post_id: postId,
+              availability: 'available',
+            },
+          ],
+          'content.post': [
+            {
+              route: threadRoute,
+              thread_id: threadId,
+              post_id: postId,
+              reply_to_post_id: null,
+              author_account_id: accountId,
+              head_revision_id: revisionId,
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              created_at: new Date(createdAt),
+              availability: 'available',
+            },
+          ],
+          'content.revision': [
+            {
+              route: threadRoute,
+              thread_id: threadId,
+              post_id: postId,
+              revision_id: revisionId,
+              body: growthBody,
+              body_sha256: growthBodySha256,
+              search_text: 'Fixed protected Realm read growth body',
+              licence: 'MIT',
+              subject_ids: [],
+              board_id: boardId,
+              availability: 'available',
+              recorded_transaction_id: transactionId,
+              recorded_at: new Date(createdAt),
+              media_ids: [],
+            },
+          ],
+          'content.board_thread': [
+            {
+              route,
+              board_id: boardId,
+              thread_id: threadId,
+              created_at: new Date(createdAt),
+              last_activity_at: new Date(createdAt),
+              score: 0,
+              active_rank: 0,
+              hot_rank: 0,
+              rank_refreshed_at: new Date(createdAt),
+              source_epoch: 1,
+              source_position: ordinal + 1,
+              source_revision_id: revisionId,
             },
           ],
         };
       },
     };
+    // Growth model: grow grants, memberships, other Realms and their boards, and threads on other boards at 500 × scale; keep the listed Realm and page fixed.
     const report = await checkGrowth(db, {
       name: 'Realm board listing',
-      scales: [256, 1024, 4096],
+      scales: [8, 32, 128],
       repetitions: 3,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       async grow(database, scale, previous) {
-        await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
+        await seed({ pool: database.pool, admin: database.admin }, population, {
+          from: 500 * previous,
+          to: 500 * scale,
+        });
       },
       async operation() {
         const result = await call('GET', '/v1/realms/' + publicRealm.realmId + '/boards?limit=1');
@@ -745,9 +1089,10 @@ test.serial(
         expect(result.value.items.map((item: Board) => item.id)).toHaveLength(1);
       },
     });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+    expect(report.samples.map(({ scale }) => scale)).toEqual([8, 32, 128]);
     for (const { cost } of report.samples)
-      for (const relation of Object.values(cost.relations ?? {})) expect(relation.sequentialScans).toBe(0);
+      for (const [name, relation] of Object.entries(cost.relations ?? {}))
+        if (growingRelations.has(name)) expect(relation.sequentialScans).toBe(0);
     console.info(JSON.stringify(report));
   },
   300_000,

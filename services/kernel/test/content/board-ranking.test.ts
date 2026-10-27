@@ -8,6 +8,7 @@ import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { createBoardEffect } from '../../src/content/board-projection.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
@@ -22,6 +23,22 @@ const createdType = 'com.rezics.content.thread.created.v1';
 const replyType = 'com.rezics.content.post.created.v1';
 const baseCreatedAt = '2026-10-25T00:00:00.000Z';
 const refreshAt = '2026-10-26T12:00:00.000Z';
+const growingRelations = new Set([
+  'access.account',
+  'access.membership_inverse',
+  'access.resource_grant',
+  'access.resource_role_grant',
+  'community.realm_member',
+  'community.space',
+  'community.space_revision',
+  'community.realm',
+  'community.realm_revision',
+  'content.board',
+  'content.board_thread',
+  'content.thread',
+  'content.post',
+  'content.revision',
+]);
 
 type SourceThread = {
   boardId: string;
@@ -209,7 +226,6 @@ async function rankRow(threadId: string): Promise<{ last_activity_at: string; ra
 function growthPopulation(activeRank: number): Population {
   const body = Buffer.from(JSON.stringify(fromPlainText('A fixed rank growth body')));
   const bodyHash = createHash('sha256').update(body).digest();
-  const at = '2000-01-01T00:00:00.000Z';
   return {
     name: `board-rank-growth-${randomUUID()}`,
     hotPartition: partitionOf(sourceRoute),
@@ -220,19 +236,122 @@ function growthPopulation(activeRank: number): Population {
       const revisionId = newId(route);
       const boardId = newId(boardRoute);
       const subjectId = newId(boardRoute);
+      const accountId = newId(boardRoute);
+      const spaceId = newId(boardRoute);
+      const spaceRevisionId = newId(boardRoute);
+      const realmId = newId(boardRoute);
+      const realmRevisionId = newId(boardRoute);
+      const reservationId = newId(boardRoute);
       const transactionId = randomUUID();
+      const at = '2000-01-01T00:00:00.000Z';
       return {
+        'access.account': [
+          { route: boardRoute, account_id: accountId, kind: 'actor', state: 'active', transaction_id: transactionId },
+        ],
+        'access.membership_inverse': [
+          {
+            route: boardRoute,
+            account_id: accountId,
+            kind: 'realm',
+            group_id: realmId,
+            reservation_id: reservationId,
+            transaction_id: transactionId,
+          },
+        ],
+        'access.resource_grant': [
+          {
+            route: boardRoute,
+            resource_id: boardId,
+            subject_id: accountId,
+            subject_role: '',
+            action: 'board:read',
+            valid: '(,)',
+            transaction_id: transactionId,
+          },
+        ],
+        'access.resource_role_grant': [
+          {
+            route: boardRoute,
+            resource_id: realmId,
+            subject_kind: 'identity',
+            subject_id: accountId,
+            subject_role: '',
+            grant_role: 'community.realm.member',
+            valid: '(,)',
+            transaction_id: transactionId,
+          },
+        ],
+        'community.realm_member': [
+          {
+            route: boardRoute,
+            realm_id: realmId,
+            account_id: accountId,
+            role: 'member',
+            valid: '(,)',
+            reservation_id: reservationId,
+            transaction_id: transactionId,
+          },
+        ],
+        'community.space': [
+          {
+            route: boardRoute,
+            space_id: spaceId,
+            state: 'active',
+            head_revision_id: spaceRevisionId,
+            created_at: at,
+            creator: accountId,
+          },
+        ],
+        'community.space_revision': [
+          {
+            route: boardRoute,
+            space_id: spaceId,
+            revision_id: spaceRevisionId,
+            predecessor: null,
+            title: 'Other ranked-board host',
+            summary: '',
+            created_at: at,
+            author: accountId,
+          },
+        ],
+        'community.realm': [
+          {
+            route: boardRoute,
+            realm_id: realmId,
+            space_id: spaceId,
+            state: 'active',
+            visibility: 'public',
+            context_id: GLOBAL_CONTEXT,
+            head_revision_id: realmRevisionId,
+            created_at: at,
+            creator: accountId,
+          },
+        ],
+        'community.realm_revision': [
+          {
+            route: boardRoute,
+            realm_id: realmId,
+            revision_id: realmRevisionId,
+            predecessor: null,
+            title: 'Other ranked-board Realm',
+            summary: '',
+            visibility: 'public',
+            context_id: GLOBAL_CONTEXT,
+            created_at: at,
+            author: accountId,
+          },
+        ],
         'content.board': [
           {
             route: boardRoute,
             board_id: boardId,
+            realm_id: realmId,
             subject_id: subjectId,
             title: 'Rank growth board',
             visibility: 'published',
             security_revision: 1,
             recorded_transaction_id: transactionId,
             created_at: at,
-            realm_id: null,
           },
         ],
         'content.thread': [
@@ -395,14 +514,15 @@ test.serial(
     const anchor = await createSourceThread(boardId, new Date(Date.now() - 60 * 60_000).toISOString());
     await project(await readEvents());
     const pagePopulation = growthPopulation(0);
-    const scales = [256, 1024, 4096] as const;
+    const scales = [8, 32, 128] as const;
+    // Grow grants, memberships, Realms, boards, and threads on other resources at 500 × scale; keep the requested board and page fixed.
     const pageReport = await checkGrowth(db, {
       name: 'active board page',
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       repetitions: 1,
       grow: async (growthDb, scale, previous) =>
-        seed({ pool: growthDb.pool, admin: growthDb.admin }, pagePopulation, { from: previous, to: scale }),
+        seed({ pool: growthDb.pool, admin: growthDb.admin }, pagePopulation, { from: 500 * previous, to: 500 * scale }),
       operation: async (growthDb) => {
         const page = (await listBoardThreads(
           dependencies(growthDb.pool),
@@ -415,11 +535,9 @@ test.serial(
       },
     });
     expect(pageReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
-    expect(
-      pageReport.samples.every((sample) =>
-        Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
-      ),
-    ).toBe(true);
+    for (const { cost } of pageReport.samples)
+      for (const [name, relation] of Object.entries(cost.relations ?? {}))
+        if (growingRelations.has(name)) expect(relation.sequentialScans).toBe(0);
   },
   180_000,
 );
