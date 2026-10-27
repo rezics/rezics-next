@@ -393,6 +393,38 @@ and time. Missing or unavailable anchors and changes to state, fence, authentica
 and receipt disclosure against the immutable authenticated snapshot, even when token epoch exceeds a changed floor.
 Anonymous commands add no acting-account read and retain the generic eligibility formula.
 
+## Opaque list cursors
+
+A keyset cursor can carry the position of an item the reader cannot see, so a list cursor must be opaque, not only
+signed. `src/tokens/list-cursor.ts` encrypts every list cursor with authenticated encryption:
+
+```ts
+encodeListCursor(ring, { route, viewer, query }, { epoch, after }, now): Promise<string>
+decodeListCursor(ring, { route, viewer, query }, token, now): Promise<{ ok: true; epoch; after } | { ok: false; reason: 'expired' | 'invalid' }>
+```
+
+- `route` is the list's method and path template, or a feed's fixed name. `viewer` is the acting account's lowercase
+  UUID, or `null` for an anonymous viewer; the two never match. `query` holds every parameter that shapes the list
+  (filters, sort, page size). A cursor decodes only for the route, viewer and query it was issued for.
+- `now` is the kernel clock's time and is required. A cursor issued more than 60 s after `now` is `invalid`; one older
+  than 15 minutes is `expired`. Every other failure (tamper, another viewer, route or query, unknown key id) answers
+  `invalid`, and `decodeListCursor` never throws.
+- Caps: each string after-key at most 256 UTF-8 bytes, at most 8 after-keys, `route` at most 256 bytes, canonical
+  query at most 2,048 bytes, token at most 4,096 characters. Encoding above a cap throws `TypeError`; decoding an
+  oversized token answers `invalid` before any decryption.
+- Construction: WebCrypto HKDF-SHA-256 and AES-256-GCM with a 128-bit tag. A fresh random 16-byte salt per token
+  derives a one-message key and IV, with HKDF info `rezics/list-cursor/v1`, so the raw ring key never encrypts and
+  the HMAC seal, session tokens and list cursors share no key material. The route, viewer kind and id, canonical
+  query, version and key id are authenticated associated data and do not travel in the token.
+
+Keys come from the same `tokens` ring as the other tokens, read from `KERNEL_SESSION_KEYS`; there is no separate
+variable and no fallback. Rotate by prepending a new `kid:base64url` entry: it becomes current, and older entries
+still decrypt. Retire a key by removing its entry, which makes every cursor issued under it `invalid` at once, so a
+client restarts from the first page. Keep a previous key at least 15 minutes, the cursor lifetime, before retiring it.
+
+Every new list uses `encodeListCursor`. An existing list moves when its owner next touches it. `encodeCursor` stays
+only for lists that have not yet moved.
+
 ## Cost
 
 Every read, write, check, authorization, projection and erasure must touch a bounded neighbourhood: an anchor plus bounded hops and results, costing roughly changes × log N, independent of engine speed or machine size.
@@ -419,6 +451,7 @@ The table derives indexed access shapes from `src/`, `db/migrations/` and `db/sc
 | Command actor admission    | `readAccount` uses `access.account` primary key `(route, account_id)` independently before resource checkout, once per live attempt shared across action checks. Grow R = N + U × t + M, unrelated accounts and the same actor receipts/history; fix K <= 1000. Authentication retains its one account point read; anonymous commands add none.                                                                                                                                                                                                                                                                                                                                                                          | Per authenticated command attempt: additional R = 1, W = 0, A = 1, T = 0, examined rows O(1), indexed blocks O(log R); connection released before resource checkout. Existing O((1 + K) log G + matches) authorization and actual k log R command changes are unchanged.                                                                                                                                                                                                 | `test/access/growth-command-admission.test.ts`: three scales; `test/access/command-admission.test.ts`: retry reads.                                                    |
 | Session header             | Decode once per request; record merges then encodes. No relations/indexes; validate distinct partitions, find/filter/copy j components and retain last 32; HMAC uses one key-ID map lookup. Grow total and anchor content/history, then j; fix scope/key/payload widths and records per request.                                                                                                                                                                                                                                                                                                                                                                                                                         | DB R/W, shared blocks, A/T = 0; CPU O(j), constant N/P; unseal rejects tokens over 4096 characters before decoding, j ≤ 32 on HTTP path. Direct merge accepts longer input and seal has no output-length cap.                                                                                                                                                                                                                                                            | `test/growth-request.test.ts`: “Session header stays within its bound as j grows”                                                                                      |
 | Cursors and seal           | Encode/decode have no relations/indexes; canonicalize binding by sorting parameter keys, validate ≤ 8 after-keys, HMAC SHA-256, canonical base64url and constant-time MAC comparison; expiry uses local time, not SQL. Grow total and anchor content/history; fix binding, key/scope and cursor byte lengths, then grow parameter count/bytes separately.                                                                                                                                                                                                                                                                                                                                                                | DB R/W, shared blocks, A/T = 0; constant N/P with fixed inputs; CPU linear in token/scope bytes plus parameter sorting (count × log count). Decode token ≤ 4096 characters; encode, binding parameters and string after-keys have no byte cap, so input work is not universally constant.                                                                                                                                                                                | `test/growth-request.test.ts`: `Cursors and seal stays within its bound as N grows`                                                                                    |
+| Opaque list cursors        | Encode/decode have no relations/indexes and take no pool. Canonicalize the query by sorting parameter keys, validate ≤ 8 after-keys of ≤ 256 bytes, route ≤ 256 bytes and canonical query ≤ 2,048 bytes; one HKDF-SHA-256 derivation (cached imported key per ring key) and one AES-256-GCM operation per token; decode checks length ≤ 4096 and canonical base64url before any decryption. Expiry uses the passed clock, not SQL.                                                                                                                                                                                                                                                                                       | DB R/W, shared blocks, A/T = 0; constant N/P and constant CPU: one derivation and one AES-GCM pass over at most 4,096 characters, independent of list size and position.                                                                                                                                                                                                                                                                                                 | `test/tokens/list-cursor.test.ts`: `oversized inputs are refused` (maximal token stays within 4,096 characters)                                                        |
 
 - Import identity history: `test/imports/identity-growth.test.ts`, “fixed public bulk grant changes and reduced-scope native Auth/Access remain bounded across actual history growth”, at [1, 8, 64].
 
