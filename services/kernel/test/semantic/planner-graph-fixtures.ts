@@ -321,14 +321,11 @@ export function assertUnforcedIndexes(name: string, scale: number, raw: Capture,
     `Unforced semantic plans ${JSON.stringify({ name, scale, plannerSettings, indexes, rows: cost.rows, blocks: cost.blocks, statements: cost.statements, controlStatements: cost.controlStatements, relations: cost.relations })}`,
   );
   // Keep all statements and plans together: a failing growth bound needs every scale's evidence.
-  console.info(`UNFORCED_RAW_PLANS ${JSON.stringify({ name, scale, statements: raw.statements, plans: raw.plans })}`);
+  console.info(`UNFORCED_RAW_PLANS ${JSON.stringify({ name, scale, ...raw })}`);
   if (process.env.DUMP_SEMANTIC_PLANS === '1') {
     const directory = resolve(process.cwd(), '../..', '.temp');
     mkdirSync(directory, { recursive: true });
-    appendFileSync(
-      resolve(directory, 'semantic-unforced-plans.jsonl'),
-      `${JSON.stringify({ name, scale, statements: raw.statements, plans: raw.plans })}\n`,
-    );
+    appendFileSync(resolve(directory, 'semantic-unforced-plans.jsonl'), `${JSON.stringify({ name, scale, ...raw })}\n`);
   }
   expect(plannerSettings, `${name} at ${scale} used planner method settings`).toEqual([]);
   expect(missing, `${name} at ${scale} missed intended indexes`).toEqual([]);
