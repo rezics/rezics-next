@@ -7,9 +7,7 @@ import type {
 
 export type LibraryProfileDescriptor = DefinitionsLibraryProfile;
 export type LibraryProfilePin = DefinitionsLibraryProfilePin;
-export type LibraryEntryStateDescriptor = NonNullable<
-  LibraryProfileDescriptor['entryStateSet']
->['states'][number];
+export type LibraryEntryStateDescriptor = NonNullable<LibraryProfileDescriptor['entryStateSet']>['states'][number];
 export type LibraryProgressUnitDescriptor = NonNullable<
   LibraryProfileDescriptor['progress']
 >['allowed'][number]['units'][number];
