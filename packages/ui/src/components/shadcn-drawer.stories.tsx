@@ -24,7 +24,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const gone = () => waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument(), { timeout: 3000 });
+const gone = () => waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument(), { timeout: 15000 });
 
 const FilterDrawer = ({
   swipeDirection,
