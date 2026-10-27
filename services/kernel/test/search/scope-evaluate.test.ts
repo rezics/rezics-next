@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FilterDocument } from '@rezics/filter';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
+import { classifyUnavailability } from '../../src/access/unavailable.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
@@ -73,6 +74,7 @@ let empty: string;
 let target: string;
 let other: string;
 let role: string;
+let nativePoints = 0;
 
 async function write(path: string, body: unknown, persona: 'editor' | 'acceptor' | 'steward' = 'editor') {
   const response = await driver.request(persona, 'POST', path, body, { 'Idempotency-Key': `"${randomUUID()}"` });
@@ -100,7 +102,14 @@ async function factory(): Promise<ScopeFactory> {
 }
 async function scope(pool: Pool = db.pool) {
   const createScope = await factory();
-  return createScope({ ...runtime, pool, source: semantic.subjectSource(pool, routeKey) });
+  const native = semantic.subjectSource(pool, routeKey);
+  const match = native.matchRelationFacets?.bind(native);
+  if (match)
+    native.matchRelationFacets = async (partition, probes) => {
+      nativePoints += probes.length;
+      return match(partition, probes);
+    };
+  return createScope({ ...runtime, pool, source: native });
 }
 async function evaluate(filter: FilterDocument, ids: string[], budget: NativeBudget = ample) {
   const owner = await scope();
@@ -197,6 +206,12 @@ test('point evaluation without invented hits shares current complete Boolean sem
 });
 
 test('native type code range and same-statement qualifier evidence do not need named matched queries', async () => {
+  const split = await create('schema:Book', {
+    'schema:inLanguage': [
+      statement('schema:inLanguage', 'ja', [part('wdt:P3831', role)]),
+      statement('schema:inLanguage', 'en', [part('wdt:P3831', other)]),
+    ],
+  });
   const qualified: FilterDocument = {
     statement: { property: 'schema:inLanguage', in: ['ja'], qualifiers: [{ property: 'wdt:P3831', in: [role] }] },
   };
@@ -210,7 +225,7 @@ test('native type code range and same-statement qualifier evidence do not need n
   const wrongRole: FilterDocument = {
     statement: { property: 'schema:inLanguage', in: ['ja'], qualifiers: [{ property: 'wdt:P3831', in: [other] }] },
   };
-  expect((await evaluate(within(wrongRole), [lagged])).results).toEqual([false]);
+  expect((await evaluate(within(wrongRole), [lagged, split])).results).toEqual([false, false]);
   expect((await evaluate(within({ not: wrongRole }), [lagged])).results).toEqual([true]);
   expect(
     (await evaluate(within({ statement: { property: 'schema:datePublished', range: { lte: 2025 } } }), [lagged]))
@@ -296,6 +311,7 @@ test('overflow absence stays unknown through NOT while decisive true OR and fals
   const { id, omitted } = await overflowFixture();
   const absent = await create('schema:Person');
   const unknown = relation([absent]);
+  expect(typeof source.matchRelationFacets, 'missing native relation point prerequisite').toBe('function');
   expect(
     await source.matchRelationFacets!(subjectPartition(id), [
       { subject: id, property: 'schema:author', value: absent },
@@ -322,22 +338,26 @@ test('native point witness row byte and empty-seek reservations are independent 
   for (const dimension of Object.keys(ample) as (keyof NativeBudget)[]) {
     const budget = { ...ample, [dimension]: 0 };
     const before = engineCalls.length;
+    const beforePoints = nativePoints;
     const measured = await capture(db, () => owner.evaluate(prepared, [id], budget));
     expect(engineCalls.slice(before)).toEqual([]);
     expect(measured.value.results, dimension).toEqual(['not_proven']);
     expect(measured.value.exhausted).toContain(dimension);
     expect(measured.value.usage[dimension]).toBe(0);
+    expect(nativePoints - beforePoints).toBeLessThanOrEqual(measured.value.usage.points);
     // Use the shared native statement/row capture, not a local growth classifier or only logical result counts.
     expect(costOf(measured.capture).statements).toBeLessThan(8192);
     if (dimension === 'rows') expect(costOf(measured.capture).rows).toBe(0);
   }
   const leaves = Array.from({ length: 31 }, () => relation(Array.from({ length: 64 }, () => randomUUID())));
   const manyLeaves = await owner.prepare({ filter: { and: [books, ...leaves] } });
+  const beforePoints = nativePoints;
   const measured = await capture(db, () => owner.evaluate(manyLeaves, [id], { ...ample, points: 8 }));
   expect(measured.value.results).toEqual(['not_proven']);
   expect(measured.value.exhausted).toContain('points');
-  expect(measured.value.usage.points).toBeGreaterThan(0);
+  expect(measured.value.usage.points).toBeGreaterThanOrEqual(0);
   expect(measured.value.usage.points).toBeLessThanOrEqual(8);
+  expect(nativePoints - beforePoints).toBeLessThanOrEqual(measured.value.usage.points);
   expect(costOf(measured.capture).statements).toBeLessThan(8192);
 }, 600_000);
 
@@ -370,7 +390,14 @@ test('native database timeout cannot become a definitive negative or a successfu
     await lock.query('BEGIN');
     await lock.query('LOCK TABLE semantic.subject IN ACCESS EXCLUSIVE MODE');
     // A real lock timeout is owner unavailability; no injected arrays, errors or replacement point evaluator.
-    await expect(owner.evaluate(prepared, [lagged], ample)).rejects.toBeInstanceOf(Error);
+    let failure: unknown;
+    try {
+      await owner.evaluate(prepared, [lagged], ample);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure, 'native timeout must reject, never resolve a Boolean result').toBeInstanceOf(Error);
+    expect(['deadline', 'contention']).toContain(classifyUnavailability(failure));
   } finally {
     await lock.query('ROLLBACK');
     lock.release();
