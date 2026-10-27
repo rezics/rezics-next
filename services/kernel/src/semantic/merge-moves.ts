@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { runCommand } from '../command/command.ts';
+import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { GLOBAL_CONTEXT } from './definitions.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LINKS_MOVING, LINKS_PROJECTED } from './events.ts';
 import { redirectOf } from './merges.ts';
@@ -18,9 +19,29 @@ import pageOutbound from './list-outbound-merge.sql';
 import readLatestRevision from './merges-read-latest-revision.sql';
 import clearProjectionPending from './merge-clear-projection-pending.sql';
 
+// Counter deltas observe Global writes before sparse Context rows in the same move.
+async function upsertByContext<T extends { context_id?: string }>(
+  tx: CommandTransaction,
+  input: { route: number; transaction_id: string; changes: T[] },
+  direction: 'inbound' | 'outbound',
+) {
+  const contexts = [...new Set(input.changes.map((row) => row.context_id ?? GLOBAL_CONTEXT))];
+  contexts.sort((a, b) => (a === GLOBAL_CONTEXT ? -1 : b === GLOBAL_CONTEXT ? 1 : a.localeCompare(b)));
+  for (const context of contexts) {
+    const parameters = {
+      ...input,
+      changes: input.changes.filter((row) => (row.context_id ?? GLOBAL_CONTEXT) === context),
+    };
+    if (direction === 'inbound') await upsertInboundLinks.run(tx, parameters);
+    else await upsertOutboundLinks.run(tx, parameters);
+  }
+}
+
 type Verification = { account: string; receipt: string };
 type Move = { phase: 'links' | 'outbound' | 'members' | 'done'; cursor: string[] };
 type Link = {
+  context_id: string;
+  suppressed: boolean;
   property: string;
   source_subject_id: string;
   statement_id: string;
@@ -32,6 +53,8 @@ type Link = {
   filter_value: string;
 };
 type Outbound = {
+  context_id: string;
+  suppressed: boolean;
   property: string;
   statement: string;
   slot: string;
@@ -150,13 +173,14 @@ export async function moveMergePage(
           after_source: state.cursor[1] ?? NIL,
           after_statement: state.cursor[2] ?? NIL,
           after_filter: state.cursor[3] ?? NIL,
+          after_context: state.cursor[4] ?? NIL,
         })
       ).map((link) => ({ ...link, source_security_revision: Number(link.source_security_revision) }));
       const last = links.at(-1);
       if (links.length === 100 && last)
         next = {
           phase: 'links',
-          cursor: [last.property, last.source_subject_id, last.statement_id, last.filter_value],
+          cursor: [last.property, last.source_subject_id, last.statement_id, last.filter_value, last.context_id],
         };
       else {
         next = { phase: 'outbound', cursor: [] };
@@ -171,6 +195,7 @@ export async function moveMergePage(
           after_target: state.cursor[1] ?? NIL,
           after_statement: state.cursor[2] ?? NIL,
           after_filter: state.cursor[3] ?? NIL,
+          after_context: state.cursor[4] ?? NIL,
         })
       ).map((row) => ({
         ...row,
@@ -189,7 +214,10 @@ export async function moveMergePage(
       })) as Outbound[];
       const last = outbound.at(-1);
       if (outbound.length === 100 && last)
-        next = { phase: 'outbound', cursor: [last.property, last.target ?? NIL, last.statement, last.filter_value] };
+        next = {
+          phase: 'outbound',
+          cursor: [last.property, last.target ?? NIL, last.statement, last.filter_value, last.context_id],
+        };
       else {
         const member = await firstMember.run(tx, { route: sourceRoute, subject_id: id });
         next = { phase: member ? 'members' : 'done', cursor: [] };
@@ -216,30 +244,36 @@ export async function moveMergePage(
     const revision = page.value.outbound[0]!.source_revision;
     const securityRevision = page.value.outbound[0]!.source_security_revision;
     await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx, { transactionId }) => {
-      await upsertOutboundLinks.run(tx, {
-        route: sourceRoute,
-        transaction_id: transactionId,
-        changes: page.value.outbound.map((link) => ({
-          subject_id: id,
-          property: link.property,
-          filter_value: link.filter_value,
-          order_key: link.order_key,
-          target_subject_id: link.target ?? NIL,
-          statement_id: link.statement,
-          slot_id: link.slot,
-          relation: link.relation,
-          source_type: link.source_type,
-          source_order_key: link.source_order_key,
-          outbound_order: link.outbound_order,
-          source_revision: revision,
-          source_security_revision: securityRevision,
-          target_revision: link.target_revision,
-          target_type: link.target_type,
-          external: link.external,
-          value: link.value,
-          present: false,
-        })),
-      });
+      await upsertByContext(
+        tx,
+        {
+          route: sourceRoute,
+          transaction_id: transactionId,
+          changes: page.value.outbound.map((link) => ({
+            subject_id: id,
+            context_id: link.context_id,
+            suppressed: link.suppressed,
+            property: link.property,
+            filter_value: link.filter_value,
+            order_key: link.order_key,
+            target_subject_id: link.target ?? NIL,
+            statement_id: link.statement,
+            slot_id: link.slot,
+            relation: link.relation,
+            source_type: link.source_type,
+            source_order_key: link.source_order_key,
+            outbound_order: link.outbound_order,
+            source_revision: revision,
+            source_security_revision: securityRevision,
+            target_revision: link.target_revision,
+            target_type: link.target_type,
+            external: link.external,
+            value: link.value,
+            present: false,
+          })),
+        },
+        'outbound',
+      );
       return { value: null, events: [projected(id)] };
     });
     const targets = new Map<number, Outbound[]>();
@@ -261,22 +295,28 @@ export async function moveMergePage(
       }
       await runCommand(pool, { partition }, async (tx, { transactionId }) => {
         for (const [targetRoute, routeLinks] of byRoute)
-          await upsertInboundLinks.run(tx, {
-            route: targetRoute,
-            transaction_id: transactionId,
-            changes: routeLinks.map((link) => ({
-              subject_id: link.target,
-              property: link.property,
-              source_subject_id: id,
-              statement_id: link.statement,
-              source_revision: revision,
-              source_security_revision: securityRevision,
-              present: false,
-              source_type: link.source_type,
-              order_key: link.source_order_key,
-              filter_value: link.filter_value,
-            })),
-          });
+          await upsertByContext(
+            tx,
+            {
+              route: targetRoute,
+              transaction_id: transactionId,
+              changes: routeLinks.map((link) => ({
+                subject_id: link.target,
+                context_id: link.context_id,
+                suppressed: link.suppressed,
+                property: link.property,
+                source_subject_id: id,
+                statement_id: link.statement,
+                source_revision: revision,
+                source_security_revision: securityRevision,
+                present: false,
+                source_type: link.source_type,
+                order_key: link.source_order_key,
+                filter_value: link.filter_value,
+              })),
+            },
+            'inbound',
+          );
         return { value: null, events: [projected(id)] };
       });
     }
@@ -293,11 +333,15 @@ export async function moveMergePage(
     const current = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
     if (JSON.stringify(current) !== JSON.stringify(state)) return { value: null, events: [projected(survivor)] };
     if (page.value.links.length)
-      await upsertInboundLinks.run(tx, {
-        route,
-        transaction_id: transactionId,
-        changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
-      });
+      await upsertByContext(
+        tx,
+        {
+          route,
+          transaction_id: transactionId,
+          changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
+        },
+        'inbound',
+      );
     if (verification && page.value.links.length) {
       await recordMovedAgentLinks.run(tx as PoolClient, {
         route,

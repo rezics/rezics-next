@@ -3,12 +3,13 @@ import { runCommand, type CommandAuthorization, type CommandTransaction } from '
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readRelease } from './definitions.ts';
+import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from './events.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
 import { holderFacts } from './link-keys.ts';
-import { linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import listRelationContexts from './relation-context-list.sql';
 import moderationBumpSecurity from './moderation-bump-security.sql';
 import moderationDeleteHidden from './moderation-delete-hidden.sql';
 import moderationHasLiveCandidate from './moderation-has-live-candidate.sql';
@@ -129,7 +130,7 @@ async function readModeratedSubject(
 }
 
 async function shownFacts(tx: CommandTransaction, subject: string, property: string, slot: string): Promise<FactRow[]> {
-  return (await slotView(tx, subject, property, undefined, {}, slot)).facts;
+  return (await slotView(tx, subject, property, GLOBAL_CONTEXT, {}, slot)).facts;
 }
 
 async function moderationLinks(
@@ -140,17 +141,26 @@ async function moderationLinks(
   releaseDigest: string,
   before: FactRow[],
   after: FactRow[],
+  contexts: Map<string, { before: FactRow[]; after: FactRow[] }>,
 ): Promise<{ type: string; subject: string; data: unknown } | null> {
-  if (before.length === 0 && after.length === 0) return null;
+  if (before.length === 0 && after.length === 0 && contexts.size === 0) return null;
   const release = await readRelease(tx, releaseDigest);
   if (!release) throw new Error('Subject revision release is missing');
   const identity = await holderFacts(tx, subject, release);
-  const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]), {
-    subject,
-    release,
-    type: identity.type,
-    identityFacts: identity.facts,
-  });
+  const metadata = { subject, release, type: identity.type, identityFacts: identity.facts };
+  const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]), metadata);
+  for (const [context, facts] of contexts)
+    changes.push(
+      ...contextLinkChanges(
+        before,
+        facts.before,
+        facts.after,
+        factDataTypes(release, [...before, ...after, ...facts.before, ...facts.after]),
+        metadata,
+        context,
+        after,
+      ),
+    );
   if (changes.length === 0) return null;
   return {
     type: LINKS_CHANGED,
@@ -345,6 +355,17 @@ export async function moderateStatement(
       const body = validateModerationBody(options.action, options.body);
       const nextVisibility = nextStatementVisibility(options.action);
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
+      const contexts = new Map<string, { before: FactRow[]; after: FactRow[] }>();
+      if (located.relation && current.visibility === 'visible')
+        for (const { context_id } of await listRelationContexts.run(tx, {
+          route,
+          subject_id: options.subject,
+          slot_id: slot,
+        }))
+          contexts.set(context_id, {
+            before: (await slotView(tx, options.subject, property, context_id, {}, slot)).facts,
+            after: [],
+          });
       await expandSlot(tx, options.subject, property, transactionId, slot, located.relation);
       const updated = await moderationBumpSecurity.run(tx, {
         route,
@@ -381,6 +402,8 @@ export async function moderateStatement(
       }
       const securityRevision = Number(revision);
       const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
+      for (const [context, facts] of contexts)
+        facts.after = (await slotView(tx, options.subject, property, context, {}, slot)).facts;
       const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.statement_visibility_changed.v1',
@@ -401,6 +424,7 @@ export async function moderateStatement(
         current.release,
         before,
         after,
+        contexts,
       );
       if (links) events.push(links);
       return {

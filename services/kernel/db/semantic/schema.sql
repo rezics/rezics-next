@@ -335,11 +335,30 @@ CREATE TABLE semantic.inbound_link (
     source_type text DEFAULT ''::text NOT NULL,
     order_key text DEFAULT ''::text NOT NULL COLLATE pg_catalog."C",
     filter_value uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
+    suppressed boolean DEFAULT false NOT NULL,
     CONSTRAINT inbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT inbound_link_property_check CHECK ((char_length(property) >= 1)),
     CONSTRAINT inbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT inbound_link_source_revision_check CHECK ((source_revision >= 1)),
     CONSTRAINT inbound_link_source_security_revision_check CHECK ((source_security_revision >= 0))
+);
+
+
+--
+-- Name: inbound_link_context_count; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.inbound_link_context_count (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    property text NOT NULL,
+    filter_value uuid NOT NULL,
+    value bigint NOT NULL,
+    CONSTRAINT inbound_link_context_count_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT inbound_link_context_count_context_id_check CHECK ((context_id <> '00000000-0000-8000-8000-000000000000'::uuid)),
+    CONSTRAINT inbound_link_context_count_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -353,7 +372,9 @@ CREATE TABLE semantic.inbound_link_count (
     property text NOT NULL,
     filter_value uuid NOT NULL,
     value bigint NOT NULL,
+    context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
     CONSTRAINT inbound_link_count_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT inbound_link_count_context_id_check CHECK ((context_id = '00000000-0000-8000-8000-000000000000'::uuid)),
     CONSTRAINT inbound_link_count_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT inbound_link_count_value_check CHECK ((value >= 0))
 );
@@ -421,6 +442,8 @@ CREATE TABLE semantic.outbound_link (
     value text NOT NULL,
     present boolean NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
+    suppressed boolean DEFAULT false NOT NULL,
     CONSTRAINT outbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT outbound_link_property_check CHECK ((char_length(property) >= 1)),
     CONSTRAINT outbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -428,6 +451,23 @@ CREATE TABLE semantic.outbound_link (
     CONSTRAINT outbound_link_source_security_revision_check CHECK ((source_security_revision >= 0)),
     CONSTRAINT outbound_link_target_revision_check CHECK ((target_revision >= 0)),
     CONSTRAINT outbound_link_value_check CHECK ((value = ANY (ARRAY['value'::text, 'somevalue'::text, 'novalue'::text])))
+);
+
+
+--
+-- Name: outbound_link_context_count; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.outbound_link_context_count (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    property text NOT NULL,
+    filter_value uuid NOT NULL,
+    value bigint NOT NULL,
+    CONSTRAINT outbound_link_context_count_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT outbound_link_context_count_context_id_check CHECK ((context_id <> '00000000-0000-8000-8000-000000000000'::uuid)),
+    CONSTRAINT outbound_link_context_count_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -441,7 +481,9 @@ CREATE TABLE semantic.outbound_link_count (
     property text NOT NULL,
     filter_value uuid NOT NULL,
     value bigint NOT NULL,
+    context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
     CONSTRAINT outbound_link_count_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT outbound_link_count_context_id_check CHECK ((context_id = '00000000-0000-8000-8000-000000000000'::uuid)),
     CONSTRAINT outbound_link_count_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT outbound_link_count_value_check CHECK ((value >= 0))
 );
@@ -469,6 +511,20 @@ CREATE TABLE semantic.redirect (
     sequence integer NOT NULL,
     target uuid NOT NULL,
     recorded_transaction_id uuid NOT NULL
+);
+
+
+--
+-- Name: relation_context_slot; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.relation_context_slot (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    CONSTRAINT relation_context_slot_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT relation_context_slot_context_id_check CHECK ((context_id <> '00000000-0000-8000-8000-000000000000'::uuid))
 );
 
 
@@ -658,6 +714,14 @@ ALTER TABLE ONLY semantic.hidden_candidate
 
 
 --
+-- Name: inbound_link_context_count inbound_link_context_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.inbound_link_context_count
+    ADD CONSTRAINT inbound_link_context_count_pkey PRIMARY KEY (route, subject_id, context_id, property, filter_value);
+
+
+--
 -- Name: inbound_link_count inbound_link_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -670,7 +734,7 @@ ALTER TABLE ONLY semantic.inbound_link_count
 --
 
 ALTER TABLE ONLY semantic.inbound_link
-    ADD CONSTRAINT inbound_link_pkey PRIMARY KEY (route, subject_id, property, source_subject_id, statement_id, filter_value);
+    ADD CONSTRAINT inbound_link_pkey PRIMARY KEY (route, subject_id, context_id, property, source_subject_id, statement_id, filter_value);
 
 
 --
@@ -690,6 +754,14 @@ ALTER TABLE ONLY semantic.moderation
 
 
 --
+-- Name: outbound_link_context_count outbound_link_context_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.outbound_link_context_count
+    ADD CONSTRAINT outbound_link_context_count_pkey PRIMARY KEY (route, subject_id, context_id, property, filter_value);
+
+
+--
 -- Name: outbound_link_count outbound_link_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -702,7 +774,7 @@ ALTER TABLE ONLY semantic.outbound_link_count
 --
 
 ALTER TABLE ONLY semantic.outbound_link
-    ADD CONSTRAINT outbound_link_pkey PRIMARY KEY (route, subject_id, property, filter_value, order_key, target_subject_id, statement_id);
+    ADD CONSTRAINT outbound_link_pkey PRIMARY KEY (route, subject_id, context_id, property, filter_value, order_key, target_subject_id, statement_id);
 
 
 --
@@ -719,6 +791,14 @@ ALTER TABLE ONLY semantic.partition_subjects
 
 ALTER TABLE ONLY semantic.redirect
     ADD CONSTRAINT redirect_pkey PRIMARY KEY (route, subject_id, sequence);
+
+
+--
+-- Name: relation_context_slot relation_context_slot_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.relation_context_slot
+    ADD CONSTRAINT relation_context_slot_pkey PRIMARY KEY (route, subject_id, slot_id, context_id);
 
 
 --
@@ -792,21 +872,28 @@ CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id
 -- Name: inbound_link_all_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX inbound_link_all_present ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id) WHERE (present AND (filter_value = '00000000-0000-0000-0000-000000000000'::uuid));
+CREATE INDEX inbound_link_all_present ON semantic.inbound_link USING btree (route, subject_id, context_id, property, source_subject_id, statement_id) INCLUDE (source_type, suppressed) WHERE (present AND (filter_value = '00000000-0000-0000-0000-000000000000'::uuid));
+
+
+--
+-- Name: inbound_link_context_overrides; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX inbound_link_context_overrides ON semantic.inbound_link USING btree (route, subject_id, property, filter_value, statement_id, source_subject_id, context_id) WHERE (present AND (context_id <> '00000000-0000-8000-8000-000000000000'::uuid));
 
 
 --
 -- Name: inbound_link_key_reemit; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX inbound_link_key_reemit ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id, filter_value) WHERE present;
+CREATE INDEX inbound_link_key_reemit ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id, filter_value, context_id) WHERE present;
 
 
 --
 -- Name: inbound_link_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, subject_id, property, filter_value, order_key, source_subject_id, statement_id) WHERE present;
+CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, subject_id, context_id, property, filter_value, order_key, source_subject_id, statement_id) INCLUDE (source_type, suppressed) WHERE present;
 
 
 --
@@ -817,24 +904,45 @@ CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, s
 
 
 --
+-- Name: outbound_link_context_overrides; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_context_overrides ON semantic.outbound_link USING btree (route, subject_id, property, filter_value, statement_id, target_subject_id, context_id) WHERE (present AND (context_id <> '00000000-0000-8000-8000-000000000000'::uuid));
+
+
+--
 -- Name: outbound_link_identity; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX outbound_link_identity ON semantic.outbound_link USING btree (route, subject_id, property, statement_id, filter_value) WHERE present;
+CREATE INDEX outbound_link_identity ON semantic.outbound_link USING btree (route, subject_id, context_id, property, statement_id, filter_value) WHERE present;
 
 
 --
 -- Name: outbound_link_key_reemit; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX outbound_link_key_reemit ON semantic.outbound_link USING btree (route, subject_id, property, target_subject_id, statement_id, filter_value) WHERE (present AND relation);
+CREATE INDEX outbound_link_key_reemit ON semantic.outbound_link USING btree (route, subject_id, property, target_subject_id, statement_id, filter_value, context_id) WHERE (present AND relation);
+
+
+--
+-- Name: outbound_link_maintenance; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_maintenance ON semantic.outbound_link USING btree (route, subject_id, property, target_subject_id, statement_id, filter_value, context_id) WHERE present;
 
 
 --
 -- Name: outbound_link_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX outbound_link_present ON semantic.outbound_link USING btree (route, subject_id, property, filter_value, order_key, target_subject_id, statement_id) INCLUDE (slot_id) WHERE present;
+CREATE INDEX outbound_link_present ON semantic.outbound_link USING btree (route, subject_id, context_id, property, filter_value, order_key, target_subject_id, statement_id) INCLUDE (relation, target_type, suppressed) WHERE present;
+
+
+--
+-- Name: outbound_link_statement; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (route, subject_id, context_id, property, filter_value, statement_id, source_revision DESC, source_security_revision DESC, target_revision DESC);
 
 
 --

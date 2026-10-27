@@ -399,6 +399,7 @@ export async function readSubject(
           continue;
         }
         const preview = (await listOutboundLinks.run(client, {
+          context_id: context,
           route,
           subject_id: id,
           property,
@@ -409,15 +410,36 @@ export async function readSubject(
           page_limit: 13,
         })) as { slot: string; statement: string; target: string | null; order_key: string }[];
         const count = await readOutboundLinkCount.run(client, {
+          context_id: context,
           route,
           subject_id: id,
           property,
           filter_value: NIL_UUID,
         });
         relationCounts[property] = Number(count?.value ?? 0);
+        // Resolution describes omitted Global slots too. Keep that diagnostic at
+        // the same bounded Global preview it used before Context projection rows.
+        if (context !== GLOBAL_CONTEXT) {
+          const inheritedPreview = (await listOutboundLinks.run(client, {
+            context_id: GLOBAL_CONTEXT,
+            route,
+            subject_id: id,
+            property,
+            filter_value: NIL_UUID,
+            after_order: '',
+            after_target: NIL_UUID,
+            after_statement: NIL_UUID,
+            page_limit: 12,
+          })) as { slot: string }[];
+          for (const entry of inheritedPreview) {
+            const view = await slotView(client, id, property, context, defaults, entry.slot);
+            if (view.resolution) resolution[property] = view.resolution;
+          }
+        }
         for (const entry of preview.slice(0, 12)) {
           const view = await slotView(client, id, property, context, defaults, entry.slot);
-          statementFacts.push(...view.facts);
+          const fact = view.facts.find((row) => row.statement_id === entry.statement);
+          if (fact) statementFacts.push(fact);
           if (view.resolution) resolution[property] = view.resolution;
         }
       }

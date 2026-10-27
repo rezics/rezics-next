@@ -5,6 +5,8 @@ import { relationSlotForStatement, statementSlotId } from './item.ts';
 import { routeOf } from '../route/route.ts';
 
 export type LinkChange = {
+  context_id?: string;
+  suppressed?: boolean;
   property: string;
   statement: string;
   target: string | null;
@@ -197,5 +199,33 @@ export function linkChanges(
     }
     return 0;
   });
+  return changes;
+}
+
+/** Changes to a Context's sparse layer, relative to the same Global slot snapshot. */
+export function contextLinkChanges(
+  global: readonly LinkFact[],
+  before: readonly LinkFact[],
+  after: readonly LinkFact[],
+  dataTypes: Readonly<Record<string, string>>,
+  metadata: { subject: string; release: Release; type: string; identityFacts?: readonly FactRow[] },
+  context: string,
+  nextGlobal: readonly LinkFact[] = global,
+): LinkChange[] {
+  const layer = (globalFacts: readonly LinkFact[], facts: readonly LinkFact[]) => {
+    const base = linksOf(globalFacts, dataTypes, metadata);
+    const selected = linksOf(facts, dataTypes, metadata);
+    const result = new Map<string, LinkChange>();
+    for (const [key, link] of base)
+      if (!selected.has(key)) result.set(key, { ...link, context_id: context, present: true, suppressed: true });
+    for (const [key, link] of selected)
+      if (!base.has(key)) result.set(key, { ...link, context_id: context, present: true, suppressed: false });
+    return result;
+  };
+  const previous = layer(global, before);
+  const next = layer(nextGlobal, after);
+  const changes: LinkChange[] = [];
+  for (const [key, link] of previous) if (!next.has(key)) changes.push({ ...link, present: false });
+  for (const [key, link] of next) if (JSON.stringify(previous.get(key)) !== JSON.stringify(link)) changes.push(link);
   return changes;
 }

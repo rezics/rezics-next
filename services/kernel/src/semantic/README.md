@@ -58,7 +58,7 @@ The per-subject cap of 512 applies to descriptive facts, including labels, descr
 
 Relations remain statements and keep the same candidates, slots, Contexts, adoption, revisions, moderation and history as other statements. Each relation slot is keyed by `(subject, property, target)`. A property's optional `relation.slotKey` adds the value of an admitted item qualifier to that identity, for example `wdt:P725` uses `wdt:P453` to give each actor–character pair its own slot. A relation with a resolved target and no slot-key qualifier uses the target slot with an empty key. A `somevalue` with a `schema:sameAs` IRI has its own external-IRI slot; `somevalue` without that qualifier and `novalue` use the property-level slot. A later resolved statement is proposed in its target slot and does not automatically move the unresolved candidate.
 
-Relation slots are projected into `semantic.outbound_link` in the holder's partition, with a mirror in `semantic.inbound_link` in the target's partition. Unresolved relation slots have outbound rows, count toward property totals and have no inbound row. The subject read returns the first 12 selected slots per relation property and its exact count. A relation candidate that exists only in a Context is not in either projection, the preview or relation pages until a later change layers Context candidates into both projections.
+Relation slots are projected into `semantic.outbound_link` in the holder's partition, with a mirror in `semantic.inbound_link` in the target's partition. Unresolved relation slots have outbound rows, count toward property totals and have no inbound row. The subject read returns the first 12 selected slots per relation property and its exact count. Both projections carry `context_id`. Global is the base layer; a community Context stores only added or replacing relations and active suppression rows for overridden Global keys. The relay projects Context decisions in both directions. Forward and inverse pages accept `context`, and subject previews use the same ordered merge. Global reads select only Global rows. Global counters retain their existing keys and fixed Global `context_id`; the separate `outbound_link_context_count` and `inbound_link_context_count` tables hold signed deltas keyed by Context. Counts add the Global counter and the selected Context's delta. Subject previews select each projected statement once, even when a slot selects several values. Their resolution diagnostics retain a separate bounded 12-row Global preview for omitted slots.
 
 A source relation is mapped to a release property only after its direction has been checked against the source's documentation and at least one known record. A source relation that no existing standard term expresses gets a `rezics:` term with its own inverse, labels and group; it is never dropped because no Wikidata property matches, and it is never mapped to a looser term that changes its meaning.
 
@@ -180,7 +180,7 @@ append, with no additional SQL. The API round trips are covered by
 
 ### Key-change re-emission page
 
-- Touches: one indexed source projection range of at most 101 present rows, at most 100 changed mirror rows with fixed qualifier/filter fanout and fixed partitions, fixed identity/key point reads, and one continuation command. The four-part keyset cursor advances through the exact last examined row, including all filter rows and NIL targets.
+- Touches: one indexed source projection range of at most 101 present rows, at most 100 changed mirror rows with fixed qualifier/filter fanout and fixed partitions, fixed identity/key point reads, and one continuation command. The five-part keyset cursor advances through the exact last examined row, including all filter rows, NIL targets and Contexts.
 - Bound: rows and statements per step are independent of total degree and relation history; blocks are logarithmic in involved indexes. Mirror lookups probe the full stable identity, and inactive outbound rows use the exact tuple found by that probe. Total eventual catch-up is O(degree) over separate bounded steps, never one request or one relay snapshot.
 - Growth check: `test/semantic/growth-key-reemit.test.ts`, `holder key re-emission processes a bounded page as its out-degree grows` and `target key re-emission processes a bounded page as its in-degree grows`, `[64,512,4096]`.
 
@@ -324,6 +324,12 @@ All writes serialize on their own `core.partition.position` counter, with defini
 Fact/subject and activation/release joins and foreign keys stay on the same route, while related-label and Access evidence reads cross partitions as separate reads without a cross-partition join or transaction; the in-process release cache affects constants, not the cold lookup bound.
 The global context is inserted once by migration and has no runtime semantic read/write path.
 
+### Context relation page
+
+- Touches: two ordered index ranges (Context rows and Global rows) in one partition, merged; two counter probes. The indexes cover suppression flags; forward pages fetch payloads by key only after the page limit. Active suppression rows override Global keys; relay tombstones do not override them. Merge and key-change continuations include Context in their keys.
+- Bound: rows O(s + suppressions in the page's range); independent of Global's and the Context's totals elsewhere.
+- Growth check: `test/semantic/context-relations.test.ts`: `a Context relation page examines rows bounded by the page and the Context's own changes in its range`, scales `[16, 128, 1024]` Context changes outside the page's property range; forward and inverse page rows stay flat.
+
 ### Inverse page
 
 - Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one pending-merge index probe for the scanned holder ids, one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.
@@ -332,8 +338,8 @@ The global context is inserted once by migration and has no runtime semantic rea
 
 ### Links projection write
 
-- Touches: per changed statement, `1 + distinct values across both filter qualifiers` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, property, filter_value, order_key, source_subject_id, statement_id)`.
-- Bound: O(changed statements × (1 + values of both qualifiers)) per event. Key changes enqueue paged re-emission, with O(page) work per relay step and O(degree) work spread across steps. Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value.
+- Touches: per changed statement, `1 + distinct values across both filter qualifiers` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, context_id, property, filter_value, order_key, source_subject_id, statement_id)`.
+- Bound: O(changed statements × (1 + values of both qualifiers)) per event. Key changes enqueue paged re-emission, with O(page) work per relay step and O(degree) work spread across steps. Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value and Context. A Global change also probes the override index for its changed keys and adjusts those Context deltas; Global adoption reconciles the Contexts registered for that slot, so its work also includes the affected Context rows.
 - Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, three projection rows per changed statement (base, role and arc), a measured loop over 10, 100 and 500 changed links and an in-degree check at scales `[64, 512, 4096]`.
 
 ### Subject summaries

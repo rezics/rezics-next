@@ -1517,6 +1517,7 @@ function subjectRoutes(
       {
         params: t.Object({ id: t.String() }),
         query: t.Object({
+          context: t.Optional(EditorialBodyContext),
           ...pageQuery,
           property: t.Optional(t.String({ minLength: 1 })),
           filter: t.Optional(t.String({ format: 'uuid' })),
@@ -1579,6 +1580,7 @@ function subjectRoutes(
         if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
         if (query.type !== undefined && !Object.hasOwn(active.release.types, query.type))
           throw new ProblemError('invalid_request');
+        if (query.context !== undefined && routeOf(query.context) === null) throw new ProblemError('invalid_request');
         const resource = { route, id: params.id };
         const seen = [...session.components];
         const caughtUp = await admission.run('normal', job, () =>
@@ -1588,6 +1590,7 @@ function subjectRoutes(
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
             listSubjectLinks(pool, tokens, {
+              context: query.context ?? GLOBAL_CONTEXT,
               subject: params.id,
               property: query.property ?? null,
               limit: query.limit ?? 20,

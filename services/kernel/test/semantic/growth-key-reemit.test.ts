@@ -285,7 +285,7 @@ async function checkDirection(direction: 'holder' | 'target') {
     );
     expect(pending.rows).toHaveLength(1);
     expect(pending.rows[0].data.direction).toBe(direction);
-    expect(pending.rows[0].data.cursor).toHaveLength(4);
+    expect(pending.rows[0].data.cursor).toHaveLength(5);
     expect(pending.rows[0].data.revision).toBe(revision);
   }
   await drain();

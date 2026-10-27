@@ -11,6 +11,7 @@ CROSS JOIN LATERAL (
     SELECT slot_id, order_key, target_subject_id, statement_id
     FROM semantic.outbound_link
     WHERE route = requested.route AND subject_id = requested.id
+      AND context_id = '00000000-0000-8000-8000-000000000000'::uuid
       AND property = 'rezics:representativeEdition'
       AND filter_value = '00000000-0000-0000-0000-000000000000'::uuid AND present
       AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16

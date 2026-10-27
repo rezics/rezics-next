@@ -283,6 +283,19 @@ test("a work without its own cover shows its representative edition's cover in t
   expect(fallback).toEqual(en);
 });
 
+test('Global representative summaries ignore community projection rows', async () => {
+  const title = await subject('schema:Book', 32112, undefined, {
+    'rezics:representativeEdition': [value('rezics:representativeEdition', edition, 'en')],
+  });
+  await db.admin.query('UPDATE semantic.outbound_link SET context_id=$3 WHERE route=$1 AND subject_id=$2', [
+    32112,
+    title,
+    newId(32112),
+  ]);
+  const summary = (await readSubjectSummaries(dependencies(), [title])).get(title)!;
+  expect(summary.cover).toBeNull();
+});
+
 test('own preferred images win and representative language fallback is deterministic', async () => {
   const japaneseEdition = await subject('bf:Instance', 32112, undefined, {
     'schema:image': [value('schema:image', japanese)],

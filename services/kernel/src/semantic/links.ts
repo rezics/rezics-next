@@ -5,8 +5,8 @@ import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { readItemTypes, readLabels, readLabelChoices } from './subject.ts';
 import { chooseLabel, languageRanges } from './language.ts';
 import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
-import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
-import { linkChanges } from './link-changes.ts';
+import { factDataTypes, resolveItem, type Statement } from './item.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { contextSnapshot } from './context.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
@@ -59,6 +59,8 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type LinkChangeRow = {
+  context_id?: string;
+  suppressed?: boolean;
   property: string;
   statement: string;
   target: string | null;
@@ -91,6 +93,8 @@ type LinksVisibilityChanged = {
   cursor: (string | number)[];
 };
 type StoredChange = {
+  context_id?: string;
+  suppressed?: boolean;
   route: number;
   subjectId: string;
   property: string;
@@ -105,6 +109,8 @@ type StoredChange = {
   filterValue: string;
 };
 type StoredOutboundChange = {
+  context_id?: string;
+  suppressed?: boolean;
   route: number;
   subjectId: string;
   property: string;
@@ -152,10 +158,12 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
         if (change.target === null) continue;
         const route = routeOf(change.target);
         if (route === null) continue;
-        const key = `${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}\0${change.filter_value ?? NIL_UUID}`;
+        const key = `${change.context_id ?? GLOBAL_CONTEXT}\0${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}\0${change.filter_value ?? NIL_UUID}`;
         const current = newest.get(key);
         if (current && olderChange(data.revision, security, envelope.position, current)) continue;
         newest.set(key, {
+          context_id: change.context_id ?? GLOBAL_CONTEXT,
+          suppressed: change.suppressed ?? false,
           route,
           subjectId: change.target,
           property: change.property,
@@ -193,7 +201,7 @@ function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, Stor
       const security = Number(data.security_revision);
       for (const change of data.changes) {
         if (!change.project_outbound || !change.slot_id) continue;
-        const key = `${data.subject}\0${change.property}\0${change.statement}\0${change.target ?? ''}\0${change.external ?? ''}\0${change.filter_value ?? NIL_UUID}`;
+        const key = `${change.context_id ?? GLOBAL_CONTEXT}\0${data.subject}\0${change.property}\0${change.statement}\0${change.target ?? ''}\0${change.external ?? ''}\0${change.filter_value ?? NIL_UUID}`;
         const current = newest.get(key);
         if (
           current &&
@@ -214,6 +222,8 @@ function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, Stor
         )
           continue;
         newest.set(key, {
+          context_id: change.context_id ?? GLOBAL_CONTEXT,
+          suppressed: change.suppressed ?? false,
           route: holder,
           subjectId: data.subject,
           property: change.property,
@@ -247,10 +257,23 @@ function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, Stor
 }
 
 async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> {
+  const contexts = [...new Set(changes.map((change) => change.context_id ?? GLOBAL_CONTEXT))];
+  if (contexts.length > 1) {
+    contexts.sort((left, right) =>
+      left === GLOBAL_CONTEXT ? -1 : right === GLOBAL_CONTEXT ? 1 : left.localeCompare(right),
+    );
+    for (const context of contexts)
+      await applyChanges(
+        pool,
+        changes.filter((change) => (change.context_id ?? GLOBAL_CONTEXT) === context),
+      );
+    return;
+  }
   const newest = new Map<string, StoredChange>();
   for (const change of changes) {
     const key = JSON.stringify([
       change.subjectId,
+      change.context_id ?? GLOBAL_CONTEXT,
       change.property,
       change.sourceSubjectId,
       change.statementId,
@@ -281,6 +304,8 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
             .filter((change) => change.route === route)
             .map((change) => ({
               subject_id: change.subjectId,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
               property: change.property,
               source_subject_id: change.sourceSubjectId,
               statement_id: change.statementId,
@@ -316,6 +341,18 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
 }
 
 async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[]): Promise<void> {
+  const contexts = [...new Set(changes.map((change) => change.context_id ?? GLOBAL_CONTEXT))];
+  if (contexts.length > 1) {
+    contexts.sort((left, right) =>
+      left === GLOBAL_CONTEXT ? -1 : right === GLOBAL_CONTEXT ? 1 : left.localeCompare(right),
+    );
+    for (const context of contexts)
+      await applyOutboundChanges(
+        pool,
+        changes.filter((change) => (change.context_id ?? GLOBAL_CONTEXT) === context),
+      );
+    return;
+  }
   const routes = new Map<number, StoredOutboundChange[]>();
   for (const change of changes) {
     const group = routes.get(change.route) ?? [];
@@ -370,6 +407,8 @@ async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[])
                       : target);
             return {
               subject_id: change.subjectId,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
               property: change.property,
               filter_value: change.filterValue,
               order_key: targetOrder,
@@ -407,6 +446,8 @@ function sourceOrder(order: string | null, keys: { name: string; date: string },
 }
 
 type OutboundProjectionRow = {
+  context_id: string;
+  suppressed: boolean;
   route: number;
   subject_id: string;
   property: string;
@@ -429,6 +470,8 @@ type OutboundProjectionRow = {
 
 function outboundProjectionRow(row: OutboundProjectionRow): StoredOutboundChange {
   return {
+    context_id: String(row.context_id ?? GLOBAL_CONTEXT),
+    suppressed: row.suppressed === true,
     route: Number(row.route),
     subjectId: String(row.subject_id),
     property: String(row.property),
@@ -475,6 +518,7 @@ async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void
     after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
     after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
     after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+    after_context: typeof data.cursor[4] === 'string' ? data.cursor[4] : NIL_UUID,
   })) as Omit<OutboundProjectionRow, 'route' | 'subject_id'>[];
   const page = rows.slice(0, 100);
   if (page.length === 0) return;
@@ -497,6 +541,8 @@ async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void
             {
               route: routeOf(change.target)!,
               subjectId: change.target,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
               property: change.property,
               sourceSubjectId: data.subject,
               statementId: change.statementId,
@@ -515,7 +561,13 @@ async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void
     const last = page.at(-1)!;
     await enqueueKeyContinuation(pool, {
       ...data,
-      cursor: [last.property, last.target ?? NIL_UUID, last.statement_id, last.filter_value],
+      cursor: [
+        String(last.property),
+        typeof last.target === 'string' ? last.target : NIL_UUID,
+        String(last.statement_id),
+        String(last.filter_value),
+        String(last.context_id),
+      ],
     });
   }
 }
@@ -530,10 +582,12 @@ async function reemitTargetKeys(pool: Pool, data: LinkKeysChanged): Promise<void
     after_source: typeof afterSource === 'string' ? afterSource : NIL_UUID,
     after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
     after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+    after_context: typeof data.cursor[4] === 'string' ? data.cursor[4] : NIL_UUID,
   });
   const page = inboundRows.slice(0, 100) as {
     property: string;
     source: string;
+    context_id: string;
     statement: string;
     filter_value: string;
   }[];
@@ -555,6 +609,7 @@ async function reemitTargetKeys(pool: Pool, data: LinkKeysChanged): Promise<void
           route: holderRoute,
           links: rows.map((row) => ({
             subject_id: row.source,
+            context_id: row.context_id,
             property: row.property,
             statement_id: row.statement,
             filter_value: row.filter_value,
@@ -582,7 +637,7 @@ async function reemitTargetKeys(pool: Pool, data: LinkKeysChanged): Promise<void
     const last = page.at(-1)!;
     await enqueueKeyContinuation(pool, {
       ...data,
-      cursor: [last.property, last.source, last.statement, last.filter_value],
+      cursor: [last.property, last.source, last.statement, last.filter_value, last.context_id],
     });
   }
 }
@@ -607,6 +662,7 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
     after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
     after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
     after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+    after_context: typeof data.cursor[4] === 'string' ? data.cursor[4] : NIL_UUID,
   })) as (Omit<OutboundProjectionRow, 'route' | 'subject_id' | 'statement_id' | 'slot_id'> & {
     statement: string;
     slot: string;
@@ -632,26 +688,40 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
       return row;
     });
   } else {
-    const slots = new Map<string, string>();
-    for (const row of page) slots.set(`${String(row.property)}\0${String(row.slot)}`, String(row.property));
-    const currentFacts: FactRow[] = await withConnection(pool, async (client) => {
-      const facts: FactRow[] = [];
-      for (const [key, property] of slots) {
-        const slot = key.slice(key.indexOf('\0') + 1);
-        facts.push(...(await slotView(client, data.subject, property, GLOBAL_CONTEXT, {}, slot)).facts);
-      }
-      return facts;
-    });
+    const slots = new Map<string, { property: string; slot: string; context: string }>();
+    for (const row of page) {
+      const entry = { property: String(row.property), slot: String(row.slot), context: String(row.context_id) };
+      slots.set(`${entry.property}\0${entry.slot}\0${entry.context}`, entry);
+    }
     const identity = await withConnection(pool, (client) => holderFacts(client, data.subject, release));
-    const links = linkChanges([], currentFacts, factDataTypes(release, currentFacts), {
-      subject: data.subject,
-      release,
-      type: identity.type,
-      identityFacts: identity.facts,
+    const metadata = { subject: data.subject, release, type: identity.type, identityFacts: identity.facts };
+    const links = await withConnection(pool, async (client) => {
+      const result = [];
+      for (const { property, slot, context } of slots.values()) {
+        const global = (await slotView(client, data.subject, property, GLOBAL_CONTEXT, {}, slot)).facts;
+        if (context === GLOBAL_CONTEXT) {
+          result.push(...linkChanges([], global, factDataTypes(release, global), metadata));
+        } else {
+          const selected = (await slotView(client, data.subject, property, context, {}, slot)).facts;
+          result.push(
+            ...contextLinkChanges(
+              global,
+              global,
+              selected,
+              factDataTypes(release, [...global, ...selected]),
+              metadata,
+              context,
+            ),
+          );
+        }
+      }
+      return result;
     });
     changes = links.map((link) => ({
       route,
       subjectId: data.subject,
+      context_id: link.context_id ?? GLOBAL_CONTEXT,
+      suppressed: link.suppressed ?? false,
       property: link.property,
       statementId: link.statement,
       target: link.target,
@@ -680,6 +750,8 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
             {
               route: routeOf(change.target)!,
               subjectId: change.target,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
               property: change.property,
               sourceSubjectId: data.subject,
               statementId: change.statementId,
@@ -703,6 +775,7 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
         typeof last.target === 'string' ? last.target : NIL_UUID,
         String(last.statement),
         String(last.filter_value),
+        String(last.context_id),
       ],
     });
   }
@@ -808,6 +881,7 @@ export async function listSubjectLinks(
   ring: KeyRing,
   options: {
     subject: string;
+    context?: string;
     property: string | null;
     limit: number;
     filter?: string;
@@ -827,11 +901,14 @@ export async function listSubjectLinks(
   if (route === null) throw new SubjectNotFoundError();
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid links page limit');
+  const context = options.context ?? GLOBAL_CONTEXT;
+  if (context !== GLOBAL_CONTEXT && !(await contextSnapshot(pool, context))) throw new SubjectNotFoundError();
   const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.links',
     parameters: {
       subject: options.subject,
+      ...(context === GLOBAL_CONTEXT ? {} : { context }),
       property: options.property,
       filter: options.filter ?? null,
       type: options.type ?? null,
@@ -870,6 +947,7 @@ export async function listSubjectLinks(
       const rows =
         options.property === null
           ? await listInboundLinks.run(client, {
+              context_id: context,
               route,
               subject_id: options.subject,
               after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
@@ -878,6 +956,7 @@ export async function listSubjectLinks(
               page_limit: options.limit + 1,
             })
           : await listInboundLinksByProperty.run(client, {
+              context_id: context,
               route,
               subject_id: options.subject,
               property: options.property,
@@ -902,6 +981,7 @@ export async function listSubjectLinks(
       let count: { value: number; exact: boolean } | undefined;
       if (options.property !== null) {
         const total = await readInboundLinkCount.run(client, {
+          context_id: context,
           route,
           subject_id: options.subject,
           property: options.property,
@@ -911,6 +991,7 @@ export async function listSubjectLinks(
         if (!options.type) count = { value, exact: true };
         else {
           const sample = await countInboundLinkTypes.run(client, {
+            context_id: context,
             route,
             subject_id: options.subject,
             property: options.property,
@@ -1040,9 +1121,9 @@ export async function listSubjectRelations(
   if (route === null) throw new SubjectNotFoundError();
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid relation page limit');
-  const context = options.context ?? NIL_UUID;
-  const contextRecord = context === NIL_UUID ? null : await contextSnapshot(pool, context);
-  if (context !== NIL_UUID && !contextRecord) throw new SubjectNotFoundError();
+  const context = options.context ?? GLOBAL_CONTEXT;
+  const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
+  if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
   const defaults = contextRecord?.defaults ?? {};
   const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
@@ -1050,7 +1131,7 @@ export async function listSubjectRelations(
     parameters: {
       subject: options.subject,
       property: options.property,
-      context,
+      context: options.context ?? NIL_UUID,
       filter: options.filter ?? null,
       type: options.type ?? null,
       language: languages.join(',') || null,
@@ -1078,6 +1159,7 @@ export async function listSubjectRelations(
     if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
     const scanLimit = options.type ? 4 * options.limit : options.limit;
     const rows = (await listOutboundLinksByProperty.run(client, {
+      context_id: context,
       route,
       subject_id: options.subject,
       property: options.property,
@@ -1105,6 +1187,7 @@ export async function listSubjectRelations(
       if (selected.length === options.limit) break;
     }
     const total = await readOutboundLinkCount.run(client, {
+      context_id: context,
       route,
       subject_id: options.subject,
       property: options.property,
@@ -1114,6 +1197,7 @@ export async function listSubjectRelations(
     let count = { value: totalValue, exact: true };
     if (options.type) {
       const sample = (await countOutboundLinkTypes.run(client, {
+        context_id: context,
         route,
         subject_id: options.subject,
         property: options.property,

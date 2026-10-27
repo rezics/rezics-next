@@ -24,7 +24,7 @@ import {
   type Violation,
 } from './item.ts';
 import { holderFacts } from './link-keys.ts';
-import { linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
 import { rejectBulkContent, rejectContent } from './rules.ts';
 import { authoredAuthorization, installAuthoredStatement, type ProposalInstall } from './authored.ts';
@@ -43,6 +43,8 @@ import {
 } from './slots.ts';
 import { accountSource, assertAgentStatementAccess, readItemDetails, type AgentSelfSource } from './subject.ts';
 import { contextSnapshot } from './context.ts';
+import registerRelationContext from './relation-context-register.sql';
+import listRelationContexts from './relation-context-list.sql';
 import { matchesTarget } from './targets.ts';
 import changeCurrentFacts from './change-current-facts.sql';
 import insertCandidate from './candidates-insert-candidate.sql';
@@ -349,6 +351,8 @@ export async function decideCandidate(
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  const defaults =
+    options.context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, options.context))?.defaults ?? {});
   const command = await runCommand(
     pool,
     {
@@ -403,6 +407,20 @@ export async function decideCandidate(
       if (listed(concealed).length > 0) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
 
+      const release = candidate.relation ? await readRelease(tx, candidate.release) : null;
+      const before = release
+        ? (await slotView(tx, options.subject, candidate.property, options.context, defaults, candidate.slot_id)).facts
+        : [];
+      const global = release
+        ? (await slotView(tx, options.subject, candidate.property, GLOBAL_CONTEXT, {}, candidate.slot_id)).facts
+        : [];
+      if (release && options.context !== GLOBAL_CONTEXT)
+        await registerRelationContext.run(tx, {
+          route,
+          subject_id: options.subject,
+          slot_id: candidate.slot_id,
+          context_id: options.context,
+        });
       await expandSlot(tx, options.subject, candidate.property, transactionId, candidate.slot_id, candidate.relation);
       if (options.decision === 'reject') {
         const adoption = await latestAdoption(
@@ -436,6 +454,32 @@ export async function decideCandidate(
           revision,
           candidate.slot_id,
         );
+        const linkEvents = [];
+        if (release) {
+          const subject = await readAdoptionSubject.run(tx, { route, subject_id: options.subject });
+          if (!subject) throw new SubjectNotFoundError();
+          const after = (
+            await slotView(tx, options.subject, candidate.property, options.context, defaults, candidate.slot_id)
+          ).facts;
+          const identity = await holderFacts(tx, options.subject, release);
+          const metadata = { subject: options.subject, release, type: identity.type, identityFacts: identity.facts };
+          const dataTypes = factDataTypes(release, [...global, ...before, ...after]);
+          const changes =
+            options.context === GLOBAL_CONTEXT
+              ? linkChanges(before, after, dataTypes, metadata)
+              : contextLinkChanges(global, before, after, dataTypes, metadata, options.context);
+          if (changes.length)
+            linkEvents.push({
+              type: LINKS_CHANGED,
+              subject: options.subject,
+              data: {
+                subject: options.subject,
+                revision,
+                security_revision: Number(subject.security_revision),
+                changes,
+              },
+            });
+        }
         return {
           value: {
             acceptance: {
@@ -447,6 +491,7 @@ export async function decideCandidate(
             revision,
           },
           events: [
+            ...linkEvents,
             {
               type: SUBJECT_REVISED,
               subject: options.subject,
@@ -486,6 +531,8 @@ export async function adoptCandidates(
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  const defaults =
+    options.context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, options.context))?.defaults ?? {});
   const command = await runCommand(
     pool,
     {
@@ -561,11 +608,29 @@ export async function adoptCandidates(
       if (!definition.multivalued && options.selection.length > 1)
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
-      const beforeFacts =
+      const beforeFacts = (await slotView(tx, options.subject, options.property, options.context, defaults, slot))
+        .facts;
+      const globalFacts =
         options.context === GLOBAL_CONTEXT
-          ? (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts
-          : null;
-      const identity = beforeFacts ? await holderFacts(tx, options.subject, options.release.release) : null;
+          ? beforeFacts
+          : (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts;
+      const identity = await holderFacts(tx, options.subject, options.release.release);
+      const contextViews = new Map<string, typeof beforeFacts>();
+      if (isRelationProperty(options.release.release, options.property)) {
+        if (options.context !== GLOBAL_CONTEXT)
+          await registerRelationContext.run(tx, {
+            route,
+            subject_id: options.subject,
+            slot_id: slot,
+            context_id: options.context,
+          });
+        else
+          for (const row of await listRelationContexts.run(tx, { route, subject_id: options.subject, slot_id: slot }))
+            contextViews.set(
+              row.context_id,
+              (await slotView(tx, options.subject, options.property, row.context_id, {}, slot)).facts,
+            );
+      }
       let oldGlobalCount = 0;
       if (options.context === GLOBAL_CONTEXT) {
         const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT, slot);
@@ -631,18 +696,33 @@ export async function adoptCandidates(
           },
         ];
         if (beforeFacts) {
-          const afterFacts = (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts;
-          const changes = linkChanges(
-            beforeFacts,
-            afterFacts,
-            factDataTypes(options.release.release, [...beforeFacts, ...afterFacts]),
-            {
-              subject: options.subject,
-              release: options.release.release,
-              type: subject.type,
-              ...(identity?.facts === undefined ? {} : { identityFacts: identity.facts }),
-            },
-          );
+          const afterFacts = (await slotView(tx, options.subject, options.property, options.context, defaults, slot))
+            .facts;
+          const metadata = {
+            subject: options.subject,
+            release: options.release.release,
+            type: subject.type,
+            ...(identity?.facts === undefined ? {} : { identityFacts: identity.facts }),
+          };
+          const dataTypes = factDataTypes(options.release.release, [...globalFacts, ...beforeFacts, ...afterFacts]);
+          const changes =
+            options.context === GLOBAL_CONTEXT
+              ? linkChanges(beforeFacts, afterFacts, dataTypes, metadata)
+              : contextLinkChanges(globalFacts, beforeFacts, afterFacts, dataTypes, metadata, options.context);
+          for (const [context, before] of contextViews) {
+            const after = (await slotView(tx, options.subject, options.property, context, {}, slot)).facts;
+            changes.push(
+              ...contextLinkChanges(
+                globalFacts,
+                before,
+                after,
+                factDataTypes(options.release.release, [...globalFacts, ...afterFacts, ...before, ...after]),
+                metadata,
+                context,
+                afterFacts,
+              ),
+            );
+          }
           if (changes.length > 0) {
             events.push({
               type: LINKS_CHANGED,
@@ -655,7 +735,7 @@ export async function adoptCandidates(
               },
             });
           }
-          if (options.property === 'schema:datePublished') {
+          if (options.context === GLOBAL_CONTEXT && options.property === 'schema:datePublished') {
             for (const direction of ['holder', 'target'] as const)
               events.push({
                 type: LINK_KEYS_CHANGED,

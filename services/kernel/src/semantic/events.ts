@@ -8,6 +8,8 @@ const verification = Type.Object(
 );
 const linkChange = Type.Object(
   {
+    context_id: Type.Optional(UUID),
+    suppressed: Type.Optional(Type.Boolean()),
     property: Type.String({ minLength: 1 }),
     statement: UUID,
     target: Type.Union([UUID, Type.Null()]),

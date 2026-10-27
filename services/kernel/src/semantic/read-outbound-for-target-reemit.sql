@@ -1,9 +1,9 @@
 WITH links AS MATERIALIZED (
   SELECT * FROM jsonb_to_recordset(:links::jsonb) AS link(
-    subject_id uuid, property text, statement_id uuid, filter_value uuid
+    context_id uuid, subject_id uuid, property text, statement_id uuid, filter_value uuid
   )
 )
-SELECT outbound.route, outbound.subject_id::text, outbound.property,
+SELECT outbound.context_id::text, outbound.suppressed, outbound.route, outbound.subject_id::text, outbound.property,
        outbound.filter_value::text, outbound.order_key,
        NULLIF(outbound.target_subject_id, '00000000-0000-0000-0000-000000000000'::uuid)::text AS target,
        outbound.statement_id::text, outbound.slot_id::text, outbound.relation,
@@ -13,7 +13,7 @@ SELECT outbound.route, outbound.subject_id::text, outbound.property,
 FROM links
 JOIN LATERAL (
   SELECT * FROM semantic.outbound_link outbound
-  WHERE outbound.route = :route::integer AND outbound.subject_id = links.subject_id AND outbound.property = links.property
+  WHERE outbound.route = :route::integer AND outbound.subject_id = links.subject_id AND outbound.context_id = links.context_id AND outbound.property = links.property
     AND outbound.statement_id = links.statement_id AND outbound.filter_value = links.filter_value
     AND outbound.present AND outbound.relation
   LIMIT 1
