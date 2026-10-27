@@ -106,6 +106,8 @@ test('the tombstone and undo toast stories have no accessibility violations in l
   const run = Bun.spawn(
     [
       'bun',
+      'scripts/isolated.ts',
+      'bun',
       'x',
       'vitest',
       'run',
