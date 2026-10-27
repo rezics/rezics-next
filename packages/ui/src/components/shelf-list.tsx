@@ -1,0 +1,177 @@
+import type { MouseEvent, ReactNode } from 'react';
+import { EllipsisIcon } from 'lucide-react';
+import { Button } from '../shadcn/button.tsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
+import { Cover, type CoverProps } from './cover.tsx';
+import { ProgressRow } from './progress-row.tsx';
+
+export interface ShelfSelectionProps {
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
+  onSelect?: (event: MouseEvent) => void;
+}
+export interface ShelfListRowProps extends ShelfSelectionProps {
+  href: string;
+  cover: Omit<CoverProps, 'size'>;
+  title: string;
+  titleLang?: string;
+  meta?: ReactNode;
+  status?: ReactNode;
+  statusMenu?: ReactNode;
+  progress?: { value: number | null; label: string };
+  stepper?: { onStep: (delta: number) => void; decreaseLabel: string; increaseLabel: string };
+  date?: ReactNode;
+  menu?: ReactNode;
+  labels: { select: string; menu: string };
+}
+/** A shelf list landmark; shadcn has no shelf list layout. */
+export function ShelfList({ children }: { children: ReactNode }) {
+  return <ul className="divide-y">{children}</ul>;
+}
+/** A compact shelf entry; shadcn has no subject list row. */
+export function ShelfListRow({
+  href,
+  cover,
+  title,
+  titleLang,
+  meta,
+  status,
+  statusMenu,
+  progress,
+  stepper,
+  date,
+  menu,
+  labels,
+  selectable,
+  selected = false,
+  onSelectedChange,
+  onSelect,
+}: ShelfListRowProps) {
+  const select = (event: MouseEvent) => {
+    onSelectedChange?.(!selected);
+    onSelect?.(event);
+  };
+  const chip =
+    status != null &&
+    (statusMenu != null ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>{status}</DropdownMenuTrigger>
+        <DropdownMenuContent>{statusMenu}</DropdownMenuContent>
+      </DropdownMenu>
+    ) : (
+      status
+    ));
+  return (
+    <li
+      className="flex h-32 items-center gap-3 py-3 sm:h-24"
+      onClick={
+        selectable
+          ? (event) => {
+              if (!(event.target as Element).closest('a, button, input, [role="menuitem"]')) select(event);
+            }
+          : undefined
+      }
+    >
+      {selectable && (
+        <input
+          type="checkbox"
+          aria-label={labels.select}
+          aria-checked={selected}
+          checked={selected}
+          onChange={() => onSelectedChange?.(!selected)}
+          onClick={(event) => onSelect?.(event)}
+        />
+      )}
+      <div className="h-[72px] w-12 shrink-0 overflow-hidden rounded">
+        <Cover {...cover} size="fill" ratio="2:3" decorative caption={false} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <a
+          href={href}
+          lang={titleLang}
+          onClick={
+            selectable
+              ? (event) => {
+                  event.preventDefault();
+                  select(event);
+                }
+              : undefined
+          }
+          className="line-clamp-2 text-sm font-semibold sm:line-clamp-1"
+        >
+          {title}
+        </a>
+        {meta != null && <div className="hidden truncate text-xs text-muted-foreground sm:block">{meta}</div>}
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:hidden">
+          {chip}
+          <span className="whitespace-nowrap">{progress?.label}</span>
+          <span>{date}</span>
+        </div>
+        {progress?.value != null && (
+          <div className="mt-1 h-1 overflow-hidden rounded bg-muted sm:hidden">
+            <div
+              className="h-full bg-primary"
+              style={{ width: `${Math.max(0, Math.min(1, progress.value)) * 100}%` }}
+            />
+          </div>
+        )}
+        <div className="flex justify-end sm:hidden">
+          {stepper && (
+            <div className="flex">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={stepper.decreaseLabel}
+                onClick={() => stepper.onStep(-1)}
+              >
+                −
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={stepper.increaseLabel}
+                onClick={() => stepper.onStep(1)}
+              >
+                +
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="hidden items-center gap-3 sm:flex">
+        {chip}
+        {progress && (
+          <div className="w-24 text-xs">
+            <ProgressRow {...progress} />
+          </div>
+        )}
+
+        {stepper && (
+          <div className="flex">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={stepper.decreaseLabel}
+              onClick={() => stepper.onStep(-1)}
+            >
+              −
+            </Button>
+            <Button variant="ghost" size="icon-xs" aria-label={stepper.increaseLabel} onClick={() => stepper.onStep(1)}>
+              +
+            </Button>
+          </div>
+        )}
+        <span className="text-xs text-muted-foreground">{date}</span>
+      </div>
+      {menu != null && (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={labels.menu} />}>
+            <EllipsisIcon aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>{menu}</DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </li>
+  );
+}
