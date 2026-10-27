@@ -43,6 +43,6 @@ export const ItemMenuStory: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Item actions' }));
-    await expect(within(document.body).getByText('Status')).toBeInTheDocument();
+    await expect(await within(document.body).findByText('Status')).toBeInTheDocument();
   },
 };
