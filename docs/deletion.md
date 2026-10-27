@@ -13,7 +13,12 @@ promises still hold.
     because erasure is the person's right;
   - an immediate purge before the window ends needs a platform permission and its own route or explicit parameter,
     never the ordinary delete call.
-- **Takedown and legal holds.** A takedown withholds the record at once, as a deletion does; whether its data is
+- **Purge the least data that serves the purpose.** A purge removes the fields that are personal, private or the
+  object of the takedown (author link, body or image, contact data, network addresses) and keeps the record's
+  skeleton: identifier, type, relations, aggregate counts and the tombstone, so threads, lists, counts and
+  references stay consistent. A whole record is removed only when the skeleton itself is personal data, such as a
+  private library fact that one account reads a subject.
+- **Takedown and legal holds.** A takedown withholds the affected field or record at once, as a deletion does; whether its data is
   later purged or kept follows the legal process, and a legal hold suspends the automatic purge for that record.
 - **Evidence.** Moderation and audit records keep identifiers and decisions, not the deleted content, past the
   window.
