@@ -23,12 +23,12 @@ reference programs were run. No product code was copied. To preserve the instruc
 worktree, checkouts reside in `.temp/search-visibility-witnesses-refs/<project>/`, rather than the external shared
 reference directory. Only this report is a tracked change.
 
-| Reference checkout | Inspected commit | Verified licence at that commit |
-| --- | --- | --- |
-| `security` — OpenSearch Security | `f199729d604987b537336ab870b9d575c756e4ab` | [Apache-2.0, `LICENSE.txt`][os-license] |
+| Reference checkout                     | Inspected commit                           | Verified licence at that commit                                                                                                |
+| -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `security` — OpenSearch Security       | `f199729d604987b537336ab870b9d575c756e4ab` | [Apache-2.0, `LICENSE.txt`][os-license]                                                                                        |
 | `sourcegraph` — public source snapshot | `c864f15af264f0f456a6d8a83290b5c940715349` | [`LICENSE` delegates to `LICENSE.enterprise`][sg-license]; [Sourcegraph Enterprise License][sg-enterprise] for inspected paths |
-| `openfga` | `57b39bc3dcc12f92270602bc01eb933ca4accfbe` | [Apache-2.0, `LICENSE`][fga-license] |
-| `spicedb` | `7e7420c3f541648971b70642691ef86cac00a6cc` | [Apache-2.0, `LICENSE`][spice-license] |
+| `openfga`                              | `57b39bc3dcc12f92270602bc01eb933ca4accfbe` | [Apache-2.0, `LICENSE`][fga-license]                                                                                           |
+| `spicedb`                              | `7e7420c3f541648971b70642691ef86cac00a6cc` | [Apache-2.0, `LICENSE`][spice-license]                                                                                         |
 
 Sourcegraph's snapshot is dated 2024-08-22; the other three commits are dated 2026-10-26. Current official docs
 provide context, not proof that every detail exists in the older snapshot. No superseding licence was found in the
@@ -156,13 +156,13 @@ read boundary. It does not require REZICS to introduce a token/proof cache, a pu
 
 ## Shared patterns and the unsupported combination
 
-| Evidence-supported pattern | Applicability and limit here |
-| --- | --- |
-| Separate discovery from authorization | OpenFGA explicitly rechecks a change-fed index; SpiceDB checks candidate pages. REZICS must still check the authoritative current evidence. |
-| Batch or scope authorization work | OpenFGA batches; Sourcegraph filters repository scope; SpiceDB chunks. Batch size/concurrency bounds are not proofs of bounded underlying rows or graph traversal. |
-| Treat consistency as part of correctness | Sourcegraph documents upstream lag; OpenFGA exposes cache preferences; SpiceDB uses revisions. They offer different guarantees, not interchangeable definitions of “current.” |
-| Repair derived state incrementally | OpenFGA supplies change pages; Sourcegraph stores/coalesces sync jobs. Neither inspected implementation establishes this exact per-pair witness repair scheme. |
-| Keep pagination separate from eligibility | SpiceDB's integration guide uses cursors; OpenSearch documents sort-based continuation. Cursor progress does not guarantee full visible pages or complete recall. |
+| Evidence-supported pattern                | Applicability and limit here                                                                                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Separate discovery from authorization     | OpenFGA explicitly rechecks a change-fed index; SpiceDB checks candidate pages. REZICS must still check the authoritative current evidence.                                   |
+| Batch or scope authorization work         | OpenFGA batches; Sourcegraph filters repository scope; SpiceDB chunks. Batch size/concurrency bounds are not proofs of bounded underlying rows or graph traversal.            |
+| Treat consistency as part of correctness  | Sourcegraph documents upstream lag; OpenFGA exposes cache preferences; SpiceDB uses revisions. They offer different guarantees, not interchangeable definitions of “current.” |
+| Repair derived state incrementally        | OpenFGA supplies change pages; Sourcegraph stores/coalesces sync jobs. Neither inspected implementation establishes this exact per-pair witness repair scheme.                |
+| Keep pagination separate from eligibility | SpiceDB's integration guide uses cursors; OpenSearch documents sort-based continuation. Cursor progress does not guarantee full visible pages or complete recall.             |
 
 No inspected source establishes the specific 128/32 limits, a saved-witness-plus-fallback contract, or guaranteed
 finite recovery with independent imported fences. The combination is a locally reasoned algorithm requiring local
@@ -223,13 +223,13 @@ Do not promise an exact snapshot traversal, or reappearance on the same cursor a
 At budget exhaustion a short or empty page with continuation is valid; only exhausted **candidates** justify no next
 candidate cursor. Even candidate exhaustion says nothing about new facts not indexed yet.
 
-| Quantity | Truthful interpretation |
-| --- | --- |
-| Current visible hit | Supported by checks at their read boundaries; not a globally simultaneous snapshot of all partitions/fences. |
-| Candidate total | Count of engine matches at the engine's view. It may include stale revoked facts and omit new matches. |
+| Quantity                         | Truthful interpretation                                                                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current visible hit              | Supported by checks at their read boundaries; not a globally simultaneous snapshot of all partitions/fences.                                                                    |
+| Candidate total                  | Count of engine matches at the engine's view. It may include stale revoked facts and omit new matches.                                                                          |
 | Candidate superset from overflow | Conservative relative to the indexed sampled/overflow representation. It need not contain every current source match during lag. Its size is not a lower bound on live matches. |
-| Disclosed-hit count | Conservative evidence for matches actually disclosed on that response, under its read semantics; not an exact global cardinality or cumulative unique count across cursors. |
-| Sampled facet count | An index/sample count with stated freshness and sampling limits; not automatically a live-authorized count. |
+| Disclosed-hit count              | Conservative evidence for matches actually disclosed on that response, under its read semantics; not an exact global cardinality or cumulative unique count across cursors.     |
+| Sampled facet count              | An index/sample count with stated freshness and sampling limits; not automatically a live-authorized count.                                                                     |
 
 [The service][local-service] switches to the current response's disclosed result length as a lower bound when
 overflow/live relation rejection makes candidate totals unsafe, and carries known inexactness in its cursor binding.
