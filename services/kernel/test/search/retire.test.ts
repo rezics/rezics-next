@@ -138,6 +138,7 @@ test('an older generation is retired after the grace period with its checkpoints
     expect(await checkpoints(subjectConsumer(prefix, 1))).toBeGreaterThan(0);
     await activate(prefix, 2);
     await eventually(async () => (await generationsOf(prefix)).join() === '2');
+    await eventually(async () => (await checkpoints(subjectConsumer(prefix, 1))) === 0);
     expect(await checkpoints(subjectConsumer(prefix, 1))).toBe(0);
     expect(await checkpoints(subjectConsumer(prefix, 2))).toBeGreaterThan(0);
     const later = book(500, 2);
@@ -194,6 +195,7 @@ test('a runner started after the grace period retires at its first discovery', a
   });
   try {
     await eventually(async () => (await generationsOf(prefix)).join() === '2');
+    await eventually(async () => (await checkpoints(subjectConsumer(prefix, 1))) === 0);
     expect(await checkpoints(subjectConsumer(prefix, 1))).toBe(0);
   } finally {
     await restarted.stop();

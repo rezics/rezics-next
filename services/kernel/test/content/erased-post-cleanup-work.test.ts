@@ -389,6 +389,7 @@ if (process.argv.includes('--erased-post-worker')) {
       expect(await revisionCount(contentRoute, created.post)).toBe(101);
       expect(await uncleared(contentRoute, created.post)).toBe(0);
       expect(await uncleared(contentRoute, created.neighbour)).toBe(1);
+      await until('governance workflow completion', async () => (await governanceSucceeded(created.post)) > 0);
       expect(await governanceSucceeded(created.post)).toBeGreaterThan(0);
     } finally {
       await running.handle.stop().catch(() => running.handle.kill());

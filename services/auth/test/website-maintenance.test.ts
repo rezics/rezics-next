@@ -30,6 +30,8 @@ test('protocol retention registers and dispatches one bounded batch through the 
       const schedule = await client.getSchedule(WEBSITE_MAINTENANCE_WORKFLOW);
       assert.equal(schedule.queueName, 'maintenance');
       assert.equal(schedule.automaticBackfill, false);
+      // Pause before launch so no scheduler loop can plan a competing batch.
+      await client.pauseSchedule(schedule.scheduleName);
       await pool.query(\`INSERT INTO "oauthClientAssertion" (id,"expiresAt")
         SELECT 'expired-'||i,now()-interval '1 day' FROM generate_series(1,2001) i\`);
       await work.launch();
