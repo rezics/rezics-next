@@ -74,10 +74,10 @@ export interface FollowCountsDriver {
   capture(follower: Principal, target: CountTarget): Promise<string>;
   deliver(capture: string): Promise<void>;
   reconcile(follower: Principal, target: CountTarget): Promise<void>;
-  /** Delivery hints reread current account truth; they cannot assert lifecycle state. */
-  accountSignal(accountId: string, hint: 'scheduled' | 'cancelled' | 'terminal'): Promise<void>;
-  /** Actual shared page runner; returns raw source/target rows examined per page. */
-  purge(accountId: string, elapsedDays: number): Promise<{ pages: number; maxRows: number; complete: boolean }>;
+  /** Redeliver the actual terminal account-tombstoned event through its production consumer. */
+  accountSignal(accountId: string): Promise<void>;
+  /** Await actual event-enqueued bounded purge, without advancing time or invoking a manual cleanup shortcut. */
+  purge(accountId: string): Promise<{ pages: number; maxRows: number; complete: boolean }>;
   inspect(follower: Principal, target: CountTarget): Promise<CountInspection>;
   /** Fault actual dependency/coverage readiness; never fabricate a response. */
   fault(state: 'access_unavailable' | 'projection_unready' | 'clear'): Promise<void>;
@@ -89,8 +89,11 @@ export interface FollowCountsDriver {
    * OTHER accounts following this target. Other axes never follow this target.
    * Distinct physical source/target partitions, all partition numbers <4096.
    */
-  seed(fixture: CountFixture, scale: number,
-    axis: 'unrelated_followers' | 'unrelated_targets' | 'history' | 'target_followers'): Promise<void>;
+  seed(
+    fixture: CountFixture,
+    scale: number,
+    axis: 'unrelated_followers' | 'unrelated_targets' | 'history' | 'target_followers',
+  ): Promise<void>;
   measure<T>(read: () => Promise<T>): Promise<{ value: T; trace: ReadTrace }>;
   close(): Promise<void>;
 }

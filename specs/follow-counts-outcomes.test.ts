@@ -4,7 +4,11 @@ import { pathToFileURL } from 'node:url';
 import { routeOf } from '../services/kernel/src/route/route.ts';
 import {
   FOLLOW_COUNTS_MISSING_DRIVER,
-  type CountFixture, type CountTarget, type Credential, type FollowCountsDriver, type ReadTrace,
+  type CountFixture,
+  type CountTarget,
+  type Credential,
+  type FollowCountsDriver,
+  type ReadTrace,
 } from './follow-counts-driver.ts';
 
 setDefaultTimeout(240_000);
@@ -12,14 +16,20 @@ let driver: FollowCountsDriver | undefined;
 beforeEach(async () => {
   const location = process.env.FOLLOW_COUNTS_DRIVER;
   if (!location) throw new Error(FOLLOW_COUNTS_MISSING_DRIVER);
-  if (!isAbsolute(location) && !location.startsWith('file:')) throw new Error('FOLLOW_COUNTS_DRIVER must be absolute or a file URL');
+  if (!isAbsolute(location) && !location.startsWith('file:'))
+    throw new Error('FOLLOW_COUNTS_DRIVER must be absolute or a file URL');
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
   if (url.protocol !== 'file:') throw new Error('FOLLOW_COUNTS_DRIVER must use a file URL');
   const binding = await import(url.href);
-  if (typeof binding.createFollowCountsDriver !== 'function') throw new Error('Expected createFollowCountsDriver factory');
+  if (typeof binding.createFollowCountsDriver !== 'function')
+    throw new Error('Expected createFollowCountsDriver factory');
   driver = await binding.createFollowCountsDriver();
 });
-afterEach(async () => { const current = driver; driver = undefined; await current?.close(); });
+afterEach(async () => {
+  const current = driver;
+  driver = undefined;
+  await current?.close();
+});
 const native = () => driver!;
 const targetPath = (target: CountTarget) => `/v1/followCounts/${target.targetType}/${target.targetId}`;
 async function problem(response: Response, status: number, code: string) {
@@ -45,7 +55,8 @@ async function outgoing(credential: Credential, value: number) {
 }
 async function write(f: CountFixture, intent: 'follow' | 'unfollow', key = crypto.randomUUID()) {
   const response = await native().request(f.follower.credential, `/v1/follows/${f.target.targetId}`, {
-    method: intent === 'follow' ? 'PUT' : 'DELETE', headers: { 'Idempotency-Key': key },
+    method: intent === 'follow' ? 'PUT' : 'DELETE',
+    headers: { 'Idempotency-Key': key },
   });
   expect(response.status).toBe(200);
   return response.json();
@@ -72,14 +83,20 @@ test('follower counts are visible only through existing target management author
   const otherPage = await native().request(f.other.credential, '/v1/follows?limit=1');
   expect(otherPage.status).toBe(200);
   expect((await otherPage.json()).follows).toEqual([]);
-  await problem(await native().request(f.other.credential, `/v1/followCounts/outgoing?accountId=${f.follower.accountId}`), 400, 'invalid_request');
+  await problem(
+    await native().request(f.other.credential, `/v1/followCounts/outgoing?accountId=${f.follower.accountId}`),
+    400,
+    'invalid_request',
+  );
 });
 
 test('Space management uses its installed role through native Access', async () => {
   const f = await followed('space');
   await count(f, 1, f.granted.credential);
   const measured = await native().measure(() => count(f, 1, f.granted.credential));
-  expect(measured.trace.managementChecks).toEqual([{ action: 'space:manage', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } }]);
+  expect(measured.trace.managementChecks).toEqual([
+    { action: 'space:manage', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } },
+  ]);
   await native().revokeManagement(f);
   await problem(await native().request(f.granted.credential, targetPath(f.target)), 404, 'not_found');
 });
@@ -93,7 +110,9 @@ test('person agent self automated operator and organization owner resolve the ac
     if (kind === 'person') expect(f.manager.accountId).toBe(f.targetAccountId!);
     else {
       const result = await native().measure(() => count(f, 1));
-      expect(result.trace.managementChecks).toEqual([{ action: 'account:manage', resource: { route: routeOf(f.targetAccountId!)!, id: f.targetAccountId! } }]);
+      expect(result.trace.managementChecks).toEqual([
+        { action: 'account:manage', resource: { route: routeOf(f.targetAccountId!)!, id: f.targetAccountId! } },
+      ]);
     }
     await count(f, 1, f.granted.credential);
     await native().revokeManagement(f);
@@ -162,7 +181,9 @@ test('one management authorization is performed per count page independent of fo
   for (const scale of [1, 4, 16]) {
     await native().seed(f, scale, 'target_followers');
     const result = await native().measure(() => count(f, 1 + 128 * scale));
-    expect(result.trace.managementChecks).toEqual([{ action: 'collection:update', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } }]);
+    expect(result.trace.managementChecks).toEqual([
+      { action: 'collection:update', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } },
+    ]);
   }
 });
 
@@ -213,24 +234,20 @@ test('a delayed reverse positive cannot beat a newer negative even on its first 
   await count(f, 0);
 });
 
-test('scheduled hide and cancelled restore reconcile current truth and never resurrect explicit unfollow', async () => {
+test('suspension and reactivation reconcile current truth and never resurrect explicit unfollow', async () => {
   const f = await followed();
   const old = await native().capture(f.follower, f.target);
   await native().accountState(f.follower.accountId, 'suspended');
-  await native().accountSignal(f.follower.accountId, 'scheduled');
+  await native().reconcile(f.follower, f.target);
   await native().deliver(old);
   await count(f, 0);
   await native().accountState(f.follower.accountId, 'active');
   f.follower = await native().reauthenticate(f.follower);
-  await native().accountSignal(f.follower.accountId, 'cancelled');
-  await count(f, 1);
-  await native().accountSignal(f.follower.accountId, 'scheduled'); // late hint, account is active
+  await native().reconcile(f.follower, f.target);
   await count(f, 1);
   await write(f, 'unfollow');
-  await native().accountSignal(f.follower.accountId, 'cancelled');
-  await count(f, 0);
-  await native().accountState(f.follower.accountId, 'suspended');
-  await native().accountSignal(f.follower.accountId, 'cancelled'); // late restore, account is hidden
+  await native().deliver(old);
+  await native().reconcile(f.follower, f.target);
   await count(f, 0);
 });
 
@@ -243,12 +260,12 @@ test('a positive first application rechecks current account state without waitin
   await count(f, 0);
 });
 
-test('terminal purge removes private payloads by thirty days and all old work remains fenced', async () => {
+test('terminal account event starts bounded private purge immediately and all old work remains fenced', async () => {
   const f = await followed();
   const old = await native().capture(f.follower, f.target);
   await native().accountState(f.follower.accountId, 'deleted');
-  await native().accountSignal(f.follower.accountId, 'terminal');
-  const result = await native().purge(f.follower.accountId, 30);
+  await native().accountSignal(f.follower.accountId);
+  const result = await native().purge(f.follower.accountId);
   expect(result.complete).toBe(true);
   expect(result.pages).toBeGreaterThan(0);
   expect(result.maxRows).toBeLessThanOrEqual(100);
@@ -257,7 +274,7 @@ test('terminal purge removes private payloads by thirty days and all old work re
   expect(state.privatePayloads).toEqual([]);
   expect(state.terminalFences).toContainEqual({ accountId: f.follower.accountId });
   await native().deliver(old);
-  await native().accountSignal(f.follower.accountId, 'cancelled');
+  await native().accountSignal(f.follower.accountId);
   await count(f, 0);
   expect((await native().inspect(f.follower, f.target)).privatePayloads).toEqual([]);
 });
@@ -283,7 +300,9 @@ test('private follow data never enters public responses FTS public counts sitema
   const artifacts = await native().publicArtifacts();
   // Inspection is scoped to public follow effects; fixture creation is excluded.
   expect(artifacts).toEqual(before);
-  expect(new Set(artifacts.map(row => row.surface))).toEqual(new Set(['responses', 'fts', 'counts', 'sitemaps', 'notifications']));
+  expect(new Set(artifacts.map((row) => row.surface))).toEqual(
+    new Set(['responses', 'fts', 'counts', 'sitemaps', 'notifications']),
+  );
 });
 
 function bounded(traces: ReadTrace[]) {
@@ -302,7 +321,8 @@ function bounded(traces: ReadTrace[]) {
 test('three legal geometric growth scales bound target and outgoing rows blocks and statements', async () => {
   for (const axis of ['unrelated_followers', 'unrelated_targets', 'history', 'target_followers'] as const) {
     const f = await followed();
-    const targets: ReadTrace[] = [], outgoingReads: ReadTrace[] = [];
+    const targets: ReadTrace[] = [],
+      outgoingReads: ReadTrace[] = [];
     for (const scale of [1, 4, 16]) {
       await native().seed(f, scale, axis);
       const expected = axis === 'target_followers' ? 1 + 128 * scale : 1;
