@@ -297,8 +297,18 @@ test('repair store and current witness reads remain bounded as unrelated state g
     const repairPath = '../../src/semantic/subject-page-publication.ts';
     const repairs = await import(repairPath).catch(() => ({}));
     expect(typeof (repairs as any).createSubjectPagePublication).toBe('function');
-    const store: PublicationStore = (stores as any).createSubjectPagePublicationStore({ pool: db.pool, access, clock });
-    const runner: PublicationRunner = (repairs as any).createSubjectPagePublication({ pool: db.pool, access, clock });
+    const store: PublicationStore = (stores as any).createSubjectPagePublicationStore({
+      pool: db.pool,
+      access,
+      clock,
+      routeKey,
+    });
+    const runner: PublicationRunner = (repairs as any).createSubjectPagePublication({
+      pool: db.pool,
+      access,
+      clock,
+      routeKey,
+    });
     const key = { route: 0, id: anchor };
     await runner.requestRebuild(key);
     await drain(runner);

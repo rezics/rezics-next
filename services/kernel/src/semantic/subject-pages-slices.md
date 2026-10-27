@@ -9,12 +9,16 @@ their HTTP-first checks, mounted runtime accessor and privacy assertions.
 
 ## Shared internal contract
 
-`subject-page-publication-store.ts` owns the types and all publication SQL.
+`subject-page-publication-store.ts` owns the types and all publication-table SQL.
 `subject-page-publication.ts` owns the durable algorithm. Both factories receive
-`{ pool: Pool; access: Access; clock: KernelClock }`, with the resolved real Access,
+`{ pool: Pool; access: Access; clock: KernelClock; routeKey: Uint8Array }`, with the resolved real Access,
 not its factory. They bind native selection, moderation, disclosure and owner
 readers internally; neither accepts callbacks supplying publication truth.
 Factories are synchronous and do no work until a method is called.
+`routeKey` is required and is the same canonical secret already owned by
+`createKernel`/the worker; this adds no kernel dependency. Bootstrap derives
+`tupleRoute(routeKey, source, external_id)` for retained imported components.
+No registry, default, alternate key or guessed canonical secret is allowed.
 
 ```ts
 type SubjectKey = { route: number; id: string };
@@ -38,8 +42,18 @@ type PublicationStore = {
   read(subject: SubjectKey): Promise<PublicationSnapshot | null>;
   readCurrent(subject: SubjectKey): Promise<PublicationEntry | null>;
 };
-function createSubjectPagePublicationStore(input: { pool: Pool; access: Access; clock: KernelClock }): PublicationStore;
-function createSubjectPagePublication(input: { pool: Pool; access: Access; clock: KernelClock }): {
+function createSubjectPagePublicationStore(input: {
+  pool: Pool;
+  access: Access;
+  clock: KernelClock;
+  routeKey: Uint8Array;
+}): PublicationStore;
+function createSubjectPagePublication(input: {
+  pool: Pool;
+  access: Access;
+  clock: KernelClock;
+  routeKey: Uint8Array;
+}): {
   requestRebuild(subject: SubjectKey): Promise<void>;
   step(options: { limit: number }): Promise<{
     processed: number;
@@ -161,6 +175,34 @@ time: EvidenceTime } | null>`. This port alone
 acquires durable runnable leases using indexed ordered work and `SKIP LOCKED`;
 null means no claim, not global idle while another live lease remains.
 
+Repair's native source-reader boundary is
+`readSubjectPageNativeWindow(client, { subject, phase, after, limit, sentinel })`, where
+`phase` is `'descriptive' | 'relations' | 'evidence'`, `after` is `string[]`,
+`limit` is the remaining combined budget, and `sentinel: boolean` grants
+the still-unused step-wide sentinel allowance. It returns
+`{ keys: { sourceKey: string[]; component: ComponentKey }[]; hasMore: boolean }`.
+The ordered key window precedes current filtering; the runner advances past
+filtered keys and obtains current component state through the existing keyed
+native readers. The optional key-only sentinel consumes the step's one shared
+sentinel allowance, never a fresh allowance per phase. Bootstrap reuses the
+candidate primitive's native source window and commits only through
+`commitSubjectPageBootstrapPage`.
+
+Publication replay and reverse dependencies remain store-owned reads:
+`readSubjectPageReplayWindow(client, { subject, after: string, limit: number, sentinel: boolean })`
+returns `{ changes: { position: string; changeId: string;
+component: ComponentKey | null; before: PublicState; after: PublicState;
+time: EvidenceTime }[]; hasMore: boolean }`, and
+`readSubjectPageFanoutWindow(client, { owner, after: string[], limit: number, sentinel: boolean })`
+returns `{ edges: { sourceKey: string[]; subject: SubjectKey;
+component: ComponentKey }[]; hasMore: boolean }`.
+Both use the remaining combined key budget and shared sentinel allowance.
+Claimed checkpoint/high-water state comes from the store claim port; replay
+and fanout windows cannot mutate it. All component installation, ledger,
+publication, lease and checkpoint writes remain exclusively in store ports.
+Repair owns phase sequencing and native source SQL, never a second
+publication-table writer.
+
 Only the store implements these writers. Callers must already hold the matching
 command-partition transaction; ports reject a cross-partition write. Local
 `recordSubjectPageTransition` obtains `authoritativeTimeValue(commandTime(tx)!)`
@@ -183,7 +225,10 @@ their original evidence time through fanout, never semantic consumption time.
 All tables are semantic-owned migrations under `db/semantic/migrations/`.
 Use the exact keys in the design, and these column spellings for checkpoints
 and diagnostics. Publication SQL belongs exclusively to the store slice;
-repair, HTTP and Relay call the ports above rather than writing these tables.
+repair, HTTP and Relay call the store ports rather than writing these tables.
+Repair may own `subject-page-publication-phase-*.typed.sql` source readers for
+native semantic component windows. Those readers never write or directly read
+publication tables. Store SQL and native phase SQL have distinct ownership.
 
 | Table                      | Primary key; other required index                                                                                                                          | Required state; store writer                                                                                                                                                   |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -255,22 +300,31 @@ Estimates below describe production work, excluding this acceptance handoff.
 Each slice owns its listed implementation files; shared store files have one
 writer. No permanent stub or temporary success response is a valid landing.
 
-| Slice                                    | Paths and estimate                                                                                                                                                    | Independent acceptance                                                                                                                                                             | Genuine dependency                                                                                                                                                                                              |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native publication store                 | `subject-page-publication-store.ts`, `subject-page-publication-*.sql`, semantic migration, native mutation files listed above; about 1,100 lines / 20 files           | `bun run --cwd services/kernel check test/semantic/subject-page-local-publication.test.ts`                                                                                         | Existing command/Access/read helpers only. No feed route, Content event implementation or repair runtime prerequisite.                                                                                          |
-| Durable repair/bootstrap                 | `subject-page-publication.ts`, repair/phase key SQL owned through store ports; about 800 lines / 10 files                                                             | `bun run --cwd services/kernel check test/semantic/subject-page-repair.test.ts test/semantic/growth-subject-page-repair.test.ts`                                                   | Store types/ports and current candidate primitive. Direct factory acceptance proves durable unit behavior; it does not prove mounting or worker registration.                                                   |
-| HTTP traversal/current-proof adapter     | `semantic/http/subject-pages.ts`, API schema/derived client surface and transport integration; about 350 lines / 5 files                                              | `bun run --cwd services/kernel check test/semantic/subject-pages-contract.test.ts test/semantic/subject-page-candidates.test.ts`; final composition also runs full API tests below | Candidate primitive and store interface. It can implement signed traversal, batching, omission scheduling and final current proof without waiting on unrelated worker tests.                                    |
-| Content source-fence original-time event | `src/content/source-fences.ts`, `src/content/events.ts`, `db/content/migrations/` and `test/content/source-fence-publication-time.test.ts`; about 250 lines / 5 files | `bun run --cwd services/kernel check test/content/source-fence-publication-time.test.ts` (new owner acceptance), plus final foreign fixture below                                  | Existing source-fence command/outbox contract. Preserve original `authoritativeTimeValue` at live command and stable tuple/event identity. This is separate from semantic delivery/fanout.                      |
-| Semantic durable Relay/fanout            | `src/semantic/subject-page-publication-relay.ts`, store fanout ports/SQL and `test/semantic/subject-page-publication-relay.test.ts`; about 450 lines / 6 files        | `bun run --cwd services/kernel check test/semantic/subject-page-publication-relay.test.ts` (new owner acceptance); final API foreign-removal test remains required                 | Content's agreed source-fence original-time event for real foreign completion. Uses store owner-change/fanout ports; does not require Content code for native store/repair acceptance.                          |
-| Kernel/worker composition                | `http/kernel.ts`, `worker.ts`, omission scheduler mounting; about 200 lines / 3 files                                                                                 | `bun run --cwd services/kernel check test/semantic/subject-pages.test.ts test/semantic/growth-subject-pages.test.ts`                                                               | Runtime, HTTP and real foreign adapter. `subjectPagePublicationFor(app)` must return the actual shared mounted instance; worker registration invokes that implementation and durable queue with retry/shutdown. |
+| Slice                                | Paths and estimate                                                                                                                                              | Independent acceptance                                                                                                                                                             | Genuine dependency                                                                                                                                                                                                            |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native publication store             | `subject-page-publication-store.ts`, `subject-page-publication-*.sql`, semantic migration, native mutation files listed above; about 1,100 lines / 20 files     | `bun run --cwd services/kernel check test/semantic/subject-page-local-publication.test.ts`                                                                                         | Existing command/Access/read helpers only. No feed route, Content event implementation or repair runtime prerequisite.                                                                                                        |
+| Durable repair/bootstrap             | `subject-page-publication.ts`, native repair phase-window `*.typed.sql` readers (publication-table access only through store ports); about 800 lines / 10 files | `bun run --cwd services/kernel check test/semantic/subject-page-repair.test.ts test/semantic/growth-subject-page-repair.test.ts`                                                   | Store types/ports and current candidate primitive. Direct factory acceptance proves durable unit behavior; it does not prove mounting or worker registration.                                                                 |
+| HTTP traversal/current-proof adapter | `semantic/http/subject-pages.ts`, API schema/derived client surface and transport integration; about 350 lines / 5 files                                        | `bun run --cwd services/kernel check test/semantic/subject-pages-contract.test.ts test/semantic/subject-page-candidates.test.ts`; final composition also runs full API tests below | Candidate primitive and store interface. It can implement signed traversal, batching, omission scheduling and final current proof without waiting on unrelated worker tests.                                                  |
+| Semantic durable Relay/fanout        | `src/semantic/subject-page-publication-relay.ts`, store fanout ports/SQL and `test/semantic/subject-page-publication-relay.test.ts`; about 450 lines / 6 files  | `bun run --cwd services/kernel check test/semantic/subject-page-publication-relay.test.ts` (new owner acceptance); final API foreign-removal test remains required                 | Content's agreed original-time event and subsequent `SourceFence`/`readFences` extension for real foreign completion. Uses store owner-change/fanout ports; does not require Content code for native store/repair acceptance. |
+| Kernel/worker composition            | `http/kernel.ts`, `worker.ts`, omission scheduler mounting; about 200 lines / 3 files                                                                           | `bun run --cwd services/kernel check test/semantic/subject-pages.test.ts test/semantic/growth-subject-pages.test.ts`                                                               | Runtime, HTTP and real foreign adapter. `subjectPagePublicationFor(app)` must return the actual shared mounted instance; worker registration invokes that implementation and durable queue with retry/shutdown.               |
 
 The repair runner also handles native owner fanout windows through the same
 combined step budget and store ports. The Relay adapter supplies durable foreign
 event ingestion, deduplication and retry into that machinery; kernel/worker
 composition alone owns its lifecycle registration and shutdown callsites.
 
-The two foreign slices' exact event agreement and their new acceptance belong
-to their owners; no speculative new obligations are added here. The unchanged
+Content's already agreed original-time slice owns the immutable original
+`taken_down_at`/`takedown_id` pair and optional `takenDownAt`/`takedownId` on
+`com.rezics.content.source_fence.taken_down.v1` (in `source-fence-events.ts`).
+The subsequent internal-read slice extends only `SourceFence` and `readFences`
+in `src/content/source-fences.ts` with optional `takenDownAt`/`takedownId`,
+absent for legacy, standing and missing fences. It depends on that original-time
+slice. The existing cap stays 100 tuples per call (stricter than the general
+256-owner cap); one statement per partition, deduplication and independently
+owned anchors stay unchanged. There is no `readSourceFences` helper. This is
+the exact foreign integration dependency, not a new Content acceptance or
+file-ownership assignment. Semantic Relay/fanout consumes the original pair
+through the event and bounded current read; neither adapter invents a time. The unchanged
 full foreign API fixture is the mandatory final integration dependency, not a
 substitute for the isolated native tests. Documentation/web optional-time
 adoption remains a separately owned final consumer slice from the design.

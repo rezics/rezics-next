@@ -140,8 +140,13 @@ test('durable publication repair advances a fixed combined key budget and settle
   expect(typeof (stores as any).createSubjectPagePublicationStore).toBe('function');
   let workerPool = db.pool;
   const fresh = (): PublicationRunner =>
-    (module as any).createSubjectPagePublication({ pool: workerPool, access, clock });
-  const store: PublicationStore = (stores as any).createSubjectPagePublicationStore({ pool: db.pool, access, clock });
+    (module as any).createSubjectPagePublication({ pool: workerPool, access, clock, routeKey });
+  const store: PublicationStore = (stores as any).createSubjectPagePublicationStore({
+    pool: db.pool,
+    access,
+    clock,
+    routeKey,
+  });
   let runner = fresh();
   const cursors = new Set<string>();
   let nonidle = 0;

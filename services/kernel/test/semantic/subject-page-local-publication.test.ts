@@ -53,11 +53,12 @@ const actions = [
   'context:adopt',
   'moderation:hide',
 ];
+const routeKey = new Uint8Array(32).fill(81);
 const real = await createRealAccess(admin, accounts, actions, { clock });
 let access: Access;
 const app = createKernel({
   pool,
-  routeKey: new Uint8Array(32).fill(81),
+  routeKey,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) },
   clock,
   writeRate: real.writeRate,
@@ -176,7 +177,12 @@ test('local public component changes retain command time while private activity 
   const path = '../../src/semantic/subject-page-publication-store.ts';
   const module = await import(path).catch(() => ({}));
   expect(typeof (module as any).createSubjectPagePublicationStore, 'production store factory').toBe('function');
-  const store: PublicationStore = (module as any).createSubjectPagePublicationStore({ pool, access: access!, clock });
+  const store: PublicationStore = (module as any).createSubjectPagePublicationStore({
+    pool,
+    access: access!,
+    clock,
+    routeKey,
+  });
   const indexes = (
     await admin.query(`SELECT tablename, indexdef FROM pg_indexes
     WHERE schemaname='semantic' AND tablename LIKE 'subject_page_%'`)
@@ -366,10 +372,11 @@ test('native publication transition and current proof cost excludes unrelated co
       routeOf(growthAccounts.editor),
       growthAccounts.editor,
     ]);
+    const routeKey = new Uint8Array(32).fill(87);
     let resolved: Access;
     const kernel = createKernel({
       pool: db.pool,
-      routeKey: new Uint8Array(32).fill(87),
+      routeKey,
       clock,
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(88)]]) },
       writeRate: fixture.writeRate,
@@ -432,6 +439,7 @@ test('native publication transition and current proof cost excludes unrelated co
       pool: db.pool,
       access: resolved!,
       clock,
+      routeKey,
     });
     for (const axis of ['population', 'noindex', 'history', 'degree'] as const) {
       const population: Population = {
