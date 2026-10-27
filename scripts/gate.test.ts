@@ -249,7 +249,7 @@ test('the gate is not capped at half capacity and leaves one slot of its host fr
   expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(5);
   const probe = seen.find((event) => event.kind === 'probe')!.script as string;
   expect(probe).toContain('GATE_WAITING');
-  const take = (seen.find((event) => event.kind === 'slot')!);
+  const take = seen.find((event) => event.kind === 'slot')!;
   expect(take.requested).toBe(5);
 });
 

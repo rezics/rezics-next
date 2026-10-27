@@ -463,7 +463,7 @@ test('a request above half the smallest answering host capacity is refused befor
   const result = await remote(env, directory, ['true'], ['--slots', '3']);
   expect(result.code).toBe(64);
   expect(result.stderr).toContain('cap of 2');
-  expect(result.stderr).toContain('lower the run\'s concurrency to match');
+  expect(result.stderr).toContain("lower the run's concurrency to match");
   expect(result.stderr).not.toContain('waiting for a free one');
   expect(events().filter((event) => event.kind === 'probe')).toHaveLength(2);
   expect(events().some((event) => event.kind === 'slot')).toBe(false);
@@ -741,7 +741,7 @@ test('a remote run takes all requested slots in one session on one host and rele
   const tooMany = scenario({ a: { available: 4e9 } });
   const refused = await remote(tooMany.env, workspace(), ['bun', 'test'], ['--slots', '3']);
   expect(refused.code).toBe(64);
-  expect(refused.stderr).toContain('lower the run\'s concurrency to match');
+  expect(refused.stderr).toContain("lower the run's concurrency to match");
   expect(tooMany.events().some((event) => event.kind === 'slot')).toBe(false);
 });
 
@@ -762,9 +762,13 @@ test('single-slot runs keep starting on a host while a multi-slot run waits for 
     expect(events().filter((event) => event.kind === 'slot' && event.requested === 2)).toHaveLength(0);
 
     laterSingle = startRemote(env, workspace(), ['true']);
-    await waitFor(() => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 2);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 2,
+    );
     expect(await laterSingle.child.exited).toBe(0);
-    expect(events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted)).toHaveLength(2);
+    expect(
+      events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted),
+    ).toHaveLength(2);
 
     first.child.kill('SIGTERM');
     await first.child.exited;
@@ -785,7 +789,9 @@ test('single-slot runs keep starting on a host while a multi-slot run waits for 
 });
 
 test('a multi-slot waiter takes all slots or none and holds no slot or reservation while waiting', async () => {
-  const { env, events } = scenario({ a: { available: 20e9, slots: 4, hang: true, hangRuns: 1, loadOnHang: 6, loadAfterHang: 0 } });
+  const { env, events } = scenario({
+    a: { available: 20e9, slots: 4, hang: true, hangRuns: 1, loadOnHang: 6, loadAfterHang: 0 },
+  });
   const waitFile = join(env.FAKE_DIR!, 'multi-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
   const first = startRemote(env, workspace(), ['sleep', '120']);
@@ -830,18 +836,23 @@ test('while a gate waits for a host, single-slot runs prefer other hosts', async
     await waitFor(() => events().some((event) => event.kind === 'run' && event.address === 'ops@b.test'));
     gateRun = startRemote(env, workspace(), ['true'], ['--gate', '--slots', '2']);
     await waitFor(() => events().some((event) => event.kind === 'gate-marker' && event.address === 'ops@b.test'));
-    await waitFor(() => events().some((event) => event.kind === 'probe' && event.address === 'ops@b.test' && event.gateWaiting === true));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'probe' && event.address === 'ops@b.test' && event.gateWaiting === true),
+    );
     await waitFor(() => existsSync(waitFile));
 
     single = startRemote(env, workspace(), ['true']);
     await waitFor(() => events().some((event) => event.kind === 'run' && event.address === 'ops@a.test'));
     expect(await single.child.exited).toBe(0);
-    expect(events().find((event) => event.kind === 'rsync' && String(event.destination).startsWith('ops@a.test:')))
-      .toBeDefined();
+    expect(
+      events().find((event) => event.kind === 'rsync' && String(event.destination).startsWith('ops@a.test:')),
+    ).toBeDefined();
 
     gateRun.child.kill('SIGTERM');
     expect(await gateRun.child.exited).toBe(143);
-    await waitFor(() => events().some((event) => event.kind === 'gate-marker-release' && event.address === 'ops@b.test'));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'gate-marker-release' && event.address === 'ops@b.test'),
+    );
     first.child.kill('SIGTERM');
     await first.child.exited;
   } finally {

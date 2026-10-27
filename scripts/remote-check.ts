@@ -56,7 +56,10 @@ const MAX_WAIT_RECORD_MS = 60_000;
 export class Aborted extends Error {}
 
 export class SlotRequestTooLarge extends Error {
-  constructor(readonly cap: number, readonly requested: number) {
+  constructor(
+    readonly cap: number,
+    readonly requested: number,
+  ) {
     super(`remote-check: requested ${requested} slots exceeds the cap of ${cap}; lower the run's concurrency to match`);
     this.name = 'SlotRequestTooLarge';
   }
@@ -568,7 +571,12 @@ async function takeGateMarker(host: Host, signal: AbortSignal): Promise<SessionL
 }
 
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
-async function rankedHosts(hosts: Host[], signal: AbortSignal, gate: boolean, preferUngated = false): Promise<RankedHost[]> {
+async function rankedHosts(
+  hosts: Host[],
+  signal: AbortSignal,
+  gate: boolean,
+  preferUngated = false,
+): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
   return (
@@ -591,13 +599,19 @@ export async function answeringHosts(hosts: Host[]): Promise<Host[]> {
 }
 
 /** Tries every host's slots once, most resource-backed free slots first, and never waits for one. */
-async function acquireOnce(hosts: Host[], requestedSlots: number, signal: AbortSignal, gate = false): Promise<Lease | null> {
+async function acquireOnce(
+  hosts: Host[],
+  requestedSlots: number,
+  signal: AbortSignal,
+  gate = false,
+): Promise<Lease | null> {
   const ranked = await rankedHosts(hosts, signal, gate);
   let slots = requestedSlots;
   if (ranked.length > 0) {
     if (gate) {
       const largestAdmissible = Math.max(...ranked.map(({ gateCapacity }) => gateCapacity));
-      if (largestAdmissible < 1) throw new Error('remote-check: no check host can run the gate while leaving one slot free');
+      if (largestAdmissible < 1)
+        throw new Error('remote-check: no check host can run the gate while leaving one slot free');
       if (slots > largestAdmissible) {
         slots = largestAdmissible;
         console.error(
