@@ -1332,21 +1332,21 @@ export async function listSubjectRelations(
     { languages },
   );
   requireAccessDeadline(deadline);
-  return {
-    ...page,
-    relations: page.relations.flatMap((entry) => {
-      if (!entry.target) return [{ ...entry, summary: null }];
-      const summary = summaries.get(entry.target) ?? null;
-      if (options.authorizeSummary && !summary) return [];
-      const type = summary?.type ?? entry.type;
-      return [
-        {
-          ...entry,
-          ...(type ? { type } : {}),
-          label: summary?.label?.value ?? '',
-          summary,
-        },
-      ];
-    }),
-  };
+  const relations: SubjectRelation[] = [];
+  for (const entry of page.relations) {
+    if (!entry.target) {
+      relations.push({ ...entry, summary: null });
+      continue;
+    }
+    const summary = summaries.get(entry.target) ?? null;
+    if (options.authorizeSummary && !summary) continue;
+    const type = summary?.type ?? entry.type;
+    relations.push({
+      ...entry,
+      ...(type ? { type } : {}),
+      label: summary?.label?.value ?? '',
+      summary,
+    });
+  }
+  return { ...page, relations };
 }

@@ -1770,7 +1770,12 @@ function subjectRoutes(
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
-          return result;
+          const links = result.links.flatMap(({ summary, ...link }) =>
+            summary
+              ? [{ ...link, type: summary.type, label: summary.label?.value ?? '', summary }]
+              : [],
+          );
+          return { ...result, links };
         } catch (error) {
           if (error instanceof SubjectRedirectError) {
             set.status = 308;
@@ -1889,7 +1894,11 @@ function subjectRoutes(
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
-          return result;
+          const relations = result.relations.map((relation) => ({
+            ...relation,
+            summary: relation.summary ?? null,
+          }));
+          return { ...result, relations };
         } catch (error) {
           if (error instanceof SubjectRedirectError) {
             set.status = 308;
