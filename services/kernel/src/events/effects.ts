@@ -78,7 +78,7 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
               workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
               workflowIDReusePolicy: 'return-existing',
               queueName: EFFECTS_QUEUE,
-              enqueueOptions: { queuePartitionKey: String(partition) },
+              enqueueOptions: { queuePartitionKey: `${effect.name}:${partition}` },
             })(effect.name, event);
           }
         }),
