@@ -16,7 +16,7 @@ import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, ty
 import { classifyFailure } from './failures.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
-import { makeRecord, readMeasurement, reportedApproaches } from './records.ts';
+import { makeRecord, readMeasurement, reportedApproaches, MODEL_AT_CAPACITY } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import {
@@ -42,6 +42,9 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
   if (!files.size) for (const file of outcome.changedFiles) files.add(file);
   return [...files];
 }
+
+/** How long a capacity refusal waits before the attempt continues. */
+export const CAPACITY_PAUSE_MS = 10_000;
 
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
@@ -523,7 +526,8 @@ export class WorkerJob implements GateOutcomeSink {
   /** Launch/exit facts do not fabricate a gate outcome. */
   onAttemptExit(ref: AttemptRef): void {
     const store = this.tasks.store;
-    let retry = false;
+    let retry = false,
+      capacity = false;
     const queueRetry = (options: RetryOptions) => {
       store.updateTask(ref, (t) => {
         t.state = 'ready';
@@ -569,7 +573,9 @@ export class WorkerJob implements GateOutcomeSink {
         this.inbox.deliver(event);
       } else {
         const previous = ref.attempt > 1 ? store.attempt({ taskId: ref.taskId, attempt: ref.attempt - 1 }) : null;
-        if (kind === 'tool' && previous?.failureKind === 'tool') {
+        // A provider capacity refusal is not the task's failure: continue after a pause, however often it repeats.
+        capacity = kind === 'tool' && MODEL_AT_CAPACITY.test(`${attempt.result ?? ''}\n${attempt.blocker ?? ''}`);
+        if (kind === 'tool' && previous?.failureKind === 'tool' && !capacity) {
           const firstLine = (
             previous.result ||
             previous.blocker ||
@@ -602,7 +608,12 @@ export class WorkerJob implements GateOutcomeSink {
       }
     });
     // The recovery sweep calls this while it holds the task's lease, which the retry takes: start after it is released.
-    if (retry) this.track(new Promise<void>((done) => setImmediate(done)).then(() => this.runRetryIntent(ref)));
+    if (retry)
+      this.track(
+        new Promise<void>((done) => (capacity ? setTimeout(done, CAPACITY_PAUSE_MS) : setImmediate(done))).then(() =>
+          this.runRetryIntent(ref),
+        ),
+      );
   }
   private exitRetryOptions(attempt: Attempt, evidencePath: string): RetryOptions {
     const kind = attempt.failureKind!;

@@ -24,6 +24,8 @@ function tokens(value: Record<string, unknown>): Tokens {
     output: num(value.output_tokens ?? value.outputTokens) };
 }
 /** A worker CLI's own words for an allowance that is spent, in a stream error or, before any session, on stderr. */
+/** A provider-side capacity refusal: transient and independent of the model, so the attempt simply continues. */
+export const MODEL_AT_CAPACITY = /selected model is at capacity|model is at capacity|try a different model|server is overloaded|temporarily overloaded/i;
 export const POOL_EXHAUSTED = /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
 export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
