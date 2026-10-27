@@ -12,6 +12,14 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const route = 0x6510;
 const operatorAccountId = newId(route);
+const accountViewer = {
+  kind: 'account' as const,
+  accountId: newId(route),
+  clientId: 'operator-list-test',
+  scopes: ['account:manage'],
+  requestedBy: null,
+  authnEpoch: 1,
+};
 const ring = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
 const actions = new Map([['account:manage', { anonymous: false }]]);
 const access = createAccess({ actions, accountEvidence: () => null });
@@ -74,24 +82,31 @@ test('opaque cursor binds operator and operation and rejects tampering before di
   const token = first.next!;
   const forged = (
     after: (string | number)[],
-    options: { now?: number; epoch?: number; operation?: string; parameters?: typeof binding.query } = {},
+    options: {
+      now?: number;
+      epoch?: number;
+      operation?: string;
+      parameters?: typeof binding.query;
+      viewer?: string;
+    } = {},
   ) =>
     encodeListCursor(
       ring,
       {
         route: options.operation ?? binding.route,
-        viewer: null,
+        viewer: options.viewer ?? null,
         query: options.parameters ?? { ...binding.query, limit: 1 },
       },
       { epoch: options.epoch ?? 1, after },
       new Date(options.now ?? Date.now()),
     );
+  const expiredToken = await forged([id(1)], { now: Date.now() - 16 * 60_000, viewer: accountViewer.accountId });
   const tokens = await Promise.all([
     '',
     id(1),
     'garbage',
     `${token.slice(0, -2)}xx`,
-    forged([id(1)], { now: Date.now() - 16 * 60_000 }),
+    expiredToken,
     forged([id(1)], { operation: 'access.operator.opening' }),
     forged([id(1)], { parameters: { ...binding.query, limit: 1, sort: 'reservationId:desc' } }),
     forged([id(1)], { parameters: { ...binding.query, limit: 1, purpose: 'membership' } }),
@@ -115,9 +130,12 @@ test('opaque cursor binds operator and operation and rejects tampering before di
   ]);
   for (const cursor of tokens) {
     const attempt = await capture(db, async () => {
-      await expect(commands().responsibilityPage({ operatorAccountId, limit: 1, cursor })).rejects.toBeInstanceOf(
-        OperatorDeniedError,
-      );
+      await expect(
+        commands().responsibilityPage(
+          { operatorAccountId, limit: 1, cursor },
+          cursor === expiredToken ? accountViewer : undefined,
+        ),
+      ).rejects.toBeInstanceOf(OperatorDeniedError);
     });
     expect(attempt.capture.statements.some((sql) => sql.includes('access.lifecycle_coordination'))).toBe(false);
   }
@@ -184,18 +202,34 @@ test('operator list cursor binds the acting viewer and page size before reading 
 test('responsibility list issuance and expiry use the configured kernel clock', async () => {
   let now = new Date('2020-01-01T00:00:00Z');
   const operators = createOperatorCommands({ ...config(), clock: () => now });
-  const page = await operators.responsibilityPage({ operatorAccountId });
-  expect(await decodeListCursor(ring, binding, page.next!, now)).toMatchObject({ ok: true, after: [id(20)] });
-  expect((await operators.responsibilityPage({ operatorAccountId, cursor: page.next! })).operators).toEqual(
-    expected.slice(20, 40),
-  );
+  const page = await operators.responsibilityPage({ operatorAccountId }, accountViewer);
+  expect(await decodeListCursor(ring, { ...binding, viewer: accountViewer.accountId }, page.next!, now)).toMatchObject({
+    ok: true,
+    after: [id(20)],
+  });
+  expect(
+    (await operators.responsibilityPage({ operatorAccountId, cursor: page.next! }, accountViewer)).operators,
+  ).toEqual(expected.slice(20, 40));
   now = new Date(now.getTime() + 15 * 60_000 + 1);
   const attempt = await capture(db, async () => {
-    await expect(operators.responsibilityPage({ operatorAccountId, cursor: page.next! })).rejects.toBeInstanceOf(
-      OperatorDeniedError,
-    );
+    await expect(
+      operators.responsibilityPage({ operatorAccountId, cursor: page.next! }, accountViewer),
+    ).rejects.toBeInstanceOf(OperatorDeniedError);
   });
   expect(attempt.capture.statements.some((sql) => sql.includes('access.lifecycle_coordination'))).toBe(false);
+});
+
+test('an anonymous responsibility cursor is stable and carries no issue time', async () => {
+  let now = new Date('2020-01-01T00:00:00Z');
+  const operators = createOperatorCommands({ ...config(), clock: () => now });
+  const first = await operators.responsibilityPage({ operatorAccountId });
+  expect(first.next).toBeString();
+  now = new Date(now.getTime() + 16 * 60_000);
+  const repeated = await operators.responsibilityPage({ operatorAccountId });
+  expect(repeated.next).toBe(first.next);
+  expect((await operators.responsibilityPage({ operatorAccountId, cursor: first.next! })).operators).toEqual(
+    expected.slice(20, 40),
+  );
 });
 
 test('internal fanout keeps sealed work cursors separate from opaque list cursors', async () => {
@@ -254,20 +288,25 @@ test('responsibility list inherits the Access kernel clock and honors the exact 
     return now;
   });
   const operators = createOperatorCommands({ ...config(), access });
-  const page = await operators.responsibilityPage({ operatorAccountId, limit: 1 });
+  const page = await operators.responsibilityPage({ operatorAccountId, limit: 1 }, accountViewer);
   expect(clockReads).toBe(1);
   expect(
-    await decodeListCursor(ring, { ...binding, query: { ...binding.query, limit: 1 } }, page.next!, now),
+    await decodeListCursor(
+      ring,
+      { ...binding, viewer: accountViewer.accountId, query: { ...binding.query, limit: 1 } },
+      page.next!,
+      now,
+    ),
   ).toMatchObject({ ok: true, epoch: 1, after: [id(1)] });
   now = new Date(now.getTime() + 15 * 60_000);
-  expect((await operators.responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! })).operators).toEqual(
-    expected.slice(1, 2),
-  );
+  expect(
+    (await operators.responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! }, accountViewer)).operators,
+  ).toEqual(expected.slice(1, 2));
   expect(clockReads).toBe(2);
   now = new Date(now.getTime() + 1);
   const attempt = await capture(db, async () => {
     await expect(
-      operators.responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! }),
+      operators.responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! }, accountViewer),
     ).rejects.toBeInstanceOf(OperatorDeniedError);
   });
   expect(clockReads).toBe(3);
