@@ -1,199 +1,294 @@
-# Relation facet source access
+# Current outgoing relation facets
 
-This is a proposed implementation derivation and executable acceptance specification, not a claim that the current
-source implements relation facets. The current `search-source-facts.sql` and `search-source-statements.sql` explicitly
-exclude relations. Removing those predicates would introduce a degree/history scan and does not implement this design.
-The agreed Search port and its overflow behavior remain unchanged.
+This is the acceptance and implementation handoff for unqualified relation facets. It does not implement the
+production source. The direct indexed lookup has an unresolved boundedness conflict described below; dispatching
+production requires resolving that conflict. Missing production behavior remains an explicit failing assertion.
 
-A source's declared relation facets contribute adopted Global outgoing statements to `IndexedSubject.statements`.
-Book author remains `schema:author`. Nonfacet relations and incoming edges contribute nothing. Descriptive statements
-keep their existing representation. Relation entries have `facet: { kind: 'item' }` and the adopted statement's admitted
-item qualifiers. Sample entries represent statements, including distinct slotKey statements with the same main value;
-qualifiers from separate statements are never combined. The per-property cap is 128 entries, not 128 distinct targets.
-`relationFacetOverflow` is always emitted, with `[]` when no property overflows; its order has no semantic meaning.
+## Observable contract
 
-## Required materialization and publication contract
+A relation facet is a `(property, value)` pair. Role, episode and other qualifiers remain statement metadata and slot
+identity inputs; they are not predicates of this port. Unsupported qualified input must be rejected, never stripped
+and answered as an unqualified probe.
 
-A current-state membership projection is necessary. An index on `(subject, property, target, slot)` alone cannot
-answer a qualified existential query: all slots for the same target may fail the last qualifier. A `LIMIT 1` after
-that residual test still scans unbounded rows. Nor can a single cached witness plus a final fence check answer exactly:
-that witness can become fenced while another qualifying statement remains disclosable.
+For each declared outgoing relation facet, `IndexedSubject.statements` contains at most
+`MAX_RELATION_FACET_VALUES = 128` distinct visible adopted Global target values. Sampling is deterministic for unchanged
+state. Multiple selected statements with the same target contribute one value; a stable representative retains its
+qualifier metadata. This avoids treating slot multiplicity as extra facet values. A 129th distinct visible value proves
+overflow. `relationFacetOverflow?: string[]` is the shared compatibility field; production always emits a sorted array,
+including `[]` when nothing overflows. Nonfacet relations and incoming edges do not contribute. Existing descriptive
+facets retain their values and representations exactly.
 
-This design therefore requires **synchronous current membership maintenance and a disclosure publication barrier**.
-These are implementation prerequisites, not restrictions on admitted facets or changes to qualifier semantics.
-An asynchronously maintained outbound-link projection is candidate evidence only and cannot supply an exact negative.
-No release digest, subject digest, outbox checkpoint or stable sample substitutes for final disclosure checks.
+`RelationFacetProbe = { subject: string; property: string; value: string }` and optional compatibility
+`matchRelationFacets(partition, probes): Promise<boolean[]>` are shared with Search; production implements the method.
+`MAX_RELATION_FACET_PROBES = 256`. Validate the complete input before data SQL: integer partition in `[0,4095]`, bounded
+probe count, valid source UUIDs and matching source partition. Targets may be in another partition. Empty input returns
+`[]`; duplicates retain aligned positions. A missing, hidden, taken-down or redirected source cannot match. A pending,
+merely accepted, suppressed, retracted, hidden, taken-down or fenced statement cannot witness a match. A different
+currently adopted visible statement for the same pair can witness it. Current target visibility also applies.
 
-The barrier extends the existing imported-source fence/moderation lifecycle. Before publishing a change that makes
-existing membership evidence invalid, mark its dependency generation pending, prevent admission of new contributions
-under that generation, and drain affected membership updates through independently anchored source-partition commands.
-Publish the new gate state and generation only when every affected source partition acknowledges. Reads encountering
-a pending dependency or incomplete local projection reject with the existing unavailable/retry path; they do not return
-a fabricated Boolean. Recovery resumes the durable drain before publication; retries use dependency generation and
-statement identity as idempotency keys. A crash cannot expose old membership under a completed new generation.
+Each probe must seek the statement store by an index and check current selection, visibility, moderation and source
+fences. A Boolean describes existence now, not presence at rebuild time. Incomplete evidence rejects the entire request
+as unavailable; neither partial Boolean arrays nor invented absence are allowed. A bounded retry is possible for a
+transient failure; permanent unavailability for valid high-degree subjects is not an implementation.
 
-This is an explicit cost tradeoff: a fence affecting D statements has O(D times bounded signature fanout) maintenance
-work and may delay availability. It does not have constant total write cost. Source reads and point probes retain their
-bounds. Retaining immediately published remote fences, allowing arbitrarily stale membership, requiring exact Booleans
-without retries, and forbidding dependency maintenance would be incompatible requirements. A final check on one stale
-witness cannot solve that variant. Alternatives are a publication barrier as specified here, synchronous distributed
-membership updates, or a changed read contract permitting indeterminate results. The tests require completed writes to
-be observed and do not require stale evidence to produce a Boolean during an incomplete publication.
+Search must point-recheck every positive candidate before disclosure, including nonoverflow documents. A failed check
+drops the hit and refills the page from subsequent candidates. Stable samples and index hits cannot authorize
+visibility. Negation uses the index, with overflow absence rechecked through this same probe. A hide before rebuild
+may omit a negated hit, failing closed. Index facet counts say `at least`, disclose no subject ids and converge after
+rebuild. These Search behaviors and port changes belong to Search, and are not implemented or simulated here.
 
-Every SQL statement binds exactly one partition, with `route >= partition * 16 AND route < (partition + 1) * 16` in
-addition to equality on the full route key. Remote disclosure evidence is grouped by its independently validated route
-and read in separately anchored statements. There is no cross-partition SQL join or transaction holding source locks
-while waiting for a remote partition. Read gate generations before and after local evidence; require equal completed
-generations, otherwise retry within the request deadline or report unavailable. This also prevents a read assembled
-across two incompatible publication generations. Restores use the same protocol, with no prematurely positive member.
+Rebuilds are asynchronous and refer to changed statements' source subjects. They do not rebuild relation target
+documents as a side effect. Existing committed moderation and fence writes already suppress disclosure; there is no
+publication barrier, synchronous membership materialization or signature catalogue.
 
-## Current tables and proposed indexed paths
+## Existing statement store: exact access paths
 
-Existing authorities are `semantic.subject` (visibility/security revision/current release), `semantic.fact` (compact
-assert/retract/expand log), `semantic.candidate`, `semantic.acceptance_current`, `semantic.adoption`,
-`semantic.hidden_candidate`, `semantic.redirect`, `semantic.revision` (including imported proposing provenance),
-`semantic.definition_release`, and `content.source_fences`. Definition reads use route 0 and exact release digest.
-Candidate provenance must be copied into current state at proposal/compact creation; probing revision or fact history
-to rediscover it is not a bounded read path. The existing historical tables remain the replay authorities.
+The following keys are in `db/semantic/schema.sql`; SQL paths below are relative to `src/semantic/`.
 
-The following proposed tables are partitioned by the source route, except the explicitly routed dependency catalogue.
-All listed keys are B-tree keys with bytewise canonical text ordering. Index-only access is optional: the proof also
-allows one bounded heap fetch for each returned index tuple. History never accumulates in these current tables.
+| Evidence                    | Existing key and lookup                                                                                                                                                               | Maximum rows examined once the full key is known                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Source/target status        | `subject_pkey (route,subject_id)`                                                                                                                                                     | 1 per subject                                                         |
+| Redirect                    | `redirect_pkey (route,subject_id,sequence)`, descending sequence, `LIMIT 1`                                                                                                           | 1 current row                                                         |
+| Compact slot head           | `fact_pkey (route,subject_id,slot_id,log_seq)`, descending log sequence                                                                                                               | 1 head row                                                            |
+| Compact candidate payload   | `fact_compact_candidate (route,subject_id,statement_id,log_seq DESC)`, partial on asserted statements                                                                                 | 1 assertion; this alone does not prove it remains selected            |
+| Expanded payload            | `candidate_pkey (route,subject_id,candidate_id)`                                                                                                                                      | 1                                                                     |
+| Latest Global adoption      | `adoption_pkey (route,subject_id,slot_id,context_id,head)`, Global context and descending head                                                                                        | 1 adoption row; at most 32 selected candidates                        |
+| Current verdict             | `acceptance_current_pkey (route,subject_id,context_id,candidate_id)`                                                                                                                  | 1                                                                     |
+| Candidate moderation        | `hidden_candidate_pkey (route,subject_id,candidate_id)`                                                                                                                               | 1                                                                     |
+| Proposing provenance        | `candidate_pkey` to `revision_pkey (route,subject_id,revision)`                                                                                                                       | 1 each                                                                |
+| Compact provenance fallback | `fact_compact_candidate`, then recording transaction via `revision_transaction (recorded_transaction_id,route,subject_id)`                                                            | Latest assertion is bounded; arbitrary historical eligibility is not  |
+| Retraction                  | `retraction_pkey (route,subject_id,candidate_id,revision)`, descending revision                                                                                                       | 1 latest row                                                          |
+| Local imported dependency   | `source_candidate_pkey (route,subject_id,source,external_id,field_group,statement_digest)`; `source_candidate_retract (route,subject_id,candidate_id,source,external_id,field_group)` | Depends on enumerated dependency keys; neither starts with tuple home |
 
-| Proposed table/index                               | Leading key and predicate                                                                    | Examined current rows                                                                          |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `semantic.relation_facet_slot` primary key         | `(route, subject_id, slot_id)`                                                               | One per changed slot; holds current Global selection, eligibility generation and candidate ids |
-| `semantic.relation_facet_entry` primary key        | `(route, subject_id, candidate_id)`                                                          | One selected statement payload, slot, value, release, rank, source tuple and generations       |
-| `relation_facet_sample` partial index on entry     | `(route, subject_id, property, slot_id, candidate_id) WHERE adopted AND locally_disclosable` | At most 129 per declared facet; no residual eligibility scan                                   |
-| `semantic.relation_facet_member` primary key       | `(route, subject_id, property, value, signature)`                                            | Zero or one aggregate count and witness per exact signature point                              |
-| `semantic.relation_facet_contribution` primary key | `(route, subject_id, property, value, signature, candidate_id)`                              | One per statement/signature delta; only live eligible contributions exist                      |
-| `relation_facet_contribution_by_candidate`         | `(route, subject_id, candidate_id, signature)`                                               | At most the bounded signature fanout for a changed statement                                   |
-| `semantic.relation_facet_dependency` primary key   | `(route, dependency_kind, dependency_id, source_route, subject_id, candidate_id)`            | Keyset pages of affected statements at the dependency's home; write/drain path only            |
-| `semantic.relation_facet_gate` primary key         | `(route, dependency_kind, dependency_id)`                                                    | One completed generation/pending flag per referenced disclosure dependency                     |
+`GLOBAL_CONTEXT` is `00000000-0000-8000-8000-000000000000`. `item.ts` derives an ordinary relation slot from
+source/property/target; a slotKey relation also needs the qualifier key, which is absent from an unqualified probe.
+`adoption.selection` is JSON, not an index of target to current selected candidates. `candidate_page` is
+`(route,subject_id,slot_id,revision,view_order,candidate_id)` and includes historical proposals. A known candidate lets
+`fences.ts:candidateSources` point-read proposing provenance; finding the eligible candidate is the unresolved part.
 
-`relation_facet_member` stores a count and one live witness, not an array of all members. On witness deletion, the
-contribution primary key supports a successor `ORDER BY candidate_id LIMIT 1` using the complete signature prefix.
-It does not scan tombstones: deleted contributions are removed. Counts, witness and entries change in the same source
-transaction. Use ordinary vacuum/maintenance as with other current-state indexes; historical editorial rows cannot
-become residual filters. A per-subject projection readiness row, keyed `(route, subject_id)`, records whether current
-state is complete for its semantic revision; an incomplete projection is unavailable, never an authoritative absence.
+`content.source_fences` has primary key `(route,source,external_id,field_group)`. `tupleRoute(routeKey,source,external_id)`
+locates its home, which can differ from both source and target partitions. `content/source-fences.ts:readFences`
+accepts at most 100 tuples per call; `semantic/fences.ts:readAnchoredFences` checks the tuple partition's current state
+and then reads the exact tuples. `withoutFencedEntries` uses those current reads. No last-rebuild fence state is an
+authority. Chunk known evidence by partition and the existing 100/256 limits, and pass the route key in all production
+source compositions. A target is a value, never a foreign source anchor to reject at input validation.
 
-Dependency ids are canonical structured keys, not a hash with unchecked collisions. The dependency home is the
-referenced subject route for subject disclosure, and `tupleRoute(routeKey, source, external_id)` for imported fences,
-with field group in the exact key. Candidate gates live in their source partition. Dependencies are registered before
-contributions become visible and removal is generation checked. Registering against a pending gate retries. The drain
-has a durable cursor and a bounded page size; it enumerates changed dependencies, never a whole source subject.
+`search-source-facts.sql` currently excludes `fact.relation`, folds all descriptive statement history and identifies
+expanded slots. `search-source-adoptions.sql` seeks the latest Global adoption separately for each supplied slot.
+`search-source-statements.sql` excludes `candidate.relation` and point-checks `hidden_candidate`.
+`search-source.ts:indexedStatement` also excludes nonclassification relation definitions. Removing those exclusions
+would enumerate relation degree and history before applying a cap; that is not an indexed bounded implementation.
 
-## Same-statement qualifier signatures
+`outbound_link_pkey` is `(route,subject_id,property,filter_value,order_key,target_subject_id,statement_id)`.
+`outbound_link_present` has the same leading fields and includes `slot_id`, with predicate `present`.
+`inbound_link_pkey` is `(route,subject_id,property,source_subject_id,statement_id,filter_value)`.
+These are asynchronous link projections. Their `present` state cannot prove current adoption or moderation before the
+worker runs, and the outbound key's order prefix does not isolate an arbitrary target point. Incoming enumeration is
+not a source algorithm.
 
-A signature is a canonical sorted set of `(qualifier property, item id)` atoms. The empty signature covers unqualified
-membership. For each adopted eligible statement, materialize all distinct subsets of its item atoms of size at most
-four. The statement validator admits at most 16 qualifiers and the shared filter limits permit four qualifier predicates
-with at most 64 values each. Thus one changed statement produces at most
-`F = sum(C(16,k), k=0..4) = 2517` signature contributions. Duplicate atoms collapse before subset enumeration.
-There is no restriction to the relation's filter or slotKey qualifier: every admitted item qualifier participates.
+## Proposed secondary indexes and the boundedness obstruction
 
-For a probe, enumerate one atom from each qualifier predicate's `in` list, canonicalize each resulting set, deduplicate,
-and point-read those signatures. Duplicate predicates on the same property still retain their AND meaning: each list
-must have a value present on the witness statement; overlapping lists can choose the same atom. An empty `in` list
-cannot match. The number of signature points is at most `A = 64^4` for permitted inputs, independent of degree.
-Unqualified probes use one point. The port validates the same filter-input bounds; it must not silently narrow valid
-queries to a single qualifier or value. The large worst-case constant is a storage/query tradeoff, not a claimed cheap
-common-case query. Any future optimization must preserve the same proof and measurements.
+A candidate payload expression index could be:
 
-A positive member exists only if a SINGLE candidate contributed that ENTIRE signature. In particular, counts for
-`{left=L}` and `{right=R}` do not establish `{left=L,right=R}`. Joining separate inverted lists on subject/target would
-be incorrect. Joining on candidate with an unbounded intersection would also violate the access bound.
+```sql
+CREATE INDEX candidate_relation_target ON semantic.candidate
+  (route, subject_id, property, (statement #>> '{value,content}'), slot_id, candidate_id)
+  WHERE relation AND statement #>> '{value,type}' = 'value';
+CREATE INDEX fact_relation_target ON semantic.fact
+  (route, subject_id, property, (body #>> '{value,content}'), slot_id, statement_id, log_seq DESC)
+  WHERE relation AND kind = 'statement';
+```
 
-## Snapshot algorithm
+The point predicates would fix `route`, `subject_id`, `property`, and the main target expression; the snapshot
+predicates would fix the first three and order by target. These are proposals, not migrations or sufficient plans.
+They cover historical candidates/facts, including unselected or retracted assertions. Even a `DISTINCT ON` or `LIMIT`
+above them does not bound examined history. A partial index predicate cannot refer to the latest adoption in another
+row or the hidden/fence state in another table or partition. Indexing JSON payloads does not change that restriction.
 
-1. Validate partition and all source anchors before SQL. Point-read the subject, current release and projection
-   readiness. Resolve the bounded declared facet list from the immutable release: at most 16 facets per type.
-2. For each declared relation facet, seek the complete sample prefix and read at most 129 entries in stable
-   `(slot_id,candidate_id)` order. Never enumerate inbound links, candidate history or all slots. The partial index
-   contains current locally eligible Global selections, including compact state without a proposal row.
-3. Batch point-read final statement/subject gates and referenced target and imported-source gates. At most 129 bounded
-   payloads and their bounded dependencies are examined per property. Fence reads use full
-   `(route,source,external_id,field_group)` keys in `content.source_fences`; hidden candidates use
-   `(route,subject_id,candidate_id)`, subjects use `(route,subject_id)` and redirect uses its latest indexed sequence.
-   Current entry/slot generations provide adoption/retraction evidence without folding the immutable fact log.
-4. Return at most 128 disclosable sampled entries with their own qualifiers. A 129th eligible entry establishes
-   overflow. If final checks remove entries, do not scan forward to refill. Conservatively mark that property overflow
-   whenever the bounded read cannot prove completeness; never silently label a truncated prefix complete. An exhausted
-   prefix of at most 128 entries with all gates completed and checked is complete. Sort overflow names for stability.
+There is no finite maximum examined row count for these proposals under the approved inputs. The required maxima
+are 129 **distinct eligible** values per declared property for a snapshot and a fixed number of statement/evidence rows
+per probe, independent of degree/history. Existing indexes only bound evidence after a witness is known. They do not
+bound finding the witness or proving no witness exists. No successful production derivation is claimed here.
 
-The relation part examines at most `129 * R` current entry rows plus bounded point evidence per payload, where R is
-the declared relation facet count. Gate-generation validation can cause a retry, never an unbounded scan. With fixed R
-and bounded payload/qualifier sizes, rows and SQL statements are constant in relation degree and history, while index
-blocks grow logarithmically. This derivation concerns the added relation contribution; it does not grant permission to
-expand existing descriptive reads or bypass their independent bounds.
+An exact counterexample, requiring no qualifier filtering:
 
-## Point algorithm and final authoritativeness
+1. A Book S declares the slotKey relation `ex:credit` as a facet. Create N different keys K1…KN, all with main target T.
+   Accept and adopt one candidate Ci per slot in Global. Each candidate has a different imported source tuple Ui.
+   All statements and adoptions are valid. Add arbitrary rejected/unselected candidates to those same slots.
+2. Commit tuple takedowns for U1…U(N-1), while rebuild and link projection workers remain paused. Leave UN visible.
+   The unqualified probe `(S,ex:credit,T)` must return true, using CN. A stale first witness cannot authorize it.
+3. In a second state, also commit the takedown for UN. The same probe must return false. These two states differ
+   only in one tuple row at its own partition. No synchronous fanout has updated the local candidate/index rows.
+4. For any fixed evidence budget B choose N > B, and place the only surviving tuple outside the examined B witnesses.
+   Every examined statement/index/evidence row is identical in the two states. The answer differs. Checking the
+   remainder examines O(N) tuples/statement witnesses; stopping and returning false invents absence. Returning
+   unavailable permanently violates the valid-input contract. Changing index ordering just changes which Ui survives.
 
-Validate the whole call before acquiring a data connection: partition integer in `[0,4095]`, at most 256 probes,
-every anchor a routable UUID in that partition, and bounded valid qualifier inputs. Main target and item qualifier ids
-may route elsewhere; they are values, not source anchors. Preserve duplicates and original result positions. Empty
-input returns `[]`. Missing, nonfacet, hidden or redirected source subjects cannot match; missing targets, absent
-members, pending candidates, rejected candidates, unadopted acceptances and retracted selections cannot match.
+Individual candidate hides give the same residual-scan problem through `hidden_candidate`; history creates a further
+unbounded scan even without moderation. A known ordinary author slot can point-read its latest adoption, but that does
+not solve unqualified slotKey existence or finding 129 distinct currently eligible snapshot values. For snapshots,
+N fenced values before 129 visible values defeats a fixed prefix and `LIMIT 129`; N slots for one target also defeats
+counting statement rows as distinct values. The snapshot must not silently call an incomplete prefix complete.
 
-For each `(subject,property,value)` read its current empty-signature membership point, then the bounded requested
-signature points. Zero current counts are authoritative only with completed source readiness. A live witness carries
-its candidate/slot generation and imported provenance. Validate that exact witness against current entry, hidden
-candidate, source/target visibility, redirect and fence evidence using exact points. No slot enumeration is permitted.
-A generation mismatch does not invite scanning the remaining witnesses. Retry the publication protocol or reject
-unavailable. Once a gate update is completed, all affected aggregates have been repaired, so a live alternative witness
-is already selectable and a removed last witness yields zero. This is why the barrier is necessary for exact negatives
-and for qualified matches after individual witnesses disappear.
+The minimum unresolved decision is which requirement can change so arbitrary same-target witnesses with independent
+current remote fences admit exact bounded existence and bounded visible sampling. The approved combination of
+arbitrary multiplicity, immediate independent fence reads, no synchronous materialization/barrier and fixed examined
+rows cannot be implemented by adding secondary indexes to this store. This is a contract conflict, not a request to
+restore a prior design. No forbidden replacement is specified as an alternative authority.
 
-With P probes, each call examines at most `P * (1 + A)` aggregate rows and a bounded number B of payload/gate rows per
-successful signature. Use the conservative budget B = 256 exact evidence-row lookups per witness: at most 17 item
-targets (main plus 16 qualifiers), one imported proposing-source tuple, and source/candidate/slot/readiness gates with
-before/after generation checks. Batch duplicates without increasing that budget. Thus the bound is
-`O(P * (1 + A) * B)` rows/statements and that bound times index depth for blocks. For fixed
-permitted filter inputs these are O(P) and O(P log N). Each individual SQL statement is anchored to one partition.
-Batch signature reads and final evidence by partition; chunk source-fence tuples to their existing 100-tuple bound.
-Neither matching nor final fence checking touches every same-target slot. P is at most 256; chunking belongs to Search.
+## Source-only event and worker handoff
 
-## Write, replay, merge and moderation lifecycle
+Existing registered event data must remain intact. `events/catalogue.ts` registers `SEMANTIC_EVENTS` and
+`CONTENT_EVENTS` at startup and validates them through `events/log.ts:projectBatch`. Relevant existing envelopes are:
 
-Compact creation installs selected entries and signatures in its source command. A proposal records provenance and
-pending candidate state without a contribution. Acceptance alone does not contribute. Expansion copies the currently
-selected compact entries into current slot state before the command commits. Adoption/replacement diffs only the old
-and new bounded selection of the addressed slot. Global empty replacement suppresses that slot; community suppression
-has no effect on Global membership. Rejection cannot target a currently selected candidate; suppress its adoption first. Rejected unselected candidates
-never contribute. Retraction, candidate hide/takedown and restore update affected selected statements and their signature
-deltas transactionally. No operation rediscovers current members by scanning a subject.
+| Lifecycle                          | Existing emitting files/events                                                                      | Source rebuild work                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Compact create                     | `subject.ts`, `com.rezics.subject.created.v1`                                                       | Resolve only created source's declared outgoing facets                                              |
+| Proposal                           | `candidates.ts`, `com.rezics.statement.proposed.v1`, `com.rezics.subject.revised.v1` kind `propose` | Point-read changed candidate/definition and enqueue source if declared facet, even if still pending |
+| Global acceptance/rejection        | `candidates.ts`, `com.rezics.statement.accepted.v1` / `.rejected.v1`, revised `accept` / `reject`   | Check context and addressed property; enqueue source for declared facet                             |
+| Adoption/replacement/suppression   | `candidates.ts:adoptCandidates`, revised `adopt`, `LINKS_CHANGED` only when links differ            | Enqueue addressed source; do not infer source from a link target                                    |
+| Imported retraction                | `bulk.ts`, `com.rezics.statement.retracted.v1`, revised `retract` (no link delta is emitted here)   | Enqueue changed candidate's source even when no selected contribution remains                       |
+| Statement hide/takedown/restore    | `moderation.ts`, `com.rezics.subject.statement_visibility_changed.v1`, link deltas                  | Candidate point identifies property and source; enqueue only declared facet source                  |
+| Source subject visibility/redirect | `moderation.ts`, `merges.ts`, subject visibility/merged events and `LINKS_VISIBILITY_CHANGED`       | Existing source document deletion/rebuild; dependent statements must use their source ids           |
+| Target visibility                  | `moderation.ts`, link visibility/key continuation events                                            | Page affected dependencies and enqueue their sources; do not enumerate them in a disclosure request |
+| Remote tuple fence                 | `content/source-fence-command.ts`, `com.rezics.content.source_fence.taken_down.v1`                  | Page tuple dependencies and route each affected statement source to its own partition               |
+| Release facet declaration change   | definitions published/activated events in `events/catalogue.ts`                                     | Page source rebuilds under the new declarations; no claim of immediate index convergence            |
 
-A declaration/release change has an explicit backfill/readiness transition; do not pretend a new facet has a complete
-empty projection. Replay rebuilds entries, signatures, counts and dependencies from the authoritative semantic log in
-bounded pages, then atomically publishes readiness for the replay revision. Partial replay cannot disclose or prove
-absence. Repeated envelope delivery applies statement/generation deltas once. Sampling order does not depend on arrival
-order, time or random selection. Semantic command maintenance, not a target search document, owns membership truth.
+`com.rezics.subject.adopted.v1` is registered in `semantic/events.ts` but is not currently emitted by
+`candidates.ts:adoptCandidates`. The generic revised event has no property/context, and a no-op or nonfacet adoption
+need not emit a link delta. The production task must emit the already registered adopted event, with its existing
+`context`, `property`, `mode`, `revision` and `head` data and source envelope subject. That supplies a bounded classifier
+without reverse-scanning adoption history by revision. Keep its existing schema; do not pretend registration alone
+is delivery. Retraction must use its candidate-bearing event rather than wait for a nonexistent link delta.
 
-Merge redirects make the losing source unindexable immediately. Moving statements uses existing bounded member/link
-pages, rewriting each changed statement's source route and dependency registration, then signature deltas. Target
-merge/visibility changes drain only registered affected statements through their source partitions; this is dependency
-maintenance, not rebuilding target documents. A source relation change schedules only its source search snapshot.
-It never schedules the relation target's search snapshot. Subject-wide moderation may gate the whole source at once;
-restoring its individual eligible memberships is paged under pending readiness before publication.
+The semantic link constants are in `semantic/events.ts`: `LINKS_CHANGED`, `LINK_KEYS_CHANGED`,
+`LINKS_VISIBILITY_CHANGED`, `LINKS_MOVING`, `LINKS_PROJECTED`. `links.ts:linkProjection` uses consumer `semantic_links`;
+it maintains asynchronous inbound/outbound state and continuation pages. `worker.ts:startWorker` composes
+`work/modules.ts:KERNEL_WORK_MODULES`, launches work, then starts effects and semantic link relays.
+`search/work.ts:searchWorkModule` starts `search/runner.ts:startSearchIndexing` only when Search is configured.
+`search/indexer.ts:createSubjectIndexer` currently watches all `com.rezics.subject.*` events plus library listing
+changes. It neither classifies declared relation facets nor consumes tuple fences, which have no source subject on
+the envelope. A generic subject event is not evidence that the missing remote source hook exists. Generic descriptive
+indexing remains independently necessary; excluding nonfacet events below concerns the relation-facet rebuild path.
 
-For C changed statements, current-state work is O(C * F) indexed deltas and O(C * F log N) index work, plus bounded
-payload validation and dependency registration. A fence/target change costs the number of dependent changed statements;
-it does not claim O(1) write work for an arbitrary fanout. Ordinary relation changes are independent of all other source
-relations and editorial history. There is no whole-subject rebuild and no target reindex.
+The acceptance proposes this semantic-owned hook, exported from `semantic/search-source.ts` (implementation can live
+in a new `semantic/relation-facet-rebuilds.ts`):
 
-## Executable checks and current gap
+```ts
+relationFacetRebuilds(options: {
+  pool: Pool;
+  consumer: string;
+  pageSize: number; // 1..64, bounds envelopes and source fanout in one run
+  enqueue(partition: number, subjects: readonly string[], cause: string): Promise<void>;
+}): Relay;
+```
 
-`relation-facet-source.test.ts` specifies Book author, nonfacet and incoming exclusion, descriptive behavior, compact
-expansion/adoption, cap boundaries, deterministic sampling, qualified slotKey witnesses, final target and imported-source
-fences, and pre-SQL input validation. Missing fields/methods fail explicit assertions rather than imports or typechecks.
-`growth-relation-facet-source.test.ts` uses the shared growth database, catalog/background classifiers and `checkGrowth`
-at `[64,512,4096]`, one warmup and three samples per scale. Each snapshot/present/absent/qualified-match/qualified-miss
-operation has its own report. Degree, same-target slot count and a retracted slot's history grow; probe count stays one.
-Each anchor starts with 128 relations per facet before the first scale, keeping the sample saturated; the scales add
-64, 512 and 4096 relations and history entries. A present probe is selected outside the actual sample at every scale. Derived runner work is attributed to
-seeding when run there; work triggered by the measured operation remains in that operation's capture.
+It uses real `projectBatch` checkpoints and bounded durable continuation pages. Enqueue addresses source partitions;
+`cause` is stable across replay (envelope identity plus continuation cursor), and the durable queue upserts that key.
+Checkpoint advancement follows durable enqueue. Duplicate event delivery cannot create additional logical requests.
+The hook classifies nonfacet changes out and never rebuilds target documents because of source relation changes.
+Acceptance uses the production semantic source, real protected HTTP writes and real outbox consumption; an absent hook
+fails an explicit assertion. Its recording callback observes requests, not semantic answers.
 
-The current product is expected to fail the snapshot and cap assertions because relations are excluded, and the point,
-input, final-disclosure and growth assertions because production has no `matchRelationFacets`. These tests do not
-modify Search's shared interface or frozen outcomes. They do not relax qualifier semantics to make a bounded proof fit.
+Content peer contract proposal in `src/content/source-fences.ts`:
+
+```ts
+type DependentCursor = { partition: number; subject: string; candidate: string };
+listSourceStatementDependents(
+  pool: Pool,
+  tuple: SourceFenceTuple,
+  after: DependentCursor | null,
+  limit: number, // 1..64
+): Promise<{ statements: DependentCursor[]; next: DependentCursor | null }>;
+```
+
+Propose `content.source_statement_dependency` with primary key
+`(tuple_route,source,external_id,field_group,source_partition,subject_id,candidate_id)` under
+`db/content/migrations/`, reflected in `db/content/schema.sql`. Fix the complete tuple prefix, seek strictly after the
+last three cursor fields and read at most `limit + 1` routing rows. This provides the per-page maximum of 65 dependency
+rows, plus bounded candidate/declaration points per returned source statement. It needs semantic provenance event
+emission in `src/semantic/bulk.ts`. Current `source_candidate` starts with subject home and cannot
+serve a remote tuple seek across all sources. Preserve or register dependencies through retraction/merge as required
+for live candidates; completed retractions need no later fence rebuild. The statement source owner emits bounded
+per-statement dependency data in its own committed outbox;
+a tuple-home consumer registers that routing index asynchronously and checks an already committed fence when applying
+a late registration. This index routes rebuild work only; it does not materialize membership or visibility truth.
+There is no cross-partition command waiting for registration. Tuple fanout is asynchronous. A tuple-home dependency
+schema/index migration and replay backfill are needed. This is a direct peer proposal for agreement before production dispatch, not a read-time
+publication condition. It cannot resolve the existence obstruction above.
+
+All existing event types already have data schemas in `semantic/events.ts`, `content/source-fence-events.ts`,
+`content/events.ts` and `events/catalogue.ts`. If a production task emits a new dependency continuation or rebuild
+request type, that emitting task must register its schema before use. This specification introduces no production event.
+
+## Bounded implementation tasks after contract resolution
+
+1. Semantic: resolve the store obstruction before adding relation reads to `src/semantic/search-source.ts`. Review
+   `search-source-facts.sql`, `search-source-adoptions.sql`, `search-source-statements.sql`, `fences.ts`, `item.ts`,
+   `slots.ts`, `context.ts` and `write-facts.ts`. Keep descriptive reads unchanged. Add any agreed secondary indexes
+   under `db/semantic/migrations/` and regenerate `db/semantic/schema.sql`; historical payload indexes alone are
+   insufficient. Supply EXPLAIN/captured row bounds for the actual eligible-value and existence plans, not just
+   returned `LIMIT` counts. Do not ship the illustrative indexes as a purported fix.
+2. Semantic/Content: implement the proposed rebuild relay and agreed tuple dependency hook, schema/index migration
+   and bounded replay/backfill. Touch `semantic/candidates.ts`, `semantic/bulk.ts`, `semantic/moderation.ts`,
+   `semantic/merges.ts`, `semantic/links.ts` only for missing source-event/dependency maintenance. Compose the relay
+   through `worker.ts` or a registered work module. Per page, O(changed source ids) rows/statements and logarithmic
+   index blocks; total fence fanout remains proportional to affected statements, not constant for the whole run.
+3. Search: shared `src/search/source.ts` names/caps/optional compatibility port; source compositions in
+   `src/search/work.ts`, `src/server.ts`, `test/search/outcome-driver.ts` and
+   `test/search/growth-facets.test.ts` must carry current fence capability.
+   Integrate source queue consumption into `src/search/indexer.ts` and `src/search/runner.ts` without duplicating
+   source truth. Update `src/search/document.ts`, `src/search/service.ts`,
+   `src/search/disclosure/check.ts`, `src/search/facets.ts` and `src/search/query.ts` for capped values, overflow, all-positive
+   recheck/refill, overflow negation absence and `at least` counts. Audit `src/search/filter.ts` and filter consumers
+   so qualified queries are explicitly unsupported until separately designed. Search owns these edits and tests.
+   Other semantic source callers to audit are `test/semantic/search-source.test.ts`,
+   `test/semantic/search-source-facets.test.ts`, `test/semantic/growth-search-source.test.ts`,
+   `test/semantic/imported-fields.test.ts` and both relation-facet tests. Purely local descriptive fixtures do not
+   supply imported provenance; imported fixtures already pass their route key. Preserve that distinction when the
+   production source gains its required fence capability.
+4. Validation: retain `test/semantic/search-source.test.ts` and descriptive behavior, run both revised relation-facet
+   tests, `test/semantic/statement-visibility.test.ts`, `test/semantic/imported-fields.test.ts`,
+   `test/semantic/links-projection.test.ts`, `test/content/source-fences.test.ts`,
+   `test/content/source-fence-http.test.ts`, `test/content/source-fence-storage.test.ts`, `test/search/relation-facet-port.test.ts`, `test/search/relation-overflow-mapping.test.ts`,
+   `test/search/indexing.test.ts`, `test/search/overflow-disclosure.test.ts`, `test/search/overflow-service.test.ts`,
+   `test/search/overflow-counts.test.ts`, `test/search/filter-overflow.test.ts`, `test/search/disclosure.test.ts`,
+   `test/search/filter.test.ts`, `test/worker-effects.test.ts`, `test/work/worker.test.ts`,
+   `test/search/work-imports.test.ts` and root typecheck. New emitting event tests verify catalogue registration and replay.
+   No production changes are made by this specification task.
+
+## Executable acceptance and cost measurements
+
+`test/semantic/relation-facet-source.test.ts` covers compact Book author, pending expansion, Global adoption,
+suppression/rejection, hide/takedown/restore, incoming/nonfacet exclusion and unchanged descriptive values. It tests
+128/129 distinct values and deterministic sampling, a target outside the sample, absent targets, same-target slotKey
+statements surviving hidden/fenced alternatives and loss of the last visible witness. No worker runs between indexing
+and moderation/fence probes. Real pool exhaustion tests whole-request unavailability. Invalid partitions/anchors,
+foreign anchors, 257 probes and unsupported qualified input fail before captured data SQL; cross-partition target
+values and empty/duplicate aligned results remain valid.
+
+`relation facet changes and visibility changes rebuild only their source subject` exercises real writes, an owned
+outbox consumer, source-only requests and real envelope replay by rewinding only that test's checkpoint. Missing
+`relationFacetRebuilds` is an expected red assertion naming the absent hook. Nonfacet proposals and unrelated edits to
+an inbound target do not request relation-facet rebuilds.
+
+`relation facet rebuild consumption stays bounded per page as queued changes grow` is the focused per-change/page
+cost check in the same source test. Scales `[8,32,128]` grow pending change/history envelopes while `pageSize=1` stays
+fixed, with one warmup and three measured samples. Each operation consumes one real envelope. Rows/statements are
+constant and blocks logarithmic. This tests per-step work, not whole-fanout completion cost.
+
+`test/semantic/growth-relation-facet-source.test.ts`,
+`relation facet source and point probes stay bounded as relation degree grows`, uses shared `checkGrowth` at
+`[64,512,4096]`, one warmup and three repetitions per scale. Four independent reports measure snapshot, present outside
+the sample, absent (with growing retracted history), and unqualified same-target slotKey membership. Each source starts
+with 128 relations before the first scale; scales add degree/history while the returned cap and single-probe input stay
+fixed. Distinct authors overflow; many credit slots for one target do not. Fixture facts and real link envelopes are
+seeded as in other semantic growth tests; no prefilled membership answers or replacement source are used. Captured
+catalogue/background work uses shared classifiers. Projection catch-up during grow is seeding work; any catch-up
+triggered by a measured operation remains measured. There are no planner flags or relaxed growth bounds. Shared test
+databases use `openGrowthDatabase` and `os.tmpdir()`; task scratch files stay in `.temp/`.
+
+Required source cost is at most 129 visible distinct values per property times the bounded declared facet count,
+plus bounded final evidence; required point cost is O(probes) examined statement/evidence rows and O(probes times
+index depth) blocks, at most 256 probes. Neither bound currently follows from the statement store for the counterexample.
+Expected red tests specify missing source fields/methods/hooks, rather than silently accepting missing production.

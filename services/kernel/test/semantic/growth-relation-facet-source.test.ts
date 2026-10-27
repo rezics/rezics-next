@@ -4,7 +4,11 @@ import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import type { IndexedSubject } from '../../src/search/source.ts';
+import {
+  MAX_RELATION_FACET_VALUES,
+  type IndexedSubject,
+  type RelationFacetProbe as SharedRelationFacetProbe,
+} from '../../src/search/source.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
 import { factDataTypes, itemFacts } from '../../src/semantic/item.ts';
@@ -33,20 +37,21 @@ const itemProperty = (id: string) => ({
   qualifiers: [],
   targets: ['schema:Person'],
 });
-for (const id of ['ex:key', 'ex:left', 'ex:right']) release.properties[id] = itemProperty(id);
+for (const id of ['ex:key']) release.properties[id] = itemProperty(id);
 release.properties['ex:credit'] = {
   ...itemProperty('ex:credit'),
-  qualifiers: ['ex:key', 'ex:left', 'ex:right'],
+  qualifiers: ['ex:key'],
   relation: { group: 'credit', inverse: 'none', order: 'name', slotKey: 'ex:key' },
 };
 release.types['schema:Book']!.properties = ['ex:credit', 'schema:author', 'schema:inLanguage'];
 release.types['schema:Book']!.facets = ['schema:author', 'ex:credit', 'schema:inLanguage'];
 const digest = releaseDigest(release);
 const people = Array.from({ length: 4226 }, () => newId(route));
-const [target, left, right] = people as [string, string, string, ...string[]];
+const target = people[0]!;
 const missing = newId(route);
 const snak = (property: string, content: string) => ({ property: { id: property }, value: { type: 'value', content } });
-type Probe = { subject: string; property: string; value: string; qualifiers?: { property: string; in: string[] }[] };
+type RelationFacetProbe = Pick<SharedRelationFacetProbe, 'subject' | 'property' | 'value'>;
+type Probe = RelationFacetProbe;
 type Port = { matchRelationFacets?: (partition: number, probes: readonly Probe[]) => Promise<boolean[]> };
 
 function subjects(ids: string[], type: string): Population {
@@ -91,7 +96,7 @@ afterAll(async () => {
   if (db) await db.close();
 });
 
-// Like growth-relations, seed authoritative compact facts, not the proposed membership tables.
+// Like growth-relations, seed authoritative compact facts.
 // writeFacts and real link-change envelopes exercise derived-state maintenance; no fake source or prefilled answer.
 async function grow(subject: string, from: number, to: number) {
   for (let offset = from; offset < to; offset += 32) {
@@ -99,15 +104,9 @@ async function grow(subject: string, from: number, to: number) {
     const authors = people
       .slice(offset, end)
       .map((id) => ({ ...snak('schema:author', id), qualifiers: [], references: [] }));
-    const slots = people.slice(offset, end).map((key, index) => ({
+    const slots = people.slice(offset, end).map((key) => ({
       ...snak('ex:credit', target),
-      qualifiers: [
-        snak('ex:key', key),
-        // Exactly one statement holds both; the rest hold alternating halves, all with the SAME main target.
-        ...(offset + index === 0
-          ? [snak('ex:left', left), snak('ex:right', right)]
-          : [snak((offset + index) % 2 ? 'ex:left' : 'ex:right', (offset + index) % 2 ? left : right)]),
-      ],
+      qualifiers: [snak('ex:key', key)],
       references: [],
     }));
     const facts = itemFacts(
@@ -129,13 +128,17 @@ async function grow(subject: string, from: number, to: number) {
         transaction_id: transactionId,
         facts: facts.map((fact) => ({ ...fact, release: digest, relation: true })),
       });
-      // An irrelevant history slot grows as well. Reads must never fold relation history to find current members.
+      // Retracted history grows for both the absent author and the same-target slotKey pair.
+      // Reads must never fold relation history to find current members.
       const history = itemFacts(
         subject,
         {
           labels: { en: 'History' },
           statements: {
             'schema:author': [{ ...snak('schema:author', missing), qualifiers: [], references: [] }],
+            'ex:credit': [
+              { ...snak('ex:credit', target), qualifiers: [snak('ex:key', people[4225]!)], references: [] },
+            ],
           },
         },
         'schema:Book',
@@ -181,13 +184,13 @@ test('relation facet source and point probes stay bounded as relation degree gro
   expect(typeof port.matchRelationFacets, 'semantic source must provide matchRelationFacets').toBe('function');
   const match = port.matchRelationFacets!.bind(port);
   const projection = linkProjection(db.pool);
-  const operations = ['snapshot', 'present outside sample', 'absent', 'qualified match', 'qualified miss'] as const;
+  const operations = ['snapshot', 'present outside sample', 'absent', 'same-target slotKey membership'] as const;
   // Independent reports prevent one cheap operation from masking a scan in a different operation.
   for (const operation of operations) {
     const subject = newId(route);
     await seed(db, subjects([subject], 'schema:Book'), { from: 0, to: 1 });
     // Saturate the fixed sample before the smallest measured scale; a 64-to-128 fill is not degree growth.
-    await grow(subject, 0, 128);
+    await grow(subject, 0, MAX_RELATION_FACET_VALUES);
     let present = '';
     const report = await checkGrowth(db, {
       name: `relation facet ${operation}`,
@@ -196,7 +199,7 @@ test('relation facet source and point probes stay bounded as relation degree gro
       repetitions: 3,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: async (_database, scale, previous) => {
-        await grow(subject, previous + 128, scale + 128);
+        await grow(subject, previous + MAX_RELATION_FACET_VALUES, scale + MAX_RELATION_FACET_VALUES);
         // Derived-state work belongs to seeding, and is recorded by checkGrowth's grow attribution.
         // Any source-triggered catch-up inside operation is also captured; never subtract runner SQL.
         for (;;) {
@@ -208,30 +211,32 @@ test('relation facet source and point probes stay bounded as relation degree gro
           relationFacetOverflow?: string[];
         };
         const sample = snapshot.statements.filter((row) => row.property === 'schema:author');
-        expect(sample).toHaveLength(128);
-        expect(snapshot.relationFacetOverflow?.slice().sort()).toEqual(['ex:credit', 'schema:author']);
+        expect(sample).toHaveLength(MAX_RELATION_FACET_VALUES);
+        expect(snapshot.relationFacetOverflow?.slice().sort()).toEqual(['schema:author']);
+        expect(snapshot.statements.filter((row) => row.property === 'ex:credit').map(({ value }) => value)).toEqual([
+          target,
+        ]);
         const sampled = new Set(sample.map((row) => row.value));
-        present = people.slice(0, scale + 128).find((id) => !sampled.has(id))!;
+        present = people.slice(0, scale + MAX_RELATION_FACET_VALUES).find((id) => !sampled.has(id))!;
         expect(present).toBeDefined();
       },
       operation: async () => {
         if (operation === 'snapshot') {
           const snapshot = (await source.read(partition, [subject])).subjects[0]!;
-          expect(snapshot.statements.filter((row) => row.property === 'schema:author').length).toBeLessThanOrEqual(128);
+          expect(snapshot.statements.filter((row) => row.property === 'schema:author').length).toBeLessThanOrEqual(
+            MAX_RELATION_FACET_VALUES,
+          );
           return snapshot;
         }
         const probe: Probe = { subject, property: 'schema:author', value: operation === 'absent' ? missing : present };
-        if (operation.startsWith('qualified')) {
+        if (operation === 'same-target slotKey membership') {
           probe.property = 'ex:credit';
           probe.value = target;
-          probe.qualifiers = [
-            { property: 'ex:left', in: [left] },
-            { property: 'ex:right', in: [right] },
-          ];
-          if (operation === 'qualified miss') probe.qualifiers.push({ property: 'ex:key', in: [people[1]!] });
         }
         const result = await match(partition, [probe]);
-        expect(result).toEqual([operation === 'present outside sample' || operation === 'qualified match']);
+        expect(result).toEqual([
+          operation === 'present outside sample' || operation === 'same-target slotKey membership',
+        ]);
         return result;
       },
     });
