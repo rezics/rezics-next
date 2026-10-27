@@ -217,8 +217,9 @@ test(
           );
           await page.locator('html[data-hydrated]').waitFor();
           // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
-          await page.getByRole('main').waitFor();
-          expect(await page.getByRole('main').count()).toBe(1);
+          const main = page.getByRole('main');
+          await main.waitFor();
+          expect(await main.count()).toBe(1);
           // Secondary navigation is allowed when every navigation landmark has a name.
           expect(await page.getByRole('navigation', { name: /\S/ }).count()).toBe(
             await page.getByRole('navigation').count(),
@@ -226,6 +227,12 @@ test(
           expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
           const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
           expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
+          const heading = main.getByRole('heading', { level: 1 });
+          await heading.waitFor();
+          const headingText = (await heading.textContent())?.trim();
+          if (!/(missing|error)/i.test(name))
+            for (const key of ['not_found_heading', 'error_heading', 'platform_closed_heading'])
+              expect(headingText, `${name} does not show ${key} in ${locale}`).not.toBe(own[key]);
           if (entry.name === 'Signed Out')
             expect(
               await page.getByRole('banner').getByRole('link', { name: own.account_sign_in, exact: true }).count(),
@@ -238,14 +245,10 @@ test(
             expect(await menu.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
           }
           if (name === 'home' || name === 'missing-subject')
-            expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
-              name === 'home' ? own.home_heading : own.not_found_heading,
-            );
+            expect(headingText).toBe(name === 'home' ? own.home_heading : own.not_found_heading);
           if (name === 'subject') {
             const recording = await Bun.file(join(recorded, 'subject.json')).json();
-            expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
-              recording.subject.labels[locale] ?? recording.subject.labels.en,
-            );
+            expect(headingText).toBe(recording.subject.labels[locale] ?? recording.subject.labels.en);
           }
           const a11y = await new AxeBuilder({ page })
             .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
