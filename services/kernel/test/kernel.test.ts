@@ -237,12 +237,6 @@ const typed = [
   'GET /v1/subjects/:id/source-statistics',
   'PUT /v1/subjects/:id/source-statistics/:source',
 ] as const satisfies readonly Routes[];
-// The subject reaction handlers are served but absent from the inferred Eden route tree.
-const runtimeOnly = [
-  'DELETE /v1/subjects/:id/reaction',
-  'GET /v1/subjects/:id/reaction',
-  'PUT /v1/subjects/:id/reaction',
-] as const;
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;
 type Loose = LooseRoutes<Kernel['~Routes']>;
@@ -253,7 +247,7 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
     ({ method, path }) => `${method} ${path}`,
   );
   expect([complete, precise]).toEqual([true, true]);
-  expect(served.sort()).toEqual([...typed, ...runtimeOnly].sort());
+  expect(served.sort()).toEqual([...typed].sort());
 });
 
 test('semantic editorial listings document their default page size', () => {
