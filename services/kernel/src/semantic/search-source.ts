@@ -1,4 +1,5 @@
 import type { Release } from '@rezics/definitions';
+import { readRelease } from './definitions.ts';
 import type { Pool, PoolClient } from 'pg';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { withoutFencedEntries } from './fences.ts';
@@ -281,6 +282,12 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
             }[])
           : [];
         const releases = new Map(releaseRows.map((row) => [row.digest, row.body]));
+        // A statement of a Context's own relation type was written with a composed release.
+        for (const digest of digests) {
+          if (releases.has(digest)) continue;
+          const composed = await readRelease(client, digest);
+          if (composed) releases.set(digest, composed);
+        }
 
         const termRows = new Map<string, FactRow[]>();
         for (const row of factRows) {

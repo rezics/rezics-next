@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema/release.json": "./schema/release.json",
+    "./extension": "./src/extension.ts",
     "./compile": "./src/compile.ts",
     "./bundled": "./src/bundled.ts",
     "./validate": "./src/validate.ts",

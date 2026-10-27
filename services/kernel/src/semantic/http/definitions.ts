@@ -9,6 +9,10 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } f
 import type { subjectRoutes } from './subjects.ts';
 import { AuthenticationError, type Access, type AccessFactory } from '../../request/access.ts';
 import { globalReadEligibility } from '../eligibility.ts';
+import { publicContextEligibility } from '../context.ts';
+import { routeOf } from '../../route/route.ts';
+import type { Resource } from '../../request/access.ts';
+import { activateExtension, activeExtension, ExtensionInputError, publishExtension } from '../extensions.ts';
 import {
   activateRelease,
   activeRelease,
@@ -33,9 +37,19 @@ const unavailable = problemSchema(
   'transaction_retry_exhausted',
   'deadline_exceeded',
 );
+const unavailableCodes = [
+  'overloaded',
+  'partition_unavailable',
+  'transaction_retry_exhausted',
+  'deadline_exceeded',
+] as const;
 const sessionHeaders = { [SESSION_HEADER]: t.String() };
 
 function definitionProblem(error: unknown): never {
+  if (error instanceof ExtensionInputError)
+    throw new ProblemError('invalid_request', {
+      errors: error.violations.map(({ pointer, code }) => ({ pointer: `/extension${pointer}`, code })),
+    });
   if (error instanceof DefinitionInputError)
     throw new ProblemError('invalid_request', {
       errors: error.violations.map(({ pointer, code }) => ({
@@ -74,6 +88,7 @@ export function definitionRoutes(
           operationId: 'definitions.publish',
           'x-exposure': 'public',
           'x-action': 'definitions:publish',
+          'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -130,7 +145,8 @@ export function definitionRoutes(
         });
         const release = await admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
-          return readRelease(pool, params.digest);
+          // A release composed for one Context is not a published release.
+          return readRelease(pool, params.digest, { composed: false });
         });
         if (!release) throw new ProblemError('not_found');
         set.headers.etag = `"${params.digest}"`;
@@ -190,6 +206,7 @@ export function definitionRoutes(
           operationId: 'definitions.activate',
           'x-exposure': 'public',
           'x-action': 'definitions:activate',
+          'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -217,6 +234,160 @@ export function definitionRoutes(
         } catch (error) {
           return definitionProblem(error);
         }
+      },
+    )
+    .post(
+      '/v1/contexts/:id/definitions/extensions',
+      {
+        params: t.Object({ id: t.String() }),
+        headers: writeHeaders,
+        body: t.Object({ extension: releaseObject }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(digestResponse, sessionHeaders),
+          201: withHeaders(digestResponse, sessionHeaders),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('semantic_not_ready', ...unavailableCodes),
+        },
+        detail: {
+          operationId: 'definitions.publish_extension',
+          'x-exposure': 'public',
+          'x-action': 'definitions:publish',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (params.id !== GLOBAL_CONTEXT && route === null) throw new ProblemError('not_found');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const context = { route: params.id === GLOBAL_CONTEXT ? 0 : route!, id: params.id };
+        const authorization = await authorizeCommand(context, () => new DefinitionAccessDeniedError());
+        try {
+          const result = await admission.run('normal', job, () =>
+            publishExtension(pool, {
+              actor,
+              idempotencyKey: key,
+              digest: requestDigest('definitions.publish_extension', actor, { params, body }),
+              context: params.id,
+              extension: body.extension,
+              authorize: authorization.check,
+              authorization,
+              deadline: job.deadline,
+              clock,
+            }),
+          );
+          session.record(result.component);
+          set.status = result.created ? 201 : 200;
+          return { digest: result.digest };
+        } catch (error) {
+          return definitionProblem(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/contexts/:id/definitions/extensions/:digest', 'activate'),
+      {
+        params: t.Object({ id: t.String(), digest: t.String() }),
+        headers: writeHeaders,
+        body: t.Object(
+          { expected_head: t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()]) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: withHeaders(activeResponse, sessionHeaders),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('stale_editorial_head'),
+          422: problemSchema('idempotency_conflict'),
+          503: unavailable,
+        },
+        detail: {
+          operationId: 'definitions.activate_extension',
+          'x-exposure': 'public',
+          'x-action': 'definitions:activate',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (params.id !== GLOBAL_CONTEXT && route === null) throw new ProblemError('not_found');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const context = { route: params.id === GLOBAL_CONTEXT ? 0 : route!, id: params.id };
+        const authorization = await authorizeCommand(context, () => new DefinitionAccessDeniedError());
+        try {
+          const result = await admission.run('normal', job, () =>
+            activateExtension(pool, {
+              actor,
+              idempotencyKey: key,
+              digest: requestDigest('definitions.activate_extension', actor, { params, body }),
+              context: params.id,
+              extensionDigest: params.digest,
+              expectedHead: body.expected_head,
+              authorize: authorization.check,
+              authorization,
+              deadline: job.deadline,
+              clock,
+            }),
+          );
+          session.record(result.component);
+          return { digest: result.digest, head: result.head };
+        } catch (error) {
+          return definitionProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/contexts/:id/definitions',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          200: t.Object(
+            {
+              context: t.String(),
+              digest: t.Union([t.String(), t.Null()]),
+              head: t.Integer(),
+              extension: t.Union([releaseObject, t.Null()]),
+            },
+            { additionalProperties: false },
+          ),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          503: problemSchema('overloaded', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'definitions.read_context',
+          'x-exposure': 'public',
+          'x-action': 'context:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job }) => {
+        const route = params.id === GLOBAL_CONTEXT ? 0 : routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const context: Resource = { route, id: params.id };
+        context.eligibility = publicContextEligibility(context);
+        const check = await authorize(context);
+        const active = await admission.run('normal', job, async () => {
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          return activeExtension(pool, params.id);
+        });
+        return {
+          context: params.id,
+          digest: active?.digest ?? null,
+          head: active?.head ?? 0,
+          extension: (active?.extension as unknown as Record<string, unknown> | undefined) ?? null,
+        };
       },
     );
 }

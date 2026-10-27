@@ -488,6 +488,25 @@ is reported at `/filters/<group>`. Codes are `unsupported`, `invalid`, `limit`,
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.
 
+## Term extensions
+
+`@rezics/definitions/extension` holds the format of a Context's custom relation types: an immutable body
+(`format` `https://rezics.com/definitions/extension/1`, the Context's `context` id and its `terms`) addressed by
+`extensionDigest`. A term is a relation property in the Context's namespace: its CURIE is `c<context id as 32 hex>:<localName>`,
+its IRI `https://rezics.com/contexts/<context id>/terms/<localName>`. It carries a `description`, `labels`, `domain`,
+`targets`, `multivalued`, optional `qualifiers` and `mappings`, and a `relation` (group `order`, `derivation`, `world`,
+`membership` or `association`, one of `inverse` or `symmetric`, optional `acyclic` and `order`), and may be deprecated with
+`deprecated.replacedBy`.
+
+- `validateExtension(value, release, { context, sources })` returns the violations of a body against the release it extends
+  (RFC 6901 pointers, at most 64 terms). A term with no description, domain or targets is refused with its field named. Only
+  Global's extension may name terms of other Contexts, and only as copies of the term in `sources`.
+- `checkExtensionUpdate(previous, next)` returns the violations of replacing an active extension: a term keeps its
+  description, domain, targets, multiplicity, group, acyclicity and direction, is not dropped and does not lose its deprecation.
+- `applyExtension(release, extension)` returns the release as the Context sees it, a pure function of both bodies that
+  stays valid under `validateRelease` and quietly omits terms whose types the release no longer has. Its digest is the
+  digest of the composed release.
+
 ## Portable input validation
 
 `@rezics/definitions/validate` exports `Violation`, `ItemTarget`,

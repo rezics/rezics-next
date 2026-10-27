@@ -8,6 +8,7 @@ import pointer from './definitions-active.sql';
 import exists from './definitions-exists.sql';
 import publish from './definitions-publish.sql';
 import read from './definitions-read.sql';
+import { composedRelease, readComposedRelease } from './extensions.ts';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
@@ -29,19 +30,25 @@ function validated(value: unknown): Release {
   return value as Release;
 }
 
-function freeze(value: unknown): void {
+export function freeze(value: unknown): void {
   if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return;
   for (const child of Object.values(value)) freeze(child);
   Object.freeze(value);
 }
 
 /** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
-export async function readRelease(pool: Pool | CommandTransaction, digest: string): Promise<Release | null> {
+export async function readRelease(
+  pool: Pool | CommandTransaction,
+  digest: string,
+  options: { composed?: boolean } = {},
+): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
+  const composed = options.composed === false ? null : composedRelease(digest);
+  if (composed) return composed;
   const cached = releases.get(digest);
   if (cached) return (await exists.run(pool, { route: resource.route, digest })) ? cached : null;
   const row = await read.run(pool, { route: resource.route, digest });
-  if (!row) return null;
+  if (!row) return options.composed === false ? null : readComposedRelease(pool, digest);
   const release = validated(row.body);
   if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
   freeze(release);
@@ -59,7 +66,7 @@ export async function activeRelease(
   return { ...active, release };
 }
 
-type WriteOptions = {
+export type WriteOptions = {
   actor: AccountActor;
   idempotencyKey: string;
   digest: Uint8Array;
@@ -69,9 +76,15 @@ type WriteOptions = {
   clock?: () => Date;
 };
 
-function commandOptions(options: WriteOptions, kind: string, action: string) {
+/** The command options of a definition write on `target`: Global's own partition unless a Context's extension is written. */
+export function commandOptions(
+  options: WriteOptions,
+  kind: string,
+  action: string,
+  target: { partition: number; resource: { route: number; id: string } } = { partition: 0, resource },
+) {
   return {
-    partition: 0,
+    partition: target.partition,
     ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
     receipt: {
       actorAccountId: options.actor.accountId,
@@ -88,7 +101,7 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
       options.authorization ??
       ({
         action,
-        resource,
+        resource: target.resource,
         denied: () => new DefinitionAccessDeniedError(),
         async authorize(tx, attempt) {
           if (!(await options.authorize(tx, attempt.time))) throw new DefinitionAccessDeniedError();

@@ -25,6 +25,8 @@ Semantic writes use the route action and authority below. When the authority and
 | Each bulk proposal command         | `statement:propose`    | Global Context                             |
 | Definition publication             | `definitions:publish`  | Global Context                             |
 | Definition activation              | `definitions:activate` | Global Context                             |
+| Extension publication              | `definitions:publish`  | Selected Global or community Context       |
+| Extension activation               | `definitions:activate` | Selected Global or community Context       |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
 
 ## Agents
@@ -126,6 +128,17 @@ A custom relation type follows the same lifecycle as any term:
 - A layout or grouping a person arranges for a graph view is view state; it never changes the facts.
 
 The number of custom relation types is limited per Context; statements that use one are stored, paged and counted exactly like statements that use a bundled relation property.
+
+#### Term extensions
+
+A Context's custom relation types are one term extension: an immutable body addressed by its digest (`@rezics/definitions/extension`, format `https://rezics.com/definitions/extension/1`) that holds only item properties and refers to the Global release for types and qualifiers. `POST /v1/contexts/:id/definitions/extensions` publishes a body once (`definitions:publish` on that Context), `POST /v1/contexts/:id/definitions/extensions/:digest:activate` makes it the Context's head with an expected-head check (`definitions:activate` on that Context), and `GET /v1/contexts/:id/definitions` returns the active extension, or a null extension at head 0. The routes accept Global's id as well: Global has its own extension. Publication and activation emit the `definitions.published` and `definitions.activated` events with the Context as their subject.
+
+- A term's CURIE is `c<context id as 32 hex>:<localName>` and its IRI is `https://rezics.com/contexts/<context id>/terms/<localName>`. A term is never reused for another meaning, and an inverse name counts as a used name.
+- A term carries a `description` (at least `en`), `labels`, `domain` (holder types of the Global release), `targets`, `multivalued` and a `relation` with a group from `order`, `derivation`, `world`, `membership` or `association`, exactly one of `inverse` (a CURIE in the Context's namespace, or `none`) and `symmetric`, `inverseLabels` when there is an inverse, and optional `acyclic` and `order`. Its qualifiers are Global release properties for position, the part or range, spoiler level and note. Optional `mappings` are `{ predicate, iri }` pairs with `owl:equivalentProperty`, `skos:exactMatch` or `skos:closeMatch` and an absolute IRI. A term without a meaning, domain or target is refused with the field named in the error pointer.
+- A later extension of the same Context may add terms, change labels and deprecate a term with `deprecated.replacedBy`. It may not drop a term or change a term's description, domain, targets, multiplicity, group, acyclicity or direction, nor lift a deprecation; activation refuses it with the field named. At most 64 terms, deprecated ones included.
+- Global's extension follows the same rules, and a term of another Context may appear in it only as a copy of that Context's active term (same CURIE and body). Until then Global does not know the property, and refuses to accept its candidates.
+- The release a Context sees is the Global release plus Global's extension plus the Context's own, composed into one release by `applyExtension` and addressed by its own digest (`semantic.release_composite` maps it back to its parent and extension). Candidates and the link relay keep the composed digest; a subject's own revisions keep the published release, so reading a subject in another Context never picks up this Context's terms. Proposals, acceptance, adoption, relation and link pages, previews and counts, and the subject read resolve through it. Bulk writes, merges, search source reads and summaries use the published release or resolve a stored digest.
+- The graph read is the relation and link pages: there is no separate graph endpoint.
 
 ## Cost
 
@@ -256,6 +269,18 @@ append, with no additional SQL. The API round trips are covered by
 - Touches: `bootstrapRelease`: outer latest-head probe; when absent, command repeats probe, publishes 0/1 release, inserts first activation and emits 2 events, no receipt/basis. Uses definition PKs and fence indexes above. Grow D and H; fix body size, including already-active fast path.
 - Bound: Rows O(1), blocks O(log D + C), one statement if active, otherwise eleven including command; race recovery may add one head lookup after rollback.
 - Growth check: `test/semantic/growth-definitions.test.ts`: `Definition bootstrap stays within its bound as D grows`, scales `[1, 4, 16]`.
+
+### Context term resolution
+
+- Touches: `effectiveRelease` / `layeredRelease`: the active release pointer, then the head probe of Global's extension and of the request's Context (`context_extension_activation_pkey(route, context_id, head)`, backward, `LIMIT 1`), each 0/1 row. A digest pair composes once per process (`applyExtension` over the active release and the extension body, which is read on a miss and validated by digest) and later requests find the composed release in memory. A write registers a composed digest once per process (`INSERT ... ON CONFLICT DO NOTHING` into `semantic.release_composite`); reads never write. A stored composed digest resolves through `readRelease`. Grow the Context's terms; the holder's type keeps one term.
+- Bound: rows O(1), blocks O(log D) per request; a cold read is linear in the extension size (at most 64 terms) once per digest pair per process. A request touches only the properties of the holder's type, so terms on other types add nothing.
+- Growth check: `test/semantic/custom-relation-types.test.ts`: `a Context's term resolution reads a bounded number of rows however many terms the Context holds`, scales `[1, 8, 64]` terms; a Context without an extension reads the active release itself (`a Context without an extension reads the active release unchanged`).
+
+### Extension activation
+
+- Touches: `activateExtension`: read the extension body by `context_extension_pkey`, the Context's latest head, the check of the body against the active release and the prior extension (at most 64 terms each), then insert 0/1 activation with the expected-head check. Publication inserts 0/1 body.
+- Bound: rows O(terms) ≤ 64 for the check, otherwise O(1); blocks O(log D + C).
+- Growth check: none beyond the 64-term limit, which `test/semantic/custom-relation-types.test.ts`: `a Context's custom relation types are limited` exercises.
 
 ### Typed validation
 

@@ -24,6 +24,22 @@ CREATE SCHEMA semantic;
 
 
 --
+-- Name: context_extension_head(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.context_extension_head(p_route integer, p_context_id uuid) RETURNS TABLE(digest text, head integer)
+    LANGUAGE sql STABLE
+    SET enable_seqscan TO 'off'
+    AS $$
+  SELECT activation.digest, activation.head
+  FROM semantic.context_extension_activation activation
+  WHERE activation.route = p_route AND activation.context_id = p_context_id
+  ORDER BY activation.head DESC
+  LIMIT 1
+$$;
+
+
+--
 -- Name: guard_subject_security(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -265,6 +281,37 @@ CREATE TABLE semantic.context (
     CONSTRAINT context_settings_pair_check CHECK (((settings_id IS NULL) = (settings_release IS NULL))),
     CONSTRAINT context_settings_release_check CHECK (((settings_release IS NULL) OR (settings_release ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT context_without_settings_defaults_check CHECK (((settings_id IS NOT NULL) OR (defaults = '{}'::jsonb)))
+);
+
+
+--
+-- Name: context_extension; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.context_extension (
+    route integer NOT NULL,
+    context_id uuid NOT NULL,
+    digest text NOT NULL,
+    body jsonb NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT context_extension_check CHECK ((route = ((get_byte(uuid_send(context_id), 10) * 256) + get_byte(uuid_send(context_id), 11)))),
+    CONSTRAINT context_extension_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT context_extension_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: context_extension_activation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.context_extension_activation (
+    route integer NOT NULL,
+    context_id uuid NOT NULL,
+    head integer NOT NULL,
+    digest text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT context_extension_activation_head_check CHECK ((head >= 1)),
+    CONSTRAINT context_extension_activation_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -566,6 +613,21 @@ CREATE TABLE semantic.relation_context_slot (
 
 
 --
+-- Name: release_composite; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.release_composite (
+    digest text NOT NULL,
+    parent_digest text NOT NULL,
+    extension_route integer NOT NULL,
+    extension_context_id uuid NOT NULL,
+    extension_digest text NOT NULL,
+    CONSTRAINT release_composite_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT release_composite_parent_digest_check CHECK ((parent_digest ~ '^sha256:[0-9a-f]{64}$'::text))
+);
+
+
+--
 -- Name: retraction; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -723,6 +785,22 @@ ALTER TABLE ONLY semantic.candidate
 
 
 --
+-- Name: context_extension_activation context_extension_activation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_extension_activation
+    ADD CONSTRAINT context_extension_activation_pkey PRIMARY KEY (route, context_id, head);
+
+
+--
+-- Name: context_extension context_extension_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_extension
+    ADD CONSTRAINT context_extension_pkey PRIMARY KEY (route, context_id, digest);
+
+
+--
 -- Name: context context_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -856,6 +934,14 @@ ALTER TABLE ONLY semantic.redirect
 
 ALTER TABLE ONLY semantic.relation_context_slot
     ADD CONSTRAINT relation_context_slot_pkey PRIMARY KEY (route, subject_id, slot_id, context_id);
+
+
+--
+-- Name: release_composite release_composite_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.release_composite
+    ADD CONSTRAINT release_composite_pkey PRIMARY KEY (digest);
 
 
 --
@@ -1245,6 +1331,14 @@ ALTER TABLE ONLY semantic.candidate
 
 
 --
+-- Name: context_extension_activation context_extension_activation_route_context_id_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.context_extension_activation
+    ADD CONSTRAINT context_extension_activation_route_context_id_digest_fkey FOREIGN KEY (route, context_id, digest) REFERENCES semantic.context_extension(route, context_id, digest);
+
+
+--
 -- Name: definition_activation definition_activation_route_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -1306,6 +1400,14 @@ ALTER TABLE ONLY semantic.moderation
 
 ALTER TABLE ONLY semantic.redirect
     ADD CONSTRAINT redirect_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: release_composite release_composite_extension_route_extension_context_id_ext_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.release_composite
+    ADD CONSTRAINT release_composite_extension_route_extension_context_id_ext_fkey FOREIGN KEY (extension_route, extension_context_id, extension_digest) REFERENCES semantic.context_extension(route, context_id, digest);
 
 
 --

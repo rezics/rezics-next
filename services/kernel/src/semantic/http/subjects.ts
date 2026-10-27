@@ -31,6 +31,8 @@ import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
+import { effectiveRelease } from '../extensions.ts';
+import { termContext } from '@rezics/definitions/extension';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import type { Access, AccountActor, Resource } from '../../request/access.ts';
 import { AuthenticationError } from '../../request/access.ts';
@@ -461,7 +463,7 @@ function subjectRoutes(
       async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, GLOBAL_CONTEXT, true);
         if (!active) throw new ProblemError('semantic_not_ready');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = subjectTarget(routeKey, account.accountId, key);
@@ -944,7 +946,12 @@ function subjectRoutes(
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const subjectRoute = routeOf(params.id);
         if (subjectRoute === null) throw new ProblemError('not_found');
-        const active = await activeRelease(pool);
+        const property = (body.statement as { property?: { id?: unknown } }).property?.id;
+        const owner = typeof property === 'string' ? termContext(property) : null;
+        let active = await effectiveRelease(pool, GLOBAL_CONTEXT, true);
+        // A Context's relation type is proposed with the release that Context sees.
+        if (active && owner && !Object.hasOwn(active.release.properties, property as string))
+          active = await effectiveRelease(pool, owner, true);
         if (!active) throw new ProblemError('semantic_not_ready');
         const authorization = await authorizeSemanticWrite({
           access: access(),
@@ -1386,7 +1393,7 @@ function subjectRoutes(
         if (routeOf(params.id) === null) throw new ProblemError('not_found');
         const contextRoute = routeOf(body.context);
         if (contextRoute === null) throw new ProblemError('invalid_request');
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, body.context, true);
         if (!active) throw new ProblemError('semantic_not_ready');
         const slot = relationSlotAddress(params.id, body.property, active.release, body);
         const authorization = await authorizeSemanticWrite({
@@ -1481,7 +1488,7 @@ function subjectRoutes(
       async ({ params, query, actor, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
         if (!active) throw new ProblemError('semantic_not_ready');
         if (!Object.hasOwn(active.release.properties, query.property)) throw new ProblemError('invalid_request');
         const slot = relationSlotAddress(params.id, query.property, active.release, query);
@@ -1699,7 +1706,7 @@ function subjectRoutes(
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
         if (!active) throw new ProblemError('semantic_not_ready');
         if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
           throw new ProblemError('invalid_request');
@@ -1817,7 +1824,7 @@ function subjectRoutes(
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
         if (!active) throw new ProblemError('semantic_not_ready');
         if (
           !Object.hasOwn(active.release.properties, query.property) ||

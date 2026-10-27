@@ -44,6 +44,7 @@ import readSubjectStatement from './read-subject.sql';
 import readTypesStatement from './read-item-types.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import { readRelease as getRelease } from './definitions.ts';
+import { layeredRelease } from './extensions.ts';
 import { writeFacts } from './write-facts.ts';
 import {
   AccountAgentLabelEditError,
@@ -431,8 +432,11 @@ export async function readSubject(
     }
     const allowed = await authorize(client);
     if (allowed && rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
-    const release = await getRelease(client, rows[0]!.release);
-    if (!release) throw new Error('Subject revision release is missing');
+    const stored = await getRelease(client, rows[0]!.release);
+    if (!stored) throw new Error('Subject revision release is missing');
+    // The Context's own relation types show with the subject's release; reads never register the digest.
+    const layer = await layeredRelease(client, { digest: rows[0]!.release, release: stored }, context);
+    const release = layer.release;
     let statementFacts: FactRow[] = [];
     const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
     const relationCounts: Record<string, number> = {};
@@ -517,13 +521,14 @@ export async function readSubject(
       rows,
       statementFacts,
       release,
+      layerDigest: layer.digest,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       resolution,
       relationCounts,
     };
   });
   if (!snapshot) return null;
-  const { rows, component, release, statementFacts, resolution, relationCounts } = snapshot;
+  const { rows, component, release, layerDigest, statementFacts, resolution, relationCounts } = snapshot;
   const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
   return {
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
@@ -543,7 +548,7 @@ export async function readSubject(
       : null,
     subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
       revision: rows[0]!.revision,
-      release: rows[0]!.release,
+      release: layerDigest,
       context,
       resolution,
       relationCounts,

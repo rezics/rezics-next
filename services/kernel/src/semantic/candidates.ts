@@ -12,7 +12,9 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
-import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { baseOf, layeredRelease } from './extensions.ts';
+import { termContext } from '@rezics/definitions/extension';
 import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import {
@@ -266,14 +268,14 @@ export async function writeProposal(
       route,
       subject_id: options.subject,
       revision,
-      release: options.release.digest,
+      release: baseOf(options.release.digest),
       transaction_id: transactionId,
       source: options.source ?? accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
     });
     await updateSubjectRelease.run(tx, {
       route,
       subject_id: options.subject,
-      release: options.release.digest,
+      release: baseOf(options.release.digest),
     });
     await insertCandidate.run(tx, {
       route,
@@ -349,13 +351,13 @@ async function appendEditorialRevision(
     subject_id: input.subject,
     revision: input.revision,
     kind: input.kind,
-    release: input.release,
+    release: baseOf(input.release),
     transaction_id: input.transactionId,
   });
   await updateSubjectRelease.run(tx, {
     route: input.route,
     subject_id: input.subject,
-    release: input.release,
+    release: baseOf(input.release),
   });
 }
 
@@ -434,6 +436,13 @@ export async function decideCandidate(
       });
       if (listed(concealed).length > 0) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
+      // A Context's relation type is unknown elsewhere until Global adopts it.
+      if (termContext(candidate.property) !== null) {
+        const active = await activeRelease(tx);
+        const visible = active && (await layeredRelease(tx, active, options.context)).release;
+        if (!visible?.properties[candidate.property])
+          throw new SubjectInputError([{ pointer: '/candidate', code: 'unsupported' }]);
+      }
 
       const release = candidate.relation ? await readRelease(tx, candidate.release) : null;
       const before = release
