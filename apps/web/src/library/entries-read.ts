@@ -3,12 +3,11 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import {
-  libraryLabel,
-  type LibraryLabel,
   libraryFullQuery,
   libraryListQuery,
   readLibraryResult,
   StaleCursorError,
+  subjectOf,
   type LibrarySubject,
 } from './reads';
 
@@ -68,20 +67,14 @@ export type LibraryRemoveInput = {
   idempotencyKey: string;
 };
 
-type RawSubject = { id: string; type: string; label: LibraryLabel };
 type RawEntry = {
   subjectId: string;
   state: LibraryEntryState;
   revision: number;
   createdAt: string;
   updatedAt: string;
-  subject?: RawSubject | null;
+  subject?: Parameters<typeof subjectOf>[0];
 };
-
-function presentSubject(subject: RawSubject | null | undefined): LibrarySubject | null {
-  if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: libraryLabel(subject.label, subject.id) };
-}
 
 function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
   return {
@@ -90,7 +83,7 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
     revision: entry.revision,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
-    subject: presentSubject(entry.subject),
+    subject: subjectOf(entry.subject),
   };
 }
 

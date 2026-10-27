@@ -1,4 +1,26 @@
-import { useState, type FormEvent } from 'react';
+import type { CoverRatio } from '@rezics/ui/cover';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@rezics/ui/shadcn/dropdown-menu';
+import { BookCopyIcon, ChevronDownIcon, EllipsisIcon, GaugeIcon, Trash2Icon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { deletePersonalLibraryEntry, savePersonalLibraryEntry } from './entries-actions';
@@ -9,7 +31,7 @@ import {
   type PersonalLibraryEntry,
   type PersonalLibraryView,
 } from './entries-read';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 import { PageHeading } from '../shell/page-heading';
 
 function formatUpdated(value: string, locale: string) {
@@ -37,7 +59,7 @@ function libraryHref(locale: string, state?: LibraryEntryState | null, cursor?: 
 }
 
 function LibrarySections({ locale }: { locale: string }) {
-  const linkClass = 'inline-flex min-h-10 items-center rounded-lg px-3 text-primary underline-offset-4 hover:underline';
+  const linkClass = buttonVariants({ variant: 'ghost', size: 'lg' });
   return (
     <nav aria-label={m.library_navigation()} className="flex flex-wrap gap-2">
       <a href={libraryHref(locale)} aria-current="page" className={linkClass}>
@@ -59,28 +81,26 @@ function failureText(reason: 'closed' | 'unavailable' | 'signed-out'): string {
   return m.error_message();
 }
 
-function LibraryRow({ entry, locale }: { entry: PersonalLibraryEntry; locale: string }) {
+function LibraryRow({ entry, locale, ratio }: { entry: PersonalLibraryEntry; locale: string; ratio: CoverRatio }) {
   const [row, setRow] = useState(entry);
   const [changeKey, setChangeKey] = useState(entry.changeKey);
   const [removeKey, setRemoveKey] = useState(entry.removeKey);
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState<'closed' | 'unavailable' | 'signed-out' | null>(null);
   const [removed, setRemoved] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [pending, setPending] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   if (removed) return null;
 
-  const onChange = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const state = libraryEntryState(String(form.get('state') ?? ''));
-    const subjectId = String(form.get('subjectId') ?? '');
-    const revision = Number(form.get('revision'));
-    const idempotencyKey = String(form.get('idempotencyKey') ?? '');
-    if (!state || !subjectId || !idempotencyKey || !Number.isInteger(revision)) return;
+  const onChange = async (value: string) => {
+    const state = libraryEntryState(value);
+    if (!state || state === row.state || pending) return;
     setPending(true);
     try {
       const result = await savePersonalLibraryEntry({
-        data: { subjectId, state, revision, idempotencyKey },
+        data: { subjectId: row.subjectId, state, revision: row.revision, idempotencyKey: changeKey },
         headers: csrfHeaders(),
       });
       if (result.ok && result.entry) {
@@ -110,17 +130,12 @@ function LibraryRow({ entry, locale }: { entry: PersonalLibraryEntry; locale: st
     }
   };
 
-  const onRemove = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const subjectId = String(form.get('subjectId') ?? '');
-    const revision = Number(form.get('revision'));
-    const idempotencyKey = String(form.get('idempotencyKey') ?? '');
-    if (!subjectId || !idempotencyKey || !Number.isInteger(revision)) return;
+  const onRemove = async () => {
+    if (pending) return;
     setPending(true);
     try {
       const result = await deletePersonalLibraryEntry({
-        data: { subjectId, revision, idempotencyKey },
+        data: { subjectId: row.subjectId, revision: row.revision, idempotencyKey: removeKey },
         headers: csrfHeaders(),
       });
       if (result.ok) {
@@ -130,71 +145,116 @@ function LibraryRow({ entry, locale }: { entry: PersonalLibraryEntry; locale: st
         setRemoveKey(crypto.randomUUID());
         setConflict(true);
         setFailure(null);
+        setRemoving(false);
       } else if (result.reason === 'missing') {
         setRemoved(true);
       } else {
         setFailure(result.reason === 'closed' || result.reason === 'signed-out' ? result.reason : 'unavailable');
+        setRemoving(false);
       }
     } catch {
       setFailure('unavailable');
+      setRemoving(false);
     } finally {
       setPending(false);
     }
   };
 
+  const title = row.subject?.label ?? m.library_subject_unavailable();
+  const current = stateLabel(row.state);
+  const subjectQuery = row.subject ? `?subjectId=${encodeURIComponent(row.subject.id)}` : null;
   return (
-    <li className="space-y-3 py-4">
-      <p className="flex flex-wrap items-baseline gap-2">
-        <SubjectRef subject={row.subject} />
-      </p>
-      <p data-state={row.state}>{stateLabel(row.state)}</p>
-      <p>
-        {m.library_updated()} <time {...{ datetime: row.updatedAt }}>{formatUpdated(row.updatedAt, locale)}</time>
-      </p>
-      {conflict ? <p role="status">{m.library_conflict()}</p> : null}
-      {failure ? <p role="alert">{failureText(failure)}</p> : null}
-      <form onSubmit={onChange} className="flex flex-wrap items-end gap-3">
-        <input type="hidden" name="subjectId" value={row.subjectId} />
-        <input type="hidden" name="revision" value={String(row.revision)} />
-        <input type="hidden" name="idempotencyKey" value={changeKey} />
-        <label className="grid gap-1 text-sm">
-          {m.library_change_state()}
-          <select
-            name="state"
-            defaultValue={row.state}
-            className="min-h-10 rounded-lg border border-border bg-background px-3"
-          >
-            {libraryEntryStates.map((state) => (
-              <option key={state} value={state}>
-                {stateLabel(state)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 hover:bg-muted"
-        >
-          {m.library_save_state()}
-        </button>
-      </form>
-      <details>
-        <summary className="cursor-pointer">{m.library_remove()}</summary>
-        <form onSubmit={onRemove} className="mt-3 space-y-3">
+    <li className="space-y-2 py-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <SubjectIdentity subject={row.subject} ratio={ratio}>
+          {m.library_updated()} <time {...{ datetime: row.updatedAt }}>{formatUpdated(row.updatedAt, locale)}</time>
+        </SubjectIdentity>
+        <form onSubmit={(event) => event.preventDefault()}>
           <input type="hidden" name="subjectId" value={row.subjectId} />
           <input type="hidden" name="revision" value={String(row.revision)} />
-          <input type="hidden" name="idempotencyKey" value={removeKey} />
-          <p>{m.library_remove_confirm()}</p>
-          <button
-            type="submit"
-            disabled={pending}
-            className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 hover:bg-muted"
-          >
-            {m.library_remove_submit()}
-          </button>
+          <input type="hidden" name="idempotencyKey" value={changeKey} />
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!hydrated || pending}
+                  aria-label={m.library_entry_state_label({ title, state: current })}
+                  data-slot="library-status"
+                  data-state={row.state}
+                />
+              }
+            >
+              {current}
+              <ChevronDownIcon aria-hidden="true" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuRadioGroup value={row.state} onValueChange={(value) => void onChange(value)}>
+                {libraryEntryStates.map((state) => (
+                  <DropdownMenuRadioItem key={state} value={state} closeOnClick>
+                    {stateLabel(state)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </form>
-      </details>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={m.library_entry_actions({ title })}
+                data-slot="library-actions"
+              />
+            }
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            {subjectQuery ? (
+              <>
+                <DropdownMenuItem render={<a href={`/${locale}/library/copies${subjectQuery}`} />}>
+                  <BookCopyIcon aria-hidden="true" />
+                  {m.library_entry_copies()}
+                </DropdownMenuItem>
+                <DropdownMenuItem render={<a href={`/${locale}/library/progress${subjectQuery}`} />}>
+                  <GaugeIcon aria-hidden="true" />
+                  {m.library_entry_progress()}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            <DropdownMenuItem variant="destructive" disabled={!hydrated || pending} onClick={() => setRemoving(true)}>
+              <Trash2Icon aria-hidden="true" />
+              {m.library_remove()}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {conflict ? <p role="status">{m.library_conflict()}</p> : null}
+      {failure ? <p role="alert">{failureText(failure)}</p> : null}
+      <form onSubmit={(event) => event.preventDefault()}>
+        <input type="hidden" name="subjectId" value={row.subjectId} />
+        <input type="hidden" name="revision" value={String(row.revision)} />
+        <input type="hidden" name="idempotencyKey" value={removeKey} />
+      </form>
+      <AlertDialog open={removing} onOpenChange={setRemoving}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{m.library_remove_confirm()}</AlertDialogTitle>
+            <AlertDialogDescription>{title}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>{m.library_collection_cancel()}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={pending} onClick={() => void onRemove()}>
+              {m.library_remove_submit()}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
   );
 }
@@ -208,6 +268,7 @@ function SignedInLibrary({ page, locale }: { page: Extract<PersonalLibraryView, 
     { state: 'paused', label: m.library_state_paused() },
     { state: 'dropped', label: m.library_state_dropped() },
   ];
+  const ratio = rowRatio(page.entries.map((entry) => entry.subject));
   return (
     <>
       <nav aria-label={m.library_states()} className="flex flex-wrap gap-2">
@@ -218,7 +279,7 @@ function SignedInLibrary({ page, locale }: { page: Extract<PersonalLibraryView, 
               key={tab.state ?? 'all'}
               href={libraryHref(locale, tab.state)}
               {...(current ? { 'aria-current': 'page' as const } : {})}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 underline-offset-4 hover:bg-muted hover:underline"
+              className={buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'lg' })}
             >
               {tab.label}
             </a>
@@ -228,7 +289,7 @@ function SignedInLibrary({ page, locale }: { page: Extract<PersonalLibraryView, 
       {page.entries.length ? (
         <ol className="divide-y divide-border/60 border-y border-border/60">
           {page.entries.map((entry) => (
-            <LibraryRow key={entry.subjectId} entry={entry} locale={locale} />
+            <LibraryRow key={entry.subjectId} entry={entry} locale={locale} ratio={ratio} />
           ))}
         </ol>
       ) : (
@@ -237,7 +298,7 @@ function SignedInLibrary({ page, locale }: { page: Extract<PersonalLibraryView, 
       {page.next ? (
         <a
           href={libraryHref(locale, page.state, page.next)}
-          className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+          className={buttonVariants({ variant: 'outline', size: 'lg' })}
         >
           {m.library_more()}
         </a>

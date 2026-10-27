@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import type { CoverSummary } from '@rezics/ui/cover';
 import { notFound } from '@tanstack/react-router';
 import { isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
@@ -7,8 +8,18 @@ import { readSessionIdentity, type SessionIdentity } from '../session/state';
 /** One rendered library list page. The kernel allows at most 100. */
 export const LIBRARY_PAGE_LIMIT = 100;
 
-/** `typeLabel` is the type's name in the reader's language, once the page's server function has set it. */
-export type LibrarySubject = { id: string; type: string; label: string; typeLabel?: string };
+/**
+ * `typeLabel` is the type's name in the reader's language, once the page's server function has set it. `types` is the
+ * subject's type chain for its cover frame, and `cover` is the cover summary the kernel embedded, or null.
+ */
+export type LibrarySubject = {
+  id: string;
+  type: string;
+  types: string[];
+  label: string;
+  cover: CoverSummary | null;
+  typeLabel?: string;
+};
 export type LibraryLabel = string | { value: string; language: string } | null;
 
 /** Both subject summaries and collection/space targets present a plain display label. */
@@ -39,7 +50,13 @@ export type CollectionPageData = {
 
 type LibraryResult<T> = { data?: T | null; error?: unknown; status?: number };
 type RawAccount = { id?: string; handle: string | null; displayName: string | null };
-type RawSubject = { id: string; type: string; label: LibraryLabel };
+type RawSubject = {
+  id: string;
+  type: string;
+  types?: readonly string[];
+  label: LibraryLabel;
+  cover?: unknown;
+};
 type RawCollection = {
   id: string;
   curatorAccountId: string;
@@ -115,7 +132,13 @@ function accountOf(account: RawAccount | null | undefined): LibraryAccount | nul
 /** Maps an embedded subject, with the label the viewer sees or the id when there is none. */
 export function subjectOf(subject: RawSubject | null | undefined): LibrarySubject | null {
   if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: libraryLabel(subject.label, subject.id) };
+  return {
+    id: subject.id,
+    type: subject.type,
+    types: subject.types?.length ? [...subject.types] : [subject.type],
+    label: libraryLabel(subject.label, subject.id),
+    cover: (subject.cover ?? null) as CoverSummary | null,
+  };
 }
 
 async function readCollection(client: KernelClient, id: string): Promise<RawCollection> {

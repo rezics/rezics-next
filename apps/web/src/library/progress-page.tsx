@@ -5,7 +5,7 @@ import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
 import { startProgressSession } from './progress-server';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 
 const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'scalar_amount', label: () => m.library_progress_mode_amount() },
@@ -81,6 +81,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
     }
   }
 
+  const ratio = rowRatio(page.signedIn ? page.sessions.map((session) => session.subject) : []);
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
@@ -145,9 +146,9 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
             <ol className="divide-y divide-border/60 border-y border-border/60">
               {page.sessions.map((session) => (
                 <li key={session.id} className="space-y-2 py-4">
-                  <p className="flex flex-wrap items-baseline gap-2">
-                    <SubjectRef subject={session.subject} />
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <SubjectIdentity subject={session.subject} ratio={ratio} />
+                  </div>
                   <p>{stateLabel(session.state)}</p>
                   <p>{modeLabel(session.mode)}</p>
                   <p>{unitLabel(session.unit)}</p>

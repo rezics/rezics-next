@@ -5,7 +5,7 @@ import { csrfHeaders } from '../threads/composer';
 import { removePublishedLog } from './logs-server';
 import type { PublishedLog } from './logs-read';
 import { AccountRef } from './account-ref';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -78,8 +78,8 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
         </div>
         <div>
           <dt className="font-medium">{m.library_logs_subject()}</dt>
-          <dd className="flex flex-wrap items-baseline gap-2">
-            <SubjectRef subject={log.subject} />
+          <dd className="flex items-center gap-3">
+            <SubjectIdentity subject={log.subject} ratio={rowRatio([log.subject])} />
           </dd>
         </div>
         <div>

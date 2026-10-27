@@ -38,8 +38,8 @@ test('a collection presents localized subject summary labels while hidden subjec
   });
   const page = await loadCollectionPage(client, new Request('https://web.test/collection'), {}, { id: 'collection' });
   expect(page.members.map(({ subject }) => subject)).toEqual([
-    { id: 'localized', type: 'book', label: 'Localized title' },
-    { id: 'unlabeled', type: 'book', label: 'unlabeled' },
+    { id: 'localized', type: 'book', types: ['book'], label: 'Localized title', cover: null },
+    { id: 'unlabeled', type: 'book', types: ['book'], label: 'unlabeled', cover: null },
     null,
   ]);
   expect(paths.sort()).toEqual(['/v1/collections/collection', '/v1/collections/collection/members']);

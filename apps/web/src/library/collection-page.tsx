@@ -1,3 +1,4 @@
+import type { CoverRatio } from '@rezics/ui/cover';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { Link, useRouter } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
@@ -18,7 +19,7 @@ import {
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
 import type { CollectionMember, CollectionVisibility } from './reads';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 
 /** The kernel holds at most this many members in one collection. */
 const COLLECTION_LIMIT = 5000;
@@ -272,6 +273,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
   }
 
   const atLimit = page.memberCount >= COLLECTION_LIMIT;
+  const ratio = rowRatio(members.map((member) => member.subject));
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
@@ -395,6 +397,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
                 members={members}
                 moveMember={moveMember}
                 owner={owner}
+                ratio={ratio}
                 removeMember={removeMember}
                 saveNote={saveNote}
               />
@@ -426,6 +429,7 @@ function MemberRow({
   members,
   firstPage,
   owner,
+  ratio,
   busy,
   moveMember,
   saveNote,
@@ -437,6 +441,7 @@ function MemberRow({
   members: CollectionMember[];
   firstPage: boolean;
   owner: boolean;
+  ratio: CoverRatio;
   busy: boolean;
   moveMember: (memberId: string, after: string | null) => Promise<void>;
   saveNote: (memberId: string, note: string) => Promise<void>;
@@ -473,7 +478,7 @@ function MemberRow({
           : undefined
       }
     >
-      <p className="flex flex-wrap items-baseline gap-2">
+      <div className="flex items-center gap-3">
         {owner ? (
           <span
             aria-hidden="true"
@@ -481,8 +486,8 @@ function MemberRow({
             data-drag-handle=""
           />
         ) : null}
-        <SubjectRef subject={member.subject} />
-      </p>
+        <SubjectIdentity subject={member.subject} ratio={ratio} />
+      </div>
       {member.note ? <p className="whitespace-pre-wrap">{member.note}</p> : null}
       {owner ? (
         <div className="space-y-3">

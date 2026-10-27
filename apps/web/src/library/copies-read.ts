@@ -4,11 +4,11 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { copiesSubjectId } from './copies-query';
 import {
-  libraryLabel,
   type LibraryLabel,
   libraryListQuery,
   readLibraryResult,
   StaleCursorError,
+  subjectOf as presentSubject,
   type LibrarySubject,
 } from './reads';
 
@@ -60,7 +60,13 @@ const statuses = new Set<CopyStatus>(['ordered', 'owned', 'lent', 'disposed']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const textLimit = { location: 200, source: 200, note: 1000 } as const;
 
-type RawSubject = { id?: string; type?: string; label?: LibraryLabel } | null;
+type RawSubject = {
+  id?: string;
+  type?: string;
+  types?: readonly string[];
+  label?: LibraryLabel;
+  cover?: unknown;
+} | null;
 type RawCopy = {
   id: string;
   subjectId: string;
@@ -190,7 +196,7 @@ function parseRemove(input: unknown): RemoveInput | undefined {
 
 function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
   if (!subject || typeof subject.id !== 'string' || typeof subject.type !== 'string') return null;
-  return { id: subject.id, type: subject.type, label: libraryLabel(subject.label, subject.id) };
+  return presentSubject({ ...subject, id: subject.id, type: subject.type, label: subject.label ?? null });
 }
 
 function present(copy: RawCopy): CopyItem {

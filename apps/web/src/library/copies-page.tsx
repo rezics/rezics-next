@@ -1,3 +1,4 @@
+import type { CoverRatio } from '@rezics/ui/cover';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -5,7 +6,7 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders, SignInPrompt } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy } from './copies-actions';
 import type { CopiesPageData, CopyItem, CopyStatus, SavedCopy } from './copies-read';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 
 const statuses = ['ordered', 'owned', 'lent', 'disposed'] as const;
 const control =
@@ -155,10 +156,12 @@ function failureText(reason: string): string {
 
 function CopyArticle({
   copy,
+  ratio,
   onSaved,
   onRemoved,
 }: {
   copy: CopyItem;
+  ratio: CoverRatio;
   onSaved: (copy: CopyItem) => void;
   onRemoved: (id: string) => void;
 }) {
@@ -241,9 +244,9 @@ function CopyArticle({
 
   return (
     <article data-idempotency-key={copy.idempotencyKey} className="space-y-4 py-6">
-      <p className="flex flex-wrap items-baseline gap-2">
-        <SubjectRef subject={copy.subject} />
-      </p>
+      <div className="flex items-center gap-3">
+        <SubjectIdentity subject={copy.subject} ratio={ratio} />
+      </div>
       <CopySummary copy={copy} />
       <form className="space-y-4" onSubmit={save}>
         <StatusField value={status} onChange={setStatus} />
@@ -409,6 +412,7 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
     setAddKey(page.addKey);
   }, [page]);
   const returnTo = location.publicHref.split('#')[0] ?? location.publicHref;
+  const ratio = rowRatio(copies.map((copy) => copy.subject));
   const subjectTitle = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
 
   return (
@@ -434,6 +438,7 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
                 <CopyArticle
                   key={`${copy.id}:${copy.revision}`}
                   copy={copy}
+                  ratio={ratio}
                   onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}
                   onRemoved={(id) => setCopies((current) => current.filter((item) => item.id !== id))}
                 />

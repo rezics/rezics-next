@@ -8,6 +8,8 @@ import {
   libraryListQuery,
   readLibraryResult,
   StaleCursorError,
+  subjectOf,
+  type LibraryLabel,
   type LibraryAccount,
   type LibrarySubject,
 } from './reads';
@@ -21,7 +23,13 @@ type RawPublishedLog = {
   completedAt: string | null;
   note: string | null;
   publishedAt: string;
-  subject?: { id: string; type: string; label: string } | null;
+  subject?: {
+    id: string;
+    type: string;
+    types?: readonly string[];
+    label: LibraryLabel;
+    cover?: unknown;
+  } | null;
   account?: { id: string; handle: string | null; displayName: string | null } | null;
 };
 
@@ -50,7 +58,7 @@ function present(log: RawPublishedLog): PublishedLog {
     completedAt: log.completedAt,
     note: log.note,
     publishedAt: log.publishedAt,
-    subject: log.subject ? { id: log.subject.id, type: log.subject.type, label: log.subject.label } : null,
+    subject: subjectOf(log.subject),
     account: log.account ? { handle: log.account.handle, displayName: log.account.displayName } : null,
   };
 }

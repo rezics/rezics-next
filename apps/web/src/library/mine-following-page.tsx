@@ -1,3 +1,5 @@
+import type { CoverRatio } from '@rezics/ui/cover';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
@@ -5,27 +7,45 @@ import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt } from '../threads/composer';
 import type { MineFollow, MineFollowingPage } from './mine-following';
 import { unfollow } from './mine-following-actions';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 
 function csrfHeaders(): HeadersInit {
   const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
   return { 'X-CSRF-Token': token };
 }
 
-function FollowTarget({ follow }: { follow: MineFollow }) {
-  if (!follow.target) return <span>{m.library_subject_unavailable()}</span>;
-  if (follow.targetType === 'collection')
+/** A followed subject, collection or Space: its cover frame, and its name linked to its page where it has one. */
+function FollowTarget({ follow, ratio }: { follow: MineFollow; ratio: CoverRatio }) {
+  const target = follow.target;
+  if (!target || follow.targetType === 'subject')
     return (
-      <Link
-        to="/collections/$id"
-        params={{ id: follow.target.id }}
-        className="text-primary underline-offset-4 hover:underline"
-      >
-        {follow.target.label}
-      </Link>
+      <SubjectIdentity subject={target} ratio={ratio}>
+        {follow.reason === 'library' ? <p className="text-sm">{m.library_follow_reason_library()}</p> : null}
+        {follow.reason === 'membership' ? <p className="text-sm">{m.library_follow_reason_membership()}</p> : null}
+      </SubjectIdentity>
     );
-  if (follow.targetType === 'subject') return <SubjectRef subject={follow.target} />;
-  return <span>{follow.target.label}</span>;
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <SubjectCover subject={target} ratio={ratio} />
+      <div className="min-w-0 space-y-0.5">
+        <p className="font-medium break-words">
+          {follow.targetType === 'collection' ? (
+            <Link
+              to="/collections/$id"
+              params={{ id: target.id }}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              {target.label}
+            </Link>
+          ) : (
+            <span>{target.label}</span>
+          )}
+        </p>
+        {follow.reason === 'library' ? <p className="text-sm">{m.library_follow_reason_library()}</p> : null}
+        {follow.reason === 'membership' ? <p className="text-sm">{m.library_follow_reason_membership()}</p> : null}
+      </div>
+    </div>
+  );
 }
 
 export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
@@ -68,6 +88,7 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
           {groups.map(({ type, label }) => {
             const items = active.filter((follow) => follow.targetType === type);
             if (!items.length) return null;
+            const ratio = rowRatio(items.map((follow) => follow.target));
             return (
               <section key={type} className="space-y-3" aria-labelledby={`following-${type}`}>
                 <h2 id={`following-${type}`} className="text-xl font-semibold">
@@ -77,24 +98,14 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                   {items.map((follow) => (
                     <li
                       key={`${follow.targetType}:${follow.targetId}`}
-                      className="flex flex-wrap items-center justify-between gap-4 py-4"
+                      className="flex items-center justify-between gap-3 py-3"
                     >
-                      <div className="space-y-1">
-                        <p className="flex flex-wrap items-baseline gap-2">
-                          <FollowTarget follow={follow} />
-                        </p>
-                        {follow.reason === 'library' ? <p>{m.library_follow_reason_library()}</p> : null}
-                        {follow.reason === 'membership' ? <p>{m.library_follow_reason_membership()}</p> : null}
-                      </div>
+                      <FollowTarget follow={follow} ratio={ratio} />
                       <form method="post" onSubmit={(event) => void submit(event, follow)}>
                         <input type="hidden" name="idempotency_key" value={follow.idempotencyKey} />
-                        <button
-                          type="submit"
-                          disabled={pending === follow.targetId}
-                          className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary hover:bg-muted disabled:opacity-50"
-                        >
+                        <Button type="submit" variant="outline" size="sm" disabled={pending === follow.targetId}>
                           {m.library_follow_unfollow()}
-                        </button>
+                        </Button>
                       </form>
                     </li>
                   ))}

@@ -2,7 +2,15 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { libraryFullQuery, libraryListQuery, readLibraryResult, StaleCursorError, type LibrarySubject } from './reads';
+import {
+  libraryFullQuery,
+  libraryListQuery,
+  readLibraryResult,
+  StaleCursorError,
+  subjectOf as presentSubject,
+  type LibraryLabel,
+  type LibrarySubject,
+} from './reads';
 
 export const PROGRESS_BATCH_LIMIT = 100;
 
@@ -93,7 +101,13 @@ export type ProgressSnapshot = {
 export type ProgressStarted = { ok: true; id: string };
 export type ProgressRecorded = { ok: true; session: ProgressSnapshot };
 
-type RawSubject = { id: string; type: string; label: string } | null;
+type RawSubject = {
+  id: string;
+  type: string;
+  types?: readonly string[];
+  label: LibraryLabel;
+  cover?: unknown;
+} | null;
 type RawIntent =
   | { amount: string }
   | { locator: string; position: string }
@@ -116,8 +130,7 @@ function isUnit(value: string): value is ProgressUnit {
 }
 
 function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
-  if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: subject.label };
+  return presentSubject(subject);
 }
 
 function presentSession(session: RawSession): ProgressSessionCore {

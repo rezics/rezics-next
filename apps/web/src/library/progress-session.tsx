@@ -13,7 +13,7 @@ import {
   type ProgressUnit,
 } from './progress-reads';
 import { finishProgressSession, recordProgressSession } from './progress-server';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -274,18 +274,19 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
   }
 
   const progress = progressText(session);
+  const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
-        <p className="flex flex-wrap items-baseline gap-2">
-          <SubjectRef subject={session.subject} />
-        </p>
+        <div className="flex items-center gap-3">
+          <SubjectIdentity subject={session.subject} ratio={ratio} />
+        </div>
         {session.versionSubjectId ? (
-          <p className="flex flex-wrap items-baseline gap-2">
-            <SubjectRef subject={session.versionSubject} />
-          </p>
+          <div className="flex items-center gap-3">
+            <SubjectIdentity subject={session.versionSubject} ratio={ratio} />
+          </div>
         ) : null}
         <p>{modeLabel(session.mode)}</p>
         <p>{unitLabel(session.unit)}</p>

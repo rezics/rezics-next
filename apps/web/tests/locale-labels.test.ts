@@ -394,7 +394,10 @@ test(
       ['de', 'book', 'film'],
     ] as const) {
       const shelf = main(await html(`/${locale}/collections/${collectionId}`));
-      const rows = [...shelf.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((row) => plain(row[1]!));
+      // The decorative cover's initials are not part of what the row says.
+      const rows = [...shelf.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((row) =>
+        plain(row[1]!.replace(/<span\b[^>]*font-work-title[^>]*>[^<]*<\/span>/g, '')),
+      );
       expect(rows, locale).toEqual([`Book row ${bookName}`, `Film row ${filmName}`, 'Unnamed type row']);
       expect(shelf).not.toMatch(/schema:|wd:Q/);
 

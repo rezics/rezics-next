@@ -6,7 +6,7 @@ import { publishProgressLog } from './logs-server';
 import type { PublishedLog, PublishedLogPage } from './logs-read';
 import type { ProgressSessionPage } from './progress-reads';
 import { AccountRef } from './account-ref';
-import { SubjectRef } from './subject-ref';
+import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -98,6 +98,7 @@ function PublishedLogs({
 }) {
   if (!page.signedIn) return null;
   const headingId = 'published-logs-heading';
+  const ratio = rowRatio(page.logs.map((log) => log.subject));
 
   return (
     <section role="region" aria-labelledby={headingId} className="space-y-3">
@@ -111,9 +112,9 @@ function PublishedLogs({
               <p className="flex flex-wrap items-baseline gap-2">
                 <AccountRef account={log.account} />
               </p>
-              <p className="flex flex-wrap items-baseline gap-2">
-                <SubjectRef subject={log.subject} />
-              </p>
+              <div className="flex items-center gap-3">
+                <SubjectIdentity subject={log.subject} ratio={ratio} />
+              </div>
               <p>{stateLabel(log.sessionState)}</p>
               <p>
                 <SnapshotTime value={log.publishedAt} />

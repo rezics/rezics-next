@@ -628,8 +628,8 @@ test(
       expect(await page.content()).toContain(key);
       expect(await change.locator('input[name="revision"]').inputValue()).toBe('4');
       calls.length = 0;
-      await zebra.locator('select').selectOption('paused');
-      await zebra.getByRole('button', { name: 'Save', exact: true }).click();
+      await zebra.locator('[data-slot="library-status"]').click();
+      await page.getByRole('menuitemradio', { name: 'Paused', exact: true }).click();
       await eventually(() => calls.some((call) => call.method === 'PUT'));
       const put = calls.find((call) => call.method === 'PUT');
       expect(calls.filter((call) => call.method !== 'GET')).toEqual([put]);
@@ -641,16 +641,16 @@ test(
         body: { state: 'paused', revision: 4 },
       });
       await eventually(async () => (await change.locator('input[name="revision"]').inputValue()) === '5');
-      expect(await zebra.locator('[data-state]').getAttribute('data-state')).toBe('paused');
-      expect(await zebra.locator('[data-state]').innerText()).toBe('Paused');
+      expect(await zebra.locator('[data-slot="library-status"]').getAttribute('data-state')).toBe('paused');
+      expect(await zebra.locator('[data-slot="library-status"]').innerText()).toBe('Paused');
       const nextKey = await change.locator('input[name="idempotencyKey"]').inputValue();
       expect(nextKey).toMatch(uuid);
       expect(nextKey).not.toBe(key);
 
       diverge(id(11), 'dropped');
       calls.length = 0;
-      await zebra.locator('select').selectOption('completed');
-      await zebra.getByRole('button', { name: 'Save', exact: true }).click();
+      await zebra.locator('[data-slot="library-status"]').click();
+      await page.getByRole('menuitemradio', { name: 'Completed', exact: true }).click();
       await eventually(() =>
         calls.some((call) => call.method === 'GET' && call.path === `/v1/libraryEntries/${id(11)}`),
       );
@@ -669,8 +669,8 @@ test(
         revision: 10,
         updatedAt: reloadedStamp,
       });
-      await eventually(async () => (await zebra.locator('[data-state]').innerText()) === 'Dropped');
-      expect(await zebra.locator('[data-state]').getAttribute('data-state')).toBe('dropped');
+      await eventually(async () => (await zebra.locator('[data-slot="library-status"]').innerText()) === 'Dropped');
+      expect(await zebra.locator('[data-slot="library-status"]').getAttribute('data-state')).toBe('dropped');
       expect(await zebra.locator('time').getAttribute('datetime')).toBe(reloadedStamp);
       expect(await zebra.getByRole('status').innerText()).toBe('This entry changed elsewhere.');
       expect(await zebra.locator('form').first().locator('input[name="revision"]').inputValue()).toBe('10');
@@ -682,8 +682,9 @@ test(
       expect(removeKey).toMatch(uuid);
       expect(await removal.locator('input[name="revision"]').inputValue()).toBe('2');
       calls.length = 0;
-      await apple.locator('summary').click();
-      await apple.getByRole('button', { name: 'Confirm removal', exact: true }).click();
+      await apple.locator('[data-slot="library-actions"]').click();
+      await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm removal', exact: true }).click();
       await eventually(() => calls.some((call) => call.method === 'DELETE'));
       expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([`DELETE /v1/libraryEntries/${id(12)}`]);
       expect(calls[0]).toMatchObject({
