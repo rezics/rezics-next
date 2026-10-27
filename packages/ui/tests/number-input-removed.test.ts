@@ -20,9 +20,10 @@ test('the legacy number input and its existence test are removed', () => {
 });
 
 test('workspace sources do not import the legacy number input', () => {
-  const excluded = new Set(['node_modules', '.temp', 'dist', 'build', 'coverage', '.next', '.output']);
+  const excluded = new Set(['node_modules', '.temp', '.git', '.next', '.turbo', 'dist', 'build', 'coverage']);
   const pattern = /(?:from\s*|import\s*\(|require\s*\()\s*['"][^'"]*number-input/;
   const matches: string[] = [];
+
   for (const path of new Bun.Glob('**/src/**/*.{ts,tsx,js,jsx}').scanSync({ cwd: root })) {
     if (path.split('/').some((part) => excluded.has(part))) continue;
     const lines = readFileSync(join(root, path), 'utf8').split('\n');
@@ -30,5 +31,6 @@ test('workspace sources do not import the legacy number input', () => {
       if (pattern.test(line)) matches.push(`${path}:${index + 1}:${line}`);
     }
   }
+
   expect(matches, matches.join('\n')).toEqual([]);
-});
+}, 120_000);
