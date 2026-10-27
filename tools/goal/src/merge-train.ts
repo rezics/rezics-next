@@ -36,7 +36,8 @@ async function runIntegrationChecks(
   cwd: string,
   logPath: string,
 ): Promise<GateResult> {
-  const execute = gateRunner(180_000);
+  // Web's recorded-response check regenerates the web client first, which takes about two minutes on a loaded host.
+  const execute = gateRunner(600_000);
   let output = '';
   let passed = true,
     timedOut = false;

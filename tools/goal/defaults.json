@@ -15,6 +15,14 @@
     {
       "paths": ["apps/**", "services/**", "packages/**", "specs/**", "package.json", "bun.lock", "tsconfig*.json"],
       "command": ["bun", "scripts/workspace-imports.ts"]
+    },
+    {
+      "paths": ["packages/client/src/kernel/**"],
+      "command": [
+        "sh",
+        "-c",
+        "bun run --cwd apps/web generate && bun apps/web/scripts/isolated.ts bun test apps/web/tests/page-stories.test.ts -t 'each recorded response type-checks'"
+      ]
     }
   ],
   "derivedFiles": [
