@@ -368,10 +368,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
     if (failures.length) throw new AggregateError(failures, 'Durable initiator fixture cleanup failed');
   };
   let drainPending = async () => {};
-  const close = async () => {
-    await drainPending();
-    await retireFixture();
-  };
+  const close = retireFixture;
   const replaceFixture = async () => {
     if (resources) await retireFixture();
     native = resources = await createFixtureResources(databaseUrl);
