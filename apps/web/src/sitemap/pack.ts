@@ -26,7 +26,7 @@ const wrapperBytes = encoder.encode(header).length + encoder.encode(footer).leng
 type Open = {
   gzip: CompressionStream;
   writer: WritableStreamDefaultWriter<BufferSource>;
-  output: Promise<Uint8Array>;
+  output: Promise<Uint8Array<ArrayBuffer>>;
   families: number;
   urls: number;
   bytes: number;
@@ -35,7 +35,7 @@ type Open = {
 function begin(): Open {
   const gzip = new CompressionStream('gzip');
   // Drain from the start so writes never wait on a reader that is not there yet.
-  const output = new Response(gzip.readable).bytes();
+  const output = new Response(gzip.readable).arrayBuffer().then((buffer) => new Uint8Array(buffer));
   const open: Open = { gzip, writer: gzip.writable.getWriter(), output, families: 0, urls: 0, bytes: 0 };
   const head = encoder.encode(header);
   open.bytes = wrapperBytes;
