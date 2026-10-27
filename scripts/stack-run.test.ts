@@ -141,6 +141,7 @@ appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   destination: args.at(-1),
   files: input.split('\\0').filter(Boolean),
 }) + '\\n');
+if (process.env.FAKE_RSYNC_FAIL === '1') process.exit(12);
 `;
 
 const fakeDocker = `#!/usr/bin/env bun
@@ -379,6 +380,19 @@ test("a worker's stack run waits for a check host slot instead of running locall
   expect(seen.filter((event) => event.kind === 'slot' && event.granted === false).length).toBeGreaterThan(0);
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
   expect(seen.filter((event) => event.kind === 'probe').length).toBeGreaterThan(2);
+}, 30_000);
+
+test('a worker does not run locally after a reachable host fails during workspace sync', async () => {
+  const { env, lease, events } = scenario({ a: { available: 30e9 } });
+  const result = await stack({ ...env, GOAL_TASK_ID: 'worker', FAKE_RSYNC_FAIL: '1' }, local);
+
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain('rsync to a failed with exit code 12');
+  expect(result.stderr).not.toContain('stack-run: the run local');
+  expect(result.stdout).not.toContain('local slot');
+  expect(events().some((event) => event.kind === 'probe')).toBe(true);
+  expect(events().some((event) => event.kind === 'run')).toBe(false);
+  expect(existsSync(lease)).toBe(false);
 }, 30_000);
 
 test("environment variables cannot make a worker's run count as on a check host", async () => {

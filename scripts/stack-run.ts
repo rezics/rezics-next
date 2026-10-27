@@ -162,6 +162,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     return [name, handler] as const;
   });
   let started = false;
+  let answered = false;
   try {
     const interval = pollMs(env);
     const outcome = await remoteCheckUnlessUnreachable(
@@ -172,6 +173,9 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         command: run.command,
         ...(run.slots === undefined ? {} : { slots: run.slots }),
         ...(interval === undefined ? {} : { pollMs: interval }),
+        answered: () => {
+          answered = true;
+        },
         started: (host) => {
           started = true;
           console.error(`stack-run: ${run.label} on ${host}`);
@@ -186,8 +190,8 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     return outcome;
   } catch (error) {
     if (error instanceof Aborted) return 128 + (received ?? 15);
-    if (started) throw error;
-    // Nothing has run yet, so the local lease is still a safe place for the command.
+    if (answered || started) throw error;
+    // Only an unanswered host probe is a local placement; do not bypass a reachable host after another error.
     console.error(`stack-run: ${run.label} local, ${error instanceof Error ? error.message : error}`);
     return null;
   } finally {

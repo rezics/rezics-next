@@ -28,6 +28,8 @@ export type RemoteCheck = {
   command: string[];
   slots?: number;
   pollMs?: number;
+  /** Called for each probe round that finds at least one responding host. */
+  answered?: () => void;
   /** Called with the host's name once its slot is held and the command is about to start. */
   started?: (host: string) => void;
 };
@@ -428,6 +430,7 @@ async function acquire(
   pollMs: number,
   signal: AbortSignal,
   giveUpIfUnanswered = false,
+  onAnswered?: () => void,
 ): Promise<Lease | null> {
   let announced = false;
   let answered = false;
@@ -442,8 +445,10 @@ async function acquire(
     const ranked = memory
       .filter((entry): entry is { host: Host; available: number } => entry.available !== null)
       .sort((left, right) => right.available - left.available);
-    if (ranked.length > 0) answered = true;
-    else if (giveUpIfUnanswered && !answered) return null;
+    if (ranked.length > 0) {
+      answered = true;
+      onAnswered?.();
+    } else if (giveUpIfUnanswered && !answered) return null;
     for (const { host } of ranked) {
       if (slots === 1) {
         const lease = await takeSlot(host, false, signal);
@@ -572,7 +577,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal, true);
+  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal, true, options.answered);
   if (!lease) return null;
   return await runLeased(lease, options, files, slotWaitStarted, signal);
 }

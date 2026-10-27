@@ -416,15 +416,20 @@ export async function placeKernelCheck(
   locations: { root: string; cwd: string } = { root: resolve(directory, '../..'), cwd: directory },
 ): Promise<number | null> {
   if (plan.files?.length === 0) return null;
-  const forwarded = env.KERNEL_CHECK_CONCURRENCY
-    ? ['env', `KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`]
-    : [];
+  const forwardedEnv: string[] = [];
+  if (env.KERNEL_CHECK_CONCURRENCY) forwardedEnv.push(`KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`);
+  if (env.KERNEL_CHECK_SKIP_STALE_CLEANUP === '1') forwardedEnv.push('KERNEL_CHECK_SKIP_STALE_CLEANUP=1');
   return runOnCheckHost(
     {
       label: 'kernel check',
       root: locations.root,
       cwd: locations.cwd,
-      command: [...forwarded, 'bun', 'scripts/check.ts', ...(plan.files ?? [])],
+      command: [
+        ...(forwardedEnv.length ? ['env', ...forwardedEnv] : []),
+        'bun',
+        'scripts/check.ts',
+        ...(plan.files ?? []),
+      ],
     },
     env,
   );
