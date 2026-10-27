@@ -10,6 +10,7 @@ import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '..
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { accessCheck } from '../../src/request/access.ts';
+import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -315,10 +316,17 @@ test('resumable alias groups find the last readable member beyond two hundred fi
         if (result.status !== 'read' || result.envelopes === 0) break;
       }
     }
-    await commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID());
+    // This baseline uses the existing full resolver; give its cold rendering a real request budget.
+    await withRequestDeadline(deadline(), () =>
+      commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID()),
+    );
     if (storedCount++ === 0) {
-      await commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID());
-      await commands.addMember(f.editor, overlap.id, { subjectId: id }, randomUUID());
+      await withRequestDeadline(deadline(), () =>
+        commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID()),
+      );
+      await withRequestDeadline(deadline(), () =>
+        commands.addMember(f.editor, overlap.id, { subjectId: id }, randomUUID()),
+      );
     }
   }
   const { root, originals, last } = await f.aliases(257, { stored });
