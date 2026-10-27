@@ -164,35 +164,44 @@ test('a capture across several connections records exactly one plan for every ex
     );
 
     const statements = captured.capture.statements.flatMap((text, index) =>
-      isControlStatement(text) ? [] : [{ text, backend: captured.capture.statementBackends?.[index] }],
+      isControlStatement(text)
+        ? []
+        : [
+            {
+              text,
+              backend: captured.capture.statementBackends?.[index],
+              error: captured.capture.statementErrors?.[index],
+            },
+          ],
     );
     const plans = captured.capture.plans.flatMap((document, index) =>
       planQueryTexts(document)
         .filter((text) => !isControlStatement(text))
         .map((text) => ({ text, backend: captured.capture.planBackends?.[index] })),
     );
-    const statementCounts = new Map<string, number>();
     const planCounts = new Map<string, number>();
-    for (const statement of statements) {
-      const key = matchKey(statement.backend, statement.text);
-      statementCounts.set(key, (statementCounts.get(key) ?? 0) + 1);
-    }
     for (const plan of plans) {
       const key = matchKey(plan.backend, plan.text);
       planCounts.set(key, (planCounts.get(key) ?? 0) + 1);
     }
 
-    expect(plans).toHaveLength(statements.length);
+    const plannedStatements = statements.filter(({ error }) => error === null);
+    expect(plans).toHaveLength(plannedStatements.length);
     expect(captured.capture.statementBackends).toHaveLength(captured.capture.statements.length);
     expect(captured.capture.planBackends).toHaveLength(captured.capture.plans.length);
     expect(new Set(statements.map(({ backend }) => backend)).size).toBe(width);
-    expect([...planCounts.entries()].sort()).toEqual([...statementCounts.entries()].sort());
+    const plannedStatementCounts = new Map<string, number>();
+    for (const statement of plannedStatements) {
+      const key = matchKey(statement.backend, statement.text);
+      plannedStatementCounts.set(key, (plannedStatementCounts.get(key) ?? 0) + 1);
+    }
+    expect([...planCounts.entries()].sort()).toEqual([...plannedStatementCounts.entries()].sort());
     for (const backend of new Set(statements.map(({ backend }) => backend)))
       expect(
         statements.filter(
           ({ text, backend: statementBackend }) => statementBackend === backend && text.includes('insert-candidate'),
         ),
-      ).toHaveLength(2);
+      ).toHaveLength(3);
   } finally {
     for (const client of clients) client.release();
   }

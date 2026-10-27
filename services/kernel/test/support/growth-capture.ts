@@ -284,7 +284,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
               done(false);
               resolve();
             });
-            stream.once!('error', (error: unknown) => {
+            stream.once!('error', (...errors: unknown[]) => {
+              const error = errors[0];
               done(true, undefined, error);
               resolve();
             });
