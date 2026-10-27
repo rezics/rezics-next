@@ -23,11 +23,12 @@ afterAll(async () => {
   await db?.close();
 });
 
-function check(
+async function check(
   name: string,
   options: { rule?: 'step' | 'series'; repetitions?: number; variable?: boolean; fixed?: boolean } = {},
 ) {
-  return checkGrowth(db, {
+  await db.admin.query(`TRUNCATE ${table}`);
+  return await checkGrowth(db, {
     name,
     ...(options.rule === undefined ? {} : { rule: options.rule }),
     ...(options.repetitions === undefined ? {} : { repetitions: options.repetitions }),
