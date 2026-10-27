@@ -15,6 +15,9 @@ CREATE TABLE worker_records (task_id TEXT NOT NULL REFERENCES worker_tasks(id), 
 CREATE TABLE worker_integration_plans (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
 CREATE TABLE worker_promotions (id INTEGER PRIMARY KEY CHECK (id=1), body TEXT NOT NULL);
 CREATE TABLE worker_retry_intents (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
+` }, { module: 'worker', version: 3, sql: `
+CREATE INDEX worker_attempts_ended_at ON worker_attempts(json_extract(body, '$.endedAt'))
+  WHERE json_extract(body, '$.endedAt') IS NOT NULL;
 ` }] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => row ? JSON.parse((row as Body).body) as T : undefined;
@@ -35,6 +38,12 @@ export class WorkerStore implements AttemptFence {
     const rows = taskId ? this.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(taskId)
       : this.db.query('SELECT body FROM worker_attempts ORDER BY task_id, attempt').all();
     return rows.map(row => decode<Attempt>(row)!);
+  }
+  /** Attempts that ended within a time window, using an index so older attempt bodies are not read. */
+  attemptsEndedBetween(start: string, end: string): Attempt[] {
+    return this.db.query(
+      "SELECT body FROM worker_attempts WHERE json_extract(body, '$.endedAt') >= ? AND json_extract(body, '$.endedAt') <= ? ORDER BY task_id, attempt",
+    ).all(start, end).map(row => decode<Attempt>(row)!);
   }
   records(): AttemptRecord[] { return this.db.query('SELECT body FROM worker_records ORDER BY task_id, attempt').all().map(row => decode<AttemptRecord>(row)!); }
   record(ref: AttemptRef): AttemptRecord | undefined { return decode<AttemptRecord>(this.db.query('SELECT body FROM worker_records WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt)); }
