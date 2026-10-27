@@ -1,3 +1,12 @@
+export type AuthConsentConfig = Readonly<{
+    url: string;
+    serviceTokenId: string;
+    serviceTokenSecret: string;
+}>;
+export declare const AUTH_CONSENT_VARIABLES: readonly ["KERNEL_AUTH_CONSENT_URL", "CF_ACCESS_CLIENT_ID", "CF_ACCESS_CLIENT_SECRET"];
+/** Shared host configuration for every module that restores an initiator.
+ * The group is absent or complete; errors name a variable, never its value. */
+export declare function readAuthConsentConfig(env: Readonly<Record<string, string | undefined>>): AuthConsentConfig | null;
 export type CurrentConsent = Readonly<{
     actorAccountId: string;
     clientId: string;
@@ -15,9 +24,6 @@ export type CurrentConsentReader = (input: {
  * Every invocation obtains Auth's native current fact, independently of Access's
  * evaluator T/clock. Inject into the restorer; do not install in requestJSON.
  */
-export declare function createAuthConsentReader(config: {
-    url: string;
-    serviceTokenId: string;
-    serviceTokenSecret: string;
+export declare function createAuthConsentReader(config: AuthConsentConfig & {
     fetch?: (url: string, init: RequestInit) => Promise<Response>;
 }): CurrentConsentReader;

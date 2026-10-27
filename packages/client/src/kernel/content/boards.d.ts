@@ -1,3 +1,4 @@
+import { type Access } from '../request/access.ts';
 import { type BoardCursorSort } from './board-cursor.ts';
 import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext } from './model.ts';
 import { type ContentReadDependencies, type ThreadView } from './reads.ts';
@@ -25,6 +26,7 @@ export type RealmBoardPage = {
     next: string | null;
     anchors: readonly AnchoredPosition[];
 };
+export declare function indexedReadAccess(access: Access): Access;
 /** A Realm is the read container for every Realm-owned board. Legacy boards
  * have no Realm and retain their existing board-only disclosure behavior. */
 export declare function readRealmBoard(dependencies: ContentBoardDependencies, boardId: string, context: ReadContext): Promise<Anchored<BoardView | null>>;

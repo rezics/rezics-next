@@ -952,6 +952,10 @@ declare const productEventTypes: {
         visible: Type.TBoolean;
         cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
     }>;
+    readonly 'com.rezics.subject.statement_disclosed.v1': Type.TObject<{
+        id: Type.TString;
+        candidate: Type.TString;
+    }>;
     readonly 'com.rezics.statement.retracted.v1': Type.TObject<{
         candidate: Type.TString;
         revision: Type.TInteger;

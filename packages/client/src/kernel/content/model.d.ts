@@ -109,6 +109,7 @@ export declare function isErasedPlaceholder(entry: Readonly<{
 }>): entry is ErasedPlaceholder;
 export type BoardView = Readonly<{
     id: BoardId;
+    realmId: string | null;
     route: Route;
     title: string | null;
     purpose: 'discussion' | 'reviews';
