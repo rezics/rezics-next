@@ -77,7 +77,7 @@ afterAll(async () => {
 });
 
 test('templates are stored under versioned ids and installing them again changes nothing', async () => {
-  expect([SEARCH_TEMPLATE, SUGGEST_TEMPLATE]).toEqual(['subjects-search-v1', 'subjects-suggest-v1']);
+  expect([SEARCH_TEMPLATE, SUGGEST_TEMPLATE]).toEqual(['subjects-search-v2', 'subjects-suggest-v1']);
   const stored = await search.request<{ found: boolean }>('GET', `/_scripts/${prefix}${SEARCH_TEMPLATE}`);
   expect(stored.body.found).toBe(true);
   await installTemplates(search, prefix);

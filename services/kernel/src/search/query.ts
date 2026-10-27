@@ -4,7 +4,7 @@ import { subjectAlias } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
-export const SEARCH_TEMPLATE = 'subjects-search-v1';
+export const SEARCH_TEMPLATE = 'subjects-search-v2';
 export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
 export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
@@ -39,6 +39,8 @@ export type SearchPlan = {
   sort: 'relevance' | 'name' | 'id' | 'collections';
   size: number;
   after?: readonly SortValue[];
+  /** Distinct statement properties in the admitted filter. */
+  overflowProperties?: readonly string[];
 };
 
 export type SubjectHit = {
@@ -56,6 +58,7 @@ export type SearchHit = SubjectHit & {
 export type SearchResult = {
   hits: SearchHit[];
   total: { value: number; relation: 'exact' | 'lower_bound' };
+  overflow?: boolean;
 };
 
 type StoredHit = {
@@ -71,6 +74,7 @@ type SearchResponse = {
     hits: StoredHit[];
     total: { value: number; relation: 'eq' | 'gte' };
   };
+  aggregations?: { overflow: { doc_count: number } };
 };
 
 function validateSize(size: number, maximum: number): void {
@@ -95,6 +99,7 @@ export async function installTemplates(search: OpenSearch, prefix: string): Prom
 export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<SearchResult> {
   validateSize(plan.size, 200);
   const alias = subjectAlias(prefix);
+  const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort =
     plan.sort === 'relevance'
       ? [{ _score: 'desc' }, { id: 'asc' }]
@@ -120,6 +125,8 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
         size: plan.size,
         after: plan.after,
         has_after: plan.after !== undefined,
+        has_overflow: hasOverflow,
+        overflow_properties: plan.overflowProperties,
       },
     })
     .then(({ body }) => ({
@@ -132,6 +139,7 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
         value: body.hits.total.value,
         relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact',
       },
+      ...(hasOverflow ? { overflow: body.aggregations!.overflow.doc_count > 0 } : {}),
     }));
 }
 
@@ -150,21 +158,34 @@ export function suggestSubjects(
     .then(({ body }) => body.hits.hits.map(subjectHit));
 }
 
+type FacetAggregation =
+  | { values: { buckets: { key: string; doc_count: number }[] } }
+  | { facts: { property: { values: { buckets: { key: string; subjects: { doc_count: number } }[] } } } };
+
+type FacetAggregations = Record<`facet_${number}`, FacetAggregation>;
+
 type FacetResponse = {
   hits: { total: { value: number; relation: 'eq' | 'gte' } };
-  aggregations: Record<
-    string,
-    | { values: { buckets: { key: string; doc_count: number }[] } }
-    | { facts: { property: { values: { buckets: { key: string; subjects: { doc_count: number } }[] } } } }
-  >;
+  aggregations: FacetAggregations & {
+    [key: `overflow_${number}`]: { doc_count: number } | undefined;
+    filter_overflow?: { doc_count: number };
+    definite?: FacetAggregations & { doc_count: number };
+  };
 };
 
 export async function countFacets(
   search: OpenSearch,
   prefix: string,
-  plan: { query?: Record<string, unknown>; filter?: Record<string, unknown>; facets: readonly Facet[]; sample: number },
+  plan: {
+    query?: Record<string, unknown>;
+    filter?: Record<string, unknown>;
+    /** Distinct statement properties in the admitted filter. */
+    overflowProperties?: readonly string[];
+    facets: readonly Facet[];
+    sample: number;
+  },
 ) {
-  const aggregations = Object.fromEntries(
+  const facetAggregations = Object.fromEntries(
     plan.facets.map(({ property, size }, index) => [
       `facet_${index}`,
       {
@@ -199,6 +220,25 @@ export async function countFacets(
       },
     ]),
   );
+  const filterOverflow = plan.overflowProperties?.length
+    ? { terms: { relation_facet_overflow: plan.overflowProperties } }
+    : undefined;
+  // Probe all candidates, outside the sampler: a missing sampled value can still make a facet incomplete.
+  const aggregations = {
+    ...Object.fromEntries(
+      plan.facets.map(({ property }, index) => [
+        `overflow_${index}`,
+        { filter: { term: { relation_facet_overflow: property } } },
+      ]),
+    ),
+    ...(filterOverflow
+      ? {
+          filter_overflow: { filter: filterOverflow },
+          // Candidate filter truth is unresolved on these markers. Only definite matches may add counts.
+          definite: { filter: { bool: { must_not: [filterOverflow] } }, aggs: facetAggregations },
+        }
+      : facetAggregations),
+  };
   const { body } = await search.request<FacetResponse>('POST', `/${subjectAlias(prefix)}/_search/template`, {
     id: `${prefix}${FACET_TEMPLATE}`,
     params: {
@@ -206,16 +246,19 @@ export async function countFacets(
       aggregations,
     },
   });
-  const total: SearchResult['total'] = {
-    value: body.hits.total.value,
-    relation: body.hits.total.relation === 'eq' ? 'exact' : 'lower_bound',
-  };
+  const unresolved = (body.aggregations.filter_overflow?.doc_count ?? 0) > 0;
+  const total: SearchResult['total'] = unresolved
+    ? { value: Math.min(TOTAL_LIMIT, body.aggregations.definite!.doc_count), relation: 'lower_bound' }
+    : {
+        value: body.hits.total.value,
+        relation: body.hits.total.relation === 'eq' ? 'exact' : 'lower_bound',
+      };
   const relation: SearchResult['total']['relation'] =
     total.relation === 'exact' && total.value <= plan.sample ? 'exact' : 'lower_bound';
   return {
     total,
     facets: plan.facets.map(({ property }, index) => {
-      const aggregation = body.aggregations[`facet_${index}`]!;
+      const aggregation = (filterOverflow ? body.aggregations.definite! : body.aggregations)[`facet_${index}`]!;
       const values =
         'values' in aggregation
           ? aggregation.values.buckets.map(({ key, doc_count }) => ({ value: key, count: doc_count }))
@@ -225,7 +268,7 @@ export async function countFacets(
             }));
       return {
         property,
-        relation,
+        relation: (body.aggregations[`overflow_${index}`]?.doc_count ?? 0) > 0 ? 'lower_bound' : relation,
         values: values.sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0)),
       };
     }),
