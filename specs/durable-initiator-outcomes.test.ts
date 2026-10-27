@@ -310,26 +310,28 @@ test('each later step and result rechecks current three-operand formula and reco
   }
 });
 
-test('suspension fence epoch consent delegation revocations deny independently', async () => {
-  const d = await setup();
-  const baseline = await create(d);
-  const kinds = await sequence(d, baseline.op);
-  const axes: Mutation[] = [
-    'suspended',
-    'tombstoned',
-    'fenced',
-    'account-missing',
-    'epoch-floor-increased',
-    'client-missing',
-    'consent-missing',
-    'consent-revoked',
-    'consent-reduced',
-    'delegation-missing',
-    'delegation-changed-actor',
-    'delegation-changed-principal',
-    'delegation-revoked',
-  ];
-  for (const axis of axes) {
+const revocations: readonly Mutation[] = [
+  'suspended',
+  'tombstoned',
+  'fenced',
+  'account-missing',
+  'epoch-floor-increased',
+  'client-missing',
+  'consent-missing',
+  'consent-revoked',
+  'consent-reduced',
+  'delegation-missing',
+  'delegation-changed-actor',
+  'delegation-changed-principal',
+  'delegation-revoked',
+];
+
+// One case per mutation family keeps each case within its timeout on one shared check slot.
+for (const axis of revocations) {
+  test(`suspension fence epoch consent delegation revocations deny independently: ${axis}`, async () => {
+    const d = await setup();
+    const baseline = await create(d);
+    const kinds = await sequence(d, baseline.op);
     for (let index = 0; index < kinds.length; index++) {
       await positive(d, index);
       const { f, op } = await create(d);
@@ -339,8 +341,8 @@ test('suspension fence epoch consent delegation revocations deny independently',
       await d.restart();
       await denies(d, op, point);
     }
-  }
-});
+  });
+}
 
 test('operation provenance target or tuple substitution denies', async () => {
   const d = await setup();
