@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:26cc6ea47e14f603a6ebed0447eb38ea49002a871bdefaaa58023ffe59e561bc",
+  "digest": "sha256:677f6a56786b23d3f3dff399b644063c937a35a7a67fe3f52e75c751e27d05e5",
   "release": {
     "types": {
       "wd:Q95074": {
@@ -645,9 +645,11 @@
           "schema:keywords",
           "schema:name",
           "schema:recipeIngredient",
+          "schema:recipeInstructions",
           "schema:recipeYield",
           "schema:sameAs",
-          "schema:url"
+          "schema:url",
+          "wdt:P186"
         ]
       },
       "schema:Episode": {
@@ -1261,6 +1263,58 @@
           "wdt:P5732",
           "wdt:P725"
         ]
+      },
+      "wd:Q2095": {
+        "iri": "http://www.wikidata.org/entity/Q2095",
+        "labels": {
+          "de": "Lebensmittel",
+          "en": "food",
+          "es": "alimento",
+          "fr": "aliment",
+          "ja": "食品",
+          "ko": "식품",
+          "zh-Hans": "食物",
+          "zh-Hant": "食物"
+        },
+        "mappings": [],
+        "bases": [
+          "schema:Thing"
+        ],
+        "properties": [
+          "schema:image",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url"
+        ],
+        "facets": [],
+        "coverRatio": "1:1"
+      },
+      "schema:SoftwareApplication": {
+        "iri": "http://schema.org/SoftwareApplication",
+        "labels": {
+          "de": "Softwareanwendung",
+          "en": "software application",
+          "es": "aplicación de software",
+          "fr": "application logicielle",
+          "ja": "ソフトウェアアプリケーション",
+          "ko": "소프트웨어 애플리케이션",
+          "zh-Hans": "软件应用程序",
+          "zh-Hant": "軟體應用程式"
+        },
+        "mappings": [
+          "wd:Q166142"
+        ],
+        "bases": [
+          "schema:Thing"
+        ],
+        "properties": [
+          "schema:image",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url"
+        ],
+        "facets": [],
+        "coverRatio": "1:1"
       }
     },
     "format": "https://rezics.com/definitions/release/1",
@@ -2186,7 +2240,8 @@
             "ko": "목소리로 출연한 작품",
             "zh-Hans": "配音作品",
             "zh-Hant": "配音作品"
-          }
+          },
+          "slotKey": "wdt:P453"
         },
         "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453"],
         "multivalued": true
@@ -2324,7 +2379,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -2353,7 +2416,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["http://www.wikidata.org/entity/Q577"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -2823,7 +2894,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            }
           },
           "additionalProperties": false
         },
@@ -2869,7 +2948,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            }
           },
           "additionalProperties": false
         },
@@ -3037,7 +3124,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["http://www.wikidata.org/entity/Q7727"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -3100,7 +3195,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["http://www.wikidata.org/entity/Q11574"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -3197,7 +3300,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -3682,7 +3793,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -3710,7 +3829,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -3906,7 +4033,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -3972,7 +4107,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -4034,7 +4177,15 @@
           "required": ["amount", "unit"],
           "properties": {
             "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" }
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            }
           },
           "additionalProperties": false
         },
@@ -4294,6 +4445,205 @@
         "relation": { "group": "derivation", "order": "name", "inverse": "none" },
         "qualifiers": ["schema:inLanguage"],
         "multivalued": true
+      },
+      "rezics:listSection": {
+        "iri": "https://rezics.com/vocab/listSection",
+        "labels": {
+          "de": "Listenabschnitt",
+          "en": "list section",
+          "es": "sección de la lista",
+          "fr": "section de la liste",
+          "ja": "リストの区分",
+          "ko": "목록 구역",
+          "zh-Hans": "列表分节",
+          "zh-Hant": "清單分節"
+        },
+        "mappings": [],
+        "datatype": "monolingualtext",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": [
+            "text",
+            "language"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1500
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            }
+          }
+        }
+      },
+      "wdt:P186": {
+        "iri": "http://www.wikidata.org/prop/direct/P186",
+        "labels": {
+          "de": "hergestellt aus",
+          "en": "made from material",
+          "es": "hecho de",
+          "fr": "fabriqué à partir de",
+          "ja": "材料",
+          "ko": "재료",
+          "zh-Hans": "材料",
+          "zh-Hant": "材料"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [
+          "rezics:listSection",
+          "rezics:note",
+          "schema:position",
+          "schema:sameAs",
+          "wdt:P1114",
+          "wdt:P1932"
+        ],
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "relation": {
+          "group": "derivation",
+          "order": "position",
+          "inverse": "rezics:usedIn",
+          "inverseLabels": {
+            "de": "Verwendet in",
+            "en": "Used in",
+            "es": "Se usa en",
+            "fr": "Utilisé dans",
+            "ja": "使用先",
+            "ko": "사용되는 곳",
+            "zh-Hans": "用于",
+            "zh-Hant": "用於"
+          }
+        },
+        "targets": [
+          "schema:Recipe",
+          "wd:Q2095"
+        ]
+      },
+      "rezics:note": {
+        "iri": "https://rezics.com/vocab/note",
+        "labels": {
+          "de": "Anmerkung",
+          "en": "note",
+          "es": "nota",
+          "fr": "note",
+          "ja": "注記",
+          "ko": "비고",
+          "zh-Hans": "备注",
+          "zh-Hant": "備註"
+        },
+        "mappings": [],
+        "datatype": "monolingualtext",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": [
+            "text",
+            "language"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1500
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            }
+          }
+        }
+      },
+      "wdt:P1114": {
+        "iri": "http://www.wikidata.org/prop/direct/P1114",
+        "labels": {
+          "de": "Menge",
+          "en": "quantity",
+          "es": "cantidad",
+          "fr": "quantité",
+          "ja": "数量",
+          "ko": "수량",
+          "zh-Hans": "数量",
+          "zh-Hant": "數量"
+        },
+        "mappings": [],
+        "datatype": "quantity",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": [
+            "amount",
+            "unit"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            "lowerBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            "upperBound": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            "unit": {
+              "type": "string",
+              "pattern": "^(?:1|(?:^[A-Za-z][A-Za-z0-9+.-]*:[^\\s\\u0000-\\u0020\\u007f-\\u009f<>\"{}|\\\\^`]*$)(?![\\s\\S]))$"
+            }
+          }
+        },
+        "units": [
+          "*"
+        ]
+      },
+      "schema:recipeInstructions": {
+        "iri": "http://schema.org/recipeInstructions",
+        "labels": {
+          "de": "Zubereitung",
+          "en": "instructions",
+          "es": "instrucciones",
+          "fr": "instructions",
+          "ja": "作り方",
+          "ko": "조리 방법",
+          "zh-Hans": "做法",
+          "zh-Hant": "作法"
+        },
+        "mappings": [],
+        "datatype": "document",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": [
+            "language",
+            "document"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            },
+            "document": {
+              "type": "object"
+            }
+          }
+        }
       }
     }
   },

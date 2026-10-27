@@ -1,8 +1,13 @@
 types:
+  wd:Q2095: 食品
   schema:Person: 人物
   schema:Organization: 組織
   schema:SoftwareApplication: ソフトウェアアプリケーション
 properties:
+  wdt:P186: 材料
+  wdt:P1114: 数量
+  rezics:note: 注記
+  rezics:listSection: リストの区分
   schema:url: URL
   schema:name: 名前
   schema:sameAs: 完全に一致
@@ -51,6 +56,7 @@ properties:
   rezics:bangumiLegacyVersion: '別バージョン（Bangumi旧コード）'
   rezics:expansionCounterpart: '拡張版・本編ゲーム'
 inverseProperties:
+  wdt:P186: 使用先
   schema:author: '著作'
   schema:illustrator: 'イラスト担当作品'
   schema:director: '監督作品'

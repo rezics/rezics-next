@@ -1,8 +1,13 @@
 types:
+  wd:Q2095: aliment
   schema:Person: 'personne'
   schema:Organization: 'organisation'
   schema:SoftwareApplication: 'application logicielle'
 properties:
+  wdt:P186: fabriqué à partir de
+  wdt:P1114: quantité
+  rezics:note: note
+  rezics:listSection: section de la liste
   schema:url: 'site officiel'
   schema:name: 'nom'
   schema:sameAs: 'correspondance exacte'
@@ -51,6 +56,7 @@ properties:
   rezics:bangumiLegacyVersion: 'Version associée (ancien code Bangumi)'
   rezics:expansionCounterpart: 'Extension ou jeu de base'
 inverseProperties:
+  wdt:P186: Utilisé dans
   schema:author: 'Œuvres écrites'
   schema:illustrator: 'Œuvres illustrées'
   schema:director: 'Œuvres réalisées'

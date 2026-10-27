@@ -119,9 +119,11 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     'schema:keywords',
     'schema:name',
     'schema:recipeIngredient',
+    'schema:recipeInstructions',
     'schema:recipeYield',
     'schema:sameAs',
     'schema:url',
+    'wdt:P186',
   ]);
   expect(properties['schema:author']).toMatchObject({
     datatype: 'wikibase-item',

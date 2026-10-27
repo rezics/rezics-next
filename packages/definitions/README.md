@@ -418,7 +418,10 @@ Source conventions:
 - `external-id` requires exactly one exact mapping, matching `wd:P<digits>`.
   Exact mappings become release mappings; close mappings are accepted as source
   metadata. Quantity requires `units`, a space-separated string of `1` or
-  CURIEs, expanded to IRIs, and alone permits minimum and maximum bounds.
+  CURIEs, expanded to IRIs, or `'*'` alone for any unit (`1` or an absolute IRI).
+  Quantities alone permit minimum and maximum bounds. Amounts and optional
+  `lowerBound` and `upperBound` are exact signed decimal strings; bounds enclose
+  the amount and obey the property's limits. APIs preserve those strings.
   `qualifiers` is a space-separated string of existing slot names.
 - Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
   Every source pattern must compile with JavaScript's `u` flag, contain at most
@@ -793,7 +796,7 @@ const cover: BatchCommand = {
 requires `rights`: an SPDX licence identifier or `LicenseRef-` identifier of at
 most 80 characters, zero to four distinct CC REL requirements (`cc:Attribution`,
 `cc:ShareAlike`, `cc:Notice`, `cc:SourceCode`), and attribution of 1–500 characters.
-Its document uses the `text` profile accepted by `@rezics/document`, with a
+Its document uses a `text` or `blocks` profile accepted by `@rezics/document`, with a
 `serializeDocument` representation of at most 32,768 UTF-8 bytes. The document
 has its own licence and its body is stored by content. `schema:abstract` is
 multivalued, with one summary per language by convention.
@@ -815,3 +818,36 @@ video games and visual novels. Identifier labels follow their Wikidata propertie
 [VNDB](https://www.wikidata.org/wiki/Property:P3180)); the summary and cover terms
 follow [schema:abstract](https://schema.org/abstract) and
 [schema:image](https://schema.org/image).
+
+## How-to documents
+
+Any `document` property can carry how-to content. Its steps form one top-level
+`orderedList`, starting at 1; each `listItem` is one step, in document order.
+Use the `blocks` profile when a step contains extensions. A duration is an
+`extensionInline` with definition `http://schema.org/timeRequired`, version `1`,
+an ISO 8601 duration string as its `payload` (for example `"PT30M"`), and readable
+`fallback` text (for example `"30 minutes"`). A tip is an `extensionBlock` with
+definition `http://schema.org/HowToTip`, version `1`, an empty object payload,
+and the tip text as `fallback`. These are document components, not statement
+qualifiers. Content owns their representation; semantic stores a document reference.
+
+The bulk `summary` field group accepts any catalogue property with datatype
+`document`, including instructions, with the same rights and source evidence.
+Single-subject writes use `{ document, licence, language }` for those properties.
+Both routes accept Text and Blocks snapshots. Existing content restrictions on
+image and media nodes still apply to these field writes.
+
+Recipes declare structured materials through the general `wdt:P186` relation.
+Each target has its own slot. `schema:position` orders the list; `wdt:P1114`
+qualifies it with an exact quantity, `rezics:note` with preparation wording and
+`rezics:listSection` with a section heading. An unresolved object uses `somevalue`
+with `wdt:P1932` preserving its source wording and `schema:sameAs` when an external
+IRI is known. Without an IRI, it uses the single property-level slot.
+The food type uses Wikidata's [food item, Q2095](https://www.wikidata.org/wiki/Q2095)
+as its class URI, verified against that item's English label and definition.
+
+A page uses the structured materials list whenever `wdt:P186` statements exist;
+otherwise `schema:recipeIngredient` preserves unstructured source wording.
+`schema:recipeYield` gives the base servings. Clients multiply the structured
+amount and any bounds by `servings / recipeYield` with decimal arithmetic; the
+API returns amounts exactly as stored and never rounds or scales them.

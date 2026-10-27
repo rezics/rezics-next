@@ -73,6 +73,7 @@ test('bundled types declare the documented cover frame ratios', () => {
     ],
     '3:4': ['schema:VideoGame', 'wd:Q689445', 'wd:Q209163', 'wd:Q20631656', 'wd:Q95074', 'schema:Person'],
     '1:1': [
+      'wd:Q2095',
       'schema:MusicAlbum',
       'schema:Organization',
       'schema:SoftwareApplication',

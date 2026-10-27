@@ -1,6 +1,7 @@
 types:
   schema:Recipe: receta de cocina
 properties:
+  schema:recipeInstructions: instrucciones
   schema:recipeIngredient: ingrediente
   schema:cookTime: tiempo de cocción
   schema:recipeYield: raciones

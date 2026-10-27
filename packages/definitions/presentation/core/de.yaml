@@ -1,8 +1,13 @@
 types:
+  wd:Q2095: Lebensmittel
   schema:Person: 'Person'
   schema:Organization: 'Organisation'
   schema:SoftwareApplication: 'Softwareanwendung'
 properties:
+  wdt:P186: hergestellt aus
+  wdt:P1114: Menge
+  rezics:note: Anmerkung
+  rezics:listSection: Listenabschnitt
   schema:url: 'offizielle Website'
   schema:name: 'Name'
   schema:sameAs: 'exakte Übereinstimmung'
@@ -51,6 +56,7 @@ properties:
   rezics:bangumiLegacyVersion: 'Versionsbezug (alter Bangumi-Code)'
   rezics:expansionCounterpart: 'Erweiterung oder Grundspiel'
 inverseProperties:
+  wdt:P186: Verwendet in
   schema:author: 'Verfasste Werke'
   schema:illustrator: 'Illustrierte Werke'
   schema:director: 'Regiearbeiten'

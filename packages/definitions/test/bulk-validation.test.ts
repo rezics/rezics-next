@@ -38,12 +38,12 @@ test('summary size counts canonical UTF-8 bytes, including the snapshot envelope
   ]);
 });
 
-test('only valid text snapshots are portable summary documents', () => {
+test('only valid Text and Blocks snapshots are portable document fields', () => {
+  expect(check(command(fromPlainText('猫', 'blocks')))).toEqual([]);
   for (const document of [
     null,
     [],
     serializeDocument(fromPlainText('猫')),
-    fromPlainText('猫', 'blocks'),
     { ...fromPlainText('猫'), extra: true },
     { version: 'rezics-document-v1', profile: 'text', doc: { type: 'doc', content: [{ type: 'unknown' }] } },
   ])

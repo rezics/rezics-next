@@ -87,6 +87,10 @@ classes:
     description: An organization.
     exact_mappings:
       - wd:Q43229
+  Food:
+    is_a: Thing
+    class_uri: wd:Q2095
+    description: A substance consumed to provide nutritional support for the body.
   SoftwareApplication:
     is_a: Thing
     class_uri: schema:SoftwareApplication
@@ -96,6 +100,36 @@ classes:
     annotations:
       cover_ratio: 1:1
 slots:
+  madeFromMaterial:
+    slot_uri: wdt:P186
+    description: A material or prepared component used to make the subject.
+    any_of:
+      - range: Food
+      - range: Recipe
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position quantity note listSection creditedAs sameAs
+      relation_group: derivation
+      relation_order: position
+      inverse: rezics:usedIn
+  quantity:
+    slot_uri: wdt:P1114
+    description: The exact quantity of the object used in a statement, optionally bounded by a range.
+    range: decimal
+    annotations:
+      datatype: quantity
+      units: '*'
+  note:
+    slot_uri: rezics:note
+    description: A free-text note qualifying a statement.
+    annotations:
+      datatype: monolingualtext
+  listSection:
+    slot_uri: rezics:listSection
+    description: The section of an ordered list to which an item belongs.
+    annotations:
+      datatype: monolingualtext
   crossMediaCounterpart:
     slot_uri: rezics:crossMediaCounterpart
     description: >-
@@ -312,7 +346,7 @@ slots:
       relation_filter: wdt:P3831
   position:
     slot_uri: schema:position
-    description: The one-based order of a credit or the ordinal of a member in a series.
+    description: The one-based order of an item in a list.
     pattern: '^[1-9][0-9]{0,3}$'
     exact_mappings:
       - wd:P1545
@@ -537,7 +571,7 @@ slots:
       relation_filter: wdt:P3831
   creditedAs:
     slot_uri: wdt:P1932
-    description: The name as it appears in the credit.
+    description: The wording naming the object of a statement in its source.
     annotations:
       datatype: string
   detailedRole:

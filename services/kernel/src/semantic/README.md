@@ -157,6 +157,19 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 - Bound: Rows O(s) (O(s + 1,000) with a type count), blocks O(s log N + partitions), statements O(1 + page partitions), independent of the holder's relation count. Slot views and label fills are bounded by the page.
 - Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, middle page at limit 25 and scales `[64, 512, 4096]`.
 
+### Material-list statements
+
+The catalogue's `wdt:P186` uses the forward relation path above, ordered by
+`schema:position`, with one slot per target. Adding this property to a type adds
+one 13-row range, one counter probe and at most 12 slot views to its subject
+preview, plus bounded target fills. Full material lists use paged relation reads;
+each request is bounded by its page limit. Creation checks the 32-selection limit
+per target slot (including a declared slot key), while preserving the 512-fact
+command budget. Exact quantity and bound checks run before SQL and add no
+statements. Document instructions reuse the existing imported or authored field
+append, with no additional SQL. The API round trips are covered by
+`test/semantic/recipe-structure.test.ts`.
+
 ### Relation-key re-emission
 
 - Touches: one page of the changed subject's outbound links per holder-key relay step, or one page of its inbound links plus the corresponding holder outbound rows per target-key step; each page updates its mirror projection and counters.
@@ -262,10 +275,13 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 ### Authored documents
 
 Single-subject creation and statement proposals accept document values as
-`{ document, licence, language }`: a text-profile snapshot, an SPDX licence or
+`{ document, licence, language }`: a Text or Blocks snapshot, an SPDX licence or
 `LicenseRef-` identifier, and a BCP 47 language tag. Validation happens before the
 command. Media values remain `unsupported`, including qualifiers and references.
-Bulk summary and cover rules are unchanged.
+The bulk `summary` field group accepts every `document` property with source
+evidence and rights, including how-to instructions. Text and Blocks snapshots
+share the existing content append path. Document validation and exact quantity
+bounds add no SQL statements.
 
 The containing statement allocates the candidate and revision before content's
 `appendAuthoredField` runs in the same transaction. Creation uses its compact

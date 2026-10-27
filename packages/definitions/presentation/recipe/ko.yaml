@@ -1,6 +1,7 @@
 types:
   schema:Recipe: 요리법
 properties:
+  schema:recipeInstructions: 조리 방법
   schema:recipeIngredient: 재료
   schema:cookTime: 조리 시간
   schema:recipeYield: 인분

@@ -1,6 +1,7 @@
 types:
   schema:Recipe: 食譜
 properties:
+  schema:recipeInstructions: 作法
   schema:recipeIngredient: 食材
   schema:cookTime: 烹調時間
   schema:recipeYield: 份量

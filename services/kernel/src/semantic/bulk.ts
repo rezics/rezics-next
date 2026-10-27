@@ -154,8 +154,7 @@ export async function batchCommand(
     const value = command.statement.value;
     const content = value.type === 'value' && record(value.content) ? value.content : null;
     try {
-      const document = parseDocument(content?.document);
-      if (document.profile !== 'text') throw new TypeError('Imported summaries require a text document');
+      parseDocument(content?.document);
     } catch {
       throw new SubjectInputError([{ pointer: '/statement/value/content/document', code: 'invalid_format' }]);
     }

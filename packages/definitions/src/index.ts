@@ -155,7 +155,11 @@ function buildValueSchema(datatype: DataType, options: ValueOptions) {
         additionalProperties: false,
         properties: {
           amount: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
-          unit: { enum: [...(options.units ?? [])] },
+          lowerBound: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
+          upperBound: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
+          unit: options.units?.includes('*')
+            ? { type: 'string', pattern: `^(?:1|${schema.$defs.iri.pattern})$` }
+            : { enum: [...(options.units ?? [])] },
         },
       };
     case 'time':
@@ -382,7 +386,10 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
         if (!targetNames.has(target)) add(at(targetPointer, index));
       });
     }
-    if (property.units) list(property.units, at(pointer, 'units'), undefined, false);
+    if (property.units) {
+      list(property.units, at(pointer, 'units'), undefined, false);
+      if (property.units.includes('*') && property.units.length !== 1) add(at(pointer, 'units'));
+    }
     if (property.minimum !== undefined && property.maximum !== undefined && property.maximum < property.minimum)
       add(at(pointer, 'maximum'));
     const value = property.value as Record<string, unknown>;

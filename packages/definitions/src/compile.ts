@@ -645,8 +645,10 @@ export async function compileCatalogue(input: {
       const units = words(annotations.units);
       if (!units.length || units.length > 16)
         add(annotation('units'), 'invalid', 'Quantity needs between one and 16 units');
+      if (units.includes('*') && units.length !== 1)
+        add(annotation('units'), 'invalid', 'Any-unit wildcard must be used alone');
       property.units = unique(
-        units.map((unit) => (unit === '1' ? unit : (expand(unit, annotation('units'), false) ?? unit))),
+        units.map((unit) => (unit === '1' || unit === '*' ? unit : (expand(unit, annotation('units'), false) ?? unit))),
       );
     } else if (annotations.units !== undefined)
       add(annotation('units'), 'invalid', 'Units are only allowed for quantity');

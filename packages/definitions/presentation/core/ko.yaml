@@ -1,8 +1,13 @@
 types:
+  wd:Q2095: 식품
   schema:Person: '사람'
   schema:Organization: '단체'
   schema:SoftwareApplication: '소프트웨어 애플리케이션'
 properties:
+  wdt:P186: 재료
+  wdt:P1114: 수량
+  rezics:note: 비고
+  rezics:listSection: 목록 구역
   schema:url: '공식 웹사이트'
   schema:name: '명칭'
   schema:sameAs: '정확히 일치'
@@ -51,6 +56,7 @@ properties:
   rezics:bangumiLegacyVersion: '대응 버전 (Bangumi 폐기 코드)'
   rezics:expansionCounterpart: '확장팩 또는 원본 게임'
 inverseProperties:
+  wdt:P186: 사용되는 곳
   schema:author: '집필한 작품'
   schema:illustrator: '삽화를 그린 작품'
   schema:director: '연출한 작품'

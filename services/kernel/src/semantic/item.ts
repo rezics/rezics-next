@@ -196,7 +196,7 @@ function canonical(value: unknown): string {
 export function itemFacts(subjectId: string, input: unknown, _type?: string, release?: Release): Fact[] {
   const route = routeOf(subjectId);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
-  const { violations, terms, aliasTerms, drafts } = checkSubjectStructure(input);
+  const { violations, terms, aliasTerms, drafts } = checkSubjectStructure(input, release);
   if (violations.length) throw new SubjectInputError(violations);
   const facts: Fact[] = [];
   const put = (

@@ -92,8 +92,9 @@ test('value contents are checked by the value schemas of the release', () => {
   expect(violations(pages({ amount: '+120', unit: MINUTE }))).toEqual([
     { pointer: '/statements/schema:numberOfPages/0/value/content/unit', code: 'invalid_format' },
   ]);
-  expect(violations(pages({ amount: '+120', unit: '1', upperBound: '+121' }))).toEqual([
-    { pointer: '/statements/schema:numberOfPages/0/value/content/upperBound', code: 'unknown_field' },
+  expect(violations(pages({ amount: '+120', unit: '1', upperBound: '+121' }))).toEqual([]);
+  expect(violations(pages({ amount: '+120', unit: '1', upperBound: '+119' }))).toEqual([
+    { pointer: '/statements/schema:numberOfPages/0/value/content/upperBound', code: 'out_of_range' },
   ]);
   expect(violations(edition({ 'schema:url': [snak('schema:url', 'ftp://example.org/kokoro')] }))).toEqual([
     { pointer: '/statements/schema:url/0/value/content', code: 'invalid_format' },

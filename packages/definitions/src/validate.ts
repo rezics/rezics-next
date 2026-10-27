@@ -15,7 +15,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const pointer = (base: string, part: string | number) =>
   `${base}/${String(part).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
-export function checkSubjectStructure(input: unknown) {
+export function checkSubjectStructure(input: unknown, release?: Release) {
   const errors: Violation[] = [];
   const add = (at: string, code: Violation['code']) => {
     if (errors.length < 16) errors.push({ pointer: at, code });
@@ -124,7 +124,6 @@ export function checkSubjectStructure(input: unknown) {
           add(at, 'invalid_type');
           continue;
         }
-        if (list.length > 32) add(at, 'out_of_range');
         const entries: StatementDraft[] = [];
         list.forEach((entry, i) => {
           const path = pointer(at, i);
@@ -172,6 +171,43 @@ export function checkSubjectStructure(input: unknown) {
           if (snak && typeof rank === 'string')
             entries.push({ property: prop, rank, value: snak.value, qualifiers, references });
         });
+        // Selection limits apply to each relation target, including its declared slot key.
+        // Unknown values share one property slot unless an external identity is supplied.
+        const relation = release?.properties[prop]?.relation;
+        const selections = new Map<string, number>();
+        for (const entry of entries) {
+          const value = entry.value;
+          const qualifier = (id: string, absolute = false) =>
+            entry.qualifiers.find(
+              (part): part is { property: string; value: { type: 'value'; content: string } } =>
+                isObject(part) &&
+                part.property === id &&
+                isObject(part.value) &&
+                part.value.type === 'value' &&
+                typeof part.value.content === 'string' &&
+                (!absolute || /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(part.value.content)),
+            )?.value.content;
+          let key = '';
+          if (relation && isObject(value)) {
+            if (
+              value.type === 'value' &&
+              typeof value.content === 'string' &&
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.content)
+            )
+              key = JSON.stringify([
+                'target',
+                value.content,
+                relation.slotKey ? (qualifier(relation.slotKey) ?? '') : '',
+              ]);
+            else if (value.type === 'somevalue') {
+              const iri = qualifier('schema:sameAs', true);
+              if (iri) key = JSON.stringify(['external', iri]);
+            }
+          }
+          const count = (selections.get(key) ?? 0) + 1;
+          selections.set(key, count);
+          if (count === 33) add(at, 'out_of_range');
+        }
         drafts.push({ property: prop, entries });
       }
   }
@@ -359,8 +395,7 @@ export function checkSubjectRelease(
       return;
     }
     if (authored && record(content)) {
-      if (!record(content.document) || content.document.profile !== 'text' || !checkDocument(content.document))
-        add(`${pointer}/document`, 'invalid_format');
+      if (!record(content.document) || !checkDocument(content.document)) add(`${pointer}/document`, 'invalid_format');
       else if (new TextEncoder().encode(serializeDocument(content.document)).byteLength > 2 * 1024 * 1024)
         add(`${pointer}/document`, 'out_of_range');
       if (
@@ -383,6 +418,17 @@ export function checkSubjectRelease(
         (property.maximum !== undefined && compareDecimal(content.amount, String(property.maximum)) > 0)
       )
         add(`${pointer}/amount`, 'out_of_range');
+      for (const bound of ['lowerBound', 'upperBound'] as const) {
+        const value = content[bound];
+        if (typeof value !== 'string') continue;
+        if (
+          (bound === 'lowerBound' && compareDecimal(value, content.amount) > 0) ||
+          (bound === 'upperBound' && compareDecimal(value, content.amount) < 0) ||
+          (property.minimum !== undefined && compareDecimal(value, String(property.minimum)) < 0) ||
+          (property.maximum !== undefined && compareDecimal(value, String(property.maximum)) > 0)
+        )
+          add(`${pointer}/${bound}`, 'out_of_range');
+      }
     } else if (
       property.datatype === 'time' &&
       record(content) &&
@@ -462,7 +508,7 @@ export function checkSubjectInput(
   rejectContent?: (property: PropertyDefinition) => boolean,
   authoredDocuments = false,
 ): { violations: Violation[]; targets: ItemTarget[] } {
-  const structural = checkSubjectStructure(input);
+  const structural = checkSubjectStructure(input, release);
   const typed = checkSubjectRelease(input, release, rejectContent, false, authoredDocuments);
   return { violations: combine(structural.violations, typed.violations), targets: typed.items };
 }

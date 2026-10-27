@@ -1,8 +1,13 @@
 types:
+  wd:Q2095: food
   schema:Person: person
   schema:Organization: organization
   schema:SoftwareApplication: software application
 properties:
+  wdt:P186: made from material
+  wdt:P1114: quantity
+  rezics:note: note
+  rezics:listSection: list section
   schema:url: URL
   schema:name: name
   schema:sameAs: exact match
@@ -51,6 +56,7 @@ properties:
   rezics:bangumiLegacyVersion: 'Version counterpart (retired Bangumi code)'
   rezics:expansionCounterpart: 'Expansion or base game'
 inverseProperties:
+  wdt:P186: Used in
   schema:author: 'Author of'
   schema:illustrator: 'Illustrator of'
   schema:director: 'Director of'
