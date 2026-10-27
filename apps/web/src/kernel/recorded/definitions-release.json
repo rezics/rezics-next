@@ -1277,15 +1277,8 @@
           "zh-Hant": "食物"
         },
         "mappings": [],
-        "bases": [
-          "schema:Thing"
-        ],
-        "properties": [
-          "schema:image",
-          "schema:name",
-          "schema:sameAs",
-          "schema:url"
-        ],
+        "bases": ["schema:Thing"],
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "facets": [],
         "coverRatio": "1:1"
       },
@@ -1301,18 +1294,9 @@
           "zh-Hans": "软件应用程序",
           "zh-Hant": "軟體應用程式"
         },
-        "mappings": [
-          "wd:Q166142"
-        ],
-        "bases": [
-          "schema:Thing"
-        ],
-        "properties": [
-          "schema:image",
-          "schema:name",
-          "schema:sameAs",
-          "schema:url"
-        ],
+        "mappings": ["wd:Q166142"],
+        "bases": ["schema:Thing"],
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "facets": [],
         "coverRatio": "1:1"
       }
@@ -4464,10 +4448,7 @@
         "qualifiers": [],
         "value": {
           "type": "object",
-          "required": [
-            "text",
-            "language"
-          ],
+          "required": ["text", "language"],
           "additionalProperties": false,
           "properties": {
             "text": {
@@ -4524,10 +4505,7 @@
             "zh-Hant": "用於"
           }
         },
-        "targets": [
-          "schema:Recipe",
-          "wd:Q2095"
-        ]
+        "targets": ["schema:Recipe", "wd:Q2095"]
       },
       "rezics:note": {
         "iri": "https://rezics.com/vocab/note",
@@ -4547,10 +4525,7 @@
         "qualifiers": [],
         "value": {
           "type": "object",
-          "required": [
-            "text",
-            "language"
-          ],
+          "required": ["text", "language"],
           "additionalProperties": false,
           "properties": {
             "text": {
@@ -4583,10 +4558,7 @@
         "qualifiers": [],
         "value": {
           "type": "object",
-          "required": [
-            "amount",
-            "unit"
-          ],
+          "required": ["amount", "unit"],
           "additionalProperties": false,
           "properties": {
             "amount": {
@@ -4607,9 +4579,7 @@
             }
           }
         },
-        "units": [
-          "*"
-        ]
+        "units": ["*"]
       },
       "schema:recipeInstructions": {
         "iri": "http://schema.org/recipeInstructions",
@@ -4629,10 +4599,7 @@
         "qualifiers": [],
         "value": {
           "type": "object",
-          "required": [
-            "language",
-            "document"
-          ],
+          "required": ["language", "document"],
           "additionalProperties": false,
           "properties": {
             "language": {
