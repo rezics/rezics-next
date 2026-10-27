@@ -227,3 +227,78 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
   const openingPlans = await capture(db, discover);
   expectIndex(openingPlans.capture.plans, 'exposure_opening_pkey');
 });
+
+test('admitted groups read stays bounded as unrelated accounts, gate grants, and openings grow', async () => {
+  const { admittedGroups } = await import('../../../src/access/gates/visibility.ts');
+  const ids = Array.from({ length: 64 * rowsPerScaleUnit }, () => newId(accountRoute));
+  const names = Array.from({ length: 64 * rowsPerScaleUnit }, (_, index) => `gd${tag}_admitted_${alpha(index)}`);
+  const read = async () => {
+    const admitted = await admittedGroups({
+      viewer: {
+        kind: 'account',
+        accountId: actorId,
+        clientId: 'growth-admitted',
+        scopes: ['exposure:read'],
+        requestedBy: null,
+        authnEpoch: 1,
+      },
+      pool: db.pool,
+      access,
+      routes: kernel.routes,
+      deadline: Date.now() + 15_000,
+      clock: () => new Date(fixedTime),
+    });
+    expect(admitted).toEqual([group]);
+  };
+  const report = await checkGrowth(db, {
+    name: 'Admitted groups read with unrelated accounts, gate grants, and openings',
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    repetitions: 1,
+    warmups: 1,
+    async grow(database, scale, previous) {
+      const added = ids.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit);
+      await database.admin.query(
+        `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+         SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+        [accountRoute, added, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'gate:unrelated', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [added, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_role_grant
+           (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', 'identity', id, '', 'growth_unrelated', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [added, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_denial
+           (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, '', 'gate:unrelated', 'resource', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [added, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         SELECT name, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2
+         FROM unnest($1::text[]) name`,
+        [names.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit), Bun.randomUUIDv7()],
+      );
+    },
+    operation: read,
+  });
+  expectBounded(report, kernel.routes.length);
+  const plans = (await capture(db, read)).capture.plans;
+  for (const index of [
+    'resource_grant_pkey',
+    'resource_role_grant_pkey',
+    'resource_denial_permission',
+    'exposure_opening_pkey',
+  ]) {
+    expectIndex(plans, index);
+  }
+});
