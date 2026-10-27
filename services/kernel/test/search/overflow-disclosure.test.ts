@@ -141,7 +141,7 @@ test('overflow disclosure rechecks complete boolean filters including negation b
   }
 });
 
-test('overflow probes bind all qualifiers to the same statement and override stale sampled values', async () => {
+test('qualified overflow clauses reject before probing even under AND, OR and NOT', async () => {
   const { fake, source, calls } = fixture();
   const split = book(1);
   split.statements.push(
@@ -155,20 +155,34 @@ test('overflow probes bind all qualifiers to the same statement and override sta
       [role, language].map((q) => ({ property: q.property, value: q.in[0]! })),
     ),
   );
+  for (const subject of [split, together]) fake.put(subject);
+  const qualified = value([target], [role, language]);
+  const filters: FilterDocument[] = [
+    qualified,
+    { not: qualified },
+    { and: [type, qualified] },
+    { or: [type, qualified] },
+    value([target], [language, { ...role, in: [...role.in, ...role.in] }]),
+  ];
+  for (const filter of filters) {
+    const { clauses, names } = named(filter);
+    await expect(
+      checkHits(
+        source,
+        [split, together].map((s) => hit(s, names)),
+        clauses,
+        { filter },
+      ),
+    ).rejects.toThrow('Qualified relation overflow');
+    expect(calls).toEqual([]);
+  }
+});
+
+test('unqualified overflow probes override stale sampled values', async () => {
+  const { fake, source } = fixture();
   const stale = book(3);
   stale.statements.push(relation(id(9999)));
-  for (const subject of [split, together, stale]) fake.put(subject);
-  const filter = value([target], [role, language]);
-  const { clauses, names } = named(filter);
-  const result = await checkHits(
-    source,
-    [split, together].map((s) => hit(s, names)),
-    clauses,
-    { filter },
-  );
-  expect(result.passed.map(({ subject }) => subject.id)).toEqual([together.id]);
-  expect(calls[0]!.probes).toHaveLength(2);
-  expect(calls[0]!.probes[0]!.qualifiers).toHaveLength(2);
+  fake.put(stale);
   const read = source.read;
   source.read = async (partition, ids) => {
     const snapshot = await read(partition, ids);
@@ -309,7 +323,7 @@ test('overflow read failures and absent or malformed point results reject the wh
   }
 });
 
-test('duplicate leaves and equivalent qualifier sets reuse probes while retaining matched clause priority', async () => {
+test('duplicate leaves reuse unqualified probes while retaining matched clause priority', async () => {
   const { fake, source, calls } = fixture();
   const a = book(1);
   a.statements.push(
@@ -320,12 +334,7 @@ test('duplicate leaves and equivalent qualifier sets reuse probes while retainin
   );
   fake.put(a);
   const filter: FilterDocument = {
-    or: [
-      value([id(9999), target], [role, language]),
-      value([target, id(9999), target], [language, { ...role, in: [...role.in, ...role.in] }]),
-      value([id(9998)]),
-      { not: value([target], [role, language]) },
-    ],
+    or: [value([id(9999), target]), value([target, id(9999), target]), value([id(9998)]), { not: value([target]) }],
   };
   const { clauses, names } = named(filter);
   const result = await checkHits(source, [hit(a, [names[2]!, names[0]!]), hit(a, names)], clauses, { filter });

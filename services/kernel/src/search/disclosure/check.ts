@@ -48,10 +48,8 @@ function holds(subject: IndexedSubject, clause: FactClause): boolean {
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
-function normalizedQualifiers(
-  qualifiers: readonly FilterQualifier[] = [],
-): NonNullable<RelationFacetProbe['qualifiers']> {
-  const clauses = new Map<string, { property: string; in: string[] }>();
+function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): FilterQualifier[] {
+  const clauses = new Map<string, FilterQualifier>();
   for (const { property, in: values } of qualifiers) {
     const clause = { property, in: sortedValues(values) };
     clauses.set(JSON.stringify(clause), clause);
@@ -185,21 +183,18 @@ export async function checkHits(
           const values: (boolean | Point[])[] = new Array(plan.leaves.length);
           for (const leaf of order) {
             const clause = plan.leaves[leaf]!;
-            if (
-              clause.facet !== 'statement' ||
-              !('values' in clause) ||
-              !subject.relationFacetOverflow?.includes(clause.property)
-            ) {
+            const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
+            if (clause.facet === 'statement' && overflow && clause.qualifiers !== undefined)
+              throw new Error('Qualified relation overflow cannot be checked by unqualified probes');
+            if (clause.facet !== 'statement' || !('values' in clause) || !overflow) {
               values[leaf] = holds(subject, clause);
               continue;
             }
-            const qualifiers = normalizedQualifiers(clause.qualifiers);
             values[leaf] = sortedValues(clause.values).map((value) => {
               const probe: RelationFacetProbe = {
                 subject: subject.id,
                 property: clause.property,
                 value,
-                ...(qualifiers.length ? { qualifiers } : {}),
               };
               const key = JSON.stringify(probe);
               let point = points.get(key);

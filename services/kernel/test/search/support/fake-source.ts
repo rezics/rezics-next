@@ -35,6 +35,7 @@ export function createFakeSource(): SubjectSource & {
       if (probes.length > MAX_RELATION_FACET_PROBES)
         throw new RangeError(`Relation facet matching accepts at most ${MAX_RELATION_FACET_PROBES} probes`);
       for (const probe of probes) {
+        if ('qualifiers' in probe) throw new TypeError('Relation facet probes do not accept qualifiers');
         if (subjectPartition(probe.subject) !== partition)
           throw new RangeError('Subject id routes to a different partition');
       }
@@ -42,14 +43,7 @@ export function createFakeSource(): SubjectSource & {
         const subject = subjects.get(probe.subject);
         if (!subject || subject.visibility !== 'visible' || subject.redirect !== null) return false;
         return subject.statements.some(
-          (statement) =>
-            statement.property === probe.property &&
-            statement.value === probe.value &&
-            (probe.qualifiers ?? []).every((clause) =>
-              statement.qualifiers?.some(
-                (qualifier) => qualifier.property === clause.property && clause.in.includes(qualifier.value),
-              ),
-            ),
+          (statement) => statement.property === probe.property && statement.value === probe.value,
         );
       });
     },

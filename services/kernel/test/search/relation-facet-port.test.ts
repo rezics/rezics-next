@@ -23,77 +23,36 @@ const subject = (n: number): IndexedSubject => ({
   statements: [],
 });
 
-test('relation facet probes preserve order, bind qualifiers to one statement and reject foreign partitions', async () => {
+test('relation facet probes are unqualified property/value points and reject qualifier fields', async () => {
   const source = createFakeSource();
   expect(typeof source.matchRelationFacets).toBe('function');
   const book = subject(1);
   const person = id(2, '0123');
-  const editor = id(3);
-  const translator = id(4);
-  const english = id(5);
-  const japanese = id(6);
-  const statement = (value: string, roleValue: string, languageValue: string) => ({
-    property: author,
-    value,
-    facet: { kind: 'item' as const },
-    qualifiers: [
-      { property: role, value: roleValue },
-      { property: language, value: languageValue },
-    ],
-  });
   book.statements = [
-    statement(person, editor, english),
-    statement(person, translator, japanese),
-    statement(id(7), translator, english),
-    { ...statement(person, translator, english), property: 'schema:illustrator' },
+    { property: author, value: person, qualifiers: [{ property: role, value: id(3) }] },
+    { property: author, value: person, qualifiers: [{ property: language, value: id(4) }] },
+    { property: author, value: id(5) },
+    { property: 'schema:illustrator', value: id(6) },
   ];
   source.put(book);
   source.put({ ...book, id: id(8, '0123') });
   const plain = { subject: book.id, property: author, value: person };
-  const positive = {
-    ...plain,
-    qualifiers: [
-      { property: role, in: [id(99), translator] },
-      { property: language, in: [japanese] },
-    ],
-  };
-  const split = { ...positive, qualifiers: [positive.qualifiers[0]!, { property: language, in: [english] }] };
   const probes: readonly RelationFacetProbe[] = [
-    split,
-    positive,
     plain,
     { ...plain, value: id(99) },
     { ...plain, property: 'schema:publisher' },
-    positive,
-    { ...plain, qualifiers: [{ property: 'schema:country', in: [english] }] },
-    { ...plain, qualifiers: [{ property: role, in: [] }] },
-    { ...plain, qualifiers: [] },
-    split,
+    { ...plain, value: id(5) },
+    { ...plain, value: id(6) },
+    { ...plain, property: 'schema:illustrator', value: id(6) },
+    plain,
   ];
-  expect(await source.matchRelationFacets(10, probes)).toEqual([
-    false,
-    true,
-    true,
-    false,
-    false,
-    true,
-    false,
-    false,
-    true,
-    false,
-  ]);
-  expect(await source.matchRelationFacets(10, [...probes].reverse())).toEqual([
-    false,
-    true,
-    false,
-    false,
-    true,
-    false,
-    false,
-    true,
-    true,
-    false,
-  ]);
+  const expected = [true, false, false, true, false, true, true];
+  expect(await source.matchRelationFacets(10, probes)).toEqual(expected);
+  expect(await source.matchRelationFacets(10, [...probes].reverse())).toEqual([...expected].reverse());
+  for (const qualifiers of [[{ property: role, in: [id(3)] }], [], undefined]) {
+    const qualified = { ...plain, qualifiers } as unknown as RelationFacetProbe;
+    await expect(source.matchRelationFacets(10, [plain, qualified])).rejects.toThrow();
+  }
   await expect(source.matchRelationFacets(10, [plain, { ...plain, subject: id(8, '0123') }])).rejects.toThrow();
   await expect(source.matchRelationFacets(18, [plain])).rejects.toThrow();
   await expect(source.matchRelationFacets(10, [{ ...plain, subject: 'not-a-uuid' }])).rejects.toThrow();

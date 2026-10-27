@@ -5,12 +5,11 @@ export type LanguageValue = { language: string; value: string };
 export const MAX_RELATION_FACET_VALUES = 128;
 export const MAX_RELATION_FACET_PROBES = 256;
 
-/** All qualifier clauses must match the same adopted Global relation statement. */
+/** Unqualified adopted Global relation membership for one subject, property and value. */
 export type RelationFacetProbe = {
   subject: string;
   property: string;
   value: string;
-  qualifiers?: { property: string; in: string[] }[];
 };
 
 /**
@@ -49,7 +48,7 @@ export type IndexedSubject = {
   aliases: LanguageValue[];
   descriptions: LanguageValue[];
   /**
-   * Adopted Global statement values; an item value is the target subject id.
+   * Adopted Global statement values visible at snapshot build time; an item value is the target subject id.
    * Descriptive statements are unchanged. Outgoing relations include at most MAX_RELATION_FACET_VALUES
    * sampled entries per declared facet property, retaining facet and qualifier metadata.
    * Undeclared relation properties and inbound edges are omitted.
@@ -71,12 +70,12 @@ export interface SubjectSource {
   /** Visible, non-redirected subjects of the partition and its position, in one snapshot. */
   count(partition: number): Promise<{ position: bigint; count: number }>;
   /**
-   * Match against full adopted Global relations, applying source fences and moderation.
+   * Match unqualified membership in full adopted Global relations, applying current source fences and moderation.
    * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;
-   * invalid input rejects. Results preserve probe order and duplicates. Each probe's qualifiers
-   * bind to one statement: clauses are ANDed, and `in` values within a clause are ORed.
+   * invalid input, including a qualifiers field, rejects. The aligned boolean array preserves probe order
+   * and duplicates; each result matches only the probe's subject, property and value.
    * Missing, hidden, taken-down and redirected subjects return false.
-   * Production implements this; it is optional for historical mocks. Search must fail closed
+   * Optional for historical mocks. Search must fail closed
    * when an overflow probe is needed and this method is absent.
    */
   matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<boolean[]>;
