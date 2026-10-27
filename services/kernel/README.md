@@ -6,10 +6,18 @@ The kernel workspace owns the database records and adapters used by the service.
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write
 its connection string to `.env`. Use `bun run db down` to stop it while keeping its volume, `bun run db reset` to remove
-and recreate the database, and `bun run db dump` to update the committed schema dump. Dumps run `pg_dump` inside the
-running database container, using its PostgreSQL version. The check command uses its disposable database container;
-the development dump command uses the local development container. Callers that do not set `KERNEL_DATABASE_CONTAINER`
-retain the `docker run` fallback.
+and recreate the database, and `bun run db dump` to update the committed schema dumps from that mutable development
+database. Dumps run `pg_dump` inside the running database container, using its PostgreSQL version. The check command
+uses its disposable database container; the development dump command uses the local development container. Callers that
+do not set `KERNEL_DATABASE_CONTAINER` retain the `docker run` fallback.
+
+CI and the controller run `bun run derived schema` from this workspace (`bun run --cwd services/kernel derived schema`).
+It checks migration versions, migrates a fresh throwaway PostgreSQL container, and writes `db/schema.sql` plus every
+module dump `db/<module>/schema.sql`, using all current migrations, the pinned PostgreSQL image and the same dump
+normalization as database checks. The command uses that container's `DATABASE_URL` and `KERNEL_DATABASE_CONTAINER`,
+so an inherited development URL or container is ignored. It does not construct the kernel, read Auth or runtime secrets,
+write the OpenAPI document or client, or touch the development database. `bun run derived` with no arguments still
+regenerates the OpenAPI document and client. Any other argument is rejected before a database starts.
 
 ## Development search node
 
@@ -371,7 +379,8 @@ schema with the module's name. The module owner edits `src/<module>/`, `db/<modu
 Migration versions use UTC timestamps in `YYYYMMDDHHMMSS_<name>.sql` form and are unique across all migration
 directories. `0001_core_partition.sql` keeps its name and sorts first. Dbmate applies pending migrations from every
 directory in version order, so a module migration may merge behind a newer migration from another directory. Once a
-migration is merged, never rename or edit it. Run `bun run db dump` to update and commit every schema dump.
+migration is merged, never rename or edit it. Run `bun run derived schema` to regenerate every committed schema dump
+from a fresh database, or `bun run db dump` to refresh those files from the local development database.
 
 Only kernel migrations create PostgreSQL extensions. A module that needs an extension asks the kernel to install it;
 module migrations may use extensions but must not create them.

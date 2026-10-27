@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, POSTGRES_IMAGE, validateMigrationVersions } from './database.ts';
+import { migrate, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import { cleanup, cleanupStale, docker, run } from './check.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,9 +60,32 @@ export async function withThrowawayDatabase<T>(work: (env: NodeJS.ProcessEnv) =>
   }
 }
 
+function derivedAction(args: readonly string[]): 'schema' | 'contracts' {
+  if (args.length === 0) return 'contracts';
+  if (args.length === 1 && args[0] === 'schema') return 'schema';
+  throw new Error(`Unsupported derived arguments: ${args.join(' ')}`);
+}
+
+/** Write every dump from the helper's fresh database, ignoring any inherited development URL or container. */
+async function writeSchemaDumps(env: NodeJS.ProcessEnv): Promise<void> {
+  const url = env.DATABASE_URL;
+  const container = env.KERNEL_DATABASE_CONTAINER;
+  if (!url || !container) throw new Error('Throwaway database connection is missing');
+  // withThrowawayDatabase also installs the fresh container in process.env for schemaDumps' pg_dump.
+  const dumps = schemaDumps(url, directory);
+  for (const [path, dump] of Object.entries(dumps)) {
+    await Bun.write(resolve(directory, path), dump);
+  }
+}
+
 async function main(): Promise<void> {
+  const action = derivedAction(process.argv.slice(2));
   const migrations = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrations, new Date());
+  if (action === 'schema') {
+    await withThrowawayDatabase(writeSchemaDumps);
+    return;
+  }
   await withThrowawayDatabase((env) => {
     run('bun', ['scripts/openapi.ts'], env);
     run('bun', ['scripts/client.ts'], env);
