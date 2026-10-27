@@ -9,6 +9,7 @@ import {
   terminateProcessGroup,
   waitForProcessGroup,
   waitForWorkerExit,
+  processIdentity,
 } from './process.ts';
 import { markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -506,6 +507,14 @@ export class WorkerJob implements GateOutcomeSink {
         // A command never waits for a worker that may still run: following it would hold the command (a dispatch
         // waited 31 minutes on another Goal's live worker). The host adopts it instead.
         if (!adoptRunning && attempt.state !== 'exited') continue;
+        // The adopter becomes the attempt's driver, as a launcher is, and lets the lease go: holding it for the
+        // worker's lifetime made every adopted task impossible to stop or retry. A live driver keeps others away.
+        const driver = processIdentity();
+        if (!driver) throw new Error('Cannot identify driver process');
+        store.updateAttempt(ref, (current) => {
+          current.driver = driver;
+        });
+        lease.release();
         followed = true;
         follows.push(
           (async () => {
@@ -513,9 +522,7 @@ export class WorkerJob implements GateOutcomeSink {
               if (attempt.process) await waitForProcessGroup(attempt.process);
               await this.followAttempt({ attempt, exited: Promise.resolve(readWorkerExit(attempt.logPath)) });
             } catch (error) {
-              await this.endAsEnvironment(ref, error, true);
-            } finally {
-              lease.release();
+              await this.endAsEnvironment(ref, error);
             }
           })(),
         );
