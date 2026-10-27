@@ -6,7 +6,11 @@ import {
   shownProperties,
   type CompositionDocument,
 } from '@rezics/composition';
+import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import { coverSrc } from '../../media/cover-src';
+import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
+import { m } from '../../paraglide/messages.js';
 import { languageName, LANGUAGE_PROPERTY, originalLanguage } from '../../subject/language';
 import type { Related, Subject } from '../../subject/types';
 import type { PageDocument } from './render';
@@ -25,10 +29,27 @@ type PageLink = ComponentType<LinkProps>;
 type Options = { locale: string; messages: PageMessages; link: PageLink };
 type Snak = { property: { id: string; data_type: string }; value: { type: string; content?: unknown } };
 type SubjectRead = { subject: Subject; related: Related };
-type SearchRead = { subjects: Pick<Subject, 'id' | 'labels'>[] };
-type PreparedRead = { header?: ReactNode; groups?: Map<string, ReactNode>; more?: ReactNode[]; list?: ReactNode[] };
+type SearchHit = Pick<Subject, 'id' | 'labels'> & { type?: string; summary?: SubjectSummary };
+type SearchRead = { subjects: SearchHit[]; total?: { value: number; relation: 'exact' | 'lower_bound' } };
+type PreparedRead = {
+  header?: ReactNode;
+  groups?: Map<string, ReactNode>;
+  more?: ReactNode[];
+  list?: ReactNode[];
+  /** The hits of a search read with their cover summaries, and the read's total count. */
+  hits?: SearchHit[];
+  total?: SearchRead['total'];
+};
 
-const PageContext = createContext<{ locale: string; messages: PageMessages; nodes: Map<string, PreparedRead> }>({
+/** A Zone's `cover` appearance token chooses the frame shared by its rows. */
+const tokenRatios: Record<string, CoverRatio> = { portrait: '2:3', square: '1:1', landscape: '4:3' };
+
+const PageContext = createContext<{
+  locale: string;
+  messages: PageMessages;
+  nodes: Map<string, PreparedRead>;
+  ratio?: CoverRatio;
+}>({
   locale: 'en',
   messages: { unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' },
   nodes: new Map(),
@@ -312,8 +333,11 @@ export function PageData({
       prepared.set(key, prepareSubject(result.body as SubjectRead, options, shown));
     } else if (planned.kind === 'search' && Array.isArray(result.body.subjects)) {
       const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
+      const total = (result.body as SearchRead).total;
       prepared.set(key, {
         list: subjects.map((item) => <li key={item.id}>{itemLink(item.id, item.labels, options)}</li>),
+        hits: subjects,
+        ...(total ? { total } : {}),
       });
     }
   }
@@ -322,7 +346,15 @@ export function PageData({
     const read = prepared.get(key);
     if (read) nodes.set(id, read);
   }
-  return <PageContext.Provider value={{ locale, messages, nodes }}>{children}</PageContext.Provider>;
+  const appearance = isRecord(composition.root.props.appearance) ? composition.root.props.appearance : {};
+  const token =
+    typeof appearance.cover === 'string' && Object.hasOwn(tokenRatios, appearance.cover) ? appearance.cover : '';
+  const ratio = token ? tokenRatios[token] : undefined;
+  return (
+    <PageContext.Provider value={{ locale, messages, nodes, ...(ratio ? { ratio } : {}) }}>
+      {children}
+    </PageContext.Provider>
+  );
 }
 
 function useNodeRead(id: unknown) {
@@ -351,8 +383,80 @@ function SubjectList(props: Record<string, unknown>) {
   return <TypeListContent {...props} />;
 }
 
+/** The bounded count of a search read: a lower bound is shown with a plus sign. */
+function countText(total: NonNullable<PreparedRead['total']>, locale: string): string {
+  return `${new Intl.NumberFormat(locale).format(total.value)}${total.relation === 'lower_bound' ? '+' : ''}`;
+}
+
+/**
+ * One vertical of the home: a row of covers with the section's count and a link to the whole search. The row shares
+ * one frame ratio, so a mixed row stays aligned, and each cover is named by the title beside it.
+ */
 function TypeList(props: Record<string, unknown>) {
-  return <TypeListContent {...props} />;
+  const read = useNodeRead(props.id);
+  const { locale, messages, ratio: zoneRatio } = useContext(PageContext);
+  const title = pageText(props.title, locale);
+  if (!read?.hits?.length) return null;
+  const hits = read.hits;
+  const id = typeof props.id === 'string' ? props.id : 'type-list';
+  const type = Array.isArray(props.types) && typeof props.types[0] === 'string' ? props.types[0] : undefined;
+  const subjects = hits.map((hit) => {
+    const text = pageText(hit.labels, locale);
+    return { hit, text, subject: coverSubject(hit.id, text.text, hit.summary, hit.type) };
+  });
+  const ratio = zoneRatio ?? sharedRatio(subjects.map((item) => item.subject));
+  return (
+    <section
+      data-slot="type-list"
+      aria-labelledby={`${id}-title`}
+      className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2
+            id={`${id}-title`}
+            lang={title.lang}
+            className="text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl"
+          >
+            {title.text}
+          </h2>
+          {read.total && (
+            <span data-slot="type-count" className="text-sm text-muted-foreground tabular-nums">
+              {m.home_section_count({ count: countText(read.total, locale) }, { locale: locale as never })}
+            </span>
+          )}
+        </div>
+        {type && (
+          <a
+            data-slot="see-all"
+            href={`/${encodeURIComponent(locale)}/search?type=${encodeURIComponent(type)}`}
+            aria-describedby={`${id}-title`}
+            className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
+          >
+            {m.home_see_all({}, { locale: locale as never })}
+          </a>
+        )}
+      </div>
+      <ul className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-2">
+        {subjects.map(({ hit, text, subject }) => (
+          <li key={hit.id} className="w-40 shrink-0 snap-start">
+            <a
+              href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(hit.id)}`}
+              className="group flex flex-col gap-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <Cover subject={subject} cover={coverOf(hit.summary)} size="md" ratio={ratio} src={coverSrc} decorative />
+              <span
+                lang={text.lang}
+                className={`line-clamp-2 text-sm leading-snug font-medium break-words group-hover:underline ${linkClass} ${text.text ? 'text-foreground' : 'text-muted-foreground'}`}
+              >
+                {text.text || messages.unlabelled}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function TypeListContent(props: Record<string, unknown>) {

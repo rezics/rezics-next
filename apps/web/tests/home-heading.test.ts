@@ -93,7 +93,6 @@ test('the platform home opens with its heading and keeps a personal slot for sig
     'Heading',
     'SearchBox',
     'Slot',
-    'LinkGrid',
     'TypeList',
     'TypeList',
     'TypeList',
@@ -127,7 +126,6 @@ test('the route page shows the template heading as its only h1 and lets the host
   expect(html).toMatch(/<section[^>]*data-slot="personal"[^>]*><p>続きを読む<\/p><\/section>/);
   expect(html.indexOf('<h1')).toBeLessThan(html.indexOf('<form'));
   expect(html.indexOf('<form')).toBeLessThan(html.indexOf('data-slot="personal"'));
-  expect(html.indexOf('data-slot="personal"')).toBeLessThan(html.indexOf('href="/ja/search?type=schema%3ABook"'));
 
   const signedOut = renderToString(
     createElement(RoutePage, {

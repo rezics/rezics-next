@@ -58,8 +58,11 @@ import spaceRecording from './recorded/space.json';
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
 
+/** A fixture subject, with the cover summary the kernel would embed in a search hit when it has an image. */
+type FixtureSubject = Subject & { cover?: unknown };
+
 type Fixtures = {
-  subjects: Subject[];
+  subjects: FixtureSubject[];
   properties: { id: string; labels: Record<string, string> }[];
   redirects: Record<string, string>;
   /** Structural bases by type, copied from the bundled definitions release. */
@@ -442,13 +445,31 @@ function byEnglishLabel(left: Subject, right: Subject): number {
   return 0;
 }
 
+/** The hit a search read returns for one fixture: its labels and the summary that draws its cover. */
+function searchHit(fixtures: Fixtures, subject: FixtureSubject) {
+  const types = [subject.type, ...(fixtures.types[subject.type]?.bases ?? [])];
+  return {
+    id: subject.id,
+    type: subject.type,
+    labels: subject.labels,
+    summary: {
+      id: subject.id,
+      type: subject.type,
+      types,
+      creativeWork: types.includes('schema:CreativeWork'),
+      label: { value: subject.labels.en ?? Object.values(subject.labels)[0] ?? '', language: 'en' },
+      cover: subject.cover ?? null,
+    },
+  };
+}
+
 /** Subjects with a statement of that property naming one of the filter's subjects. */
 function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search' }>) {
   const filter = read.body.filter;
   if ('type' in filter) {
     const types = new Set(filter.type.in);
     const matched = fixtures.subjects.filter((subject) => types.has(subject.type)).sort(byEnglishLabel);
-    const subjects = matched.slice(0, read.body.limit).map(({ id, type, labels }) => ({ id, type, labels }));
+    const subjects = matched.slice(0, read.body.limit).map((subject) => searchHit(fixtures, subject));
     return {
       subjects,
       total: { value: matched.length, relation: 'exact' as const },
@@ -469,7 +490,7 @@ function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search'
       )
     : [];
   matched.sort(byEnglishLabel);
-  const subjects = matched.slice(0, read.body.limit).map(({ id, type, labels }) => ({ id, type, labels }));
+  const subjects = matched.slice(0, read.body.limit).map((subject) => searchHit(fixtures, subject));
   return {
     subjects,
     total: { value: matched.length, relation: 'exact' as const },

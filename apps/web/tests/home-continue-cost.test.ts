@@ -12,14 +12,16 @@ const sessionId = 'a'.repeat(43);
 const sizes = [1, 10, 100];
 const stamp = '2026-04-02T15:04:05.000Z';
 const csrf = newCsrfToken();
-// The home page's own read is one pages:read. The library row adds one library read and the session read it needs.
+// The home page's own read is one pages:read. The library row adds one library read and one progress read for each
+// card shown (at most six, whatever the size of the library), and the session read they need.
 const signedOutBound = { D: 0, K: 1, R: 0, A: 0 };
-const signedInBound = { D: 1, K: 2, R: 0, A: 0 };
+const signedInBound = (cards: number) => ({ D: 1, K: 2 + cards, R: 0, A: 0 });
 
 test('the home page reads the library once per view whatever the size of the library', async () => {
   const counts = { D: 0, K: 0, R: 0, A: 0 };
   let size = 1;
   const reads: URL[] = [];
+  const progress: URL[] = [];
   const paths: string[] = [];
   const pages = createFakeKernelFetch(fixtures as never);
   const client = createKernelClient('https://kernel.example.test', {
@@ -53,6 +55,10 @@ test('the home page reads the library once per view whatever the size of the lib
         });
       }
       if (url.pathname.startsWith('/v1/libraryEntries/')) throw new Error(`unexpected per-entry read ${url.pathname}`);
+      if (url.pathname === '/v1/progressSessions') {
+        progress.push(url);
+        return Response.json({ progressSessions: [], next: null });
+      }
       return pages(request);
     }) as typeof fetch,
   });
@@ -107,6 +113,7 @@ test('the home page reads the library once per view whatever the size of the lib
     counts.R = 0;
     counts.A = 0;
     reads.length = 0;
+    progress.length = 0;
     paths.length = 0;
   };
 
@@ -124,11 +131,12 @@ test('the home page reads the library once per view whatever the size of the lib
     expect(signedIn.page.kind).toBe('page');
     expect(signedIn.continue).toHaveLength(Math.min(scale, 6));
     expect(reads).toHaveLength(1);
+    expect(progress).toHaveLength(Math.min(scale, 6));
     expect(Number(reads[0]!.searchParams.get('limit'))).toBeGreaterThan(0);
     expect(Number(reads[0]!.searchParams.get('limit'))).toBeLessThanOrEqual(6);
     expect(reads[0]!.searchParams.get('state')).toBe('in_progress');
     expect(paths.filter((path) => path === 'POST /v1/pages:read')).toHaveLength(1);
-    expect(counts).toEqual(signedInBound);
+    expect(counts).toEqual(signedInBound(Math.min(scale, 6)));
 
     reset();
     const signedOut = await loadHome(client, new Request('https://site.example.test/en'), env, () =>

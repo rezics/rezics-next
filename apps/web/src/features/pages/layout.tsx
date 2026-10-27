@@ -1,4 +1,6 @@
 import { APPEARANCE, platformRegistry } from '@rezics/composition';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale, usePageMessages } from './data';
 
@@ -203,20 +205,17 @@ function SearchBox(props: Record<string, unknown>) {
       action={`/${encodeURIComponent(locale)}/search`}
       className="flex w-full max-w-3xl gap-2"
     >
-      <input
+      <Input
         type="search"
         name="q"
         placeholder={placeholder.text}
         aria-label={placeholder.text}
         lang={placeholder.lang}
-        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-3 text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-12 min-w-0 flex-1 rounded-xl px-4 text-base"
       />
-      <button
-        type="submit"
-        className="shrink-0 rounded-xl bg-primary px-5 py-3 font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      >
+      <Button type="submit" size="lg" className="h-12 shrink-0 rounded-xl px-5 text-base">
         {messages.search}
-      </button>
+      </Button>
     </form>
   );
 }

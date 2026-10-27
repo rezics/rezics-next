@@ -134,6 +134,42 @@
             "references": []
           }
         ]
+      },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e01",
+        "width": 640,
+        "height": 960,
+        "placeholder": {
+          "thumbhash": "",
+          "color": "#3b4a6b"
+        },
+        "variants": [
+          {
+            "format": "avif",
+            "width": 160
+          },
+          {
+            "format": "webp",
+            "width": 160
+          },
+          {
+            "format": "avif",
+            "width": 320
+          },
+          {
+            "format": "webp",
+            "width": 320
+          }
+        ],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": {
+            "name": "Rezics",
+            "url": "https://rezics.com"
+          },
+          "license": "CC0-1.0"
+        }
       }
     },
     {
@@ -231,6 +267,42 @@
             "references": []
           }
         ]
+      },
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e03",
+        "width": 640,
+        "height": 960,
+        "placeholder": {
+          "thumbhash": "",
+          "color": "#6b4a3b"
+        },
+        "variants": [
+          {
+            "format": "avif",
+            "width": 160
+          },
+          {
+            "format": "webp",
+            "width": 160
+          },
+          {
+            "format": "avif",
+            "width": 320
+          },
+          {
+            "format": "webp",
+            "width": 320
+          }
+        ],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": {
+            "name": "Rezics",
+            "url": "https://rezics.com"
+          },
+          "license": "CC0-1.0"
+        }
       }
     },
     {
@@ -264,6 +336,248 @@
         "es": "cuento"
       },
       "descriptions": {},
+      "aliases": {},
+      "statements": {}
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06",
+      "type": "schema:TVSeries",
+      "labels": {
+        "en": "Mushishi",
+        "ja": "蟲師",
+        "zh-Hans": "虫师"
+      },
+      "descriptions": {
+        "en": "Anime series about wandering folklore."
+      },
+      "aliases": {},
+      "statements": {},
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e06",
+        "width": 640,
+        "height": 960,
+        "placeholder": {
+          "thumbhash": "",
+          "color": "#2f5d50"
+        },
+        "variants": [
+          {
+            "format": "avif",
+            "width": 160
+          },
+          {
+            "format": "webp",
+            "width": 160
+          },
+          {
+            "format": "avif",
+            "width": 320
+          },
+          {
+            "format": "webp",
+            "width": 320
+          }
+        ],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": {
+            "name": "Rezics",
+            "url": "https://rezics.com"
+          },
+          "license": "CC0-1.0"
+        }
+      }
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e07",
+      "type": "schema:TVSeries",
+      "labels": {
+        "en": "Frieren: Beyond Journey’s End",
+        "ja": "葬送のフリーレン",
+        "zh-Hans": "葬送的芙莉莲"
+      },
+      "descriptions": {
+        "en": "Anime series about an elf mage."
+      },
+      "aliases": {},
+      "statements": {}
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e08",
+      "type": "schema:Movie",
+      "labels": {
+        "en": "Spirited Away",
+        "ja": "千と千尋の神隠し",
+        "zh-Hans": "千与千寻"
+      },
+      "descriptions": {
+        "en": "Animated film."
+      },
+      "aliases": {},
+      "statements": {},
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e08",
+        "width": 1280,
+        "height": 720,
+        "placeholder": {
+          "thumbhash": "",
+          "color": "#5d2f4a"
+        },
+        "variants": [
+          {
+            "format": "avif",
+            "width": 160
+          },
+          {
+            "format": "webp",
+            "width": 160
+          },
+          {
+            "format": "avif",
+            "width": 320
+          },
+          {
+            "format": "webp",
+            "width": 320
+          }
+        ],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": {
+            "name": "Rezics",
+            "url": "https://rezics.com"
+          },
+          "license": "CC0-1.0"
+        }
+      }
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e09",
+      "type": "wd:Q689445",
+      "labels": {
+        "en": "Clannad",
+        "ja": "クラナド",
+        "zh-Hans": "CLANNAD"
+      },
+      "descriptions": {
+        "en": "Visual novel."
+      },
+      "aliases": {},
+      "statements": {},
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e09",
+        "width": 600,
+        "height": 800,
+        "placeholder": {
+          "thumbhash": "",
+          "color": "#2f3d5d"
+        },
+        "variants": [
+          {
+            "format": "avif",
+            "width": 160
+          },
+          {
+            "format": "webp",
+            "width": 160
+          },
+          {
+            "format": "avif",
+            "width": 320
+          },
+          {
+            "format": "webp",
+            "width": 320
+          }
+        ],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": {
+            "name": "Rezics",
+            "url": "https://rezics.com"
+          },
+          "license": "CC0-1.0"
+        }
+      }
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10",
+      "type": "wd:Q689445",
+      "labels": {
+        "en": "Steins;Gate",
+        "ja": "シュタインズ・ゲート",
+        "zh-Hans": "命运石之门"
+      },
+      "descriptions": {
+        "en": "Visual novel."
+      },
+      "aliases": {},
+      "statements": {}
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11",
+      "type": "schema:Recipe",
+      "labels": {
+        "en": "Nikujaga",
+        "ja": "肉じゃが",
+        "zh-Hans": "土豆炖肉"
+      },
+      "descriptions": {
+        "en": "Braised meat and potatoes."
+      },
+      "aliases": {},
+      "statements": {},
+      "cover": {
+        "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d5e11",
+        "width": 800,
+        "height": 600,
+        "placeholder": {
+          "thumbhash": "",
+          "color": "#5d4a2f"
+        },
+        "variants": [
+          {
+            "format": "avif",
+            "width": 160
+          },
+          {
+            "format": "webp",
+            "width": 160
+          },
+          {
+            "format": "avif",
+            "width": 320
+          },
+          {
+            "format": "webp",
+            "width": 320
+          }
+        ],
+        "focalPoint": null,
+        "credit": {
+          "rightsHolder": "Rezics fixture art",
+          "via": {
+            "name": "Rezics",
+            "url": "https://rezics.com"
+          },
+          "license": "CC0-1.0"
+        }
+      }
+    },
+    {
+      "id": "0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12",
+      "type": "schema:Recipe",
+      "labels": {
+        "en": "Shakshuka",
+        "ja": "シャクシュカ",
+        "zh-Hans": "沙克舒卡"
+      },
+      "descriptions": {
+        "en": "Eggs poached in spiced tomato."
+      },
       "aliases": {},
       "statements": {}
     }
@@ -316,6 +630,18 @@
   },
   "types": {
     "schema:Book": {
+      "bases": ["schema:CreativeWork", "schema:Thing"]
+    },
+    "schema:TVSeries": {
+      "bases": ["schema:CreativeWork", "schema:Thing"]
+    },
+    "schema:Movie": {
+      "bases": ["schema:CreativeWork", "schema:Thing"]
+    },
+    "wd:Q689445": {
+      "bases": ["schema:CreativeWork", "schema:Thing"]
+    },
+    "schema:Recipe": {
       "bases": ["schema:CreativeWork", "schema:Thing"]
     }
   }

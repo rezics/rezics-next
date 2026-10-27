@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { FILTER_LIMITS } from '@rezics/filter';
+import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage, readSearch } from '../search/search.tsx';
+import { PageHeading } from '../shell/page-heading';
 import { m } from '../paraglide/messages.js';
 
 function facetValuesFromSearch(search: Record<string, unknown>): Record<string, string[]> {
@@ -49,7 +51,22 @@ export const Route = createFileRoute('/search')({
   staleTime: 30_000,
   head: () => ({ meta: [{ title: m.search_heading() }] }),
   component: SearchRoute,
+  errorComponent: SearchFailed,
 });
+
+/** A search the kernel could not answer says so in a sentence, in the page's own frame. */
+function SearchFailed() {
+  return (
+    <section className="mx-auto max-w-5xl space-y-6">
+      <PageHeading>{m.search_heading()}</PageHeading>
+      <Empty className="border" role="alert">
+        <EmptyHeader>
+          <EmptyTitle className="text-base font-normal">{m.search_failed()}</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    </section>
+  );
+}
 
 function SearchRoute() {
   const search = Route.useSearch();

@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { RoutePageLoad } from '../features/pages/route';
+import type { SubjectSummary } from '../media/summary';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { readEntryPage } from './entries-read';
@@ -8,11 +9,75 @@ import { libraryLabel } from './reads';
 /** The Continue row shows at most this many subjects. */
 export const CONTINUE_LIMIT = 6;
 
-export type ContinueEntry = { subjectId: string; label: string };
+/** The progress read of one subject's active session: what unit it counts and how far it has come. */
+export type ContinueProgress = {
+  sessionId: string;
+  mode: 'scalar_amount' | 'cursor_position' | 'completed_units';
+  unit: 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
+  amount: string | null;
+  total: string | null;
+  completedUnitCount: number;
+};
+
+export type ContinueEntry = {
+  subjectId: string;
+  label: string;
+  /** The language of the label when the kernel names it, so a fallback text can carry its own `lang`. */
+  language?: string;
+  /** The embedded subject, which carries the cover and the types that choose its frame. */
+  summary: SubjectSummary;
+  progress: ContinueProgress | null;
+};
+
+type RawSubject = {
+  id: string;
+  type: string;
+  types?: string[];
+  label: Parameters<typeof libraryLabel>[0];
+  cover?: NonNullable<SubjectSummary>['cover'];
+};
+
+function summaryOf(subject: RawSubject): SubjectSummary {
+  return {
+    id: subject.id,
+    type: subject.type,
+    ...(subject.types ? { types: subject.types } : {}),
+    label: typeof subject.label === 'object' ? subject.label : null,
+    cover: subject.cover ?? null,
+  };
+}
+
+/** The active session of one subject, or null when the read fails or the subject has none. */
+async function readProgress(
+  client: KernelClient,
+  subjectId: string,
+  authorization: string,
+): Promise<ContinueProgress | null> {
+  try {
+    const result = await client.progressSessions.get({
+      query: { subjectId, limit: 5 },
+      headers: { authorization },
+    });
+    const session = result.data?.progressSessions.find((item) => item.state === 'active');
+    if (!session) return null;
+    return {
+      sessionId: session.id,
+      mode: session.mode,
+      unit: session.unit,
+      amount: session.amount,
+      total: session.total,
+      completedUnitCount: session.completedUnitCount,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The viewer's subjects in progress, most recently updated first: one library read for a signed-in visitor, none
- * otherwise. Any failure leaves the row out instead of failing the page.
+ * otherwise, then one progress read per subject shown (at most six, whatever the size of the library). A failed
+ * library read leaves the row out instead of failing the page; a failed progress read leaves that card without a
+ * progress line.
  */
 export async function loadContinue(
   client: KernelClient,
@@ -24,8 +89,21 @@ export async function loadContinue(
     const authorization = viewerCredential(request);
     if (!authorization) return [];
     const page = await readEntryPage(client, authorization, undefined, 'in_progress', CONTINUE_LIMIT);
-    return page.libraryEntries.flatMap((entry) =>
-      entry.subject ? [{ subjectId: entry.subjectId, label: libraryLabel(entry.subject.label, entry.subject.id) }] : [],
+    return await Promise.all(
+      page.libraryEntries.flatMap((entry) => {
+        const subject = entry.subject as RawSubject | null | undefined;
+        if (!subject) return [];
+        const language = typeof subject.label === 'object' && subject.label ? subject.label.language : undefined;
+        return [
+          readProgress(client, entry.subjectId, authorization).then((progress): ContinueEntry => ({
+            subjectId: entry.subjectId,
+            label: libraryLabel(subject.label, entry.subjectId),
+            ...(language ? { language } : {}),
+            summary: summaryOf(subject),
+            progress,
+          })),
+        ];
+      }),
     );
   } catch {
     return [];

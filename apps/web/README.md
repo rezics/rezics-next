@@ -339,21 +339,25 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Search page (`/<locale>/search`)
 
 - **Touches:** In parallel: one `POST /v1/subjects:search` and one `POST /v1/subjects:facets`; the search read asks for
-  descriptions, the reader's language chain (at most four languages) and, for a single-type search, at most two facet
-  properties; active definitions digest
+  descriptions, the reader's language chain (at most four languages) and the properties that give each hit its year
+  (at most four time properties across types, the type's first on a single-type search) plus, for a single-type search,
+  at most two facet properties; the facets read of a single-type search asks for the type's facet properties, and that
+  of a search across types asks for the type counts, so the types are listed by count; active definitions digest
   cached for 60 s and release cached by digest without expiry
 - **Bound:** 2 K and 0 D per search; result page is at most 100 entries and facet work is bounded to 8 properties × 10
   values; the response stays O(page size), with each description at most 200 grapheme clusters in at most four languages
-  and at most 2 properties × 3 values per hit; 0 R/A
+  and at most 3 properties × 3 values per hit, one cover summary per hit and no media call; 0 R/A
 - **Growth check:** `tests/search-facets.test.ts`:
   `searches read the definitions release once per digest and make two kernel reads each`
 
 ### Suggestions (shell typeahead)
 
-- **Touches:** One site GET route calls `subjects:suggest` with a constant cap; browser waits 200 ms after typing pauses
-  and cancels stale requests
-- **Bound:** 1 K per request with a constant result cap, 0 D, 0 R and 0 A. The browser sends at most one request per
-  pause
+- **Touches:** One site GET route calls `subjects:suggest` with a constant cap and the reader's language chain, and
+  names the suggested types from the cached definitions release; browser waits 200 ms after typing pauses and cancels
+  stale requests
+- **Bound:** 1 K per request with a constant result cap, plus the definitions reads that the digest and release caches
+  absorb, 0 D, 0 R and 0 A; each suggestion carries one cover summary and no media call. The browser sends at most one
+  request per pause
 - **Growth check:** `tests/request-cost.test.ts`: `suggestions stay within their bound as s grows`
 
 ### Site shell (navigation column and header)
@@ -367,9 +371,10 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Home page (`/<locale>`)
 
 - **Touches:** Root preferences → D `signedIn` with a valid configured session cookie; one `POST /v1/pages:read`
-  for route `/`, including the platform search box, vertical links and type lists
-- **Bound:** ≤1 K (four searches of at most 12 subjects each inside the page read), ≤1 D, 0 R/A; O(t) session bytes
-  and O(document + read results) rendering, bounded by composition limits; no result, label or media calls per item
+  for route `/`, including the platform search box and the type lists
+- **Bound:** ≤1 K (four searches of at most 12 subjects each inside the page read, each hit with its cover summary),
+  ≤1 D, 0 R/A; O(t) session bytes and O(document + read results) rendering, bounded by composition limits; no result,
+  label or media calls per item
 - **Growth check:** `tests/session-controls.test.ts`:
   `pages read the signed-in state without contacting Auth or refreshing tokens` asserts zero A;
   `tests/request-cost.test.ts`: `home page stays within its bound as s grows` for D/K
@@ -377,10 +382,11 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Home Continue row
 
 - **Touches:** for a signed-in visitor, one `GET /v1/libraryEntries?state=in_progress&view=FULL` with a limit of 6,
-  started together with the home page read; none for a signed-out visitor.
+  started together with the home page read, then one `GET /v1/progressSessions?subjectId=` for each entry shown, all
+  started together; none for a signed-out visitor.
 - **Bound:** signed in, 1 more K per home view returning at most 6 entries with their embedded subjects, whatever the
-  size of the library, and 1 more D for the credential the read sends; signed out, 0. No R or A beyond the home page's
-  existing session read; no per-entry reads.
+  size of the library, plus at most 6 progress reads (one per card shown), and 1 more D for the credential the reads
+  send; signed out, 0. No R or A beyond the home page's existing session read; no other per-entry reads.
 - **Growth check:** `tests/home-continue-cost.test.ts`: the home page reads the library once per view whatever the size of the library
 
 ### Board page (`/<locale>/boards/<id>`)

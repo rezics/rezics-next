@@ -359,7 +359,8 @@ test('search page stays within its bound as s grows', async () => {
     const response = await fetch(`${origin}/en/search?q=results`);
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual(['GET /v1/definitions/active', 'POST /v1/subjects:search']);
-    expect((await response.text()).length).toBeLessThan(100_000);
+    // At most 100 hits, each with its cover frame and placeholder: a constant few kilobytes per hit.
+    expect((await response.text()).length).toBeLessThan(300_000);
   }
 }, 300_000);
 test('suggestions stay within their bound as s grows', async () => {
@@ -369,7 +370,9 @@ test('suggestions stay within their bound as s grows', async () => {
     kernelCalls.length = 0;
     const response = await fetch(`${origin}/api/search/suggestions?q=results`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual(['GET /v1/subjects:suggest']);
+    // One suggest read, plus at most the active digest and the release that name the types, whatever s is.
+    expect(kernelCalls.filter((call) => !call.includes('/v1/definitions/'))).toEqual(['GET /v1/subjects:suggest']);
+    expect(kernelCalls.filter((call) => call.includes('/v1/definitions/')).length).toBeLessThanOrEqual(2);
     expect(((await response.json()) as { subjects: unknown[] }).subjects.length).toBeLessThanOrEqual(8);
   }
 }, 300_000);

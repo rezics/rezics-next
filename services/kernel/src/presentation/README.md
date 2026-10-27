@@ -17,9 +17,8 @@ Type templates place their `SubjectList`s after the header and before `MoreState
 and `wdt:P725`, limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany`
 and `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists
 `schema:character`, limit 24. Route `/` is the site home template: a level-1 `Heading`, a `SearchBox`, the
-`personal` `Slot`, then a `LinkGrid` of Books, Anime, Visual novels and Recipes, then one `TypeList` per vertical in
-that order, sorted by `collections` with limit 12. The host fills the `personal` slot for the signed-in viewer; the
-page read never does. The home plans four searches and no subject read. Each search returns at most 12 subjects, so the
+`personal` `Slot`, then one `TypeList` per vertical (Books, Anime, Visual novels and Recipes, in that order), sorted by
+`collections` with limit 12. The host fills the `personal` slot for the signed-in viewer; the page read never does. The home plans four searches and no subject read. Each search returns at most 12 subjects, so the
 page's read cost is 48 of 128. `setupPresentation` bootstraps the profile once at startup, immediately after
 `setupSemantic`. When a profile is already active, that bootstrap is one pointer read.
 

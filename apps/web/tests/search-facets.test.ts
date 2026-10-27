@@ -233,6 +233,7 @@ test(
       expect(facetCalls[0]!.body).toEqual({
         text: 'Kokoro',
         filter: expected,
+        languages: ['en'],
         facets: [
           { property: author, size: 10 },
           { property: genre, size: 10 },

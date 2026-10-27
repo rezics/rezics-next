@@ -51,11 +51,47 @@
               "zh-Hant": "寓言"
             }
           }
+        ],
+        "schema:datePublished": [
+          {
+            "kind": "time",
+            "year": 1943
+          }
         ]
+      },
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "creativeWork": true,
+        "label": {
+          "value": "The Little Prince",
+          "language": "en"
+        },
+        "cover": {
+          "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0101",
+          "width": 640,
+          "height": 960,
+          "placeholder": {
+            "thumbhash": "",
+            "color": "#3b4a6b"
+          },
+          "variants": [
+            {
+              "format": "webp",
+              "width": 320
+            }
+          ],
+          "focalPoint": null,
+          "credit": null
+        }
       }
     }
   ],
-  "total": { "value": 1, "relation": "exact" },
+  "total": {
+    "value": 1,
+    "relation": "exact"
+  },
   "next": null,
   "as_of": "2026-10-26T18:21:56.818Z",
   "status": 200,

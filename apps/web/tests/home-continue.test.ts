@@ -412,7 +412,7 @@ afterAll(async () => {
 });
 
 test(
-  'a signed-in visitor with subjects in progress sees them on the home page, most recently updated first, each linking to its subject and its progress',
+  'a signed-in visitor with subjects in progress sees them on the home page, most recently updated first, each card linking to its progress',
   async () => {
     const cookie = await alice();
     for (const locale of locales) {
@@ -425,15 +425,14 @@ test(
       // The row sits after the search box, and holds only entries in progress, newest first.
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
-      const subjects = [...(row ?? '').matchAll(new RegExp(`href="/${locale}/subjects/([^"]+)"`, 'g'))].map(
-        (m) => m[1],
-      );
+      const subjects = [
+        ...(row ?? '').matchAll(new RegExp(`href="/${locale}/library/progress\\?subjectId=([^"]+)"`, 'g')),
+      ].map((m) => m[1]);
       expect(subjects).toEqual([id(23), id(25), id(21)]);
+      // Each card is one link; the card holds no second link to the subject.
       const hrefs = linksIn(row ?? '').map((link) => link.href);
-      for (const n of [23, 25, 21]) {
-        expect(hrefs).toContain(`/${locale}/subjects/${id(n)}`);
-        expect(hrefs).toContain(`/${locale}/library/progress?subjectId=${id(n)}`);
-      }
+      expect(hrefs).toHaveLength(3);
+      for (const n of [23, 25, 21]) expect(hrefs).toContain(`/${locale}/library/progress?subjectId=${id(n)}`);
       expect(row).toContain('Newest read');
       expect(row).not.toContain('Only planned');
       expect(row).not.toContain('Already finished');
@@ -449,7 +448,7 @@ test(
     }
     reset(crowded());
     const crowd = personal((await readPage('/en', cookie)).html) ?? '';
-    expect([...crowd.matchAll(/href="\/en\/subjects\//g)]).toHaveLength(6);
+    expect([...crowd.matchAll(/href="\/en\/library\/progress\?subjectId=/g)]).toHaveLength(6);
     expect(crowd).toContain('Crowded 9');
     expect(crowd).not.toContain('Crowded 3<');
   },

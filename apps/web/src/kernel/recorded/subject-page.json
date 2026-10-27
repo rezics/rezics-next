@@ -1,6 +1,6 @@
 {
   "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
-  "profile": "sha256:88921cc5e997e26013530d390f177bc1578f9fa06f5d81b895cdda09f67a73ea",
+  "profile": "sha256:b9a457a7cd6195a54db485961e8645d47f85e49c58531280f2e8cf00d6ccb184",
   "template": { "scope": "base", "key": "schema:CreativeWork" },
   "document": {
     "root": { "props": {} },

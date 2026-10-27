@@ -244,7 +244,7 @@ const cases = [
     type: 'book',
     description: 'A student meets a reclusive teacher. <em>Not markup</em>',
     other: 'A picture book about courage.',
-    facts: 'Natsume Soseki · Second Author · Third Author · 1914',
+    facts: 'Natsume Soseki · Second Author · Third Author',
   },
   {
     locale: 'ja',
@@ -254,7 +254,7 @@ const cases = [
     type: '本',
     description: '学生が隠遁する先生と出会う小説。',
     other: '勇気についての絵本。',
-    facts: '夏目漱石 · 第二著者 · 第三著者 · 1914',
+    facts: '夏目漱石 · 第二著者 · 第三著者',
   },
 ];
 
@@ -299,8 +299,9 @@ test(
           properties: [author, published],
         });
         const first = row(page, spec.title, 0);
-        // Three values of the author, then the year; the fourth author and the unadmitted properties never show.
+        // Three values of the author; the year sits beside the type, and the fourth author never shows.
         expect(await text(first)).toContain(spec.facts);
+        expect(await first.locator('[data-slot="year"]').innerText()).toBe('1914');
         expect(await text(first)).not.toContain('Fourth');
         const facts = first.getByText(spec.facts, { exact: true });
         expect(await facts.count()).toBe(1);
@@ -318,7 +319,7 @@ test(
 );
 
 test(
-  'an unfiltered search asks for no facts and still shows type names and descriptions',
+  'an unfiltered search asks only for the years and still shows type names and descriptions',
   async () => {
     for (const spec of cases) {
       const before = calls.length;
@@ -328,12 +329,12 @@ test(
         const body = searches(before)[0]!.body!;
         expect(body.descriptions).toBe(true);
         expect(body.languages).toEqual(spec.languages);
-        expect(body.properties).toBeUndefined();
+        expect(body.properties).toEqual([published]);
         const first = row(page, spec.title, 0);
         expect(await text(first)).toContain(spec.type);
         expect(await text(first)).toContain(spec.description);
         expect(await text(first)).not.toContain('Natsume');
-        expect(await text(first)).not.toContain('1914');
+        expect(await first.locator('[data-slot="year"]').innerText()).toBe('1914');
       } finally {
         await page.context().close();
       }
@@ -364,7 +365,7 @@ test(
           expect(secondPage!.languages).toEqual(firstPage!.languages);
           expect(secondPage!.languages).toEqual(spec.languages);
           expect(secondPage!.properties).toEqual(firstPage!.properties);
-          expect(secondPage!.properties).toEqual(filtered ? [author, published] : undefined);
+          expect(secondPage!.properties).toEqual(filtered ? [author, published] : [published]);
         } finally {
           await page.context().close();
         }
@@ -383,7 +384,8 @@ test(
         const page = await open(`/${spec.locale}/search?q=Untold${type}`);
         try {
           const title = spec.language === 'en' ? 'Untold book' : '語られない本';
-          expect(await text(row(page, title))).toBe(`${title} ${spec.type}`);
+          // The cover's placeholder repeats the title as its picture; the text beside it is the title and the type.
+          expect(await text(row(page, title).locator('[data-slot="item-content"]'))).toBe(`${title} ${spec.type}`);
         } finally {
           await page.context().close();
         }

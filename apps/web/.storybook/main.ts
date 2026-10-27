@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
   stories: ['../src/stories/**/*.stories.tsx'],
+  // Generated abstract covers (CC0) behind the media route the recorded cover summaries point at.
+  staticDirs: [{ from: './media', to: '/media' }],
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
   core: { disableTelemetry: true },
   // Generated cover images for the recorded summaries, served where the site's media route would be.

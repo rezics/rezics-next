@@ -1,4 +1,4 @@
-import { localeChain, pickText } from '@rezics/composition';
+import { localeChain } from '@rezics/composition';
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
@@ -11,19 +11,26 @@ import {
   ComboboxList,
   useListCollection,
 } from '@rezics/ui/combobox';
+import { Cover, sharedRatio } from '@rezics/ui/cover';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
+import { FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Label } from '@rezics/ui/shadcn/label';
+import { Separator } from '@rezics/ui/shadcn/separator';
+import { cn } from '@rezics/ui/utils';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
+import { coverSrc } from '../media/cover-src';
+import { coverOf, coverSubject } from '../media/summary';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
-
-type Fact =
-  | { kind: 'item'; id: string; labels: Record<string, string> }
-  | { kind: 'time'; year: number }
-  | { kind: 'quantity'; amount: number; unit: string }
-  | { kind: 'code'; value: string };
+import { hitYear, localizedLabel, ResultList, SubjectMeta, type Fact, type ResultHit } from './results.tsx';
+import type { SuggestionResult } from './suggestions.ts';
 type SearchBody = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   descriptions?: boolean;
   languages?: string[];
@@ -34,9 +41,9 @@ type SearchResult = Omit<SearchData, 'subjects'> & {
   subjects: (SearchData['subjects'][number] & {
     descriptions?: Record<string, string>;
     facts?: Record<string, Fact[]>;
-  })[];
+  } & Pick<ResultHit, 'summary'>)[];
 };
-type SuggestResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
+type FacetBody = Parameters<KernelClient['subjects']['$facets']['post']>[0] & { languages?: string[] };
 type FacetResult = {
   facets: {
     property: string;
@@ -58,7 +65,9 @@ type SearchPageData = {
   type?: string;
   typeLabels?: Record<string, string>;
   hitTypes: Record<string, Record<string, string>>;
-  typeChoices: { id: string; labels: Record<string, string> }[];
+  /** The properties whose time values give a hit its year, in the order the search asked for them. */
+  yearProperties: string[];
+  typeChoices: { id: string; labels: Record<string, string>; count?: number }[];
   groups: {
     property: string;
     labels: Record<string, string>;
@@ -70,8 +79,8 @@ type SearchPageData = {
 };
 /** At most this many facet properties are asked for on a single-type search. */
 const FACT_PROPERTIES = 2;
-/** At most this many values of one property are shown on a result. */
-const FACT_VALUES = 3;
+/** At most this many time properties are asked for to give hits their year. */
+const YEAR_PROPERTIES = 4;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -91,6 +100,23 @@ function factProperties(release: Release, type: string): string[] {
       return definition.datatype === 'string' && !!definition.value?.pattern;
     })
     .slice(0, FACT_PROPERTIES);
+}
+
+/**
+ * Time properties that give a hit its year: the type's own first one, or on a search across types the first of
+ * every returnable type, so each result can show a year without more than four properties in the request.
+ */
+function yearProperties(release: Release, type?: string): string[] {
+  const candidates = type
+    ? facetProperties(release, [type])
+    : Object.keys(release.types).flatMap((id) => facetProperties(release, [id]));
+  const found = new Set<string>();
+  for (const property of candidates) {
+    if (found.size >= (type ? 1 : YEAR_PROPERTIES)) break;
+    const definition = Object.hasOwn(release.properties, property) ? release.properties[property] : undefined;
+    if (definition?.datatype === 'time') found.add(property);
+  }
+  return [...found];
 }
 
 function selectedFilters(
@@ -171,7 +197,8 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const filter = selected?.filter;
     const hasSearch = data.query.length > 0 || type !== undefined;
     const languages = localeChain(data.locale);
-    const properties = release && type ? factProperties(release, type) : [];
+    const years = release ? yearProperties(release, type) : [];
+    const properties = release ? [...new Set([...(type ? factProperties(release, type) : []), ...years])] : [];
     const searchPromise: Promise<SearchResult | undefined> = hasSearch
       ? (async () => {
           const body: SearchBody = {
@@ -190,14 +217,16 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       : Promise.resolve(undefined);
 
     const facetPropertiesForType = release && type ? facetProperties(release, [type]).slice(0, 8) : [];
+    const facetBody: FacetBody = {
+      ...(data.query ? { text: data.query } : {}),
+      ...(filter ? { filter } : {}),
+      languages,
+      facets: facetPropertiesForType.map((property) => ({ property, size: 10 })),
+    };
     const facetsPromise: Promise<FacetResult | null | undefined> =
       release && type && facetPropertiesForType.length > 0
         ? kernelClient(data.locale)
-            .subjects.$facets.post({
-              ...(data.query ? { text: data.query } : {}),
-              ...(filter ? { filter } : {}),
-              facets: facetPropertiesForType.map((property) => ({ property, size: 10 })),
-            })
+            .subjects.$facets.post(facetBody)
             .then((response) => {
               if (response.error) return null;
               return response.data as FacetResult;
@@ -205,7 +234,34 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             .catch(() => null)
         : Promise.resolve(undefined);
 
-    const [result, facetResult] = await Promise.all([searchPromise, facetsPromise]);
+    const typeChoices = release
+      ? Object.entries(release.types)
+          .filter(
+            ([, definition]) =>
+              isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
+          )
+          .map(([id, definition]) => ({ id, labels: definition.labels ?? {} }))
+      : [];
+    const typeBody: FacetBody = { text: data.query, languages, facets: [{ property: 'type', size: 20 }] };
+    // The count of each type among the matches, when the facets read has one; without it the types are listed by name.
+    const typeCountsPromise: Promise<Map<string, number>> =
+      release && !type && data.query && typeChoices.length > 0
+        ? kernelClient(data.locale)
+            .subjects.$facets.post(typeBody)
+            .then(
+              (response) =>
+                new Map(
+                  response.error
+                    ? []
+                    : ((response.data as FacetResult).facets
+                        .find((facet) => facet.property === 'type')
+                        ?.values.map((entry): [string, number] => [entry.value, entry.count]) ?? []),
+                ),
+            )
+            .catch(() => new Map<string, number>())
+        : Promise.resolve(new Map<string, number>());
+
+    const [result, facetResult, typeCounts] = await Promise.all([searchPromise, facetsPromise, typeCountsPromise]);
     const facetsAvailable = !release || !type || facetResult !== null;
     const valuesByProperty = new Map((facetResult?.facets ?? []).map((facet) => [facet.property, facet.values]));
     const groups =
@@ -220,21 +276,27 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     if (release)
       for (const subject of result?.subjects ?? [])
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
-    const typeChoices = release
-      ? Object.entries(release.types)
-          .filter(
-            ([, definition]) =>
-              isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
-          )
-          .map(([id, definition]) => ({ id, labels: definition.labels ?? {} }))
-      : [];
+    // One entry per type term, never merged by name: the most matches first, then by name in the reader's language.
+    const collator = new Intl.Collator(data.locale);
+    const orderedTypes = typeChoices
+      .map((choice) => ({ ...choice, ...(typeCounts.has(choice.id) ? { count: typeCounts.get(choice.id)! } : {}) }))
+      .sort(
+        (left, right) =>
+          (right.count ?? 0) - (left.count ?? 0) ||
+          collator.compare(
+            localizedLabel(left.labels, data.locale).text || left.id,
+            localizedLabel(right.labels, data.locale).text || right.id,
+          ) ||
+          (left.id < right.id ? -1 : 1),
+      );
 
     return {
       ...(result ? { result } : {}),
       ...(type ? { type } : {}),
       ...(type && release ? { typeLabels: release.types[type]?.labels ?? {} } : {}),
       hitTypes,
-      typeChoices,
+      yearProperties: years,
+      typeChoices: orderedTypes,
       groups,
       selectedFacets: selected?.selected ?? {},
       selectedFacetLabels: Object.fromEntries(
@@ -246,21 +308,6 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       facetsAvailable: release !== undefined && facetsAvailable,
     };
   });
-
-/** The same chain the subject page uses: the page locale, its language, sibling scripts, then English. */
-function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
-  const picked = pickText(labels, locale);
-  return { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) };
-}
-
-/** The shown form of one fact value; an item without a label in the asked languages has nothing to show. */
-function factText(fact: Fact, locale: string): { text: string; lang?: string } {
-  if (fact.kind === 'item') return localizedLabel(fact.labels, locale);
-  if (fact.kind === 'time') return { text: String(fact.year) };
-  if (fact.kind === 'quantity')
-    return { text: `${new Intl.NumberFormat(locale).format(fact.amount)}${fact.unit ? ` ${fact.unit}` : ''}` };
-  return { text: fact.value };
-}
 
 function searchHref(
   locale: string,
@@ -279,6 +326,8 @@ function searchHref(
   return `/${locale}/search${search ? `?${search}` : ''}`;
 }
 
+const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
+
 export function SearchPage({ query, cursor, data }: { query: string; cursor?: string; data?: SearchPageData }) {
   const [formQuery, setFormQuery] = useState(query);
   const [hydrated, setHydrated] = useState(false);
@@ -286,6 +335,7 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
   const type = data?.type;
   const result = data?.result;
   const selectedFacets = data?.selectedFacets ?? {};
+  const number = new Intl.NumberFormat(locale);
   const activeFilterCount =
     (type ? 1 : 0) + Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0);
   useEffect(() => setHydrated(true), []);
@@ -295,133 +345,157 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
   const hasFilterPanel = Boolean(data?.facetsAvailable && (data.typeChoices.length > 0 || type));
+  const results = renderResults(query, cursor, result, locale, type, selectedFacets, data);
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
       <form method="get" action={`/${locale}/search`} className="space-y-5">
         <div className="flex gap-2">
-          <label className="sr-only" htmlFor="search-query">
+          <Label className="sr-only" htmlFor="search-query">
             {m.search_label()}
-          </label>
-          <input
+          </Label>
+          <Input
             id="search-query"
             name="q"
             value={formQuery}
             onChange={(event) => setFormQuery(event.target.value)}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3"
+            className="h-10 min-w-0 flex-1"
           />
-          <button className="rounded-xl bg-primary px-4 text-primary-foreground">{m.search_submit()}</button>
+          <Button type="submit" size="lg" className="h-10 px-4">
+            {m.search_submit()}
+          </Button>
         </div>
         {type && <input type="hidden" name="type" value={type} />}
         {hasFilterPanel ? (
           <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <details open className="rounded-xl border border-border/60 p-4 lg:col-start-1 lg:row-start-1">
-              <summary className="cursor-pointer font-medium lg:hidden">
-                {m.search_filters()} ({new Intl.NumberFormat(locale).format(activeFilterCount)})
-              </summary>
-              <div className="space-y-5 pt-3 lg:pt-0">
-                {type ? (
-                  <section className="space-y-3">
-                    <h2 className="font-medium">
-                      {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
-                    </h2>
-                    <a className="text-sm underline" href={searchHref(locale, query, undefined, {})}>
-                      {m.search_clear_type()}
-                    </a>
-                    {Object.entries(selectedFacets).length > 0 && (
-                      <ul className="space-y-2 border-t border-border/60 pt-3">
-                        {Object.entries(selectedFacets).map(([property, values]) => {
-                          const label = localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale);
-                          return (
-                            <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
-                              <span lang={label.lang}>{label.text || property}</span>
-                              <a
-                                className="underline"
-                                href={searchHref(
-                                  locale,
-                                  query,
-                                  type,
-                                  Object.fromEntries(
-                                    Object.entries(selectedFacets).filter(
-                                      ([selectedProperty]) => selectedProperty !== property,
-                                    ),
-                                  ),
-                                )}
-                              >
-                                {m.search_clear_facet()} ({new Intl.NumberFormat(locale).format(values.length)})
-                              </a>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {data?.groups.map((group) => {
-                      const propertyLabel = localizedLabel(group.labels, locale);
-                      const selected = selectedFacets[group.property] ?? [];
-                      return (
-                        <fieldset key={group.property} className="space-y-2 border-t border-border/60 pt-3">
-                          <legend className="font-medium" lang={propertyLabel.lang}>
-                            {propertyLabel.text || group.property}
-                          </legend>
+            <Collapsible defaultOpen className="rounded-xl border border-border/60 p-4 lg:col-start-1 lg:row-start-1">
+              <CollapsibleTrigger
+                className={`${buttonVariants({ variant: 'ghost' })} w-full justify-between font-medium lg:hidden`}
+              >
+                {m.search_filters()} ({number.format(activeFilterCount)})
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-5 pt-3 lg:pt-0">
+                  {type ? (
+                    <section className="space-y-3">
+                      <h2 className="font-medium">
+                        {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
+                      </h2>
+                      <a className={linkClass} href={searchHref(locale, query, undefined, {})}>
+                        {m.search_clear_type()}
+                      </a>
+                      {Object.entries(selectedFacets).length > 0 && (
+                        <>
+                          <Separator />
                           <ul className="space-y-2">
-                            {group.values.map((entry) => {
-                              const valueLabel = localizedLabel(entry.labels, locale);
-                              const id = `facet-${encodeURIComponent(group.property)}-${encodeURIComponent(entry.value)}`;
+                            {Object.entries(selectedFacets).map(([property, values]) => {
+                              const label = localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale);
                               return (
-                                <li key={entry.value}>
-                                  <label className="flex items-start gap-2 text-sm" htmlFor={id} lang={valueLabel.lang}>
-                                    <input
-                                      id={id}
-                                      type="checkbox"
-                                      name={`f.${group.property}`}
-                                      value={entry.value}
-                                      defaultChecked={selected.includes(entry.value)}
-                                      onChange={(event) => {
-                                        if (hydrated) event.currentTarget.form?.requestSubmit();
-                                      }}
-                                    />
-                                    <span>
-                                      {valueLabel.text || entry.value} (
-                                      {new Intl.NumberFormat(locale).format(entry.count)})
-                                    </span>
-                                  </label>
+                                <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
+                                  <span lang={label.lang}>{label.text || property}</span>
+                                  <a
+                                    className={linkClass}
+                                    href={searchHref(
+                                      locale,
+                                      query,
+                                      type,
+                                      Object.fromEntries(
+                                        Object.entries(selectedFacets).filter(
+                                          ([selectedProperty]) => selectedProperty !== property,
+                                        ),
+                                      ),
+                                    )}
+                                  >
+                                    {m.search_clear_facet()} ({number.format(values.length)})
+                                  </a>
                                 </li>
                               );
                             })}
                           </ul>
-                        </fieldset>
-                      );
-                    })}
-                  </section>
-                ) : (
-                  <section className="space-y-3">
-                    <h2 className="font-medium">{m.search_types()}</h2>
-                    <ul className="space-y-2">
-                      {data?.typeChoices.map((choice) => {
-                        const label = localizedLabel(choice.labels, locale);
+                        </>
+                      )}
+                      {data?.groups.map((group) => {
+                        const propertyLabel = localizedLabel(group.labels, locale);
+                        const selected = selectedFacets[group.property] ?? [];
                         return (
-                          <li key={choice.id}>
-                            <a className="underline" href={searchHref(locale, query, choice.id, {})} lang={label.lang}>
-                              {label.text || choice.id}
-                            </a>
-                          </li>
+                          <div key={group.property} className="space-y-3">
+                            <Separator />
+                            <FieldSet className="gap-2">
+                              <FieldLegend variant="label" className="mb-0" lang={propertyLabel.lang}>
+                                {propertyLabel.text || group.property}
+                              </FieldLegend>
+                              <ul className="space-y-2">
+                                {group.values.map((entry) => {
+                                  const valueLabel = localizedLabel(entry.labels, locale);
+                                  const id = `facet-${encodeURIComponent(group.property)}-${encodeURIComponent(entry.value)}`;
+                                  return (
+                                    <li key={entry.value}>
+                                      <Label
+                                        className="items-start gap-2 text-sm font-normal"
+                                        htmlFor={id}
+                                        lang={valueLabel.lang}
+                                      >
+                                        <input
+                                          id={id}
+                                          type="checkbox"
+                                          name={`f.${group.property}`}
+                                          value={entry.value}
+                                          defaultChecked={selected.includes(entry.value)}
+                                          className="mt-0.5 size-4 shrink-0 accent-primary"
+                                          onChange={(event) => {
+                                            if (hydrated) event.currentTarget.form?.requestSubmit();
+                                          }}
+                                        />
+                                        <span>
+                                          {valueLabel.text || entry.value} ({number.format(entry.count)})
+                                        </span>
+                                      </Label>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </FieldSet>
+                          </div>
                         );
                       })}
-                    </ul>
-                  </section>
-                )}
-                <button type="submit" hidden={hydrated} className="rounded-lg border border-border px-3 py-2 text-sm">
-                  {m.search_apply()}
-                </button>
-              </div>
-            </details>
-            <div className="space-y-4 lg:col-start-2 lg:row-start-1">
-              {renderResults(query, cursor, result, locale, type, selectedFacets, data?.hitTypes ?? {})}
-            </div>
+                    </section>
+                  ) : (
+                    <section className="space-y-3">
+                      <h2 className="font-medium">{m.search_types()}</h2>
+                      <ul className="space-y-2">
+                        {data?.typeChoices.map((choice) => {
+                          const label = localizedLabel(choice.labels, locale);
+                          return (
+                            <li key={choice.id} className="flex items-baseline gap-2">
+                              <a
+                                className={linkClass}
+                                href={searchHref(locale, query, choice.id, {})}
+                                lang={label.lang}
+                              >
+                                {label.text || choice.id}
+                              </a>
+                              {choice.count !== undefined && (
+                                <span className="text-sm text-muted-foreground tabular-nums">
+                                  ({number.format(choice.count)})
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </section>
+                  )}
+                  <Button type="submit" variant="outline" hidden={hydrated}>
+                    {m.search_apply()}
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            <div className="space-y-4 lg:col-start-2 lg:row-start-1">{results}</div>
           </div>
         ) : (
-          renderResults(query, cursor, result, locale, type, selectedFacets, data?.hitTypes ?? {})
+          results
         )}
       </form>
     </section>
@@ -435,67 +509,30 @@ function renderResults(
   locale: string,
   type: string | undefined,
   selectedFacets: Record<string, string[]>,
-  hitTypes: Record<string, Record<string, string>>,
+  data: SearchPageData | undefined,
 ) {
   if (!result) return null;
-  if (result.subjects.length === 0) return <p>{m.search_no_results()}</p>;
+  if (result.subjects.length === 0)
+    return (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyTitle className="text-base font-normal">{m.search_no_results()}</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    );
   return (
     <>
       <p className="text-sm text-muted-foreground">{m.search_results()}</p>
-      <ul className="divide-y divide-border/60 rounded-xl border border-border/60">
-        {result.subjects.map((subject) => {
-          const label = localizedLabel(subject.labels, locale);
-          const typeName = localizedLabel(
-            Object.hasOwn(hitTypes, subject.type) ? (hitTypes[subject.type] ?? {}) : {},
-            locale,
-          );
-          const description = localizedLabel(subject.descriptions ?? {}, locale);
-          const facts = Object.values(subject.facts ?? {}).flatMap((values) =>
-            values
-              .slice(0, FACT_VALUES)
-              .map((value) => factText(value, locale))
-              .filter((value) => value.text),
-          );
-          return (
-            <li key={subject.id} className="space-y-1 px-4 py-3">
-              <div className="flex flex-wrap items-baseline gap-x-2">
-                <Link
-                  to="/subjects/$id"
-                  params={{ id: subject.id }}
-                  lang={label.lang}
-                  className="font-medium underline-offset-4 hover:underline"
-                >
-                  {label.text}
-                </Link>
-                {typeName.text && (
-                  <span className="text-xs text-muted-foreground" lang={typeName.lang}>
-                    {typeName.text}
-                  </span>
-                )}
-              </div>
-              {facts.length > 0 && (
-                <p className="text-sm">
-                  {facts.map((fact, index) => (
-                    <span key={index}>
-                      {index > 0 && ' · '}
-                      <span lang={fact.lang}>{fact.text}</span>
-                    </span>
-                  ))}
-                </p>
-              )}
-              {description.text && (
-                <p className="line-clamp-2 text-sm text-muted-foreground" lang={description.lang}>
-                  {description.text}
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <ResultList
+        hits={result.subjects}
+        locale={locale}
+        hitTypes={data?.hitTypes ?? {}}
+        yearProperties={data?.yearProperties ?? []}
+      />
       {result.next && (
         <a
           href={searchHref(locale, query, type, selectedFacets, result.next)}
-          className="inline-flex rounded-lg border px-3 py-2"
+          className={buttonVariants({ variant: 'outline' })}
         >
           {m.search_more()}
         </a>
@@ -511,16 +548,19 @@ function readSearch({ data }: { data: Omit<SearchParams, 'locale'> }): Promise<S
 
 export { readSearch };
 
+type SuggestionItem = { value: string; label: string; suggestion: SuggestionResult['subjects'][number] };
+
 export function ShellSearch() {
   const locale = getLocale();
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState('');
-  const collectionState = useListCollection({
-    initialItems: [] as { value: string; label: string; subject: SuggestResult['subjects'][number] }[],
-  });
+  const [types, setTypes] = useState<SuggestionResult['types']>({});
+  const [failed, setFailed] = useState(false);
+  const collectionState = useListCollection({ initialItems: [] as SuggestionItem[] });
   const collection = collectionState.collection;
   useEffect(() => {
     const value = inputValue.trim();
+    setFailed(false);
     if (!value) {
       collectionState.clear();
       return;
@@ -534,17 +574,25 @@ export function ShellSearch() {
             signal: controller.signal,
           },
         );
-        if (!response.ok) return;
-        const result = (await response.json()) as SuggestResult;
+        if (!response.ok) {
+          collectionState.clear();
+          setFailed(true);
+          return;
+        }
+        const result = (await response.json()) as SuggestionResult;
+        setTypes(result.types ?? {});
         collectionState.set(
-          result.subjects.map((subject) => ({
-            value: subject.id,
-            label: localizedLabel(subject.labels, locale).text,
-            subject,
+          result.subjects.map((suggestion) => ({
+            value: suggestion.id,
+            label: localizedLabel(suggestion.labels, locale).text,
+            suggestion,
           })),
         );
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) collectionState.clear();
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          collectionState.clear();
+          setFailed(true);
+        }
       }
     }, 200);
     return () => {
@@ -559,6 +607,10 @@ export function ShellSearch() {
         search: { q: inputValue.trim(), type: undefined, facetValues: {}, cursor: undefined },
       });
   };
+  // One frame for the list, so covers of mixed types line up.
+  const ratio = sharedRatio(
+    collection.items.map(({ suggestion }) => coverSubject(suggestion.id, '', suggestion.summary, suggestion.type)),
+  );
   return (
     <Combobox
       collection={collection}
@@ -581,13 +633,36 @@ export function ShellSearch() {
         showTrigger={false}
       />
       <ComboboxContent>
-        <ComboboxEmpty>{m.search_no_suggestions()}</ComboboxEmpty>
+        <ComboboxEmpty>{failed ? m.search_suggestions_failed() : m.search_no_suggestions()}</ComboboxEmpty>
         <ComboboxList>
-          {collection.items.map((item) => (
-            <ComboboxItem item={item} key={item.value}>
-              {item.label}
-            </ComboboxItem>
-          ))}
+          {collection.items.map((item) => {
+            const { suggestion } = item;
+            const typeName = localizedLabel(
+              Object.hasOwn(types, suggestion.type) ? (types[suggestion.type] ?? {}) : {},
+              locale,
+            );
+            return (
+              <ComboboxItem item={item} key={item.value} className="h-auto items-start gap-3 py-2">
+                <Cover
+                  subject={coverSubject(suggestion.id, item.label, suggestion.summary, suggestion.type)}
+                  cover={coverOf(suggestion.summary)}
+                  size="xs"
+                  ratio={ratio}
+                  src={coverSrc}
+                  decorative
+                />
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-medium">{item.label}</span>
+                  <SubjectMeta
+                    type={typeName}
+                    year={hitYear(suggestion.facts)}
+                    locale={locale}
+                    className="text-xs text-muted-foreground"
+                  />
+                </span>
+              </ComboboxItem>
+            );
+          })}
         </ComboboxList>
       </ComboboxContent>
     </Combobox>
