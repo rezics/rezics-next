@@ -288,7 +288,7 @@ export async function rerunLoadFailures<T>(
   return rerunGrowthFailures(
     outcomes,
     rerun,
-    (outcome) => classify(outcome)?.map((failure) => ({ ...failure, kind: 'load' })),
+    (outcome) => classify(outcome)?.map((failure) => ({ ...failure, kind: 'load' })) ?? null,
     write,
   );
 }
