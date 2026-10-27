@@ -116,8 +116,9 @@ test(
   "the search story shows each result's type name and description",
   async () => {
     const { subject: recorded } = await subject();
-    const typeName = release.types[recorded.type]?.labels.en;
-    expect(typeName, 'the recorded release names the recorded subject type').toBeTruthy();
+    const rawTypeName = release.types[recorded.type]?.labels.en;
+    expect(rawTypeName, 'the recorded release names the recorded subject type').toBeTruthy();
+    const typeName = `${rawTypeName![0]!.toLocaleUpperCase('en')}${rawTypeName!.slice(1)}`;
     expect(recorded.descriptions.en, 'the recorded subject has an English description').toBeTruthy();
     for (const visitor of ['Signed In', 'Signed Out']) {
       const page = await openStory('search', visitor, 'en');
