@@ -163,11 +163,14 @@ test('a worker that writes nothing within the start window is stopped and retrie
 
 test('the host starts a ready task whose dispatching process is gone, once', async () => {
   const h = harness(), inbox: ManagerEvent[] = [];
-  h.settings.startGraceMs = 10;
+  // A start window long enough for the fixture worker to write, even on a loaded host.
+  h.settings.startGraceMs = 5_000;
   try {
-    // Dispatched, but the command that would start it ended before it could.
+    // Dispatched, but the command that would start it ended before it could: created well before the window.
     const task = h.tasks.dispatch(h.briefFile);
-    await new Promise(resolve => setTimeout(resolve, 50));
+    h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
+      current.createdAt = new Date(Date.now() - 60_000).toISOString();
+    });
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
     await job.recoverOrphans({ adoptRunning: true }); await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(1);
