@@ -1891,7 +1891,9 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             };
             if (operation === 'reference') {
               const key = requestKey();
-              const referenceId = externalIds[changedRowCounts.indexOf(changedRows)]!;
+              const referenceId = externalIds[changedRowCounts.indexOf(changedRows)];
+              if (referenceId === undefined)
+                throw new Error('Growth reference fixture lacks its anchored source identifier');
               const reply = await this.refresh('importer', growthField(source, referenceId), key);
               if (reply.status < 200 || reply.status >= 300)
                 throw new Error(`Growth reference anchor failed (${reply.status}): ${JSON.stringify(reply.body)}`);
@@ -1913,8 +1915,8 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           if (group.operation === 'reference') {
             const referenceIndex = changedRowCounts.indexOf(group.changedRows);
             const externalId = group.externalIds[referenceIndex];
-            if (!externalId) throw new Error('Growth reference run lacks its exact seeded document');
-            return Array.from({ length: group.changedRows }, () => externalId!);
+            if (externalId === undefined) throw new Error('Growth reference run lacks its exact seeded document');
+            return Array.from({ length: group.changedRows }, () => externalId);
           }
           let start = 2;
           for (const prior of groups) {
@@ -1925,9 +1927,13 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           if (group.operation === 'hook')
             start += scaleIndex * group.changedRows * 4 + (repetition % 4) * group.changedRows;
           else start += scaleIndex * group.changedRows;
-          const ids = Array.from({ length: group.changedRows }, (_, index) => group.externalIds[start + index]);
-          if (ids.some((id) => id === undefined))
-            throw new Error('Growth operation identifiers exceeded their anchors');
+          const ids: string[] = [];
+          for (let offset = 0; offset < group.changedRows; offset++) {
+            const externalId = group.externalIds[start + offset];
+            if (externalId === undefined)
+              throw new Error(`Growth ${group.operation} fixture identifier ${start + offset} is missing`);
+            ids.push(externalId);
+          }
           return ids;
         };
         const waitForImports = async (ids: readonly string[]) => {
@@ -2253,7 +2259,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
               const measuredRepetition = repetition + 1;
               const additionalGroups = groups.slice(1);
               const hookCommands = runIds(groups[0]!, scale, warmupRepetition).map((externalId) => {
-                const field = growthField(groups[0]!.source, externalId!);
+                const field = growthField(groups[0]!.source, externalId);
                 return {
                   op: 'propose',
                   key: requestKey(),
