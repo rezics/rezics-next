@@ -40,6 +40,7 @@ type CaptureState = {
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
 const clientAttribution = new WeakMap<PoolClient, Attribution>();
+const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
   return typeof value === 'object' && value !== null && 'capture' in value && 'background' in value;
@@ -49,8 +50,11 @@ function currentAttribution(state: CaptureState): Attribution | undefined {
   for (let current = growing.getStore(); isAttribution(current); current = current.parent)
     if (current.capture === state.active) return current;
   // DBOS executes queued workflows in its runner's async context, after the initiating operation has returned
-  // control to the queue. The SDK singleton is shared by kernel and auth workspaces in this test process.
-  if (state.active && DBOS.workflowID !== undefined) return { capture: state.active, background: false };
+  // control to the queue. Scheduled workflow IDs use `sched-${scheduleName}-${date.toISOString()}`; `startWorkflow`
+  // derives child IDs by appending their function ID, so the same format identifies every scheduled descendant.
+  // The SDK singleton is shared by kernel and auth workspaces in this test process.
+  if (state.active && DBOS.workflowID !== undefined)
+    return { capture: state.active, background: scheduledWorkflowID.test(DBOS.workflowID) };
   return undefined;
 }
 

@@ -260,7 +260,8 @@ Catalog-only statements are counted apart, with at most one allowed per distinct
 statement that also reads data counts in full.
 
 Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
-capture runs; loops started outside both are reported as background work. Background statement counts follow measured
+capture runs; workflows started by a schedule and their children, and loops started outside both, are reported as
+background work. Background statement counts follow measured
 wall time, while rows and blocks per background statement must stay within the default constant-cost slack as data
 grows when the statement reads an application relation. Statements reading only DBOS system relations remain
 reported, but their row and block growth is not bounded because `grow` does not seed DBOS history; that history's
