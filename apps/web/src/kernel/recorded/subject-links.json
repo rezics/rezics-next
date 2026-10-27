@@ -54,7 +54,14 @@
       "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0111",
       "type": "schema:Book",
       "label": "Letters to the Rose",
-      "summary": null,
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0011",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Letters to the Rose", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      },
       "date": "2015"
     },
     {
@@ -110,7 +117,14 @@
       "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0121",
       "type": "schema:Book",
       "label": "Little Prince, an Opera",
-      "summary": null,
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0021",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Little Prince, an Opera", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      },
       "date": "2008"
     },
     {
