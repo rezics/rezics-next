@@ -19,6 +19,7 @@ import {
   type CatalogClassification,
   type Cost,
 } from './growth-cost.ts';
+import { classifySeries, type SeriesClassification } from './growth-model.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
@@ -31,7 +32,10 @@ export function measure<T>(db: GrowthDatabase, operation: () => Promise<T>): Pro
 
 export type GrowthCheck = {
   readonly name: string;
-  readonly scales?: readonly [number, number, number]; // default [1, 8, 64]
+  readonly scales?:
+    | readonly [number, number, number]
+    | readonly [number, number, number, number]
+    | readonly [number, number, number, number, number]; // default [1, 8, 64]
   readonly bounds: Readonly<Record<Metric, Bound>>;
   readonly slack?: Partial<Record<Metric, Slack>>;
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
@@ -74,17 +78,76 @@ export type GrowthReport = {
   readonly name: string;
   readonly bounds: Readonly<Record<Metric, Bound>>;
   readonly samples: readonly ReportSample[];
+  readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
 };
+
+export type ShadowVerdict = (
+  | SeriesClassification
+  | { readonly outcome: 'insufficient-evidence'; readonly error: string }
+) & { readonly uncertainties: readonly number[] };
+
+function shadowVerdict(samples: readonly ReportSample[], check: GrowthCheck, metric: Metric): ShadowVerdict {
+  const uncertainties: number[] = [];
+  try {
+    const slack = check.slack?.[metric] ?? DEFAULT_SLACK[metric];
+    const points = samples.map(({ scale, cost, repetitions }) => {
+      const uncertainty = Math.max(slack.absolute, slack.relative * cost[metric]);
+      uncertainties.push(uncertainty);
+      return { scale, repetitions: repetitions.map((value) => value[metric]), uncertainty };
+    });
+    return { ...classifySeries(points, check.bounds[metric]), uncertainties };
+  } catch (error) {
+    // Shadow diagnostics must not preempt any existing assertion, including validation of bounds and slack.
+    return {
+      outcome: 'insufficient-evidence',
+      uncertainties,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 let profileWarned = false;
 
 /** Appends one line per check to the file named by GROWTH_PROFILE; a failure warns once and never fails the check. */
-function appendProfile(name: string, scales: readonly number[], samples: readonly ReportSample[]): void {
+function appendProfile(report: GrowthReport): void {
   const path = process.env.GROWTH_PROFILE;
   if (!path) return;
   try {
     const file = relative(process.cwd(), Bun.main);
-    const line = JSON.stringify({ file, check: name, scales, seeding: samples.map(({ seeding }) => seeding) });
+    const { name, bounds, samples, shadow } = report;
+    const line = JSON.stringify({
+      file,
+      check: name,
+      scales: samples.map(({ scale }) => scale),
+      seeding: samples.map(({ seeding }) => seeding),
+      bounds,
+      repetitions: samples.map(({ repetitions }) =>
+        repetitions.map(({ rows, blocks, statements }) => ({ rows, blocks, statements })),
+      ),
+      relationSizes: samples.map(({ relationSizes }) => relationSizes),
+      shadow: Object.fromEntries(
+        Object.entries(shadow).map(([metric, verdict]) => [
+          metric,
+          {
+            ...verdict,
+            ...('families' in verdict
+              ? {
+                  families: Object.fromEntries(
+                    Object.entries(verdict.families).map(([family, { a, b, factor }]) => [
+                      family,
+                      {
+                        a,
+                        b,
+                        t: Number.isFinite(factor) ? factor : 'Infinity',
+                      },
+                    ]),
+                  ),
+                }
+              : {}),
+          },
+        ]),
+      ),
+    });
     appendFileSync(path, `${line}\n`);
   } catch (error) {
     if (profileWarned) return;
@@ -188,15 +251,19 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const scales = check.scales ?? [1, 8, 64];
   const repetitions = check.repetitions ?? 5;
   const warmups = check.warmups ?? 1;
-  if (scales.length !== 3) throw new TypeError('Growth checks require exactly three scales');
-  const [first, second, third] = scales;
+  if (scales.length < 3 || scales.length > 5) throw new TypeError('Growth checks require three to five scales');
+  const [first, second] = scales;
   const firstRatio = second / first;
-  const secondRatio = third / second;
   if (
-    scales.some((scale) => !Number.isFinite(scale) || scale <= 0 || scale > 4096) ||
-    !(first < second && second < third) ||
+    scales.some(
+      (scale, index) =>
+        !Number.isFinite(scale) || scale <= 0 || scale > 4096 || (index > 0 && scale <= scales[index - 1]!),
+    ) ||
     firstRatio < 4 ||
-    Math.abs(firstRatio - secondRatio) / Math.max(firstRatio, secondRatio) >= 1e-9
+    scales.slice(2).some((scale, index) => {
+      const ratio = scale / scales[index + 1]!;
+      return Math.abs(firstRatio - ratio) / Math.max(firstRatio, ratio) >= 1e-9;
+    })
   ) {
     throw new TypeError(
       'Growth scales must be positive, increasing and equally spaced by a ratio of at least four, with a largest scale no greater than 4096',
@@ -247,7 +314,13 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     previous = scale;
   }
 
-  appendProfile(check.name, scales, samples);
+  const shadow: GrowthReport['shadow'] = {
+    rows: shadowVerdict(samples, check, 'rows'),
+    blocks: shadowVerdict(samples, check, 'blocks'),
+    statements: shadowVerdict(samples, check, 'statements'),
+  };
+  const report: GrowthReport = { name: check.name, bounds: check.bounds, samples, shadow };
+  appendProfile(report);
   assertBackgroundBound(check.name, samples);
   try {
     assertGrowth(samples, check.bounds, check.slack);
@@ -258,5 +331,5 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     throw error;
   }
 
-  return { name: check.name, bounds: check.bounds, samples };
+  return report;
 }

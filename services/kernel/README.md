@@ -252,7 +252,7 @@ shared blocks and statements, never time. Use `checkGrowth` from `test/support/g
 add rows between scales. Grow both the total data and hot partition, while keeping the operation's own neighbourhood
 fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
 `linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
-API from `test/support/growth.ts`. The largest scale in a check must not exceed 4096.
+API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not exceed 4096.
 
 Each measured session in the instrumented `pool` and `openPool` connections pins `max_parallel_workers_per_gather = 0`
 and `jit = off`, then sets `work_mem = 4MB`, `random_page_cost = 4`, `effective_cache_size = 4GB`,
@@ -279,6 +279,7 @@ Plans are collected only inside a capture: an instrumented connection runs auto_
 measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
 `grow` (every pool, `admin` included) with the time of `grow` and of the vacuum after it; when `GROWTH_PROFILE` names a
 file, `checkGrowth` appends one JSON line per check with the test file, check name, scales and each scale's `seeding`.
+The line also carries every repetition, relation sizes and a shadow whole-series verdict that does not yet decide the check.
 Each report sample also carries `repetitions`, the cost of every measured run in order, and `relationSizes`, the
 `reltuples` and `relpages` of every relation the measured plans read at that scale.
 `seed` skips its own vacuum inside `grow`, since `checkGrowth` vacuums right after.

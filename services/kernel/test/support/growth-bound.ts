@@ -43,22 +43,23 @@ export class GrowthBoundError extends Error {
 
 const METRICS: readonly Metric[] = ['rows', 'blocks', 'statements'];
 
-function validateSamples(
-  samples: readonly GrowthSample[],
-): asserts samples is readonly [GrowthSample, GrowthSample, GrowthSample] {
-  if (samples.length !== 3) throw new TypeError('Growth checks require exactly three samples');
-  const [first, second, third] = samples;
-  if (!first || !second || !third) throw new TypeError('Growth checks require exactly three samples');
-  const scales = [first.scale, second.scale, third.scale];
+function validateSamples(samples: readonly GrowthSample[]): void {
+  if (samples.length < 3 || samples.length > 5) throw new TypeError('Growth checks require three to five samples');
+  const scales = samples.map(({ scale }) => scale);
   if (
-    scales.some((scale) => !Number.isFinite(scale) || scale <= 0) ||
-    !(scales[0]! < scales[1]! && scales[1]! < scales[2]!)
+    scales.some((scale, index) => !Number.isFinite(scale) || scale <= 0 || (index > 0 && scale <= scales[index - 1]!))
   ) {
     throw new TypeError('Growth scales must be finite, positive and strictly increasing');
   }
+  if (scales.at(-1)! > 4096) throw new TypeError('The largest growth scale must be no greater than 4096');
   const firstRatio = scales[1]! / scales[0]!;
-  const secondRatio = scales[2]! / scales[1]!;
-  if (firstRatio < 4 || Math.abs(firstRatio - secondRatio) / Math.max(firstRatio, secondRatio) >= 1e-9) {
+  if (
+    firstRatio < 4 ||
+    scales.slice(2).some((scale, index) => {
+      const ratio = scale / scales[index + 1]!;
+      return Math.abs(firstRatio - ratio) / Math.max(firstRatio, ratio) >= 1e-9;
+    })
+  ) {
     throw new TypeError('Growth scales must have equal ratios of at least four');
   }
   for (const sample of samples) {
@@ -85,8 +86,6 @@ export function growthViolations(
   slack: Partial<Record<Metric, Slack>> = {},
 ): Violation[] {
   validateSamples(samples);
-  const scales = samples.map(({ scale }) => scale) as [number, number, number];
-  const ratio = scales[1] / scales[0];
   const violations: Violation[] = [];
   for (const metric of METRICS) {
     const bound = bounds[metric];
@@ -94,22 +93,27 @@ export function growthViolations(
       throw new TypeError(`Unknown growth bound for ${metric}`);
     const tolerance = slack[metric] ?? DEFAULT_SLACK[metric];
     validateSlack(tolerance, metric);
-    const values = samples.map(({ cost }) => cost[metric]) as [number, number, number];
-    const firstStep = values[1] - values[0];
-    const secondStep = values[2] - values[1];
-    const allowance = Math.max(tolerance.absolute, tolerance.relative * values[0]);
-    const observed = bound === 'constant' ? Math.max(values[1], values[2]) - values[0] : secondStep;
-    const allowed =
-      bound === 'constant'
-        ? allowance
-        : (bound === 'logarithmic' ? 2 : 1.5 * ratio) * Math.max(firstStep, 0) + allowance;
-    if (observed > allowed) violations.push({ metric, bound, scales, values, observed, allowed });
+    for (let index = 0; index < samples.length - 2; index++) {
+      const triple = samples.slice(index, index + 3);
+      const scales = triple.map(({ scale }) => scale) as [number, number, number];
+      const ratio = scales[1] / scales[0];
+      const values = triple.map(({ cost }) => cost[metric]) as [number, number, number];
+      const firstStep = values[1] - values[0];
+      const secondStep = values[2] - values[1];
+      const allowance = Math.max(tolerance.absolute, tolerance.relative * values[0]);
+      const observed = bound === 'constant' ? Math.max(values[1], values[2]) - values[0] : secondStep;
+      const allowed =
+        bound === 'constant'
+          ? allowance
+          : (bound === 'logarithmic' ? 2 : 1.5 * ratio) * Math.max(firstStep, 0) + allowance;
+      if (observed > allowed) violations.push({ metric, bound, scales, values, observed, allowed });
+    }
   }
   return violations;
 }
 
 function formatRelations(samples: readonly GrowthSample[]): string[] {
-  const relations = samples[2]?.cost.relations;
+  const relations = samples.at(-1)?.cost.relations;
   if (!relations) return [];
   const entries = Object.entries(relations);
   const rows = entries.toSorted((left, right) => right[1].rows - left[1].rows).slice(0, 5);
