@@ -713,3 +713,24 @@ The global context is inserted once by migration and has no runtime semantic rea
 `readSubjectSummaries` is the shared display projection. Callers provide the active release and a current reader authorization check; representative editions pass that same check. Its `languages` option receives the parsed ranges and its labels follow the shared label rule above. The selected label's actual language selects a representative edition among the first 12 rows in the outbound projection, falling back to an unqualified representative and then the first row. The projection range runs with sequential scans disabled; the batched summary query uses the normal planner. Preferred images win over normal images; deprecated, hidden and retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen image yields null rather than switching editions. Suitability policies may withhold a cover through `maySeeCover`, producing null without hiding the subject.
 
 Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.
+
+## Deletion and retention
+
+The [deletion contract](deletion-contract.md) audits first-public-scope records, native evidence, required routes,
+retention adapter and independent implementation briefs against [the deletion policy](../../../../docs/deletion.md).
+Communal subjects and immutable definition releases are not automatically private records owned by their creator.
+Contribution attribution and current community Context resource ownership must establish owner deletion authority.
+
+Implemented behavior is limited to native subject/candidate hide, takedown and moderation restore, terminal
+consent-statement retraction, source-fence disclosure, and immediate derived-account-agent name clearing. Name
+clearing removes old labels without retaining name history; it remains a field clear. Native takedown retains
+data, but its free-text scope does not implement least-field/passage/image withholding.
+
+Required work: default owned-record soft deletion with immediate tombstones and suppression, current-owner restore
+within 30 days without rewinding current adoption/visibility, separate platform early/legal purge, legal holds,
+automatic minimal personal/private payload purge and account-erasure de-identification. No semantic purge job or
+purge bound is implemented. The required job caps examined source keys before filters, commits durable fragment
+checkpoints in one owner partition, and retains nonpersonal identity/decision skeleton. Takedown alone never
+creates its deadline. Workflow-history retention does not establish semantic erasure. Native link readers currently
+filter unavailable summaries while keeping stored counts; this does not prove publicly live counts under paused
+consumers. The contract supplies a real counterexample and leaves exact foreign-count authority for resolution.
