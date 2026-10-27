@@ -309,7 +309,8 @@ export type TrainOptions = {
   stateDirectory: string;
   worktreeRoot: string;
   formatCommand?: string[];
-  integrationChecks?: IntegrationCheck[];
+  /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
+  integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -551,7 +552,8 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
-        const integrationChecks = (o.integrationChecks ?? []).filter((check) =>
+        const configuredChecks = typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
+        const integrationChecks = configuredChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
         if (integratesIntoDev && integrationChecks.length) {
