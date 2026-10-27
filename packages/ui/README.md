@@ -60,19 +60,24 @@ The frame ratio comes from the subject's type, never from the image, so grids an
 
 | Type family                                      | Frame ratio (width:height) |
 | ------------------------------------------------ | -------------------------- |
-| Book, edition, manga, light novel, comic volume  | 3:4                        |
-| Anime series or film, live-action series or film | 3:4 (poster)               |
-| Visual novel, game                               | 3:4 (package art)          |
+| Book, edition, manga, light novel, comic volume  | 5:7                        |
+| Anime series or film, live-action series or film | 5:7 (poster)               |
+| Visual novel, game                               | 5:7 (package art)          |
 | Music release                                    | 1:1                        |
 | Recipe, place, event                             | 4:3                        |
 | Character, person                                | 3:4 (portrait)             |
 | Organization, Realm, Zone, concept               | 1:1                        |
 
+5:7 (0.714) is the default for works because most covers in the catalogue are close to 1:√2: Japanese bunko (A6),
+tankōbon, manga and light novels (B6), A5 books, Blu-ray and DVD cases and B-series posters are 0.70–0.71. A 2:3
+cover (US trade, Steam capsules) loses about 7% of its height in the frame; 3:4 would cost the 1:√2 majority about
+6% and 2:3 covers 11%.
+
 `coverRatio(types)` in `@rezics/ui/cover` holds this table by type CURIE as the fallback. When the definition release carries a `coverRatio` annotation for the type, the site resolves it and passes it as the `ratio` prop, which wins over the table.
 
-The ratio is resolved from the subject's semantic type through its structural bases, the same way templates resolve; a creative work with no more specific type uses 3:4 and anything else uses 1:1. A coarse resource class, an empty type list or a summary that dropped the types never decides the ratio, so every read that feeds `Cover` carries the subject's type.
+The ratio is resolved from the subject's semantic type through its structural bases, the same way templates resolve; a creative work with no more specific type uses 5:7 and anything else uses 1:1. A coarse resource class, an empty type list or a summary that dropped the types never decides the ratio, so every read that feeds `Cover` carries the subject's type.
 
-A row, grid or list that mixes types uses one frame ratio for all its items (the ratio of most of its items, 3:4 when tied), so mixed shelves stay aligned; each image is then fitted by the rule below. A Zone's `cover` appearance token (`portrait`, `square`, `landscape`) chooses that shared ratio on its pages instead. A single-type list and the subject page header always use the type's own ratio.
+A row, grid or list that mixes types uses one frame ratio for all its items (the ratio of most of its items, 5:7 when tied), so mixed shelves stay aligned; each image is then fitted by the rule below. A Zone's `cover` appearance token (`portrait`, `square`, `landscape`) chooses that shared ratio on its pages instead. A single-type list and the subject page header always use the type's own ratio.
 
 An image whose own ratio is within 15% of the frame fills it (`object-fit: cover`). A wider or taller image is shown whole (`object-fit: contain`) on a backdrop of its own placeholder colour, so landscape package art or a square album cover in a portrait slot is never cut to a sliver. Portraits of characters and people keep the top of the image when they are cropped (`object-position: top`); other images keep their stored focal point, or the centre.
 
