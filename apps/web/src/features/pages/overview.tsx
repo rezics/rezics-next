@@ -1,5 +1,5 @@
 import { pickLanguage, type PageRead } from '@rezics/composition';
-import { Cover as CoverFrame, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
@@ -10,6 +10,7 @@ import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '..
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
 import type { AccountProfile } from './account-read';
+import { CoverList } from './cover-list';
 import { listView } from './views';
 import {
   bestRank,
@@ -140,6 +141,20 @@ export function dateText(value: unknown, locale: string): string | null {
   }).format(date);
 }
 
+/** The year of a date in the kernel's partial ISO form: the one secondary line a card has room for. */
+export function yearText(value: unknown, locale: string): string | null {
+  const year = typeof value === 'string' ? /^-?\d{4,}/.exec(value)?.[0] : undefined;
+  return year === undefined ? null : dateText(year, locale);
+}
+
+/** The holders of a read with their year as the secondary line, when the read carries a date. */
+function datedItems(items: Item[], locale: string): Item[] {
+  return items.map((item) => {
+    const year = yearText(item.date, locale);
+    return year ? { ...item, notes: [year] } : item;
+  });
+}
+
 /** A preview section: a heading with its count, then the body, then a link to the full view when there is more. */
 export function Preview({
   slot,
@@ -206,65 +221,6 @@ export function Failed({ slot, id, title, locale }: { slot: string; id: string; 
         {m.subject_section_retry({}, options)}
       </a>
     </section>
-  );
-}
-
-export function ItemRow({
-  item,
-  value,
-  size,
-  ratio,
-}: {
-  item: Item;
-  value: RowValue;
-  size: 'xs' | 'sm';
-  ratio: CoverRatio;
-}) {
-  const Link = value.link;
-  const title = item.label.text || value.unlabelled;
-  const body = (
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="shrink-0">
-        <CoverFrame
-          subject={coverSubject(item.id, title, item.summary, item.type)}
-          cover={coverOf(item.summary)}
-          size={size}
-          src={coverSrc}
-          suitability={value.reader.suitability}
-          labels={value.labels.cover}
-          decorative
-          ratio={ratio}
-        />
-      </div>
-      <div className="min-w-0">
-        <span
-          className={`${linkClass} font-medium break-words ${item.label.text ? linkColor : 'text-muted-foreground'}`}
-        >
-          <Link
-            href={`/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(item.id)}`}
-            {...(item.label.lang ? { lang: item.label.lang } : {})}
-          >
-            {title}
-          </Link>
-        </span>
-        {item.notes.length > 0 && <p className="text-sm break-words text-muted-foreground">{item.notes.join(' · ')}</p>}
-      </div>
-    </div>
-  );
-  return <li>{item.gated ? <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate> : body}</li>;
-}
-
-/** The rows of one list share a frame ratio, so a mixed list stays aligned; a Zone's appearance fixes it for every row. */
-export function Items({ items, value, ordered = false }: { items: Item[]; value: RowValue; ordered?: boolean }) {
-  const ratio =
-    value.ratio ?? sharedRatio(items.map((item) => coverSubject(item.id, item.label.text, item.summary, item.type)));
-  const List = ordered ? 'ol' : 'ul';
-  return (
-    <List className="grid gap-3 sm:grid-cols-2 in-data-[density=compact]:gap-2">
-      {items.map((item, index) => (
-        <ItemRow key={`${item.id}-${index}`} item={item} value={value} size="sm" ratio={ratio} />
-      ))}
-    </List>
   );
 }
 
@@ -362,9 +318,10 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
   const id = String(props.id);
   if (!section?.ok) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
   const limit = limitOf(props);
-  const listed = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit);
-  if (!listed) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
-  if (listed.items.length === 0) return null;
+  const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit);
+  if (!found) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
+  if (found.items.length === 0) return null;
+  const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
   const text = pageText(props.title, value.locale);
   return (
     <Preview
@@ -377,7 +334,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       href={viewHref(value, view)}
       locale={value.locale}
     >
-      <Items items={listed.items} value={value} />
+      <CoverList items={listed.items} value={value} label={text.text || title} preview />
     </Preview>
   );
 }
@@ -453,8 +410,8 @@ export function RelationGroups(props: Record<string, unknown>) {
       {groups.map(({ group, members }) => {
         const items = members.flatMap((entry) =>
           entry.items.map((item): Item => {
-            const date = dateText(item.date, value.locale);
-            return { ...item, notes: [entry.label, date ?? ''].filter(Boolean) };
+            const year = yearText(item.date, value.locale);
+            return { ...item, notes: [entry.label, year ?? ''].filter(Boolean) };
           }),
         );
         const count: Count = {
@@ -493,7 +450,12 @@ export function RelationGroups(props: Record<string, unknown>) {
                 );
               })}
             </div>
-            <Items items={items} value={value} ordered={group === 'order'} />
+            <CoverList
+              items={items}
+              value={value}
+              label={groups.length > 1 ? GROUP_TITLES[group](options) : heading}
+              preview
+            />
           </div>
         );
       })}
@@ -516,9 +478,10 @@ export function SubjectList(props: Record<string, unknown>) {
   const { value, section } = state;
   const id = String(props.id);
   const title = pageText(props.title, value.locale);
-  const listed = linkItems(section, limitOf(props));
-  if (!listed) return <Failed slot="subject-list" id={id} title={title.text} locale={value.locale} />;
-  if (listed.items.length === 0) return null;
+  const found = linkItems(section, limitOf(props));
+  if (!found) return <Failed slot="subject-list" id={id} title={title.text} locale={value.locale} />;
+  if (found.items.length === 0) return null;
+  const listed = { ...found, items: datedItems(found.items, value.locale) };
   return (
     <Preview
       slot="subject-list"
@@ -530,7 +493,7 @@ export function SubjectList(props: Record<string, unknown>) {
       href={viewHref(value, 'relations', typeof props.property === 'string' ? props.property : undefined)}
       locale={value.locale}
     >
-      <Items items={listed.items} value={value} />
+      <CoverList items={listed.items} value={value} label={title.text} preview />
     </Preview>
   );
 }

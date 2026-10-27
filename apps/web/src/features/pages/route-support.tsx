@@ -1,20 +1,20 @@
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { PageMessages } from './data';
+import type { LinkProps } from './shared';
 import type { ViewTabLabels } from './view-tabs';
 
 /** A link to a subject page navigates in the client; any other address is a plain anchor. */
-export function SubjectLink({ href, lang, children }: { href: string; lang?: string; children: ReactNode }) {
+export function SubjectLink({ href, lang, className, children }: LinkProps) {
   const id = /^\/[^/]+\/subjects\/([^/?#]+)$/.exec(href)?.[1];
   if (!id)
     return (
-      <a href={href} lang={lang}>
+      <a href={href} lang={lang} className={className}>
         {children}
       </a>
     );
   return (
-    <Link to="/subjects/$id" params={{ id: decodeURIComponent(id) }} lang={lang}>
+    <Link to="/subjects/$id" params={{ id: decodeURIComponent(id) }} lang={lang} className={className}>
       {children}
     </Link>
   );

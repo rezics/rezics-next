@@ -169,7 +169,8 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   expect(text(section(html, 'subject-summary'))).toContain('A pilot meets a prince.');
 
   const relations = section(html, 'relation-groups');
-  expect(relations.match(/<li>/g)).toHaveLength(12);
+  // Each card is drawn once for the phone row and once for the grid.
+  expect(relations.match(/<article\b/g)).toHaveLength(24);
   expect(text(relations)).toContain('30 total');
   expect(relations).toContain(`href="/en/subjects/${subjectId}/relations?property=wdt%3AP155"`);
 

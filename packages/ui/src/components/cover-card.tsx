@@ -1,17 +1,40 @@
-import { CheckIcon, EllipsisIcon } from 'lucide-react';
-import { createContext, useContext, type MouseEvent, type PointerEventHandler, type ReactNode } from 'react';
-import { Button } from '../shadcn/button.tsx';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
-import { Cover, type CoverProps, type CoverRatio } from './cover.tsx';
+import { CheckIcon, EllipsisIcon } from "lucide-react";
+import {
+  createContext,
+  useContext,
+  type ComponentType,
+  type MouseEvent,
+  type PointerEventHandler,
+  type ReactNode,
+} from "react";
+import { Button } from "../shadcn/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "../shadcn/dropdown-menu.tsx";
+import { Cover, type CoverProps, type CoverRatio } from "./cover.tsx";
 
-export type CoverDensity = 'small' | 'medium' | 'large';
+export type CoverDensity = "small" | "medium" | "large";
 const DensityContext = createContext<CoverDensity | undefined>(undefined);
 
 const RatioContext = createContext<CoverRatio | undefined>(undefined);
 
+/** What the card needs of the link that carries its title: a site passes its router link here. */
+export type CoverCardLink = ComponentType<{
+  href: string;
+  lang?: string | undefined;
+  title?: string | undefined;
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  className?: string | undefined;
+  children: ReactNode;
+}>;
+
 export interface CoverCardProps {
   href: string;
-  cover: Omit<CoverProps, 'size'>;
+  /** The component that draws the title link, an anchor by default; a site passes its client-side router link. */
+  link?: CoverCardLink;
+  cover: Omit<CoverProps, "size">;
   title: string;
   titleLang?: string;
   secondary?: ReactNode;
@@ -24,7 +47,10 @@ export interface CoverCardProps {
   meta?: ReactNode;
   selectable?: boolean;
   selected?: boolean;
-  onSelectedChange?: (selected: boolean, event: MouseEvent<HTMLButtonElement>) => void;
+  onSelectedChange?: (
+    selected: boolean,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => void;
   onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
   onPointerDown?: PointerEventHandler<HTMLElement>;
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
@@ -33,6 +59,7 @@ export interface CoverCardProps {
 /** A subject card with a stretched title link; shadcn has no subject-cover card pattern. */
 export function CoverCard({
   href,
+  link,
   cover,
   title,
   titleLang,
@@ -54,7 +81,8 @@ export function CoverCard({
   const ratio = useContext(RatioContext);
   const contextDensity = useContext(DensityContext);
   const density = densityProp ?? contextDensity;
-  const small = density === 'small';
+  const small = density === "small";
+  const Link = link ?? "a";
   return (
     <article
       onPointerDown={onPointerDown}
@@ -89,7 +117,7 @@ export function CoverCard({
         <>
           {status != null && (
             <div
-              className={`pointer-events-none absolute top-2 left-2 z-10 ${onSelect ? 'pointer-fine:group-hover:invisible pointer-fine:group-focus-within:invisible' : ''}`}
+              className={`pointer-events-none absolute top-2 left-2 z-10 ${onSelect ? "pointer-fine:group-hover:invisible pointer-fine:group-focus-within:invisible" : ""}`}
             >
               {status}
             </div>
@@ -116,29 +144,50 @@ export function CoverCard({
           {title}
         </div>
       )}
-      {badge != null && <div className="pointer-events-none absolute top-2 right-2 z-10">{badge}</div>}
-      <div className={small ? (state != null ? 'space-y-1 p-2 [&_.tabular-nums]:sr-only' : '') : 'space-y-1 p-3'}>
+      {badge != null && (
+        <div className="pointer-events-none absolute top-2 right-2 z-10">
+          {badge}
+        </div>
+      )}
+      <div
+        className={
+          small
+            ? state != null
+              ? "space-y-1 p-2 [&_.tabular-nums]:sr-only"
+              : ""
+            : "space-y-1 p-3"
+        }
+      >
         {selectable ? (
-          <span className={small ? 'sr-only' : 'line-clamp-2 text-sm font-semibold wrap-anywhere'} lang={titleLang}>
+          <span
+            className={
+              small
+                ? "sr-only"
+                : "line-clamp-2 text-sm font-semibold wrap-anywhere"
+            }
+            lang={titleLang}
+          >
             {title}
           </span>
         ) : (
-          <a
+          <Link
             href={href}
             lang={titleLang}
             title={small ? title : undefined}
             onClick={onClick}
             className={
               small
-                ? 'absolute inset-0 z-[1] outline-none'
+                ? "absolute inset-0 z-[1] outline-none"
                 : "line-clamp-2 text-sm font-semibold wrap-anywhere outline-none after:absolute after:inset-0 after:content-['']"
             }
           >
             {small ? <span className="sr-only">{title}</span> : title}
-          </a>
+          </Link>
         )}
         {!small && (meta ?? secondary) != null && (
-          <div className="line-clamp-1 text-xs text-muted-foreground">{meta ?? secondary}</div>
+          <div className="line-clamp-1 text-xs text-muted-foreground">
+            {meta ?? secondary}
+          </div>
         )}
         {(state != null || menu != null) && (
           <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
@@ -171,11 +220,11 @@ export function CoverCard({
 /** A responsive subject grid; shadcn does not provide this layout. */
 const densityClasses: Record<CoverDensity, string> = {
   small:
-    'grid-cols-4 @min-[640px]:grid-cols-6 @min-[1024px]:grid-cols-8 @min-[1280px]:grid-cols-10 @min-[1536px]:grid-cols-12',
+    "grid-cols-4 @min-[640px]:grid-cols-6 @min-[1024px]:grid-cols-8 @min-[1280px]:grid-cols-10 @min-[1536px]:grid-cols-12",
   medium:
-    'grid-cols-3 @min-[640px]:grid-cols-4 @min-[1024px]:grid-cols-6 @min-[1280px]:grid-cols-7 @min-[1536px]:grid-cols-8',
+    "grid-cols-3 @min-[640px]:grid-cols-4 @min-[1024px]:grid-cols-6 @min-[1280px]:grid-cols-7 @min-[1536px]:grid-cols-8",
   large:
-    'grid-cols-2 @min-[640px]:grid-cols-3 @min-[1024px]:grid-cols-4 @min-[1280px]:grid-cols-5 @min-[1536px]:grid-cols-6',
+    "grid-cols-2 @min-[640px]:grid-cols-3 @min-[1024px]:grid-cols-4 @min-[1280px]:grid-cols-5 @min-[1536px]:grid-cols-6",
 };
 
 export function CoverGrid({
@@ -192,7 +241,7 @@ export function CoverGrid({
       <DensityContext.Provider value={density}>
         <div className="@container">
           <div
-            className={`grid gap-4 ${density ? densityClasses[density] : 'grid-cols-2 @min-[30rem]:grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]'}`}
+            className={`grid gap-4 ${density ? densityClasses[density] : "grid-cols-2 @min-[30rem]:grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]"}`}
           >
             {children}
           </div>
@@ -203,7 +252,15 @@ export function CoverGrid({
 }
 
 /** A keyboard-reachable, snapping subject row; shadcn does not provide this layout. */
-export function CoverRow({ ratio, label, children }: { ratio: CoverRatio; label: string; children: ReactNode }) {
+export function CoverRow({
+  ratio,
+  label,
+  children,
+}: {
+  ratio: CoverRatio;
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <RatioContext.Provider value={ratio}>
       <div

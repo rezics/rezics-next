@@ -127,9 +127,11 @@ const text = (html: string) =>
     .replace(/\s+/g, ' ');
 const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
+// A group's heading, counts and cards. Each card is drawn once for the phone row and once for the grid.
 const groupBlock = (html: string, group: string) =>
-  new RegExp(`<div[^>]*data-slot="relation-group"[^>]*data-group="${group}"[\\s\\S]*?</(?:ol|ul)>`).exec(html)?.[0] ??
-  '';
+  new RegExp(
+    `<div[^>]*data-slot="relation-group"[^>]*data-group="${group}"[\\s\\S]*?(?=<div[^>]*data-slot="relation-group"|</section>)`,
+  ).exec(html)?.[0] ?? '';
 
 const relationDocument = {
   root: { props: {} },
@@ -162,7 +164,8 @@ test("relations show from the reader's side with the property's inverse label, s
   const shown = text(section(html, 'relation-groups'));
   expect(shown).toContain('Sequel');
   expect(shown).toContain('Adaptations');
-  expect(shown.match(/Same setting/g)).toHaveLength(2);
+  // Two holders, each drawn for the phone row and for the grid.
+  expect(shown.match(/Same setting/g)).toHaveLength(4);
   expect(shown).not.toMatch(/follows|based on/);
   expect(text(render(page, 'zh-Hans', { relations: definitions('zh-Hans') }))).toContain('续作');
 
@@ -203,18 +206,16 @@ test('relations are grouped by relation group, each group with its count, cover,
   expect(groups).toEqual(['order', 'derivation', 'world']);
 
   const order = groupBlock(html, 'order');
-  expect(order).toMatch(/<ol\b/);
   expect(text(order)).toContain('2 total');
   expect(text(order)).toContain('Second Voyage');
   expect(text(order)).toContain('Sequel');
-  expect(text(order)).toContain('May 2012');
+  expect(text(order)).toContain('Sequel · 2012');
   expect(text(order)).toContain('2015');
   expect(order).toContain('/media/');
   expect(order.indexOf('Second Voyage')).toBeLessThan(order.indexOf('Third Voyage'));
 
   const derivation = groupBlock(html, 'derivation');
-  expect(derivation).toMatch(/<ul\b/);
-  expect(derivation.match(/<li\b/g)).toHaveLength(12);
+  expect(derivation.match(/<article\b/g)).toHaveLength(24);
   expect(text(derivation)).toContain('30+ total');
   expect(derivation).toContain(`href="/en/subjects/${subjectId}/relations?property=wdt%3AP144"`);
   expect(groupBlock(html, 'order')).not.toContain('/relations?property=');

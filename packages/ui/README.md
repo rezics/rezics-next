@@ -108,7 +108,7 @@ mode, relation, edition and character tiles) follows one pattern:
   the subject page.
 - Every cover in a grid or row has the frame ratio rules of [Cover](#cover), so covers align across the row and
   text starts at the same height.
-- The whole card is one link to the subject. Actions on the item (change status, remove, add to collection) live
+- The whole card is one link to the subject; a site passes its client-side router link as `link`. Actions on the item (change status, remove, add to collection) live
   in the card's ⋯ menu, never as a button or select on the card.
 - Grid columns follow the container width (two on a phone, more on wider screens), with the same gap between
   cards in both directions.

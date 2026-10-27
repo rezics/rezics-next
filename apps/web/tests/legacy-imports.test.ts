@@ -10,6 +10,7 @@ const siteComponents = new Set([
   'utils',
   'styles.css',
   'cover',
+  'cover-card',
   'reactions',
   'content-actions',
   'document-body',

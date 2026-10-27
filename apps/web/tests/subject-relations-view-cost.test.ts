@@ -52,7 +52,7 @@ test('the relations view renders one page of the continuation however large the 
   const sizes = [100, 10_000, 1_000_000];
   const views = sizes.map(render);
   for (const html of views) {
-    expect(html.match(/<li>/g)).toHaveLength(100);
+    expect(html.match(/<article\b/g)).toHaveLength(100);
     expect(html).toContain(`href="/en/subjects/${subject}/relations?cursor=opaque-cursor"`);
   }
   expect(views[1]).toContain('10,000+ total');

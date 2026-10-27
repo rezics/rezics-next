@@ -725,9 +725,13 @@ Each server render and browser session has its own query cache. Public reads sta
   `SubjectList` render the bodies of the template's planned inverse `links` reads; `TypeList` renders its `search`
   read. A directed property reads under its inverse label and a symmetric one under its own, a property without a
   relation definition under its own label in the other group. The first `RelationGroups` node renders every
-  `RelationGroups` node of the page by relation group
+  `RelationGroups` node of the page by relation group. Every list draws its subjects as `CoverCard`s through
+  `features/pages/cover-list.tsx`: a preview is one snapping `CoverRow` below `sm` and a `CoverGrid` from `sm` up, a
+  full view is a `CoverGrid` at every width. A preview emits both layouts and CSS shows one, so the page needs no
+  viewport width on the server
 - **Bound:** 0 K, D, R and A beyond the page read and at most 2 K for definitions on a cold cache, 0 when warm. A
-  preview renders at most its `limit` items per read (24) whatever the in-degree, so rendering is O(limit × reads);
+  preview renders at most its `limit` items per read (24) whatever the in-degree, twice (row and grid), so rendering is
+  O(limit × reads);
   the count is the read's exact or "at least" count, never a total computed here
 - **Growth check:** `tests/subject-relations-lists.test.ts`: `SubjectList and TypeList show an exact or at-least count and a See all link to a paged view`
 

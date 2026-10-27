@@ -4,7 +4,8 @@ import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { RELATION_GROUPS, type RelationDefinition } from '../../subject/relations';
-import { countText, dateText, GROUP_TITLES, holderItems, Items, type Item, type RowValue } from './overview';
+import { CoverList } from './cover-list';
+import { countText, GROUP_TITLES, holderItems, yearText, type Item, type RowValue } from './overview';
 import { ViewHeading } from './subject-frame';
 import { loadSubjectPage } from './subject';
 
@@ -76,8 +77,8 @@ export function RelationsView({
     : m.subject_relations({}, options);
   const items: Item[] = (listed?.items ?? []).map((item) => {
     const entry = definition(item.property);
-    const date = dateText(item.date, locale);
-    return { ...item, notes: [entry?.label ?? '', date ?? ''].filter(Boolean) };
+    const year = yearText(item.date, locale);
+    return { ...item, notes: [entry?.label ?? '', year ?? ''].filter(Boolean) };
   });
   const groups = RELATION_GROUPS.flatMap((group) => {
     const members = items.filter((item) => (definition(item.property)?.group ?? 'other') === group);
@@ -108,7 +109,7 @@ export function RelationsView({
             {groups.length > 1 && (
               <h2 className="text-lg font-semibold tracking-tight">{GROUP_TITLES[group](options)}</h2>
             )}
-            <Items items={members} value={value} ordered={group === 'order'} />
+            <CoverList items={members} value={value} label={heading} />
           </div>
         ))
       )}

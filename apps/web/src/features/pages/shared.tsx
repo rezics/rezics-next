@@ -3,7 +3,12 @@ import type { ComponentType, ReactNode } from 'react';
 import type { Summary } from '../../subject/types';
 import { SPOILER_PROPERTY } from './values';
 
-export type LinkProps = { href: string; lang?: string; children: ReactNode };
+export type LinkProps = {
+  href: string;
+  lang?: string | undefined;
+  className?: string | undefined;
+  children: ReactNode;
+};
 export type PageLink = ComponentType<LinkProps>;
 
 export type Snak = {
@@ -40,9 +45,9 @@ export function pageText(value: unknown, locale: string, original?: string) {
   };
 }
 
-export function PlainLink({ href, lang, children }: LinkProps) {
+export function PlainLink({ href, lang, className, children }: LinkProps) {
   return (
-    <a href={href} lang={lang}>
+    <a href={href} lang={lang} className={className}>
       {children}
     </a>
   );
