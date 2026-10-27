@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -16,12 +16,16 @@ import {
   diffLineCount,
   firstFailure,
   gateRunner,
+  gateEnvironment,
   git,
   nonGeneratedFiles,
   outsideScope,
   type GateResult,
   type GateRunner,
 } from './merge.ts';
+
+import type { AffectedTestResult } from './types.ts';
+import { CHECK_HOST_TRANSPORT } from './records.ts';
 
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export type IntegrationCheck = { paths: string[]; command: string[] };
@@ -30,6 +34,84 @@ import { resolveInsertedSections } from './section-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
+
+/** Kernel's lane runner prints failed-file summaries; passing file headings and stack frames are not failures. */
+export function failingTestFiles(output: string): string[] {
+  const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
+  const files = new Set<string>();
+  const add = (file: string) => files.add(file.replace(/^\.\//, ''));
+  let summarized = false;
+  for (const summary of clean.matchAll(/tests failed for (\d+) file\(s\):\r?\n([^]*?)(?=\n\s*at |$)/gi)) {
+    summarized = true;
+    files.clear(); // The final summary excludes files that passed the check's own rerun.
+    for (const line of summary[2]!.split(/\r?\n/).slice(0, Number(summary[1]))) {
+      const file = line.trim();
+      if (file) add(file);
+    }
+  }
+  if (summarized) return [...files].sort();
+  for (const match of clean.matchAll(
+    /^\s*(?:FAIL\s+([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?)|([^\s:]+\.(?:test|spec)\.[cm]?[jt]sx?):[^\n]*(?:fail|error))/gim,
+  ))
+    add((match[1] ?? match[2])!);
+  let currentFile: string | undefined;
+  for (const line of clean.split(/\r?\n/)) {
+    const heading = line.match(/^([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/);
+    if (heading) currentFile = heading[1];
+    else if (currentFile && /^\s*\(fail\)/.test(line)) add(currentFile);
+  }
+  return [...files].sort();
+}
+
+function checkTransportFailed(output: string): boolean {
+  return (
+    CHECK_HOST_TRANSPORT.test(output) ||
+    /remote-check: (?:connection to .+ failed during .+ before a result|no check host answered)/.test(output)
+  );
+}
+
+/** No wall timeout: a check waiting for a shared host slot is still queued. */
+export async function runAffectedTest(
+  command: readonly string[],
+  cwd: string,
+  logPath: string,
+  env: NodeJS.ProcessEnv,
+): Promise<AffectedTestResult> {
+  const started = Date.now();
+  let output = '';
+  let passed = false;
+  let unverified = false;
+  for (let retry = 0; retry < 2; retry++) {
+    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
+    const result = await new Promise<{ passed: boolean; output: string }>((done) => {
+      let captured = '';
+      const child = spawn(command[0]!, command.slice(1), { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      const collect = (chunk: Buffer) => {
+        captured += chunk.toString();
+        appendFileSync(logPath, chunk);
+      };
+      child.stdout.on('data', collect);
+      child.stderr.on('data', collect);
+      child.once('error', (error) => done({ passed: false, output: String(error) }));
+      child.once('close', (code) => done({ passed: code === 0, output: captured }));
+    });
+    output = result.output;
+    passed = result.passed;
+    unverified = !passed && checkTransportFailed(output);
+    if (!unverified) break;
+    if (retry === 0) appendFileSync(logPath, 'Check-host transport failed; retrying once\n');
+  }
+  const status = unverified ? 'unverified' : passed ? 'passed' : 'failed';
+  const durationMs = Date.now() - started;
+  appendFileSync(logPath, `Affected test: ${status} in ${durationMs} ms\n`);
+  return {
+    command: [...command],
+    status,
+    failingFiles: passed || unverified ? [] : failingTestFiles(output),
+    durationMs,
+    output,
+  };
+}
 
 export async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
@@ -510,6 +592,7 @@ export class MergeTrain {
         delete result.firstFailure;
         delete result.failsOnMain;
         delete result.timedOut;
+        delete result.failedCommand;
         const base = target();
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
@@ -588,6 +671,75 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
+        const affectedFailures: string[] = [];
+        for (const checked of request.affectedTests ?? []) {
+          if (checked.status === 'unverified') {
+            appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
+            continue;
+          }
+          if (checked.status === 'passed') continue;
+          stage = 'gate';
+          const key = `affected-test:${JSON.stringify(checked.command)}`;
+          let baseline = o.queue.baseline(base, key);
+          if (!baseline) {
+            // A base compared with itself selects no affected tests. Run the same command without that selection;
+            // its full result covers every failed file and can be reused by other attempts on this base.
+            const baselineTree = resolve(o.worktreeRoot, `affected-base-${randomUUID()}`);
+            git(o.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+            try {
+              appendFileSync(logPath, `Affected test baseline on ${base}: ${checked.command.join(' ')}\n`);
+              const environment = {
+                ...gateEnvironment(process.env, o.stateDirectory),
+                KERNEL_CHECK_AFFECTED: '',
+                KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
+              };
+              // As with promotion's narrowed gates, a fresh local worktree needs its installed tools.
+              if (existsSync(join(baselineTree, 'package.json'))) {
+                const installed = await runAffectedTest(
+                  ['bun', 'install', '--frozen-lockfile'],
+                  baselineTree,
+                  logPath,
+                  environment,
+                );
+                if (installed.status !== 'passed')
+                  throw new Error(`Affected-test baseline install failed: ${installed.output}`);
+              }
+              const measured = await runAffectedTest(checked.command, baselineTree, logPath, environment);
+              if (measured.status === 'unverified') {
+                appendFileSync(logPath, 'Affected test baseline unverified (landing allowed)\n');
+                continue;
+              }
+              baseline = { passed: measured.status === 'passed', output: measured.output, timedOut: false };
+              o.queue.saveBaseline(base, key, baseline);
+            } finally {
+              git(o.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+            }
+          }
+          o.fence.assertCurrent(request);
+          if (target() !== base) break;
+          const baseFiles = new Set(failingTestFiles(baseline.output));
+          const added = checked.failingFiles.filter((file) => baseline.passed || !baseFiles.has(file));
+          // A compiler or setup error may stop the check before the test runner reports any files.
+          const errors = checked.failingFiles.length ? [] : newErrorLines(checked.output, baseline.output);
+          if (added.length || errors.length || (!checked.failingFiles.length && baseline.passed)) {
+            affectedFailures.push(...(added.length ? added : errors.length ? errors : [checked.output]));
+            result.failedCommand ??= [...checked.command];
+          } else appendFileSync(logPath, 'Base already shares the affected-test failures\n');
+        }
+        o.fence.assertCurrent(request);
+        if (target() !== base) continue;
+        if (affectedFailures.length) {
+          const report = `Affected tests introduced failures:\n${[...new Set(affectedFailures)].join('\n')}`;
+          appendFileSync(logPath, `${report}\n`);
+          result.firstFailure = {
+            ...firstFailure(report),
+            assertion: report,
+            fingerprint: createHash('sha256').update(report).digest('hex'),
+          };
+          result.failsOnMain = false;
+          result.stage = 'gate';
+          return result;
+        }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const integrationChecks = configuredChecks.filter((check) =>

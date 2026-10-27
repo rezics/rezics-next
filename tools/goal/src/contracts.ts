@@ -1,3 +1,5 @@
+import type { AffectedTestResult } from './types.ts';
+
 // The two halves of the control plane meet only here. The worker side owns tasks, attempts, routing, launch,
 // failure classes and evidence bundles; the integration side owns the merge train, manager sessions and inboxes.
 // Each side tests against fakes of the other side's interface.
@@ -30,6 +32,7 @@ export type LandingRequest = AttemptRef & {
   /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
   protectedPaths?: readonly string[];
   gate: readonly string[];
+  affectedTests?: readonly AffectedTestResult[];
 };
 
 /** Implemented by the integration side. */

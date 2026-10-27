@@ -200,6 +200,26 @@ changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` 
 kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and
 dependency installation never run in the main checkout or the worker's checkout.
 
+The `affectedTests` setting independently lists `{ paths: string[], command: string[] }` checks, overridable in
+local settings (use `[]` to disable them). After a successful worker report, settlement commits any remaining work
+and runs matching commands in that attempt's worktree before requesting landing. Commands and other attempts run
+in parallel, outside the serial train. The default checks `services/kernel/**` with
+`bun run --cwd services/kernel check`, using `KERNEL_CHECK_AFFECTED=<task base>` and the worker's environment,
+including configured remote check hosts. Kernel is currently the only workspace with an affected check mode.
+
+Each command's status (`passed`, `failed`, or `unverified`), failing test files, duration in milliseconds and output
+are saved on the attempt and carried with its landing request. Completed results survive settlement recovery.
+Kernel's final failed-file summaries, lane errors, Bun reporter failures and `FAIL <test-file>` lines identify
+failing files; passing headings and stack frames do not. A check-host transport failure is retried once; a second
+transport failure is unverified and lands with a note in the landing log. Waiting for a check-host slot has no wall timeout.
+
+Only recorded failures need a train baseline. The train reuses a cached result for the integration base and command,
+or runs that command in a separate base worktree, installing dependencies there when it has a package manifest.
+The baseline clears `KERNEL_CHECK_AFFECTED` to run the full check: a base compared with itself would select no tests. This also makes the cached baseline reusable across attempts.
+A landing is refused only for newly failing test files, named in its gate failure; failures shared by the base are
+allowed. Errors before any test-file result use diagnostic-line comparison. An unverified baseline also allows
+landing with a log note. The train's existing integration checks are unchanged.
+
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.

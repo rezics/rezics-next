@@ -33,6 +33,14 @@ export type Pool = {
     maxBurnPerHour?: number;
   };
 };
+export type AffectedTestCheck = { paths: string[]; command: string[] };
+export type AffectedTestResult = {
+  command: string[];
+  status: 'passed' | 'failed' | 'unverified';
+  failingFiles: string[];
+  durationMs: number;
+  output: string;
+};
 export type Settings = {
   version: 1;
   mainCheckout: string;
@@ -50,6 +58,7 @@ export type Settings = {
   riskAreasFile: string;
   gate: string[];
   formatCommand: string[];
+  affectedTests?: AffectedTestCheck[];
   terminationGraceMs: number;
   /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */
   startGraceMs?: number;
@@ -183,6 +192,7 @@ export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted'
 export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
   supersededFinalized?: boolean;
+  affectedTests?: AffectedTestResult[];
   failureKind?: AttemptFailure | null;
   profile: Profile;
   pool: string;

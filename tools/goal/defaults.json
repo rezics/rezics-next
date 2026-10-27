@@ -3,6 +3,12 @@
   "mainBranch": "main",
   "branchPrefix": "worker/",
   "terminationGraceMs": 1500,
+  "affectedTests": [
+    {
+      "paths": ["services/kernel/**"],
+      "command": ["bun", "run", "--cwd", "services/kernel", "check"]
+    }
+  ],
   "integrationChecks": [
     {
       "paths": ["apps/**", "services/**", "packages/**", "specs/**", "package.json", "bun.lock", "tsconfig*.json"],

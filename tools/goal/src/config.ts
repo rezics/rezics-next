@@ -45,24 +45,27 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
     return { path, stage: file.stage, command: [...file.command] };
   });
 }
-export function readIntegrationChecks(value: unknown = defaults.integrationChecks): IntegrationCheck[] {
-  if (!Array.isArray(value)) throw new Error('integrationChecks must be an array');
+export function readIntegrationChecks(
+  value: unknown = defaults.integrationChecks,
+  label = 'integrationChecks',
+): IntegrationCheck[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value.map((item, index) => {
-    const check = object(item, `integrationChecks[${index}]`);
-    keys(check, ['paths', 'command'], `integrationChecks[${index}]`);
+    const check = object(item, `${label}[${index}]`);
+    keys(check, ['paths', 'command'], `${label}[${index}]`);
     if (
       !Array.isArray(check.paths) ||
       !check.paths.length ||
       check.paths.some((part) => typeof part !== 'string' || !part)
     )
-      throw new Error(`integrationChecks[${index}].paths must be a path list`);
+      throw new Error(`${label}[${index}].paths must be a path list`);
     for (const path of check.paths) validatePath(path);
     if (
       !Array.isArray(check.command) ||
       !check.command.length ||
       check.command.some((part) => typeof part !== 'string' || !part)
     )
-      throw new Error(`integrationChecks[${index}].command must be a command array`);
+      throw new Error(`${label}[${index}].command must be a command array`);
     return { paths: [...check.paths], command: [...check.command] };
   });
 }
@@ -121,6 +124,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'gate',
       'formatCommand',
       'integrationChecks',
+      'affectedTests',
       'codex',
       'routingFile',
       'riskAreasFile',
@@ -224,6 +228,10 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     gate: gate as string[],
     formatCommand: formatCommand as string[],
     integrationChecks,
+    affectedTests: readIntegrationChecks(
+      local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
+      'affectedTests',
+    ),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
     notes: parseNotes(local.notes),
