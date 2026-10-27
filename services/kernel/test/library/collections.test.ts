@@ -11,7 +11,7 @@ import { EVENT_TYPES } from '../../src/events/log.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import type { Collection, CollectionMember } from '../../src/library/collection-model.ts';
-import { insertMember, listMembers, readCollection } from '../../src/library/collection-store.ts';
+import { listMembers, readCollection } from '../../src/library/collection-store.ts';
 import { GENERATED_ORDINAL_KEY_LENGTH, MAX_ORDINAL_KEY_LENGTH, respacedKeys } from '../../src/library/ordinal.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../../src/request/access.ts';
@@ -432,28 +432,31 @@ test('the 5001st member is collection_full and changes nothing', async () => {
   const id = created.value.id;
   const keys = respacedKeys(5000);
   const idRoute = routeOf(id)!;
-  for (let start = 0; start < 5000; start += 200) {
-    await withConnection(pool, async (client) => {
-      await client.query('BEGIN');
-      try {
-        const context = { transactionId: randomUUID(), time: new Date().toISOString() };
-        for (let index = start; index < start + 200; index += 1) {
-          const inserted = await insertMember(
-            client,
-            idRoute,
-            id,
-            { id: newId(idRoute), subjectId: subjectA, note: null, ordinalKey: keys[index]! },
-            context,
-          );
-          if (!inserted) throw new Error('member seed failed');
-        }
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
-  }
+  const memberIds = Array.from({ length: 5000 }, () => newId(idRoute));
+  await withConnection(pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      const context = { transactionId: randomUUID(), time: new Date().toISOString() };
+      await client.query(
+        `UPDATE library.collection
+         SET member_count = 5000, updated_at = $3::timestamptz, transaction_id = $4
+         WHERE route = $1 AND collection_id = $2`,
+        [idRoute, id, context.time, context.transactionId],
+      );
+      const inserted = await client.query(
+        `INSERT INTO library.collection_member
+           (route, collection_id, member_id, subject_id, note, ordinal_key, added_at, transaction_id)
+         SELECT $1, $2, members.member_id, $3, NULL, members.ordinal_key, $5::timestamptz, $6
+         FROM UNNEST($4::uuid[], $7::text[]) AS members(member_id, ordinal_key)`,
+        [idRoute, id, subjectA, memberIds, context.time, context.transactionId, keys],
+      );
+      if (inserted.rowCount !== 5000) throw new Error('member seed failed');
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
   expect(await read(id)).toMatchObject({ memberCount: 5000, revision: 1 });
   const before = await read(id);
   const counts = await footprint();
