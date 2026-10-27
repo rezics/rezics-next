@@ -1,3 +1,4 @@
+import { workerTestEnv } from '../support/worker-env.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -100,13 +101,13 @@ if (process.argv.includes('--content-worker')) {
     KERNEL_WORK_MODULES.map((module) =>
       module === registerContent ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
     ),
-    {
+    workerTestEnv({
       CONTENT_R2_ENDPOINT: storageEndpoint,
       CONTENT_R2_BUCKET: 'media-test',
       CONTENT_R2_ACCESS_KEY_ID: 'fixture',
       CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: `${consentEndpoint}/internal/v1/consents:read`,
+      KERNEL_AUTH_CONSENT_URL: `${consentEndpoint}/internal/v1/consents:read`,
       CF_ACCESS_CLIENT_ID: 'fixture.access',
       CF_ACCESS_CLIENT_SECRET: 'fixture-secret',
       KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
@@ -116,7 +117,7 @@ if (process.argv.includes('--content-worker')) {
       KERNEL_ROUTE_KEY: process.env.CONTENT_TEST_ROUTE_KEY ?? Buffer.alloc(32, 7).toString('base64url'),
       KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
       CONTENT_TEST_COLLECTION_PARTITIONS: String(partition),
-    },
+    }),
   );
   console.log('ready');
   for await (const line of console) {

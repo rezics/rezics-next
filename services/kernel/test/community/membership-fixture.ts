@@ -128,7 +128,7 @@ export async function startConsentServer(answer: ConsentAnswer): Promise<Consent
   });
   return {
     env: {
-      CONTENT_AUTH_CONSENT_URL: `https://localhost:${server.port}/internal/v1/consents:read`,
+      KERNEL_AUTH_CONSENT_URL: `https://localhost:${server.port}/internal/v1/consents:read`,
       CF_ACCESS_CLIENT_ID: tokenId,
       CF_ACCESS_CLIENT_SECRET: tokenSecret,
       NODE_EXTRA_CA_CERTS: certificate,

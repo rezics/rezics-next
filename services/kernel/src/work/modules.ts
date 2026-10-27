@@ -1,4 +1,4 @@
-import { createAuthConsentReader, type CurrentConsentReader } from '../access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { createAccess } from '../access/index.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
@@ -7,7 +7,6 @@ import roles from '../access/resource-roles.json';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
 import { communityWorkModule } from '../community/work.ts';
 import { registerContent } from '../content/register.ts';
-import { readContentWorkConfig } from '../content/work-config.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
@@ -24,7 +23,7 @@ function realmActionCatalogue() {
 
 /** The kernel's one Auth consent configuration. Absent, restoration is unavailable and its steps fail. */
 function consentReader(env: Readonly<Record<string, string | undefined>>): CurrentConsentReader {
-  const consent = readContentWorkConfig(env).consent;
+  const consent = readAuthConsentConfig(env);
   return consent === null
     ? async () => {
         throw new Error('Auth consent is not configured');

@@ -1,3 +1,4 @@
+import { workerTestEnv } from '../support/worker-env.ts';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
@@ -166,6 +167,7 @@ if (process.argv.includes('--erased-post-worker')) {
     const sessionKey = Buffer.alloc(32, 9).toString('base64url');
     const env: Record<string, string | undefined> = {
       ...process.env,
+      ...workerTestEnv(),
       DATABASE_URL: databaseUrl,
       KERNEL_EXECUTOR_ID: executorId,
       KERNEL_ROUTE_KEY: routeKey,
@@ -178,9 +180,6 @@ if (process.argv.includes('--erased-post-worker')) {
       CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
       CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
-      CF_ACCESS_CLIENT_ID: 'fixture.access',
-      CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
     };
     for (const name of [
       'OPENSEARCH_URL',

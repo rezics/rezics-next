@@ -1,3 +1,4 @@
+import { workerTestEnv } from '../support/worker-env.ts';
 import { fromPlainText } from '@rezics/document';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -239,6 +240,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     const sessionKey = Buffer.alloc(32, 9).toString('base64url');
     const env: Record<string, string | undefined> = {
       ...process.env,
+      ...workerTestEnv(),
       DATABASE_URL: databaseUrl,
       KERNEL_EXECUTOR_ID: `reaction-counts-${process.pid}`,
       KERNEL_WORKER_POOL_SIZE: '10',
@@ -252,9 +254,6 @@ if (process.argv.includes('--reaction-count-worker')) {
       CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
       CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
-      CF_ACCESS_CLIENT_ID: 'fixture.access',
-      CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
     };
     for (const name of [
       'OPENSEARCH_URL',

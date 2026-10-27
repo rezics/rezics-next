@@ -190,7 +190,7 @@ export async function openApiRuntime(options: DriverOptions) {
                 KERNEL_SESSION_KEYS: [...configuration.tokenKeys.keys]
                   .map(([id, bytes]) => `${id}:${Buffer.from(bytes).toString('base64url')}`)
                   .join(','),
-                CONTENT_AUTH_CONSENT_URL: `${auth.issuer}/internal/v1/consents:read`,
+                KERNEL_AUTH_CONSENT_URL: `${auth.issuer}/internal/v1/consents:read`,
                 CF_ACCESS_CLIENT_ID: 'external-fixture',
                 CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
                 OPENSEARCH_URL: '',

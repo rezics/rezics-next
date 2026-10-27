@@ -543,8 +543,8 @@ cursors and does not need media storage credentials. Content worker settings are
 
 The content registration in `src/content/register.ts` uses the shared kernel worker and its
 queues, database pool, enqueue client and shutdown. It does not start a separate process or relay.
-Storage, sources and consent are independent groups. Registration installs the same workflows, queues,
-schedules and effects with or without them. An absent storage port or consent reader fails closed with
+Content owns the storage and sources groups; Access owns the shared Auth consent group. Registration installs
+the same workflows, queues, schedules and effects with or without them. An absent storage port or consent reader fails closed with
 `dependency_unavailable` on every call, and an absent sources group leaves the source allowlist empty.
 A partial group fails startup and names its first missing or invalid variable. Errors and logs name the
 variable, never a value. Startup logs one line for each absent group.
@@ -557,7 +557,8 @@ variable, never a value. Startup logs one line for each absent group.
 | `CONTENT_R2_SECRET_ACCESS_KEY` | Corresponding private secret.                                                                                                                                       |
 | `CONTENT_SOURCE_HOSTS`         | Comma-separated exact lowercase DNS source hosts, at most 100, for trusted HTTPS source imports. No schemes, ports, wildcard suffixes, IP literals or whitespace.   |
 
-The consent group is optional and all or nothing: `CONTENT_AUTH_CONSENT_URL` is the exact private HTTPS
+Access reads the shared consent group with `readAuthConsentConfig(env)`. It is optional and all or nothing:
+`KERNEL_AUTH_CONSENT_URL` is the exact private HTTPS
 `/internal/v1/consents:read` endpoint, together with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`
 for its Cloudflare Access service token. The shared `KERNEL_ROUTE_KEY` binds imported source tuples.
 

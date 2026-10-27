@@ -1,7 +1,12 @@
 import { createAccess } from '../access/index.ts';
 import resourceRoles from '../access/resource-roles.json';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import { createAuthConsentReader, type CurrentConsentReader } from '../access/auth-consent.ts';
+import {
+  AUTH_CONSENT_VARIABLES,
+  createAuthConsentReader,
+  readAuthConsentConfig,
+  type CurrentConsentReader,
+} from '../access/auth-consent.ts';
 import type { KernelClock } from '../clock.ts';
 import { contentEffects } from './relays.ts';
 import type { WorkModule } from '../work/registry.ts';
@@ -37,6 +42,7 @@ export class ContentDependencyUnavailableError extends Error {
 
 export type ContentWorkDependencies = Readonly<{
   config: ContentWorkConfig;
+  absentGroups: readonly Readonly<{ name: string; variables: readonly string[] }>[];
   storage: MediaStorage;
   readConsent: CurrentConsentReader;
   fetchConfig: MediaImportFetchConfig;
@@ -61,17 +67,15 @@ export function contentWorkDependencies(
   fetchImpl: (request: Request) => Promise<Response>,
 ): ContentWorkDependencies {
   const config = readContentWorkConfig(env);
+  const consent = readAuthConsentConfig(env);
   return Object.freeze({
     config,
+    absentGroups: Object.freeze([
+      ...config.absentGroups,
+      ...(consent === null ? [Object.freeze({ name: 'consent', variables: AUTH_CONSENT_VARIABLES })] : []),
+    ]),
     storage: config.storage === null ? unavailableStorage() : new R2Storage({ ...config.storage, fetch: fetchImpl }),
-    readConsent:
-      config.consent === null
-        ? unavailableConsent()
-        : createAuthConsentReader({
-            url: config.consent.url,
-            serviceTokenId: config.consent.serviceTokenId,
-            serviceTokenSecret: config.consent.serviceTokenSecret,
-          }),
+    readConsent: consent === null ? unavailableConsent() : createAuthConsentReader(consent),
     fetchConfig: Object.freeze({ allowedHosts: config.sourceHosts }),
   });
 }
@@ -102,7 +106,7 @@ export const registerContent: WorkModule = {
   async register(context) {
     const dependencies = contentWorkDependencies(context.env, fetch);
     const collectionPartitions = testCollectionPartitions(context.env);
-    for (const group of dependencies.config.absentGroups) {
+    for (const group of dependencies.absentGroups) {
       console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
     }
     await createContentWork({

@@ -219,7 +219,7 @@ leave, the manager for add-member, the moderator for a ban removal. `createRealm
 takes the restorer; without one, a sealed step fails closed. A reference that is not sealed
 authenticates through Access, and `publish` authorizes with that authenticated actor object itself,
 never a copy: production admission knows no other object. The kernel's worker composes both from
-the one Auth consent configuration (`CONTENT_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID`,
+the one Auth consent configuration (`KERNEL_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID`,
 `CF_ACCESS_CLIENT_SECRET`); with the group absent, restoration is unavailable.
 A missing Realm, or one that is not yet active at T, has no proof.
 

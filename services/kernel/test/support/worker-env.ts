@@ -12,6 +12,9 @@ export function workerTestEnv(overrides: Record<string, string | undefined> = {}
     CONTENT_R2_ACCESS_KEY_ID: 'worker-fixture-access',
     CONTENT_R2_SECRET_ACCESS_KEY: 'worker-fixture-secret',
     CONTENT_SOURCE_HOSTS: 'images.example.org',
+    KERNEL_AUTH_CONSENT_URL: 'https://consent.worker.test/internal/v1/consents:read',
+    CF_ACCESS_CLIENT_ID: 'worker-fixture-client',
+    CF_ACCESS_CLIENT_SECRET: 'worker-fixture-client-secret',
     ...overrides,
   };
 }

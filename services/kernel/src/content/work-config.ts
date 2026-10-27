@@ -4,13 +4,7 @@ import type { R2StorageOptions } from './r2-storage.ts';
 
 export type ContentStorageConfig = Readonly<Omit<R2StorageOptions, 'fetch'>>;
 
-export type ContentConsentConfig = Readonly<{
-  url: string;
-  serviceTokenId: string;
-  serviceTokenSecret: string;
-}>;
-
-export type ContentWorkGroupName = 'storage' | 'sources' | 'consent';
+export type ContentWorkGroupName = 'storage' | 'sources';
 
 export type ContentWorkGroup = Readonly<{
   name: ContentWorkGroupName;
@@ -20,7 +14,6 @@ export type ContentWorkGroup = Readonly<{
 export type ContentWorkConfig = Readonly<{
   storage: ContentStorageConfig | null;
   sourceHosts: readonly string[];
-  consent: ContentConsentConfig | null;
   absentGroups: readonly ContentWorkGroup[];
 }>;
 
@@ -35,28 +28,19 @@ const STORAGE_VARIABLES = Object.freeze([
 
 const SOURCE_VARIABLES = Object.freeze(['CONTENT_SOURCE_HOSTS'] as const);
 
-const CONSENT_VARIABLES = Object.freeze([
-  'CONTENT_AUTH_CONSENT_URL',
-  'CF_ACCESS_CLIENT_ID',
-  'CF_ACCESS_CLIENT_SECRET',
-] as const);
-
 const NO_HOSTS = Object.freeze<readonly string[]>([]);
 
 /** Host configuration only. Each group is absent or complete. Errors name a variable, never its value. */
 export function readContentWorkConfig(env: Environment): ContentWorkConfig {
   const storage = readStorage(env);
   const sourceHosts = readSourceHosts(env);
-  const consent = readConsent(env);
   const absentGroups = [
     storage === null ? absentGroup('storage', STORAGE_VARIABLES) : null,
     sourceHosts === null ? absentGroup('sources', SOURCE_VARIABLES) : null,
-    consent === null ? absentGroup('consent', CONSENT_VARIABLES) : null,
   ].filter((group): group is ContentWorkGroup => group !== null);
   return Object.freeze({
     storage,
     sourceHosts: sourceHosts ?? NO_HOSTS,
-    consent,
     absentGroups: Object.freeze(absentGroups),
   });
 }
@@ -73,13 +57,6 @@ function groupPresent(env: Environment, variables: readonly string[]): boolean {
 function storageValue(env: Environment, variable: string): string {
   const value = env[variable];
   if (!value || value.trim() !== value || /[\x00-\x1f\x7f]/.test(value)) throw new ConfigError(variable);
-  return value;
-}
-
-/** Consent values keep the historical visible-ASCII bound. */
-function consentValue(env: Environment, variable: string): string {
-  const value = env[variable];
-  if (!value || !/^[\x21-\x7e]{1,1024}$/.test(value)) throw new ConfigError(variable);
   return value;
 }
 
@@ -132,30 +109,6 @@ function readSourceHosts(env: Environment): readonly string[] | null {
   )
     throw new ConfigError('CONTENT_SOURCE_HOSTS');
   return Object.freeze(hosts);
-}
-
-function readConsent(env: Environment): ContentConsentConfig | null {
-  if (!groupPresent(env, CONSENT_VARIABLES)) return null;
-  const url = consentValue(env, 'CONTENT_AUTH_CONSENT_URL');
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.protocol !== 'https:' ||
-      parsed.pathname !== '/internal/v1/consents:read' ||
-      parsed.username ||
-      parsed.password ||
-      parsed.search ||
-      parsed.hash
-    )
-      throw new Error();
-  } catch {
-    throw new ConfigError('CONTENT_AUTH_CONSENT_URL');
-  }
-  return Object.freeze({
-    url,
-    serviceTokenId: consentValue(env, 'CF_ACCESS_CLIENT_ID'),
-    serviceTokenSecret: consentValue(env, 'CF_ACCESS_CLIENT_SECRET'),
-  });
 }
 
 function canonicalDnsHost(host: string): boolean {

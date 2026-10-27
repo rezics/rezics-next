@@ -28,7 +28,7 @@ const contentEnv = {
   CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
   CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
   CONTENT_SOURCE_HOSTS: 'images.example.org,covers.example.net',
-  CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+  KERNEL_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
   CF_ACCESS_CLIENT_ID: 'access-client-id',
   CF_ACCESS_CLIENT_SECRET: 'access-client-secret',
 };
@@ -192,7 +192,7 @@ if (process.argv.includes('--content-registration')) {
     expect(absenceLines(output)).toEqual([
       'content storage group is absent: CONTENT_R2_ENDPOINT, CONTENT_R2_BUCKET, CONTENT_R2_ACCESS_KEY_ID, CONTENT_R2_SECRET_ACCESS_KEY',
       'content sources group is absent: CONTENT_SOURCE_HOSTS',
-      'content consent group is absent: CONTENT_AUTH_CONSENT_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET',
+      'content consent group is absent: KERNEL_AUTH_CONSENT_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET',
     ]);
     expect(output).not.toContain(canary);
     expect(output).not.toContain(routeKey);
@@ -334,7 +334,7 @@ if (process.argv.includes('--content-registration')) {
 
       const dependencies = contentWorkDependencies({}, transport);
       expect(dependencies.config.storage).toBeNull();
-      expect(dependencies.config.consent).toBeNull();
+      expect(dependencies.absentGroups.map((group) => group.name)).toContain('consent');
       expect(dependencies.fetchConfig.allowedHosts).toEqual([]);
 
       const image = await createImageJob(pool, dependencies.storage)
