@@ -253,10 +253,11 @@ export function createSearchService({
       }
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
-      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f' }) : undefined;
-      const clauses = new Map<string, FactClause>(
-        compiledFilter?.leaves.filter((leaf) => !leaf.negated).map((leaf) => [leaf.name, leaf]),
-      );
+      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
+      const overflowProperties = [
+        ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+      ];
+      const clauses = new Map<string, FactClause>(compiledFilter?.leaves.map((leaf) => [leaf.name, leaf]));
       const plan = {
         ...(compiledText
           ? {
@@ -268,25 +269,48 @@ export function createSearchService({
             }
           : {}),
         ...(compiledFilter ? { filter: compiledFilter.query } : {}),
+        ...(overflowProperties.length ? { overflowProperties } : {}),
         sort,
       };
       let after = cursor?.after;
       let generation = cursor?.generation;
       let total;
+      let overflow = false;
       let exhausted = false;
       const results: SearchHit[] = [];
       const shown: IndexedSubject[] = [];
+      // Observe every checked snapshot, including rejected candidates: current overflow can
+      // precede its indexed marker, so an exact candidate total would also be unsafe there.
+      const disclosureSource: SubjectSource = overflowProperties.length
+        ? {
+            async read(partition, ids) {
+              const snapshot = await source.read(partition, ids);
+              overflow ||= snapshot.subjects.some((subject) =>
+                subject.relationFacetOverflow?.some((property) => overflowProperties.includes(property)),
+              );
+              return snapshot;
+            },
+            count: (partition) => source.count(partition),
+            ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
+          }
+        : source;
       for (let round = 0; round < 3; round++) {
         const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
           searchSubjects(client, prefix, { ...plan, size, ...(after === undefined ? {} : { after }) }),
         );
         total ??= page.total;
+        overflow ||= page.overflow === true;
         const currentGeneration = await generationOf(page.hits);
         if (generation !== undefined && generation !== currentGeneration)
           throw new ProblemError('search_restart_required');
         generation = currentGeneration;
-        const { passed } = await checkHits(source, page.hits, clauses);
+        const { passed } = await checkHits(
+          disclosureSource,
+          page.hits,
+          clauses,
+          admitted ? { filter: admitted } : undefined,
+        );
         const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
         let consumed = 0;
         for (const hit of page.hits) {
@@ -308,7 +332,9 @@ export function createSearchService({
       }
       return {
         subjects: results,
-        total: total!,
+        // Overflow candidates are a superset, not a lower bound. Only disclosed hits
+        // on this response prove a count without scanning beyond the bounded pages.
+        total: overflow ? { value: results.length, relation: 'lower_bound' as const } : total!,
         next: exhausted ? null : encodeSearchCursor(cursors, binding, { generation: generation!, after: after! }, now),
         as_of: await asOf(generation!),
       };
@@ -324,10 +350,15 @@ export function createSearchService({
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       const admitted = await admitQuery(text, filter, current);
       admitFacets(facets, filter, current);
+      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
+      const overflowProperties = [
+        ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+      ];
       const counted = await indexRequest(() =>
         countFacets(client, prefix, {
           ...(text ? { query: compileText(text, { field: 'search_text', prefix: 't' }).query } : {}),
-          ...(admitted ? { filter: compileFilter(admitted, { prefix: 'f' }).query } : {}),
+          ...(compiledFilter ? { filter: compiledFilter.query } : {}),
+          ...(overflowProperties.length ? { overflowProperties } : {}),
           facets,
           sample: facetSample,
         }),
