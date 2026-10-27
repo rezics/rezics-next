@@ -862,3 +862,24 @@ otherwise `schema:recipeIngredient` preserves unstructured source wording.
 `schema:recipeYield` gives the base servings. Clients multiply the structured
 amount and any bounds by `servings / recipeYield` with decimal arithmetic; the
 API returns amounts exactly as stored and never rounds or scales them.
+
+## URL slug
+
+`slug(label)` is the canonical URL slug of a display label. Subjects and threads share
+it; `subjectSlug` is the identical function. Import it from the browser-portable entry
+`@rezics/definitions/slug`, which maps directly to `src/slug.ts`; the module imports
+nothing and uses no runtime globals.
+
+The label is NFKC-normalized and lowercased with `String.prototype.toLowerCase`, never
+a locale-sensitive form. Each run of characters other than Unicode letters, marks and
+numbers becomes one hyphen, and hyphens are trimmed from both ends. CJK stays actual
+Unicode: nothing is transliterated, romanized, percent-encoded or stripped of marks.
+The result holds at most 60 Unicode code points, never UTF-16 units. When the text is
+longer, it is cut at the last hyphen inside the first 60 code points if there is one,
+otherwise at 60 code points, then trimmed again. An empty result is `subject`. The URL
+builder, not this helper, serializes the slug into a URL. An unchanged label gives an
+unchanged slug, and a slug is its own slug.
+
+Cost: the helper touches only the supplied string in memory, with no database, network
+or locale-catalogue access. Work is O(label code points) and the output is at most 60
+code points, independent of subjects, manifests and history.
