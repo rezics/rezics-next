@@ -10,7 +10,7 @@ import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { ThreadPost } from '../../threads/reads';
-import { credentialMode, threadPageQuery, threadSlugQuery } from '../../threads/thread-queries';
+import { credentialMode, threadPageQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
 import {
   rememberThreadSlug,
@@ -47,13 +47,12 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   loader: async ({ params, deps, context }) => {
     const mode = credentialMode();
     const known = rememberedThreadSlug(params.id);
-    if (known !== undefined && !slugMatches(params.slug, known)) {
-      const head = await context.queryClient.ensureQueryData(threadSlugQuery(params.id, mode));
-      rememberThreadSlug(head.id, head.title);
-      if (!sameThreadSlug(params.slug, head.title))
-        throw redirect({ href: threadLocation(getLocale(), head, deps.cursor), statusCode: 301 });
+    const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
+    const page = await context.queryClient.ensureQueryData(threadPageQuery(params.id, deps.cursor, mode, expectedSlug));
+    if ('redirect' in page) {
+      rememberThreadSlug(page.redirect.id, page.redirect.title);
+      throw redirect({ href: threadLocation(getLocale(), page.redirect, deps.cursor), statusCode: 301 });
     }
-    const page = await context.queryClient.ensureQueryData(threadPageQuery(params.id, deps.cursor, mode));
     const title = threadTitle(page.thread);
     rememberThreadSlug(page.thread.id, title);
     if (!sameThreadSlug(params.slug, title))

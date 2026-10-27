@@ -20,11 +20,23 @@ export function threadSlugQuery(id: string, credentialMode: CredentialMode) {
   });
 }
 
-export function threadPageQuery(id: string, cursor: string | undefined, credentialMode: CredentialMode) {
+export function threadPageQuery(
+  id: string,
+  cursor: string | undefined,
+  credentialMode: CredentialMode,
+  expectedSlug?: string,
+) {
   return queryOptions({
     ...publicRead,
-    queryKey: ['thread-page', id, cursor ?? null, credentialMode],
-    queryFn: () => readThreadPage({ data: { id, ...(cursor === undefined ? {} : { cursor }) } }),
+    queryKey: ['thread-page', id, cursor ?? null, credentialMode, expectedSlug ?? null],
+    queryFn: () =>
+      readThreadPage({
+        data: {
+          id,
+          ...(cursor === undefined ? {} : { cursor }),
+          ...(expectedSlug === undefined ? {} : { expectedSlug }),
+        },
+      }),
   });
 }
 

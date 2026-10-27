@@ -32,6 +32,7 @@ export type ThreadHeadPage = {
     title?: string | null;
     createdAt: string;
     authorId: string;
+    subjectIds: readonly string[];
     firstPost: { id: string; body?: unknown };
     replyCount?: number;
   };
@@ -86,24 +87,28 @@ function replyCount(thread: { replyCount?: number }): number {
   return typeof thread.replyCount === 'number' && Number.isFinite(thread.replyCount) ? thread.replyCount : 0;
 }
 
-/** The widest published cover variant, used as the link-preview card. Sensitive covers stay out of metadata. */
-function cardImage(subjects: ThreadSubject[], alt: string) {
-  for (const subject of subjects) {
-    const cover = subject.cover;
-    if (!cover || cover.withheld || cover.variants.length === 0 || cover.width <= 0) continue;
-    const width = Math.max(...cover.variants.map((variant) => variant.width));
-    const format = cover.variants.some((variant) => variant.format === 'webp' && variant.width === width)
-      ? 'webp'
-      : cover.variants.find((variant) => variant.width === width)?.format;
-    if (!format) continue;
-    return {
-      url: coverSrc(cover.media, format, width),
-      width,
-      height: Math.max(1, Math.round((cover.height * width) / cover.width)),
-      alt: subjectTitle(subject, getLocale()) || alt,
-    };
-  }
-  return undefined;
+/** The first attached subject's closest published cover variant to the default card width. */
+function cardImage(subjects: ThreadSubject[], firstSubjectId: string | undefined, alt: string) {
+  if (!firstSubjectId) return undefined;
+  const subject = subjects.find((item) => item.id === firstSubjectId);
+  const cover = subject?.cover;
+  if (!subject || !cover || cover.withheld || cover.variants.length === 0 || cover.width <= 0) return undefined;
+
+  const width = [...new Set(cover.variants.map((variant) => variant.width))].sort(
+    (a, b) => Math.abs(a - 1200) - Math.abs(b - 1200) || b - a,
+  )[0];
+  if (width === undefined) return undefined;
+  const variant =
+    cover.variants.find((item) => item.width === width && item.format === 'webp') ??
+    cover.variants.find((item) => item.width === width);
+  if (!variant) return undefined;
+
+  return {
+    url: coverSrc(cover.media, variant.format, width),
+    width,
+    height: Math.max(1, Math.round((cover.height * width) / cover.width)),
+    alt: subjectTitle(subject, getLocale()) || alt,
+  };
 }
 
 function contextFor(path: string): HeadContext | undefined {
@@ -155,7 +160,7 @@ export function threadPageHead(page: ThreadHeadPage) {
       : []),
     { name: title, path },
   ];
-  const image = cardImage(page.subjects, title);
+  const image = cardImage(page.subjects, page.thread.subjectIds[0], title);
   return pageHead(
     {
       title,

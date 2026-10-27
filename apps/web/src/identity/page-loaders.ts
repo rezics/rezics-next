@@ -3,8 +3,8 @@ import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import { boardRealmId, readBoardRealm, type BoardRealm } from '../threads/board-context';
-import { readThreadSubjects } from '../threads/subjects';
-import { loadThreadPage } from '../threads/thread-page';
+import { readThreadSubjects, type ThreadSubject } from '../threads/subjects';
+import { loadThreadPage, type LoadedThreadPage, type ThreadSlugRedirect } from '../threads/thread-page';
 import { readPageAuthors, type PageAuthors } from './read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -53,15 +53,43 @@ export async function loadBoardPageWithAuthors(
   return { board: board.board, ...(realm ? { realm } : {}), threads, authors, now };
 }
 
-export async function loadThreadPageWithAuthors(
+type ThreadPageInput = PageInput & { expectedSlug?: string };
+type ThreadPageWithAuthors = LoadedThreadPage & { authors: PageAuthors; subjects: ThreadSubject[]; now: string };
+
+export function loadThreadPageWithAuthors(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  data: PageInput & { expectedSlug: string },
+  verification: VerificationConfig,
+): Promise<ThreadPageWithAuthors | ThreadSlugRedirect>;
+export function loadThreadPageWithAuthors(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  data: ThreadPageInput,
+  verification: VerificationConfig,
+): Promise<ThreadPageWithAuthors | ThreadSlugRedirect>;
+export function loadThreadPageWithAuthors(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   data: PageInput,
   verification: VerificationConfig,
-) {
+): Promise<ThreadPageWithAuthors>;
+export async function loadThreadPageWithAuthors(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  data: ThreadPageInput,
+  verification: VerificationConfig,
+): Promise<ThreadPageWithAuthors | ThreadSlugRedirect> {
   const now = new Date().toISOString();
-  const page = await loadThreadPage(client, request, sessionEnv, data, verification);
+  const page =
+    data.expectedSlug === undefined
+      ? await loadThreadPage(client, request, sessionEnv, data, verification)
+      : await loadThreadPage(client, request, sessionEnv, { ...data, expectedSlug: data.expectedSlug }, verification);
+  if ('redirect' in page) return page;
   const [authors, subjects] = await Promise.all([
     readPageAuthors(client, [
       page.thread.authorId,

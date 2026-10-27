@@ -13,7 +13,7 @@ import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity
 import type { PageAuthors } from '../identity/read';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
-import type { ThreadPost } from './thread-page';
+import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -22,7 +22,7 @@ type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type { ThreadPost };
 
-type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new' };
+type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new'; expectedSlug?: string };
 const draftCookie = 'rezics_draft_key';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -42,13 +42,15 @@ function validatePageInput(input: unknown): PageInput {
     typeof input.id !== 'string' ||
     input.id.length > 128 ||
     ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
-    ('sort' in input && input.sort !== undefined && input.sort !== 'hot' && input.sort !== 'new')
+    ('sort' in input && input.sort !== undefined && input.sort !== 'hot' && input.sort !== 'new') ||
+    ('expectedSlug' in input && input.expectedSlug !== undefined && typeof input.expectedSlug !== 'string')
   )
     throw notFound();
   return {
     id: input.id,
     ...('cursor' in input && typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
     ...('sort' in input && (input.sort === 'hot' || input.sort === 'new') ? { sort: input.sort } : {}),
+    ...('expectedSlug' in input && typeof input.expectedSlug === 'string' ? { expectedSlug: input.expectedSlug } : {}),
   };
 }
 
@@ -103,18 +105,21 @@ export const readThreadPage = createServerFn({ method: 'GET' })
   .handler(
     async ({
       data,
-    }): Promise<{
-      thread: Thread['thread'];
-      board?: Board['board'];
-      realm?: BoardRealm;
-      posts: PostPage;
-      idempotencyKey: string;
-      viewerId?: string;
-      verification: VerificationConfig;
-      authors: PageAuthors;
-      subjects: ThreadSubject[];
-      now: string;
-    }> => {
+    }): Promise<
+      | {
+          thread: Thread['thread'];
+          board?: Board['board'];
+          realm?: BoardRealm;
+          posts: PostPage;
+          idempotencyKey: string;
+          viewerId?: string;
+          verification: VerificationConfig;
+          authors: PageAuthors;
+          subjects: ThreadSubject[];
+          now: string;
+        }
+      | ThreadSlugRedirect
+    > => {
       setResponseHeader('cache-control', 'private, no-store');
       const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
       const request = getRequest();
@@ -124,6 +129,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
           (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
           'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
       });
+      if ('redirect' in page) return page;
       return { ...page, idempotencyKey: carriedDraftKey(request, data.id) ?? crypto.randomUUID() };
     },
   );
