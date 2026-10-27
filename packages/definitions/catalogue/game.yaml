@@ -27,7 +27,7 @@ classes:
     slots:
       - alternateName
     annotations:
-      cover_ratio: 3:4
+      cover_ratio: 5:7
   VideoGameRelease:
     class_uri: wd:Q20631656
     description: >-
@@ -65,7 +65,7 @@ classes:
       - vndbId
     annotations:
       facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage author director illustrator musicBy screenwriter voiceActor contributor
-      cover_ratio: 3:4
+      cover_ratio: 5:7
       schema_org_type: https://schema.org/CreativeWork
   BangumiVideoGame:
     is_a: VideoGame
@@ -131,7 +131,7 @@ classes:
       - expansionOf
     annotations:
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf author director musicBy producer productionCompany developer publisher character partOfSeries
-      cover_ratio: 3:4
+      cover_ratio: 5:7
       schema_org_type: https://schema.org/CreativeWork
 slots:
   gamePlatform:

@@ -96,7 +96,7 @@
         "wdt:P58",
         "schema:producer"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/Episode"
     },
     "schema:Movie": {
@@ -178,7 +178,7 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/Movie"
     },
     "schema:TVSeason": {
@@ -260,7 +260,7 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/TVSeason",
       "descriptions": {
         "en": "television series season",
@@ -352,7 +352,7 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/TVSeries",
       "descriptions": {
         "ja": "テレビ番組シリーズ",
@@ -436,7 +436,7 @@
         "wdt:P178",
         "wdt:P725"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/Book",
       "descriptions": {
         "de": "Ausgabe oder Version",
@@ -502,7 +502,7 @@
         "schema:contributor",
         "schema:inLanguage"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/Book",
       "descriptions": {
         "de": "Schrifttum",
@@ -735,7 +735,7 @@
         "wdt:P361"
       ],
       "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/CreativeWork"
     },
     "schema:VideoGame": {
@@ -818,7 +818,7 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/VideoGame"
     },
     "wd:Q209163": {
@@ -902,7 +902,7 @@
         "schema:character",
         "wdt:P179"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/CreativeWork",
       "descriptions": {
         "de": "Computerspiel-Erweiterung",
@@ -975,7 +975,7 @@
         "wdt:P725",
         "schema:contributor"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/CreativeWork",
       "descriptions": {
         "de": "Softwareveröffentlichung",
@@ -1053,7 +1053,7 @@
         "wdt:P179",
         "schema:inLanguage"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/PublicationVolume"
     },
     "schema:ComicSeries": {
@@ -1122,7 +1122,7 @@
         "wdt:P179",
         "schema:inLanguage"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/ComicSeries",
       "descriptions": {
         "ja": "日本の連載漫画",
@@ -1221,7 +1221,7 @@
         "schema:contributor",
         "wdt:P179"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/BookSeries"
     },
     "wd:Q7725310": {
@@ -1267,7 +1267,7 @@
         "wdt:P361"
       ],
       "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/CreativeWorkSeries",
       "descriptions": {
         "de": "Mehrteiler",
@@ -1348,7 +1348,7 @@
         "wdt:P179",
         "schema:inLanguage"
       ],
-      "coverRatio": "3:4",
+      "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/VideoGame"
     },
     "schema:MusicAlbum": {

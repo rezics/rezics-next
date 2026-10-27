@@ -59,7 +59,7 @@ test('every bundled item property declares how it reads in both directions', () 
 
 test('bundled types declare the documented cover frame ratios', () => {
   const ratios: Record<string, string[]> = {
-    '3:4': [
+    '5:7': [
       'wd:Q2620972',
       'schema:Book',
       'bf:Instance',
@@ -75,9 +75,8 @@ test('bundled types declare the documented cover frame ratios', () => {
       'wd:Q689445',
       'wd:Q209163',
       'wd:Q20631656',
-      'wd:Q95074',
-      'schema:Person',
     ],
+    '3:4': ['wd:Q95074', 'schema:Person'],
     '1:1': [
       'wd:Q2095',
       'schema:MusicAlbum',
@@ -141,7 +140,7 @@ test('story arcs are creative-work subjects held as ordered part ranges', () => 
   expect(types['wd:Q2620972']).toMatchObject({
     iri: 'http://www.wikidata.org/entity/Q2620972',
     bases: ['schema:CreativeWork', 'schema:Thing'],
-    coverRatio: '3:4',
+    coverRatio: '5:7',
   });
   expect(properties['rezics:storyArc']).toMatchObject({
     datatype: 'wikibase-item',
