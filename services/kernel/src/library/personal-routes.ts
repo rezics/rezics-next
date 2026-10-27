@@ -14,12 +14,13 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
-import { createEntryCommands, LibraryConflictError } from './entries.ts';
+import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import type { Copy, Entry } from './entry-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
 import { admitShelfRead } from './shelf-admission.ts';
 import { ShelfContractNotImplementedError, type ShelfEntry, type ShelfReads } from './shelf-contract.ts';
+import { libraryStoredVocabularySchema } from './profile-schemas.ts';
 import {
   shelfEntrySchema,
   shelfListQuerySchema,
@@ -42,22 +43,19 @@ const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
-const state = t.Union([
-  t.Literal('planned'),
-  t.Literal('in_progress'),
-  t.Literal('completed'),
-  t.Literal('paused'),
-  t.Literal('dropped'),
-]);
-const status = t.Union([t.Literal('ordered'), t.Literal('owned'), t.Literal('lent'), t.Literal('disposed')]);
+const stateInput = t.String();
+const statusInput = t.String();
 const pageQuery = {
   ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 };
-const entrySchema = t.Object({ subjectId: id, state, revision, createdAt: id, updatedAt: id }, closed);
+const entrySchema = t.Object(
+  { subjectId: id, state: libraryStoredVocabularySchema, revision, createdAt: id, updatedAt: id },
+  closed,
+);
 const copyFields = {
-  status: t.Optional(status),
+  status: t.Optional(statusInput),
   location: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
   source: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
   acquiredOn: t.Optional(nullable),
@@ -68,7 +66,7 @@ const copySchema = t.Object(
   {
     id,
     subjectId: id,
-    status,
+    status: libraryStoredVocabularySchema,
     revision,
     location: nullable,
     source: nullable,
@@ -126,6 +124,7 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
     if (error instanceof GrantDeniedError) throw new ProblemError(denied);
     if (error instanceof LibraryNotFoundError) throw new ProblemError('not_found');
     if (error instanceof LibraryConflictError || error instanceof CopyConflictError) throw new ProblemError('conflict');
+    if (error instanceof LibraryEntryInvalidError) throw new ProblemError('invalid_request');
     if (error instanceof CopyInvalidError) throw new ProblemError('invalid_request');
     throw error;
   }
@@ -279,7 +278,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ subjectId: id }),
         headers,
-        body: t.Object({ state, revision: t.Optional(revision) }, closed),
+        body: t.Object({ state: stateInput, revision: t.Optional(revision) }, closed),
         response: { 200: entryResponse, 201: entryResponse, ...failures },
         detail: detail('library_entry.put', 'library_entry:update', true),
       },
@@ -323,7 +322,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copies',
       {
         headers,
-        body: t.Object({ ...copyFields, subjectId: id, status }, closed),
+        body: t.Object({ ...copyFields, subjectId: id, status: statusInput }, closed),
         response: { 201: copyResponse, ...failures },
         detail: detail('copy.create', 'copy:create', true),
       },

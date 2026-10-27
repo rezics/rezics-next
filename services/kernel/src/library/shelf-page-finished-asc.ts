@@ -1,5 +1,4 @@
-import { ENTRY_STATES, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
-import type { EntryState } from './entry-model.ts';
+import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
 import { routeOf, ROUTES } from '../route/route.ts';
 import unfiltered from './shelf-page-finished-asc.sql';
 import byState from './shelf-page-finished-asc-state.sql';
@@ -36,7 +35,7 @@ export function createShelfFinishedAscReader(): ShelfDateReader {
       if (query.orderBy !== 'finishedAt' || query.direction !== 'asc') throw new TypeError('Invalid shelf order');
       if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > MAX_SHELF_PAGE_SIZE)
         throw new RangeError('Invalid shelf page limit');
-      if (query.state !== null && !ENTRY_STATES.includes(query.state)) throw new TypeError('Invalid shelf state');
+      if (query.state !== null && !isLegacyEntryState(query.state)) throw new TypeError('Invalid shelf state');
       if (query.typeId !== null && (typeof query.typeId !== 'string' || !uuid.test(query.typeId)))
         throw new TypeError('Shelf type must be a private UUID');
       if (
@@ -70,7 +69,7 @@ export function createShelfFinishedAscReader(): ShelfDateReader {
       const rows = await statement.run({ query: client.query.bind(client) }, parameters);
       const entries = rows.slice(0, query.limit).map((row) => {
         if (
-          !ENTRY_STATES.includes(row.state as EntryState) ||
+          row.state === null ||
           row.createdAt === null ||
           row.updatedAt === null ||
           row.lastActivityAt === null
@@ -78,7 +77,7 @@ export function createShelfFinishedAscReader(): ShelfDateReader {
           throw new Error('Shelf rollout invariant violated');
         return {
           ...row,
-          state: row.state as EntryState,
+          state: row.state,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
           lastActivityAt: row.lastActivityAt,

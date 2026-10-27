@@ -29,7 +29,7 @@ export function createShelfActiveReader(): ShelfActiveReader {
         result.set(row.subjectId, {
           ...row,
           mode: member(row.mode, ['scalar_amount', 'cursor_position', 'completed_units']),
-          unit: member(row.unit, ['page', 'chapter', 'episode', 'volume', 'minute', 'percent']),
+          unit: row.unit,
           state: member(row.state, ['active']),
           startedAt: new Date(row.startedAt).toISOString(),
           completedAt: row.completedAt === null ? null : new Date(row.completedAt).toISOString(),

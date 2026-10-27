@@ -3824,7 +3824,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     subjectId: string;
                     versionSubjectId?: string | null;
                     mode: "completed_units" | "cursor_position" | "scalar_amount";
-                    unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                    unit: string;
                     total?: string | null;
                 };
                 params: {};
@@ -3839,7 +3839,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             subjectId: string;
                             versionSubjectId: string | null;
                             mode: import("./progress.ts").ProgressMode;
-                            unit: import("./progress.ts").ProgressUnit;
+                            unit: string;
                             total: string | null;
                             amount: string | null;
                             locator: string | null;
@@ -3857,7 +3857,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             subjectId: string;
                             versionSubjectId: string | null;
                             mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                            unit: string;
                             total: string | null;
                             amount: string | null;
                             locator: string | null;
@@ -4058,7 +4058,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             subjectId: string;
                             versionSubjectId: string | null;
                             mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                            unit: string;
                             total: string | null;
                             amount: string | null;
                             locator: string | null;
@@ -4271,7 +4271,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 subjectId: string;
                                 versionSubjectId: string | null;
                                 mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                                unit: string;
                                 total: string | null;
                                 amount: string | null;
                                 locator: string | null;
@@ -4384,7 +4384,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     subjectId: string;
                                     versionSubjectId: string | null;
                                     mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                    unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                                    unit: string;
                                     total: string | null;
                                     amount: string | null;
                                     locator: string | null;
@@ -4524,7 +4524,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     subjectId: string;
                                     versionSubjectId: string | null;
                                     mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                    unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                                    unit: string;
                                     total: string | null;
                                     amount: string | null;
                                     locator: string | null;
@@ -4664,7 +4664,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     subjectId: string;
                                     versionSubjectId: string | null;
                                     mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                    unit: "chapter" | "episode" | "minute" | "page" | "percent" | "volume";
+                                    unit: string;
                                     total: string | null;
                                     amount: string | null;
                                     locator: string | null;

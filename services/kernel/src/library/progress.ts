@@ -18,7 +18,7 @@ const STATES = new Set<string>(['active', 'completed', 'abandoned']);
 const CREATE_FIELDS = ['subjectId', 'versionSubjectId', 'mode', 'unit', 'total'];
 
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
+export type ProgressUnit = string;
 export type ProgressState = 'active' | 'completed' | 'abandoned';
 export type ProgressAction = 'complete' | 'abandon';
 
@@ -62,7 +62,7 @@ function isMode(value: unknown): value is ProgressMode {
   return typeof value === 'string' && MODES.has(value);
 }
 
-function isUnit(value: unknown): value is ProgressUnit {
+function isUnit(value: unknown): value is string {
   return typeof value === 'string' && UNITS.has(value);
 }
 

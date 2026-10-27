@@ -29924,12 +29924,6 @@
                             ]
                           },
                           "status": {
-                            "enum": [
-                              "ordered",
-                              "owned",
-                              "lent",
-                              "disposed"
-                            ],
                             "type": "string"
                           },
                           "subject": {
@@ -30887,12 +30881,6 @@
                     ]
                   },
                   "status": {
-                    "enum": [
-                      "ordered",
-                      "owned",
-                      "lent",
-                      "disposed"
-                    ],
                     "type": "string"
                   },
                   "subjectId": {
@@ -30958,12 +30946,6 @@
                           ]
                         },
                         "status": {
-                          "enum": [
-                            "ordered",
-                            "owned",
-                            "lent",
-                            "disposed"
-                          ],
                           "type": "string"
                         },
                         "subjectId": {
@@ -32422,12 +32404,6 @@
                           ]
                         },
                         "status": {
-                          "enum": [
-                            "ordered",
-                            "owned",
-                            "lent",
-                            "disposed"
-                          ],
                           "type": "string"
                         },
                         "subject": {
@@ -33389,12 +33365,6 @@
                     ]
                   },
                   "status": {
-                    "enum": [
-                      "ordered",
-                      "owned",
-                      "lent",
-                      "disposed"
-                    ],
                     "type": "string"
                   }
                 },
@@ -33454,12 +33424,6 @@
                           ]
                         },
                         "status": {
-                          "enum": [
-                            "ordered",
-                            "owned",
-                            "lent",
-                            "disposed"
-                          ],
                           "type": "string"
                         },
                         "subjectId": {
@@ -45642,13 +45606,6 @@
             "name": "state",
             "required": false,
             "schema": {
-              "enum": [
-                "planned",
-                "in_progress",
-                "completed",
-                "paused",
-                "dropped"
-              ],
               "type": "string"
             }
           },
@@ -45770,14 +45727,6 @@
                                     ]
                                   },
                                   "unit": {
-                                    "enum": [
-                                      "page",
-                                      "chapter",
-                                      "episode",
-                                      "volume",
-                                      "minute",
-                                      "percent"
-                                    ],
                                     "type": "string"
                                   },
                                   "versionSubjectId": {
@@ -45827,13 +45776,6 @@
                                 "type": "integer"
                               },
                               "state": {
-                                "enum": [
-                                  "planned",
-                                  "in_progress",
-                                  "completed",
-                                  "paused",
-                                  "dropped"
-                                ],
                                 "type": "string"
                               },
                               "subject": {
@@ -46072,13 +46014,6 @@
                                 "type": "integer"
                               },
                               "state": {
-                                "enum": [
-                                  "planned",
-                                  "in_progress",
-                                  "completed",
-                                  "paused",
-                                  "dropped"
-                                ],
                                 "type": "string"
                               },
                               "subject": {
@@ -47732,13 +47667,6 @@
                           "type": "integer"
                         },
                         "state": {
-                          "enum": [
-                            "planned",
-                            "in_progress",
-                            "completed",
-                            "paused",
-                            "dropped"
-                          ],
                           "type": "string"
                         },
                         "subject": {
@@ -48666,13 +48594,6 @@
                     "type": "integer"
                   },
                   "state": {
-                    "enum": [
-                      "planned",
-                      "in_progress",
-                      "completed",
-                      "paused",
-                      "dropped"
-                    ],
                     "type": "string"
                   }
                 },
@@ -48704,13 +48625,6 @@
                           "type": "integer"
                         },
                         "state": {
-                          "enum": [
-                            "planned",
-                            "in_progress",
-                            "completed",
-                            "paused",
-                            "dropped"
-                          ],
                           "type": "string"
                         },
                         "subjectId": {
@@ -48757,13 +48671,6 @@
                           "type": "integer"
                         },
                         "state": {
-                          "enum": [
-                            "planned",
-                            "in_progress",
-                            "completed",
-                            "paused",
-                            "dropped"
-                          ],
                           "type": "string"
                         },
                         "subjectId": {
@@ -80279,14 +80186,6 @@
                             ]
                           },
                           "unit": {
-                            "enum": [
-                              "page",
-                              "chapter",
-                              "episode",
-                              "volume",
-                              "minute",
-                              "percent"
-                            ],
                             "type": "string"
                           },
                           "versionSubject": {
@@ -81150,14 +81049,6 @@
                     ]
                   },
                   "unit": {
-                    "enum": [
-                      "page",
-                      "chapter",
-                      "episode",
-                      "volume",
-                      "minute",
-                      "percent"
-                    ],
                     "type": "string"
                   },
                   "versionSubjectId": {
@@ -81256,14 +81147,6 @@
                           ]
                         },
                         "unit": {
-                          "enum": [
-                            "page",
-                            "chapter",
-                            "episode",
-                            "volume",
-                            "minute",
-                            "percent"
-                          ],
                           "type": "string"
                         },
                         "versionSubjectId": {
@@ -82182,14 +82065,6 @@
                           ]
                         },
                         "unit": {
-                          "enum": [
-                            "page",
-                            "chapter",
-                            "episode",
-                            "volume",
-                            "minute",
-                            "percent"
-                          ],
                           "type": "string"
                         },
                         "versionSubject": {
@@ -84005,14 +83880,6 @@
                           ]
                         },
                         "unit": {
-                          "enum": [
-                            "page",
-                            "chapter",
-                            "episode",
-                            "volume",
-                            "minute",
-                            "percent"
-                          ],
                           "type": "string"
                         },
                         "versionSubjectId": {
@@ -84830,14 +84697,6 @@
                           ]
                         },
                         "unit": {
-                          "enum": [
-                            "page",
-                            "chapter",
-                            "episode",
-                            "volume",
-                            "minute",
-                            "percent"
-                          ],
                           "type": "string"
                         },
                         "versionSubjectId": {
@@ -85678,14 +85537,6 @@
                           ]
                         },
                         "unit": {
-                          "enum": [
-                            "page",
-                            "chapter",
-                            "episode",
-                            "volume",
-                            "minute",
-                            "percent"
-                          ],
                           "type": "string"
                         },
                         "versionSubjectId": {

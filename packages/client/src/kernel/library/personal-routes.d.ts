@@ -3828,7 +3828,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     view?: "BASIC" | "FULL";
                     limit?: number;
                     cursor?: string;
-                    state?: never;
+                    state?: string;
                     direction?: never;
                     type?: string;
                     orderBy?: never;
@@ -3878,7 +3878,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 label: string;
                             } | null;
                             subjectId: string;
-                            state: never;
+                            state: string;
                             revision: number;
                             createdAt: string;
                             updatedAt: string;
@@ -3889,7 +3889,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 subjectId: string;
                                 versionSubjectId: string | null;
                                 mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                unit: never;
+                                unit: string;
                                 total: string | null;
                                 amount: string | null;
                                 locator: string | null;
@@ -3942,7 +3942,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 label: string;
                             } | null;
                             subjectId: string;
-                            state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                            state: string;
                             revision: number;
                             createdAt: string;
                             updatedAt: string;
@@ -4377,7 +4377,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     label: string;
                                 } | null;
                                 subjectId: string;
-                                state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                                state: string;
                                 revision: number;
                                 createdAt: string;
                                 updatedAt: string;
@@ -4493,7 +4493,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             ":subjectId": {
                 put: {
                     body: {
-                        state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                        state: string;
                         revision?: number;
                     };
                     params: {
@@ -4507,7 +4507,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         200: {
                             libraryEntry: {
                                 subjectId: string;
-                                state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                                state: string;
                                 revision: number;
                                 createdAt: string;
                                 updatedAt: string;
@@ -4516,7 +4516,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         201: {
                             libraryEntry: {
                                 subjectId: string;
-                                state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                                state: string;
                                 revision: number;
                                 createdAt: string;
                                 updatedAt: string;
@@ -4758,7 +4758,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     disposedOn?: string | null;
                     note?: string | null;
                     subjectId: string;
-                    status: "disposed" | "lent" | "ordered" | "owned";
+                    status: string;
                 };
                 params: {};
                 query: unknown;
@@ -4770,7 +4770,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         copy: {
                             id: string;
                             subjectId: string;
-                            status: import("./entry-model.ts").CopyStatus;
+                            status: string;
                             revision: number;
                             location: string | null;
                             source: string | null;
@@ -4783,7 +4783,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         copy: {
                             id: string;
                             subjectId: string;
-                            status: "disposed" | "lent" | "ordered" | "owned";
+                            status: string;
                             revision: number;
                             location: string | null;
                             source: string | null;
@@ -4953,7 +4953,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             } | null;
                             id: string;
                             subjectId: string;
-                            status: "disposed" | "lent" | "ordered" | "owned";
+                            status: string;
                             revision: number;
                             location: string | null;
                             source: string | null;
@@ -5124,7 +5124,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 } | null;
                                 id: string;
                                 subjectId: string;
-                                status: "disposed" | "lent" | "ordered" | "owned";
+                                status: string;
                                 revision: number;
                                 location: string | null;
                                 source: string | null;
@@ -5243,7 +5243,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             ":copyId": {
                 patch: {
                     body: {
-                        status?: "disposed" | "lent" | "ordered" | "owned";
+                        status?: string;
                         location?: string | null;
                         source?: string | null;
                         acquiredOn?: string | null;
@@ -5263,7 +5263,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             copy: {
                                 id: string;
                                 subjectId: string;
-                                status: "disposed" | "lent" | "ordered" | "owned";
+                                status: string;
                                 revision: number;
                                 location: string | null;
                                 source: string | null;

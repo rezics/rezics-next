@@ -4,7 +4,7 @@
  */
 export declare const MAX_COMPLETED_UNITS = 20000;
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
+export type ProgressUnit = string;
 export type ProgressState = 'active' | 'completed' | 'abandoned';
 export type ProgressAction = 'complete' | 'abandon';
 export type ProgressSessionCreate = {

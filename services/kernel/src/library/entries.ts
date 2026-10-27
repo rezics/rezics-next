@@ -23,11 +23,18 @@ type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
 type QueryClient = Pick<PoolClient, 'query'>;
 type EntryPageRow = Awaited<ReturnType<typeof entryPage.run>>[number];
 
-const ENTRY_STATES = new Set<EntryState>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
 const UPDATED_EVENT = 'com.rezics.library.entry.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.entry.deleted.v1';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+
+export class LibraryEntryInvalidError extends TypeError {
+  constructor() {
+    super('Unknown library entry state');
+    this.name = 'LibraryEntryInvalidError';
+  }
+}
 
 export class LibraryConflictError extends Error {
   constructor() {
@@ -43,9 +50,9 @@ function account(actor: Actor, action: string): AccountActor {
 }
 
 function state(value: unknown): EntryState {
-  if (typeof value !== 'string' || !ENTRY_STATES.has(value as EntryState))
-    throw new TypeError('Unknown library entry state');
-  return value as EntryState;
+  if (typeof value !== 'string' || !ENTRY_STATES.has(value))
+    throw new LibraryEntryInvalidError();
+  return value;
 }
 
 function revision(value: unknown): number {
@@ -70,8 +77,7 @@ function entryEvent(type: string, accountId: string, subjectId: string): Command
 }
 
 function asState(value: string): EntryState {
-  if (ENTRY_STATES.has(value as EntryState)) return value as EntryState;
-  throw new Error(`Unknown library entry state: ${value}`);
+  return value;
 }
 
 function asEntry(row: EntryPageRow): Entry {

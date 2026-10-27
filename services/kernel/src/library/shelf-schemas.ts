@@ -1,6 +1,7 @@
 import { t } from 'elysia';
 import { ENTRY_STATES, SHELF_DIRECTIONS, SHELF_ORDERS } from './shelf-contract.ts';
 import { embedded, subjectFields, viewQuery } from './views.ts';
+import { libraryStoredVocabularySchema } from './profile-schemas.ts';
 
 const closed = { additionalProperties: false } as const;
 const text = t.String();
@@ -14,7 +15,7 @@ export const shelfListQuerySchema = t.Object(
   {
     ...viewQuery,
     ...shelfPageQuery,
-    state: t.Optional(t.Union(ENTRY_STATES.map((value) => t.Literal(value)))),
+    state: t.Optional(text),
     orderBy: t.Union(SHELF_ORDERS.map((value) => t.Literal(value))),
     direction: t.Optional(t.Union(SHELF_DIRECTIONS.map((value) => t.Literal(value)))),
     type: t.Optional(text),
@@ -32,9 +33,7 @@ const shelfSessionSchema = t.Object(
     subjectId: uuid,
     versionSubjectId: t.Union([uuid, t.Null()]),
     mode: t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]),
-    unit: t.Union(
-      (['page', 'chapter', 'episode', 'volume', 'minute', 'percent'] as const).map((value) => t.Literal(value)),
-    ),
+    unit: libraryStoredVocabularySchema,
     total: nullable,
     amount: nullable,
     locator: nullable,
@@ -51,7 +50,7 @@ export const shelfEntrySchema = embedded(
   t.Object(
     {
       subjectId: text,
-      state: t.Union(ENTRY_STATES.map((value) => t.Literal(value))),
+      state: libraryStoredVocabularySchema,
       revision,
       createdAt: text,
       updatedAt: text,

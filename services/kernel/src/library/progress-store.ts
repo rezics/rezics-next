@@ -33,7 +33,7 @@ type ChangeResult = NonNullable<Awaited<ReturnType<typeof changeAppend.run>>>;
 type UnitResult = Awaited<ReturnType<typeof unitPage.run>>[number];
 
 const MODES = new Set<ProgressMode>(['scalar_amount', 'cursor_position', 'completed_units']);
-const UNITS = new Set<ProgressUnit>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
+const UNITS = new Set<string>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
 const STATES = new Set<ProgressState>(['active', 'completed', 'abandoned']);
 
 function queryClient(client: Client): Client {
@@ -49,11 +49,6 @@ function asMode(value: string): ProgressMode {
   throw new Error(`Unknown progress mode: ${value}`);
 }
 
-function asUnit(value: string): ProgressUnit {
-  if (UNITS.has(value as ProgressUnit)) return value as ProgressUnit;
-  throw new Error(`Unknown progress unit: ${value}`);
-}
-
 function asState(value: string): ProgressState {
   if (STATES.has(value as ProgressState)) return value as ProgressState;
   throw new Error(`Unknown progress state: ${value}`);
@@ -64,7 +59,7 @@ function asSession(row: SessionResult): ProgressSession {
   return {
     ...session,
     mode: asMode(session.mode),
-    unit: asUnit(session.unit),
+    unit: session.unit,
     state: asState(session.state),
     startedAt: iso(session.startedAt),
     completedAt: session.completedAt === null ? null : iso(session.completedAt),

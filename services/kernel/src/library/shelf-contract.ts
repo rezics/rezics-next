@@ -10,7 +10,7 @@ import type { ProgressSession } from './progress-model.ts';
 /**
  * Types and independently implementable signatures for the private Library shelf reads. The prose contract is
  * `shelf-contract.md`. Nothing here is behaviour: every exported function that is not a pure rule throws until its
- * owning task replaces it. Existing `Entry` and `ProgressSession` stay unchanged; the shelf types are additive.
+ * owning task replaces it. Entry and progress storage layouts stay unchanged; the shelf types are additive.
  */
 
 type Client = Pick<PoolClient, 'query'>;
@@ -29,13 +29,17 @@ function notImplemented(operation: string): never {
 // --- Query model ----------------------------------------------------------------------------------------------
 
 export const ENTRY_STATES = ['planned', 'in_progress', 'completed', 'paused', 'dropped'] as const;
+export type LegacyEntryState = (typeof ENTRY_STATES)[number];
+export function isLegacyEntryState(value: string): value is LegacyEntryState {
+  return ENTRY_STATES.some((state) => state === value);
+}
 export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt'] as const;
 export const SHELF_DIRECTIONS = ['desc', 'asc'] as const;
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
 export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
 
 /** The sort each status tab opens with. The web sends these explicitly; the API has no per-state default. */
-export const SHELF_DEFAULT_ORDER: Readonly<Record<EntryState, ShelfOrder>> = {
+export const SHELF_DEFAULT_ORDER: Readonly<Record<LegacyEntryState, ShelfOrder>> = {
   in_progress: 'lastActivity',
   planned: 'createdAt',
   completed: 'finishedAt',
@@ -81,7 +85,7 @@ export type ShelfEntry = {
 
 export type ShelfPage = { entries: ShelfEntry[]; next: string | null };
 
-export type ShelfTab = EntryState | 'all' | 'collections';
+export type ShelfTab = LegacyEntryState | 'all' | 'collections';
 export type ShelfTabCount = { total: number; shown: number };
 /** `shown` applies the type filter; without one it equals `total`. `collections` ignores the type filter. */
 export type ShelfSummary = { tabs: Record<ShelfTab, ShelfTabCount> };
@@ -99,12 +103,12 @@ export type ProgressHead = {
 };
 
 /** `library.shelf_count.bucket`. `all` counts every entry of the type; `collections` counts the account's Collections. */
-export type ShelfBucket = EntryState | 'all' | 'collections';
+export type ShelfBucket = LegacyEntryState | 'all' | 'collections';
 /** Bounded UUID; the reserved nil UUID denotes the all-types rollup and Collections. */
 export type ShelfCountRow = { accountId: string; bucket: ShelfBucket; typeId: string; count: number };
 
 /** What an entry contributes to the counters. */
-export type ShelfPlacement = { state: EntryState; typeId: string };
+export type ShelfPlacement = { state: LegacyEntryState; typeId: string };
 
 // --- Injected helpers -----------------------------------------------------------------------------------------
 

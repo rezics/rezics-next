@@ -1,5 +1,5 @@
 import { routeOf } from '../route/route.ts';
-import { ENTRY_STATES, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
+import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
 import page from './shelf-page-activity-asc.sql';
 import statePage from './shelf-page-activity-asc-state.sql';
 import typePage from './shelf-page-activity-asc-type.sql';
@@ -37,7 +37,7 @@ export function createShelfActivityAscReader(): ShelfDateReader {
       if (
         query.orderBy !== 'lastActivity' ||
         query.direction !== 'asc' ||
-        (query.state !== null && !ENTRY_STATES.includes(query.state)) ||
+        (query.state !== null && !isLegacyEntryState(query.state)) ||
         (query.typeId !== null && (typeof query.typeId !== 'string' || !UUID.test(query.typeId)))
       )
         throw new TypeError('Invalid activity ascending shelf query');
@@ -73,12 +73,20 @@ export function createShelfActivityAscReader(): ShelfDateReader {
           : query.typeId === null
             ? await statePage.run(client, { ...parameters, state: query.state })
             : await stateTypePage.run(client, { ...parameters, state: query.state, type_id: query.typeId });
+      const entries: ShelfDateRows['entries'] = rows.slice(0, query.limit).map((row) => {
+        const { subjectId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt } = row;
+        if (
+          createdAt === null ||
+          updatedAt === null ||
+          lastActivityAt === null ||
+          revision === null ||
+          state === null
+        )
+          throw new Error('Shelf activity backfill is incomplete');
+        return { subjectId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt };
+      });
       return {
-        entries: rows.slice(0, query.limit).map((row) => {
-          if ([row.createdAt, row.updatedAt, row.lastActivityAt, row.revision, row.state].includes(null))
-            throw new Error('Shelf activity backfill is incomplete');
-          return row as ShelfDateRows['entries'][number];
-        }),
+        entries,
         more: rows.length > query.limit,
       };
     },

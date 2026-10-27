@@ -13,6 +13,7 @@ import type { ProgressIntent, ProgressSession } from './progress-model.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
+import { libraryStoredVocabularySchema } from './profile-schemas.ts';
 
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
@@ -23,14 +24,7 @@ const id = t.String({ format: 'uuid' });
 const nullableString = t.Union([t.String(), t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
-const unit = t.Union([
-  t.Literal('page'),
-  t.Literal('chapter'),
-  t.Literal('episode'),
-  t.Literal('volume'),
-  t.Literal('minute'),
-  t.Literal('percent'),
-]);
+const unitInput = t.String();
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
 const sessionSchema = t.Object(
   {
@@ -38,7 +32,7 @@ const sessionSchema = t.Object(
     subjectId: id,
     versionSubjectId: t.Union([id, t.Null()]),
     mode,
-    unit,
+    unit: libraryStoredVocabularySchema,
     total: nullableString,
     amount: nullableString,
     locator: nullableString,
@@ -213,7 +207,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             subjectId: t.String(),
             versionSubjectId: t.Optional(t.Union([t.String(), t.Null()])),
             mode,
-            unit,
+            unit: unitInput,
             total: t.Optional(nullableString),
           },
           closed,

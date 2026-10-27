@@ -1,5 +1,5 @@
-export type EntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
-export type CopyStatus = 'ordered' | 'owned' | 'lent' | 'disposed';
+export type EntryState = string;
+export type CopyStatus = string;
 
 /** Database projection for one account's entry on a subject. */
 export type EntryRow = {

@@ -1,5 +1,5 @@
 import { routeOf } from '../route/route.ts';
-import { ENTRY_STATES, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
+import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
 import unfiltered from './shelf-page-created-asc.sql';
 import stateOnly from './shelf-page-created-asc-state.sql';
 import typeOnly from './shelf-page-created-asc-type.sql';
@@ -38,7 +38,7 @@ export function createShelfCreatedAscReader(): ShelfDateReader {
         throw new TypeError('This shelf reader requires createdAt asc');
       if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > MAX_SHELF_PAGE_SIZE)
         throw new RangeError('Invalid shelf page limit');
-      if (query.state !== null && !ENTRY_STATES.includes(query.state)) throw new TypeError('Invalid shelf state');
+      if (query.state !== null && !isLegacyEntryState(query.state)) throw new TypeError('Invalid shelf state');
       if (query.typeId !== null && (typeof query.typeId !== 'string' || !uuid.test(query.typeId)))
         throw new TypeError('Shelf type must be a private UUID');
       if (
@@ -68,14 +68,14 @@ export function createShelfCreatedAscReader(): ShelfDateReader {
             : await stateType.run(connection, { ...parameters, state: query.state, type_id: query.typeId });
       const entries = rows.slice(0, query.limit).map((row) => {
         if (
-          !ENTRY_STATES.includes(row.state as (typeof ENTRY_STATES)[number]) ||
+          row.state === null ||
           row.createdAt === null ||
           row.lastActivityAt === null
         )
           throw new Error('Shelf rollout invariant violated');
         return {
           ...row,
-          state: row.state as (typeof ENTRY_STATES)[number],
+          state: row.state,
           createdAt: row.createdAt,
           lastActivityAt: row.lastActivityAt,
         };

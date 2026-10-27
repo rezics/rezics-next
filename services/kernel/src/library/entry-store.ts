@@ -28,8 +28,8 @@ type WriteContext = { transactionId: string; time: string };
 type EntryResult = Omit<NonNullable<Awaited<ReturnType<typeof entryRead.run>>>, 'state'> & { state: string };
 type CopyResult = Omit<NonNullable<Awaited<ReturnType<typeof copyRead.run>>>, 'status'> & { status: string };
 
-const ENTRY_STATES = new Set<EntryState>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
-const COPY_STATUSES = new Set<CopyStatus>(['ordered', 'owned', 'lent', 'disposed']);
+const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+const COPY_STATUSES = new Set<string>(['ordered', 'owned', 'lent', 'disposed']);
 
 function queryClient(client: Client): Client {
   return { query: client.query.bind(client) };
@@ -40,13 +40,11 @@ function iso(value: string): string {
 }
 
 function asState(value: string): EntryState {
-  if (ENTRY_STATES.has(value as EntryState)) return value as EntryState;
-  throw new Error(`Unknown library entry state: ${value}`);
+  return value;
 }
 
 function asStatus(value: string): CopyStatus {
-  if (COPY_STATUSES.has(value as CopyStatus)) return value as CopyStatus;
-  throw new Error(`Unknown library copy status: ${value}`);
+  return value;
 }
 
 function asEntry(row: EntryResult): Entry {
