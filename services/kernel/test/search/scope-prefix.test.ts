@@ -166,7 +166,7 @@ function assertPage(
   exhausted: boolean,
   used: number,
 ) {
-  expect(page.hits).toEqual(expected);
+  expect(page.hits).toEqual([...expected]);
   expect(page.coveredThrough).toBe(covered);
   expect(page.exhausted).toBe(exhausted);
   expect(page.generation).toBe(1);
@@ -213,7 +213,7 @@ test('real raw prefix covers rejected and lookahead candidates with pinned gener
 
 test('rejected raw prefix is returned without disclosure refill, then eligible C follows it', async () => {
   const { runtime, handle } = await prepared();
-  const rejected = await runtime.prefix(handle, { afterSubject: ids[0], quota: 1, budget: 2 });
+  const rejected = await runtime.prefix(handle, { afterSubject: ids[0]!, quota: 1, budget: 2 });
   assertPage(rejected, native.slice(1, 2), ids[1]!, false, 2);
   const eligible = await runtime.prefix(handle, { afterSubject: rejected.coveredThrough!, quota: 1, budget: 2 });
   assertPage(eligible, native.slice(2), ids[2]!, true, 1);
@@ -229,7 +229,7 @@ test('quota plus one covers A B but charges unused C; exact quota EOF requires a
 test('duplicates from bounded reread are charged again, including rejected and lookahead keys', async () => {
   const { runtime, handle } = await prepared();
   const first = await runtime.prefix(handle, { quota: 2, budget: 3 });
-  const reread = await runtime.prefix(handle, { afterSubject: ids[0], quota: 1, budget: 2 });
+  const reread = await runtime.prefix(handle, { afterSubject: ids[0]!, quota: 1, budget: 2 });
   assertPage(first, native.slice(0, 2), ids[1]!, false, 3);
   assertPage(reread, native.slice(1, 2), ids[1]!, false, 2);
   expect(first.usage.candidates + reread.usage.candidates).toBe(5);
@@ -262,7 +262,7 @@ test('caller aggregate 256 reserves every source dispatch and rejects insufficie
 
 test('empty raw range is true exhaustion with no successful unchanged nonexhaustion', async () => {
   const { runtime, handle } = await prepared();
-  const page = await runtime.prefix(handle, { afterSubject: ids[2], quota: 1, budget: 2 });
+  const page = await runtime.prefix(handle, { afterSubject: ids[2]!, quota: 1, budget: 2 });
   assertPage(page, [], ids[2]!, true, 0);
 });
 
@@ -291,7 +291,7 @@ test('native alias change between prepare and continuation requires restart inst
   await createSubjectIndex(client, prefix, 2);
   try {
     await switchAlias(prefix);
-    await expect(runtime.prefix(handle, { afterSubject: ids[0], quota: 1, budget: 2 })).rejects.toMatchObject({
+    await expect(runtime.prefix(handle, { afterSubject: ids[0]!, quota: 1, budget: 2 })).rejects.toMatchObject({
       code: 'search_restart_required',
     });
   } finally {
@@ -320,7 +320,12 @@ for (const failure of ['partial shards', 'timeout', 'unavailable'] as const) {
     let observed = 0;
     const transport: OpenSearch = {
       bulk: client.bulk.bind(client),
-      async request<T>(method, path, body, options) {
+      async request<T>(
+        method: Parameters<OpenSearch['request']>[0],
+        path: string,
+        body?: unknown,
+        options?: Parameters<OpenSearch['request']>[3],
+      ) {
         const response = await client.request<T>(method, path, body, options);
         if (!armed || !path.includes('/_search')) return response;
         observed++;
