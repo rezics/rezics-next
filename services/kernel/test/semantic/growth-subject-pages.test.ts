@@ -196,39 +196,119 @@ async function anchorFixture() {
     },
     { from: 0, to: 1 },
   );
+  await db.admin.query(`INSERT INTO semantic.partition_subjects(partition_no,visible) VALUES (0,1)
+    ON CONFLICT(partition_no) DO UPDATE SET visible=semantic.partition_subjects.visible+1`);
+}
+
+type Publication = {
+  requestRebuild(subject: { route: number; id: string }): Promise<void>;
+  step(options: { limit: number }): Promise<{ processed: number; next: string | null; done: boolean }>;
+};
+async function publication(): Promise<Publication> {
+  const response = await app.handle(new Request('http://kernel.test/v1/subject-pages?limit=4'));
+  expect(response.status, 'production HTTP mounting precedes factory availability').toBe(200);
+  const path = '../../src/semantic/subject-page-publication.ts';
+  const module = await import(path);
+  expect(typeof module.createSubjectPagePublication).toBe('function');
+  expect(typeof module.subjectPagePublicationFor).toBe('function');
+  const runtime = module.subjectPagePublicationFor(app);
+  expect(typeof runtime?.step).toBe('function');
+  expect(typeof runtime?.requestRebuild).toBe('function');
+  return runtime;
+}
+async function drain(runtime: Publication) {
+  const seen = new Set<string>();
+  for (let page = 0; page < 16384; page++) {
+    const result = await runtime.step({ limit: 32 });
+    expect(result.processed).toBeGreaterThanOrEqual(0);
+    expect(result.processed).toBeLessThanOrEqual(32);
+    if (result.done) {
+      expect(result.next).toBeNull();
+      return;
+    }
+    expect(typeof result.next).toBe('string');
+    expect(seen.has(result.next!)).toBe(false);
+    seen.add(result.next!);
+  }
+  throw new Error('Finite growth fixture repair must finish');
 }
 
 // Keep checkGrowth's catalog/background accounting, including any maintenance the GET itself starts.
 // Its row metric includes Rows Removed by Filter; an empty JSON result proves no bound by itself.
 test('subject page feed cost is bounded per candidate page as subjects and history grow', async () => {
   await anchorFixture();
-  for (const axis of ['population', 'noindex', 'history', 'degree'] as const) {
-    const report = await checkGrowth(db, {
-      name: `subject page candidate request: ${axis}`,
-      scales,
-      warmups: 1,
-      repetitions: 3,
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      grow: async (database, scale, previous) => {
-        await seed({ pool: database.pool, admin: database.admin }, population(axis), {
-          from: previous * units,
-          to: scale * units,
-        });
-      },
-      operation: async () => {
-        const response = await app.handle(new Request(`http://kernel.test/v1/subject-pages?limit=${limit}`));
-        expect(response.status, 'cost must measure the real subject-page backend, not an unavailable stub').toBe(200);
-        const body = (await response.json()) as { subjectPages: unknown[]; next: string | null };
-        expect(body.subjectPages.length).toBeLessThanOrEqual(limit);
-      },
-    });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-    for (const sample of report.samples) {
-      expect(sample.repetitions).toHaveLength(3);
-      // This prevents a route that returns constant empty output without enumerating candidates from passing.
-      const subject = sample.cost.relations.subject;
-      expect(subject, 'candidate examinations must be captured').toBeDefined();
-      expect(subject!.rows).toBeGreaterThan(0);
+  for (const mode of ['feed', 'repair'] as const) {
+    if (mode === 'repair') {
+      await db.close();
+      db = await openGrowthDatabase();
+      await bootstrapRelease(db.pool, bundledRelease);
+      app = createKernel({ pool: db.pool, routeKey, tokens });
+      await anchorFixture();
+    }
+    const runtime = await publication();
+    await runtime.requestRebuild({ route: 0, id: anchor });
+    await drain(runtime);
+    for (const axis of ['population', 'noindex', 'history', 'degree'] as const) {
+      const report = await checkGrowth(db, {
+        name: `subject page ${mode}: ${axis}`,
+        scales,
+        warmups: 1,
+        repetitions: 3,
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        grow: async (database, scale, previous) => {
+          await seed({ pool: database.pool, admin: database.admin }, population(axis), {
+            from: previous * units,
+            to: scale * units,
+          });
+        },
+        operation: async () => {
+          if (mode === 'feed') {
+            const response = await app.handle(new Request(`http://kernel.test/v1/subject-pages?limit=${limit}`));
+            expect(response.status, 'cost must measure the real subject-page backend, not an unavailable stub').toBe(
+              200,
+            );
+            const body = (await response.json()) as { subjectPages: unknown[]; next: string | null };
+            expect(body.subjectPages.length).toBeLessThanOrEqual(limit);
+          } else {
+            // Include enqueue, owner reads, checkpoint writes and background work in every repair sample.
+            await runtime.requestRebuild({ route: 0, id: anchor });
+            const step = await runtime.step({ limit: 32 });
+            expect(step.processed, 'must measure real repair work, never an idle worker').toBeGreaterThan(0);
+            expect(step.processed).toBeLessThanOrEqual(32);
+          }
+        },
+      });
+      expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+      for (const sample of report.samples) {
+        expect(sample.repetitions).toHaveLength(3);
+        // This prevents a route that returns constant empty output without enumerating candidates from passing.
+        const subject = sample.cost.relations.subject;
+        expect(subject, 'candidate examinations must be captured').toBeDefined();
+        expect(subject!.rows).toBeGreaterThan(0);
+        const relations = Object.keys(sample.cost.relations);
+        expect(
+          relations.some((name) => /fact|outbound_link/.test(name)),
+          'real repair evidence work',
+        ).toBe(true);
+        expect(
+          relations.some((name) => /permission|grant|policy|closure|resource|fence|moderation/.test(name)),
+          'actual current owner checks must be captured',
+        ).toBe(true);
+      }
+      await runtime.requestRebuild({ route: 0, id: anchor });
+      await drain(runtime);
+      const response = await app.handle(new Request(`http://kernel.test/v1/subject-pages?limit=${limit}`));
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { subjectPages: { id: string; lastModified?: string }[] };
+      const old = body.subjectPages.find(({ id }) => id === anchor);
+      expect(old, 'converged legal preexisting anchor must return').toBeDefined();
+      expect(Object.hasOwn(old!, 'lastModified')).toBe(false);
+      for (let repeat = 0; repeat < 3; repeat++) {
+        expect(await runtime.step({ limit: 32 })).toEqual({ processed: 0, next: null, done: true });
+        const again = await app.handle(new Request(`http://kernel.test/v1/subject-pages?limit=${limit}`));
+        expect(again.status).toBe(200);
+        expect(((await again.json()) as { subjectPages: unknown[] }).subjectPages).toEqual(body.subjectPages);
+      }
     }
   }
 }, 180_000);

@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { anchorRoute, partitionOf, routeOf } from '../../src/route/route.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { createRealAccess } from './real-access.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -144,7 +145,7 @@ async function adopt(
     expected_head: expectedHead,
   });
 }
-type Entry = { id: string; lastModified: string; labels: { language: string; value: string }[] };
+type Entry = { id: string; lastModified?: string; labels: { language: string; value: string }[] };
 type Page = { subjectPages: Entry[]; next: string | null };
 async function page(limit = 1000, cursor?: string, headers?: Record<string, string>): Promise<Page> {
   const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
@@ -155,8 +156,13 @@ async function page(limit = 1000, cursor?: string, headers?: Record<string, stri
   expect(answer.body.subjectPages.length).toBeLessThanOrEqual(limit);
   expect(answer.body.next === null || typeof answer.body.next === 'string').toBe(true);
   for (const entry of answer.body.subjectPages) {
-    expect(Object.keys(entry).sort()).toEqual(['id', 'labels', 'lastModified']);
-    expect(new Date(entry.lastModified).toISOString()).toBe(entry.lastModified);
+    expect(Object.keys(entry).sort()).toEqual(
+      Object.hasOwn(entry, 'lastModified') ? ['id', 'labels', 'lastModified'] : ['id', 'labels'],
+    );
+    if (Object.hasOwn(entry, 'lastModified')) {
+      expect(typeof entry.lastModified).toBe('string');
+      expect(new Date(entry.lastModified!).toISOString()).toBe(entry.lastModified);
+    }
     expect(entry.labels).toEqual([...entry.labels].sort((a, b) => a.language.localeCompare(b.language, 'en')));
   }
   return answer.body as Page;
@@ -178,6 +184,46 @@ async function all(limit = 1000): Promise<Entry[]> {
 }
 async function entry(id: string) {
   return (await all()).find((value) => value.id === id);
+}
+
+// This is the production runtime mounted by createKernel, not a test-created dormant factory.
+// Resolve only after a real HTTP 200, so a missing backend fails on behavior, never static imports.
+type Publication = {
+  requestRebuild(subject: { route: number; id: string }): Promise<void>;
+  step(options: { limit: number }): Promise<{ processed: number; next: string | null; done: boolean }>;
+};
+async function publication(): Promise<Publication> {
+  await page(4);
+  const path = '../../src/semantic/subject-page-publication.ts';
+  const module = await import(path);
+  expect(typeof module.createSubjectPagePublication, 'production publication factory').toBe('function');
+  expect(typeof module.subjectPagePublicationFor, 'runtime mounted by createKernel').toBe('function');
+  const runtime = module.subjectPagePublicationFor(app);
+  expect(typeof runtime?.step).toBe('function');
+  expect(typeof runtime?.requestRebuild).toBe('function');
+  return runtime;
+}
+async function converge(runtime: Publication, maximum = 16384) {
+  const cursors = new Set<string>();
+  for (let step = 0; step < maximum; step++) {
+    const result = await runtime.step({ limit: 32 });
+    expect(result.processed).toBeGreaterThanOrEqual(0);
+    expect(result.processed).toBeLessThanOrEqual(32);
+    if (result.done) {
+      expect(result.next).toBeNull();
+      return;
+    }
+    expect(typeof result.next).toBe('string');
+    expect(cursors.has(result.next!), 'durable repair must progress').toBe(false);
+    cursors.add(result.next!);
+  }
+  throw new Error('Finite publication repair did not converge under quiescence');
+}
+async function stable(runtime: Publication, id: string, expected: Entry | undefined) {
+  for (let repeat = 0; repeat < 3; repeat++) {
+    expect(await entry(id)).toEqual(expected);
+    expect(await runtime.step({ limit: 32 })).toEqual({ processed: 0, next: null, done: true });
+  }
 }
 
 // All setup uses admitted commands, real grants, and the shared domain clock.
@@ -266,6 +312,13 @@ test('subject page lastModified tracks shown public changes and ignores private 
     (await request(`/v1/subjects/${subject.id}`)).body.subject.statements['schema:inLanguage'].map((s: any) => s.id),
   ).toContain(candidate);
   expect(shownA).not.toBe(candidate);
+  at(18);
+  const runtime = await publication();
+  await runtime.requestRebuild({ route: routeOf(subject.id)!, id: subject.id });
+  await converge(runtime);
+  const rebuilt = await entry(subject.id);
+  expect(rebuilt?.lastModified).toBe(t6);
+  await stable(runtime, subject.id, rebuilt);
 }, 240_000);
 
 // The request has no partition selector: choose ordinary creation keys that place this fixture at the start.
@@ -336,8 +389,8 @@ test('subject page keysets advance across empty and noindex windows without gaps
 
 // This is the adversarial completeness case, independent of whether the implementation calls its
 // bounded evidence a witness, a preview, an existence cache or a publication projection.
-test('foreign tuple fences preserve a surviving public fact and its effective removal time without a relay', async () => {
-  at(31);
+test('foreign tuple fences allow lag then repair the surviving public fact at its original removal time', async () => {
+  const publishedAt = at(31);
   const subject = await book('Foreign fence', {
     'schema:url': [statement('schema:url', 'https://example.test/survivor')],
   });
@@ -370,6 +423,8 @@ test('foreign tuple fences preserve a surviving public fact and its effective re
   const candidate = batch.results[0].value.candidate;
   await accept(subject.id, candidate);
   await adopt(subject.id, candidate);
+  expect((await entry(subject.id))?.lastModified).toBe(publishedAt);
+  const runtime = await publication();
   const removedAt = at(32);
   await post('/v1/sourceFences:takedown', {
     source: 'openlibrary',
@@ -378,9 +433,169 @@ test('foreign tuple fences preserve a surviving public fact and its effective re
     reason: 'Foreign tuple removal',
   });
   at(33); // No relay was started. Reading now cannot substitute this time for the fence's effective time.
-  expect((await entry(subject.id))?.lastModified).toBe(removedAt);
+  const lagging = await entry(subject.id);
+  if (lagging) {
+    expect([publishedAt, removedAt]).toContain(lagging.lastModified!);
+    await runtime.requestRebuild({ route: routeOf(subject.id)!, id: subject.id });
+  } // Omission must already have durably scheduled repair.
+  await converge(runtime);
+  const repaired = await entry(subject.id);
+  expect(repaired?.lastModified).toBe(removedAt);
+  await stable(runtime, subject.id, repaired);
   await post(`/v1/subjects/${subject.id}/candidates/${subject.statements['schema:url'][0].id}:hide`, {
     reason: 'Remove final public fact',
   });
   expect(await entry(subject.id)).toBeUndefined();
+  await converge(runtime);
+  await stable(runtime, subject.id, undefined);
+}, 120_000);
+
+// D=8 current witness probes per candidate; ten independent homes exceed that budget.
+test('more than D foreign witnesses repair finitely and never disclose title-only uncertainty', async () => {
+  const t1 = at(41);
+  const runtime = await publication();
+  const subject = await book('Foreign witnesses');
+  const sources: string[] = [];
+  const selected: string[] = [];
+  const homes = new Set([partitionOf(routeOf(subject.id)!)]);
+  for (let index = 0; index < 10; index++) {
+    let externalId: string;
+    do externalId = randomUUID();
+    while (homes.has(partitionOf(tupleRoute(routeKey, 'openlibrary', externalId))));
+    homes.add(partitionOf(tupleRoute(routeKey, 'openlibrary', externalId)));
+    sources.push(externalId);
+    const batch = await post('/v1/subjects:batchWrite', {
+      commands: [
+        {
+          op: 'propose',
+          key: `witness-${index}`,
+          subject: subject.id,
+          source: {
+            source: 'openlibrary',
+            external_id: externalId,
+            record_revision: '1',
+            digest: 'b'.repeat(64),
+            converter_revision: '1',
+            field_group: 'facts',
+          },
+          statement: {
+            ...statement('schema:inLanguage', ['ja', 'en', 'fr', 'de', 'es', 'it', 'pt', 'ko', 'zh', 'ru'][index]),
+            references: [{ parts: [statement('schema:url', 'https://example.test/witness')] }],
+          },
+        },
+      ],
+    });
+    expect(batch.results[0].status).toBe(201);
+    const candidate = batch.results[0].value.candidate;
+    selected.push(candidate);
+    await accept(subject.id, candidate);
+    await adopt(subject.id, candidate);
+  }
+  // Replace selection would leave only one witness. Select all ten in one public adoption.
+  const head = await admin.query(
+    `SELECT max(head)::int AS head FROM semantic.adoption WHERE route=$1 AND subject_id=$2 AND context_id=$3`,
+    [routeOf(subject.id), subject.id, GLOBAL_CONTEXT],
+  );
+  await post(`/v1/subjects/${subject.id}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property: 'schema:inLanguage',
+    mode: 'replace',
+    selection: selected.map((candidate) => ({ candidate, rank: 'normal' })),
+    expected_head: head.rows[0].head,
+  });
+  await runtime.requestRebuild({ route: routeOf(subject.id)!, id: subject.id });
+  await converge(runtime);
+  expect((await entry(subject.id))?.lastModified).toBe(t1);
+  const removedAt = at(42);
+  // Fence nine of ten independent homes. A bounded probe cannot establish completeness
+  // from stale cached positives; only a currently verified survivor authorizes inclusion.
+  for (const externalId of sources.slice(0, -1)) {
+    await post('/v1/sourceFences:takedown', {
+      source: 'openlibrary',
+      externalId,
+      fieldGroup: 'facts',
+      reason: 'Remove foreign witness',
+    });
+  }
+  at(43);
+  const lagging = await entry(subject.id);
+  if (lagging) {
+    expect([t1, removedAt]).toContain(lagging.lastModified!);
+    // An omitted entry must already have queued repair. An included survivor may need catch-up.
+    await runtime.requestRebuild({ route: routeOf(subject.id)!, id: subject.id });
+  }
+  await converge(runtime);
+  const repaired = await entry(subject.id);
+  expect(repaired?.lastModified).toBe(removedAt);
+  await stable(runtime, subject.id, repaired);
+  at(44);
+  await post('/v1/sourceFences:takedown', {
+    source: 'openlibrary',
+    externalId: sources.at(-1),
+    fieldGroup: 'facts',
+    reason: 'Remove final witness',
+  });
+  expect(await entry(subject.id)).toBeUndefined();
+  await converge(runtime);
+  await stable(runtime, subject.id, undefined);
+}, 240_000);
+
+test('preexisting public rows without retained time omit the field until a proven public change', async () => {
+  at(51);
+  const runtime = await publication();
+  const id = newId(0);
+  const tx = randomUUID();
+  // Legal old rows with no command receipt or effective-time evidence. No publication truth is seeded.
+  await admin.query(
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,current_facts,current_release)
+     VALUES (0,$1,'schema:Book',$2,2,$3)`,
+    [id, tx, bundledDigest],
+  );
+  await admin.query(
+    `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
+     VALUES (0,$1,1,'create',$2,$3)`,
+    [id, bundledDigest, tx],
+  );
+  for (const fact of itemFacts(
+    id,
+    { labels: { en: 'No retained time' }, statements: { 'schema:inLanguage': [statement('schema:inLanguage', 'ja')] } },
+    'schema:Book',
+    bundledRelease,
+  )) {
+    const row = {
+      ...fact,
+      route: 0,
+      subject_id: id,
+      recorded_transaction_id: tx,
+      release: fact.kind === 'statement' ? bundledDigest : null,
+    };
+    const keys = Object.keys(row);
+    await admin.query(
+      `INSERT INTO semantic.fact (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')})`,
+      Object.values(row),
+    );
+  }
+  await admin.query(`INSERT INTO semantic.partition_subjects(partition_no,visible) VALUES (0,1)
+    ON CONFLICT(partition_no) DO UPDATE SET visible=semantic.partition_subjects.visible+1`);
+  await runtime.requestRebuild({ route: 0, id });
+  await converge(runtime);
+  const old = await entry(id);
+  expect(old).toEqual({ id, labels: [{ language: 'en', value: 'No retained time' }] });
+  expect(Object.hasOwn(old!, 'lastModified')).toBe(false);
+  at(52);
+  const unshown = await propose(id, 'en');
+  expect(await entry(id)).toEqual(old);
+  await runtime.requestRebuild({ route: 0, id });
+  await converge(runtime);
+  await stable(runtime, id, old);
+  const changedAt = at(53);
+  await accept(id, unshown);
+  await adopt(id, unshown);
+  expect((await entry(id))?.lastModified).toBe(changedAt);
+  at(54);
+  await runtime.requestRebuild({ route: 0, id });
+  await converge(runtime);
+  const changed = await entry(id);
+  expect(changed?.lastModified).toBe(changedAt);
+  await stable(runtime, id, changed);
 }, 120_000);
