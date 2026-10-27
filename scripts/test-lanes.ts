@@ -159,7 +159,8 @@ function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | u
   if (report) {
     const failures = junitFailures(report);
     if (failures !== null) {
-      return failures.length > 0 && failures.every((failure) => ['GrowthBoundError', 'GrowthEvidenceError'].includes(failure.type))
+      return failures.length > 0 &&
+        failures.every((failure) => ['GrowthBoundError', 'GrowthEvidenceError'].includes(failure.type))
         ? failures.map(({ title, message }) => ({ title, message }))
         : null;
     }

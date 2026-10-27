@@ -339,17 +339,26 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     } else {
       for (const metric of ['rows', 'blocks', 'statements'] as const) {
         const uncertainties = shadow[metric].uncertainties;
-        const verdict = classifySeries(samples.map(({ scale, repetitions }, index) => ({
-          scale,
-          repetitions: repetitions.map((value) => value[metric]),
-          uncertainty: uncertainties[index]!,
-        })), check.bounds[metric]);
+        const verdict = classifySeries(
+          samples.map(({ scale, repetitions }, index) => ({
+            scale,
+            repetitions: repetitions.map((value) => value[metric]),
+            uncertainty: uncertainties[index]!,
+          })),
+          check.bounds[metric],
+        );
         if (verdict.outcome === 'insufficient-evidence') {
-          throw new GrowthEvidenceError(`${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${uncertainties.join(', ')}`);
+          throw new GrowthEvidenceError(
+            `${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${uncertainties.join(', ')}`,
+          );
         }
         if (verdict.outcome === 'violation') {
           const error = new GrowthBoundError([], samples);
-          error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(verdict.families).map(([family, fit]) => `${family} factor ${fit.factor}`).join(', ')}`;
+          error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(
+            verdict.families,
+          )
+            .map(([family, fit]) => `${family} factor ${fit.factor}`)
+            .join(', ')}`;
           throw error;
         }
       }
