@@ -520,7 +520,9 @@ renderer refactor is needed. Focused native tests in `identity-contract.test.ts`
 - `concurrent native redirects cannot lose structural increments and epoch or home changes invalidate a basis`;
 - `resumable alias groups find the last readable member beyond two hundred fifty six without unbounded scans`;
 - `concealed groups exhaust with advancing empty windows and current eligibility behind progress requires a fresh traversal`;
-- `alias continuation rejects invalid viewer route query group and structural bases and keeps shared token lifetimes`.
+- `alias continuation rejects invalid viewer route query group and structural bases and keeps shared token lifetimes`;
+- `native repoint and verification reversal invalidate in-flight alias groups before any resumed disclosure`;
+- `alias raw keys confer no subject or source authority and malformed allocations do not start a scan`.
 
 ### Terminal read and disclosure
 

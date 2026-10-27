@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { accessCommandAuthorization, accessCheck, type Access, type Actor, type AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, accessCheck, type Access, type Actor } from '../../src/request/access.ts';
 import type { AuthoritativeTime } from '../../src/command/command.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
@@ -86,28 +86,54 @@ export const resource = (id: string) => ({ route: routeOf(id)!, id });
 
 export async function identityFixture(pool: Pool, admin: Pool) {
   const accounts = { editor: newId(0x6d10), reader: newId(0x6d20), other: newId(0x6d30) };
-  const actions = ['subject:create', 'subject:read', 'subject:merge', 'moderation:hide', 'collection:create', 'collection:read', 'collection:update'];
+  const actions = [
+    'subject:create',
+    'subject:read',
+    'subject:merge',
+    'moderation:hide',
+    'moderation:takedown',
+    'collection:create',
+    'collection:read',
+    'collection:update',
+    'collection:delete',
+  ];
   const real = await createRealAccess(admin, accounts, actions);
   const access = real.access({
-    actions: new Map(actions.map((action) => [action, {
-      anonymous: action === 'subject:read',
-      ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
-    }])),
+    actions: new Map(
+      actions.map((action) => [
+        action,
+        {
+          anonymous: action === 'subject:read',
+          ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
+        },
+      ]),
+    ),
   });
-  for (const action of ['subject:create', 'subject:merge', 'moderation:hide'])
+  for (const action of ['subject:create', 'subject:merge', 'moderation:hide', 'moderation:takedown'])
     await real.grant(globalResource, 'editor', action);
   await bootstrapRelease(pool, bundledRelease);
   const editor = await access.authenticate(real.bearer('editor'), { pool, deadline: deadline() });
   const reader = await access.authenticate(real.bearer('reader'), { pool, deadline: deadline() });
   const other = await access.authenticate(real.bearer('other'), { pool, deadline: deadline() });
   async function authorization(action: string) {
-    return accessCommandAuthorization(access, editor, action, globalResource, { pool, deadline: deadline() }, () => new Error(`Denied ${action}`));
+    return accessCommandAuthorization(
+      access,
+      editor,
+      action,
+      globalResource,
+      { pool, deadline: deadline() },
+      () => new Error(`Denied ${action}`),
+    );
   }
   async function create(route = 0x6e10, label = 'Identity fixture') {
     const target = { route, id: newId(route) };
     const key = randomUUID();
     const result = await createSubject(pool, {
-      actor: editor, target, idempotencyKey: key, digest: digest(key), release,
+      actor: editor,
+      target,
+      idempotencyKey: key,
+      digest: digest(key),
+      release,
       item: { type: 'schema:Person', labels: { en: label } },
       authorization: await authorization('subject:create'),
     });
@@ -116,9 +142,14 @@ export async function identityFixture(pool: Pool, admin: Pool) {
   }
   async function merge(original: string, terminal: string, key = randomUUID()) {
     const result = await mergeSubjects(pool, {
-      actor: editor, subjects: [original, terminal], survivor: terminal,
-      idempotencyKey: key, digest: digest(key), release,
-      authorization: await authorization('subject:merge'), deadline: deadline(),
+      actor: editor,
+      subjects: [original, terminal],
+      survivor: terminal,
+      idempotencyKey: key,
+      digest: digest(key),
+      release,
+      authorization: await authorization('subject:merge'),
+      deadline: deadline(),
     });
     expect(result.redirected).toBe(original);
     expect(result.survivor).toBe(terminal);
@@ -127,8 +158,14 @@ export async function identityFixture(pool: Pool, admin: Pool) {
   async function hide(id: string, action: 'hide' | 'restore' = 'hide') {
     const key = randomUUID();
     await moderateSubject(pool, {
-      actor: editor, subject: id, action, body: { reason: 'Native identity disclosure test' },
-      idempotencyKey: key, digest: digest(key), authorization: await authorization('moderation:hide'), deadline: deadline(),
+      actor: editor,
+      subject: id,
+      action,
+      body: { reason: 'Native identity disclosure test' },
+      idempotencyKey: key,
+      digest: digest(key),
+      authorization: await authorization(action === 'restore' ? 'moderation:takedown' : 'moderation:hide'),
+      deadline: deadline(),
     });
   }
   async function finishMove(original: string, terminal: string) {
@@ -138,17 +175,29 @@ export async function identityFixture(pool: Pool, admin: Pool) {
   }
   async function baseline(id: string, actor: Actor = reader) {
     const target = resource(id);
-    const check = await accessCheck(access, actor, 'subject:read', {
-      ...target, eligibility: subjectReadEligibility(target),
-    }, { pool, deadline: deadline() });
+    const check = await accessCheck(
+      access,
+      actor,
+      'subject:read',
+      {
+        ...target,
+        eligibility: subjectReadEligibility(target),
+      },
+      { pool, deadline: deadline() },
+    );
     const client = await pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const row = await client.query('SELECT visibility FROM semantic.subject WHERE route=$1 AND subject_id=$2', [target.route, id]);
+      const row = await client.query('SELECT visibility FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
+        target.route,
+        id,
+      ]);
       expect(row.rows[0]?.visibility).toBe('visible');
       expect(await check(client)).toBe(true);
       await client.query('COMMIT');
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   }
   async function aliases(count: number, options: { conceal?: boolean; stored?: (id: string) => Promise<void> } = {}) {
     const root = await create(0x6e00, 'Alias group root');
@@ -166,7 +215,23 @@ export async function identityFixture(pool: Pool, admin: Pool) {
     await baseline(originals.at(-1)!);
     return { root, originals, last: originals.at(-1)! };
   }
-  return { pool, admin, accounts, real, access, editor, reader, other, create, merge, hide, finishMove, baseline, aliases, authorization };
+  return {
+    pool,
+    admin,
+    accounts,
+    real,
+    access,
+    editor,
+    reader,
+    other,
+    create,
+    merge,
+    hide,
+    finishMove,
+    baseline,
+    aliases,
+    authorization,
+  };
 }
 export type IdentityFixture = Awaited<ReturnType<typeof identityFixture>>;
 export function readOptions(f: IdentityFixture, actor: Actor = f.reader): IdentityReadOptions {
@@ -191,16 +256,35 @@ export function readyWindow(result: AliasWindow) {
 }
 export const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(96)]]) };
 export const binding = (viewer: string | null, group: string): ListCursorBinding => ({
-  route: 'GET /v1/zones/{id}/subjects', viewer,
+  route: 'GET /v1/zones/{id}/subjects',
+  viewer,
   query: { zone: 'identity-contract', query: 'native', group, limit: 100 },
 });
 /** Exact proposed fixed handoff: no nested owner tokens or serialized source vector. */
-export async function continueGroup(viewer: string | null, group: string, basis: IdentityBasis, after: string | null, now = new Date()) {
-  return encodeListCursor(tokens, binding(viewer, group), {
-    epoch: 1, after: [basis.digest, '', group, 0, after ?? '', '', '', 1],
-  }, now);
+export async function continueGroup(
+  viewer: string | null,
+  group: string,
+  basis: IdentityBasis,
+  after: string | null,
+  now = new Date(),
+) {
+  return encodeListCursor(
+    tokens,
+    binding(viewer, group),
+    {
+      epoch: 1,
+      after: [basis.digest, '', group, 0, after ?? '', '', '', 1],
+    },
+    now,
+  );
 }
-export async function reconstruct(token: string, viewer: string | null, group: string, basis: IdentityBasis, now = new Date()) {
+export async function reconstruct(
+  token: string,
+  viewer: string | null,
+  group: string,
+  basis: IdentityBasis,
+  now = new Date(),
+) {
   const decoded = await decodeListCursor(tokens, binding(viewer, group), token, now);
   if (!decoded.ok) return decoded;
   if (decoded.after.length !== 8 || decoded.after[0] !== basis.digest || decoded.after[2] !== group)

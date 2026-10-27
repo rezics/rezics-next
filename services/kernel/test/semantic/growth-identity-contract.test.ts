@@ -3,8 +3,17 @@ import { accessCheck } from '../../src/request/access.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { checkGrowth, capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
-  identityFixture, terminalReader, basisReader, groupReader, readyBasis, readyWindow, readOptions,
-  resource, deadline, release, type IdentityFixture,
+  identityFixture,
+  terminalReader,
+  basisReader,
+  groupReader,
+  readyBasis,
+  readyWindow,
+  readOptions,
+  resource,
+  deadline,
+  release,
+  type IdentityFixture,
 } from './identity-fixture.ts';
 
 let db: GrowthDatabase;
@@ -15,7 +24,9 @@ beforeAll(async () => {
   db = await openGrowthDatabase(url);
   f = await identityFixture(db.pool, db.admin);
 }, 30_000);
-afterAll(async () => { if (db) await db.close(); });
+afterAll(async () => {
+  if (db) await db.close();
+});
 const scales = [64, 512, 4096] as const;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
@@ -29,7 +40,10 @@ test('identity alias steps keep fixed candidate and point budgets as the native 
   const originals: string[] = [];
   const report = await checkGrowth(db, {
     name: 'identity alias steps keep fixed candidate and point budgets as the native group grows',
-    scales, bounds, warmups: 1, repetitions: 3,
+    scales,
+    bounds,
+    warmups: 1,
+    repetitions: 3,
     async grow(_database, scale, previous) {
       if (originals.length) await f.hide(originals.at(-1)!);
       const added: string[] = [];
@@ -47,9 +61,15 @@ test('identity alias steps keep fixed candidate and point budgets as the native 
     async operation() {
       // Both fixed-home metadata sweeps and Access preparation remain inside the shared capture.
       const basis = await readyBasis(readBasis, db.pool);
-      const window = readyWindow(await group(db.pool, {
-        terminal: root, basis, after: originals.at(-33)!, limit: 32, deadline: deadline(),
-      }));
+      const window = readyWindow(
+        await group(db.pool, {
+          terminal: root,
+          basis,
+          after: originals.at(-33)!,
+          limit: 32,
+          deadline: deadline(),
+        }),
+      );
       expect(window.examined).toBeLessThanOrEqual(33);
       expect(window.points).toBeLessThanOrEqual(134);
       expect(window.originals).toEqual(originals.slice(-32));
@@ -87,7 +107,10 @@ test('terminal identity and fixed-home digest stay bounded as irrelevant editori
   let historySubject = '';
   const report = await checkGrowth(db, {
     name: 'terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows',
-    scales, bounds, warmups: 1, repetitions: 3,
+    scales,
+    bounds,
+    warmups: 1,
+    repetitions: 3,
     async grow(_database, scale, previous) {
       for (let ordinal = previous; ordinal < scale; ordinal++) {
         // Respect native per-slot history limits: a new unrelated subject every sixteen edits.
@@ -95,9 +118,15 @@ test('terminal identity and fixed-home digest stay bounded as irrelevant editori
           historySubject = await f.create(0x6b10);
           await f.real.grant(resource(historySubject), 'editor', 'subject:create');
         }
-        const authorize = await accessCheck(f.access, f.editor, 'subject:create', resource(historySubject), { pool: db.pool, deadline: deadline() });
+        const authorize = await accessCheck(f.access, f.editor, 'subject:create', resource(historySubject), {
+          pool: db.pool,
+          deadline: deadline(),
+        });
         await updateSubjectIdentity(db.pool, {
-          subject: historySubject, labels: { en: `Editorial history ${ordinal}` }, release, authorize,
+          subject: historySubject,
+          labels: { en: `Editorial history ${ordinal}` },
+          release,
+          authorize,
         });
       }
     },
@@ -122,7 +151,10 @@ test('terminal identity and alias windows stay bounded as unrelated native popul
   const basis = await basisReader();
   const report = await checkGrowth(db, {
     name: 'terminal identity and alias windows stay bounded as unrelated native population and redirect history grow',
-    scales, bounds, warmups: 1, repetitions: 3,
+    scales,
+    bounds,
+    warmups: 1,
+    repetitions: 3,
     async grow(_database, scale, previous) {
       for (let ordinal = previous; ordinal < scale; ordinal++) {
         const irrelevant = await f.create(0x6a10);
@@ -133,9 +165,15 @@ test('terminal identity and alias windows stay bounded as unrelated native popul
     },
     async operation() {
       const current = await readyBasis(basis, db.pool);
-      const window = readyWindow(await group(db.pool, {
-        terminal: root, basis: current, after: originals[0]!, limit: 32, deadline: deadline(),
-      }));
+      const window = readyWindow(
+        await group(db.pool, {
+          terminal: root,
+          basis: current,
+          after: originals[0]!,
+          limit: 32,
+          deadline: deadline(),
+        }),
+      );
       expect(window.originals).toEqual(originals.slice(1));
       expect(window.examined).toBeLessThanOrEqual(33);
       expect(await terminal(db.pool, last, readOptions(f))).toMatchObject({ state: 'ready', id: root });
@@ -149,5 +187,7 @@ test('terminal identity and alias windows stay bounded as unrelated native popul
   expect(cost.rows).toBeGreaterThan(0);
   expect(cost.blocks).toBeGreaterThan(0);
   expect(measured.capture.plans.length).toBeGreaterThan(0);
-  expect(measured.capture.statements.join('\n')).not.toMatch(/WITH\s+RECURSIVE|enable_seqscan|semantic\.(?:fact|revision|inbound_link|outbound_link)\b/i);
+  expect(measured.capture.statements.join('\n')).not.toMatch(
+    /WITH\s+RECURSIVE|enable_seqscan|semantic\.(?:fact|revision|inbound_link|outbound_link)\b/i,
+  );
 }, 600_000);
