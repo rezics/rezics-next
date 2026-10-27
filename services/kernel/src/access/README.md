@@ -968,7 +968,8 @@ observed, so later preparation does not subtract elapsed time twice.
 ## Viewer preferences
 
 Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
-`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "version": 0 }`. Anonymous viewers use these defaults locally.
+`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "notifications": { "reply": true, "mention": true }, "version": 0 }`.
+Anonymous viewers use these defaults locally.
 
 - `spoilerLevel` is the highest `rezics:spoilerLevel` displayed without a reveal control: 0 (none), 1 (minor), or
   2 (major). Summaries remain spoiler-safe regardless of this setting.
@@ -991,9 +992,24 @@ Access stores one optional `account_preferences` row on the account's route and 
 
   The column is `jsonb NOT NULL DEFAULT '{}'` with a check that it is an object of at most 16,384 bytes.
 
+- `notifications` maps every optional in-app notification kind to its effective boolean, using the saved override
+  or the catalogue default. [`notification-kinds.ts`](notification-kinds.ts) is the frozen catalogue: `reply` and
+  `mention` are optional and enabled by default; `moderation_decision` is mandatory and cannot be turned off.
+  Mandatory kinds are absent from this field. Content appends kinds to the catalogue, at most 32 total, with unique
+  lowercase snake case keys and an `optional` flag and `default` boolean. Moderation decisions include the statement
+  of reasons owed to a content author and the decision owed to a notifier. These preferences cover in-app notices;
+  there is no email delivery.
+
+  PATCH applies JSON Merge Patch (RFC 7396) over stored notification overrides: `true` or `false` sets one kind,
+  `null` removes its override, and `notifications: null` clears all overrides. Mandatory or unknown keys and values
+  other than booleans or null answer 400 and change nothing, including other fields in the same command. Only values
+  differing from a kind's default are stored. An equal merged result with other settings unchanged preserves the
+  version and writes no preference row. Storage is `jsonb NOT NULL DEFAULT '{}'`, checked to be an object of at most
+  2,048 bytes.
+
 `GET /v1/accounts/{accountId}/preferences` returns both settings, `shelf` (`{}` when nothing was saved, including
-when the account has no row) and `version`. `PATCH` accepts `expectedVersion` (required, a nonnegative integer) and
-any of the settings and `shelf`. Omitted settings keep their current values.
+when the account has no row), `notifications` and `version`. `PATCH` accepts `expectedVersion` (required, a nonnegative
+integer) and any of the settings, `shelf` and `notifications`. Omitted settings keep their current values.
 
 `shelf` in a PATCH is a JSON Merge Patch (RFC 7396) applied to the stored shelf: an object merges key by key, `null`
 removes that key (a part such as `gridSize`, or one `layouts` or `sorts` entry), and an array (`tableColumns`) replaces
@@ -1012,18 +1028,28 @@ A changed value increments the version once. Unchanged values preserve the versi
 setting the initial defaults therefore leaves storage absent. Returning to the defaults after a change keeps the row
 and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
 Replaying a successful key returns its original values/version after current authorization, even if later commands
-changed the preferences. Every successful response includes both settings, the shelf and the version, and PATCH carries the
-session token for its command receipt. Each successful command emits the existing `account-updated` event with only
+changed the preferences. Every successful response includes both settings, the shelf, notifications and the version,
+and PATCH carries the session token for its command receipt. Each successful command emits the existing `account-updated` event with only
 the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
 
 Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, with logarithmic
-blocks in accounts plus a constant number of TOAST blocks, since the stored shelf is capped at 16,384 bytes.
+blocks in accounts plus a constant number of TOAST blocks, since the stored shelf is capped at 16,384 bytes and
+notification overrides at 2,048 bytes.
 Set cost: one preference row and the command envelope's receipt, with constant rows and statements; the merge is in
-memory over at most 32 + 6 + 2 entries. Authentication and
-native authorization retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored
+memory over at most 32 + 6 + 2 shelf entries and 32 notification kinds. Authentication and native authorization
+retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored
 preferences, each holding a maximal shelf (32 layouts with 256-character keys, all six sorts, `gridSize` and 11
-columns), at scales 256, 1024 and 4096 (16 accounts per scale unit, to avoid tiny-table scans) using the shared
-harness and default warmups, for both the read and setting a maximal shelf.
+columns) and every optional notification kind overridden, at scales 256, 1024 and 4096 (16 accounts per scale unit,
+to avoid tiny-table scans) using the shared harness and default warmups, for both the read and setting a maximal
+shelf and all optional notifications.
+
+Content calls `notificationAllowed(client, { recipient, kind }): Promise<boolean>`, exported from Access, at send
+time. An unknown kind throws `TypeError` before any read. A missing, deleted or pending recipient returns false.
+For any other state, including suspended, a mandatory kind returns true and an optional kind follows its effective
+setting. Content still checks access to the item. The port uses one statement in the recipient's partition, joining
+one account row to at most one preference row by `(route, account_id)`: constant rows and statements, logarithmic
+blocks in accounts. `test/access/growth-preferences.test.ts` checks `notificationAllowed stays constant as accounts
+grow`, seeding every optional kind overridden at the same scales with the shared harness.
 
 ## Rating counting key
 
@@ -1151,7 +1177,7 @@ of authority, a closed validity interval or a terminal flag does not itself eras
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | `access.account`, identity/profile group ([schema](../../db/access/schema.sql), [fence SQL](lifecycle-fence.sql))                                                                                                                     | Handle, display name, avatar URL/id, biography, links, birth date, content preferences, suspension reason, registration ids/deadline, operator/controller ids                                  | Tombstone clears these in the barrier transaction; public views and speaker listing become false.                                                                                                                                                                  | Keep only the lifecycle tombstone for attribution and refusal of future authority.                      |
 | `access.account`, remaining state ([schema](../../db/access/schema.sql))                                                                                                                                                              | Stable account id/kind, timestamps, authentication floor/fence receipt, relation version/reservation, handle operation id, inverse status, rate tier, verified/pending subject and receipt ids | No erasure trigger or deadline for these residual fields; public disclosure is restricted by the deletion policy.                                                                                                                                                  | Terminal identity and replay/fencing; no deletion-retention purpose specified for every residual field. |
-| `access.account_preferences` ([schema](../../db/access/schema.sql), [writer](preferences.ts))                                                                                                                                         | Account id, spoiler level, suitability, version                                                                                                                                                | No deletion trigger or deadline.                                                                                                                                                                                                                                   | Private viewer choices.                                                                                 |
+| `access.account_preferences` ([schema](../../db/access/schema.sql), [writer](preferences.ts))                                                                                                                                         | Account id, spoiler level, suitability, shelf, notification overrides, version                                                                                                                 | No deletion trigger or deadline.                                                                                                                                                                                                                                   | Private viewer choices.                                                                                 |
 | `access.handle_claim` ([schema](../../db/access/schema.sql), [lifecycle](lifecycle.ts), [expiry](lifecycle-handle-expire.sql), [reservation](lifecycle-handle-reserve.sql))                                                           | Handle/account mapping, reservation and operation ids, expected prior handle, deadlines                                                                                                        | Registration/transition release can delete exact claims; expired unheld pending/reserved claims can be deleted or overwritten. Current deletion cleanup reserves the old handle for 30 days; expiry alone does not physically purge it. No bounded purge deadline. | Registration exclusion, rename redirects and reuse protection; retirement policy is separate work.      |
 | `access.lifecycle_handle_operation`, `access.lifecycle_handle_effect`, `access.lifecycle_registration_expiry` ([schema](../../db/access/schema.sql))                                                                                  | Account, handles/expected handle, operation/reservation ids, effects and transactions                                                                                                          | Completion/registration expiry records terminal state; no erasure trigger or deadline.                                                                                                                                                                             | Idempotent handle and registration recovery.                                                            |
 | `access.organization_member` ([schema](../../db/access/schema.sql))                                                                                                                                                                   | Organization/member ids, role, validity history, transaction                                                                                                                                   | Membership removal closes intervals; no account-deletion purge or deadline.                                                                                                                                                                                        | Temporal membership authority/history.                                                                  |

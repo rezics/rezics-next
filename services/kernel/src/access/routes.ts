@@ -20,6 +20,7 @@ import {
   SHELF_TABLE_COLUMNS,
   SHELF_TABS,
 } from './preferences.ts';
+import { NOTIFICATION_KINDS, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -230,7 +231,15 @@ const shelfPatch = t.Object(
   },
   closed,
 );
-const preferences = t.Object({ ...preferenceValues, shelf, version: t.Integer({ minimum: 0 }) }, closed);
+const notificationFields = <S extends TSchema>(entry: S, optional = false) =>
+  Object.fromEntries(
+    NOTIFICATION_KINDS.filter((kind) => kind.optional).map(({ kind }) => [kind, optional ? t.Optional(entry) : entry]),
+  );
+const notifications = t.Unsafe<Notifications>(t.Object(notificationFields(t.Boolean()), closed));
+const notificationsPatch = t.Unsafe<NotificationsPatch>(
+  t.Object(notificationFields(nullable(t.Boolean()), true), closed),
+);
+const preferences = t.Object({ ...preferenceValues, shelf, notifications, version: t.Integer({ minimum: 0 }) }, closed);
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -732,6 +741,7 @@ export function accessRoutes(
               spoilerLevel: t.Optional(preferenceValues.spoilerLevel),
               suitability: t.Optional(preferenceValues.suitability),
               shelf: t.Optional(nullable(shelfPatch)),
+              notifications: t.Optional(nullable(notificationsPatch)),
             },
             closed,
           ),

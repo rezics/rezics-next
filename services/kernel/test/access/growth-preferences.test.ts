@@ -1,9 +1,18 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createPreferenceCommands, readAccountPreferences, type Shelf } from '../../src/access/preferences.ts';
+import { NOTIFICATION_KINDS, type Notifications } from '../../src/access/notification-kinds.ts';
+import {
+  createPreferenceCommands,
+  notificationAllowed,
+  readAccountPreferences,
+  type Shelf,
+} from '../../src/access/preferences.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 
+const notifications = Object.fromEntries(
+  NOTIFICATION_KINDS.filter(({ optional }) => optional).map((entry) => [entry.kind, !entry.default]),
+) as Notifications;
 const route = 0x4567;
 const accountId = newId(route);
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -54,9 +63,9 @@ test('preferences read stays constant as accounts with stored preferences grow',
           [route, accountId],
         );
         await database.admin.query(
-          `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,version)
-           VALUES ($1,$2,1,'show',$3::jsonb,1)`,
-          [route, accountId, JSON.stringify(maximalShelf())],
+          `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
+           VALUES ($1,$2,1,'show',$3::jsonb,$4::jsonb,1)`,
+          [route, accountId, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
         );
       }
       // Keep the smallest sample beyond the planner's tiny-table scan threshold.
@@ -67,9 +76,9 @@ test('preferences read stays constant as accounts with stored preferences grow',
         [route, ids],
       );
       await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,version)
-        SELECT $1,id,2,'blur',$3::jsonb,1 FROM unnest($2::uuid[]) id`,
-        [route, ids, JSON.stringify(maximalShelf())],
+        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
+        SELECT $1,id,2,'blur',$3::jsonb,$4::jsonb,1 FROM unnest($2::uuid[]) id`,
+        [route, ids, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
       );
     },
     async operation() {
@@ -77,6 +86,7 @@ test('preferences read stays constant as accounts with stored preferences grow',
         spoilerLevel: 1,
         suitability: 'show',
         shelf: maximalShelf(),
+        notifications,
         version: 1,
       });
     },
@@ -131,9 +141,9 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
         [setRoute, ids],
       );
       await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,version)
-        SELECT $1,id,2,'blur',$3::jsonb,1 FROM unnest($2::uuid[]) id`,
-        [setRoute, ids, JSON.stringify(maximalShelf())],
+        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
+        SELECT $1,id,2,'blur',$3::jsonb,$4::jsonb,1 FROM unnest($2::uuid[]) id`,
+        [setRoute, ids, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
       );
       // The command reads its authorization grant and its receipt key: seed both past the planner's tiny-table scans.
       await database.admin.query(
@@ -157,8 +167,10 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
         key: Bun.randomUUIDv7(),
         expectedVersion: 0,
         shelf: maximalShelf(),
+        notifications,
       });
       expect(result.value.shelf).toEqual(maximalShelf());
+      expect(result.value.notifications).toEqual(notifications);
       expect(result.value.version).toBe(1);
     },
   });
@@ -167,3 +179,36 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
     expect(cost.relations?.['access.account_preferences']?.rows).toBe(1);
   }
 }, 120000);
+
+test('notificationAllowed stays constant as accounts grow', async () => {
+  const permissionRoute = 0x4569;
+  const recipient = newId(permissionRoute);
+  const report = await checkGrowth(db, {
+    name: 'notification permission',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale, previous) {
+      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(permissionRoute));
+      if (previous === 0) ids.push(recipient);
+      await database.admin.query(
+        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+         SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+        [permissionRoute, ids],
+      );
+      await database.admin.query(
+        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,notifications,version)
+         SELECT $1,id,0,'blur',$3::jsonb,1 FROM unnest($2::uuid[]) id`,
+        [permissionRoute, ids, JSON.stringify(notifications)],
+      );
+    },
+    async operation() {
+      expect(await notificationAllowed(db.pool, { recipient, kind: 'reply' })).toBe(false);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+  for (const { cost } of report.samples) {
+    expect(cost.statements).toBe(1);
+    expect(cost.relations?.['access.account']?.rows).toBe(1);
+    expect(cost.relations?.['access.account_preferences']?.rows).toBe(1);
+  }
+}, 60000);

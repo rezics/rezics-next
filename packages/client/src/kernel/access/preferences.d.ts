@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
+import { type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 export declare const SHELF_LAYOUTS: readonly ['grid', 'list', 'table'];
 export declare const SHELF_TABS: readonly ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'];
 export declare const SHELF_SORT_FIELDS: readonly ['last_activity', 'added', 'finished', 'title', 'rating', 'release_date', 'progress'];
@@ -36,6 +37,7 @@ export type AccountPreferences = {
     spoilerLevel: 0 | 1 | 2;
     suitability: 'blur' | 'show';
     shelf: Shelf;
+    notifications: Notifications;
     version: number;
 };
 export declare const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences>;
@@ -44,7 +46,13 @@ export type PreferenceChange = {
     spoilerLevel?: 0 | 1 | 2;
     suitability?: 'blur' | 'show';
     shelf?: ShelfPatch | null;
+    notifications?: NotificationsPatch | null;
 };
+/** One joined account/preference seek on the recipient's route, including suspended accounts. */
+export declare function notificationAllowed(client: Pick<Pool | PoolClient, 'query'>, input: {
+    recipient: string;
+    kind: string;
+}): Promise<boolean>;
 /** Shape of a patch: every known part may be `null`; unknown keys are refused at every level. */
 export declare function validShelfPatch(patch: unknown): boolean;
 /** The shelf after a patch, or `null` when the patch or the merged result breaks a rule. */
@@ -69,5 +77,6 @@ export declare function createPreferenceCommands(config: {
         spoilerLevel: 0 | 1 | 2;
         suitability: "blur" | "show";
         shelf: Shelf;
+        notifications: Notifications;
     }>>;
 };

@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { type Notifications } from './notification-kinds.ts';
 import { type Access } from '../request/access.ts';
 import { type PublicIdentity, type PublicHandleIdentity, type PublicAccountProfile } from './account-data.ts';
 import { type OrganizationSpeakersPage } from './organization-speakers.ts';
@@ -4753,6 +4754,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     gridSize?: "large" | "medium" | "small";
                                     tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[];
                                 };
+                                notifications: Notifications;
                                 version: number;
                             };
                             400: {
@@ -4871,6 +4873,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 gridSize?: "large" | "medium" | "small" | null;
                                 tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[] | null;
                             } | null;
+                            notifications?: Partial<Record<"mention" | "reply", boolean | null>> | null;
                         };
                         params: {
                             accountId: string;
@@ -4898,6 +4901,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     gridSize?: "large" | "medium" | "small";
                                     tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[];
                                 };
+                                notifications: Notifications;
                                 version: number;
                             };
                             400: {

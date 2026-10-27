@@ -431,6 +431,7 @@ export {
 export {
   createPreferenceCommands,
   readAccountPreferences,
+  notificationAllowed,
   DEFAULT_ACCOUNT_PREFERENCES,
   type AccountPreferences,
   type PreferenceChange,

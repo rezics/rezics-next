@@ -5,6 +5,13 @@ import { requestDigest } from '../http/request.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
+import {
+  DEFAULT_NOTIFICATIONS,
+  NOTIFICATION_KINDS,
+  type Notifications,
+  type NotificationsPatch,
+} from './notification-kinds.ts';
+import allowed from './preferences-notification-allowed.sql';
 import read from './preferences-read.sql';
 import set from './preferences-set.sql';
 
@@ -65,12 +72,14 @@ export type AccountPreferences = {
   spoilerLevel: 0 | 1 | 2;
   suitability: 'blur' | 'show';
   shelf: Shelf;
+  notifications: Notifications;
   version: number;
 };
 export const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences> = Object.freeze({
   spoilerLevel: 0,
   suitability: 'blur',
   shelf: Object.freeze({}),
+  notifications: DEFAULT_NOTIFICATIONS,
   version: 0,
 });
 export type PreferenceChange = {
@@ -78,6 +87,7 @@ export type PreferenceChange = {
   spoilerLevel?: 0 | 1 | 2;
   suitability?: 'blur' | 'show';
   shelf?: ShelfPatch | null;
+  notifications?: NotificationsPatch | null;
 };
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -87,6 +97,52 @@ const member = (values: readonly unknown[], value: unknown) => values.includes(v
 const onlyKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).every((key) => keys.includes(key));
 const validScope = (key: string) => key.length <= SHELF_SCOPE_MAX_LENGTH && scopePattern.test(key);
+
+/** Only optional catalogue entries accept overrides. */
+function validNotificationsPatch(patch: unknown): patch is NotificationsPatch {
+  return (
+    isObject(patch) &&
+    Object.entries(patch).every(
+      ([kind, value]) =>
+        NOTIFICATION_KINDS.some((entry) => entry.kind === kind && entry.optional) &&
+        (value === null || typeof value === 'boolean'),
+    )
+  );
+}
+
+function effectiveNotifications(overrides: NotificationsPatch): Notifications {
+  return Object.fromEntries(
+    NOTIFICATION_KINDS.filter(({ optional }) => optional).map((entry) => [
+      entry.kind,
+      overrides[entry.kind as keyof Notifications] ?? entry.default,
+    ]),
+  ) as Notifications;
+}
+
+function notificationOverrides(notifications: Notifications): NotificationsPatch {
+  return Object.fromEntries(
+    Object.entries(notifications).filter(
+      ([kind, value]) => value !== DEFAULT_NOTIFICATIONS[kind as keyof Notifications],
+    ),
+  );
+}
+
+/** One joined account/preference seek on the recipient's route, including suspended accounts. */
+export async function notificationAllowed(
+  client: Pick<Pool | PoolClient, 'query'>,
+  input: { recipient: string; kind: string },
+): Promise<boolean> {
+  const entry = NOTIFICATION_KINDS.find(({ kind }) => kind === input.kind);
+  if (!entry) throw new TypeError('Unknown notification kind');
+  const route = routeOf(input.recipient);
+  if (route === null) return false;
+  const [row] = await allowed.run(client, { route, account_id: input.recipient });
+  if (!row || row.state === 'deleted' || row.state === 'pending') return false;
+  return (
+    !entry.optional ||
+    effectiveNotifications((row.notifications ?? {}) as NotificationsPatch)[entry.kind as keyof Notifications]
+  );
+}
 
 /** Shape of a patch: every known part may be `null`; unknown keys are refused at every level. */
 export function validShelfPatch(patch: unknown): boolean {
@@ -184,8 +240,9 @@ export async function readAccountPreferences(
         spoilerLevel: row.spoilerLevel as 0 | 1 | 2,
         suitability: row.suitability as 'blur' | 'show',
         shelf: row.shelf as Shelf,
+        notifications: effectiveNotifications(row.notifications as NotificationsPatch),
       }
-    : { ...DEFAULT_ACCOUNT_PREFERENCES, shelf: {} };
+    : { ...DEFAULT_ACCOUNT_PREFERENCES, shelf: {}, notifications: { ...DEFAULT_NOTIFICATIONS } };
 }
 
 /** Serializable read/compare/write touches one preference row and the command receipt.
@@ -210,8 +267,12 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
         (input.spoilerLevel !== undefined && ![0, 1, 2].includes(input.spoilerLevel)) ||
         (input.suitability !== undefined && !['blur', 'show'].includes(input.suitability)) ||
         (input.shelf != null && !validShelfPatch(input.shelf)) ||
+        (input.notifications != null && !validNotificationsPatch(input.notifications)) ||
         Object.keys(input).some(
-          (key) => !['accountId', 'key', 'expectedVersion', 'spoilerLevel', 'suitability', 'shelf'].includes(key),
+          (key) =>
+            !['accountId', 'key', 'expectedVersion', 'spoilerLevel', 'suitability', 'shelf', 'notifications'].includes(
+              key,
+            ),
         )
       )
         throw new ProblemError('invalid_request');
@@ -248,11 +309,19 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
             spoilerLevel: input.spoilerLevel ?? current.spoilerLevel,
             suitability: input.suitability ?? current.suitability,
             shelf,
+            notifications:
+              input.notifications === undefined
+                ? current.notifications
+                : effectiveNotifications(
+                    (mergePatch(notificationOverrides(current.notifications) as Json, input.notifications as Json) ??
+                      {}) as NotificationsPatch,
+                  ),
           };
           if (
             next.spoilerLevel !== current.spoilerLevel ||
             next.suitability !== current.suitability ||
-            canonical(next.shelf) !== canonical(current.shelf)
+            canonical(next.shelf) !== canonical(current.shelf) ||
+            canonical(next.notifications) !== canonical(current.notifications)
           ) {
             const changed = await set.run(tx, {
               route,
@@ -260,6 +329,7 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
               spoiler_level: next.spoilerLevel,
               suitability: next.suitability,
               shelf: next.shelf,
+              notifications: notificationOverrides(next.notifications),
               expected_version: input.expectedVersion,
             });
             if (!changed) throw new ProblemError('conflict');
