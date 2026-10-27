@@ -179,7 +179,7 @@ async function subjectTypeLabel(locale: string, id = bookId): Promise<string> {
     html,
   );
   expect(meta, `${locale} subject type label`).not.toBeNull();
-  return meta![1]!.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim();
+  return meta![1]!.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim().split(' · ')[0]!;
 }
 
 function relationHeading(html: string): string {
