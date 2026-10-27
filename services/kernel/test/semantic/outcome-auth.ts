@@ -8,6 +8,8 @@ import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 type HostOptions = Parameters<typeof createAuthHost>[0];
 export type KernelPorts = { trustedAccess: HostOptions['trustedAccess']; access: HostOptions['access'] };
+export type OwnedSemanticResource = { kind: 'kernel_database' | 'auth_database'; name: string };
+export type OwnedResourceObserver = (resource: OwnedSemanticResource) => void | Promise<void>;
 export type SharedAuth = {
   issuer: string;
   audience: string;
@@ -62,8 +64,14 @@ function delegating<T extends object>(name: string) {
   };
 }
 
-type Built = { auth: SharedAuth; dispose(): Promise<void> };
+type Built = {
+  auth: SharedAuth;
+  resource: OwnedSemanticResource;
+  dispose(strict?: boolean): Promise<void>;
+};
 let shared: Promise<Built> | undefined;
+let terminal = false;
+let closing: Promise<void> | undefined;
 
 // bun test runs no exit handler, so nothing in this process can drop the database when it ends. A detached
 // watcher holds the read end of a pipe the process owns; the pipe closes when the process ends for any reason,
@@ -77,31 +85,83 @@ const watcher = `
   process.exit(0);
 `;
 
-async function build(source: URL): Promise<Built> {
+async function build(
+  source: URL,
+  onOwnedResource: OwnedResourceObserver | undefined,
+  strictCleanup: boolean,
+): Promise<Built> {
   const name = `semantic_auth_${randomUUID().replaceAll('-', '')}`;
   const ownerUrl = databaseUrl(source, 'postgres');
   const owner = new Pool({ connectionString: ownerUrl, max: 1 });
-  const cleanup: (() => Promise<unknown>)[] = [];
-  const dispose = async () => {
-    for (const step of cleanup.splice(0).reverse()) await step().catch(() => {});
+  let database: Pool | undefined;
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
+  let dropper: ReturnType<typeof Bun.spawn> | undefined;
+  let watcherOutput: Promise<string> | undefined;
+  let watcherErrors: Promise<string> | undefined;
+  let databaseClaimed = false;
+  let cleanup: Promise<unknown[]> | undefined;
+  const collectCleanup = () =>
+    (cleanup ??= (async () => {
+      const errors: unknown[] = [];
+      const attempt = async (step: () => unknown | Promise<unknown>) => {
+        try {
+          await step();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+
+      if (host) await attempt(() => host!.stop());
+      if (server) await attempt(() => server!.stop(true));
+      else if (database) await attempt(() => database!.end());
+      if (dropper) {
+        await attempt(async () => {
+          const stdin = dropper!.stdin;
+          if (!stdin || typeof stdin === 'number') {
+            dropper!.kill();
+            throw new Error('Semantic Auth database watcher has no controllable stdin');
+          }
+          await stdin.end();
+        });
+        await attempt(async () => {
+          const exitCode = await dropper!.exited;
+          await watcherOutput;
+          await watcherErrors;
+          if (exitCode !== 0) throw new Error(`Semantic Auth database watcher exited ${exitCode}`);
+        });
+      }
+      if (databaseClaimed) await attempt(() => dropTestDatabase(owner, name));
+      await attempt(() => owner.end());
+      return errors;
+    })());
+  const dispose = async (strict = true) => {
+    const errors = await collectCleanup();
+    if (strict && errors.length) throw new AggregateError(errors, 'Semantic Auth cleanup failed');
   };
   try {
-    cleanup.push(() => owner.end());
-    cleanup.push(() => dropTestDatabase(owner, name));
+    const existing = await owner.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
+    if (existing.rowCount) throw new Error(`Semantic Auth database name is already in use: ${name}`);
+    await onOwnedResource?.({ kind: 'auth_database', name });
+    databaseClaimed = true;
     const authUrl = await createAuthDatabase(source.toString(), name);
-    const dropper = Bun.spawn([process.execPath, '-e', watcher, ownerUrl, name], {
+    dropper = Bun.spawn([process.execPath, '-e', watcher, ownerUrl, name], {
       cwd: kernelRoot,
       stdin: 'pipe',
-      stdout: 'ignore',
-      stderr: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
     dropper.unref();
-    // Run in reverse: stop the watcher before dropping the database, then close the owner pool.
-    cleanup.push(async () => dropper.kill());
-    const database = new Pool({ connectionString: authUrl, max: 10 });
-    database.on('error', () => {});
-    database.on('connect', (client) => client.on('error', () => {}));
-    cleanup.push(() => database.end());
+    const watcherStdout = dropper.stdout;
+    const watcherStderr = dropper.stderr;
+    if (!watcherStdout || typeof watcherStdout === 'number' || !watcherStderr || typeof watcherStderr === 'number')
+      throw new Error('Semantic Auth database watcher has no readable output pipes');
+    watcherOutput = new Response(watcherStdout).text();
+    watcherErrors = new Response(watcherStderr).text();
+    const authDatabase = new Pool({ connectionString: authUrl, max: 10 });
+    database = authDatabase;
+    authDatabase.on('error', () => {});
+    authDatabase.on('connect', (client) => client.on('error', () => {}));
 
     const signingKey = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -109,16 +169,16 @@ async function build(source: URL): Promise<Built> {
       alg: 'ES256',
     };
     let service!: AuthService;
-    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => service.handler(request) });
-    cleanup.push(() => server.stop(true));
-    const issuer = `http://127.0.0.1:${server.port}`;
+    const authServer = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => service.handler(request) });
+    server = authServer;
+    const issuer = `http://127.0.0.1:${authServer.port}`;
     const audience = 'https://semantic.api.rezics.test';
 
     const trusted = delegating<KernelPorts['trustedAccess']>('trusted Access');
     const access = delegating<KernelPorts['access']>('registration');
-    const host = await createAuthHost({
-      database,
-      systemDatabasePool: database,
+    const authHost = await createAuthHost({
+      database: authDatabase,
+      systemDatabasePool: authDatabase,
       issuer,
       audience,
       secret: 'semantic-outcome-auth-secret-with-at-least-32-bytes',
@@ -129,9 +189,9 @@ async function build(source: URL): Promise<Built> {
       maintenanceSchedule: '0 0 1 1 *',
       executorId: `semantic-${name}`,
     });
-    cleanup.push(() => host.stop());
-    service = host.service;
-    await host.start();
+    host = authHost;
+    service = authHost.service;
+    await authHost.start();
 
     let client: Promise<void> | undefined;
     const auth: SharedAuth = {
@@ -156,22 +216,64 @@ async function build(source: URL): Promise<Built> {
         });
       },
     };
-    return { auth, dispose };
+    return { auth, resource: { kind: 'auth_database', name }, dispose };
   } catch (error) {
-    await dispose();
+    const errors = await collectCleanup();
+    if (strictCleanup && errors.length)
+      throw new AggregateError([error, ...errors], 'Semantic Auth setup and cleanup failed', { cause: error });
     throw error;
   }
 }
 
 /** The one Auth database, host and server of this process; the first caller builds it. A failed build is
  * disposed and retried by the next caller. Its database is dropped when the process ends. */
-export function sharedAuth(source: URL): Promise<SharedAuth> {
-  const pending = (shared ??= build(source));
+export function sharedAuth(
+  source: URL,
+  onOwnedResource?: OwnedResourceObserver,
+  strictCleanup = false,
+): Promise<SharedAuth> {
+  if (terminal) return Promise.reject(new Error('Owned semantic Auth is terminally closed in this process'));
+  if (!shared) {
+    const pending = build(source, onOwnedResource, strictCleanup);
+    shared = pending;
+    return pending.then(
+      (built) => built.auth,
+      (error) => {
+        if (shared === pending) shared = undefined;
+        throw error;
+      },
+    );
+  }
+  const pending = shared;
   return pending.then(
-    (built) => built.auth,
+    async (built) => {
+      // A cached process-local host still owns this exact database. Replay the identity to
+      // callers that need to track the existing resource before returning the host.
+      await onOwnedResource?.(built.resource);
+      return built.auth;
+    },
     (error) => {
       if (shared === pending) shared = undefined;
       throw error;
     },
   );
+}
+
+/** Terminal disposal for one isolated semantic supervisor process. Existing sharedAuth callers do not call this. */
+export function closeOwnedSemanticAuth(): Promise<void> {
+  if (closing) return closing;
+  terminal = true;
+  const pending = shared;
+  closing = (async () => {
+    if (!pending) return;
+    let built: Built;
+    try {
+      built = await pending;
+    } catch {
+      // A failed build already attempts all cleanup stages before rejecting.
+      return;
+    }
+    await built.dispose(true);
+  })();
+  return closing;
 }

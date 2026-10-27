@@ -16,13 +16,14 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
-import { sharedAuth } from './outcome-auth.ts';
+import { sharedAuth, type OwnedResourceObserver } from './outcome-auth.ts';
 
 type Account = { accountId: string; bearer: string };
 
@@ -39,6 +40,11 @@ function databaseUrl(source: URL, name: string): string {
   const value = new URL(source);
   value.pathname = `/${name}`;
   return value.href;
+}
+
+async function assertDatabaseNameAvailable(owner: Pool, name: string): Promise<void> {
+  const result = await owner.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
+  if (result.rowCount) throw new Error(`Semantic outcome database name is already in use: ${name}`);
 }
 
 async function jsonResponse(response: Response): Promise<HttpResponse> {
@@ -81,6 +87,14 @@ function phaseTimer() {
 export type SemanticOutcomeDriver = SemanticDriver & {
   readonly fixtures: {
     pool: Pool;
+    runtime: {
+      databaseUrl: string;
+      routeKey: string;
+      sessionKeys: string;
+      authIssuer: string;
+      authAudience: string;
+      authJwksUrl: string;
+    };
     person(name: string): Promise<Account>;
     grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
     send(
@@ -93,9 +107,19 @@ export type SemanticOutcomeDriver = SemanticDriver & {
   };
 };
 
+export type SemanticOutcomeOptions = {
+  linkProjection?: 'owned' | 'external';
+  beforeClose?: () => Promise<void>;
+  onOwnedResource?: OwnedResourceObserver;
+  strictCleanup?: boolean;
+};
+
 /** A caller can abandon a pending call (a hook that timed out), so the next call first lets that setup finish,
  * then closes it. Otherwise its host and database outlive the caller and the next setup collides with them. */
-export function createSemanticDriver(compose: typeof createKernel = createKernel): Promise<SemanticOutcomeDriver> {
+export function createSemanticDriver(
+  compose: typeof createKernel = createKernel,
+  options: SemanticOutcomeOptions = {},
+): Promise<SemanticOutcomeDriver> {
   const earlier = [...tracked];
   const entry: Tracked = { settled: Promise.resolve(), close: async () => {} };
   const starting = (async () => {
@@ -104,7 +128,7 @@ export function createSemanticDriver(compose: typeof createKernel = createKernel
       await previous.close();
       tracked.delete(previous);
     }
-    return startDriver(entry, compose);
+    return startDriver(entry, compose, options);
   })();
   entry.settled = starting.then(
     () => {},
@@ -114,58 +138,73 @@ export function createSemanticDriver(compose: typeof createKernel = createKernel
   return starting;
 }
 
-async function startDriver(entry: Tracked, compose: typeof createKernel): Promise<SemanticOutcomeDriver> {
+async function startDriver(
+  entry: Tracked,
+  compose: typeof createKernel,
+  options: SemanticOutcomeOptions,
+): Promise<SemanticOutcomeDriver> {
   const timer = phaseTimer();
   const number = ++started;
-  const source = new URL(required(process.env.DATABASE_URL, 'DATABASE_URL must name the migrated test database'));
-  const template = decodeURIComponent(source.pathname.slice(1));
-  if (!/^[A-Za-z0-9_]+$/.test(template)) throw new Error('Unsafe template database name');
-
-  const suffix = randomUUID().replaceAll('-', '');
-  const kernelName = `semantic_${suffix}`;
-  const owner = new Pool({ connectionString: databaseUrl(source, 'postgres'), max: 1 });
+  let source: URL | undefined;
+  let kernelName: string | undefined;
+  let owner: Pool | undefined;
   const owned: string[] = [];
   let pool: Pool | undefined;
   let release: (() => void) | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
-  let closed = false;
-
-  const close = async () => {
-    if (closed) return;
-    closed = true;
-    timer.mark('rest');
-    try {
-      release?.();
-      await relays?.stop().catch(() => {});
-      await pool?.end().catch(() => {});
-      for (const name of owned.reverse()) {
-        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
+  let completion: Promise<void> | undefined;
+  const close = () => {
+    if (completion) return completion;
+    completion = (async () => {
+      timer.mark('rest');
+      const errors: unknown[] = [];
+      const attempt = async (step: () => unknown | Promise<unknown>) => {
+        try {
+          await step();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+      await attempt(async () => options.beforeClose?.());
+      await attempt(() => release?.());
+      await attempt(async () => relays?.stop());
+      await attempt(async () => pool?.end());
+      if (owner) {
+        for (const name of owned.reverse()) await attempt(() => dropTestDatabase(owner!, name));
+        await attempt(() => owner!.end());
       }
-    } finally {
-      await owner.end().catch(() => {});
       timer.closed(number);
-    }
-  };
-  entry.close = async () => {
-    try {
-      await close();
-    } finally {
       tracked.delete(entry);
-    }
+      if (options.strictCleanup && errors.length)
+        throw new AggregateError(errors, 'Semantic outcome fixture cleanup failed');
+    })();
+    return completion;
   };
+  entry.close = close;
 
   try {
-    await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
+    source = new URL(required(process.env.DATABASE_URL, 'DATABASE_URL must name the migrated test database'));
+    const template = decodeURIComponent(source.pathname.slice(1));
+    if (!/^[A-Za-z0-9_]+$/.test(template)) throw new Error('Unsafe template database name');
+
+    const suffix = randomUUID().replaceAll('-', '');
+    kernelName = `semantic_${suffix}`;
+    owner = new Pool({ connectionString: databaseUrl(source, 'postgres'), max: 1 });
+    await assertDatabaseNameAvailable(owner, kernelName);
+    await options.onOwnedResource?.({ kind: 'kernel_database', name: kernelName });
     owned.push(kernelName);
+    await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     const kernelUrl = databaseUrl(source, kernelName);
     pool = createPool(kernelUrl);
     timer.mark('kernel database');
 
-    const auth = await sharedAuth(source);
+    const auth = await sharedAuth(source, options.onOwnedResource, options.strictCleanup ?? false);
     const { issuer, audience, service, host, database: authPool } = auth;
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
+    const authJwksUrl = `${issuer}/.well-known/jwks.json`;
+    let runtimeAuth: { issuer: string; audience: string; jwksUrl: string } | undefined;
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
       pool,
@@ -180,9 +219,10 @@ async function startDriver(entry: Tracked, compose: typeof createKernel): Promis
           auth: {
             issuer,
             audience,
-            jwksUrl: `${issuer}/.well-known/jwks.json`,
+            jwksUrl: authJwksUrl,
           },
         });
+        runtimeAuth = { issuer, audience, jwksUrl: authJwksUrl };
         return access;
       },
     });
@@ -338,7 +378,8 @@ async function startDriver(entry: Tracked, compose: typeof createKernel): Promis
       { accountId: accounts.suspended.accountId, key: randomUUID() },
     );
 
-    relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 25 });
+    if ((options.linkProjection ?? 'owned') === 'owned')
+      relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 25 });
 
     const driver: SemanticDriver = {
       globalContext: GLOBAL_CONTEXT,
@@ -374,6 +415,8 @@ async function startDriver(entry: Tracked, compose: typeof createKernel): Promis
         await grantAccount(accounts[persona], actions, resourceId, grantor);
       },
       async projection(state) {
+        if ((options.linkProjection ?? 'owned') === 'external')
+          throw new Error('Semantic helper projection control is unavailable when link projection is external');
         if (state === 'paused') await relays!.pause();
         else relays!.resume();
       },
@@ -408,13 +451,28 @@ async function startDriver(entry: Tracked, compose: typeof createKernel): Promis
       ...driver,
       fixtures: {
         pool: pool!,
+        runtime: {
+          databaseUrl: kernelUrl,
+          routeKey: Buffer.from(routeKey).toString('base64url'),
+          sessionKeys: [...sessionKeys.keys]
+            .map(([id, key]) => `${id}:${Buffer.from(key).toString('base64url')}`)
+            .join(','),
+          authIssuer: required(runtimeAuth?.issuer, 'Kernel did not construct Access with the Auth issuer'),
+          authAudience: required(runtimeAuth?.audience, 'Kernel did not construct Access with the Auth audience'),
+          authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
+        },
         person,
         grantAccount: (account, actions, resourceId) => grantAccount(account, actions, resourceId),
         send: (account, method, path, body, headers) => send(account, method, path, body, headers),
       },
     };
   } catch (error) {
-    await close();
+    try {
+      await close();
+    } catch (cleanupError) {
+      if (options.strictCleanup)
+        throw new AggregateError([error, cleanupError], 'Semantic outcome setup and cleanup failed', { cause: error });
+    }
     throw error;
   }
 }
