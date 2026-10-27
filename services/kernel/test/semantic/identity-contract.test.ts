@@ -13,6 +13,7 @@ import { accessCheck } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { linksCaughtUp } from '../../src/semantic/link-freshness.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
   identityFixture,
@@ -313,9 +314,23 @@ test('resumable alias groups find the last readable member beyond two hundred fi
     for (const partition of [homeOf(id), homeOf(f.editor.accountId)]) {
       for (let batch = 0; batch < 100; batch++) {
         const result = await projection.run(partition);
+        expect(
+          result.status,
+          JSON.stringify(result, (_key, value) => (typeof value === 'bigint' ? String(value) : value)),
+        ).toBe('read');
         if (result.status !== 'read' || result.envelopes === 0) break;
       }
     }
+    const head = (await db.pool.query('SELECT epoch, position FROM core.partition WHERE partition_no=$1', [homeOf(id)]))
+      .rows[0]!;
+    expect(
+      await linksCaughtUp(
+        db.pool,
+        [{ partition: homeOf(id), epoch: head.epoch, position: BigInt(head.position) }],
+        id,
+        deadline(),
+      ),
+    ).toBe(true);
     // This baseline uses the existing full resolver; give its cold rendering a real request budget.
     await withRequestDeadline(deadline(), () =>
       commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID()),
