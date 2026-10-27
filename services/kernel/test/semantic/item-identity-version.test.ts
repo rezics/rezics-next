@@ -115,12 +115,12 @@ test('item identity version uses the caller RR snapshot without transferring typ
 
   const hidden = await person('Hidden subject');
   const takenDown = await person('Taken down subject');
-  await admin.query("UPDATE semantic.subject SET visibility = 'hidden' WHERE route = $1 AND subject_id = $2::uuid", [
-    routeOf(hidden),
-    hidden,
-  ]);
   await admin.query(
-    "UPDATE semantic.subject SET visibility = 'taken_down' WHERE route = $1 AND subject_id = $2::uuid",
+    "UPDATE semantic.subject SET visibility = 'hidden', security_revision = security_revision + 1 WHERE route = $1 AND subject_id = $2::uuid",
+    [routeOf(hidden), hidden],
+  );
+  await admin.query(
+    "UPDATE semantic.subject SET visibility = 'taken_down', security_revision = security_revision + 1 WHERE route = $1 AND subject_id = $2::uuid",
     [routeOf(takenDown), takenDown],
   );
   expect(await readItemIdentityVersion(pool, newId(34128))).toBeNull();
