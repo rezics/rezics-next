@@ -69,9 +69,11 @@ automated-account activation use `com.rezics.access.actor-activated.v1`; organiz
 current account row by its `(route, account_id)` anchor, skips missing, non-active, fenced and deleted accounts, then
 calls Semantic's `ensureAccountAgent` as platform work. An actor without an operator is a `person`, an organization is
 an `organization`, and an actor with an operator is `software`. The label uses the current display name or handle and
-language `und`. Delivery retries after failures and always converges from current account state.
+language `und`. When no global definition release is active, the effect completes without creating an agent;
+there is no agent work yet. Every other failure propagates so delivery retries from current account state.
 
-Run `bun services/kernel/scripts/ensure-account-agents.ts` during deployment to backfill active, unfenced accounts.
+Run `bun services/kernel/scripts/ensure-account-agents.ts` during deployment after activating the global definition
+release to backfill active, unfenced accounts, including those skipped before a release was active.
 It scans in `(route, account_id)` keyset order with pages of 100, releases each page before issuing its per-account
 Semantic command, and can be rerun safely after interruption.
 

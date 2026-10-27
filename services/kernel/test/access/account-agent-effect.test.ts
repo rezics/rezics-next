@@ -266,6 +266,81 @@ test('the active-account backfill crosses page boundaries and is idempotent', as
   expect(revisionsAfter.rows[0]!.count).toBe(revisions.rows[0]!.count);
 });
 
+test('with no active global definition release the effect completes without creating an agent', async () => {
+  const accountId = newId(route);
+  await seedAccounts([{ id: accountId, handle: 'agent_before_release', displayName: 'Before Release' }]);
+  await withoutActiveRelease(async () => {
+    await expect(
+      applyAccountAgentEffect(pool, event('com.rezics.access.actor-activated.v1', accountId)),
+    ).resolves.toBeUndefined();
+    const subjects = await admin.query(
+      'SELECT count(*)::integer AS count FROM semantic.subject WHERE route = $1 AND subject_id = $2::uuid',
+      [route, accountAgentId(accountId)],
+    );
+    expect(subjects.rows[0]!.count).toBe(0);
+    expect(await revisionCount(accountId)).toBe(0);
+    const links = await admin.query(
+      'SELECT count(*)::integer AS count FROM semantic.account_agent_subject WHERE account_id = $1::uuid',
+      [accountId],
+    );
+    expect(links.rows[0]!.count).toBe(0);
+  });
+});
+
+test('running the ensure-account-agents backfill after a release activates creates the missing agent', async () => {
+  const accountId = newId(route);
+  await seedAccounts([{ id: accountId, handle: 'agent_after_release', displayName: 'After Release' }]);
+  await withoutActiveRelease(async () => {
+    await applyAccountAgentEffect(pool, event('com.rezics.access.actor-activated.v1', accountId));
+    expect(await revisionCount(accountId)).toBe(0);
+    await bootstrapRelease(pool, bundledRelease);
+    await ensureActiveAccountAgents(pool);
+    expect(await currentSubject(accountId)).toMatchObject({
+      id: accountAgentId(accountId),
+      type: 'schema:Person',
+      labels: { und: 'After Release' },
+    });
+    expect(await revisionCount(accountId)).toBe(1);
+  });
+});
+
+test('an ensure failure with the missing-release message still throws so delivery retries', async () => {
+  const accountId = newId(route);
+  await seedAccounts([{ id: accountId, handle: 'agent_other_failure', displayName: 'Other Failure' }]);
+  const failure = new Error('Global definition release is not active');
+  let checkouts = 0;
+  const failing = new Proxy(pool, {
+    get(target, property) {
+      if (property === 'connect')
+        return (...args: unknown[]) => {
+          if (++checkouts === 2) return Promise.reject(failure);
+          return target.connect(...(args as Parameters<Pool['connect']>));
+        };
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const activation = event('com.rezics.access.actor-activated.v1', accountId);
+  await expect(applyAccountAgentEffect(failing, activation)).rejects.toBe(failure);
+  expect(await revisionCount(accountId)).toBe(0);
+  await applyAccountAgentEffect(failing, activation);
+  expect((await currentSubject(accountId)).labels).toEqual({ und: 'Other Failure' });
+});
+
+async function withoutActiveRelease(run: () => Promise<void>): Promise<void> {
+  const saved = await admin.query('DELETE FROM semantic.definition_activation WHERE route = 0 RETURNING *');
+  try {
+    await run();
+  } finally {
+    await admin.query('DELETE FROM semantic.definition_activation WHERE route = 0');
+    for (const row of saved.rows)
+      await admin.query(
+        'INSERT INTO semantic.definition_activation (route, head, digest, recorded_transaction_id) VALUES ($1, $2, $3, $4)',
+        [row.route, row.head, row.digest, row.recorded_transaction_id],
+      );
+  }
+}
+
 async function lastAccountEvent(
   accountId: string,
   type: 'com.rezics.access.account-display-name-changed.v1',

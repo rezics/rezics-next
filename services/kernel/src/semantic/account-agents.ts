@@ -48,6 +48,12 @@ function listed<T>(result: T[] | T | null): T[] {
   return Array.isArray(result) ? result : [result];
 }
 
+export class NoActiveDefinitionReleaseError extends Error {
+  constructor() {
+    super('Global definition release is not active');
+  }
+}
+
 class NoAgentChange extends Error {
   constructor(readonly value: { subject: Item; created: boolean }) {
     super('Account agent is already current');
@@ -231,7 +237,7 @@ async function ensureInTransaction(
   }
   if (!row) {
     const active = await activeRelease(tx);
-    if (!active) throw new Error('Global definition release is not active');
+    if (!active) throw new NoActiveDefinitionReleaseError();
     const type =
       options.kind === 'person'
         ? 'schema:Person'

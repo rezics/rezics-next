@@ -1,7 +1,7 @@
 import { Value } from 'typebox/value';
 import type { TSchema } from 'typebox';
 import type { Pool } from 'pg';
-import { ensureAccountAgent } from '../semantic/account-agents.ts';
+import { ensureAccountAgent, NoActiveDefinitionReleaseError } from '../semantic/account-agents.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -88,5 +88,10 @@ export async function applyAccountAgentEffect(pool: Pool, event: CloudEvent): Pr
   }
   const options = accountAgentOptions(account);
   if (!options) return;
-  await ensureAccountAgent(pool, options);
+  try {
+    await ensureAccountAgent(pool, options);
+  } catch (error) {
+    if (error instanceof NoActiveDefinitionReleaseError) return;
+    throw error;
+  }
 }
