@@ -728,9 +728,18 @@ data, but its free-text scope does not implement least-field/passage/image withh
 
 Required work: default owned-record soft deletion with immediate tombstones and suppression, current-owner restore
 within 30 days without rewinding current adoption/visibility, separate platform early/legal purge, legal holds,
-automatic minimal personal/private payload purge and account-erasure de-identification. No semantic purge job or
+automatic minimal personal/private payload purge and account-erasure de-identification. Account confirmation
+is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
+account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order
+purge can remove retained takedown fields, subject to legal holds. Content owns source fences. No semantic purge job or
 purge bound is implemented. The required job caps examined source keys before filters, commits durable fragment
 checkpoints in one owner partition, and retains nonpersonal identity/decision skeleton. Takedown alone never
 creates its deadline. Workflow-history retention does not establish semantic erasure. Native link readers currently
 filter unavailable summaries while keeping stored counts; this does not prove publicly live counts under paused
 consumers. The contract supplies a real counterexample and leaves exact foreign-count authority for resolution.
+
+The required first independent slice is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
+state and owner-evidence reader defined in the contract. Native author/write-basis and current Context owner
+grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
+Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes. Exact immediate foreign
+live counts remain a pending shared ABI decision; the failing native assertion is preserved.

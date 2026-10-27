@@ -4,6 +4,8 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { mintReadTime, type AuthoritativeTime } from '../../src/command/command.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -59,6 +61,7 @@ const actions = [
   'statement:delete',
   'statement:restore',
   'account:delete',
+  'access:grant',
   'context:delete',
   'context:restore',
   'semantic:purge',
@@ -210,6 +213,116 @@ afterAll(async () => {
   await Promise.all([pool.end(), admin.end()]);
 });
 
+// Read-only first slice: caller owns RR and native T; this is evidence, never an Access grant.
+type LifecycleTarget = { kind: 'candidate'; subject: string; candidate: string } | { kind: 'context'; context: string };
+type LifecycleEvidence = {
+  target: LifecycleTarget;
+  owner: { kind: 'write_basis' | 'owner_grant'; accountId: string } | null;
+  state: 'active' | 'deleted' | 'purged';
+  deletedAt: string | null;
+  purgeAfter: string | null;
+  held: boolean;
+};
+type LifecycleReader = (
+  client: Pick<pg.PoolClient, 'query'>,
+  input: { target: LifecycleTarget; accountId: string; nativeT: AuthoritativeTime },
+) => Promise<LifecycleEvidence | null>;
+async function lifecycle(target: LifecycleTarget, persona: Persona) {
+  return withReadTransaction(pool, async (client) => {
+    const nativeT = await mintReadTime(client, clock);
+    const reader = Reflect.get(semantic, 'readSemanticLifecycle');
+    expect(typeof reader, 'Semantic must expose its native state/owner evidence reader').toBe('function');
+    return (reader as LifecycleReader)(client, { target, accountId: accounts[persona], nativeT });
+  });
+}
+const activeEvidence = (target: LifecycleTarget, owner: LifecycleEvidence['owner']): LifecycleEvidence => ({
+  target,
+  owner,
+  state: 'active',
+  deletedAt: null,
+  purgeAfter: null,
+  held: false,
+});
+
+test('native lifecycle locator identifies proposal authors without provenance or editorial-role ownership', async () => {
+  // The subject creator/adopter is a different account from this contribution's author.
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  const created = await call('POST', '/v1/subjects', 'editor', {
+    type: 'schema:Person',
+    labels: { en: 'Another account created this communal subject' },
+  });
+  status(created, 201);
+  const record = await proposal(created.body.subject.id);
+  await accept(record);
+  await adopt(record, null);
+  // Actual native attribution evidence, not installed lifecycle truth. This URL proposal
+  // never mentions the derived account agent, so its source is null.
+  const evidence = await admin.query(
+    `SELECT r.source, b.principal_kind, b.principal_id::text
+     FROM semantic.candidate c JOIN semantic.revision r
+       ON r.route=c.route AND r.subject_id=c.subject_id AND r.revision=c.revision
+     JOIN editorial.write_basis b ON b.partition_no=$3 AND b.transaction_id=r.recorded_transaction_id
+     WHERE c.route=$1 AND c.subject_id=$2 AND c.candidate_id=$4`,
+    [routeOf(record.subject), record.subject, partitionOf(routeOf(record.subject)!), record.candidate],
+  );
+  expect(evidence.rows).toEqual([{ source: null, principal_kind: 'account', principal_id: accounts.owner }]);
+  const target: LifecycleTarget = { kind: 'candidate', subject: record.subject, candidate: record.candidate };
+  expect(await lifecycle(target, 'owner')).toEqual(
+    activeEvidence(target, { kind: 'write_basis', accountId: accounts.owner }),
+  );
+  // Acceptance/adoption authority grants no ownership of someone else's contribution.
+  expect(await lifecycle(target, 'editor')).toEqual(activeEvidence(target, null));
+  expect(await lifecycle(target, 'stranger')).toEqual(activeEvidence(target, null));
+  expect(await lifecycle({ ...target, subject: await person() }, 'owner')).toBeNull();
+});
+
+test('native lifecycle locator identifies compact contributions independently of communal subject ownership', async () => {
+  const payload = `https://example.test/compact/${randomUUID()}`;
+  const created = await call('POST', '/v1/subjects', 'owner', {
+    type: 'schema:Person',
+    labels: { en: 'Communal subject' },
+    statements: { 'schema:url': [cited('schema:url', payload)] },
+  });
+  status(created, 201);
+  const subject = created.body.subject.id;
+  const listed = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl`, 'owner');
+  status(listed, 200);
+  expect(listed.body.candidates).toHaveLength(1);
+  const target: LifecycleTarget = { kind: 'candidate', subject, candidate: listed.body.candidates[0].id };
+  expect(await lifecycle(target, 'owner')).toEqual(
+    activeEvidence(target, { kind: 'write_basis', accountId: accounts.owner }),
+  );
+  expect(await lifecycle(target, 'stranger')).toEqual(activeEvidence(target, null));
+});
+
+test('native lifecycle state uses current Context owner grants after native revocation', async () => {
+  const created = await call('POST', '/v1/contexts', 'owner', { labels: { en: 'Current owner evidence' } });
+  status(created, 201);
+  const context = created.body.context.id;
+  const target: LifecycleTarget = { kind: 'context', context };
+  expect(await lifecycle(target, 'owner')).toEqual(
+    activeEvidence(target, { kind: 'owner_grant', accountId: accounts.owner }),
+  );
+  expect(await lifecycle(target, 'stranger')).toEqual(activeEvidence(target, null));
+  const ownerGrant = await admin.query(
+    `SELECT valid::text FROM access.resource_role_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='semantic.context.owner'`,
+    [routeOf(context), context, accounts.owner],
+  );
+  expect(ownerGrant.rows).toHaveLength(1);
+  const grant = {
+    resource: { route: routeOf(context)!, id: context },
+    subject: { kind: 'account', id: accounts.owner },
+    role: 'semantic.context.owner',
+    valid: ownerGrant.rows[0].valid,
+  };
+  status(await call('POST', '/v1/roleGrants:revoke', 'owner', grant), 200);
+  expect(await lifecycle(target, 'owner')).toEqual(activeEvidence(target, null));
+  // Global has lifecycle identity but no private owner, even for an editorial grantee.
+  const global: LifecycleTarget = { kind: 'context', context: GLOBAL_CONTEXT };
+  expect(await lifecycle(global, 'editor')).toEqual(activeEvidence(global, null));
+});
+
 test('user-owned semantic records soft-delete and restore without resurrecting superseded decisions', async () => {
   const subject = await person();
   const old = await proposal(subject);
@@ -231,8 +344,8 @@ test('user-owned semantic records soft-delete and restore without resurrecting s
   await accept(replacement);
   await adopt(replacement, head);
   now = new Date(deletedAt + 29 * day);
-  status(await call('POST', `${path(old)}:restore-deleted`, 'stranger', {}), 403);
-  status(await call('POST', `${path(old)}:restore-deleted`, 'owner', {}), 200);
+  status(await call('POST', `${path(old)}:restoreDeleted`, 'stranger', {}), 403);
+  status(await call('POST', `${path(old)}:restoreDeleted`, 'owner', {}), 200);
   const shown = JSON.stringify(await current(subject));
   expect(shown).toContain(replacement.payload);
   expect(shown).not.toContain(old.payload);
@@ -252,12 +365,12 @@ test('owner restore expires at thirty days and cannot reverse current moderation
     200,
   );
   now = new Date(deletedAt + 29 * day);
-  status(await call('POST', `${path(record)}:restore-deleted`, 'owner', {}), 200);
+  status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
   expect((await readCandidateDisclosure(admin, record))?.disclosed).toBe(false);
   const expired = await proposal(await person());
   status(await call('DELETE', path(expired), 'owner'), 200);
   now = new Date(clock().getTime() + 30 * day);
-  status(await call('POST', `${path(expired)}:restore-deleted`, 'owner', {}), 409);
+  status(await call('POST', `${path(expired)}:restoreDeleted`, 'owner', {}), 409);
 });
 
 test('community Context deletion uses its real owner and restores the same identity', async () => {
@@ -298,6 +411,30 @@ test('semantic takedown withholds only covered fields and retains reversible dat
   ).toBe(record.payload);
   status(await call('POST', `${path(record)}:restore`, 'platform', { reason: 'Counter-notice accepted' }), 200);
   expect(JSON.stringify(await current(record.subject))).toContain(record.payload);
+});
+
+test('ordinary owners and early platform purge cannot destroy retained takedown evidence', async () => {
+  const record = await proposal(await person());
+  status(
+    await call('POST', `${path(record)}:takedown`, 'platform', {
+      notice: { complaint: 'Retain covered field', received_at: clock().toISOString(), scope: '/value' },
+    }),
+    200,
+  );
+  status(await call('POST', `${path(record)}:purge`, 'owner', { reason: 'early' }), 403);
+  status(await call('POST', `${path(record)}:purge`, 'platform', { reason: 'early' }), 409);
+  status(await call('POST', `${path(record)}:hold`, 'platform', { held: true, reason: 'Evidence hold' }), 200);
+  status(
+    await call('POST', `${path(record)}:purge`, 'platform', { reason: 'legal_order', order: 'order-reference' }),
+    200,
+  );
+  now = new Date(clock().getTime() + 60 * day);
+  await drain(record.subject);
+  const held = await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate]);
+  expect(JSON.stringify(held.rows)).toContain(record.payload);
+  status(await call('POST', `${path(record)}:hold`, 'platform', { held: false, reason: 'Released' }), 200);
+  await drain(record.subject);
+  await absentPayload(record.payload);
 });
 
 test('semantic purge removes minimum personal payload in bounded durable pages while retaining nonpersonal skeleton', async () => {
@@ -420,9 +557,12 @@ test('account erasure de-identifies retained public contributions and automatica
   const actor = await access.authenticate(await bearer(accounts.owner, actions), { pool, deadline: Date.now() + 5000 });
   const commands = createLifecycleCommands({ pool, access, clock });
   await commands.tombstone({ actor, deadline: Date.now() + 5000 }, { accountId: accounts.owner, key: randomUUID() });
-  now = new Date(clock().getTime() + 30 * day);
+  const confirmedAt = clock().toISOString();
+  // First-scope confirmation is final: start native cleanup at the same T,
+  // without borrowing the individual-record restoration window.
   // Source and account partitions progress independently through native durable work.
   for (const subject of [accounts.owner, holder, record.subject]) await drain(subject);
+  expect(clock().toISOString()).toBe(confirmedAt);
   await absentPayload(privateName);
   const retained = await call('GET', `/v1/subjects/${record.subject}/candidates?property=schema%3Aurl`);
   status(retained, 200);

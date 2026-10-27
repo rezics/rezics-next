@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { mintReadTime, type AuthoritativeTime } from '../../src/command/command.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
+import type { PoolClient } from 'pg';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -109,6 +112,44 @@ afterAll(async () => {
   await db.close();
 });
 
+test('native lifecycle state and author locator stay bounded across unrelated proposal history', async () => {
+  const subject = await person();
+  const selected = await proposal(subject);
+  const target = { kind: 'candidate' as const, subject, candidate: selected.candidate };
+  const report = await checkGrowth(db, {
+    name: 'semantic native state and author locator',
+    scales: [64, 512, 4096],
+    repetitions: 1,
+    warmups: 1,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(_database, scale, previous) {
+      for (let i = previous; i < scale; i++) await proposal(subject);
+    },
+    async operation() {
+      await withReadTransaction(db.pool, async (client) => {
+        const nativeT = await mintReadTime(client, clock);
+        const reader = Reflect.get(semantic, 'readSemanticLifecycle');
+        expect(typeof reader, 'Semantic must expose its native state/owner evidence reader').toBe('function');
+        const result = await (
+          reader as (
+            client: Pick<PoolClient, 'query'>,
+            input: { target: typeof target; accountId: string; nativeT: AuthoritativeTime },
+          ) => Promise<unknown>
+        )(client, { target, accountId: account, nativeT });
+        expect(result).toEqual({
+          target,
+          owner: { kind: 'write_basis', accountId: account },
+          state: 'active',
+          deletedAt: null,
+          purgeAfter: null,
+          held: false,
+        });
+      });
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+});
+
 test('owned semantic deletion and restore stay bounded across unrelated history and population', async () => {
   for (const axis of ['history', 'population'] as const) {
     const subject = await person();
@@ -148,7 +189,7 @@ test('owned semantic deletion and restore stay bounded across unrelated history 
         const view = await call('GET', `/v1/subjects/${subject}`);
         status(view, 200);
         expect(JSON.stringify(view.body)).not.toContain(selected.payload);
-        status(await call('POST', `${path(selected)}:restore-deleted`, {}), 200);
+        status(await call('POST', `${path(selected)}:restoreDeleted`, {}), 200);
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
