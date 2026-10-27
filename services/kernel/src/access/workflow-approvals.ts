@@ -566,7 +566,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     const { row, actor } = await within(bounded.deadline, () =>
       readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
     );
-    requireAllowed(input.operationKey === row.operationKey);
+    // The reference binds the stored key; caller-supplied resolution metadata must match it.
+    requireAllowed(input.operationKey === undefined || input.operationKey === row.operationKey);
     const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline, row);
     requireAllowed(
       !caller ||
