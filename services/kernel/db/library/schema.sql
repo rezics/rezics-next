@@ -582,6 +582,8 @@ CREATE TABLE library.type_preparation_header (
     creation_receipt jsonb NOT NULL,
     creation_commitment text NOT NULL,
     created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    source_identity jsonb,
+    origin_identity jsonb,
     CONSTRAINT type_preparation_header_binding_check CHECK ((jsonb_typeof(binding) = 'object'::text)),
     CONSTRAINT type_preparation_header_binding_digest_check CHECK ((binding_digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT type_preparation_header_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -621,7 +623,21 @@ COMMENT ON COLUMN library.type_preparation_header.input_digest IS 'Lookup accele
 -- Name: COLUMN type_preparation_header.creation_commitment; Type: COMMENT; Schema: library; Owner: -
 --
 
-COMMENT ON COLUMN library.type_preparation_header.creation_commitment IS 'Commits preparation, owner, full binding, origin, principal/input association and creator receipt locator, excluding this commitment field itself. Publication and key payload remain exact native evidence.';
+COMMENT ON COLUMN library.type_preparation_header.creation_commitment IS 'Commits preparation, owner, full binding, origin, source_identity, origin_identity, principal/input association and creator receipt locator, excluding this commitment field itself and mutable progress including last_receipt. Publication and key payload remain exact native evidence.';
+
+
+--
+-- Name: COLUMN type_preparation_header.source_identity; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_header.source_identity IS 'Private exact initial same-RR resolved-source latest create/identity metadata: sourceId, partition, epoch, revision, transactionId, redirect. Origin/survivor are independently anchored. Immutable header commitment includes both identities; DDL checks storage only, never authenticity. Bounded purge inventory must remove this metadata.';
+
+
+--
+-- Name: COLUMN type_preparation_header.origin_identity; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_header.origin_identity IS 'Private exact initial same-RR requested-origin identity, independently anchored with the same fields as source_identity. Historical NULL headers remain immutable and prove no authority: reader returns null; an admitted producer under current owner/gate locks may replace an invalid slot with a fresh UUID. Bounded purge inventory must remove this metadata.';
 
 
 --
@@ -639,6 +655,8 @@ CREATE TABLE library.type_preparation_progress (
     type_id uuid,
     enqueue_pending boolean DEFAULT false NOT NULL,
     updated_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    last_receipt jsonb,
+    last_transaction_id uuid,
     CONSTRAINT type_preparation_progress_byte_offset_check CHECK ((byte_offset >= 0)),
     CONSTRAINT type_preparation_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT type_preparation_progress_check1 CHECK ((route = ((get_byte(uuid_send(preparation_id), 10) * 256) + get_byte(uuid_send(preparation_id), 11)))),
@@ -654,6 +672,20 @@ CREATE TABLE library.type_preparation_progress (
 --
 
 COMMENT ON TABLE library.type_preparation_progress IS 'Mutable native checkpoint/final mapping, separate from immutable evidence. Runner verifies offset <= header length, reservation/source association, current owner epoch, command and readiness. Edges/reservation progress, checkpoint and successor outbox commit together; final key, ready progress and reservation removal commit atomically. No cross-table CHECK or callback confers authority.';
+
+
+--
+-- Name: COLUMN type_preparation_progress.last_receipt; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_progress.last_receipt IS 'Private mutable native core receipt locator, excluded from immutable header commitment. Creator/page stores locator and actual transaction with corresponding core receipt response in the SAME command. JSON alone is not authority: reader/consumer independently verifies real core row partition/account/kind/key/digest/transaction, full header commitment, root/final state/checkpoint/typeId response. No receipt FK: shared retention is bounded; collection fails closed. Bounded purge inventory must remove locators.';
+
+
+--
+-- Name: COLUMN type_preparation_progress.last_transaction_id; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_progress.last_transaction_id IS 'Actual core receipt transaction paired with last_receipt, not hash-only proof. Historical ready rows lacking proof are never served as ready; replace/reobserve through an admitted producer. Pending historical metadata gains no authority. DDL authenticates nothing.';
 
 
 --
@@ -856,6 +888,14 @@ ALTER TABLE ONLY library.subject_listing
 
 
 --
+-- Name: type_preparation_header type_preparation_header_identity_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.type_preparation_header
+    ADD CONSTRAINT type_preparation_header_identity_check CHECK (((source_identity IS NOT NULL) AND (jsonb_typeof(source_identity) = 'object'::text) AND (origin_identity IS NOT NULL) AND (jsonb_typeof(origin_identity) = 'object'::text))) NOT VALID;
+
+
+--
 -- Name: type_preparation_header type_preparation_header_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -877,6 +917,22 @@ ALTER TABLE ONLY library.type_preparation_header
 
 ALTER TABLE ONLY library.type_preparation_progress
     ADD CONSTRAINT type_preparation_progress_pkey PRIMARY KEY (route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_ready_proof_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_ready_proof_check CHECK (((state <> 'ready'::text) OR ((last_receipt IS NOT NULL) AND (last_transaction_id IS NOT NULL)))) NOT VALID;
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_receipt_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_receipt_check CHECK ((((last_receipt IS NULL) AND (last_transaction_id IS NULL)) OR ((last_receipt IS NOT NULL) AND (jsonb_typeof(last_receipt) = 'object'::text) AND (last_transaction_id IS NOT NULL)))) NOT VALID;
 
 
 --
