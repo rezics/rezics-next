@@ -293,12 +293,21 @@ export function clientAuthority(
         const receipt = input.barrier;
         const current = await access.readFencedAccount(input.accountId);
         if (current && (current.accountId !== input.accountId || !current.fenced)) deny();
+        const consent = await connection.query(
+          'SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+          [input.accountId, input.clientId],
+        );
         let deletedOwner = current?.state === 'deleted';
         if (!current) {
-          const scheduled = await connection.query('SELECT account_id FROM auth_consent_erasure WHERE account_id=$1', [
-            input.accountId,
-          ]);
-          if (!scheduled.rowCount) deny();
+          if (consent.rowCount) {
+            const scheduled = await connection.query(
+              'SELECT account_id FROM auth_consent_erasure WHERE account_id=$1',
+              [input.accountId],
+            );
+            if (!scheduled.rowCount) deny();
+          }
+          // An erased owner's last consent may already have been removed, which
+          // also clears the due marker before this owner step is replayed.
           deletedOwner = true;
         }
         if (
@@ -310,10 +319,6 @@ export function clientAuthority(
             current!.authnEpoch < receipt.minimumAuthnEpoch)
         )
           deny();
-        const consent = await connection.query(
-          'SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2',
-          [input.accountId, input.clientId],
-        );
         if (!deletedOwner) {
           const saved = (
             await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
