@@ -1,0 +1,296 @@
+# Bounded Zone union: independent source and continuation analysis
+
+Research evidence, 2026-10-28. This report makes recommendations; it does not adopt a query architecture or change an owning contract.
+Repository observations refer to base commit `ecc2424167207c6a000a93b784b853d866b10d70`.
+Only the named scope documents, fixed routing skeleton, relevant owner entry points, and primary external sources were consulted.
+No other Zone-union research report or proposed manager algorithm was read. No third-party project was installed, built, or executed.
+
+## Answer
+
+**The current callable owner seams cannot provide the complete guarantee.** A bounded, deduplicated traversal is possible using the existing owners, after specific owner adapters and identity/index readiness guarantees exist. It requires a common canonical-subject order, covered raw candidate prefixes, native current membership/access evidence, and the existing confidential list cursor. Wrapping today's public Search and curated members responses does not satisfy these requirements.
+
+Recommend ascending canonical subject ID for the first union. Merge source heads in that order, but continue from only the greatest **settled common prefix**, rereading unconsumed lookahead on the next request. This trades bounded rereads for a scalar cursor and avoids a traversal-sized seen set. Curated occurrence order remains intact on the Collection page; it is not the Zone's union order.
+
+The scalar version requires bounded definitive checks for a canonical identity group. A large group of aliases with different native readability can defeat that requirement: a canonical index alone is insufficient. Covering every such admitted Collection requires an owner-proved bounded authorized representative or explicit resumable alias-group windows. That prerequisite must not be hidden behind a newly named point API.
+
+This can enforce the proposed 256 source-candidate-key budget and at most 100 outputs, with short and empty continuing pages. It cannot guarantee 100 outputs, complete instantaneous catalogue recall, a cross-partition snapshot, or exactly-once identity across arbitrary redirects and restarts. Missing indexed candidates and unresolved native witnesses are real recall/readiness limitations, not problems solved by deduplication.
+
+All numerical bounds in this report are local contract bounds or explicitly conditional engineering bounds, **not external standards**.
+
+## What exists, and what does not
+
+The scope is saved catalogue filters plus curated and built-in dynamic Collections; user-authored dynamic queries are later. The fixed skeleton supplies one Zone resource, saved-filter references, mounted Collection references, ordinary Access, shared rendering, and opaque keysets. Its query algorithm is undecided. The skeleton was absent in this worktree, so its exact named file was read from the main checkout without writing there: `.temp/goal/semantic/zones-shared-skeleton.md`.
+
+| Owner / evidence | Implemented capability | Limit relevant to this question |
+| --- | --- | --- |
+| [Scope](../scope.md), [Library and Collections](../library-and-collections.md), [Dynamic Collections](../dynamic-collections.md) | Product/specification contracts | Dynamic runtime, profile-pinned built-ins, public activation/freeze, and the common members page are not implemented merely because the specification describes them. |
+| [`search/service.ts:232–378`](../../services/kernel/src/search/service.ts), [`search/query.ts:38–153`](../../services/kernel/src/search/query.ts) | Saved-filter admission, `id` sort, raw `searchSubjects` with typed sort tuples; public search checks current evidence | Public search does up to three rounds of up to 200 raw hits, returns filtered subjects, and exposes neither the covered raw prefix nor its charged work. Its public limit is not a raw limit. |
+| [`packages/filter/src/filter.ts`](../../packages/filter/src/filter.ts), [`search/filter.ts`](../../services/kernel/src/search/filter.ts) | Shared closed AST, definitions-based saved-filter expansion and admission | Current limits are 32 leaves, depth 4, up to 64 values per `in`, and four qualifiers; expansion is also bounded. Relation qualifiers are rejected. These are not the later dynamic AST's different limits. |
+| [`search/disclosure/check.ts:130–280`](../../services/kernel/src/search/disclosure/check.ts), [`search/source.ts`](../../services/kernel/src/search/source.ts) | Actual hit lineage, routed snapshots, visibility/redirect/security-revision checks, full Boolean evaluation; optional relation probes return `true`, `false`, or `not_proven` | No viewer-native subject Access argument. A hit is index evidence, not a generic membership probe. Unknown stays unknown through NOT and cannot disclose. Probe arrays are capped at 256 **per call**, not per request. |
+| [`semantic/search-source.ts:182–359`](../../services/kernel/src/semantic/search-source.ts), [`search-source-facts.sql`](../../services/kernel/src/semantic/search-source-facts.sql) | Routed RR snapshots for at most 256 IDs, current terms and descriptive statements | The production factory has no `matchRelationFacets` implementation. Its fact SQL reads subject histories without a row bound and excludes relation facts. Limiting IDs does not bound their fact/history work. |
+| [`library/collection-reads.ts:197–226,307–350`](../../services/kernel/src/library/collection-reads.ts), [`collection-reads-members.sql`](../../services/kernel/src/library/collection-reads-members.sql) | Native Collection authorization, current account checks, ordered occurrence pages, filtered-empty continuation | Page fetch is `limit + 1`; authorization runs after fetching considered rows. The response hides rejected keys. Cursor order is ordinal plus occurrence ID, not canonical subject ID. |
+| [`db/library/schema.sql:229–242,799–808,1071`](../../services/kernel/db/library/schema.sql) | Occurrence primary key, ordinal uniqueness, and `collection_member_subject(route,collection_id,subject_id)` | The subject index can support anchored raw-ID existence and next-subject seeks. It is not a canonical-survivor index, nor an implemented Zone adapter. Repeated subject IDs are legal. |
+| [`library/subject-anchor.ts:24–80`](../../services/kernel/src/library/subject-anchor.ts), [`semantic/subject.ts:387–548`](../../services/kernel/src/semantic/subject.ts) | Real `subject:read` checks at each followed subject anchor | `resolveSubject` renders `readSubject` and follows a visited-set loop with no fixed hop bound. `readableSubjects` returns stored IDs, not canonical resolved IDs. Neither is a bounded lightweight point primitive. |
+| [`semantic/eligibility.ts`](../../services/kernel/src/semantic/eligibility.ts), [`subject-public-evidence.sql`](../../services/kernel/src/semantic/subject-public-evidence.sql), [`read-redirect.sql`](../../services/kernel/src/semantic/read-redirect.sql) | Small native eligibility evidence; one latest redirect edge per lookup | Eligibility is an input to ordinary Access, not an alternate permission formula. One redirect edge does not prove a bounded canonical root lookup or an inverse canonical membership index. |
+| [`library/listing-freshness-contract.ts`](../../services/kernel/src/library/listing-freshness-contract.ts), [its contract](../../services/kernel/src/library/listing-freshness-contract.md) | Pure stamp comparison and public-history predicate; specification of monotonic publication | Observer/apply/fence ports explicitly throw. The contract documents a stale-positive restoration defect in the existing projection. That projection cannot be assumed to make dynamic public output safe. |
+| [`tokens/list-cursor.ts`](../../services/kernel/src/tokens/list-cursor.ts), [`tokens/cursor.ts`](../../services/kernel/src/tokens/cursor.ts), [`tokens/seal.ts`](../../services/kernel/src/tokens/seal.ts) | Shared encrypted list codec exists, beside older signed cursors | Existing Search and Collection reads use the older signing codec. They have not thereby acquired the encrypted codec's viewer binding, anonymity policy, or confidentiality. |
+
+The Search service wires `subjectSource(pool)` in [`server.ts:239–244`](../../services/kernel/src/server.ts). The optional interface method is therefore not evidence that a production relation witness is available. A missing required probe fails closed through the Search service's current-evidence error handling. A Collection candidate must not be passed into `checkHits` with an invented partition/revision/matched-query record to bypass this dependency.
+
+## Primary implementation and standards evidence
+
+Reference repositories are retained under `/home/edge/projects/rezics/rezics-next/.reference/`; all three existing clones were reused, at their recorded commits. Source was read with Git, including files outside sparse working trees. The corresponding reuse entries are in `.reference/INDEX.md`. Designs below are derived for this repository's TypeScript/PostgreSQL/OpenSearch stack; no external implementation is proposed for copying.
+
+| Primary source | Exact retained path and immutable link | Licence / finding |
+| --- | --- | --- |
+| PostgreSQL | `library-shelf-maintenance/postgres`, commit `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; [`src/backend/executor/nodeMergeAppend.c`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/executor/nodeMergeAppend.c) and [`nodeUnique.c`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/executor/nodeUnique.c) | [PostgreSQL License, `COPYRIGHT`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/COPYRIGHT). MergeAppend requires equally ordered children and holds a head per child in a heap. Unique compares adjacent sorted tuples; it does not solve arbitrary-order deduplication. |
+| OpenSearch | `search-rating-populations/opensearch`, commit `4ee42a94e87f66fbf1e62a9871b1b87f91e02472`; [`server/src/main/java/org/opensearch/search/searchafter/SearchAfterBuilder.java`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/searchafter/SearchAfterBuilder.java), `buildFieldDoc` | [Apache-2.0, `LICENSE.txt`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/LICENSE.txt). The continuation must match the actual sort fields; it is an exclusive sort boundary, not a portable cursor for a different order. |
+| OpenSearch documentation | `search-rating-populations/documentation-website`, commit `9bf360dee6e0930aa0bd66ba91e992b9ee2828bf`; [`_search-plugins/searching-data/paginate.md`](https://github.com/opensearch-project/documentation-website/blob/9bf360dee6e0930aa0bd66ba91e992b9ee2828bf/_search-plugins/searching-data/paginate.md) | [Apache-2.0, `LICENSE`](https://github.com/opensearch-project/documentation-website/blob/9bf360dee6e0930aa0bd66ba91e992b9ee2828bf/LICENSE). `search_after` is live; a unique tiebreaker is needed. Consistent PIT traversal retains server search state. |
+
+The [official pagination documentation](https://docs.opensearch.org/latest/search-plugins/searching-data/paginate/) supports using the indexed `id` keyword sort and acknowledging live-index changes. It does not establish a raw-prefix or cross-owner authorization guarantee. Its PIT recommendation cannot override this repository's current-keyset contract.
+
+[PostgreSQL multicolumn-index documentation](https://www.postgresql.org/docs/current/indexes-multicolumn.html) explains why equality on owner/Collection followed by an inequality on subject ID supports a bounded result seek; [transaction isolation documentation](https://www.postgresql.org/docs/current/transaction-iso.html) limits an RR snapshot to its transaction. Neither makes separate owner transactions one global snapshot.
+
+[Google AIP-158](https://google.aip.dev/158) permits short or empty nonterminal pages, requires opaque page tokens, warns that transparent base64 is insufficient, and requires authorization independently of a token. It is design guidance, not a mandate to adopt its suggested token lifetime. [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515.html) defines signatures/MACs; [RFC 7516](https://www.rfc-editor.org/rfc/rfc7516.html) separately defines encrypted, integrity-protected content. Their distinction explains why HMAC alone does not conceal rejected private keys; this report does not propose adopting JOSE.
+
+AIP-158's page states CC-BY-4.0 for prose and Apache-2.0 for code samples; the RFCs carry the IETF Trust/BCP 78 legal terms, including their stated code-component terms. PostgreSQL's documentation is covered by its PostgreSQL licence. This report paraphrases these sources; it imports no implementation or long passage.
+
+**Shared pattern:** one total order with a unique identity, continuation tied to that order, explicit separation of candidate enumeration from current disclosure, and stated consistency boundaries. No cited implementation establishes that a result limit, a heap, or an in-memory Set alone proves the requested guarantee.
+
+## Concrete design, conditional on the owner obligations below
+
+Let `K <= 32` logical sources be the at most 16 expanded saved scopes and 16 distinct mounts. Order source descriptors deterministically. Repeated saved scopes may be coalesced only when their complete admitted meanings and bases are equal. Let `P <= 100`, `B = 256`, and `w` be the last settled canonical subject ID, initially minus infinity.
+
+Admit each scope through the shared planner. Sixteen individually valid 32-leaf scopes need not fit one 32-leaf OR document; combining them must not bypass the existing admission limits or hide the sum of their costs.
+
+For each admitted source, require a seek that obtains the first raw candidate strictly above a supplied canonical ID, or proves candidate exhaustion, with a declared bounded cost. “Raw” is relative to that source's indexed candidate plan: it precedes native current residual filtering and authorization. It need not enumerate the whole catalogue. Every candidate has a real source anchor, its canonical subject key, and owner evidence/basis. The owner must certify that no candidate between the seek boundary and the returned head was omitted from its indexed candidate sequence.
+
+The following are conceptual operations, **not existing exported API names**:
+
+1. Resolve current Zone configuration, viewer, source identities, releases and source bases; authorize the Zone and each source on its own native anchor. An authoritatively unreadable source contributes nothing. Unavailable ownership/current evidence is not proof of unreadability or emptiness.
+2. Decode the shared encrypted list cursor under its stable viewer/route/request binding, then compare its authenticated encrypted basis fingerprint with current owner bases. Recheck all native authorization; a cursor grants no rights. Reject a changed meaning/order/canonicalization basis with the shared stale/restart behavior before continuing.
+3. Seek one head for each readable source above `w`. Charge every returned candidate key, including lookahead and rejects. Reserve an adapter's maximum source-key cost **before** calling it; it may not spend a private internal refill budget. An EOF query with no key still consumes a bounded query/probe allowance.
+4. After every source has either a head or definitive EOF, choose the smallest head ID `x`. All heads equal to `x` form one group. No other source can contain an earlier unexamined candidate. Check native current membership for the actual contributing source(s), their current Access, the complete applicable filter, and current subject Access on the actual requested/canonical anchors. One definitive readable membership witness suffices for union truth; if every witness is definitively false, reject `x`.
+5. Set `w = x` only after the group has a definitive accept/reject result. Emit at most one subject for accepted `x`. Consume all heads equal to `x`; refill those sources before selecting any larger group. Reserve both source-key and point-work allowances before starting any indivisible check. Stop at `P` outputs or the work limit; do not refill until a full page appears.
+6. At a response boundary, discard every unconsumed head. Encode **only `w` and bound basis information**, not the faster sources' lookahead cursors. The next request seeks all sources above `w` again. This bounded reread includes keys examined earlier and charges them again. Return null only when every readable source is definitively exhausted and no candidate remains; otherwise return a continuation, even with an empty result.
+
+Dropping prefetched heads is safe because their source positions are also discarded. Keeping a faster source's advanced position while dropping its buffered keys is unsafe. A vector of consumed positions plus retained heads could avoid rereads, but adds cursor/state obligations without being necessary for the first scope. The scalar design needs no Zone membership store or server traversal session.
+
+### Proof and asymmetric frontiers
+
+Invariant: before selecting a group, each readable source's entire candidate sequence at or below `w` is settled, and its head is its first candidate above `w`, or its remainder is exhausted. Thus the minimum head `x` is the next union candidate key. All occurrences of that canonical key across sources are in the equal-head group. Definitively deciding it extends the settled prefix to `x`. Induction gives increasing, unique output identities without retaining earlier IDs. Re-seeking exclusively above `w` preserves that invariant on a continuation with an unchanged basis.
+
+For example, source A has prefetched `[2,100]`, source B `[3,4]`, and the response settles through `3`. The correct continuation is `w=3`; A must still yield `100` and B must still yield `4`. Advancing A to its fetch frontier `100` loses its buffered member; advancing every source to `100` also loses `4`. Taking a minimum of unrelated raw cursors does not restore the lost buffers. The recommendation instead repeats bounded lookahead above `3`.
+
+An implementation using one candidate at a time has no hidden batch-tail loss. If it batches, every fetched tail key counts against `B`, and the discarded tail must be reread from the settled boundary. The public Search cursor is unsuitable here: it follows the public service's consumption decisions, while the Zone has different deduplication and page boundaries.
+
+### Duplicate occurrences and required order
+
+Curated `[x,y,x]` is a legal occurrence sequence. A page-local Set followed by another occurrence page emits `x` twice. Concatenating source A `[x,y]` and B `[y,x]` has the same problem even without duplicates inside either source. Neither ordinal order nor independently ranked Search scores is the common subject order required by the proof.
+
+For **unredirected stored IDs**, the existing Collection subject index can support repeated seeks of the form `route = r AND collection_id = c AND subject_id > last ORDER BY subject_id LIMIT 1`. After selecting `x`, the next strict subject-ID seek skips all its occurrences without scanning their notes or computing multiplicity. A batch `DISTINCT subject_id LIMIT n` or `GROUP BY` is not equivalent work evidence: it may read a whole duplicate run. Native EXPLAIN/buffer tests must prove the seek shape. This is an alternative read over the same occurrence truth, not another Collection identity or membership authority.
+
+That index does **not** solve redirected aliases: stored IDs `a < c < z` can resolve as `a -> z`, `c -> c`, `z -> z`, producing canonical order `[z,c,z]`. Dropping the final `z` using an ID floor loses `c` or duplicates `z`, depending on which order is used. The owner needs canonical-order enumeration and canonical membership existence, or an equivalent indexed representative election. Resolving each row after ordering raw IDs is insufficient.
+
+A canonical index alone also does not prove that one arbitrary stored alias is an adequate **authorized** witness. Today's `resolveSubject` checks the stored alias before its survivor. If a Collection contains many aliases of `z`, a hidden first alias must not make a later readable alias disappear. Any representative election must preserve the native policy and account for all work; it cannot scan an alias group behind a point API. The scalar design's definitive-group cost is therefore an explicit readiness condition, not a claim that canonicalization removes this issue.
+
+### Rejected and unknown windows
+
+An all-rejected but covered raw prefix is progress: settle its groups, return `[]` with `next`, and resume past the last definitively examined group. A filtered public response of `[]` proves neither EOF nor a covered raw interval. A timed-out/partial shard response likewise cannot certify that a smaller key is absent; the Search owner must expose this distinction.
+
+Native `not_proven` must not become false, especially under NOT. If another authorized source proves the same `x` belongs, the union may accept it. Otherwise `x` is unresolved and cannot extend the settled prefix. Return an already settled smaller prefix if one exists, with explicit shared freshness/readiness; if none exists, return the owner's retryable readiness failure. Do not create an endless unchanged successful empty continuation or skip unknown members permanently. A headless source with no certified prefix blocks selecting larger keys altogether.
+
+Progress therefore depends on the owner eventually supplying a definitive bounded witness or marking a genuinely unsupported plan through the shared planner. A fixed witness limit with permanent uncertainty is a documented recall/readiness gap, not a completeness proof. Implementing an alternate Zone fact store to make it disappear is outside the design.
+
+## Bounds, counterexamples, and work accounting
+
+Define an examined source key as a candidate/member-index key read for enumeration or membership revalidation. Count duplicates in different sources, discarded lookahead, filtered/rejected rows, and rereads. Empty seeks, Access work and semantic fact/relationship witnesses need separate bounded counters; they are not free because they return no candidate. The proposed `256` is meaningful only with this unit stated. It cannot simultaneously mean 256 total physical index entries, statements, facts, and authorization operations for every admitted filter.
+
+| Counterexample | Exact failure | Minimal honest change |
+| --- | --- | --- |
+| One existing Search call, `limit=100`, at least 600 indexed hits; each round's hits fail current evidence | Round sizes are `min(200,2*(100-0)+1)=200`; all three rounds execute, checking **600 raw keys**, even if the public output is empty. | A Search-owned covered-prefix adapter with a caller-supplied raw allowance, no internal overread/refill, and current-evidence work accounting. Until available, this plan is not ready. Calling the public route with a smaller output limit does not make it the required prefix API. |
+| Fetch public pages independently for 16 saved scopes and 16 curated mounts, `limit=100`, with enough rows and current rejects | The actual wrappers can fetch **11,216 candidate/member keys**: `16*600 + 16*101`, before accounting for subject-rendering work. A Zone-side cap of 256 returned subjects cannot undo this work. | Share the allowance before dispatching owner calls; include failed/filtered/lookahead work. Do not multiply each owner's full public budget by its source count. |
+| 32 native ID-ordered sources all contain the same 100 IDs | A straightforward head merge needs **3,200 candidate occurrences** to settle all 100 identity groups; discovering successors can cost more. | Keep `B=256` and permit a short page: at most eight such groups fit if no extra key revalidation is required. A promised full 100-item page would require changing that promise or budget; no such full-page promise is made here. |
+| A native curated stream orders `x`, then 4,998 other occurrences, then `x` | There is no fixed recent-ID window that catches the last duplicate. Scanning the whole Collection to elect the first occurrence violates 256. | Native subject-order strict seeks, plus canonical normalization. Preserve occurrence order on its ordinary page. Do not encode up to 5,000 seen IDs in the cursor. |
+| An adapter insists on fetching 257 ordinal keys before producing any resumable raw boundary | It cannot even expose its first useful prefix within `B`. | Make owner progress resumable below 256, or require an indexed seek driver. Readiness failure is honest; silently using 400 or 600 is not. |
+| One curated Collection has 257 distinct stored aliases of the same survivor, with only the last alias readable under the current stored-alias-then-survivor policy | An unindexed authorized-representative election can require 257 member keys and 257 alias checks for **one** canonical identity. It exceeds 256 even though the final output has one row; using the first alias loses a valid member. The existing 5,000-occurrence cap admits this case. | Supply a bounded, policy-equivalent native representative proof, or make alias-group examination explicitly resumable in bounded owner windows. Do not assume root-only authorization, raise the cap, or hide a group scan in canonical EXISTS. |
+
+The dynamic Collection page specification independently allows `C=4P <= 400` unique candidates. That is **not** a Zone allowance. Reusing a full `P=100` dynamic page as one indivisible call can violate 256 before other sources or lookahead. The minimal adapter accepts the Zone's remaining budget rather than inheriting the members page's larger one. No authoritative document is changed by this observation.
+
+### Logical and physical work
+
+Let `E <= B` be all examined candidate keys, `M <= E` the settled distinct identities, `L_i <= 32` a scope's expanded leaves, `V <= 64` values per set leaf, `Q <= 4` qualifiers, and `H` a **native, proved** bound on identity/relationship witness and Access work, where needed. `H` is currently missing, not a guessed constant. Bounds below concern an implementation with those owner obligations, not today's full-rendering subject helper.
+
+- Heap setup and source admission are `O(K)`, plus reading/compiling the admitted plans; merge work is `O(E log K)` and `O(K + P + sum_i L_i)` plan/merge state when evaluating witnesses incrementally. An active witness also needs its declared bounded workspace. Buffering every probe eagerly instead can require `O(E * max L_i * V)` state; the current Search checker collects such point arrays per batch. These bounds exclude the owners' shared definitions/cache infrastructure.
+- Candidate checks for enumeration need only the sources whose heads actually have that identity. Their total source occurrences are charged in `E`. Residual work is bounded by `sum_i C_i * L_i * V * H`, with `sum_i C_i <= E`, plus scalar/qualifier checks; even `(256*32*64)=524,288` relation-value probes is possible before witness amplification if all candidates require all set leaves. Short-circuiting can help particular predicates, but is not a worst-case proof.
+- With one-head seeks, at most `E + K` owner next-head operations occur per request: each nonempty result spends a key, and each source can reach EOF once. If an owner operation uses at most `d` primitive seeks, enumeration uses at most `d*(E+K)` such seeks. One source-membership recheck per processed head adds at most `d*E`; a conservative total is `d*(2E+K)`, before Semantic/Access probes. This explicitly charges empty seeks. The four-fact illustration gives at most `4*(2*256+32)=2,176` primitive seeks under these assumptions, **not** 256 statements or a latency guarantee.
+- A **point request for arbitrary subject `x`** may ask every source, unlike merge enumeration. Absence requires up to `K` definitive answers, not one. Across `M` independently checked subjects, naive membership election costs `M*K` owner probes and up to `M*sum_i(L_i*V*H)` residual work. At the admitted maxima `256*32=8,192` source probes are possible; count any returned member keys against `B` too. Source-rank election is not a free deduplication technique.
+- A private Everything driver may itself merge four fact families: non-null state, independent labels, retained sessions/history, and holdings. If it does four indexed next-subject seeks each time, one logical head can cost up to four source keys; it cannot count as one. With 16 scopes and 16 such mounts, a full head bootstrap can cost `16 + 16*4 = 80` keys. Rereading candidates for current membership can add another bounded cost. The Collection owner must declare internal work and strict duplicate skips. A published/frozen unique-output index can have a different declared cost.
+- With that conditional four-seek driver, reserving a worst-case four keys per mount recheck makes a maximal 32-source identity group cost at most another 80 keys, after an 80-key bootstrap. Thus at least one group fits in 256 **if** source facts/identity/proofs require no extra candidate scans. Reserve refills too; return early when they do not fit. If an actual adapter has a higher indivisible cost, this arithmetic no longer proves progress: change its seek/continuation seam or return not-ready, not a larger hidden cap.
+- Native anchor reads must also have explicit bounded statements/rows. Current `subjectSource.read` can read unbounded term/statement histories per ID; current `resolveSubject` can render a subject for every hop. Their costs invalidate an `O(E)` total-work claim. New lightweight adapters must read only identity/eligibility and admitted indexed leaf witnesses, using the actual resource policies.
+
+The current Search probe cap of 256 limits one `matchRelationFacets` call. The checker issues as many batches as its candidate/leaf plan needs. It is not a request probe cap or a bound on each witness's underlying work. For example, 32 relation leaves each with 64 alternatives can require 2,048 leaf-value probes for one full evaluation; qualified/descriptive histories introduce different costs. The shared planner must declare these costs and reject unsupported shapes or obtain bounded native proofs. It cannot reinterpret uncertainty as definite absence to fit a budget.
+
+The four-fact arithmetic assumes session/history presence has one bounded subject driver. If retained history needs extra drivers or canonical proofs read extra candidates, use their actual `d_i` and re-prove bootstrap plus one group fits. The specification's four categories do not establish that today's tables provide four complete drivers.
+
+For direct Zone subject routing, do bounded native union-membership/Access checks first; only then invoke the normal renderer the routing contract actually requests. Rendering is valid work for that page, not a hidden part of a “point membership” function. Source authorization uses the saved-scope/Collection's real anchor; subject authorization uses its real route, requested identity and canonical survivor, and any intermediate anchors required by native policy. A public index snapshot or Collection permission is not a substitute.
+
+Saved filters are definitions data, not independently routed permission resources: use the native catalogue/definitions context and current release. A mount is checked at its Collection's route and ID; private fact evaluation stays at the curator's owning partition. Do not create a fictitious filter anchor or authorize a subject on the Zone/Collection partition.
+
+PostgreSQL B-tree seeks have height/cache/MVCC costs, and OpenSearch indexed filters can visit many postings/documents or shards to produce one raw hit. Candidate limits therefore do not establish a universal physical CPU/I/O bound or wall deadline. In particular, LIMIT does not bound invisible tuples or historical-fact reads. Declare bounded application candidates/probes separately, measure native rows/buffers/statements at increasing scales, and use existing deadline/cancellation behavior. No numerical constant here is evidence that a plan is fast.
+
+## Minimum native owner seams and indexes
+
+These are obligations for existing owners, not permission to introduce a Zone query database. Column descriptions below are required access paths, not proposed migration names.
+
+| Owner | Minimal obligation | Existing foundation versus readiness work |
+| --- | --- | --- |
+| Search / shared planner | Admit and expand the same saved filters against their exact definitions release; give an ID-ordered **covered raw prefix** with requested work allowance, raw sort boundary, real lineage, generation/freshness, definitive EOF versus partial/unknown, and charged lookahead. Expose current residual evaluation without fake hits. | `searchSubjects`, filter admission/compiler and current-evidence code exist. A composable budget/coverage adapter and generic native point evaluation do not. Verify shard completeness/timeout handling rather than trusting a body with some hits. Use existing indexed keyword `id`, not `_id`, local FTS or copied private predicates. |
+| Semantic / Access | Lightweight identity and eligibility evidence plus ordinary native Access; complete admitted anchored filter witnesses with true/false/unknown; bounded canonical resolution with explicit policy and freshness. | Current eligibility/redirect point reads are foundations. `readSubject` is too broad; a visited-set redirect loop is unbounded. Production relation witnesses are absent at this base. Need indexed source/subject/property/value and native adoption/fence/moderation proof, with bounded absence evidence; do not hide slot/history scans or unbounded witness walks. |
+| Collections / Library | An authorized, subject-ordered raw candidate seek and canonical subject-membership point check on the same Collection identity, with source incarnation/basis and work receipts. | Raw curated subject index exists. Add canonical survivor ordering/representative access paths where raw IDs can redirect, maintained from native member truth. A raw-ID EXISTS is easy; canonical EXISTS across arbitrary aliases is not. Occurrence notes and multiplicity are irrelevant to union truth. |
+| Built-in dynamic owner | Everything/state-view drivers over indexed curator facts, accepted profile/state identities and pinned releases; no eager whole-account materialization or personal-fact mirror. | Entry PK `(route,account_id,subject_id)` and copy/session subject-prefix indexes are useful. Existing state index `(route,account_id,state,updated_at,subject_id)` does not supply a state-specific subject-ID seek across dates. Need `(route,account_id,profile/state identity,canonical_subject_id)` access paths; label/session/copy drivers need subject-prefix strict seeks that skip duplicate facts without scanning them. Full accepted-profile semantics, independent labels and dynamic runtime remain dependencies, not the old shelf route. |
+| Publication / retention owner | Monotonic complete activated public subject-set generation, source revoke/freeze fencing and bounded reconciliation; source-current verification before disclosure. | Existing public listing freshness ports are proposals and their documented defect is unresolved here. Dynamic public/unlisted/frozen reads depend on the shared protocol becoming real. Unique output access path must support `(Collection,active generation,canonical subject ID)` seeks and point existence, without exposing predicate/private facts. |
+| Shared token owner / Zone adapter | Use encrypted `encodeListCursor` / `decodeListCursor`; bind route, viewer, effective query and current structural basis, plus settled key. | Codec already exists. Zone supplies canonical bindings and validation. No Zone-local cipher, TTL, token cache, snapshot/session store, signing-only wrapper or degree-sized payload is needed. |
+
+Canonical normalization is the hardest index dependency. An owner can maintain a derived canonical key/representative alongside existing membership truth and invalidate/fence its old ordered basis during rekeying. That index is not an independent membership authority: native occurrence/fact truth, current Access and the Semantic identity owner still decide. Moving a survivor can affect many source rows; bounded background reconciliation plus an honest not-ready basis is necessary. No synchronous degree-sized merge update, assumed instant event delivery, or permanent omission of alias members is proved here.
+
+If owners cannot provide an atomic definitive authorized representative within the declared work bound, the minimal continuation extension is a **single pending canonical group**, with native per-source alias keysets and the unchanged settled floor. Process at most the remaining allowance, preserve the next unexamined alias boundary, and finish/recheck its real positive witness before emitting that identity once. A definite all-rejected result requires exhaustion of its alias windows. Quiescent progress then measures examined alias keys as well as settled identities; some successful empty pages can advance pending-group state without advancing `w`. This is a different invariant from the scalar-only proof above and requires native acceptance before adoption. It must fit a bounded compact payload in the existing eight-key codec; nesting 16 arbitrary public owner tokens is not a demonstrated fit. No complete alias-window adapter exists at this base. Without either owner proof or this extension, the scalar design does not cover every admitted redirected Collection and must not be declared first-scope complete.
+
+An alternative raw-order source-rank algorithm needs indexed canonical membership/first-representative election in every earlier source, and pays the `K` probe factor above. It does not remove the canonical inverse-index dependency, nor does it preserve deduplication when its winner source is revoked partway through traversal. Prefer the common-order design unless owners demonstrate that alternative's complete cost/consistency contract.
+
+## Consistency, revocation, privacy and recall
+
+**Current authorization is per native read, not one global instant.** Load current viewer/account state and authorize the Zone, each contributing source and each subject at their actual native anchors; reject cached private rows after source revocation or suspension. Membership/fact truth and its source stamp must be read in the owner's authoritative transaction. Release that transaction before visiting another partition. A cursor or old publication row never overrides a current deny.
+
+A source can change after its check and before a subject's check or network delivery. Independent current reads cannot promise atomic “all rights still hold at send time.” Rechecking narrows that interval but cannot eliminate it. The honest guarantee is the native owners' existing current-evidence semantics, no unauthorized disclosure relative to those checks, and no cross-page Access snapshot. Already delivered results cannot be revoked retroactively.
+
+Bind source readability policy/eligible-source set where the owner exposes a stable basis; a detected change requires a restart rather than silently changing source meaning. Every continuation must still perform current checks, since not every grant change supplies a suitable global epoch. Newly readable sources or facts below `w` may be missed in a live traversal; revoked contributions are withheld on subsequent reads. Replays of the same token are repeat reads, not a single-use exactly-once protocol.
+
+The cursor's meaning basis includes Zone incarnation/revision, ordered saved-scope definitions and expanded release/query digest, mount identities/incarnations, effective filter/order/page size, profile/state pins, relevant canonical-order generation, and owner-declared source/projection/index compatibility generations. Hash that canonical basis vector into the encrypted position. Keep observation positions as freshness evidence, compared only within their own partition; do not compare positions across partitions or use wall time/UUID order. A routine source write is not automatically an incompatible basis change unless the owning contract declares it so. Ordinary mutations retain current-keyset semantics, not a newly invented snapshot or immutable data generation for every page.
+
+**Redirect counterexample across pages:** emit subject `a`; later merge `a -> z`; then emit `z` from another source. Current subject-ID uniqueness has not prevented repeating the same newly canonical identity. Even a traversal-sized historical-ID Set needs current alias equivalence to detect this. A proof requires stable canonical equivalence/order for accepted continuations, with native basis invalidation and restart when it changes. Existing per-subject redirect reads do not supply a global/per-source canonical-order fence. Restarting starts a new traversal; no once-only guarantee spans restarts. Arbitrary requested survivors are admitted by `semantic/merges.ts`, so “survivor ID always decreases” is not an available invariant.
+
+Private dynamic reads may evaluate the curator's facts only through the owner-authorized Collection adapter. Other viewers get only explicitly disclosed membership subjects, never descriptors, state/profile pins, query text, candidate counts or private fact hints. Public/unlisted dynamic output must come from the shared safe publication mechanism, not from a Zone mirror or Search indexing of personal facts. Mounting never changes visibility or creates an alternate Collection ID.
+
+For account deletion, a previously activated public/unlisted dynamic contribution uses the specification's last complete frozen subject set under the same Collection identity; the private query/facts are gone. Do not reevaluate deleted facts as an empty query or as a continuing permission source. A never-activated output is withdrawn. Frozen membership remains subject to current subject Access and current source eligibility. Stale events cannot reactivate a revoked/frozen generation; proving that is the publication owner's prerequisite.
+
+**Confidential continuation:** `tokens/seal.ts` signs a base64url JSON body. Decoding that body reveals its keys even without the MAC secret. The old Search/Collection cursor therefore cannot carry a rejected private candidate safely. `tokens/list-cursor.ts` already encrypts and authenticates its position and binds route/viewer/query. It permits at most eight after-keys, each string at most 256 UTF-8 bytes, and a token at most 4,096 characters. Use two after-keys: the settled UUID and a 64-character canonical basis digest; use the actual positive Zone partition epoch in the codec's epoch field. The first-page minus-infinity position needs no token. This fits without extending the codec.
+
+Use associated data for stable route/Zone ID, viewer and client-supplied effective request parameters, hashing complex request data into scalar binding values. Put changing owner/configuration generations in the authenticated encrypted position fingerprint, then compare after decryption. Binding only the **current** basis in associated data would turn every genuine basis change into an indistinguishable decryption failure instead of the required stale-cursor result. Separate valid-but-stale state from tampering through this adapter logic; do not modify the shared cipher/error policy or store a cursor session.
+
+The shared codec's anonymous tokens are timestamp-free, deterministic and timeless while their key remains valid; account-bound tokens expire after 15 minutes. Key retirement invalidates either kind. Adopt those policies unchanged. Source/private values remain inside encrypted position data, not public URL parameters or a returned debug cursor; complex internal bindings use a digest. Encryption does not hide response length, an empty continuing page, timing, or deterministic-token equality; no stronger traffic-analysis secrecy is established. Never return rejected IDs or private per-source diagnostics alongside the token.
+
+### Finite quiescent traversal: precisely what can be proved
+
+For one sequential continuation chain, assume:
+
+1. A finite candidate universe; fixed Zone/source/query/profile/order bases and canonical equivalence; no concurrent source or subject eligibility changes for that traversal.
+2. Each source supplies the complete indexed candidate sequence for its admitted plan, strict canonical-ID seeks and trustworthy EOF; required publication/index generations are ready.
+3. Every necessary current membership/filter/access answer becomes definitive within declared per-operation bounds. Permanent `not_proven` does not satisfy this condition.
+4. The budget admits head bootstrap plus at least one definitive identity group, and the caller continues through empty nonterminal pages.
+
+Then each successful nonterminal request advances `w` over at least one distinct candidate identity. At most the number of distinct candidate identities, plus a possible final EOF-only request, are needed. Duplicate occurrences, sparse filters and sources with very different frontiers do not break termination. Output is exactly once for the authorized union of that **complete candidate universe**, by the prefix invariant. This is a finite-work proof; it is not a latency estimate.
+
+The following executable abstract model checks the scalar-prefix invariant, budget reservation and rereads; it does not simulate native Access, redirects, unknown witnesses or index coverage. It is included as report evidence, not a product acceptance test. Source states are absent, raw-but-rejected, and raw-and-accepted; weighted seeks/rechecks conservatively charge their full declared cost. A standard-library Python run checked 590,490 three-source traversals plus the two 32-source cases below. Native readiness assumptions remain unproved by this finite model.
+
+```python
+from itertools import product
+
+def page(states, costs, budget, limit, floor):
+    missing = object()
+    heads = [missing] * len(states)
+    spent, output = 0, []
+    while True:
+        for i, source in enumerate(states):
+            if heads[i] is not missing:
+                continue
+            if spent + costs[i] > budget:
+                return output, floor, True, spent
+            head = next((x for x, state in enumerate(source, 1)
+                         if x > floor and state), None)
+            spent += costs[i] if head is not None else 0
+            heads[i] = head
+        live = [x for x in heads if x is not None]
+        if not live:
+            return output, floor, False, spent
+        x = min(live)
+        group = [i for i, head in enumerate(heads) if head == x]
+        proof_cost = sum(costs[i] for i in group)
+        if spent + proof_cost > budget:
+            return output, floor, True, spent
+        spent += proof_cost
+        if any(states[i][x - 1] == 2 for i in group):
+            output.append(x)
+        floor = x
+        for i in group:
+            heads[i] = missing
+        if len(output) == limit:
+            return output, floor, True, spent
+
+def traverse(states, costs, budget, limit):
+    floor, actual = 0, []
+    universe = len(states[0])
+    for request in range(universe + 1):
+        items, after, more, spent = page(states, costs, budget, limit, floor)
+        assert spent <= budget and len(items) <= limit
+        actual.extend(items)
+        if not more:
+            expected = [x for x in range(1, universe + 1)
+                        if any(source[x - 1] == 2 for source in states)]
+            assert actual == expected
+            return
+        assert after > floor
+        floor = after
+    raise AssertionError("Traversal did not terminate")
+
+cases = 0
+for flat in product(range(3), repeat=9):
+    states = [flat[i:i + 3] for i in (0, 3, 6)]
+    for costs in ((1, 1, 1), (1, 4, 4)):
+        for budget in range(2 * sum(costs), 2 * sum(costs) + 5):
+            for limit in (1, 2, 3):
+                traverse(states, costs, budget, limit)
+                cases += 1
+assert cases == 590490
+traverse([(2,) * 100] * 32, (1,) * 32, 256, 100)
+traverse([(1,) * 100] * 32, (1,) * 16 + (4,) * 16, 256, 100)
+print(f"{cases} small traversals and 2 maximal-source traversals passed")
+```
+
+Actual recall gaps remain:
+
+- Search cannot return an indexed candidate it does not have. A newly eligible subject, newly added facet, missing overflow marker, stale false-negative filter document or unindexed survivor can be absent from the raw sequence. Current rechecks remove stale positives; they cannot discover these negatives. An `as_of` watermark is evidence about indexing progress, not automatic full-current recall.
+- An indexed candidate inserted below `w` after its range was traversed is missed even if indexing becomes quiescent later. “Eventually quiet” is weaker than a complete, quiescent basis from the beginning; restart after catch-up is required for that stronger recall claim.
+- A bounded relation witness may remain unknown, and canonical-member reindexing/public activation may be incomplete. Do not label that range exhausted. Exact recall waits for owner readiness; a deliberately best-effort Search-like mode would need an explicitly adopted incomplete-results contract instead.
+- No snapshot means additions, removals, visibility changes and redirected order changes can cause live omissions, stale-cursor restarts or removal of earlier contributions. Missing required adapters are readiness dependencies, not authorization to permanently exclude valid mounts or silently substitute another data source.
+
+## Minimum native acceptance before adoption as implemented behavior
+
+The following are recommended owner/union implementation acceptance cases, not tests claimed to pass in this research change. Use real commands, native drivers and routed anchors; measure keys, probes, rows, buffers and statements rather than only response length.
+
+1. All 32 sources, unequal/sparse ranges and overlap: concatenate every page and compare with a finite quiescent reference union; cross page boundaries at each equal-key group. Assert strictly increasing canonical IDs, uniqueness, eventual EOF and `<=256` charged candidate keys per request, including revalidation/lookahead/rereads. Include `P=1` and `P=100`.
+2. Preserve curated occurrence duplicates/notes/order on the canonical Collection route while the Zone emits one canonical subject; include the `[x,y,x]` and `[z,c,z]` redirect counterexamples, a duplicate run at the existing curated cap, and 257 aliases with only the last readable. Prove bounded representative lookup or bounded pending-group continuation without losing that final witness. EXPLAIN must demonstrate strict subject-key seeks without a duplicate-run scan or full-Collection DISTINCT/sort.
+3. Exercise the actual Search three-round all-rejected 600-hit case; the Zone adapter must stop at its supplied allowance and expose covered progress. Include an empty intermediate prefix, filtered lookahead at a different source frontier, and partial-shard/timeout/unknown prefix cases. No owner call may overspend before the Zone notices.
+4. Native true/false/unknown Boolean cases, especially NOT, OR with an independent true witness, overflow and absent production probes. Unknown-only windows must never disclose, become false or terminal EOF. Verify recovery after owner repair; no unbounded retry loop or silent permanent skip.
+5. Owner/other/anonymous/suspended viewers; revoke a Collection, account, source permission or subject between pages and at native read barriers. Verify actual source/alias/survivor anchors and ordinary Access. Ensure lightweight probes do not invoke `readSubject` or follow an unbounded chain. Measure long-chain rejection/readiness and later canonical-index repair.
+6. Everything from each fact family independently and in overlap; a cleared state shell contributes nothing. State identity/profile pin/retirement changes, all-empty accounts, unrelated-fact growth, duplicate session/copy/label runs and state-ID ordering must use actual indexes. Internal fact-driver keys count toward the Zone's budget.
+7. Missing indexed candidate before/after `w`, later catch-up, redirect survivor behind/ahead of the floor, incompatible saved-filter release, changed canonical/source/projection basis and owner relocation. Expect the specified recall limitation or stale/readiness outcome, never invented live completeness.
+8. Public/unlisted/private, same Collection identity, activate/revoke races, stale positive after newer zero, account deletion after/without activation, frozen public set and inaccessible frozen subjects. Assert absence of private query/fact/descriptor/count data in Search, projection, output and continuation plaintext.
+9. Shared cursor tamper, viewer/route/query/Zone/source mismatch, page size/filter/sort binding, key retirement, account expiry and anonymous deterministic timeless behavior. Decode base64 of old signing tokens to demonstrate the leak fixture; encrypted Zone continuations must not expose rejected source keys. No local TTL/snapshot/session substitution.
+10. First/deep pages at three increasing data scales, fixed `P`, and worst admitted leaf/value counts. Assert separate source-key, native witness and query-call bounds; inspect rows/buffers for every new index/probe. Capture existing deadline behavior without inferring wall latency from 256 candidates.
+
+## Recommended owner-task split and unresolved assumptions
+
+| Owner task | Deliverable / dependency |
+| --- | --- |
+| Shared Search/filter | Covered raw-prefix and native residual-plan contracts with caller work receipts; prove ID order, index completeness flags and all-rejected/unknown behavior. Preserve public Search semantics and existing acceptance. |
+| Semantic identity + Access | Bounded lightweight policy-equivalent subject/alias checks, actual relation/absence witnesses, and canonical-order invalidation/fencing usable by source owners. Establish the missing cost bound; a renamed rendering helper is insufficient. |
+| Collections / Library | Same-identity raw and canonical point adapters; curated strict subject seeks and canonical representatives; built-in profile-pinned fact-family drivers and their native indexes. Keep facts private and do not install a separate Zone membership authority. |
+| Shared publication / retention | Implement and prove monotonic current eligibility, complete public activation/freeze and revoke fencing before using dynamic public/frozen sources. Existing throwing proposals are dependencies. |
+| Zone integration | Adopt an order and declared work unit, supply shared cursor bindings, execute the common-prefix merge and native point routing, publish freshness/recall semantics and run the cross-owner cases above. No gate/merge work belongs to this report. |
+
+Unproven at this base: a complete raw-prefix coverage API; bounded generic native filter/identity proofs; canonical-ordered membership indexes, authorized alias representatives or resumable groups, and change fences; dynamic built-in runtime; safe activated/frozen public generations; and native growth measurements. The source code does not justify treating any of them as already implemented. Their absence means the proposed implementation is not ready, while this research question has a concrete conditional design and concrete refutations of the existing wrappers.
+
+Decisions made for this analysis: use canonical-ID order rather than invent a blended rank; allow short/empty continuing pages under the given upper bounds; prefer scalar settled-prefix continuation with bounded rereads; treat unknown as readiness rather than permanent exclusion; interpret 256 as candidate/member keys with separately declared point work; keep cross-page current-keyset semantics and the shared cursor policy. These are recommendations for the manager to adopt in owning documents, not new authoritative contracts.
+
+Research acceptance is the named nonempty report check, `test -s docs/research/zone-union-independent-sol.md`. No product code, frozen file, existing acceptance test or authoritative document is changed by this research.
