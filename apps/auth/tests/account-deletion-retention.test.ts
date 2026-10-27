@@ -27,19 +27,23 @@ let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
 let browser: Browser | undefined;
 let issuerOrigin = '';
+let serverOutput = '';
 
-function site(): Promise<string> {
+function site(privacyContact: string | null = 'mailto:privacy@example.test'): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    let output = '';
+    serverOutput = '';
     const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
+      serverOutput = (serverOutput + chunk.toString()).slice(-8000);
     };
+    const env = { ...process.env, AUTH_ORIGIN: fake.url.origin };
+    delete env.PRIVACY_CONTACT_URL;
+    if (privacyContact !== null) env.PRIVACY_CONTACT_URL = privacyContact;
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, AUTH_ORIGIN: fake.url.origin, PRIVACY_CONTACT_URL: 'mailto:privacy@example.test' },
+      env,
     });
     let startError: Error | undefined;
     child.on('error', (error) => (startError = error));
@@ -50,16 +54,26 @@ function site(): Promise<string> {
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (startError) throw startError;
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${serverOutput}`);
       try {
         const response = await fetch(`${origin}/login`, { signal: AbortSignal.timeout(60_000) });
         if (response.status === 200) return origin;
       } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /login in time:\n${output}`);
+      if (Date.now() > deadline) throw new Error(`dev server did not serve /login in time:\n${serverOutput}`);
       await Bun.sleep(500);
     }
   })();
   return started;
+}
+
+async function stopSite() {
+  if (child?.pid && child.exitCode === null) {
+    const stopped = new Promise<void>((resolve) => child!.once('exit', () => resolve()));
+    process.kill(-child.pid, 'SIGTERM');
+    await stopped;
+  }
+  child = undefined;
+  started = undefined;
 }
 
 async function open(
@@ -242,10 +256,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await stopSite();
 });
 
 for (const [locale, expected] of Object.entries(copy)) {
@@ -273,6 +284,9 @@ for (const [locale, expected] of Object.entries(copy)) {
         const contact = page.getByRole('link', { name: 'mailto:privacy@example.test', exact: true });
         expect(await contact.isVisible()).toBe(true);
         expect(await contact.getAttribute('href')).toBe('mailto:privacy@example.test');
+        expect(await page.locator('main').innerText()).not.toMatch(
+          /\b(immediately|instantly|within \d+|by \d{4}|sofort|unverzüglich|inmediatamente|immédiatement)\b|即時|立即|马上|馬上|すぐに|直ちに|즉시/iu,
+        );
         expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(0);
       } finally {
         await page.context().close();
@@ -282,7 +296,7 @@ for (const [locale, expected] of Object.entries(copy)) {
   );
 }
 
-test('deployment configuration rejects a missing or invalid PRIVACY_CONTACT_URL and accepts https and mailto', async () => {
+test('configuration loads without validating PRIVACY_CONTACT_URL so dev, route generation, typecheck and build can start', async () => {
   for (const value of [
     undefined,
     '',
@@ -304,8 +318,7 @@ test('deployment configuration rejects a missing or invalid PRIVACY_CONTACT_URL 
       stderr: 'pipe',
     });
     const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-    expect(code, `configuration must reject ${JSON.stringify(value)}`).not.toBe(0);
-    expect(stderr).toContain('PRIVACY_CONTACT_URL');
+    expect(code, `configuration must load with ${JSON.stringify(value)}:\n${stderr}`).toBe(0);
   }
   for (const value of ['mailto:privacy@example.test', 'https://example.test/privacy']) {
     const child = Bun.spawn(
@@ -330,3 +343,68 @@ test('deployment configuration rejects a missing or invalid PRIVACY_CONTACT_URL 
     expect(stdout.trim()).toBe(value);
   }
 });
+
+test(
+  'a configured https privacy contact is named and linked on the deletion page',
+  async () => {
+    await stopSite();
+    await site('https://example.test/privacy');
+    const { page } = await open('/account/delete');
+    try {
+      await page.getByRole('checkbox').waitFor({ state: 'visible' });
+      const link = page.getByRole('link', { name: 'https://example.test/privacy', exact: true });
+      expect(await link.isVisible()).toBe(true);
+      expect(await link.getAttribute('href')).toBe('https://example.test/privacy');
+      expect(
+        await page
+          .getByText('To get a copy of your data, before or after deletion, contact https://example.test/privacy.', {
+            exact: true,
+          })
+          .isVisible(),
+      ).toBe(true);
+      expect(await page.getByRole('button', { name: 'Delete account', exact: true }).isEnabled()).toBe(true);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+for (const contact of [null, 'http://example.test/privacy', 'mailto:', 'mailto:not-an-address']) {
+  test(
+    `without a valid privacy contact (${JSON.stringify(contact)}), deletion fails closed at request time`,
+    async () => {
+      await stopSite();
+      await site(contact);
+      const { page } = await open('/account/delete');
+      try {
+        await page.getByRole('checkbox').waitFor({ state: 'visible' });
+        for (const [heading, items] of [
+          [copy.en.erased, copy.en.erasedItems],
+          [copy.en.retained, copy.en.retainedItems],
+        ] as const) {
+          expect(
+            await page.getByRole('region', { name: heading, exact: true }).getByRole('listitem').allTextContents(),
+          ).toEqual(items);
+        }
+        expect(
+          await page
+            .getByRole('alert')
+            .getByText('Account deletion is unavailable right now.', { exact: true })
+            .isVisible(),
+        ).toBe(true);
+        expect(await page.getByRole('link', { name: /privacy/ }).count()).toBe(0);
+        await page.getByRole('checkbox').check();
+        expect(await page.getByRole('button', { name: 'Delete account', exact: true }).isDisabled()).toBe(true);
+        const writesBefore = calls.filter((call) => call.method !== 'GET').length;
+        await page.locator('form').evaluate((form) => (form as HTMLFormElement).requestSubmit());
+        await page.waitForTimeout(300);
+        expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(writesBefore);
+        expect(serverOutput).toContain('PRIVACY_CONTACT_URL');
+      } finally {
+        await page.context().close();
+      }
+    },
+    timeout,
+  );
+}
