@@ -20,6 +20,8 @@ export type Settings = {
   notes?: readonly import('./notes.ts').Note[]; mainBranch: string; integrationBranch: string; stabilizeBranch: string; promotionParallelism: number; branchPrefix: string; localFile: string; pools: Pool[];
   routingFile: string; riskAreasFile: string; gate: string[]; formatCommand: string[];
   terminationGraceMs: number;
+  /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */
+  startGraceMs?: number;
   codex: { serviceTier: string; compactTokens: { sol: number; luna: number }; solContextWindow: number; toolOutputTokens: number };
   integration: {
     gateConcurrency: number; gateTimeoutMs: number; managerDirectory: string; inboxDirectory: string;
