@@ -6,7 +6,8 @@ export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type TaskState = 'ready' | 'held' | 'running' | 'landing' | 'integrated' | 'merged' | 'stopped' | 'cancelled';
 export type TaskKind = 'implementation' | 'interface' | 'bulk-text' | 'claim' | 'specification' | 'research' | 'mechanical';
 export type TaskClass = TaskKind | 'critical-path';
-export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string };
+/** serviceTier overrides the Codex service tier for work on this profile: 'default' (standard) or 'fast'. */
+export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
   name: string; cli: Cli | 'claude'; classes: string[]; configDirectory: string; command: string;
   /** Pools with the same allowanceKey share a quota, including pools across CLIs. */
