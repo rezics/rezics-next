@@ -93,65 +93,81 @@ verification and does not claim it has passed.
 
 ## Scope source
 
-`scope-source.ts` exports the additive `createSearchScopeSource` admission scaffold. Public Search behavior is
-unchanged. This commit delivers interfaces and permanent negative admission/reservation tests, **not runtime
-prefix or point execution**. After valid admission and one call to the existing `compileFilter`, preparation
-currently throws retryable `semantic_not_ready`; no prepared handle is issued. Valid input is not specified to
-always throw: native positive acceptance is separate work. No Collection dependency, cursor codec, route,
-lifecycle operation or generation SQL is introduced.
+`scope-source.ts` exports the additive `createSearchScopeSource` admission scaffold. Public Search and
+`SubjectSource` remain unchanged. This is a contract and honest unavailable stub, not production prefix,
+identity or leaf execution. Preparation parses, expands and admits the filter, requires a positive anchor and
+calls the existing `compileFilter` once, then currently throws retryable `semantic_not_ready`. No prepared handle
+or positive capability is minted. Valid native requests are not specified to remain unavailable forever.
 
 The factory takes `{pool: Pool, client: OpenSearch, prefix: string, source: SubjectSource,
-release?: () => Promise<FilterRelease | null>, native?: SearchScopeNative}`. The default release reader is the same
-`activeRelease(pool)` used by Search. Caller composition must bind the actual viewer-current Semantic source and
-native evidence; an account ID is not Access. The exported signatures are:
+release?: () => Promise<FilterRelease | null>, evidence?: LeafOptions}`. The default release reader is
+`activeRelease(pool)`. `LeafOptions` is imported directly from Semantic's `scope-leaf-evidence.ts`: the actual
+`access`, `actor`, `routeKey`, `deadline` and optional `nativeT` closure used by the point reader. Neither a source
+nor a principal string supplies an actor; there is no anonymous fallback. Raw prefix capability is independent
+of missing point context. There are no pretend `SearchScopeNative` basis/identity/leaves callbacks. Following
+runtime work must import actual `readIdentityBasis`, `readTerminalSubjectIdentity`, `readSubjectAliasGroup` and
+`readScopeLeafEvidence` exports. A native evidence stub returning `not_ready` is not positive capability.
 
-- `prepare(filter: FilterDocument): Promise<PreparedSearchScope>` parses the closed filter, expands saved filters
-  against the actual active release, admits supported predicates with `admitFilter`, requires a positive anchor,
-  and compiles once with existing relation-overflow handling. Arbitrary query, script, text and sort are rejected.
+The exported method signatures are:
+
+- `prepare(filter: FilterDocument): Promise<PreparedSearchScope>`.
 - `prefix(prepared, {afterSubject: string | null, quota: number, budget: number}): Promise<SearchScopePrefix>`.
-- `evaluate(prepared, subjects: readonly string[], budget: ScopeNativeBudget): Promise<SearchScopeEvaluation>`.
+- `evaluate(prepared, subjects: readonly string[], reservation: ScopeEvaluationReservation): Promise<SearchScopeEvaluation>`.
 
-`PreparedSearchScope` is opaque factory-local state with explicit `readiness: 'ready'` and `basis: ScopeBasis`;
-no handle is a bearer allow claim. `ScopeBasis` records release/query/profile/canonical identity plus concrete
-physical index name and generation. Preparation must pin that generation even with zero hits. Missing canonical
-identity or index readiness is explicit `semantic_not_ready` or `index_not_ready`; changed generation or basis is
-`search_restart_required`, never silent repinning. Release/query/profile identity describes the admitted expanded
-plan, not caller claims. Ordinary partition positions are not structural identity generations.
+`PreparedSearchScope` is opaque factory-local state with `readiness: 'ready'` and `basis: ScopeBasis`, never an
+allow claim. `ScopeBasis` has `release`, `query`, `profile`, `canonical`, `generation` and `index`. Preparation
+pins the physical index and generation even with zero hits. Missing native/index readiness is
+`semantic_not_ready`/`index_not_ready`; changed generation or basis is `search_restart_required`, never silent
+repinning. Ordinary partition positions are not structural identity generations.
 
-`SearchScopeNative` specifies required ports, without supplying or invoking a pretend ready implementation:
-`basis(budget)` reads readiness and a fixed-home digest of native partition-local structural generations;
-`identity(subject, afterAlias, budget)` supplies current terminal identity, original/terminal authority and a
-resumable alias window; `leaves(subjects, clauses, budget)` supplies aligned current `FactClause` evidence with
-truthful absence, qualifiers, current source fences and full relation witnesses. All return charged native usage;
-leaf evidence includes references for final revalidation. Semantic owns the actual evidence and structural basis,
-including merge/unmerge/repoint invalidation. Resumable alias groups, original/terminal authority and canonical
-basis are native prerequisites, never a bounded representative assumption. No raw stored IDs are canonically
-rewritten or normalized after fetch. This contract adds no permission/holder engine.
+`ScopeNativeBudget = Omit<LeafWork, 'keys'>` reuses Semantic's actual type: independent nonnegative safe-integer
+`points`, `witnesses`, `rows`, `bytes`, `emptySeeks`. None is a raw candidate allowance.
+`ScopeEvaluationReservation` has required `rawKeys: number`, required `native: ScopeNativeBudget` and optional
+`progress?: ScopeEvaluationProgress | null`. `rawKeys` is the caller's explicit REMAINING shared reservation,
+0..256, never a per-source default256. Zero remaining is valid and starts no native key work. IDs (including
+duplicates), points, witnesses and rows cannot imply keys. Malformed, negative, noninteger and overlarge
+reservations reject before I/O. Each native call receives only reserved remaining keys, hard maximum101,
+and available native axes; actual `usage.keys` is subtracted before another call. Native calls require their
+own positive axes and at most100 witnesses. Prefix candidates, alias windows and leaf/internal driver keys
+all debit the SAME outer ledger, including rereads, discarded keys and reserved unused lookahead.
 
-`SearchScopePrefix.hits` reuses engine `SearchHit` from `query.ts`, including genuine `matched` query names, index,
-partition, security revision and sort; it is not the projected public DTO from `hits.ts`. Prefix is ascending stored
-canonical subject UUID order strictly above `afterSubject`, **before** residual/current filtering. It returns the
-pinned basis, contiguous `coveredThrough`, truthful `exhausted`, and `usage.candidates`. At most quota raw entries
-are covered; any returned lookahead remains unused and cannot advance the boundary. All returned lookahead,
-duplicates, rejected/reread and internal fact-driver keys are charged. No hidden refill, synthesized hits or raw-ID
-normalization. Partial shards, timeouts and query failures are errors, never empty/exhausted or false. Empty
-nonexhausted output without covered progress is readiness/error. Raw private candidates remain service-internal;
-this seam exposes no public DTO or cursor.
+`SearchScopePrefix` returns `hits`, `basis`, `coveredThrough`, `exhausted`, `usage: {candidates: number}`. Hits
+reuse actual engine `SearchHit`, including `matched`, index, partition, security revision and sort, rather than
+public DTOs. Prefix is ascending stored canonical UUID order above `afterSubject`, before current filtering.
+Reserve quota plus one lookahead (quota1..100, budget<=256); at most quota entries are covered. Unused lookahead
+cannot advance `coveredThrough`. No hidden refill, synthesized hit or raw-ID normalization. Partial shards,
+timeouts and failures are errors, never empty/exhausted. Empty nonexhausted output needs covered progress or
+readiness/error. Raw private candidates remain service-internal.
 
-`SearchScopeEvaluation.values` aligns `true | false | 'not_proven'` with every explicit ID, including duplicates
-and IDs having no engine hit; it includes basis, usage and evidence for final current revalidation. Never fabricate
-a Hit, partition, security revision or matched query to call `checkHits`. Runtime implementation must extract and
-share the complete admitted Boolean evaluator in `disclosure/check.ts`, not introduce another interpreter.
-AND/OR/NOT preserve unknown; genuine matched queries only prioritize work. No index-only negative, ordinary sampled
-absence, `not_proven => false`, full subject renderer or hidden 8192-probe expansion. Existing `SubjectSource`
-snapshots/unqualified facet probes lack this admitted native budget/evidence surface; missing capability is readiness
-or `not_proven`, never guessed false. Zone must stop before an essential unresolved group unless another source
-settles true; public Search retains its existing skip/refill policy.
+`SearchScopeEvaluation` returns `values`, `basis`, `usage: {keys: number, native: ScopeNativeBudget}`, `evidence`
+and required `progress: ScopeEvaluationProgress | null`. `values` aligns `true | false | 'not_proven'` with every
+requested subject, including duplicates and engine misses. Evidence is request-local native references for
+fresh final revalidation, never allow tokens. Runtime shares the complete admitted Boolean evaluator from
+`disclosure/check.ts`; no fabricated Hit, separate interpreter, full renderer or unqualified snapshot can supply
+current native evidence. AND/OR/NOT preserve unknown, and genuine matched queries only prioritize work. Partial
+nonmatching facts cannot prove false without native coverage; unknown remains unknown under NOT. Original and
+terminal authority and every earlier positive require fresh current checks before disclosure.
 
-Small implementation split: `scope-source.ts` owns admission, opaque preparation and raw-prefix orchestration;
-`filter.ts`/`query.ts` remain the compiler/engine path; `disclosure/check.ts` remains the shared current Boolean
-evaluator home. Native source/facet/identity providers remain Semantic-owned. None of those runtime extractions or
-providers is claimed delivered here.
+`ScopeEvaluationProgress` has exactly `subject`, `basis`, `leafOrdinal`, `phase`, `valueOrdinal`, `after`.
+`subject` is the actual requested original, `basis` the composite owner digest. The structural slice reuses
+`ScopeLeafPosition.leafOrdinal` and actual `LeafProgress` phase/value ordinal/after types, with deterministic
+admitted leaf/value order. It carries ONE pending subject/leaf only; later unexamined values stay unknown.
+There is no growing continuation vector, historical verdict, allow cache, native witness receipt vector or
+serialized native basis. A CHARGED current leaf probe reconstructs the native leaf basis needed to recompute
+and check the owner digest before resume; the composite digest cannot substitute for native `LeafProgress.basis`.
+
+`sourceAfter` packs the agreed18-byte raw record through `scope-progress.ts` inside the existing encrypted list
+position, with no new token codec. Version1/leaf ordinal occupy byte0, phase/value ordinal byte1; the remaining16
+bytes hold sequence n+1 (zero means null) with zero padding, or a real witness UUID. Wirephase3 with allzero payload
+means witness-start null, distinct from a nil UUID in phase2. Empty sourceAfter means whole null progress.
+`aliasAfter` retains the actual original under evaluation: resume that original FIRST with current identity/source
+checks, then resume the alias group strictly after it only once settled. No ninth position field or nested token.
+
+Fixed-home identity basis work is separately charged once per preparation, continuation and final phase: each
+pays two4096-home sweeps (8192 metadata rows plus core observations), never a per-subject free sweep or hidden leaf
+usage. Physical captures must identify actual operation phases when measuring these separately; no statement
+exclusion or slack change may disguise the work. Actual producer/composition positives remain separate red
+acceptance until native exports, shared leaf matching/Boolean extraction and identity composition land.
 
 ## Global rating order
 

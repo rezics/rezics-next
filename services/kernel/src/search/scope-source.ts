@@ -9,19 +9,29 @@ import {
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import type { FactClause } from './disclosure/check.ts';
+import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
+import { packScopeLeafProgress, type ScopeLeafPosition } from './scope-progress.ts';
 import { compileFilter } from './filter.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
 import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
 
 /** Independent native work reservation; none of these units are candidate keys. */
-export type ScopeNativeBudget = Readonly<{
-  points: number;
-  witnesses: number;
-  rows: number;
-  bytes: number;
-  emptySeeks: number;
+export type ScopeNativeBudget = Omit<LeafWork, 'keys'>;
+
+/** One unfinished original/leaf; basis is the composite owner digest, never a native leaf basis. */
+export type ScopeEvaluationProgress = Readonly<{
+  subject: string;
+  basis: string;
+}> &
+  Pick<NonNullable<ScopeLeafPosition>, 'leafOrdinal'> &
+  Omit<LeafProgress, 'basis'>;
+
+export type ScopeEvaluationReservation = Readonly<{
+  /** Explicit remaining allowance in the caller's shared raw-key ledger, including alias and prefix work. */
+  rawKeys: number;
+  native: ScopeNativeBudget;
+  progress?: ScopeEvaluationProgress | null;
 }>;
 
 export type ScopeBasis = Readonly<{
@@ -41,41 +51,6 @@ export type PreparedSearchScope = {
   readonly basis: ScopeBasis;
 };
 
-/** Required native evidence surface, not a production implementation or an identity proof. */
-export interface SearchScopeNative {
-  /** Fixed-home digest of partition-local structural generations, not ordinary source positions. */
-  basis(budget: ScopeNativeBudget): Promise<{
-    readiness: 'ready' | 'not_ready';
-    canonical: string | null;
-    usage: ScopeNativeBudget;
-  }>;
-  /** Current terminal identity and original/terminal authority; alias windows must be resumable. */
-  identity(
-    subject: string,
-    afterAlias: string | null,
-    budget: ScopeNativeBudget,
-  ): Promise<{
-    terminal: string | null;
-    aliases: readonly { subject: string; authority: RelationFacetMatch }[];
-    afterAlias: string | null;
-    exhausted: boolean;
-    terminalAuthority: RelationFacetMatch;
-    canonical: string;
-    usage: ScopeNativeBudget;
-  }>;
-  /** Aligned complete current leaf evidence, including truthful absence and qualified relation witnesses. */
-  leaves(
-    subjects: readonly string[],
-    clauses: readonly FactClause[],
-    budget: ScopeNativeBudget,
-  ): Promise<{
-    values: readonly (readonly RelationFacetMatch[])[];
-    evidence: readonly string[];
-    canonical: string;
-    usage: ScopeNativeBudget;
-  }>;
-}
-
 export type SearchScopePrefix = {
   hits: readonly SearchHit[];
   basis: ScopeBasis;
@@ -88,9 +63,10 @@ export type SearchScopePrefix = {
 export type SearchScopeEvaluation = {
   values: readonly RelationFacetMatch[];
   basis: ScopeBasis;
-  usage: ScopeNativeBudget;
+  usage: { keys: number; native: ScopeNativeBudget };
   /** Native evidence references for final current revalidation, never allow tokens. */
   evidence: readonly string[];
+  progress: ScopeEvaluationProgress | null;
 };
 
 function unavailable(): never {
@@ -103,6 +79,8 @@ function bounded(value: number, maximum: number, minimum = 0): void {
 }
 
 function nativeBudget(budget: ScopeNativeBudget): void {
+  if (!budget || typeof budget !== 'object' || Array.isArray(budget))
+    throw new RangeError('Invalid native reservation');
   for (const key of ['points', 'witnesses', 'rows', 'bytes', 'emptySeeks'] as const)
     bounded(budget[key], Number.MAX_SAFE_INTEGER);
 }
@@ -118,7 +96,8 @@ export function createSearchScopeSource({
   /** Must be the actual viewer-current source composed by the caller; no account-ID Access substitute. */
   source: SubjectSource;
   release?: () => Promise<FilterRelease | null>;
-  native?: SearchScopeNative;
+  /** Actual reader context; absence does not disable independent raw prefix work. */
+  evidence?: LeafOptions;
 }): {
   prepare(filter: FilterDocument): Promise<PreparedSearchScope>;
   prefix(
@@ -132,7 +111,7 @@ export function createSearchScopeSource({
   evaluate(
     prepared: PreparedSearchScope,
     subjects: readonly string[],
-    budget: ScopeNativeBudget,
+    reservation: ScopeEvaluationReservation,
   ): Promise<SearchScopeEvaluation>;
 } {
   return {
@@ -164,10 +143,22 @@ export function createSearchScopeSource({
       if (afterSubject !== null) subjectPartition(afterSubject);
       unavailable();
     },
-    async evaluate(_prepared, subjects, budget) {
-      nativeBudget(budget);
-      // Duplicates are charged too; point work does not borrow the raw candidate reservation.
-      if (subjects.length > budget.points) throw new RangeError('Reserve every subject point before dispatch');
+    async evaluate(_prepared, subjects, reservation) {
+      if (!reservation || typeof reservation !== 'object' || Array.isArray(reservation))
+        throw new RangeError('Invalid evaluation reservation');
+      bounded(reservation.rawKeys, 256);
+      nativeBudget(reservation.native);
+      if (reservation.progress != null) {
+        const progress = reservation.progress;
+        subjectPartition(progress.subject);
+        if (!subjects.includes(progress.subject)) throw new RangeError('Pending subject was not requested');
+        if (typeof progress.basis !== 'string' || !/^[0-9a-f]{64}$/.test(progress.basis))
+          throw new RangeError('Invalid owner basis');
+        // Structural validation only; current plan/basis checks require the future charged native probe.
+        packScopeLeafProgress(progress, { valueCounts: Array.from({ length: 32 }, () => 64) });
+      }
+      // Zero remaining is valid. Never infer a key reservation from IDs or any native axis.
+      // Runtime must cap each leaf call at 101 remaining keys and subtract actual usage before the next call.
       for (const subject of subjects) subjectPartition(subject);
       unavailable();
     },

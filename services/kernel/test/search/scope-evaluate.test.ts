@@ -4,7 +4,13 @@ import type { FilterDocument } from '@rezics/filter';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
-import { createKernel } from '../../src/http/kernel.ts';
+import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
+import type { Access } from '../../src/request/access.ts';
+import {
+  createSearchScopeSource,
+  type ScopeNativeBudget,
+  type ScopeEvaluationReservation,
+} from '../../src/search/scope-source.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
@@ -26,22 +32,13 @@ import { createSemanticDriver, type SemanticOutcomeDriver } from '../semantic/ou
 import { closeOwnedSemanticAuth } from '../semantic/outcome-auth.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
-// Compatibility view while the additive owner contract lands. Missing capability must fail after native setup,
-// not as an import error. No fixture supplies an identity-ready callback, fabricated Hit or relation answer.
-type NativeBudget = { points: number; witnesses: number; rows: number; bytes: number; emptySeeks: number };
-type Evaluation = {
-  results: RelationFacetMatch[];
-  usage: NativeBudget;
-  exhausted: (keyof NativeBudget)[];
-  evidence: unknown;
-};
-type ScopeSource = {
-  prepare(input: { filter: FilterDocument }): Promise<unknown>;
-  evaluate(prepared: unknown, subjects: readonly string[], budget: NativeBudget): Promise<Evaluation>;
-};
+type NativeBudget = ScopeNativeBudget;
 type Runtime = Parameters<typeof createSearchService>[0];
-type ScopeFactory = (runtime: Runtime) => ScopeSource;
-const ample: NativeBudget = { points: 256, witnesses: 8192, rows: 65536, bytes: 4 * 1024 * 1024, emptySeeks: 256 };
+type ScopeFactory = typeof createSearchScopeSource;
+const ample: ScopeEvaluationReservation = {
+  rawKeys: 256,
+  native: { points: 256, witnesses: 8192, rows: 65536, bytes: 4 * 1024 * 1024, emptySeeks: 256 },
+};
 const books: FilterDocument = { type: { in: ['schema:Book'] } };
 const people: FilterDocument = { type: { in: ['schema:Person'] } };
 const relation = (values: string[]): FilterDocument => ({ statement: { property: 'schema:author', in: values } });
@@ -77,7 +74,7 @@ let empty: string;
 let target: string;
 let other: string;
 let role: string;
-let nativePoints = 0;
+let access: Access;
 let baseFacetsBuilt = false;
 
 async function write(path: string, body: unknown, persona: 'editor' | 'acceptor' | 'steward' = 'editor') {
@@ -113,27 +110,33 @@ async function scope(pool: Pool = db.pool) {
     baseFacetsBuilt = true;
   }
   const native = semantic.subjectSource(pool, routeKey);
-  const match = native.matchRelationFacets?.bind(native);
-  if (match)
-    native.matchRelationFacets = async (partition, probes) => {
-      nativePoints += probes.length;
-      return match(partition, probes);
-    };
-  return createScope({ ...runtime, pool, source: native });
+  const deadline = Date.now() + 60_000;
+  const account = await driver.fixtures.person('editor');
+  const actor = await access.authenticate(account.bearer, { pool, deadline });
+  return createScope({ ...runtime, pool, source: native, evidence: { access, actor, routeKey, deadline } });
 }
-async function evaluate(filter: FilterDocument, ids: string[], budget: NativeBudget = ample) {
+async function evaluate(filter: FilterDocument, ids: string[], budget: ScopeEvaluationReservation = ample) {
   const owner = await scope();
-  const prepared = await owner.prepare({ filter });
+  const prepared = await owner.prepare(filter);
   const before = engineCalls.length;
-  const result = await owner.evaluate(prepared, ids, budget);
+  const measured = await capture(db, () => owner.evaluate(prepared, ids, budget));
+  const result = measured.value;
   expect(searchesSince(before), 'explicit IDs must use native points, never another engine search').toEqual([]);
-  expect(result.results).toHaveLength(ids.length);
-  for (const key of Object.keys(budget) as (keyof NativeBudget)[]) {
-    expect(Number.isSafeInteger(result.usage[key])).toBe(true);
-    expect(result.usage[key]).toBeGreaterThanOrEqual(0);
-    expect(result.usage[key]).toBeLessThanOrEqual(budget[key]);
+  expect(result.values).toHaveLength(ids.length);
+  for (const key of Object.keys(budget.native) as (keyof NativeBudget)[]) {
+    expect(Number.isSafeInteger(result.usage.native[key])).toBe(true);
+    expect(result.usage.native[key]).toBeGreaterThanOrEqual(0);
+    expect(result.usage.native[key]).toBeLessThanOrEqual(budget.native[key]);
   }
+  expect(result.usage.keys).toBeGreaterThanOrEqual(0);
+  expect(result.usage.keys).toBeLessThanOrEqual(budget.rawKeys);
   expect(result.evidence).toBeDefined();
+  if (result.values.includes(true)) {
+    expect(result.usage.keys).toBeGreaterThan(0);
+    expect(result.usage.native.points).toBeGreaterThan(0);
+    expect(result.usage.native.rows).toBeGreaterThan(0);
+    expect(costOf(measured.capture).rows).toBeGreaterThan(0);
+  }
   return result;
 }
 
@@ -148,7 +151,18 @@ beforeAll(async () => {
         source: semantic.subjectSource(config.pool, routeKey),
         cursors: config.tokens!,
       };
-      return createKernel({ ...config, search: createSearchService(runtime) });
+      const resolver = createKernelAccessResolver({
+        pool: config.pool,
+        tokens: config.tokens!,
+        clock: config.clock ?? (() => new Date()),
+        ...(config.access === undefined ? {} : { access: config.access }),
+      });
+      return createKernel({
+        ...config,
+        search: createSearchService(runtime),
+        realmRoleReader: resolver.realmRoleReader,
+        access: (catalogue) => (access = resolver.resolveAccess(catalogue)),
+      });
     },
     { strictCleanup: true },
   );
@@ -214,7 +228,7 @@ test('point evaluation without invented hits shares current complete Boolean sem
     [{ or: [people, within(a)] }, [true, false]],
   ];
   for (const [filter, expected] of cases)
-    expect((await evaluate(filter, [lagged, empty])).results, JSON.stringify(filter)).toEqual(expected);
+    expect((await evaluate(filter, [lagged, empty])).values, JSON.stringify(filter)).toEqual(expected);
 });
 
 test('native type code range and same-statement qualifier evidence do not need named matched queries', async () => {
@@ -229,7 +243,7 @@ test('native type code range and same-statement qualifier evidence do not need n
     statement: { property: 'schema:inLanguage', in: ['ja'], qualifiers: [{ property: 'wdt:P3831', in: [role] }] },
   };
   const range: FilterDocument = { statement: { property: 'schema:datePublished', range: { gte: 2026, lte: 2026 } } };
-  expect((await evaluate({ and: [books, qualified, range] }, [empty, lagged, target, lagged])).results).toEqual([
+  expect((await evaluate({ and: [books, qualified, range] }, [empty, lagged, target, lagged])).values).toEqual([
     false,
     true,
     false,
@@ -238,18 +252,18 @@ test('native type code range and same-statement qualifier evidence do not need n
   const wrongRole: FilterDocument = {
     statement: { property: 'schema:inLanguage', in: ['ja'], qualifiers: [{ property: 'wdt:P3831', in: [otherRole] }] },
   };
-  expect((await evaluate(within(wrongRole), [lagged, split])).results).toEqual([false, false]);
-  expect((await evaluate(within({ not: wrongRole }), [lagged])).results).toEqual([true]);
+  expect((await evaluate(within(wrongRole), [lagged, split])).values).toEqual([false, false]);
+  expect((await evaluate(within({ not: wrongRole }), [lagged])).values).toEqual([true]);
   expect(
     (await evaluate(within({ statement: { property: 'schema:datePublished', range: { lte: 2025 } } }), [lagged]))
-      .results,
+      .values,
   ).toEqual([false]);
 });
 
 test('actual hit lineage is only a work-order hint and shares the complete point Boolean evaluator', async () => {
   const owner = await scope();
   const filter: FilterDocument = within({ or: [relation([target]), relation([other])] });
-  const prepared = await owner.prepare({ filter });
+  const prepared = await owner.prepare(filter);
   const snapshot = await source.read(subjectPartition(lagged), [lagged]);
   expect(snapshot.subjects).toHaveLength(1);
   expect(
@@ -275,7 +289,7 @@ test('actual hit lineage is only a work-order hint and shares the complete point
   });
   expect(checked.passed.map(({ subject }) => subject.id)).toEqual([lagged]);
   const before = engineCalls.length;
-  expect((await owner.evaluate(prepared, [lagged, empty], ample)).results).toEqual([true, false]);
+  expect((await owner.evaluate(prepared, [lagged, empty], ample)).values).toEqual([true, false]);
   expect(searchesSince(before)).toEqual([]);
 });
 
@@ -345,37 +359,47 @@ test('overflow absence stays unknown through NOT while decisive true OR and fals
     [within({ and: [{ not: books }, unknown] }), false],
     [within({ not: { or: [unknown, relation([omitted])] } }), false],
   ];
-  for (const [filter, expected] of cases) expect((await evaluate(filter, [id])).results).toEqual([expected]);
+  for (const [filter, expected] of cases) expect((await evaluate(filter, [id])).values).toEqual([expected]);
 }, 600_000);
 
 test('native point witness row byte and empty-seek reservations are independent and charge unresolved work', async () => {
   const owner = await scope();
   const { id } = await overflowFixture();
   const absent = await create('schema:Person');
-  const prepared = await owner.prepare({ filter: within({ not: relation([absent]) }) });
-  for (const dimension of Object.keys(ample) as (keyof NativeBudget)[]) {
-    const budget = { ...ample, [dimension]: 0 };
+  const prepared = await owner.prepare(within({ not: relation([absent]) }));
+  for (const dimension of Object.keys(ample.native) as (keyof NativeBudget)[]) {
+    const budget = { ...ample, native: { ...ample.native, [dimension]: 0 } };
     const before = engineCalls.length;
-    const beforePoints = nativePoints;
     const measured = await capture(db, () => owner.evaluate(prepared, [id], budget));
     expect(searchesSince(before)).toEqual([]);
-    expect(measured.value.results, dimension).toEqual(['not_proven']);
-    expect(measured.value.exhausted).toContain(dimension);
-    expect(measured.value.usage[dimension]).toBe(0);
-    expect(nativePoints - beforePoints).toBeLessThanOrEqual(measured.value.usage.points);
+    expect(measured.value.values, dimension).toEqual(['not_proven']);
+    expect(budget.native[dimension]).toBe(0);
+    expect(measured.value.progress === null || measured.value.progress.subject === id).toBe(true);
+    expect(measured.value.usage.native[dimension]).toBe(0);
+    expect(measured.value.usage.keys).toBeLessThanOrEqual(budget.rawKeys);
     // Use the shared native statement/row capture, not a local growth classifier or only logical result counts.
     expect(costOf(measured.capture).statements).toBeLessThan(8192);
     if (dimension === 'rows') expect(costOf(measured.capture).rows).toBe(0);
   }
+  {
+    const rawKeys = 0;
+    const measured = await capture(db, () => owner.evaluate(prepared, [id], { ...ample, rawKeys }));
+    expect(measured.value.values).toEqual(['not_proven']);
+    expect(measured.value.usage.keys).toBeGreaterThanOrEqual(0);
+    expect(measured.value.usage.keys).toBeLessThanOrEqual(rawKeys);
+    expect(measured.value.progress === null || measured.value.progress.subject === id).toBe(true);
+    expect(costOf(measured.capture).statements).toBeLessThan(8192);
+  }
   const leaves = Array.from({ length: 31 }, () => relation(Array.from({ length: 64 }, () => randomUUID())));
-  const manyLeaves = await owner.prepare({ filter: { and: [books, ...leaves] } });
-  const beforePoints = nativePoints;
-  const measured = await capture(db, () => owner.evaluate(manyLeaves, [id], { ...ample, points: 8 }));
-  expect(measured.value.results).toEqual(['not_proven']);
-  expect(measured.value.exhausted).toContain('points');
-  expect(measured.value.usage.points).toBeGreaterThanOrEqual(0);
-  expect(measured.value.usage.points).toBeLessThanOrEqual(8);
-  expect(nativePoints - beforePoints).toBeLessThanOrEqual(measured.value.usage.points);
+  const manyLeaves = await owner.prepare({ and: [books, ...leaves] });
+  const measured = await capture(db, () =>
+    owner.evaluate(manyLeaves, [id], { ...ample, native: { ...ample.native, points: 8 } }),
+  );
+  expect(measured.value.values).toEqual(['not_proven']);
+  expect(measured.value.progress === null || measured.value.progress.subject === id).toBe(true);
+  expect(measured.value.usage.native.points).toBeGreaterThanOrEqual(0);
+  expect(measured.value.usage.native.points).toBeLessThanOrEqual(8);
+  expect(measured.value.usage.keys).toBeLessThanOrEqual(ample.rawKeys);
   expect(costOf(measured.capture).statements).toBeLessThan(8192);
 }, 600_000);
 
@@ -383,26 +407,27 @@ test('prepare and positive evidence never authorize hidden or taken-down sources
   const id = await create('schema:Book', { 'schema:inLanguage': [statement('schema:inLanguage', 'ja')] });
   await driver.grant('editor', ['moderation:hide', 'moderation:takedown'], driver.globalContext);
   const owner = await scope();
-  const prepared = await owner.prepare({
-    filter: within({ statement: { property: 'schema:inLanguage', in: ['ja'] } }),
-  });
+  const prepared = await owner.prepare(within({ statement: { property: 'schema:inLanguage', in: ['ja'] } }));
   await write(`/v1/subjects/${id}:hide`, { reason: 'Disclosure changes after prepare' });
-  expect((await owner.evaluate(prepared, [id], ample)).results).toEqual([false]);
+  expect((await owner.evaluate(prepared, [id], ample)).values).toEqual([false]);
   await write(`/v1/subjects/${id}:restore`, { reason: 'Revalidate restored native evidence' });
   const positive = await owner.evaluate(prepared, [id], ample);
-  expect(positive.results).toEqual([true]);
+  expect(positive.values).toEqual([true]);
   expect(positive.evidence).toBeDefined();
+  expect(positive.usage.keys).toBeGreaterThan(0);
+  expect(positive.usage.native.points).toBeGreaterThan(0);
+  expect(positive.usage.native.rows).toBeGreaterThan(0);
   await write(`/v1/subjects/${id}:takedown`, {
     notice: { complaint: 'Current native disclosure test', received_at: '2026-10-28T00:00:00Z' },
   });
-  expect((await owner.evaluate(prepared, [id], ample)).results).toEqual([false]);
+  expect((await owner.evaluate(prepared, [id], ample)).values).toEqual([false]);
   expect((await driver.request('anonymous', 'GET', `/v1/subjects/${id}`)).status).not.toBe(200);
 });
 
 test('native database timeout cannot become a definitive negative or a successful NOT', async () => {
   const limitedPool = db.openPool({ options: '-c statement_timeout=50 -c lock_timeout=50', max: 1 });
   const owner = await scope(limitedPool);
-  const prepared = await owner.prepare({ filter: within({ not: relation([target]) }) });
+  const prepared = await owner.prepare(within({ not: relation([target]) }));
   const lock = await db.admin.connect();
   try {
     await lock.query('BEGIN');

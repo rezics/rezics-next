@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { admitFilter, parseFilter, type FilterDocument } from '@rezics/filter';
+import { admitFilter, parseFilter } from '@rezics/filter';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
@@ -18,33 +18,16 @@ import {
   FACET_TEMPLATE,
   type SearchHit,
 } from '../../src/search/query.ts';
-import { subjectPartition, type SubjectSource } from '../../src/search/source.ts';
+import { subjectPartition } from '../../src/search/source.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 
-// Runtime discovery is deliberately after successful native setup. A missing additive
-// capability must be a red assertion, not a loader error, bad bearer or route 404.
-// Until the owning module lands, this is the narrow expected prepare/prefix surface.
-// No test supplies a ready identity stamp or treats an outbox position as one.
-type Prepared = { readonly generation: number; readonly basis: unknown };
-type Prefix = {
-  hits: SearchHit[];
-  coveredThrough: string | null;
-  exhausted: boolean;
-  generation: number;
-  usage: { candidates: number };
-};
-type Scope = {
-  prepare(filter: FilterDocument): Promise<Prepared>;
-  prefix(prepared: Prepared, request: { afterSubject?: string; quota: number; budget: number }): Promise<Prefix>;
-};
-type Factory = (dependencies: {
-  pool: ReturnType<typeof createPool>;
-  client: OpenSearch;
-  prefix: string;
-  source: SubjectSource;
-}) => Scope;
+import { createSearchScopeSource, type SearchScopePrefix } from '../../src/search/scope-source.ts';
+
+type Prefix = SearchScopePrefix;
+type Scope = ReturnType<typeof createSearchScopeSource>;
+type Factory = typeof createSearchScopeSource;
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -154,7 +137,7 @@ async function prepared(target = prefix, transport = client) {
   // A readiness exception here is an intended missing native canonical-basis
   // prerequisite. Do not catch it and forge evidence to reach the positive cases.
   const handle = await runtime.prepare(filter);
-  expect(handle.generation).toBe(1);
+  expect(handle.basis.generation).toBe(1);
   expect(handle.basis, 'prepare needs a real structural canonical basis').toBeDefined();
   return { runtime, handle };
 }
@@ -169,7 +152,7 @@ function assertPage(
   expect(page.hits).toEqual([...expected]);
   expect(page.coveredThrough).toBe(covered);
   expect(page.exhausted).toBe(exhausted);
-  expect(page.generation).toBe(1);
+  expect(page.basis.generation).toBe(1);
   expect(page.usage.candidates).toBe(used);
   // Empty nonexhaustion is legal only if it consumed an actual covered prefix.
   if (!page.exhausted && page.hits.length === 0) expect(page.coveredThrough).not.toBeNull();
@@ -220,7 +203,7 @@ test('canonical readiness is an explicit native dependency, never an ordinary pa
   if (outcome.error !== undefined) expect(outcome.error).toMatchObject({ code: 'index_not_ready' });
   else {
     expect(outcome.handle!.basis).toBeDefined();
-    expect(outcome.handle!.generation).toBe(1);
+    expect(outcome.handle!.basis.generation).toBe(1);
     const ordinary = await source.read(subjectPartition(ids[0]!), [ids[0]!]);
     expect(outcome.handle!.basis).not.toEqual(ordinary.position);
     expect(outcome.handle!.basis).not.toEqual({ position: ordinary.position });
@@ -232,7 +215,13 @@ test('real raw prefix covers rejected and lookahead candidates with pinned gener
   const { runtime, handle } = await prepared(prefix, observed.transport);
   expect(observed.raw.flat()).toHaveLength(0);
   observed.raw.length = 0;
-  assertPage(await runtime.prefix(handle, { quota: 1, budget: 2 }), native.slice(0, 1), ids[0]!, false, 2);
+  assertPage(
+    await runtime.prefix(handle, { afterSubject: null, quota: 1, budget: 2 }),
+    native.slice(0, 1),
+    ids[0]!,
+    false,
+    2,
+  );
   expect(observed.raw).toEqual([[ids[0]!, ids[1]!]]);
 });
 
@@ -246,14 +235,20 @@ test('rejected raw prefix is returned without disclosure refill, then eligible C
 
 test('quota plus one covers A B but charges unused C; exact quota EOF requires an extra proof slot', async () => {
   const { runtime, handle } = await prepared();
-  assertPage(await runtime.prefix(handle, { quota: 2, budget: 3 }), native.slice(0, 2), ids[1]!, false, 3);
-  assertPage(await runtime.prefix(handle, { quota: 3, budget: 4 }), native, ids[2]!, true, 3);
-  await expect(runtime.prefix(handle, { quota: 3, budget: 3 })).rejects.toThrow();
+  assertPage(
+    await runtime.prefix(handle, { afterSubject: null, quota: 2, budget: 3 }),
+    native.slice(0, 2),
+    ids[1]!,
+    false,
+    3,
+  );
+  assertPage(await runtime.prefix(handle, { afterSubject: null, quota: 3, budget: 4 }), native, ids[2]!, true, 3);
+  await expect(runtime.prefix(handle, { afterSubject: null, quota: 3, budget: 3 })).rejects.toThrow();
 });
 
 test('duplicates from bounded reread are charged again, including rejected and lookahead keys', async () => {
   const { runtime, handle } = await prepared();
-  const first = await runtime.prefix(handle, { quota: 2, budget: 3 });
+  const first = await runtime.prefix(handle, { afterSubject: null, quota: 2, budget: 3 });
   const reread = await runtime.prefix(handle, { afterSubject: ids[0]!, quota: 1, budget: 2 });
   assertPage(first, native.slice(0, 2), ids[1]!, false, 3);
   assertPage(reread, native.slice(1, 2), ids[1]!, false, 2);
@@ -273,23 +268,23 @@ test('caller aggregate 256 reserves every source dispatch and rejects insufficie
     const reservation = 2;
     expect(remaining).toBeGreaterThanOrEqual(reservation);
     remaining -= reservation;
-    const page = await runtime.prefix(handle, { quota: 1, budget: reservation });
+    const page = await runtime.prefix(handle, { afterSubject: null, quota: 1, budget: reservation });
     assertPage(page, native.slice(0, 1), ids[0]!, false, 2);
     // Internal driver work must fit this same reservation, not a second per-source256.
     expect(page.usage.candidates).toBeLessThanOrEqual(reservation);
   }
   expect(remaining).toBe(2);
-  const last = await one.runtime.prefix(one.handle, { quota: 1, budget: remaining });
+  const last = await one.runtime.prefix(one.handle, { afterSubject: null, quota: 1, budget: remaining });
   remaining -= last.usage.candidates;
   expect(remaining).toBe(0);
   expect(observed.raw).toHaveLength(128);
   expect(observed.raw.every((keys) => keys.length === 2)).toBe(true);
   expect(observed.raw.flat()).toHaveLength(256);
   const dispatched = observed.raw.length;
-  await expect(two.runtime.prefix(two.handle, { quota: 1, budget: remaining })).rejects.toThrow();
-  await expect(two.runtime.prefix(two.handle, { quota: 1, budget: 1 })).rejects.toThrow();
-  await expect(two.runtime.prefix(two.handle, { quota: 101, budget: 256 })).rejects.toThrow();
-  await expect(two.runtime.prefix(two.handle, { quota: 1, budget: 257 })).rejects.toThrow();
+  await expect(two.runtime.prefix(two.handle, { afterSubject: null, quota: 1, budget: remaining })).rejects.toThrow();
+  await expect(two.runtime.prefix(two.handle, { afterSubject: null, quota: 1, budget: 1 })).rejects.toThrow();
+  await expect(two.runtime.prefix(two.handle, { afterSubject: null, quota: 101, budget: 256 })).rejects.toThrow();
+  await expect(two.runtime.prefix(two.handle, { afterSubject: null, quota: 1, budget: 257 })).rejects.toThrow();
   expect(observed.raw).toHaveLength(dispatched);
 });
 
@@ -320,7 +315,7 @@ async function switchAlias(target: string) {
 
 test('native alias change between prepare and continuation requires restart instead of repinning', async () => {
   const { runtime, handle } = await prepared();
-  await runtime.prefix(handle, { quota: 1, budget: 2 });
+  await runtime.prefix(handle, { afterSubject: null, quota: 1, budget: 2 });
   await createSubjectIndex(client, prefix, 2);
   try {
     await switchAlias(prefix);
@@ -340,9 +335,9 @@ test('native alias change between prepare and continuation requires restart inst
 test('prepare pins an empty native generation and detects alias switch before an empty continuation', async () => {
   const target = await emptyIndex();
   const { runtime, handle } = await prepared(target);
-  assertPage(await runtime.prefix(handle, { quota: 1, budget: 2 }), [], null, true, 0);
+  assertPage(await runtime.prefix(handle, { afterSubject: null, quota: 1, budget: 2 }), [], null, true, 0);
   await switchAlias(target);
-  await expect(runtime.prefix(handle, { quota: 1, budget: 2 })).rejects.toMatchObject({
+  await expect(runtime.prefix(handle, { afterSubject: null, quota: 1, budget: 2 })).rejects.toMatchObject({
     code: 'search_restart_required',
   });
 });
@@ -379,7 +374,7 @@ for (const failure of ['partial shards', 'timeout', 'unavailable'] as const) {
     };
     const { runtime, handle } = await prepared(prefix, transport);
     armed = true;
-    await expect(runtime.prefix(handle, { quota: 1, budget: 2 })).rejects.toThrow();
+    await expect(runtime.prefix(handle, { afterSubject: null, quota: 1, budget: 2 })).rejects.toThrow();
     expect(observed).toBe(1);
   });
 }
