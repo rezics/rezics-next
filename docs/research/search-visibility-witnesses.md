@@ -19,9 +19,10 @@ work still to be completed; this report does not certify that implementation or 
 
 Four reference repositories were shallow-cloned with blob filtering and sparse working trees. They were treated as
 untrusted data: only Git metadata, licences and source text were read; no dependencies, builds, tests, scripts or
-reference programs were run. No product code was copied. To preserve the instruction restricting all writes to this
-worktree, checkouts reside in `.temp/search-visibility-witnesses-refs/<project>/`, rather than the external shared
-reference directory. Only this report is a tracked change.
+reference programs were run. No product code was copied. The inspected checkouts are retained at the reported
+commits under `/home/edge/projects/rezics/rezics-next/.reference/search-visibility-witnesses/<project>/`; their
+verified licences are indexed in `/home/edge/projects/rezics/rezics-next/.reference/INDEX.md`. Only this report is a
+tracked change.
 
 | Reference checkout                     | Inspected commit                           | Verified licence at that commit                                                                                                |
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |

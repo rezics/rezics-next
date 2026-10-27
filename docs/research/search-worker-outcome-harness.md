@@ -72,11 +72,11 @@ tag exists: the attempted `5.4.6-preview` branch clone was unavailable; fetching
 commit with depth one succeeded. Upstream source package metadata uses a release placeholder.
 
 All reference repositories were shallow-cloned and read only as data. No reference
-dependencies, scripts, builds or tests were installed or executed. To honor the explicit
-worktree-only write constraint and AGENTS.md temporary-file rule, clones are under
-`.temp/search-worker-outcome-harness-refs/<project>/` in this worktree, rather than the
-requested cache outside it. No files were written to the main checkout or external cache.
-The following pins make the evidence reproducible without retaining those ignored clones:
+dependencies, scripts, builds or tests were installed or executed. The inspected checkouts
+are retained at the reported commits under
+`/home/edge/projects/rezics/rezics-next/.reference/search-worker-outcome-harness/<project>/`;
+their verified licences are indexed in `/home/edge/projects/rezics/rezics-next/.reference/INDEX.md`.
+The following pins make the evidence reproducible alongside the retained checkouts:
 
 | Reference clone and commit                                     | Files inspected and licensing evidence                                                                                                                                                                                                                                                                                                 |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

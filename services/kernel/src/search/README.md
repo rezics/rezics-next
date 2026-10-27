@@ -7,6 +7,38 @@ The optional `languages` request field is the reader's language chain, in priori
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.
 
+## Visibility, completeness and convergence
+
+Search separates candidate discovery from current disclosure checks. Evidence from [OpenFGA, SpiceDB and
+Sourcegraph](../../../../docs/research/search-visibility-witnesses.md) supports separating those stages, batching
+checks, making consistency boundaries explicit and repairing derived state durably. It does not standardize Search's
+resource limits: the 128 sampled values per property, one saved plus at most 32 alternative witnesses, 256 probes
+per source call and at most three candidate rounds are local budgets. The [Semantic witness and dependency
+design](../semantic/relation-facets-design.md) and [durable rebuild design](../semantic/relation-facet-rebuilds-design.md)
+own witness selection, current evidence, invalidation routing and repair storage. Search owns candidate handling and
+the integration behavior described here.
+
+For relation predicates, `true` and `false` are definitive current results; `not_proven` is unknown, not false.
+Boolean evaluation preserves that three-valued meaning through AND, OR and NOT, and only a complete current `true`
+result may be disclosed. A candidate with no current proof is dropped and refilled, never returned. Candidate
+discovery and current disclosure are separate guarantees: a safe check can reject stale candidates without proving
+complete recall, a full page, or fresh indexed counts. In particular, bounded snapshots can underfill while repair
+is pending. Absence from a nonoverflow snapshot may count as complete absence only after integration proves that the
+snapshot is complete; this focused completeness proof/fix belongs to Semantic after its source task. Do not document
+underfill as complete absence or broaden this into a redesign of all negative filters.
+
+Index counts, including counts reported with `as_of`, describe indexed progress; do not call them live-authorized
+exact cardinalities. Candidate supersets are not lower bounds on current matches. The existing `lower_bound` policy
+for facet results is the separate policy in [Facet counts](#facet-counts); it does not introduce a count API or a
+leak-protection guarantee. Keyset continuation consumes rejected and unproven candidates, including rejected
+lookahead, before advancing, but does not promise an OpenSearch point-in-time snapshot. Whole-index replay and witness
+repair may do work proportional to their finite input; there is no constant whole-rebuild cost or wall-clock
+convergence SLA.
+Finite convergence assumes writes stop, the affected identity and output sets are finite, invalidation routing is
+complete, I/O eventually succeeds and durable cursors progress fairly. The real-source and default-worker
+composition proof remains pending; the [outcome harness contract](../../test/search/README.md) defines the required
+verification and does not claim it has passed.
+
 ## Cost
 
 These are derivations from `src/search/`, `src/events/`, the called Access SQL, `db/search/` and the core/semantic
@@ -95,9 +127,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   fence and SQL costs are owned by the linked design rather than restated here.
 - Bound: Search snapshots and source calls are grouped by anchor partition; relation membership probes are capped
   at 256 per call. The relation projection is bounded by 128 distinct values per declared property, not the source's
-  full relation degree; a missing value from a truncated sample never proves absence. Semantic source and durable
-  rebuild work still require their real-source verification; this README does not claim that composition or its
-  measurements are complete.
+  full relation degree; a missing value from a truncated sample never proves absence. A temporarily underfilled
+  snapshot is also not evidence of complete absence. Treating nonoverflow snapshot absence as complete requires the
+  integration proof described above. Semantic source and durable rebuild work still require their real-source
+  verification; this README does not claim that composition or its measurements are complete.
 - Growth check: Search projection coverage: [test/search/relation-overflow-mapping.test.ts](../../test/search/relation-overflow-mapping.test.ts),
   “the document keeps all 128 sampled relation values and omits empty overflow markers”. Semantic verification
   requirements (not completed measurements): [test/semantic/relation-facet-source.test.ts](../../test/semantic/relation-facet-source.test.ts),
@@ -231,8 +264,9 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   anchor-partition batches of at most 256 probes and performs no relation-degree scan or qualifier Cartesian
   expansion. Semantic checks the stored witness and at most 32 further witnesses; if bounded evidence cannot prove
   membership, it returns `not_proven` and enqueues the registered
-  `com.rezics.subject.relation_facet_changed.v1` event for the affected SOURCE. Semantic rebuilds finite witness
-  pages. Existing `subject.*` indexing consumes that source-partition event with external partition versions and
+  `com.rezics.subject.relation_facet_changed.v1` event for the affected SOURCE. The adopted Semantic contract checks
+  one saved witness and at most 32 alternatives, then rebuilds durable finite witness pages. Existing `subject.*`
+  indexing consumes that source-partition event with external partition versions and
   `refresh=wait_for` checkpoint advancement. Search does not enqueue a second repair or rebuild the target's inbound
   neighborhood. Semantic owns current witness/fence truth and event/rebuild SQL details; see the linked design.
 - Bound: A candidate page checks at most 200 hits per round and at most three rounds; any partition point call has
