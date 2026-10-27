@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-
 import { checkGrowth, capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
   identityFixture,

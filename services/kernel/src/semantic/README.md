@@ -597,12 +597,12 @@ write metadata or infer readiness from jobs/history. The public independent expo
 `identity-basis.ts:readIdentityHome` delegates the home point to this same metadata owner; its fixed-home sweeps
 remain independently implementable. This is an internal service handoff, never a public Access or holder claim.
 
-The authoritative `semantic.identity_home` primary key is `(partition_no)`. It holds generation, pending, and the
-current core epoch/home incarnation. The authoritative `semantic.identity_obligation` current-row primary key is
+The authoritative `semantic.identity_home` primary key is `(partition_no)`. It holds generation and pending; current epoch/home incarnation comes from the exact
+`core.partition(partition_no)` point, not a second placement authority. The authoritative `semantic.identity_obligation` current-row primary key is
 `(partition_no, route, subject_id)`, where subject_id is the original and partition_no is its native home. Its
-`version` is that home's generation assigned by the actual mutation; `epoch`, `home`, `target` (nullable for removal),
+`version` is that home's generation assigned by the actual mutation; `target` (nullable for removal),
 `sealed_version` (nullable), and bounded phase/keyset frontier describe ONLY that current mapping obligation.
-Replace the current row on a newer actual change; old acknowledgements compare version/target/epoch/home and cannot
+Replace the current row on a newer actual change; old acknowledgements compare version/target and their core epoch/home fence and cannot
 seal or decrement the replacement. Retain the sealed current row until superseded; no historical-row lookup is
 needed. `pending` counts unsealed current obligations, so replacement of an unsealed obligation does not double-count.
 A sealed removal remains evidence of restored-root/member-removal coverage. Initial rollout must establish current
@@ -635,15 +635,18 @@ export function advanceIdentityObligation(client: PoolClient, options: {
 All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
 `recordIdentityMutation` accompanies the verified actual native redirect change in its command transaction;
 unchanged/replayed mappings return null. It atomically increments the home generation and replaces the obligation.
-`advanceIdentityObligation` compares the current obligation token and expected bounded frontier; false means stale
+`advanceIdentityObligation` compares current version/target, core epoch/home and expected bounded frontier; false means stale
 work, with no mutation. Existing maintenance supplies durable registration/repoint acknowledgements before a seal;
 `sealed:true` is permitted only after complete inherited coverage, and decrements pending exactly once. These ports
 are for trusted native writers, not caller-supplied positive membership or authorization assertions.
 
 `readIdentityReadiness` checks the exact original's current native mapping and current obligation point, with the
-home/core epoch and incarnation on the same RR client. A redirect needs matching target, epoch/home and
+current core epoch/home observation on the same RR client. A redirect needs matching target and
 `sealed_version === version`; missing/mismatched/unsealed evidence is not_ready. A restored live original with an
 obligation needs the same current-version removal seal. A never-redirected live original needs no obligation scan.
+A placement/epoch change invalidates the basis and old in-flight maintenance tokens; a sealed version remains valid
+when the native mapping and its same-home metadata move together unchanged. The current home must be available and
+unfenced. No metadata copy claims placement authority.
 Do NOT compare the obligation version to the home's latest generation: another original's mutation can legitimately
 advance that generation. The terminal recheck compares the observed original mapping and home generation; basis
 readiness additionally requires home pending zero. None of these checks reads maintenance jobs, revisions or history.

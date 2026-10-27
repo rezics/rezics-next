@@ -1,15 +1,12 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-
 import { runCommand } from '../../src/command/command.ts';
-
 import { mergeSubjectsInCommand } from '../../src/semantic/merges.ts';
 import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { accessCheck } from '../../src/request/access.ts';
-
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
   identityFixture,

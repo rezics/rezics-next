@@ -1,12 +1,9 @@
 import '../support/fixture-event-types.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-
-import type { PoolClient } from 'pg';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
 import { runCommand, authoritativeTimeValue, type AuthoritativeTime } from '../../src/command/command.ts';
 import { newId } from '../../src/route/route.ts';
-
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
   identityFixture,
