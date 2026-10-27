@@ -34,10 +34,14 @@ test('the thread head, subjects, composer and post anchors provide a compact acc
   const subjects = await Bun.file(new URL('../src/threads/thread-subjects.tsx', import.meta.url)).text();
   const composer = await Bun.file(new URL('../src/threads/composer.tsx', import.meta.url)).text();
   expect(route).toContain('to="/boards/$id"');
-  expect(route).toContain('<Byline');
+  const head = route.split('<header')[1]!.split('</header>')[0]!;
+  expect(head).not.toContain('<Byline');
+  expect(head).not.toContain('createdAt');
   expect(route).toContain('scroll-mt-');
   expect(subjects).toContain('size="xs"');
   expect(subjects).toContain('overflow-x-auto');
   expect(composer).toContain('placeholder={');
   expect(composer).toContain('thread_reply_label');
+  expect(route).toContain('window.scrollTo(0, 0)');
+  expect(route).toContain('scrollIntoView()');
 });
