@@ -87,6 +87,14 @@ classes:
     description: An organization.
     exact_mappings:
       - wd:Q43229
+  SoftwareApplication:
+    is_a: Thing
+    class_uri: schema:SoftwareApplication
+    description: A software application.
+    exact_mappings:
+      - wd:Q166142
+    annotations:
+      cover_ratio: 1:1
 slots:
   crossMediaCounterpart:
     slot_uri: rezics:crossMediaCounterpart

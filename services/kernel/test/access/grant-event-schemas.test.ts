@@ -96,6 +96,7 @@ test('all eight concrete helper events have registered schemas for every return 
       'com.rezics.access.authentication-fenced.v1',
       'com.rezics.access.authentication-established.v1',
       'com.rezics.access.account-updated.v1',
+      'com.rezics.access.account-display-name-changed.v1',
       'com.rezics.access.membership-changed.v1',
       'com.rezics.access.account-tombstoned.v1',
       'com.rezics.access.membership-inverse-reserved.v1',

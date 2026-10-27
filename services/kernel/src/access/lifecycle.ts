@@ -1430,6 +1430,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         ? await authorize(context, 'account:manage', operatorId)
         : await authorize(context, 'account:update', input.accountId);
       const allowed = authorization.check;
+      let displayNameChanged = false;
       return execute(
         {
           route,
@@ -1437,12 +1438,26 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           kind: 'account-updated',
           key: input.key,
           input: { patch },
+          additionalEvents: () =>
+            displayNameChanged
+              ? [
+                  {
+                    type: 'com.rezics.access.account-display-name-changed.v1',
+                    subject: input.accountId,
+                    data: { accountId: input.accountId },
+                  },
+                ]
+              : [],
           actor: context.actor,
           deadline: context.deadline,
           authorization,
         },
         async (tx, transactionId) => {
+          // A command retry must base its event on this transaction's locked row.
+          displayNameChanged = false;
           const account = await locked(tx, input.accountId);
+          displayNameChanged =
+            Object.hasOwn(patch, 'displayName') && account.displayName !== (patch.displayName as string | null);
           requireAllowed(operatorId === null || account.operatorAccountId === operatorId);
           if (Object.hasOwn(patch, 'speakersListed')) requireAllowed(account.kind === 'organization');
           requireAllowed(await allowed(tx));

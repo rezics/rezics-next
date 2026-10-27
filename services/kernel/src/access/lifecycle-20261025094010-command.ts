@@ -26,6 +26,7 @@ type Mutation = {
   kind: string;
   key: string;
   input: unknown;
+  additionalEvents?: () => Array<{ type: string; subject?: string; data: unknown }>;
   actor?: AccountActor;
   deadline?: number;
   authorization?: CommandAuthorization;
@@ -72,7 +73,13 @@ export function lifecycleExecutor(pool: Pool, clock?: () => Date) {
           key: `${options.route}:${options.key}`,
           digest: digest.toString('hex'),
         });
-        return { value, events: [{ type: `com.rezics.access.${options.kind}.v1`, subject: options.id, data: value }] };
+        return {
+          value,
+          events: [
+            { type: `com.rezics.access.${options.kind}.v1`, subject: options.id, data: value },
+            ...(options.additionalEvents?.() ?? []),
+          ],
+        };
       },
     );
     // Expose snapshots: callers cannot accidentally mutate the response retained

@@ -1,6 +1,7 @@
 types:
   schema:Person: '사람'
   schema:Organization: '단체'
+  schema:SoftwareApplication: '소프트웨어 애플리케이션'
 properties:
   schema:url: '공식 웹사이트'
   schema:name: '명칭'

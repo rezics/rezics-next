@@ -637,6 +637,24 @@
         "zh-Hans": "人类"
       }
     },
+    "schema:SoftwareApplication": {
+      "iri": "http://schema.org/SoftwareApplication",
+      "labels": {
+        "de": "Softwareanwendung",
+        "en": "software application",
+        "es": "aplicación de software",
+        "fr": "application logicielle",
+        "ja": "ソフトウェアアプリケーション",
+        "ko": "소프트웨어 애플리케이션",
+        "zh-Hans": "软件应用程序",
+        "zh-Hant": "軟體應用程式"
+      },
+      "mappings": ["wd:Q166142"],
+      "bases": ["schema:Thing"],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
+      "facets": [],
+      "coverRatio": "1:1"
+    },
     "schema:VideoGame": {
       "iri": "http://schema.org/VideoGame",
       "labels": {

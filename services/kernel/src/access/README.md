@@ -60,6 +60,21 @@ permission failure coverage.
 
 ## Accounts
 
+### Account graph agents
+
+The accounts WorkModule registers one shared effects worker for account-agent synchronization. Account activation and
+automated-account activation use `com.rezics.access.actor-activated.v1`; organization creation uses
+`com.rezics.access.organization-created.v1`; a committed display-name change emits
+`com.rezics.access.account-display-name-changed.v1`. These events contain only the account ID. The effect reads the
+current account row by its `(route, account_id)` anchor, skips missing, non-active, fenced and deleted accounts, then
+calls Semantic's `ensureAccountAgent` as platform work. An actor without an operator is a `person`, an organization is
+an `organization`, and an actor with an operator is `software`. The label uses the current display name or handle and
+language `und`. Delivery retries after failures and always converges from current account state.
+
+Run `bun services/kernel/scripts/ensure-account-agents.ts` during deployment to backfill active, unfenced accounts.
+It scans in `(route, account_id)` keyset order with pages of 100, releases each page before issuing its per-account
+Semantic command, and can be rerun safely after interruption.
+
 Managing an automated account requires an `account:manage` grant on its operator's account resource.
 A person holds this grant for the automation they operate. When an organization operates automation,
 its owners receive `account:manage` and `access:grant` through the owner-role grants written at organization creation.
@@ -310,6 +325,16 @@ checks leave that branch disabled and read the same grant and denial keys as bef
 - Touches: one governance check on the Global Context, the receipt, one locked account row and its operator relation.
 - Bound: `O(log R)` per statement, a fixed number of statements, independent of other accounts.
 - Growth check: `test/access/growth-rate-tier.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts and operated accounts; warm-up on a spare account; constant rows and statements, logarithmic buffers.
+
+### Account graph agents
+
+- Effect touches: one account point read by anchor, then one Semantic `ensureAccountAgent` command in the node's
+  partition. Rows and statements are constant per event; blocks are logarithmic in accounts and subjects.
+- Growth check: `test/access/growth-account-agent-effect.test.ts`, test
+  `account agent effect growth stays within its bound at [256, 1024, 4096]`; it grows unrelated accounts and their
+  graph nodes, uses a warm-up, and checks constant rows and statements with logarithmic blocks.
+- Backfill touches one `(route, account_id)` keyset page per batch, then one ensure command per account. With page
+  size 100 it is O(accounts) in total and runs only during deployment, never on a request path.
 
 ### Operator transfer
 

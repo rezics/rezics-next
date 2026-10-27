@@ -13,6 +13,7 @@ const labels = {
   'skos:ConceptScheme': ['概念体系', '概念體系', '概念体系'],
   'schema:Organization': ['组织', '組織', '組織'],
   'schema:Person': ['人物', '人物', '人物'],
+  'schema:SoftwareApplication': ['软件应用程序', '軟體應用程式', 'ソフトウェアアプリケーション'],
   'schema:VideoGame': ['电子游戏', '電子遊戲', 'コンピュータゲーム'],
   'wd:Q209163': ['追加内容', '追加內容', '追加コンテンツ'],
   'wd:Q20631656': ['版本', '版本', 'リリース'],

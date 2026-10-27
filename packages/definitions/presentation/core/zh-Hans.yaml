@@ -1,6 +1,7 @@
 types:
   schema:Person: '人物'
   schema:Organization: '组织'
+  schema:SoftwareApplication: '软件应用程序'
 properties:
   schema:url: '官方网站'
   schema:name: '名称'

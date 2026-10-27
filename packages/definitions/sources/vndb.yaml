@@ -1135,7 +1135,7 @@ table_types:
     meaning: A quotation record.
     citations: ['https://schema.org/Quotation', 'https://www.wikidata.org/wiki/Q815341']
   schema:SoftwareApplication:
-    status: proposed
+    status: existing
     mapping: wd:Q166142
     meaning: Software application or game-engine record.
     citations: ['https://schema.org/SoftwareApplication', 'https://www.wikidata.org/wiki/Q166142']

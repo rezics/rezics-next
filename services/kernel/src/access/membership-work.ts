@@ -23,6 +23,7 @@ import {
   type MembershipWorkConfig,
 } from './membership-work-config.ts';
 import type { Access } from '../request/access.ts';
+import { createAccountAgentEffect } from './account-agent-effect.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,
@@ -201,6 +202,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
     async register(context) {
       const config = options.authorize ? undefined : readMembershipWorkConfig(context.env);
       registerAccounts(context, membershipWorkPorts(context, options, config));
+      context.addEffects([createAccountAgentEffect(context.pool)]);
       if (config) registerOperatorFenceWork(context, config.referenceKeys);
       await writeRateExpiryWorkModule.register(context);
     },

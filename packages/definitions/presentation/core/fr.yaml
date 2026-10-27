@@ -1,6 +1,7 @@
 types:
   schema:Person: 'personne'
   schema:Organization: 'organisation'
+  schema:SoftwareApplication: 'application logicielle'
 properties:
   schema:url: 'site officiel'
   schema:name: 'nom'

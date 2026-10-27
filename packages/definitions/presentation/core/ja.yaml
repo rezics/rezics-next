@@ -1,6 +1,7 @@
 types:
   schema:Person: 人物
   schema:Organization: 組織
+  schema:SoftwareApplication: ソフトウェアアプリケーション
 properties:
   schema:url: URL
   schema:name: 名前

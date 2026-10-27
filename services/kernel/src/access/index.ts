@@ -1,4 +1,5 @@
 export { readPublicViews, type PublicViews } from './public-views.ts';
+export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';

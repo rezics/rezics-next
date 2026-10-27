@@ -253,6 +253,10 @@ export const ACCESS_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.access.account-updated.v1': Type.Object({ accountId: identity }, { additionalProperties: false }),
+  'com.rezics.access.account-display-name-changed.v1': Type.Object(
+    { accountId: identity },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.membership-changed.v1': Type.Object(
     {
       organizationId: identity,

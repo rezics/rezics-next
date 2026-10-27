@@ -72,7 +72,13 @@ test('bundled types declare the documented cover frame ratios', () => {
       'wd:Q7725310',
     ],
     '3:4': ['schema:VideoGame', 'wd:Q689445', 'wd:Q209163', 'wd:Q20631656', 'wd:Q95074', 'schema:Person'],
-    '1:1': ['schema:MusicAlbum', 'schema:Organization', 'skos:Concept', 'skos:ConceptScheme'],
+    '1:1': [
+      'schema:MusicAlbum',
+      'schema:Organization',
+      'schema:SoftwareApplication',
+      'skos:Concept',
+      'skos:ConceptScheme',
+    ],
     '4:3': ['schema:Recipe'],
   };
   expect(Object.values(ratios).flat().sort()).toEqual(Object.keys(types).sort());
