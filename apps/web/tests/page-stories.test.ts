@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -88,6 +88,10 @@ function sharedBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
+function storyUrl(origin: string, storyId: string, locale: string) {
+  return `${origin}/iframe.html?id=${storyId}&viewMode=story&globals=locale:${locale};a11y.manual:!true`;
+}
+
 async function openStory(name: string, visitor: string, locale: string) {
   const origin = await sharedStorybook();
   const index = (await (await fetch(`${origin}/index.json`)).json()) as {
@@ -107,35 +111,54 @@ async function openStory(name: string, visitor: string, locale: string) {
     reducedMotion: 'reduce',
   });
   const page = await context.newPage();
-  await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
-    waitUntil: 'networkidle',
-  });
+  await watchStoryReports(page);
+  await page.goto(storyUrl(origin, entry.id, locale), { waitUntil: 'networkidle' });
   await page.locator('html[data-hydrated]').waitFor();
   await page.getByRole('main').waitFor();
   return { context, page };
 }
 
-async function rerenderStoryAndReadReports(storyId: string, page: import('playwright').Page) {
-  return page.evaluate(
-    async (id) => {
-      const target = window as Window & {
-        __STORYBOOK_ADDONS_CHANNEL__?: {
-          on: (event: string, listener: (payload: { storyId: string; reporters: { type?: string }[] }) => void) => void;
-        };
-        __STORYBOOK_PREVIEW__?: { rerender: () => Promise<void> };
+async function watchStoryReports(page: Page) {
+  await page.addInitScript(() => {
+    const finished: { storyId?: string; reporters?: { type?: string }[] }[] = [];
+    const target = window as Window & {
+      __rezicsStoryFinishes?: typeof finished;
+      __STORYBOOK_ADDONS_CHANNEL__?: {
+        on?: (event: string, listener: (payload: (typeof finished)[number]) => void) => void;
       };
+    };
+    target.__rezicsStoryFinishes = finished;
+    let attached: typeof target.__STORYBOOK_ADDONS_CHANNEL__;
+    const attach = () => {
       const channel = target.__STORYBOOK_ADDONS_CHANNEL__;
-      const preview = target.__STORYBOOK_PREVIEW__;
-      if (!channel || !preview) throw new Error('Storybook preview and addon channel are unavailable.');
-      return new Promise<{ storyId: string; reporters: { type?: string }[] }>((resolve) => {
-        channel.on('storyFinished', (payload) => {
-          if (payload.storyId === id) resolve(payload);
-        });
-        void preview.rerender();
-      });
-    },
+      if (!channel) return false;
+      if (channel !== attached) {
+        attached = channel;
+        channel.on?.('storyFinished', (payload) => finished.push(payload));
+      }
+      return true;
+    };
+    const interval = window.setInterval(() => {
+      if (attach()) window.clearInterval(interval);
+    }, 0);
+    if (attach()) window.clearInterval(interval);
+  });
+}
+
+async function finishedStory(page: Page, storyId: string) {
+  await page.waitForFunction(
+    (id) =>
+      (window as Window & { __rezicsStoryFinishes?: { storyId?: string }[] }).__rezicsStoryFinishes?.some(
+        (finish) => finish.storyId === id,
+      ),
     storyId,
   );
+  return page.evaluate((id) => {
+    const finished = (
+      window as Window & { __rezicsStoryFinishes?: { storyId?: string; reporters?: { type?: string }[] }[] }
+    ).__rezicsStoryFinishes;
+    return finished?.find((finish) => finish.storyId === id);
+  }, storyId);
 }
 
 // Follow local imports, so shared replay helpers may own the recordings instead of each story importing JSON directly.
@@ -228,9 +251,7 @@ test(
           external.push(url.href);
           await route.abort();
         });
-        await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
-          waitUntil: 'networkidle',
-        });
+        await page.goto(storyUrl(origin, entry.id, locale), { waitUntil: 'networkidle' });
         await page.locator('html[data-hydrated]').waitFor();
         // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
         await page.getByRole('main').waitFor();
@@ -309,7 +330,7 @@ test(
     try {
       const storyUrl = new URL(page.url());
       expect(storyUrl.searchParams.get('globals')).toBe('locale:en;a11y.manual:!true');
-      const finished = await rerenderStoryAndReadReports(storyUrl.searchParams.get('id')!, page);
+      const finished = await finishedStory(page, storyUrl.searchParams.get('id')!);
       expect(finished?.reporters?.filter((report) => report.type === 'a11y')).toEqual([]);
       const a11y = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
