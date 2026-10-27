@@ -15,7 +15,7 @@ import type {
   PipelineReport,
 } from '../../../specs/imports-pipeline-driver.ts';
 import { Importer, type ImportMediaResolution, type ImporterOptions } from '../src/importer.ts';
-import { createImportTransport } from '../src/import-client.ts';
+import { createImportTransport, type ImportTransportOptions } from '../src/import-client.ts';
 import { createMediaResolver } from '../src/media-resolver.ts';
 import type { Owner } from '../src/record-bindings.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -106,6 +106,7 @@ class Scheduler {
     input: Omit<Exchange, 'started' | 'ended' | 'startOrder' | 'endOrder' | 'cancelled'>,
     signal: AbortSignal | undefined,
     operation: () => T,
+    delay = this.latency,
   ): Promise<T> {
     const exchange: Exchange = {
       ...input,
@@ -115,7 +116,7 @@ class Scheduler {
       endOrder: 0,
       cancelled: false,
     };
-    return this.schedule(this.latency, input.recordKey, signal, operation, exchange);
+    return this.schedule(delay, input.recordKey, signal, operation, exchange);
   }
 
   sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -268,6 +269,12 @@ export type WriteSimulation = {
   until?: number;
   status?: number;
   retryable?: boolean;
+  http?: Pick<ImportTransportOptions, 'maxAttempts' | 'maxWaitMs' | 'maxTotalWaitMs' | 'deadlineMs'>;
+  invocations?: { at: number; bytes: string; recordKey: string }[];
+  onSend?(
+    request: BatchWriteRequest,
+    at: number,
+  ): { status?: number; retryAfter?: string; delayMs?: number } | undefined;
   accepted: Map<string, number>;
   attempts: { at: number; inFlight: number; overloaded: boolean; keys: string[] }[];
 };
@@ -373,11 +380,20 @@ export const createImportPipelineDriver: (
       );
     },
     batchWrite(request: BatchWriteRequest): Promise<BatchWriteResult> {
+      writes?.invocations?.push({
+        at: scheduler.now,
+        bytes: JSON.stringify(request),
+        recordKey: request.commands[0]!.source.external_id,
+      });
       return writes ? httpTransport.batch(request, currentSignal) : remoteBatch(request);
     },
   };
 
-  const remoteBatch = (request: BatchWriteRequest, overloaded = false): Promise<BatchWriteResult> => {
+  const remoteBatch = (
+    request: BatchWriteRequest,
+    overloaded = false,
+    reply?: { status?: number; retryAfter?: string; delayMs?: number },
+  ): Promise<BatchWriteResult> => {
     const key = request.commands[0]!.source.external_id;
     const bytes = JSON.stringify(request);
     const bootstrap = request.commands.every((command) => command.op === 'create');
@@ -396,16 +412,19 @@ export const createImportPipelineDriver: (
       },
       currentSignal,
       () => {
-        if (overloaded)
+        if (overloaded || reply?.status !== undefined)
           throw Response.json(
             {
               type: 'https://rezics.com/problems/transaction_retry_exhausted',
               title: 'Transaction retry exhausted',
-              status: writes?.status ?? 503,
+              status: reply?.status ?? writes?.status ?? 503,
               code: 'transaction_retry_exhausted',
               retryable: writes?.retryable ?? true,
             },
-            { status: writes?.status ?? 503 },
+            {
+              status: reply?.status ?? writes?.status ?? 503,
+              headers: reply?.retryAfter === undefined ? {} : { 'retry-after': reply.retryAfter },
+            },
           );
         const inject = !bootstrap && fault?.recordKey === key;
         if (inject && fault?.response === 'bulk-error')
@@ -421,11 +440,13 @@ export const createImportPipelineDriver: (
           return { results: [{ key: 'invalid', status: 200, value: { revision: 1 } }] } as BatchWriteResult;
         return { results };
       },
+      reply?.delayMs,
     );
   };
   const httpTransport = createImportTransport({
     origin: 'https://api.example.test',
-    tokenProvider: async () => 'fixture',
+    tokenProvider: async (_fresh?: boolean) => 'fixture',
+    ...writes?.http,
     now: () => scheduler.now,
     schedule: (callback, ms) => scheduler.timer(callback, ms),
     sleep: (ms) => scheduler.sleep(ms, currentSignal ?? new AbortController().signal),
@@ -433,6 +454,7 @@ export const createImportPipelineDriver: (
       const request = new Request(input, init);
       const body = (await request.json()) as BatchWriteRequest;
       const count = ++inFlightWrites;
+      const reply = writes!.onSend?.(body, scheduler.now);
       const overloaded = count > writes!.limit && scheduler.now < (writes!.until ?? Infinity);
       writes!.attempts.push({
         at: scheduler.now,
@@ -441,7 +463,7 @@ export const createImportPipelineDriver: (
         keys: body.commands.map((command) => command.key),
       });
       try {
-        return Response.json(await remoteBatch(body, overloaded));
+        return Response.json(await remoteBatch(body, overloaded, reply));
       } catch (error) {
         if (error instanceof Response) return error;
         throw error;
