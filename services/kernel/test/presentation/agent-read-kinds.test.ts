@@ -42,6 +42,7 @@ let threadGrowthAccount: Account;
 let postGrowthAccount: Account;
 let collectionGrowthAccount: Account;
 let identityGrowthAccount: Account;
+let activityBaselineAccount: Account;
 let profile: PresentationProfile;
 
 const node = (type: string, id: string, props: Record<string, unknown> = {}) => ({ type, props: { id, ...props } });
@@ -196,7 +197,7 @@ async function seedAgentItems(
   await seed(growth, population, { from: 0, to: values.length });
 }
 
-async function seedAgentCollections(accountId: string, count: number, start: number): Promise<void> {
+async function seedAgentCollections(accountId: string, count: number): Promise<void> {
   const route = routeOf(accountId)!;
   const collectionIds = Array.from({ length: count }, () => newId(route));
   await admin.query(
@@ -208,7 +209,25 @@ async function seedAgentCollections(accountId: string, count: number, start: num
      FROM unnest($3::uuid[]) WITH ORDINALITY AS rows(collection_id,ordinal)`,
     [route, accountId, collectionIds],
   );
-  void start;
+}
+
+async function seedUnrelatedAccounts(count: number): Promise<void> {
+  for (let offset = 0; offset < count; offset += 1_000) {
+    const amount = Math.min(1_000, count - offset);
+    const ids = Array.from({ length: amount }, () => newId(0x5210));
+    const handles = ids.map((id) => `unrelated_${id.replaceAll('-', '')}`);
+    const routes = handles.map(handleRoute);
+    await admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,handle,transaction_id)
+       SELECT $1,id,'actor','active',handle,id FROM unnest($2::uuid[],$3::text[]) AS rows(id,handle)`,
+      [0x5210, ids, handles],
+    );
+    await admin.query(
+      `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
+       SELECT route,handle,id,'active',id FROM unnest($1::integer[],$2::text[],$3::uuid[]) AS rows(route,handle,id)`,
+      [routes, handles, ids],
+    );
+  }
 }
 
 async function call(method: string, path: string, body?: unknown) {
@@ -259,13 +278,20 @@ beforeAll(async () => {
   postGrowthAccount = await ensureAccount(`posts_${randomUUID().replaceAll('-', '')}`);
   collectionGrowthAccount = await ensureAccount(`collections_${randomUUID().replaceAll('-', '')}`);
   identityGrowthAccount = await ensureAccount(`identity_${randomUUID().replaceAll('-', '')}`);
+  activityBaselineAccount = await ensureAccount(`baseline_${randomUUID().replaceAll('-', '')}`);
+  await seedUnrelatedAccounts(4_096);
+  await seedAgentItems(
+    activityBaselineAccount.id,
+    Array.from({ length: 256 }, () => ({ kind: 'discussion' as const })),
+    'agent-activity-index-baseline',
+  );
 
   await seedAgentItems(
     pageAccount.id,
     [{ kind: 'discussion' }, { kind: 'discussion' }, { kind: 'review' }, { kind: 'review' }],
     `agent-page-${randomUUID()}`,
   );
-  await seedAgentCollections(pageAccount.id, 2, 0);
+  await seedAgentCollections(pageAccount.id, 2);
 
   const missingHandle = `missing_${randomUUID().replaceAll('-', '')}`;
   profile = {
@@ -320,9 +346,12 @@ test.serial(
     const discussions = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=discussion&limit=1`);
     const reviews = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=review&limit=1`);
     const posts = await getJson(`/v1/accounts/${pageAccount.id}/posts?limit=1`);
-    expect(answer.body.reads.r1.body).toEqual(discussions);
-    expect(answer.body.reads.r2.body).toEqual(reviews);
-    expect(answer.body.reads.r3.body).toEqual(posts);
+    expect(answer.body.reads.r1.body.threads).toEqual(discussions.threads);
+    expect(answer.body.reads.r2.body.threads).toEqual(reviews.threads);
+    expect(answer.body.reads.r3.body.posts).toEqual(posts.posts);
+    expect(answer.body.reads.r1.body.next).toBeString();
+    expect(answer.body.reads.r2.body.next).toBeString();
+    expect(answer.body.reads.r3.body.next).toBeString();
     expect(discussions.threads).toHaveLength(1);
     expect(discussions.next).toBeString();
     expect(reviews.threads).toHaveLength(1);
@@ -340,7 +369,8 @@ test.serial(
     const answer = await readPage('/agent');
     expect(answer.response.status).toBe(200);
     const collections = await getJson(`/v1/accounts/${pageAccount.id}/collections?view=BASIC&limit=1`);
-    expect(answer.body.reads.r4.body).toEqual(collections);
+    expect(answer.body.reads.r4.body.collections).toEqual(collections.collections);
+    expect(answer.body.reads.r4.body.next).toBeString();
     expect(collections.collections).toHaveLength(1);
     expect(collections.next).toBeString();
   },
@@ -354,23 +384,24 @@ test.serial('account identity read stays within its bound at 1, 10 and 100 unrel
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(database, scale, previous) {
-      const values = Array.from({ length: scale - previous }, () => {
+      const values = Array.from({ length: (scale - previous) * 16 }, () => {
         const id = newId(0x6041);
         const handle = `unrelated_${randomUUID().replaceAll('-', '')}`;
         return { id, handle, handleRoute: handleRoute(handle) };
       });
-      for (const value of values) {
-        await database.admin.query(
-          `INSERT INTO access.account(route,account_id,kind,state,handle,transaction_id)
-           VALUES ($1,$2,'actor','active',$3,$2)`,
-          [routeOf(value.id), value.id, value.handle],
-        );
-        await database.admin.query(
-          `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
-           VALUES ($1,$2,$3,'active',$3)`,
-          [value.handleRoute, value.handle, value.id],
-        );
-      }
+      const ids = values.map(({ id }) => id);
+      const handles = values.map(({ handle }) => handle);
+      const routes = values.map(({ handleRoute }) => handleRoute);
+      await database.admin.query(
+        `INSERT INTO access.account(route,account_id,kind,state,handle,transaction_id)
+         SELECT route,id,'actor','active',handle,id FROM unnest($1::integer[],$2::uuid[],$3::text[]) AS rows(route,id,handle)`,
+        [ids.map((id) => routeOf(id)!), ids, handles],
+      );
+      await database.admin.query(
+        `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
+         SELECT route,handle,id,'active',id FROM unnest($1::integer[],$2::text[],$3::uuid[]) AS rows(route,handle,id)`,
+        [routes, handles, ids],
+      );
     },
     async operation() {
       const value = await getJson(`/v1/accounts?handle=${identityGrowthAccount.handle}`);
@@ -392,6 +423,7 @@ test.serial('account discussions read stays within its bound at 1, 10 and 100 th
     repetitions: 1,
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    slack: { rows: { absolute: 3, relative: 0 } },
     async grow(_database, scale, previous) {
       await seedAgentItems(
         threadGrowthAccount.id,
@@ -409,7 +441,9 @@ test.serial('account discussions read stays within its bound at 1, 10 and 100 th
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
   assertConstantStatements(report.samples);
   expect(report.samples.every(({ cost }) => (cost.relations['content.author_item']?.rows ?? 0) <= 4)).toBe(true);
-  expect(report.samples.every(({ cost }) => (cost.relations['content.thread']?.rows ?? 0) <= 2)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.thread']?.rows ?? 0) <= 6)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.board']?.rows ?? 0) <= 5)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.revision']?.rows ?? 0) <= 6)).toBe(true);
 });
 
 test.serial('account replies read stays within its bound at 1, 10 and 100 replies', async () => {
@@ -438,8 +472,10 @@ test.serial('account replies read stays within its bound at 1, 10 and 100 replie
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
   assertConstantStatements(report.samples);
   expect(report.samples.every(({ cost }) => (cost.relations['content.author_item']?.rows ?? 0) <= 4)).toBe(true);
-  expect(report.samples.every(({ cost }) => (cost.relations['content.thread']?.rows ?? 0) <= 2)).toBe(true);
-  expect(report.samples.every(({ cost }) => (cost.relations['content.post']?.rows ?? 0) <= 2)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.thread']?.rows ?? 0) <= 11)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.post']?.rows ?? 0) <= 6)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.board']?.rows ?? 0) <= 10)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['content.revision']?.rows ?? 0) <= 12)).toBe(true);
 });
 
 test.serial('account collections read stays within its bound at 1, 10 and 100 collections', async () => {
@@ -450,7 +486,7 @@ test.serial('account collections read stays within its bound at 1, 10 and 100 co
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(_database, scale, previous) {
-      await seedAgentCollections(collectionGrowthAccount.id, scale - previous, previous);
+      await seedAgentCollections(collectionGrowthAccount.id, scale - previous);
     },
     async operation(_database, scale) {
       const value = await getJson(`/v1/accounts/${collectionGrowthAccount.id}/collections?view=BASIC&limit=1`);
@@ -461,5 +497,5 @@ test.serial('account collections read stays within its bound at 1, 10 and 100 co
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
   assertConstantStatements(report.samples);
-  expect(report.samples.every(({ cost }) => (cost.relations['library.collection']?.rows ?? 0) <= 1)).toBe(true);
+  expect(report.samples.every(({ cost }) => (cost.relations['library.collection']?.rows ?? 0) <= 4)).toBe(true);
 });

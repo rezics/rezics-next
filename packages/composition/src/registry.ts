@@ -11,12 +11,15 @@ import {
   curie,
   href,
   localizedText,
+  plainText,
   subjectId,
   safetyKind,
 } from './strings.ts';
 
 export interface PageContext {
   subject: string | null;
+  /** Account resolved by an earlier account read in the same page plan. */
+  accountId?: string | null;
 }
 
 export type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
@@ -35,6 +38,16 @@ export type PageRead =
   | { kind: 'links'; id: string; property: string; filter?: string; type?: string; limit: number }
   | { kind: 'collections'; id: string; limit: number }
   | { kind: 'reactions'; id: string }
+  | { kind: 'account'; handle: string }
+  | {
+      kind: 'accountThreads';
+      id: string;
+      threadKind: 'discussion' | 'review';
+      limit: number;
+      cursor?: string;
+    }
+  | { kind: 'accountPosts'; id: string; limit: number; cursor?: string }
+  | { kind: 'accountCollections'; id: string; limit: number; cursor?: string }
   | {
       kind: 'search';
       body: {
@@ -379,6 +392,70 @@ export const platformRegistry = defineRegistry({
       type: 'ReactionSummary',
       props: Type.Object({}, closed),
       read: (_props, page) => (page.subject === null ? null : { kind: 'reactions', id: page.subject }),
+    },
+    {
+      type: 'AccountIdentity',
+      props: Type.Object({ handle: plainText({ maxLength: 64 }) }, closed),
+      read: (props) => ({ kind: 'account', handle: props.handle as string }),
+    },
+    {
+      type: 'AccountThreads',
+      props: Type.Object(
+        {
+          threadKind: enumeration(['discussion', 'review']),
+          limit: Type.Integer({ minimum: 1, maximum: 20 }),
+          cursor: Type.Optional(plainText({ maxLength: 4_096 })),
+        },
+        closed,
+      ),
+      read: (props, page) =>
+        page.accountId == null
+          ? null
+          : {
+              kind: 'accountThreads',
+              id: page.accountId,
+              threadKind: props.threadKind as 'discussion' | 'review',
+              limit: props.limit as number,
+              ...(props.cursor === undefined ? {} : { cursor: props.cursor as string }),
+            },
+    },
+    {
+      type: 'AccountPosts',
+      props: Type.Object(
+        {
+          limit: Type.Integer({ minimum: 1, maximum: 20 }),
+          cursor: Type.Optional(plainText({ maxLength: 4_096 })),
+        },
+        closed,
+      ),
+      read: (props, page) =>
+        page.accountId == null
+          ? null
+          : {
+              kind: 'accountPosts',
+              id: page.accountId,
+              limit: props.limit as number,
+              ...(props.cursor === undefined ? {} : { cursor: props.cursor as string }),
+            },
+    },
+    {
+      type: 'AccountCollections',
+      props: Type.Object(
+        {
+          limit: Type.Integer({ minimum: 1, maximum: 24 }),
+          cursor: Type.Optional(plainText({ maxLength: 4_096 })),
+        },
+        closed,
+      ),
+      read: (props, page) =>
+        page.accountId == null
+          ? null
+          : {
+              kind: 'accountCollections',
+              id: page.accountId,
+              limit: props.limit as number,
+              ...(props.cursor === undefined ? {} : { cursor: props.cursor as string }),
+            },
     },
     {
       type: 'SearchBox',

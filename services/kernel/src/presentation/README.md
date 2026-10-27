@@ -39,13 +39,13 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 
 ### Page read execution
 
-- Touches: `readPage` dispatches each distinct descriptor through its standalone route: `Anchored subject read` in `src/semantic/README.md` or `Search planning and engine page` in `src/search/README.md`. A subject `308` adds one subject route.
+- Touches: `readPage` dispatches each distinct descriptor through its standalone route: `Anchored subject read` in `src/semantic/README.md`, `Search planning and engine page` in `src/search/README.md`, or one of the account reads below. A subject `308` adds one subject route.
 - Bound: For k <= 16 descriptors, equal canonical JSON descriptors share a dispatch, so there are at most k distinct dispatches, with at most four running at once. SQL rows, blocks and statements are the sum of those route costs, plus any followed subject route; this executor issues no SQL. Cost is independent of N, P and H beyond those routes. Session merging is O(k x 32) components.
 - Growth check: `test/presentation/reads.test.ts`: `a page holds at most sixteen valid reads, runs at most four at a time and dispatches identical reads once`; dispatches stay at most k at every page size.
 
 ### Page read
 
-- Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read` or `Search planning and engine page`). The subject read that selects the template is reused and is not repeated. This request releases its admission slot before those sub-reads; each sub-read takes its own.
+- Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read`, `Search planning and engine page`, or an account read below). The subject probe is reused. For an account template, the page first executes its `AccountIdentity` read, then re-plans account lists with the returned account id; an unknown handle has no list dispatches. This request releases its admission slot before those sub-reads; each sub-read takes its own.
 - Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
 - Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`
 
@@ -66,6 +66,30 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 - Touches: One `GET /v1/subjects/:id/reactions` call. The standalone route checks subject visibility and Access, then uses the existing reaction-total read for the subject id; it does not read or return the viewer's own reaction.
 - Bound: The reaction-total range returns at most seven rows in one statement, independent of reaction contributors. Subject visibility and authorization add a constant number of point reads and statements.
 - Growth check: `test/presentation/page-read-kinds.test.ts`: `reaction counts read stays within its bound at 1, 10 and 100 contributors`.
+
+### Page account identity read
+
+- Touches: One `GET /v1/accounts?handle=<h>` call. The standalone public profile read probes the handle claim and then the account identity, and adds one avatar summary read only when an avatar exists.
+- Bound: Constant rows and statements, logarithmic blocks in account and handle-claim counts; at most one account identity is returned. Unknown handles stop after the claim probe and answer `accounts: []`.
+- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account identity read stays within its bound at 1, 10 and 100 unrelated accounts`.
+
+### Page account threads read
+
+- Touches: One `GET /v1/accounts/{accountId}/threads?kind=discussion|review&limit=&cursor=` call. Discussion reads the account's discussions; review reads its reviews. Content checks the account's public-view flag, reads at most `4 × limit` author-item candidates, then hydrates candidates through the existing thread disclosure route.
+- Bound: At most `limit` thread summaries are returned. Candidate and hydration work is O(limit) for `limit` 1–20, independent of the account's thread count; statements remain constant as activity grows for a fixed limit.
+- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account discussions read stays within its bound at 1, 10 and 100 threads`.
+
+### Page account posts read
+
+- Touches: One `GET /v1/accounts/{accountId}/posts?limit=&cursor=` call. Content checks the account's public posts view, reads at most `4 × limit` author-item candidates, then hydrates each reply and its containing thread. A hidden thread title remains null in the returned reply context.
+- Bound: At most `limit` replies are returned. Candidate and hydration work is O(limit) for `limit` 1–20, independent of the account's reply count; statements remain constant as activity grows for a fixed limit.
+- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account replies read stays within its bound at 1, 10 and 100 replies`.
+
+### Page account collections read
+
+- Touches: One `GET /v1/accounts/{accountId}/collections?view=BASIC&limit=&cursor=` call. The standalone Commerce route checks public-view visibility and reads the account's public collections in its existing order.
+- Bound: At most `limit` collections are returned for `limit` 1–24; indexed page work is bounded by that limit and independent of the account's collection count. The page read always selects BASIC to keep the result bounded.
+- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account collections read stays within its bound at 1, 10 and 100 collections`.
 
 ### Profile publish
 

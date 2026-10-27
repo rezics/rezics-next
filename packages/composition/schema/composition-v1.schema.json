@@ -138,6 +138,18 @@
           "$ref": "#/$defs/ReactionSummary"
         },
         {
+          "$ref": "#/$defs/AccountIdentity"
+        },
+        {
+          "$ref": "#/$defs/AccountThreads"
+        },
+        {
+          "$ref": "#/$defs/AccountPosts"
+        },
+        {
+          "$ref": "#/$defs/AccountCollections"
+        },
+        {
           "$ref": "#/$defs/SearchBox"
         },
         {
@@ -683,6 +695,149 @@
               "minLength": 1,
               "maxLength": 64,
               "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "AccountIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "AccountIdentity"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "handle"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "handle": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "AccountThreads": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "AccountThreads"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "threadKind", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "threadKind": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "discussion"
+                },
+                {
+                  "type": "string",
+                  "const": "review"
+                }
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "AccountPosts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "AccountPosts"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "AccountCollections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "AccountCollections"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
             }
           }
         }

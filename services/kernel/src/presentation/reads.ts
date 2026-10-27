@@ -11,6 +11,16 @@ export type PageRead =
   | { kind: 'links'; id: string; property: string; filter?: string; type?: string; limit: number }
   | { kind: 'collections'; id: string; limit: number }
   | { kind: 'reactions'; id: string }
+  | { kind: 'account'; handle: string }
+  | {
+      kind: 'accountThreads';
+      id: string;
+      threadKind: 'discussion' | 'review';
+      limit: number;
+      cursor?: string;
+    }
+  | { kind: 'accountPosts'; id: string; limit: number; cursor?: string }
+  | { kind: 'accountCollections'; id: string; limit: number; cursor?: string }
   | { kind: 'search'; body: object };
 
 export class PageReadError extends Error {
@@ -38,6 +48,7 @@ type DispatchResult = { result: PageResult; tokens: string[] };
 const KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CURIE_PATTERN = /^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*$/;
+const HANDLE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -129,6 +140,57 @@ function validateReads(reads: unknown): PreparedRead[] {
       } else {
         canonicalDescriptor = { kind: 'reactions', id: descriptor.id };
       }
+    } else if (descriptor.kind === 'account') {
+      unknownFields(descriptor, ['kind', 'handle'], pointer, errors);
+      if (typeof descriptor.handle !== 'string' || !HANDLE_PATTERN.test(descriptor.handle)) {
+        addError(errors, `${pointer}/handle`, 'invalid_format');
+      } else {
+        canonicalDescriptor = { kind: 'account', handle: descriptor.handle };
+      }
+    } else if (descriptor.kind === 'accountThreads') {
+      unknownFields(descriptor, ['kind', 'id', 'threadKind', 'limit', 'cursor'], pointer, errors);
+      const idValid = typeof descriptor.id === 'string' && UUID_PATTERN.test(descriptor.id);
+      if (!idValid) addError(errors, `${pointer}/id`, 'invalid_format');
+      const kindValid = descriptor.threadKind === 'discussion' || descriptor.threadKind === 'review';
+      if (!kindValid) addError(errors, `${pointer}/threadKind`, 'invalid_format');
+      const limitValid =
+        Number.isInteger(descriptor.limit) && (descriptor.limit as number) >= 1 && (descriptor.limit as number) <= 20;
+      if (!limitValid) addError(errors, `${pointer}/limit`, 'out_of_range');
+      const cursorValid =
+        descriptor.cursor === undefined ||
+        (typeof descriptor.cursor === 'string' && descriptor.cursor.length >= 1 && descriptor.cursor.length <= 4096);
+      if (!cursorValid) addError(errors, `${pointer}/cursor`, 'out_of_range');
+      if (idValid && kindValid && limitValid && cursorValid) {
+        canonicalDescriptor = {
+          kind: 'accountThreads',
+          id: descriptor.id as string,
+          threadKind: descriptor.threadKind as 'discussion' | 'review',
+          limit: descriptor.limit as number,
+          ...(descriptor.cursor === undefined ? {} : { cursor: descriptor.cursor as string }),
+        };
+      }
+    } else if (descriptor.kind === 'accountPosts' || descriptor.kind === 'accountCollections') {
+      unknownFields(descriptor, ['kind', 'id', 'limit', 'cursor'], pointer, errors);
+      const idValid = typeof descriptor.id === 'string' && UUID_PATTERN.test(descriptor.id);
+      if (!idValid) addError(errors, `${pointer}/id`, 'invalid_format');
+      const maxLimit = descriptor.kind === 'accountPosts' ? 20 : 24;
+      const limitValid =
+        Number.isInteger(descriptor.limit) &&
+        (descriptor.limit as number) >= 1 &&
+        (descriptor.limit as number) <= maxLimit;
+      if (!limitValid) addError(errors, `${pointer}/limit`, 'out_of_range');
+      const cursorValid =
+        descriptor.cursor === undefined ||
+        (typeof descriptor.cursor === 'string' && descriptor.cursor.length >= 1 && descriptor.cursor.length <= 4096);
+      if (!cursorValid) addError(errors, `${pointer}/cursor`, 'out_of_range');
+      if (idValid && limitValid && cursorValid) {
+        canonicalDescriptor = {
+          kind: descriptor.kind,
+          id: descriptor.id as string,
+          limit: descriptor.limit as number,
+          ...(descriptor.cursor === undefined ? {} : { cursor: descriptor.cursor as string }),
+        };
+      }
     } else if (descriptor.kind === 'search') {
       if (!isObject(descriptor.body)) {
         addError(errors, `${pointer}/body`, 'invalid_type');
@@ -195,6 +257,23 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
     url.searchParams.set('limit', String(descriptor.limit));
   } else if (descriptor.kind === 'reactions') {
     url.pathname = `/v1/subjects/${descriptor.id}/reactions`;
+  } else if (descriptor.kind === 'account') {
+    url.pathname = '/v1/accounts';
+    url.searchParams.set('handle', descriptor.handle);
+  } else if (descriptor.kind === 'accountThreads') {
+    url.pathname = `/v1/accounts/${descriptor.id}/threads`;
+    url.searchParams.set('kind', descriptor.threadKind);
+    url.searchParams.set('limit', String(descriptor.limit));
+    if (descriptor.cursor !== undefined) url.searchParams.set('cursor', descriptor.cursor);
+  } else if (descriptor.kind === 'accountPosts') {
+    url.pathname = `/v1/accounts/${descriptor.id}/posts`;
+    url.searchParams.set('limit', String(descriptor.limit));
+    if (descriptor.cursor !== undefined) url.searchParams.set('cursor', descriptor.cursor);
+  } else if (descriptor.kind === 'accountCollections') {
+    url.pathname = `/v1/accounts/${descriptor.id}/collections`;
+    url.searchParams.set('view', 'BASIC');
+    url.searchParams.set('limit', String(descriptor.limit));
+    if (descriptor.cursor !== undefined) url.searchParams.set('cursor', descriptor.cursor);
   }
   return new Request(url, init);
 }
@@ -215,12 +294,22 @@ async function executeRead(
   credentials: ForwardedCredentials,
   dispatch: (request: Request) => Promise<Response>,
 ): Promise<DispatchResult> {
-  const initialPath = read.descriptor.kind === 'search' ? '/v1/subjects:search' : `/v1/subjects/${read.descriptor.id}`;
+  const descriptor = read.descriptor;
+  const initialPath =
+    descriptor.kind === 'search'
+      ? '/v1/subjects:search'
+      : descriptor.kind === 'account'
+        ? '/v1/accounts'
+        : descriptor.kind === 'accountThreads' ||
+            descriptor.kind === 'accountPosts' ||
+            descriptor.kind === 'accountCollections'
+          ? `/v1/accounts/${descriptor.id}`
+          : `/v1/subjects/${descriptor.id}`;
   const tokens: string[] = [];
   let response = await dispatch(requestFor(new URL(initialPath, origin), read.descriptor, credentials));
   readToken(response, tokens);
 
-  if (read.descriptor.kind === 'subject' && response.status === 308) {
+  if (descriptor.kind === 'subject' && response.status === 308) {
     const location = response.headers.get('location');
     if (location !== null) {
       let target: URL | undefined;

@@ -16,7 +16,7 @@ export const MAX_PAGE_COST = 128;
 
 /** Subjects one read can return: one subject, or a search read's limit. */
 export function readCost(read: PageRead): number {
-  return read.kind === 'subject' || read.kind === 'reactions'
+  return read.kind === 'subject' || read.kind === 'reactions' || read.kind === 'account'
     ? 1
     : read.kind === 'search'
       ? read.body.limit

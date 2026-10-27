@@ -236,30 +236,62 @@ async function pageAnswer(input: {
   probe: ReadResult | undefined;
   probeSession: string | null;
 }): Promise<Response> {
-  const plan = planReads(platformRegistry, input.resolved.document, { subject: input.subjectId });
-  const pending: Record<string, PageRead> = {};
-  let reused: string | undefined;
-  for (const [key, descriptor] of Object.entries(plan.reads)) {
-    if (input.probe && descriptor.kind === 'subject' && descriptor.id === input.subjectId) reused = key;
-    else pending[key] = descriptor;
-  }
-
-  let executed: Record<string, ReadResult> = {};
-  let executedSession: string | null = null;
-  if (Object.keys(pending).length > 0) {
+  const readKey = (descriptor: PageRead) => JSON.stringify(descriptor);
+  const resultsByRead = new Map<string, ReadResult>();
+  let readSession: string | null = input.probeSession;
+  const run = async (reads: Record<string, PageRead>) => {
+    if (Object.keys(reads).length === 0) return;
     const page = await readPage({
       dispatch: input.dispatch,
       incoming: input.request,
-      reads: pending,
+      reads,
       session: input.session,
     });
-    executed = page.results;
-    executedSession = page.session;
+    for (const [key, descriptor] of Object.entries(reads)) resultsByRead.set(readKey(descriptor), page.results[key]!);
+    readSession = mergedSession(input.session.ring, input.session.scope, readSession, page.session);
+  };
+  const hasProbe = (descriptor: PageRead) =>
+    input.probe !== undefined && descriptor.kind === 'subject' && descriptor.id === input.subjectId;
+
+  // Account lists depend on the public identity's id. Execute all independent reads and identity probes first,
+  // then re-plan once that id is known. Missing identities leave account list components without a read.
+  const initial = planReads(platformRegistry, input.resolved.document, {
+    subject: input.subjectId,
+    accountId: null,
+  });
+  const initialPending: Record<string, PageRead> = {};
+  for (const [key, descriptor] of Object.entries(initial.reads)) {
+    if (hasProbe(descriptor)) resultsByRead.set(readKey(descriptor), input.probe!);
+    else initialPending[key] = descriptor;
+  }
+  await run(initialPending);
+
+  const firstAccount = Object.values(initial.reads).find((descriptor) => descriptor.kind === 'account');
+  let accountId: string | null = null;
+  if (firstAccount !== undefined) {
+    const body = resultsByRead.get(readKey(firstAccount))?.body;
+    if (isRecord(body) && Array.isArray(body.accounts) && isRecord(body.accounts[0])) {
+      const candidate = body.accounts[0].id;
+      if (typeof candidate === 'string' && subjectIdPattern.test(candidate)) accountId = candidate;
+    }
   }
 
+  const plan =
+    accountId === null
+      ? initial
+      : planReads(platformRegistry, input.resolved.document, { subject: input.subjectId, accountId });
+  const followup: Record<string, PageRead> = {};
+  let followupIndex = 0;
+  for (const descriptor of Object.values(plan.reads)) {
+    if (resultsByRead.has(readKey(descriptor))) continue;
+    if (hasProbe(descriptor)) resultsByRead.set(readKey(descriptor), input.probe!);
+    else followup[`r${followupIndex++}`] = descriptor;
+  }
+  await run(followup);
+
   const reads: Record<string, ReadResult> = {};
-  for (const key of Object.keys(plan.reads)) {
-    const result = key === reused ? input.probe : executed[key];
+  for (const [key, descriptor] of Object.entries(plan.reads)) {
+    const result = resultsByRead.get(readKey(descriptor));
     if (!result) throw new Error('Page read did not return a result');
     reads[key] = result;
   }
@@ -273,7 +305,7 @@ async function pageAnswer(input: {
       document: input.resolved.document,
       reads,
     },
-    mergedSession(input.session.ring, input.session.scope, input.probeSession, executedSession),
+    readSession,
     true,
   );
 }
