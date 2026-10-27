@@ -5,7 +5,7 @@ import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { loadCollectionPage, type CollectionPageData } from './reads';
+import { loadEditableCollectionPage, type EditableCollectionPage } from './collection-load';
 
 function validatePageInput(input: unknown): { id: string; cursor?: string } {
   if (
@@ -26,9 +26,9 @@ function validatePageInput(input: unknown): { id: string; cursor?: string } {
 
 export const readCollectionPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }): Promise<CollectionPageData> => {
+  .handler(async ({ data }): Promise<EditableCollectionPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const page = await loadCollectionPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const page = await loadEditableCollectionPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     await nameSubjectTypes(page.members.map((member) => member.subject));
     return page;
   });

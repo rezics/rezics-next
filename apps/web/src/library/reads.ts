@@ -112,7 +112,8 @@ function accountOf(account: RawAccount | null | undefined): LibraryAccount | nul
   return { handle: account.handle, displayName: account.displayName };
 }
 
-function subjectOf(subject: RawSubject | null | undefined): LibrarySubject | null {
+/** Maps an embedded subject, with the label the viewer sees or the id when there is none. */
+export function subjectOf(subject: RawSubject | null | undefined): LibrarySubject | null {
   if (!subject) return null;
   return { id: subject.id, type: subject.type, label: libraryLabel(subject.label, subject.id) };
 }

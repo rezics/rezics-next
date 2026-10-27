@@ -465,6 +465,17 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Bound:** 1 K and 1 D for the page, and 1 K and 1 D for a join or leave; 0 R and 0 A. No per-Realm reads.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `my Realms is one page read, however many Realms the person has joined` at 1, 10 and 100
 
+### Collection editing
+
+- **Touches:** One session read, then one kernel write: `POST /v1/collections`, `PATCH` or `DELETE
+  /v1/collections/<id>?revision=…`, `POST …/members/<memberId>:move`, `PATCH` or `DELETE …/members/<memberId>`, or
+  `PUT`/`DELETE /v1/follows/<id>`. A move sends only the member and its `after` neighbour and never reads the member
+  list. The collection page of a signed-in person who is not the curator of a public collection adds one
+  `GET /v1/follows/<id>?view=FULL` after its own two reads, with the session credential it already holds.
+- **Bound:** 1 D, 1 K, 0 R and 0 A for each change, independent of the collection's size. The follow state is one more
+  kernel read, and the curator's page has none.
+- **Growth check:** `tests/library-collection-editing-cost.test.ts`: `collection editing stays within its bound as the collection grows`
+
 ### My collections and following
 
 - **Touches:** Each page reads one signed-in session and one `GET /v1/collections?curatorAccountId=…&view=FULL` or
