@@ -174,7 +174,7 @@ async function pageHtml(path: string): Promise<string> {
 }
 
 async function subjectTypeLabel(locale: string, id = bookId): Promise<string> {
-  const html = await pageHtml(`/${locale}/subjects/${id}`);
+  const html = await pageHtml(`/${locale}/subjects/${id}/relations`);
   const meta = /<div data-slot="subject-frame"[\s\S]*?<p class="text-sm text-muted-foreground">([\s\S]*?)<\/p>/.exec(
     html,
   );
