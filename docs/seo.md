@@ -102,7 +102,8 @@ A failed export leaves the previous index public. A request never starts a scan.
 including bounded-cost tests, remain required pending work.
 
 A page's `lastmod` is its separate public publication metadata for the last meaningful change to what the page
-shows. A file's `lastmod` in the index is when that file last changed. Neither is the export time.
+shows. A page whose feed does not know its last change is listed without `lastmod`, and the export never fills
+one in. A file's `lastmod` in the index is when that file last changed. Neither is the export time.
 
 Sitemaps are an inventory as of the last successful export. A page that becomes `noindex`, closed or removed
 answers its new status at once and leaves the sitemaps at the next export, within about a day.

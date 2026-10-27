@@ -11,8 +11,8 @@ import {
   xmlDeclaration,
 } from './xml.ts';
 
-/** One indexable page before locale expansion, with the time of the last change of what the page shows. */
-export type SitemapFamily = { paths: PagePaths; lastmod: string };
+/** One indexable page before locale expansion, with its last change time when known. */
+export type SitemapFamily = { paths: PagePaths; lastmod?: string };
 export type SitemapShard = { digest: string; families: number; urls: number; bytes: number; gzip: Uint8Array };
 
 const maxFamilies = 3_000;
@@ -71,8 +71,9 @@ export async function packShards(origin: string, families: readonly SitemapFamil
     for (const locale of locales) {
       if (typeof family.paths?.[locale] !== 'string') throw new Error(`${name} has no path for locale ${locale}`);
     }
-    const lastmod = utcLastmod(family.lastmod);
-    if (lastmod === undefined) throw new Error(`${name} has an invalid lastmod: ${shown(String(family.lastmod))}`);
+    const lastmod = family.lastmod === undefined ? undefined : utcLastmod(family.lastmod);
+    if (family.lastmod !== undefined && lastmod === undefined)
+      throw new Error(`${name} has an invalid lastmod: ${shown(String(family.lastmod))}`);
     const { xml, urls } = familyXml(origin, family.paths, lastmod);
     for (const url of urls) {
       assertXmlText(url, `${name} URL`);

@@ -37,7 +37,7 @@ async function sizes(pad: number) {
   return { perFamily, wrapper: one[0]!.bytes - perFamily };
 }
 
-test("packShards writes every family's eight locale URLs as entries, each with lastmod and eight reciprocal xhtml:link alternates built by pageLinks, escaped, with no x-default, changefreq or priority", async () => {
+test("packShards writes a dated family's eight locale URLs as entries, each with lastmod and eight reciprocal xhtml:link alternates built by pageLinks, escaped, with no x-default, changefreq or priority", async () => {
   const paths = {
     ...pathsOf('1'),
     en: '/search/a&b',

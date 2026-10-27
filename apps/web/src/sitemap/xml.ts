@@ -49,7 +49,7 @@ export function utcLastmod(value: string): string | undefined {
 }
 
 /** The eight `<url>` records of one page family, one per locale, each listing all eight alternates. */
-export function familyXml(origin: string, paths: PagePaths, lastmod: string): { xml: string; urls: string[] } {
+export function familyXml(origin: string, paths: PagePaths, lastmod?: string): { xml: string; urls: string[] } {
   const urls: string[] = [];
   let alternates = '';
   let xml = '';
@@ -63,7 +63,7 @@ export function familyXml(origin: string, paths: PagePaths, lastmod: string): { 
     }
     const loc = links[0]!.href;
     urls.push(loc);
-    xml += `<url><loc>${escapeXml(loc)}</loc><lastmod>${lastmod}</lastmod>${alternates}</url>`;
+    xml += `<url><loc>${escapeXml(loc)}</loc>${lastmod === undefined ? '' : `<lastmod>${lastmod}</lastmod>`}${alternates}</url>`;
   }
   return { xml, urls };
 }
