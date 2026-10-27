@@ -160,11 +160,11 @@ test('native normalization bounds complete name sort values on writes while pres
         expect(action).toEqual(original);
         continue;
       }
-      expect(action).toEqual({
+      expect<unknown>(action).toEqual({
         ...original,
         document: {
           ...original.document,
-          name_sort: n < names.length ? (expected[n]!.length <= 512 ? expected[n] : null) : null,
+          name_sort: n < names.length ? (expected[n]!.length <= 512 ? expected[n]! : null) : null,
         },
       });
     }
@@ -233,7 +233,7 @@ test('native normalization bounds complete name sort values on writes while pres
       if (typeof original.document.name_sort !== 'string') throw new Error('expected named fixture');
       expect(action).toEqual({
         ...original,
-        document: { ...original.document, name_sort: native.get(original.document.name_sort) },
+        document: { ...original.document, name_sort: native.get(original.document.name_sort)! },
       });
     }
     // Per-value fallback costs one real request per DISTINCT name; never describe it as one batched request.
