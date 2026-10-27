@@ -340,9 +340,9 @@ reconstructs the deterministic leaf from the admitted plan. A fresh bounded leaf
 needed to recompute/check the composite owner digest before resuming; that probe and its rereads are charged,
 not an extra unrecorded basis callback. A mismatch restarts preparation before consuming old progress.
 The original being evaluated is the independent native aliasAfter raw key, groupId is its canonical group,
-sourceOrdinal selects the owner and basisDigest is actual structural identity. When a leaf can become pending, request a one-original native alias window and retain its ACTUAL returned
-after in aliasAfter (the original under evaluation); resume that same native alias cursor after settling it. Never overwrite it
-with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
+sourceOrdinal selects the owner and basisDigest is actual structural identity. When a leaf can become pending,
+request a one-original native alias window and retain its ACTUAL returned after in aliasAfter (the original under
+evaluation); resume that same native alias cursor after settling it. Never overwrite it with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
 are request-local, not serialized. This scalar mapping needs manager/Search review before production; if an owner
 also needs independent unresolved prefix state at this boundary, that is a shared-protocol decision, NOT permission
 to append a ninth key or concatenate tokens. The existing scaffold's unresumable `leaves` callback must be replaced

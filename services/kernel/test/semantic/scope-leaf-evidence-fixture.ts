@@ -380,6 +380,7 @@ export function accounted(result: LeafEvidence, budget: LeafWork) {
     expect(result.usage[key], key).toBeGreaterThanOrEqual(0);
     expect(result.usage[key], key).toBeLessThanOrEqual(budget[key]);
   }
+  expect(result.usage.keys).toBeGreaterThanOrEqual(result.usage.witnesses);
   if (result.state === 'current') {
     expect(result.usage.witnesses).toBeGreaterThanOrEqual(result.facts.length);
     expect(result.usage.keys).toBeGreaterThanOrEqual(result.facts.length);

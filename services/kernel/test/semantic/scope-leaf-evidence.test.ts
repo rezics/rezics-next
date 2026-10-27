@@ -157,6 +157,9 @@ test('unresolved witness work advances bounded native progress beyond two hundre
     const final = current(
       await read(db.pool, { ...f.request(subject, leaf), revalidate: positive.facts[0]!.witness }, f.options()),
     );
+    accounted(final, stepBudget());
+    expect(final.usage.witnesses).toBeGreaterThan(0);
+    expect(final.usage.points).toBeGreaterThan(0);
     expect(evaluate(expression, [final])).toBe(true);
     await f.hideSubject(target);
     const hidden = await read(
@@ -207,6 +210,9 @@ test('current absence never comes from sampled or historically rejected witnesse
   const absent = await f.create();
   const absentLeaf: FactClause = { facet: 'statement', property: 'ex:credit', values: [absent] };
   const empty = current(await read(db.pool, f.request(book, absentLeaf), f.options()));
+  accounted(empty, stepBudget());
+  expect(empty.usage.points).toBeGreaterThan(0);
+  expect(empty.usage.emptySeeks).toBeGreaterThan(0);
   expect(empty.facts).toEqual([]);
   expect(empty.coverage?.kind).toBe('empty_pair');
   expect(empty.progress).toBeNull();
