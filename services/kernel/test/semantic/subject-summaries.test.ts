@@ -443,7 +443,7 @@ test('subject summaries for a page use two bounded reads per partition, not one 
   const unrelated = unrelatedSemanticPopulation(
     'summary-page-unrelated',
     routeOf(edition)! >>> 4,
-    [2020, 2021, 2022, 2023],
+    [32320, 32336, 32352, 32368].map((route) => route >>> 4),
   );
   const mediaPopulation = unrelatedMediaPopulation('summary-cover-media', routeOf(english)! >>> 4, actor.accountId, {
     credit,
@@ -496,7 +496,6 @@ test('a representative cover read stays flat as the work gains editions', async 
   const deps = dependencies();
   const unrelated = unrelatedSemanticPopulation('representative-cover-unrelated', routeOf(work)! >>> 4, [
     routeOf(edition)! >>> 4,
-    32048 >>> 4,
   ]);
   const mediaPopulation = unrelatedMediaPopulation('summary-cover-media', routeOf(english)! >>> 4, actor.accountId, {
     credit,
