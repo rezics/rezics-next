@@ -588,24 +588,28 @@ async function addOrganizationOwner(
 }
 
 async function selfDelegate(personValue: Awaited<ReturnType<typeof person>>) {
-  const actor = await required(accessPort, 'Access is not composed').authenticate(personValue.bearer, context());
+  return delegate(personValue, personValue);
+}
+
+async function delegate(principal: Awaited<ReturnType<typeof person>>, assignee: Awaited<ReturnType<typeof person>>) {
+  const actor = await required(accessPort, 'Access is not composed').authenticate(principal.bearer, context());
   const command = createDelegationCommands({
     pool: kernel,
     access: required(accessPort, 'Access is not composed'),
     action: 'account:manage',
   });
-  const requestId = newId(route(personValue.accountId));
+  const requestId = newId(route(principal.accountId));
   const assignment = await command.create(
     { ...context(), actor },
     {
-      principalId: personValue.accountId,
-      assignedActorId: personValue.accountId,
+      principalId: principal.accountId,
+      assignedActorId: assignee.accountId,
       requestId,
       valid: '(,)',
       key: reference('assignment'),
     },
   );
-  const delegated = await tokenFor(personValue.accountId, assignment.value.requestedBy);
+  const delegated = await tokenFor(assignee.accountId, assignment.value.requestedBy);
   return { requestedBy: assignment.value.requestedBy, requestId, ...delegated };
 }
 
@@ -707,7 +711,7 @@ async function makeFixture(
         : family === 'subject-delete'
           ? owner
           : family === 'operator-delete'
-            ? owner
+            ? await person('operator-delete-caller')
             : await person(`${family}-caller`);
   let staleCaller: string | undefined;
   if (family === 'opening') {
@@ -736,7 +740,12 @@ async function makeFixture(
   }
   // Auth session openings consume a personal human session proof without an
   // assignment. The other workflow families exercise delegated human authority.
-  const principalAssignment = family === 'opening' ? null : await selfDelegate(callerPerson);
+  const principalAssignment =
+    family === 'opening'
+      ? null
+      : family === 'operator-delete'
+        ? await delegate(owner, callerPerson)
+        : await selfDelegate(callerPerson);
   const requestedBy = principalAssignment?.requestedBy ?? null;
   const caller = principalAssignment?.bearer ?? callerPerson.bearer;
   const otherClientCaller = callerPerson.otherBearer;
@@ -1119,16 +1128,22 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
                 ),
               ]);
               if (continuationPausedAtStep) {
-                pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
-                completion
-                  .finally(() => {
-                    const currentPending = pendingWorkflows.get(work.operationKey);
-                    if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
-                    if (stepObserver === executionObserver) stepObserver = priorObserver;
-                  })
-                  .catch(() => {});
-                pendingCompletion = true;
-                return { outcome: 'denied' as const };
+                const current = await refused(() =>
+                  approvals().resolveForCaller(caller, reference, nativeOperation, context()),
+                );
+                if ('outcome' in current) {
+                  pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
+                  completion
+                    .finally(() => {
+                      const currentPending = pendingWorkflows.get(work.operationKey);
+                      if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
+                      if (stepObserver === executionObserver) stepObserver = priorObserver;
+                    })
+                    .catch(() => {});
+                  pendingCompletion = true;
+                  return { outcome: 'denied' as const };
+                }
+                releaseGate();
               }
             }
             if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
@@ -1313,8 +1328,14 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
             access: required(accessPort, 'Access is not composed'),
             action: 'account:manage',
           });
+          const principal = required(registrations.get(match[1]!), `Missing assignment principal ${match[1]}`);
+          const principalSession = await login(principal.email, loginClient);
+          const principalActor = await required(accessPort, 'Access is not composed').authenticate(
+            principalSession.bearer,
+            context(),
+          );
           await command.revoke(
-            { ...context(), actor },
+            { ...context(), actor: principalActor },
             { principalId: match[1]!, requestId: match[2]!, key: reference('assignment-revoke') },
           );
         }
@@ -2014,12 +2035,16 @@ async function observe(f: Fixture): Promise<Snapshot> {
     request_digest: Buffer;
     response: unknown;
     business_receipt_id: string | null;
+    effect_key: string | null;
+    effect_digest: string | null;
   }>(
-    `SELECT transaction_id::text,command_kind,idempotency_key,encode(request_digest,'hex') AS request_digest,response
-            ,completion.business_receipt_id
+    `SELECT transaction_id::text,command_kind,
+            COALESCE(completion.effect_key,idempotency_key) AS idempotency_key,
+            COALESCE(completion.effect_digest,encode(request_digest,'hex')) AS request_digest,
+            response,completion.business_receipt_id,completion.effect_key,completion.effect_digest
      FROM core.receipt
      LEFT JOIN LATERAL (
-       SELECT item.receipt_id::text AS business_receipt_id
+       SELECT item.receipt_id::text AS business_receipt_id,item.key AS effect_key,item.digest AS effect_digest
        FROM access.committed_continuation_completion AS item
        JOIN access.committed_continuation AS continuation USING (route, continuation_id)
        WHERE continuation.route=$3 AND continuation.operation_key=$4
