@@ -193,7 +193,7 @@ release.properties['schema:recipeYield']!.qualifiers = ['ex:key'];
 release.types['schema:Recipe']!.facets = [
   ...new Set([...release.types['schema:Recipe']!.facets!, 'schema:recipeYield', 'schema:datePublished']),
 ];
-release.types['schema:Book']!.properties = [...release.types['schema:Book']!.properties, 'ex:credit'];
+release.types['schema:Book']!.properties = [...release.types['schema:Book']!.properties, 'ex:credit'].sort();
 release.types['schema:Book']!.facets = [...new Set([...release.types['schema:Book']!.facets!, 'ex:credit'])];
 export const nativeRelease = { digest: releaseDigest(release), release };
 const digest = (key: string) => createHash('sha256').update(key).digest();
